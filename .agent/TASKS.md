@@ -14,6 +14,7 @@
 - [x] Design multi-provider care model (care_teams)
 - [x] Finalize tech stack decisions
 - [x] Document coding standards and team processes
+- [x] Lock protocol decisions (MCP, A2A, MedGemma, thinking mode)
 - [ ] Get full team alignment on PRD
 
 ### 0.2 Design & UX
@@ -89,6 +90,21 @@
 - [ ] Test DailyMed API access  
 - [ ] Test RxNorm API access
 - [ ] Obtain Syncfusion Community License key
+- [ ] Download and test MedGemma model access (Hugging Face / Vertex AI)
+
+### 1.6 MCP Server Scaffolding
+- [ ] Create MCP server base structure (`backend/app/mcp/`)
+- [ ] Implement `mcp-supabase` server (patient data queries)
+- [ ] Implement `mcp-dailymed` server (drug labels, ADR profiles)
+- [ ] Implement `mcp-rxnorm` server (drug normalization)
+- [ ] Implement `mcp-deepgram` server (STT/TTS access)
+- [ ] Test MCP servers with standalone MCP client
+
+### 1.7 A2A Protocol Setup
+- [ ] Create Agent Card JSON schema for each agent
+- [ ] Expose `/.well-known/agent.json` endpoint on backend
+- [ ] Implement A2A task management (submit, status, artifacts)
+- [ ] Create mock "Hospital EHR Agent" for demo
 
 ---
 
@@ -207,13 +223,14 @@
 ### 4.1 Agent Core
 - [ ] Create BaseAgent abstract class (SOLID compliant)
 - [ ] Create Gemini client service (with retry, timeout, structured output)
+- [ ] Create MedGemma client service (for evaluation comparisons)
 - [ ] Create LangGraph state schema for ingestion workflow
 - [ ] Implement Ingestion Agent graph:
   - [ ] Node: receive document
   - [ ] Node: call Gemini vision to extract structured data
   - [ ] Node: validate extracted data against FHIR schemas
-  - [ ] Node: normalize medications via RxNorm API
-  - [ ] Node: save to database (FHIR resources)
+  - [ ] Node: normalize medications via RxNorm MCP server
+  - [ ] Node: save to database (via Supabase MCP server)
   - [ ] Node: generate plain-language summary
   - [ ] Node: create Today Feed tasks from medications + follow-up instructions
 
@@ -222,7 +239,14 @@
 - [ ] RxNorm API client (brand → generic → RxCUI normalization)
 - [ ] Medication normalizer (parse dosage strings, frequency extraction)
 
-### 4.3 Testing
+### 4.3 MedGemma Evaluation
+- [ ] Create 20 medical test cases (doc parsing, FHIR extraction, symptom classification)
+- [ ] Run identical tests through Gemini Flash vs MedGemma
+- [ ] Compare accuracy: FHIR fields, ADR detection, clinical summary quality
+- [ ] Decision: adopt MedGemma for specific agents if it wins
+- [ ] Document results in PROJECT.md Decision Log
+
+### 4.4 Testing
 - [ ] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
 - [ ] Golden-set evaluation: expected parsing output for each test document
 - [ ] Unit tests for FHIR builder and normalizer
@@ -255,7 +279,8 @@
 - [ ] Follow-up question generation (severity, timing, related meds, recent changes)
 - [ ] Structured symptom report creation (symptom, severity 1-10, onset, related_med)
 - [ ] Save to `symptom_reports` table
-- [ ] Trigger Pharmacovigilance Agent after structured report
+- [ ] Delegate to Pharmacovigilance Agent via A2A protocol (not direct function call)
+- [ ] Verify A2A task lifecycle: submitted → working → completed
 
 ### 5.4 Medical RAG
 - [ ] Populate pgvector with drug information (from DailyMed)
@@ -325,10 +350,11 @@
 ## Phase 7: Pharmacovigilance (Weeks 19–22, parallel with Phase 6)
 
 ### 7.1 Pharmacovigilance Agent
-- [ ] DailyMed API client (query drug labels, get ADR profiles)
+- [ ] DailyMed MCP server queries (drug labels, ADR profiles)
 - [ ] Naranjo Algorithm calculator (automated scoring for 10 questions)
 - [ ] Cross-reference symptom with all active medications (including cross-provider)
-- [ ] Causality assessment with reasoning narrative
+- [ ] Causality assessment using Gemini 3.0 Pro **thinking mode** (transparent reasoning chain)
+- [ ] Log thinking chain for clinician review (show WHY, not just score)
 - [ ] MedWatch 3500A form template (all required fields)
 - [ ] Auto-populate form from patient data + ADR assessment
 - [ ] De-identification pipeline (strip PHI for FDA submission)

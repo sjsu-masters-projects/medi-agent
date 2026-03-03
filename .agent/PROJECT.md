@@ -39,6 +39,11 @@ B2B2C SaaS — sold to clinics/health systems, deployed to their patients.
 | D9 | **Monorepo** | 2026-03-02 | Team of 4, shared types/utils, easier CI/CD, single PR per feature. |
 | D10 | **FHIR-aligned data model** | 2026-03-02 | Interoperability. Data exportable as FHIR Bundles. Major selling point for startup viability. |
 | D11 | **In-app messaging + email only** (no SMS for now) | 2026-03-02 | Simplicity. Email via Resend (free tier). SMS can be added later with Twilio. |
+| D12 | **MCP (Model Context Protocol) for tool access** | 2026-03-03 | Agents access tools (DailyMed, RxNorm, Supabase, Deepgram) via MCP servers. Vendor-independent — swap LLM providers without changing tools. |
+| D13 | **A2A Protocol for inter-agent communication** | 2026-03-03 | Expose Agent Cards (`.well-known/agent.json`). Internal demo: Triage→Pharma via A2A. Future-proofs for EHR/pharmacy integration. NOT connecting to real external hospital agents — our own agents speak A2A to each other. |
+| D14 | **Gemini 3.0 Pro thinking mode for pharmacovigilance** | 2026-03-03 | Transparent chain-of-thought reasoning for Naranjo scoring. Clinicians see WHY the AI scored an ADR, not just the score. |
+| D15 | **Explore Gemini Multimodal Live API** | 2026-03-03 | Could collapse STT→LLM→TTS into one WebSocket. Deepgram is primary pipeline; Gemini Live is stretch goal. |
+| D16 | **Evaluate MedGemma for medical tasks** | 2026-03-03 | Google's open healthcare model (based on Gemma 3). Benchmark against Gemini 3.0 Flash/Pro for: doc parsing, symptom triage, FHIR extraction. Use if quality is better for specific tasks. |
 
 > **Adding a decision?** Append to this table with date and rationale. Never delete entries — only mark as superseded if changed.
 
@@ -57,15 +62,19 @@ B2B2C SaaS — sold to clinics/health systems, deployed to their patients.
 ## Tech Stack (Final)
 
 | Layer | Technology |
-|-------|-----------|
+|-------|----------|
 | Both Portals | Next.js (PWA) + Redux + TailwindCSS |
 | Document Viewer | Syncfusion PDF Viewer |
 | Backend API | Python FastAPI |
 | AI Orchestration | LangGraph |
+| Agent Tools | MCP Servers (standardized tool access) |
+| Agent Communication | A2A Protocol (inter-agent messaging) |
 | Primary LLM | Gemini 3.0 Flash |
-| Reasoning LLM | Gemini 3.0 Pro |
+| Reasoning LLM | Gemini 3.0 Pro (thinking mode) |
+| Medical LLM (eval) | MedGemma (benchmark against Gemini for medical tasks) |
 | STT | Deepgram Nova-2 |
 | TTS | Deepgram Aura |
+| Voice (explore) | Gemini Multimodal Live API (stretch goal) |
 | DB + Vectors | Supabase (PostgreSQL + pgvector) |
 | Auth | Supabase Auth |
 | Storage | Supabase Storage |

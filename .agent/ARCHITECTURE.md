@@ -1,6 +1,6 @@
 # MediAgent — System Architecture
 
-> Last updated: 2026-03-02
+> Last updated: 2026-03-03
 
 ---
 
@@ -35,23 +35,28 @@
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                 AGENT LAYER (LangGraph)                           │
+│              AGENT LAYER (LangGraph + A2A Protocol)               │
 │                                                                   │
-│  ┌───────────┐ ┌────────┐ ┌─────────┐ ┌───────────────┐        │
-│  │ Ingestion │ │ Triage │ │ Symptom │ │Pharmacovig.   │        │
-│  │ Agent     │ │ Agent  │ │ Agent   │ │Agent          │        │
-│  └─────┬─────┘ └───┬────┘ └────┬────┘ └───────┬───────┘        │
-│        │           │           │               │                 │
-│  ┌─────┴─────┐ ┌───┴────┐ ┌───┴──────┐ ┌─────┴──────┐         │
-│  │Pre-Visit  │ │Summary │ │Scheduling│ │            │         │
-│  │Prep Agent │ │Agent   │ │Agent     │ │            │         │
-│  └─────┬─────┘ └───┬────┘ └────┬─────┘ └────────────┘         │
-│        │           │           │                                 │
-│  ┌─────▼───────────▼───────────▼──────────────────────┐         │
-│  │              TOOLS                                  │         │
-│  │  DailyMed · RxNorm · FHIR Builder · MedWatch Gen   │         │
-│  │  Naranjo Calculator · Notification Sender           │         │
-│  └────────────────────────┬───────────────────────────┘         │
+│  ┌───────────┐ ──A2A──► ┌─────────┐ ──A2A──► ┌─────────────┐   │
+│  │ Triage    │          │ Symptom │          │Pharmacovig. │   │
+│  │ Agent     │          │ Agent   │          │Agent        │   │
+│  └───────────┘          └─────────┘          └─────────────┘   │
+│  ┌───────────┐ ┌─────────┐ ┌──────────┐ ┌───────────┐         │
+│  │ Ingestion │ │Pre-Visit│ │Summary   │ │Scheduling │         │
+│  │ Agent     │ │Prep     │ │Agent     │ │Agent      │         │
+│  └─────┬─────┘ └────┬────┘ └────┬─────┘ └─────┬─────┘         │
+│        │            │           │              │                │
+│  ┌─────▼────────────▼───────────▼──────────────▼──────┐        │
+│  │         MCP LAYER (Standardized Tool Access)        │        │
+│  │  mcp-dailymed · mcp-rxnorm · mcp-supabase          │        │
+│  │  mcp-deepgram · FHIR Builder · MedWatch Gen         │        │
+│  │  Naranjo Calculator · Notification Sender           │        │
+│  └────────────────────────┬───────────────────────────┘        │
+│                           │                                     │
+│  ┌────────────────────────▼───────────────────────────┐        │
+│  │     Agent Cards (/.well-known/agent.json)           │        │
+│  │     A2A endpoints for external agent discovery      │        │
+│  └────────────────────────────────────────────────────┘        │
 └───────────────────────────┼──────────────────────────────────────┘
                             │
                             ▼
@@ -60,7 +65,10 @@
 │  ┌─────────────────┐ ┌───────────────┐ ┌──────────────┐        │
 │  │ Gemini 3.0      │ │ Deepgram      │ │ Resend       │        │
 │  │ Flash + Pro     │ │ STT + TTS     │ │ (Email)      │        │
-│  └─────────────────┘ └───────────────┘ └──────────────┘        │
+│  │ (thinking mode) │ │               │ │              │        │
+│  ├─────────────────┤ └───────────────┘ └──────────────┘        │
+│  │ MedGemma (eval) │                                            │
+│  └─────────────────┘                                            │
 └─────────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -141,7 +149,7 @@ patients ──< care_teams >── clinicians
 
 ---
 
-## Agent Flow
+## Agent Flow (with A2A Communication)
 
 ```
 User Input
@@ -149,12 +157,25 @@ User Input
     ▼
 Triage Agent ──────► Intent Classification
     │                    │
-    ├── SYMPTOM ────────► Symptom Agent ──► Pharmacovigilance Agent
-    ├── MED_QUESTION ───► RAG Tool + LLM Response
-    ├── SCHEDULE ───────► Scheduling Agent
-    ├── GENERAL ────────► Direct LLM Response
-    └── URGENT ─────────► Escalation (clinician notification + 911 info)
+    ├── SYMPTOM ─(A2A)─► Symptom Agent ─(A2A)─► Pharmacovigilance Agent
+    ├── MED_QUESTION ──► RAG Tool (via MCP) + LLM Response
+    ├── SCHEDULE ─(A2A)► Scheduling Agent
+    ├── GENERAL ───────► Direct LLM Response
+    └── URGENT ────────► Escalation (clinician notification + 911 info)
+
+Protocol Layers:
+  A2A  = Agent ↔ Agent delegation (via Agent Cards + Task Objects)
+  MCP  = Agent ↔ Tools/Data (DailyMed, RxNorm, Supabase, Deepgram)
 ```
+
+### LLM Routing
+
+| Agent | Primary Model | Eval Model |
+|-------|-------------|------------|
+| Triage / Chat | Gemini 3.0 Flash | — |
+| Ingestion | Gemini 3.0 Flash (vision) | MedGemma |
+| Pharmacovigilance | Gemini 3.0 Pro (thinking) | — |
+| All others | Gemini 3.0 Flash | — |
 
 ---
 
@@ -182,11 +203,17 @@ SUPABASE_SERVICE_ROLE_KEY=
 GOOGLE_API_KEY=
 GOOGLE_PROJECT_ID=
 
+# MedGemma (if adopted after evaluation)
+# MEDGEMMA_MODEL_ID=
+
 # Deepgram
 DEEPGRAM_API_KEY=
 
 # Resend
 RESEND_API_KEY=
+
+# Syncfusion
+SYNCFUSION_LICENSE_KEY=
 
 # App
 BACKEND_URL=
