@@ -24,6 +24,7 @@ description: How to start a new feature development workflow
    - Read `.agent/PROJECT.md` for product context
    - Read `.agent/ARCHITECTURE.md` for system design
    - Read `.agent/CODING_STANDARDS.md` for code rules
+   - Read `.agent/DESIGN_SYSTEM.md` for UI and styling (if frontend)
    - Read existing related code in the codebase
 
 4. **Implement the feature**

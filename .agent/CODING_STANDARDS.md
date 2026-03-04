@@ -219,6 +219,16 @@ apps/{portal}/src/
 
 ---
 
+## Design System & UI
+
+All frontend UI code must strictly adhere to our centralized design tokens and components based on the approved Figma screens.
+**Before writing or reviewing any UI code (Tailwind, React components, CSS), you must read:**
+👉 [`.agent/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md)
+
+Do not invent new colors, spacing, or abstractions that conflict with the Design System.
+
+---
+
 ## Git Conventions
 
 ### Branch Naming

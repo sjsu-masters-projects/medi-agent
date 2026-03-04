@@ -11,7 +11,7 @@ Every time an AI coding assistant (Cursor, Copilot, Antigravity, etc.) generates
 ## Steps
 
 1. **Before AI generates code, set context**
-   - Point the AI to `.agent/PROJECT.md` and `.agent/CODING_STANDARDS.md`
+   - Point the AI to `.agent/PROJECT.md`, `.agent/CODING_STANDARDS.md`, and `.agent/DESIGN_SYSTEM.md`
    - Describe the specific task clearly
    - Reference existing code patterns the AI should follow
 

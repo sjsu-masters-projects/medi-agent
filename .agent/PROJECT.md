@@ -136,5 +136,6 @@ B2B2C SaaS — sold to clinics/health systems, deployed to their patients.
 - **Full PRD:** See `implementation_plan.md` in the brain directory
 - **Coding Standards:** `.agent/CODING_STANDARDS.md`
 - **Architecture:** `.agent/ARCHITECTURE.md`
+- **Design System:** `.agent/DESIGN_SYSTEM.md`
 - **Task Breakdown:** `.agent/TASKS.md`
 - **Team & Process:** `.agent/TEAM.md`
