@@ -9,15 +9,6 @@ This folder contains all meeting records for the MediAgent project.
 | Advisor Meeting | `YYYY-MM-DD-advisor.md` | `2026-02-13-advisor.md` |
 | Team-Only Meeting | `YYYY-MM-DD-team.md` | `2026-03-04-team.md` |
 
-## Requirements
-
-- **Advisor Meetings** (Team + Professor Richard Sinn): minimum **1 per 2 weeks**
-- **Team-Only Meetings** (students only): minimum **1 per week**
-
-## Template
-
-Use `_template.md` for every new meeting note.
-
 ## Meeting Log
 
 | Date | Type | Key Decisions / Outcomes |
