@@ -1,0 +1,92 @@
+name: CI — Lint & Test
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  # ── Backend ──────────────────────────────────────
+  backend:
+    name: Backend (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (Ruff)
+        run: ruff check src/
+
+      - name: Format check (Ruff)
+        run: ruff format --check src/
+
+      - name: Type check (mypy)
+        run: mypy src/ --ignore-missing-imports
+
+      - name: Test (pytest)
+        run: pytest tests/ -v --tb=short
+
+  # ── Patient Portal ──────────────────────────────
+  patient-portal:
+    name: Patient Portal (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/patient-portal
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/patient-portal/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  # ── Clinician Portal ────────────────────────────
+  clinician-portal:
+    name: Clinician Portal (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/clinician-portal
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/clinician-portal/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
