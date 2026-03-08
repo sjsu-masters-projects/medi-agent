@@ -15,34 +15,33 @@
 - [x] Finalize tech stack decisions
 - [x] Document coding standards and team processes
 - [x] Lock protocol decisions (MCP, A2A, MedGemma, thinking mode)
-- [ ] Get full team alignment on PRD
+- [x] Get full team alignment on PRD
 
 ### 0.2 Design & UX
-- [ ] Create information architecture (sitemap) for Patient Portal
-- [ ] Create information architecture (sitemap) for Clinician Portal
-- [ ] Define user flows: patient onboarding
-- [ ] Define user flows: document upload → parse → Today Feed
-- [ ] Define user flows: chat + voice symptom reporting
-- [ ] Define user flows: clinician dashboard → patient deep dive → MedWatch
-- [ ] Create Figma wireframes for Patient Portal (all screens)
-- [ ] Create Figma wireframes for Clinician Portal (all screens)
-- [ ] Define design system: colors, typography, spacing, component library
-- [ ] Create high-fidelity mockups (Figma AI can accelerate this)
+- [x] Create information architecture (sitemap) for Patient Portal
+- [x] Create information architecture (sitemap) for Clinician Portal
+- [x] Define user flows: patient onboarding
+- [x] Define user flows: document upload → parse → Today Feed
+- [x] Define user flows: chat + voice symptom reporting
+- [x] Define user flows: clinician dashboard → patient deep dive → MedWatch
+- [x] Create Figma wireframes for Patient Portal (all screens)
+- [x] Create Figma wireframes for Clinician Portal (all screens)
+- [x] Define design system: colors, typography, spacing, component library
+- [x] Create high-fidelity mockups (Figma AI can accelerate this)
 
 ---
 
 ## Phase 1: Infrastructure & Setup (Weeks 3–4)
 
 ### 1.1 Repository Setup
-- [ ] Initialize monorepo structure
-- [ ] Set up `apps/patient-portal` (Next.js + PWA)
-- [ ] Set up `apps/clinician-portal` (Next.js + PWA)
-- [ ] Set up `packages/shared` (types, utils)
-- [ ] Set up `backend/` (FastAPI project)
-- [ ] Configure TailwindCSS for both portals
-- [ ] Configure Redux store for both portals
-- [ ] Configure Syncfusion PDF Viewer integration
-- [ ] Create `docker-compose.yml` for local dev
+- [x] Initialize monorepo structure
+- [x] Set up `apps/patient-portal` (Next.js + PWA)
+- [x] Set up `apps/clinician-portal` (Next.js + PWA)
+- [x] Set up `packages/shared` (types, utils)
+- [x] Set up `backend/` (FastAPI project)
+- [x] Configure TailwindCSS for both portals
+- [x] Configure Redux store for both portals
+- [x] Create `docker-compose.yml` for local dev
 
 ### 1.2 Supabase Setup
 - [ ] Create Supabase project
@@ -197,7 +196,8 @@
 - [ ] Document list view
 - [ ] Document upload button (file picker + camera capture)
 - [ ] Upload progress indicator
-- [ ] Syncfusion PDF viewer integration (in-app viewing)
+- [ ] Research and configure Syncfusion PDF viewer integration
+- [ ] Syncfusion PDF viewer UI component (in-app viewing)
 - [ ] "Explain This to Me" button + summary display
 - [ ] Language selector for explanation
 
