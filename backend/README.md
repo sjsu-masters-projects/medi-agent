@@ -42,15 +42,29 @@ src/app/
 ├── a2a/              # Agent-to-Agent protocol
 ├── clients/          # SDK wrappers (Gemini, Deepgram, etc.)
 ├── db/               # Queries, migrations, seed data
+│   └── migrations/   # SQL files — run in order (001_, 002_, ...)
 ├── middleware/        # Request processing (auth, logging, etc.)
 └── utils/            # Shared helpers
 ```
+
+## Database Migrations
+
+Migrations are plain SQL files in `src/app/db/migrations/`:
+
+| File | What it does |
+|------|-------------|
+| `001_initial_schema.sql` | 20 enum types, 16 tables, indexes, triggers |
+| `002_rls_policies.sql` | RLS on all tables, 56 policies |
+| `003_storage_and_auth.sql` | 3 storage buckets + storage RLS |
+| `004_jwt_claims_hook.sql` | JWT hook — adds `user_role` claim |
+
+Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 
 ## Key Conventions
 
 - **Routers are thin** — validate input, call service, return response
 - **Services are pure** — no FastAPI imports, easy to unit test
-- **Models use `Literal` types** — catches bad enum values at the API boundary
+- **Models use `StrEnum`** — catches bad values at the API boundary, serializes to plain strings
 - **All IDs are `UUID`** — matches Supabase
 - **Custom exceptions** — `core/exceptions.py`, not raw `HTTPException`
 
@@ -61,4 +75,5 @@ src/app/
 | [PROJECT.md](../.agent/PROJECT.md) | Product context, decision log |
 | [ARCHITECTURE.md](../.agent/ARCHITECTURE.md) | System design, data model, agent flow |
 | [CODING_STANDARDS.md](../.agent/CODING_STANDARDS.md) | Code style rules |
+| [Supabase Setup Guide](../docs/supabase_setup_guide.md) | DB schema, migrations, RLS, auth hooks |
 | [workflows/new-agent.md](../.agent/workflows/new-agent.md) | How to add a new agent |

@@ -38,6 +38,7 @@ medi-agent/
 │   │   ├── a2a/                     #    Agent-to-Agent protocol
 │   │   ├── clients/                 #    SDK wrappers (Gemini, Deepgram, Resend)
 │   │   ├── db/                      #    Database queries, migrations, seed
+│   │   │   └── migrations/          #    SQL schema files (run in order)
 │   │   ├── middleware/              #    Auth, CORS, rate limiting, logging
 │   │   └── utils/                   #    Shared helpers
 │   ├── tests/                       #    pytest test suite
@@ -72,6 +73,9 @@ medi-agent/
 │           ├── utils/               #    formatDate, formatRelativeTime, clamp
 │           └── constants/           #    API_ROUTES, NARANJO_THRESHOLD, RISK_LEVELS
 │
+├── docs/                            # 📄 Team-facing guides
+│   └── supabase_setup_guide.md      #    DB setup, migrations, RLS, auth hooks
+│
 ├── .github/workflows/ci.yml        # CI — lint + test + build
 ├── docker-compose.yml               # Local dev (backend, both portals)
 ├── .env.example                     # All required env var keys
@@ -96,7 +100,13 @@ medi-agent/
 ```bash
 git clone <repo-url> && cd medi-agent
 cp .env.example .env
-# Fill in API keys — see .env.example for what each one does
+# Fill in API keys — see .env.example for where to get each one
+```
+
+Verify your setup:
+```bash
+./scripts/preflight.sh       # checks tools, .env, deps
+./scripts/check-env.sh       # validates .env against .env.example
 ```
 
 ### 2. Backend
@@ -174,6 +184,7 @@ docker compose up
 | [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md) | SOLID principles, naming, error handling, file structure, testing |
 | [DESIGN_SYSTEM.md](.agent/DESIGN_SYSTEM.md) | Colors, typography, components, layout (from Figma designs) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to set up, develop, test, and submit code |
+| [Supabase Setup Guide](docs/supabase_setup_guide.md) | Database schema, migrations, RLS policies, auth hooks, storage |
 
 ### Workflows (step-by-step guides)
 

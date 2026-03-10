@@ -45,13 +45,58 @@ npm run dev
 
 Copy `.env.example` → `.env` and fill in your keys. Never commit `.env`.
 
+See `.env.example` for where to get each key (URLs are in the comments).
+
+For team credentials, check the team's 1Password vault or ask the team lead.
+
 | Variable | Where to get it |
 |----------|-----------------|
 | `SUPABASE_URL` | Supabase dashboard → Settings → API |
 | `SUPABASE_ANON_KEY` | Same place |
+| `SUPABASE_SERVICE_ROLE_KEY` | Same place |
 | `GOOGLE_API_KEY` | Google AI Studio |
 | `DEEPGRAM_API_KEY` | Deepgram console |
 | `RESEND_API_KEY` | Resend dashboard |
+
+---
+
+## Database Setup
+
+Full guide: **[docs/supabase_setup_guide.md](docs/supabase_setup_guide.md)**
+
+Migrations live in `backend/src/app/db/migrations/` and must be run in order:
+
+```bash
+export DB_URL="postgresql://postgres:YOUR_PASSWORD@db.tsbjrzlzrejzlfkmhxpz.supabase.co:5432/postgres"
+
+psql "$DB_URL" -f backend/src/app/db/migrations/001_initial_schema.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/002_rls_policies.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
+```
+
+After running migrations, wire up the JWT claims hook in the Supabase Dashboard → Auth → Hooks. See the setup guide for details.
+
+---
+
+## Preflight Check
+
+Run this after cloning or pulling new changes — catches setup issues before you debug:
+
+```bash
+./scripts/preflight.sh
+```
+
+This checks: required tools, `.env` completeness, backend venv, frontend `node_modules`, and Supabase connection.
+
+To quickly validate just your `.env` file:
+
+```bash
+./scripts/check-env.sh
+```
+
+> [!TIP]
+> When you add a new env var, always add it to `.env.example` first with a comment. The `check-env.sh` script will then catch it for any dev whose `.env` is out of date.
 
 ---
 
@@ -156,7 +201,7 @@ Request → Router → Service → DB / Agent → Response
 | Decision | Why |
 |----------|-----|
 | `src/app/` layout | Production packaging — avoids import conflicts |
-| Pydantic `Literal` types | Catches invalid enum values at the API boundary |
+| `StrEnum` for categorical fields | Catches invalid values at the API boundary, serializes to plain strings |
 | `UUID` for all IDs | Matches Supabase's default primary keys |
 | `BaseAgent` ABC | SOLID — all agents are interchangeable |
 | Separate `services/` from `routers/` | Testable business logic without spinning up FastAPI |
@@ -233,5 +278,6 @@ Check the docs first:
 - "How should I structure this?" → [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md)
 - "What's the task priority?" → [TASKS.md](.agent/TASKS.md)
 - "How does the team work?" → [TEAM.md](.agent/TEAM.md)
+- Database/schema question → [Supabase Setup Guide](docs/supabase_setup_guide.md)
 
 If it's not in the docs, ask the team.
