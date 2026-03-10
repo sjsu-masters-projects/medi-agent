@@ -19,12 +19,13 @@ postgresql://postgres:[PASSWORD]@db.tsbjrzlzrejzlfkmhxpz.supabase.co:5432/postgr
 
 Get the password from the team lead or `.env` file (never commit it).
 
+---
+
 ## Running Migrations
 
 Migrations live in `backend/src/app/db/migrations/` and must be run in order:
 
 ```bash
-# Set your connection string
 export DB_URL="postgresql://postgres:YOUR_PASSWORD@db.tsbjrzlzrejzlfkmhxpz.supabase.co:5432/postgres"
 
 # 1. Schema: enums, tables, indexes, triggers
@@ -35,17 +36,40 @@ psql "$DB_URL" -f backend/src/app/db/migrations/002_rls_policies.sql
 
 # 3. Storage: buckets + storage RLS
 psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
+
+# 4. JWT claims hook: adds user_role to every JWT
+psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
 ```
 
 > [!IMPORTANT]
 > These migrations are **idempotent-safe on first run only**. If re-running, you'll need to drop existing objects first or use the Supabase dashboard SQL editor to reset.
+
+### Migration Index
+
+| File | What it does |
+|------|-------------|
+| `001_initial_schema.sql` | 20 PostgreSQL enum types, 16 tables, indexes, constraints, `updated_at` trigger |
+| `002_rls_policies.sql` | Enables RLS on all tables, creates 56 policies + 3 helper functions |
+| `003_storage_and_auth.sql` | 3 storage buckets (documents, avatars, voice-messages) + 9 storage RLS policies |
+| `004_jwt_claims_hook.sql` | Custom JWT hook — injects `user_role` claim into every token |
+
+### Adding New Migrations
+
+When you need to change the schema:
+1. Create a new file: `005_descriptive_name.sql`
+2. Always number sequentially — never reorder existing files
+3. If adding a new enum value: `ALTER TYPE my_enum ADD VALUE 'new_value';`
+4. If adding a new column: `ALTER TABLE my_table ADD COLUMN new_col type;`
+5. Update this guide's migration index table
+
+---
 
 ## Database Overview
 
 ### Tables (16)
 
 | Table | Purpose | FK Parent |
-|-------|---------|-----------|
+|-------|---------|-----------| 
 | `patients` | Patient profiles | `auth.users` |
 | `clinicians` | Clinician profiles | `auth.users` |
 | `care_teams` | Patient ↔ Clinician junction | patients, clinicians |
@@ -65,14 +89,18 @@ psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
 
 ### Enum Types (20)
 
-All enum types mirror `backend/src/app/models/enums.py`. If you add a new enum value in Python, you must also `ALTER TYPE ... ADD VALUE` in PostgreSQL.
+All PostgreSQL enum types mirror `backend/src/app/models/enums.py` 1:1. If you add a new value in Python, you must also run:
+
+```sql
+ALTER TYPE my_enum_name ADD VALUE 'new_value';
+```
 
 ### RLS Model
 
 - **Patients** see only their own data (`patient_id = auth.uid()`)
-- **Clinicians** see only their assigned patients (checked via `care_teams` junction where `status = 'active'`)
+- **Clinicians** see only assigned patients (via `care_teams` junction where `status = 'active'`)
 - **Service role** bypasses RLS (used by backend agents and cron jobs)
-- Helper function: `is_assigned_clinician(patient_id)` is used across all policies
+- Helper functions: `is_assigned_clinician(patient_id)`, `is_patient()`, `is_clinician()`
 
 ### Storage Buckets
 
@@ -84,44 +112,58 @@ All enum types mirror `backend/src/app/models/enums.py`. If you add a new enum v
 
 Path convention: `{bucket}/{user_id}/{filename}`
 
-## Auth Configuration (Dashboard)
+---
 
-These settings should be configured in the Supabase Dashboard under **Authentication → Providers**:
+## Auth Configuration
 
-1. **Email provider**: Enabled
-   - Confirm email: **On**
-   - Secure email change: **On**
-2. **Magic link**: Enabled (patient signup flow)
-3. **MFA (TOTP)**: Enabled (optional for clinicians)
+### Dashboard Settings
 
-### Custom JWT Claims
+Configure in Supabase Dashboard → **Authentication → Providers**:
 
-Add a `user_role` claim to the JWT via an auth hook (Dashboard → Auth → Hooks):
+| Setting | Value | Why |
+|---------|-------|-----|
+| Email provider | Enabled | Primary sign-in method |
+| Confirm email | On | Verify email ownership |
+| Secure email change | On | Requires old + new email confirmation |
+| Secure password change | On | Forces re-auth before changing password |
+| Min password length | 8 | Healthcare app — stricter than default |
+| Password requirements | Letters and digits | Basic complexity |
+| Email OTP expiration | 900s (15 min) | Shorter window for PHI security |
+| MFA (TOTP) | Enabled | Optional for clinicians |
 
-```sql
--- Function to add user_role to JWT
-CREATE OR REPLACE FUNCTION custom_access_token_hook(event jsonb)
-RETURNS jsonb AS $$
-DECLARE
-  claims jsonb;
-  user_role text;
-BEGIN
-  claims := event->'claims';
+### JWT Claims Hook
 
-  IF EXISTS (SELECT 1 FROM patients WHERE id = (event->>'user_id')::uuid) THEN
-    user_role := 'patient';
-  ELSIF EXISTS (SELECT 1 FROM clinicians WHERE id = (event->>'user_id')::uuid) THEN
-    user_role := 'clinician';
-  ELSE
-    user_role := 'unknown';
-  END IF;
+Every JWT token includes a `user_role` claim (`"patient"` or `"clinician"`) so the frontend can determine which portal to show without an extra API call.
 
-  claims := jsonb_set(claims, '{user_role}', to_jsonb(user_role));
-  event := jsonb_set(event, '{claims}', claims);
-  RETURN event;
-END;
-$$ LANGUAGE plpgsql;
+**How it works:** Migration `004_jwt_claims_hook.sql` creates a function that checks whether the user ID exists in the `patients` or `clinicians` table and injects the result into the JWT.
+
+**Dashboard setup** (after running the migration):
+1. Go to **Auth → Hooks**
+2. Click **Add a new hook** → **Customize Access Token (JWT) Claims**
+3. Enable the hook
+4. Hook type: **Postgres**
+5. Schema: **public**
+6. Function: **custom_access_token_hook**
+7. Click **Create hook**
+
+The dashboard will automatically run the required permission grants (execute for `supabase_auth_admin`, revoke from `authenticated`/`anon`/`public`).
+
+### Reading the Role in Code
+
+**Backend (Python):**
+```python
+# The JWT payload will include: {"user_role": "patient"} or {"user_role": "clinician"}
+role = jwt_payload.get("user_role")
 ```
+
+**Frontend (TypeScript):**
+```typescript
+const { data: { session } } = await supabase.auth.getSession();
+const role = session?.user?.app_metadata?.user_role;
+// "patient" | "clinician" | "unknown"
+```
+
+---
 
 ## Environment Variables
 
@@ -133,10 +175,14 @@ SUPABASE_ANON_KEY=<from dashboard → Settings → API>
 SUPABASE_SERVICE_ROLE_KEY=<from dashboard → Settings → API>
 ```
 
-## Verification
+---
 
-After running migrations, verify in the Supabase Dashboard:
-1. **Table Editor** → all 16 tables visible
-2. **Authentication → Policies** → RLS enabled on all tables
-3. **Storage** → 3 buckets (documents, avatars, voice-messages)
-4. **SQL Editor** → run: `SELECT count(*) FROM pg_policies WHERE schemaname = 'public';` → should return **56**
+## Verification Checklist
+
+After running all 4 migrations:
+
+- [ ] **Table Editor** → all 16 tables visible
+- [ ] **Auth → Policies** → RLS enabled on all tables
+- [ ] **Storage** → 3 buckets (documents, avatars, voice-messages)
+- [ ] **Auth → Hooks** → JWT claims hook active
+- [ ] **SQL Editor** → `SELECT count(*) FROM pg_policies WHERE schemaname = 'public';` → **56**
