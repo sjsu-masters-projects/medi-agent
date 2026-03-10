@@ -44,27 +44,27 @@
 - [x] Create `docker-compose.yml` for local dev
 
 ### 1.2 Supabase Setup
-- [ ] Create Supabase project
-- [ ] Create all database tables (see ARCHITECTURE.md data model)
-  - [ ] `patients`
-  - [ ] `clinicians`
-  - [ ] `care_teams`
-  - [ ] `documents`
-  - [ ] `medications`
-  - [ ] `obligations`
-  - [ ] `adherence_logs`
-  - [ ] `conditions`
-  - [ ] `allergies`
-  - [ ] `symptom_reports`
-  - [ ] `adr_assessments`
-  - [ ] `appointments`
-  - [ ] `chat_messages`
-  - [ ] `notifications`
-  - [ ] `clinician_messages`
-- [ ] Configure Row-Level Security (RLS) policies for all tables
-- [ ] Set up Supabase Auth (magic link + email/password + MFA)
-- [ ] Set up Supabase Storage buckets (documents, avatars)
-- [ ] Test RLS policies with different user roles
+- [x] Create Supabase project
+- [x] Create all database tables (see ARCHITECTURE.md data model)
+  - [x] `patients`
+  - [x] `clinicians`
+  - [x] `care_teams`
+  - [x] `documents`
+  - [x] `medications`
+  - [x] `obligations`
+  - [x] `adherence_logs`
+  - [x] `conditions`
+  - [x] `allergies`
+  - [x] `symptom_reports`
+  - [x] `adr_assessments`
+  - [x] `appointments`
+  - [x] `chat_messages`
+  - [x] `notifications`
+  - [x] `clinician_messages`
+- [x] Configure Row-Level Security (RLS) policies for all tables
+- [ ] Set up Supabase Auth (magic link + email/password + MFA) — dashboard config needed
+- [x] Set up Supabase Storage buckets (documents, avatars, voice-messages)
+- [ ] Test RLS policies with different user roles — needs real auth users
 
 ### 1.3 CI/CD
 - [ ] Set up GitHub Actions: lint on PR (Ruff + ESLint)
