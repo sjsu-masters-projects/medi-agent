@@ -1,31 +1,67 @@
-"""Patient routes."""
+"""Patient routes — profile and care team management.
 
-from fastapi import APIRouter
+All endpoints require authentication as a patient.
+"""
 
-from app.models import PatientRead, PatientUpdate
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+from supabase import Client
+
+from app.core.security import require_role
+from app.db.connection import get_db
+from app.models.auth import CurrentUser
+from app.models.care_team import CareTeamRead
+from app.models.patient import PatientRead, PatientUpdate
+from app.services.patient_service import PatientService
 
 router = APIRouter()
 
-
-@router.get("/me", response_model=PatientRead)
-async def get_my_profile() -> dict:
-    # TODO: get_current_user → patient_service.get_profile()
-    raise NotImplementedError
+# All patient routes require the "patient" role
+_patient_dep = require_role("patient")
 
 
-@router.put("/me", response_model=PatientRead)
-async def update_my_profile(data: PatientUpdate) -> dict:
-    # TODO: get_current_user → patient_service.update_profile()
-    raise NotImplementedError
+def _get_service(db: Client = Depends(get_db)) -> PatientService:
+    return PatientService(db)
 
 
-@router.get("/me/care-team")
-async def get_my_care_team() -> list:
-    # TODO: get_current_user → patient_service.get_care_team()
-    raise NotImplementedError
+@router.get("/me", response_model=PatientRead, summary="Get my patient profile")
+async def get_my_profile(
+    user: CurrentUser = Depends(_patient_dep),
+    service: PatientService = Depends(_get_service),
+) -> dict:
+    return await service.get_profile(user.id)
 
 
-@router.post("/me/care-team/join")
-async def join_clinic(invite_code: str) -> dict:
-    # TODO: get_current_user → patient_service.join_clinic()
-    raise NotImplementedError
+@router.put("/me", response_model=PatientRead, summary="Update my patient profile")
+async def update_my_profile(
+    data: PatientUpdate,
+    user: CurrentUser = Depends(_patient_dep),
+    service: PatientService = Depends(_get_service),
+) -> dict:
+    return await service.update_profile(user.id, data.model_dump(exclude_unset=True))
+
+
+@router.get(
+    "/me/care-team",
+    response_model=list[CareTeamRead],
+    summary="List my clinicians",
+)
+async def get_my_care_team(
+    user: CurrentUser = Depends(_patient_dep),
+    service: PatientService = Depends(_get_service),
+) -> list:
+    return await service.get_care_team(user.id)
+
+
+@router.post(
+    "/me/care-team/join",
+    response_model=CareTeamRead,
+    summary="Join a clinic via invite code",
+)
+async def join_clinic(
+    invite_code: str,
+    user: CurrentUser = Depends(_patient_dep),
+    service: PatientService = Depends(_get_service),
+) -> dict:
+    return await service.join_care_team(user.id, invite_code)
