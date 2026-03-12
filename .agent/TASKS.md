@@ -62,7 +62,7 @@
   - [x] `notifications`
   - [x] `clinician_messages`
 - [x] Configure Row-Level Security (RLS) policies for all tables
-- [ ] Set up Supabase Auth (magic link + email/password + MFA) — dashboard config needed
+- [x] Set up Supabase Auth (magic link + email/password + MFA + JWT claims hook)
 - [x] Set up Supabase Storage buckets (documents, avatars, voice-messages)
 - [ ] Test RLS policies with different user roles — needs real auth users
 
@@ -110,19 +110,22 @@
 ## Phase 2: Backend Core (Weeks 5–8)
 
 ### 2.1 FastAPI Foundation
-- [ ] Set up FastAPI app with middleware (CORS, auth, logging)
-- [ ] Create Pydantic models for all entities (request/response schemas)
-- [ ] Create Supabase client service (connection, queries)
-- [ ] Create base error handling (custom exceptions, error responses)
-- [ ] Set up API versioning (`/api/v1/`)
-- [ ] Auto-generate OpenAPI docs
+- [x] Set up FastAPI app with middleware (CORS, auth, logging)
+- [x] Create Pydantic models for all entities (request/response schemas)
+- [x] Create Supabase client service (connection, queries)
+- [x] Create base error handling (custom exceptions, error responses)
+- [x] Set up API versioning (`/api/v1/`)
+- [x] Auto-generate OpenAPI docs
 
 ### 2.2 Authentication API
-- [ ] `POST /api/v1/auth/signup` — patient sign-up (magic link)
-- [ ] `POST /api/v1/auth/login` — clinician login (email/password)
-- [ ] `POST /api/v1/auth/refresh` — token refresh
-- [ ] JWT middleware for route protection
-- [ ] Role-based access control (patient vs clinician vs admin)
+- [x] `POST /api/v1/auth/signup/patient` — patient signup
+- [x] `POST /api/v1/auth/signup/clinician` — clinician signup
+- [x] `POST /api/v1/auth/login` — email/password login
+- [x] `POST /api/v1/auth/refresh` — token refresh
+- [x] `POST /api/v1/auth/password-reset` — password reset email
+- [x] `GET /api/v1/auth/me` — current user from JWT
+- [x] JWT middleware for route protection
+- [x] Role-based access control (patient vs clinician)
 - [ ] Write auth integration tests
 
 ### 2.3 Patient API
