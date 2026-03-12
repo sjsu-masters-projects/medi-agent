@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,18 +12,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.routers import (
-    auth,
-    patients,
-    clinicians,
-    documents,
-    medications,
-    obligations,
     adherence,
-    chat,
-    feed,
     adr,
     appointments,
+    auth,
+    chat,
+    clinicians,
+    documents,
+    feed,
+    medications,
     notifications,
+    obligations,
+    patients,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,8 +56,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="MediAgent API",
         description=(
-            "Multi-Agent Healthcare AI Platform — "
-            "Patient Portal + Clinician Portal backend."
+            "Multi-Agent Healthcare AI Platform — Patient Portal + Clinician Portal backend."
         ),
         version="0.1.0",
         docs_url="/docs",
@@ -83,14 +82,22 @@ def create_app() -> FastAPI:
     application.include_router(patients.router, prefix=f"{api}/patients", tags=["Patients"])
     application.include_router(clinicians.router, prefix=f"{api}/clinicians", tags=["Clinicians"])
     application.include_router(documents.router, prefix=f"{api}/documents", tags=["Documents"])
-    application.include_router(medications.router, prefix=f"{api}/medications", tags=["Medications"])
-    application.include_router(obligations.router, prefix=f"{api}/obligations", tags=["Obligations"])
+    application.include_router(
+        medications.router, prefix=f"{api}/medications", tags=["Medications"]
+    )
+    application.include_router(
+        obligations.router, prefix=f"{api}/obligations", tags=["Obligations"]
+    )
     application.include_router(adherence.router, prefix=f"{api}/adherence", tags=["Adherence"])
     application.include_router(chat.router, prefix=f"{api}/chat", tags=["Chat"])
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(adr.router, prefix=f"{api}/adr", tags=["ADR"])
-    application.include_router(appointments.router, prefix=f"{api}/appointments", tags=["Appointments"])
-    application.include_router(notifications.router, prefix=f"{api}/notifications", tags=["Notifications"])
+    application.include_router(
+        appointments.router, prefix=f"{api}/appointments", tags=["Appointments"]
+    )
+    application.include_router(
+        notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
+    )
 
     # ── Health Check ────────────────────────────────────
     @application.get("/health", tags=["Health"])

@@ -14,11 +14,12 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.models.enums import Language
 
-
 # ── Requests ────────────────────────────────────────────────
+
 
 class PatientSignupRequest(BaseModel):
     """Patient signup — creates auth user + patient profile."""
+
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     first_name: str = Field(..., min_length=1, max_length=100)
@@ -33,6 +34,7 @@ class PatientSignupRequest(BaseModel):
 
 class ClinicianSignupRequest(BaseModel):
     """Clinician signup — creates auth user + clinician profile."""
+
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     first_name: str = Field(..., min_length=1, max_length=100)
@@ -44,24 +46,29 @@ class ClinicianSignupRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     """Email + password login — works for both patients and clinicians."""
+
     email: EmailStr
     password: str = Field(..., min_length=1)
 
 
 class TokenRefreshRequest(BaseModel):
     """Exchange a refresh token for a new access token."""
+
     refresh_token: str = Field(..., min_length=1)
 
 
 class PasswordResetRequest(BaseModel):
     """Request a password reset email."""
+
     email: EmailStr
 
 
 # ── Responses ───────────────────────────────────────────────
 
+
 class AuthTokens(BaseModel):
     """JWT pair returned on successful auth."""
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -70,6 +77,7 @@ class AuthTokens(BaseModel):
 
 class UserInfo(BaseModel):
     """Minimal user info returned on auth. NOT the full patient/clinician profile."""
+
     id: UUID
     email: str
     role: str = Field(description="'patient' or 'clinician'")
@@ -80,11 +88,13 @@ class UserInfo(BaseModel):
 
 class AuthResponse(BaseModel):
     """Full auth response — tokens + user metadata."""
+
     tokens: AuthTokens
     user: UserInfo
 
 
 # ── JWT Claims (internal) ──────────────────────────────────
+
 
 class CurrentUser(BaseModel):
     """Extracted from a verified JWT — injected into route handlers via Depends().
@@ -92,6 +102,7 @@ class CurrentUser(BaseModel):
     This is NOT a DB model. It's the minimal identity info we need
     to authorize a request without hitting the database.
     """
+
     id: UUID
     email: str
     role: str  # "patient" | "clinician" | "unknown"

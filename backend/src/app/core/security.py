@@ -18,7 +18,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import Depends
@@ -58,7 +58,7 @@ async def get_current_user(
         )
     except JWTError as e:
         logger.warning("JWT verification failed: %s", e)
-        raise AuthenticationError("Invalid or expired token")
+        raise AuthenticationError("Invalid or expired token") from None
 
     # Extract claims — Supabase puts user ID in "sub"
     user_id = payload.get("sub")

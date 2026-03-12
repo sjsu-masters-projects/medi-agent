@@ -50,10 +50,12 @@ class AuthService:
         Returns the Supabase session (access_token, refresh_token, user).
         """
         # 1. Create the auth user via Supabase Auth
-        auth_response = self.db.auth.sign_up({
-            "email": email,
-            "password": password,
-        })
+        auth_response = self.db.auth.sign_up(
+            {
+                "email": email,
+                "password": password,
+            }
+        )
 
         if not auth_response.user:
             raise ValidationError("Signup failed — check email format or try a different email")
@@ -62,19 +64,21 @@ class AuthService:
 
         # 2. Insert the patient profile row (admin client bypasses RLS)
         try:
-            self.db.table("patients").insert({
-                "id": user_id,
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-                "date_of_birth": date_of_birth,
-                "preferred_language": preferred_language,
-            }).execute()
+            self.db.table("patients").insert(
+                {
+                    "id": user_id,
+                    "email": email,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "date_of_birth": date_of_birth,
+                    "preferred_language": preferred_language,
+                }
+            ).execute()
         except Exception as e:
             logger.error("Failed to create patient profile for %s: %s", user_id, e)
             # Clean up the orphaned auth user
             self.db.auth.admin.delete_user(user_id)
-            raise ValidationError(f"Profile creation failed: {e}")
+            raise ValidationError(f"Profile creation failed: {e}") from e
 
         return self._format_session(auth_response)
 
@@ -89,10 +93,12 @@ class AuthService:
         npi_number: str | None = None,
     ) -> dict:
         """Create a clinician account: auth user + profile row."""
-        auth_response = self.db.auth.sign_up({
-            "email": email,
-            "password": password,
-        })
+        auth_response = self.db.auth.sign_up(
+            {
+                "email": email,
+                "password": password,
+            }
+        )
 
         if not auth_response.user:
             raise ValidationError("Signup failed — check email format or try a different email")
@@ -100,19 +106,21 @@ class AuthService:
         user_id = auth_response.user.id
 
         try:
-            self.db.table("clinicians").insert({
-                "id": user_id,
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-                "specialty": specialty,
-                "clinic_name": clinic_name,
-                "npi_number": npi_number,
-            }).execute()
+            self.db.table("clinicians").insert(
+                {
+                    "id": user_id,
+                    "email": email,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "specialty": specialty,
+                    "clinic_name": clinic_name,
+                    "npi_number": npi_number,
+                }
+            ).execute()
         except Exception as e:
             logger.error("Failed to create clinician profile for %s: %s", user_id, e)
             self.db.auth.admin.delete_user(user_id)
-            raise ValidationError(f"Profile creation failed: {e}")
+            raise ValidationError(f"Profile creation failed: {e}") from e
 
         return self._format_session(auth_response)
 
@@ -121,13 +129,15 @@ class AuthService:
     async def login(self, email: str, password: str) -> dict:
         """Authenticate with email + password. Works for both roles."""
         try:
-            response = self.db.auth.sign_in_with_password({
-                "email": email,
-                "password": password,
-            })
+            response = self.db.auth.sign_in_with_password(
+                {
+                    "email": email,
+                    "password": password,
+                }
+            )
         except Exception as e:
             logger.warning("Login failed for %s: %s", email, e)
-            raise AuthenticationError("Invalid email or password")
+            raise AuthenticationError("Invalid email or password") from None
 
         return self._format_session(response)
 
@@ -139,7 +149,7 @@ class AuthService:
             response = self.db.auth.refresh_session(refresh_token)
         except Exception as e:
             logger.warning("Token refresh failed: %s", e)
-            raise AuthenticationError("Invalid or expired refresh token")
+            raise AuthenticationError("Invalid or expired refresh token") from None
 
         return self._format_session(response)
 

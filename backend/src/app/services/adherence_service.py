@@ -12,7 +12,7 @@ each active item = 1 expected event per day.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from supabase import Client
@@ -70,9 +70,7 @@ class AdherenceService:
         Returns overall, medication-specific, and obligation-specific scores
         plus the current streak.
         """
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(days=period_days)
-        ).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=period_days)).isoformat()
 
         # Fetch all logs in the window
         logs = (
@@ -92,7 +90,8 @@ class AdherenceService:
                 .eq("patient_id", str(patient_id))
                 .eq("is_active", True)
                 .execute()
-            ).data or []
+            ).data
+            or []
         )
         obl_count = len(
             (
@@ -101,7 +100,8 @@ class AdherenceService:
                 .eq("patient_id", str(patient_id))
                 .eq("is_active", True)
                 .execute()
-            ).data or []
+            ).data
+            or []
         )
 
         # Simplified: 1 expected event per active item per day
@@ -111,11 +111,13 @@ class AdherenceService:
 
         # Count completed events
         med_completed = sum(
-            1 for log in log_data
+            1
+            for log in log_data
             if log["target_type"] == "medication" and log["status"] == "completed"
         )
         obl_completed = sum(
-            1 for log in log_data
+            1
+            for log in log_data
             if log["target_type"] == "obligation" and log["status"] == "completed"
         )
         total_completed = med_completed + obl_completed
@@ -151,7 +153,7 @@ class AdherenceService:
 
         # Walk backwards from today
         streak = 0
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         for i in range(len(completed_by_date) + 1):
             day_str = (today - timedelta(days=i)).isoformat()
             if completed_by_date.get(day_str, 0) >= daily_expected:

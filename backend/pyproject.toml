@@ -20,7 +20,13 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
-ignore = ["E501"]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "B008",   # Depends() in defaults — standard FastAPI pattern
+    "TCH001", # type-checking import (1st party) — too strict for services
+    "TCH002", # type-checking import (3rd party) — breaks runtime in services
+    "TCH003", # type-checking import (stdlib) — same
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

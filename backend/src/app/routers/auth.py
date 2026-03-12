@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from supabase import Client
 
-from app.core.security import get_current_user, require_role
+from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.models.auth import (
     AuthResponse,
@@ -34,6 +34,7 @@ def _get_auth_service(db: Client = Depends(get_db)) -> AuthService:
 
 
 # ── Signup ──────────────────────────────────────────────────
+
 
 @router.post(
     "/signup/patient",
@@ -88,6 +89,7 @@ async def signup_clinician(
 
 # ── Login ───────────────────────────────────────────────────
 
+
 @router.post(
     "/login",
     response_model=AuthResponse,
@@ -106,6 +108,7 @@ async def login(
 
 
 # ── Token Refresh ───────────────────────────────────────────
+
 
 @router.post(
     "/refresh",
@@ -126,6 +129,7 @@ async def refresh_token(
 
 # ── Password Reset ──────────────────────────────────────────
 
+
 @router.post(
     "/password-reset",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -140,6 +144,7 @@ async def password_reset(
 
 
 # ── Current User ────────────────────────────────────────────
+
 
 @router.get(
     "/me",

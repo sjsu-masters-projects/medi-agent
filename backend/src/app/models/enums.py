@@ -2,8 +2,8 @@
 
 from enum import StrEnum
 
-
 # ── Users ──────────────────────────────────────────
+
 
 class Language(StrEnum):
     EN = "en"
@@ -25,6 +25,7 @@ class ClinicianRole(StrEnum):
 
 # ── Care Team ─────────────────────────────────────
 
+
 class CareTeamStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -32,6 +33,7 @@ class CareTeamStatus(StrEnum):
 
 
 # ── Documents ──────────────────────────────────────
+
 
 class DocumentType(StrEnum):
     LAB_REPORT = "lab_report"
@@ -55,6 +57,7 @@ class UploaderRole(StrEnum):
 
 # ── Medications ────────────────────────────────────
 
+
 class MedicationRoute(StrEnum):
     ORAL = "oral"
     TOPICAL = "topical"
@@ -67,6 +70,7 @@ class MedicationRoute(StrEnum):
 
 # ── Obligations ────────────────────────────────────
 
+
 class ObligationType(StrEnum):
     DIET = "diet"
     EXERCISE = "exercise"
@@ -74,6 +78,7 @@ class ObligationType(StrEnum):
 
 
 # ── Adherence ──────────────────────────────────────
+
 
 class AdherenceTargetType(StrEnum):
     MEDICATION = "medication"
@@ -88,6 +93,7 @@ class AdherenceStatus(StrEnum):
 
 
 # ── ADR / Pharmacovigilance ───────────────────────
+
 
 class NaranjoCausality(StrEnum):
     DEFINITE = "Definite"
@@ -111,6 +117,7 @@ class MedWatchStatus(StrEnum):
 
 # ── Appointments ───────────────────────────────────
 
+
 class AppointmentType(StrEnum):
     FOLLOW_UP = "follow_up"
     INITIAL = "initial"
@@ -128,6 +135,7 @@ class AppointmentStatus(StrEnum):
 
 # ── Chat ───────────────────────────────────────────
 
+
 class ChatRole(StrEnum):
     USER = "user"
     ASSISTANT = "assistant"
@@ -135,6 +143,7 @@ class ChatRole(StrEnum):
 
 
 # ── Notifications ──────────────────────────────────
+
 
 class NotificationType(StrEnum):
     MED_REMINDER = "med_reminder"
@@ -147,12 +156,14 @@ class NotificationType(StrEnum):
 
 # ── Clinician Messages ────────────────────────────
 
+
 class MessageChannel(StrEnum):
     IN_APP = "in_app"
     EMAIL = "email"
 
 
 # ── Allergy ────────────────────────────────────────
+
 
 class AllergySeverity(StrEnum):
     MILD = "mild"
