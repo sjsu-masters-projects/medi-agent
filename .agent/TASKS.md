@@ -67,12 +67,12 @@
 - [ ] Test RLS policies with different user roles — needs real auth users
 
 ### 1.3 CI/CD
-- [ ] Set up GitHub Actions: lint on PR (Ruff + ESLint)
-- [ ] Set up GitHub Actions: test on PR (pytest + Vitest)
-- [ ] Set up GitHub Actions: build check on PR
+- [x] Set up GitHub Actions: lint on PR (Ruff + ESLint)
+- [x] Set up GitHub Actions: test on PR (pytest + Vitest)
+- [x] Set up GitHub Actions: build check on PR
 - [ ] Set up GitHub Actions: deploy backend to Cloud Run on merge to main
 - [ ] Set up GitHub Actions: deploy portals to Vercel on merge to main
-- [ ] Set up Husky pre-commit hooks (lint + format)
+- [x] Set up Husky pre-commit hooks (lint + format)
 
 ### 1.4 Cloud Infrastructure
 - [ ] Set up Google Cloud project
