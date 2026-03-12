@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+# Ensure we run from project root
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
 echo "🚀  MediAgent Preflight Check"
 echo "=============================="
 echo ""

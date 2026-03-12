@@ -8,8 +8,11 @@
 
 set -euo pipefail
 
-ENV_FILE=".env"
-EXAMPLE_FILE=".env.example"
+# Find project root so script works regardless of where it's called from
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+ENV_FILE="$ROOT_DIR/.env"
+EXAMPLE_FILE="$ROOT_DIR/.env.example"
 ERRORS=0
 
 if [ ! -f "$ENV_FILE" ]; then
