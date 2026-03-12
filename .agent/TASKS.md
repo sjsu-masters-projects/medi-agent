@@ -129,35 +129,35 @@
 - [ ] Write auth integration tests
 
 ### 2.3 Patient API
-- [ ] `GET /api/v1/patients/me` — get own profile
-- [ ] `PUT /api/v1/patients/me` — update profile
-- [ ] `GET /api/v1/patients/me/care-team` — list patient's providers
-- [ ] `POST /api/v1/patients/me/care-team/join` — join clinic via code
+- [x] `GET /api/v1/patients/me` — get own profile
+- [x] `PUT /api/v1/patients/me` — update profile
+- [x] `GET /api/v1/patients/me/care-team` — list patient's providers
+- [x] `POST /api/v1/patients/me/care-team/join` — join clinic via code
 - [ ] Write patient API tests
 
 ### 2.4 Clinician API
-- [ ] `GET /api/v1/clinicians/me` — get own profile
-- [ ] `GET /api/v1/clinicians/me/patients` — list assigned patients
-- [ ] `GET /api/v1/clinicians/patients/{id}` — get patient detail
-- [ ] `POST /api/v1/clinicians/me/invite` — generate patient invite code
+- [x] `GET /api/v1/clinicians/me` — get own profile
+- [x] `GET /api/v1/clinicians/me/patients` — list assigned patients
+- [x] `GET /api/v1/clinicians/me/patients/{id}` — get patient detail
+- [x] `POST /api/v1/clinicians/me/invite-code` — generate patient invite code
 - [ ] Write clinician API tests
 
 ### 2.5 Document API
-- [ ] `POST /api/v1/documents/upload` — upload document (patient or clinician)
-- [ ] `GET /api/v1/documents` — list patient's documents
-- [ ] `GET /api/v1/documents/{id}` — get document detail + signed URL
-- [ ] `POST /api/v1/documents/{id}/explain` — trigger AI explanation
-- [ ] File upload to Supabase Storage with signed URLs
+- [x] `POST /api/v1/documents/` — register uploaded document (metadata-only)
+- [x] `GET /api/v1/documents` — list patient's documents
+- [x] `GET /api/v1/documents/{id}` — get document detail + signed URL
+- [x] `POST /api/v1/documents/{id}/explain` — 501 placeholder (Phase 4)
+- [x] File validation + signed URL generation
 - [ ] Write document API tests
 
 ### 2.6 Medications & Obligations API
-- [ ] `GET /api/v1/medications` — list patient's active medications
-- [ ] `POST /api/v1/medications` — create medication (from parsing or clinician)
-- [ ] `PUT /api/v1/medications/{id}` — update medication
-- [ ] `GET /api/v1/obligations` — list patient's obligations
-- [ ] `POST /api/v1/obligations` — create obligation (clinician sets)
-- [ ] `POST /api/v1/adherence` — log medication taken / obligation completed
-- [ ] `GET /api/v1/adherence/stats` — adherence score calculation
+- [x] `GET /api/v1/medications` — list patient's active medications
+- [x] `POST /api/v1/medications` — create medication
+- [x] `PUT /api/v1/medications/{id}` — update medication
+- [x] `GET /api/v1/obligations` — list patient's obligations
+- [x] `POST /api/v1/obligations` — create obligation
+- [x] `POST /api/v1/adherence` — log medication taken / obligation completed
+- [x] `GET /api/v1/adherence/stats` — adherence score + streak calculation
 - [ ] Write medication and adherence tests
 
 ### 2.7 Today Feed API
