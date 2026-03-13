@@ -6,6 +6,7 @@ Searches for .env in:
 """
 
 from pathlib import Path
+from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
     log_level: str = "DEBUG"
 
     @property
-    def allowed_origins(self) -> list[str]:
+    def allowed_origins(self) -> Any:
         origins = {self.patient_portal_url, self.clinician_portal_url}
         if self.environment == "development":
             origins |= {"http://localhost:3000", "http://localhost:3001"}

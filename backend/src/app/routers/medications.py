@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -29,7 +30,7 @@ async def list_medications(
     active_only: bool = True,
     user: CurrentUser = Depends(get_current_user),
     service: MedicationService = Depends(_get_service),
-) -> list:
+) -> Any:
     return await service.list_medications(user.id, active_only)
 
 
@@ -43,7 +44,7 @@ async def create_medication(
     data: MedicationCreate,
     user: CurrentUser = Depends(get_current_user),
     service: MedicationService = Depends(_get_service),
-) -> dict:
+) -> Any:
     payload = data.model_dump(exclude_unset=True)
     # Convert enums and UUIDs to strings for Supabase
     if "route" in payload:
@@ -71,7 +72,7 @@ async def update_medication(
     data: MedicationUpdate,
     user: CurrentUser = Depends(get_current_user),
     service: MedicationService = Depends(_get_service),
-) -> dict:
+) -> Any:
     payload = data.model_dump(exclude_unset=True)
     if "route" in payload and payload["route"]:
         payload["route"] = (

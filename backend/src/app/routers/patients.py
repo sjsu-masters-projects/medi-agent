@@ -5,6 +5,8 @@ All endpoints require authentication as a patient.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from supabase import Client
 
@@ -29,7 +31,7 @@ def _get_service(db: Client = Depends(get_db)) -> PatientService:
 async def get_my_profile(
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.get_profile(user.id)
 
 
@@ -38,7 +40,7 @@ async def update_my_profile(
     data: PatientUpdate,
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.update_profile(user.id, data.model_dump(exclude_unset=True))
 
 
@@ -50,7 +52,7 @@ async def update_my_profile(
 async def get_my_care_team(
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> list:
+) -> Any:
     return await service.get_care_team(user.id)
 
 
@@ -63,5 +65,5 @@ async def join_clinic(
     invite_code: str,
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.join_care_team(user.id, invite_code)

@@ -1,5 +1,6 @@
 """Chat routes."""
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -10,7 +11,7 @@ router = APIRouter()
 
 
 @router.get("/history/{patient_id}", response_model=list[ChatMessage])
-async def get_chat_history(patient_id: UUID, limit: int = 50) -> list:
+async def get_chat_history(patient_id: UUID, limit: int = 50) -> Any:
     raise NotImplementedError
 
 

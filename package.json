@@ -12,7 +12,8 @@
   "lint-staged": {
     "backend/src/**/*.py": [
       "ruff check --fix",
-      "ruff format"
+      "ruff format",
+      "mypy --ignore-missing-imports"
     ],
     "apps/**/*.{ts,tsx}": [
       "eslint --fix"

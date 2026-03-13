@@ -8,6 +8,7 @@ and generates time-limited signed URLs for file access.
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 from uuid import UUID
 
 from supabase import Client
@@ -50,7 +51,7 @@ class DocumentService:
         document_type: str,
         source_clinic: str | None = None,
         notes: str | None = None,
-    ) -> dict:
+    ) -> Any:
         """Store document metadata after the frontend has uploaded the file.
 
         Validates file type and size before inserting.
@@ -60,7 +61,7 @@ class DocumentService:
         # Generate a signed URL for immediate access
         file_url = self._generate_signed_url(file_path)
 
-        row = {
+        row: dict[str, Any] = {
             "patient_id": str(patient_id),
             "uploaded_by": str(uploaded_by),
             "uploaded_by_role": uploaded_by_role,
@@ -81,7 +82,7 @@ class DocumentService:
 
     # ── List ────────────────────────────────────────────
 
-    async def list_documents(self, patient_id: UUID) -> list[dict]:
+    async def list_documents(self, patient_id: UUID) -> Any:
         """List all documents for a patient, newest first."""
         result = (
             self.db.table("documents")
@@ -91,14 +92,15 @@ class DocumentService:
             .execute()
         )
         # Refresh signed URLs for each document
-        for doc in result.data or []:
+        data = cast(list[dict[str, Any]], result.data or [])
+        for doc in data:
             if doc.get("file_path"):
                 doc["file_url"] = self._generate_signed_url(doc["file_path"])
-        return result.data or []
+        return data
 
     # ── Get One ─────────────────────────────────────────
 
-    async def get_document(self, document_id: UUID, patient_id: UUID) -> dict:
+    async def get_document(self, document_id: UUID, patient_id: UUID) -> Any:
         """Get a single document with a fresh signed URL."""
         result = (
             self.db.table("documents")
@@ -112,9 +114,10 @@ class DocumentService:
             raise NotFoundError("Document", str(document_id))
 
         # Refresh the signed URL
-        if result.data.get("file_path"):
-            result.data["file_url"] = self._generate_signed_url(result.data["file_path"])
-        return result.data
+        data = cast(dict[str, Any], result.data)
+        if data.get("file_path"):
+            data["file_url"] = self._generate_signed_url(data["file_path"])
+        return data
 
     # ── Helpers ─────────────────────────────────────────
 

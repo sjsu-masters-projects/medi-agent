@@ -16,6 +16,7 @@ Design decisions:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from supabase import Client
 
@@ -44,7 +45,7 @@ class AuthService:
         last_name: str,
         date_of_birth: str,
         preferred_language: str = "en",
-    ) -> dict:
+    ) -> Any:
         """Create a patient account: auth user + profile row.
 
         Returns the Supabase session (access_token, refresh_token, user).
@@ -91,7 +92,7 @@ class AuthService:
         specialty: str,
         clinic_name: str,
         npi_number: str | None = None,
-    ) -> dict:
+    ) -> Any:
         """Create a clinician account: auth user + profile row."""
         auth_response = self.db.auth.sign_up(
             {
@@ -126,7 +127,7 @@ class AuthService:
 
     # ── Login ───────────────────────────────────────────────
 
-    async def login(self, email: str, password: str) -> dict:
+    async def login(self, email: str, password: str) -> Any:
         """Authenticate with email + password. Works for both roles."""
         try:
             response = self.db.auth.sign_in_with_password(
@@ -143,7 +144,7 @@ class AuthService:
 
     # ── Token Refresh ───────────────────────────────────────
 
-    async def refresh_token(self, refresh_token: str) -> dict:
+    async def refresh_token(self, refresh_token: str) -> Any:
         """Exchange a refresh token for a new access token."""
         try:
             response = self.db.auth.refresh_session(refresh_token)
@@ -166,7 +167,7 @@ class AuthService:
     # ── Helpers ─────────────────────────────────────────────
 
     @staticmethod
-    def _format_session(response) -> dict:
+    def _format_session(response: Any) -> Any:
         """Normalize Supabase auth response into our standard shape."""
         session = response.session
         user = response.user

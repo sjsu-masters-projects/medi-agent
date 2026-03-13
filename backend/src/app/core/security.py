@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
@@ -75,7 +76,7 @@ async def get_current_user(
     )
 
 
-def require_role(role: str) -> Callable:
+def require_role(role: str) -> Callable[..., Any]:
     """Factory that creates a dependency requiring a specific user role.
 
     The returned dependency calls get_current_user first, then

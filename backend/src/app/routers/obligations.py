@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -29,7 +30,7 @@ async def list_obligations(
     active_only: bool = True,
     user: CurrentUser = Depends(get_current_user),
     service: ObligationService = Depends(_get_service),
-) -> list:
+) -> Any:
     return await service.list_obligations(user.id, active_only)
 
 
@@ -43,7 +44,7 @@ async def create_obligation(
     data: ObligationCreate,
     user: CurrentUser = Depends(get_current_user),
     service: ObligationService = Depends(_get_service),
-) -> dict:
+) -> Any:
     payload = data.model_dump(exclude_unset=True)
     if "obligation_type" in payload:
         payload["obligation_type"] = (
@@ -66,7 +67,7 @@ async def update_obligation(
     data: ObligationUpdate,
     user: CurrentUser = Depends(get_current_user),
     service: ObligationService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.update_obligation(
         obligation_id, user.id, data.model_dump(exclude_unset=True)
     )

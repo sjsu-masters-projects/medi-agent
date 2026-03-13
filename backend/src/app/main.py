@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,7 +102,7 @@ def create_app() -> FastAPI:
 
     # ── Health Check ────────────────────────────────────
     @application.get("/health", tags=["Health"])
-    async def health_check() -> dict[str, str]:
+    async def health_check() -> Any:
         return {"status": "healthy", "service": "mediagent-backend"}
 
     return application
