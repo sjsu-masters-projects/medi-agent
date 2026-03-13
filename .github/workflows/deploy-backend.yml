@@ -79,5 +79,5 @@ jobs:
             --service-account github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com \
             --port 8080 \
             --timeout 300 \
-            --set-env-vars="ENVIRONMENT=production,PORT=8080" \
+            --set-env-vars="ENVIRONMENT=production" \
             --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest"
