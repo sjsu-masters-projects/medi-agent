@@ -11,7 +11,7 @@
   },
   "lint-staged": {
     "backend/src/**/*.py": [
-      "ruff check --fix",
+      "ruff check --fix --unsafe-fixes",
       "ruff format",
       "mypy --ignore-missing-imports"
     ],
