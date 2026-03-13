@@ -45,10 +45,25 @@ class DeepgramServer(MCPServer):
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "audio_base64": {"type": "string", "description": "Base64-encoded audio data"},
-                        "model": {"type": "string", "description": "Deepgram model", "default": "nova-3"},
-                        "language": {"type": "string", "description": "Language code", "default": "en"},
-                        "smart_format": {"type": "boolean", "description": "Smart formatting", "default": True},
+                        "audio_base64": {
+                            "type": "string",
+                            "description": "Base64-encoded audio data",
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "Deepgram model",
+                            "default": "nova-3",
+                        },
+                        "language": {
+                            "type": "string",
+                            "description": "Language code",
+                            "default": "en",
+                        },
+                        "smart_format": {
+                            "type": "boolean",
+                            "description": "Smart formatting",
+                            "default": True,
+                        },
                     },
                     "required": ["audio_base64"],
                 },
@@ -60,8 +75,16 @@ class DeepgramServer(MCPServer):
                     "type": "object",
                     "properties": {
                         "text": {"type": "string", "description": "Text to convert to speech"},
-                        "model": {"type": "string", "description": "Voice model", "default": "aura-2-asteria-en"},
-                        "encoding": {"type": "string", "description": "Audio format", "default": "mp3"},
+                        "model": {
+                            "type": "string",
+                            "description": "Voice model",
+                            "default": "aura-2-asteria-en",
+                        },
+                        "encoding": {
+                            "type": "string",
+                            "description": "Audio format",
+                            "default": "mp3",
+                        },
                     },
                     "required": ["text"],
                 },
@@ -72,7 +95,10 @@ class DeepgramServer(MCPServer):
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "audio_base64": {"type": "string", "description": "Base64-encoded audio data"},
+                        "audio_base64": {
+                            "type": "string",
+                            "description": "Base64-encoded audio data",
+                        },
                         "patient_id": {"type": "string", "description": "Patient UUID for context"},
                     },
                     "required": ["audio_base64", "patient_id"],
