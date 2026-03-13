@@ -106,6 +106,11 @@ def create_app() -> FastAPI:
         """Health check endpoint for Cloud Run and monitoring."""
         return {"status": "healthy", "service": "mediagent-backend"}
 
+    @application.get("/version", tags=["Health"])
+    async def version() -> Any:
+        """API version endpoint."""
+        return {"version": "0.1.0", "service": "mediagent-backend"}
+
     return application
 
 
