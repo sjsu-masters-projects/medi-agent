@@ -137,6 +137,25 @@ if naranjo_score >= 5:
     priority = "HIGH"
 ```
 
+### Typing (Mypy & Supabase)
+
+All Python code must pass strict `mypy` checks.
+Supabase `result.data` is implicitly typed as a union of primitives (`JSON`).
+When returning or manipulating Supabase payloads, **you must use `typing.cast`** to assert the correct type constraints, otherwise `mypy` will fail.
+
+```python
+# ✅ Good — safely cast Supabase result sets
+from typing import Any, cast
+
+result = db.table("patients").select("*").execute()
+patients: list[dict[str, Any]] = cast(list[dict[str, Any]], result.data or [])
+return patients
+
+# ❌ Bad — mypy will throw indexing errors on generic unions
+result = db.table("patients").select("*").execute()
+return result.data  # mypy error: Return type "Any" is not compatible
+```
+
 ### Error Handling
 
 ```python
