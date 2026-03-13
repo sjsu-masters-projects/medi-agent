@@ -75,12 +75,12 @@
 - [x] Set up Husky pre-commit hooks (lint + format)
 
 ### 1.4 Cloud Infrastructure
-- [ ] Set up Google Cloud project
-- [ ] Configure Cloud Run for backend
-- [ ] Configure Cloud Scheduler for cron jobs
-- [ ] Set up Vercel projects (patient-portal, clinician-portal)
-- [ ] Configure environment variables in all platforms
-- [ ] Set up Sentry for error monitoring
+- [x] Set up Google Cloud project / guide
+- [x] Configure Cloud Run strategy for backend
+- [x] Configure Cloud Scheduler strategy for cron jobs
+- [x] Set up Vercel strategy (patient-portal, clinician-portal)
+- [x] Configure environment variables strategy
+- [x] Set up Sentry strategy for error monitoring
 
 ### 1.5 External Service Setup
 - [ ] Get Gemini API key (Google AI Studio / Vertex AI)
