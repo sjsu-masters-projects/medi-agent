@@ -8,6 +8,7 @@ on:
       - 'backend/**'
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PROJECT_ID: medi-agent-490106
   REGION: us-central1
   SERVICE_NAME: mediagent-backend
