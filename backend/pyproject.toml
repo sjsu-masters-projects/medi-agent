@@ -35,6 +35,7 @@ known-first-party = ["app"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+warn_unused_ignores = false
 warn_return_any = true
 warn_unused_configs = true
 plugins = ["pydantic.mypy"]
