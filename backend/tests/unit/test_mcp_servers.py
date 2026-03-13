@@ -1,8 +1,17 @@
 """Tests for MCP servers."""
 
 import base64
+import os
 import pytest
 from app.mcp import supabase_server, deepgram_server
+
+
+# Skip Deepgram tests if API key not available
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+skip_deepgram = pytest.mark.skipif(
+    not DEEPGRAM_API_KEY,
+    reason="DEEPGRAM_API_KEY not set in environment"
+)
 
 
 class TestSupabaseMCPServer:
@@ -138,6 +147,7 @@ class TestDeepgramMCPServer:
             assert "description" in tool
             assert "input_schema" in tool
     
+    @skip_deepgram
     @pytest.mark.asyncio
     async def test_generate_speech_success(self):
         """Test TTS generation."""
@@ -159,6 +169,7 @@ class TestDeepgramMCPServer:
         audio_bytes = base64.b64decode(result["audio_base64"])
         assert len(audio_bytes) > 0
     
+    @skip_deepgram
     @pytest.mark.asyncio
     async def test_transcribe_audio_success(self):
         """Test STT transcription."""
@@ -188,6 +199,7 @@ class TestDeepgramMCPServer:
         # Transcript should be similar to original text
         assert "hello" in stt_result["transcript"].lower()
     
+    @skip_deepgram
     @pytest.mark.asyncio
     async def test_transcribe_patient_message(self):
         """Test patient message transcription."""

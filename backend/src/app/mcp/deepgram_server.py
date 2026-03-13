@@ -31,7 +31,7 @@ class DeepgramServer(MCPServer):
         self._client: Any = None
 
     @property
-    def client(self) -> Any:
+    def client(self) -> Any:  # type: ignore[no-untyped-def]
         """Lazy-load async Deepgram client."""
         if self._client is None:
             self._client = get_async_deepgram_client()

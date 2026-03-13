@@ -58,7 +58,8 @@ def generate_speech(
         encoding=encoding,
     )
 
-    return response.stream.getvalue()  # type: ignore[no-any-return]
+    # type: ignore[no-any-return]
+    return response.stream.getvalue()
 
 
 async def transcribe_audio_file_async(
@@ -78,7 +79,8 @@ async def transcribe_audio_file_async(
         smart_format=smart_format,
     )
 
-    return response.results.channels[0].alternatives[0].transcript  # type: ignore[no-any-return]
+    # type: ignore[no-any-return]
+    return response.results.channels[0].alternatives[0].transcript
 
 
 async def generate_speech_async(
