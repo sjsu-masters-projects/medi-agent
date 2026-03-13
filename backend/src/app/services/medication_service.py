@@ -26,9 +26,7 @@ class MedicationService:
     def __init__(self, db: Client) -> None:
         self.db = db
 
-    async def list_medications(
-        self, patient_id: UUID, active_only: bool = True
-    ) -> list[dict]:
+    async def list_medications(self, patient_id: UUID, active_only: bool = True) -> list[dict]:
         """List medications for a patient, optionally filtered to active only."""
         query = (
             self.db.table("medications")
@@ -41,9 +39,7 @@ class MedicationService:
         result = query.execute()
         return result.data or []
 
-    async def create_medication(
-        self, patient_id: UUID, data: dict
-    ) -> dict:
+    async def create_medication(self, patient_id: UUID, data: dict) -> dict:
         """Create a new medication for a patient."""
         row = {"patient_id": str(patient_id), **data}
         result = self.db.table("medications").insert(row).execute()
@@ -51,9 +47,7 @@ class MedicationService:
             raise Exception("Failed to create medication")
         return result.data[0]
 
-    async def update_medication(
-        self, medication_id: UUID, patient_id: UUID, updates: dict
-    ) -> dict:
+    async def update_medication(self, medication_id: UUID, patient_id: UUID, updates: dict) -> dict:
         """Update a medication — only non-None fields are applied."""
         clean = {k: v for k, v in updates.items() if v is not None}
         if not clean:

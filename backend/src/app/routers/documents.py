@@ -31,8 +31,10 @@ def _get_service(db: Client = Depends(get_db)) -> DocumentService:
 
 # ── Request schema (specific to this endpoint) ─────────
 
+
 class DocumentCreateRequest(BaseModel):
     """Metadata sent after the frontend uploads the file to Storage."""
+
     file_name: str = Field(..., min_length=1, max_length=255)
     file_path: str = Field(
         ...,
@@ -46,6 +48,7 @@ class DocumentCreateRequest(BaseModel):
 
 
 # ── Endpoints ───────────────────────────────────────────
+
 
 @router.post(
     "/",

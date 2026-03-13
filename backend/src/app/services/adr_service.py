@@ -2,7 +2,6 @@
 
 
 class ADRService:
-
     async def list_assessments(self, clinician_id: str, status: str | None = None) -> list:
         raise NotImplementedError
 

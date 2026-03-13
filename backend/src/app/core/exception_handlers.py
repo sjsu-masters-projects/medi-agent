@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 # ── Helpers ─────────────────────────────────────────────────
 
+
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
     """Build a uniform error response."""
     return JSONResponse(
@@ -42,6 +43,7 @@ def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
 
 
 # ── Handlers ────────────────────────────────────────────────
+
 
 async def _not_found_handler(_: Request, exc: NotFoundError) -> JSONResponse:
     return _error_response(404, exc.code, exc.message)
@@ -80,6 +82,7 @@ async def _catch_all_handler(_: Request, exc: MediAgentError) -> JSONResponse:
 
 
 # ── Registration ────────────────────────────────────────────
+
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register all handlers on the FastAPI app.

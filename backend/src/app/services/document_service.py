@@ -17,13 +17,15 @@ from app.core.exceptions import NotFoundError, ValidationError
 logger = logging.getLogger(__name__)
 
 # File validation constants
-ALLOWED_MIME_TYPES = frozenset({
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/heic",
-})
+ALLOWED_MIME_TYPES = frozenset(
+    {
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/heic",
+    }
+)
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 SIGNED_URL_EXPIRY_SECONDS = 3600  # 1 hour
 
@@ -111,9 +113,7 @@ class DocumentService:
 
         # Refresh the signed URL
         if result.data.get("file_path"):
-            result.data["file_url"] = self._generate_signed_url(
-                result.data["file_path"]
-            )
+            result.data["file_url"] = self._generate_signed_url(result.data["file_path"])
         return result.data
 
     # ── Helpers ─────────────────────────────────────────

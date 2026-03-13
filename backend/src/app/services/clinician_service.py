@@ -31,11 +31,7 @@ class ClinicianService:
     async def get_profile(self, clinician_id: UUID) -> dict:
         """Fetch the clinician's own profile."""
         result = (
-            self.db.table("clinicians")
-            .select("*")
-            .eq("id", str(clinician_id))
-            .single()
-            .execute()
+            self.db.table("clinicians").select("*").eq("id", str(clinician_id)).single().execute()
         )
         if not result.data:
             raise NotFoundError("Clinician", str(clinician_id))
@@ -62,9 +58,7 @@ class ClinicianService:
                 patients.append(patient)
         return patients
 
-    async def get_patient_detail(
-        self, clinician_id: UUID, patient_id: UUID
-    ) -> dict:
+    async def get_patient_detail(self, clinician_id: UUID, patient_id: UUID) -> dict:
         """Get full patient profile — only if clinician is assigned.
 
         Security: checks the care_teams junction table to ensure
@@ -80,18 +74,10 @@ class ClinicianService:
             .execute()
         )
         if not assignment.data:
-            raise AuthorizationError(
-                "You are not assigned to this patient"
-            )
+            raise AuthorizationError("You are not assigned to this patient")
 
         # Fetch full patient profile
-        result = (
-            self.db.table("patients")
-            .select("*")
-            .eq("id", str(patient_id))
-            .single()
-            .execute()
-        )
+        result = self.db.table("patients").select("*").eq("id", str(patient_id)).single().execute()
         if not result.data:
             raise NotFoundError("Patient", str(patient_id))
         return result.data
@@ -108,12 +94,14 @@ class ClinicianService:
 
         result = (
             self.db.table("care_teams")
-            .insert({
-                "clinician_id": str(clinician_id),
-                "invite_code": code,
-                "status": "pending",
-                "role": "provider",
-            })
+            .insert(
+                {
+                    "clinician_id": str(clinician_id),
+                    "invite_code": code,
+                    "status": "pending",
+                    "role": "provider",
+                }
+            )
             .execute()
         )
         if not result.data:

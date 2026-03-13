@@ -39,9 +39,7 @@ async def log_adherence(
         )
     if "status" in payload:
         payload["status"] = (
-            payload["status"].value
-            if hasattr(payload["status"], "value")
-            else payload["status"]
+            payload["status"].value if hasattr(payload["status"], "value") else payload["status"]
         )
     if "target_id" in payload:
         payload["target_id"] = str(payload["target_id"])

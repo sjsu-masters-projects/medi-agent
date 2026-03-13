@@ -2,7 +2,6 @@
 
 
 class ChatService:
-
     async def save_message(self, patient_id: str, data: dict) -> dict:
         raise NotImplementedError
 

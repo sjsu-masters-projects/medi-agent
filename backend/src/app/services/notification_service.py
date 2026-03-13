@@ -2,7 +2,6 @@
 
 
 class NotificationService:
-
     async def create(self, patient_id: str, data: dict) -> dict:
         raise NotImplementedError
 

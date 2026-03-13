@@ -28,13 +28,7 @@ class PatientService:
 
     async def get_profile(self, patient_id: UUID) -> dict:
         """Fetch the patient's own profile by auth user ID."""
-        result = (
-            self.db.table("patients")
-            .select("*")
-            .eq("id", str(patient_id))
-            .single()
-            .execute()
-        )
+        result = self.db.table("patients").select("*").eq("id", str(patient_id)).single().execute()
         if not result.data:
             raise NotFoundError("Patient", str(patient_id))
         return result.data
@@ -46,12 +40,7 @@ class PatientService:
         if not clean:
             return await self.get_profile(patient_id)
 
-        result = (
-            self.db.table("patients")
-            .update(clean)
-            .eq("id", str(patient_id))
-            .execute()
-        )
+        result = self.db.table("patients").update(clean).eq("id", str(patient_id)).execute()
         if not result.data:
             raise NotFoundError("Patient", str(patient_id))
         return result.data[0]
