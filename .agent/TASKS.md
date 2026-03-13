@@ -70,34 +70,33 @@
 - [x] Set up GitHub Actions: lint on PR (Ruff + ESLint)
 - [x] Set up GitHub Actions: test on PR (pytest + Vitest)
 - [x] Set up GitHub Actions: build check on PR
-- [ ] Set up GitHub Actions: deploy backend to Cloud Run on merge to main
-- [ ] Set up GitHub Actions: deploy portals to Vercel on merge to main
+- [x] Set up GitHub Actions: deploy backend to Cloud Run on merge to main
+- [x] Set up GitHub Actions: deploy portals to Vercel on merge to main
 - [x] Set up Husky pre-commit hooks (lint + format)
 
 ### 1.4 Cloud Infrastructure
 - [x] Set up Google Cloud project / guide
 - [x] Configure Cloud Run strategy for backend
-- [x] Configure Cloud Scheduler strategy for cron jobs
+- [ ] Configure Cloud Scheduler strategy for cron jobs
 - [x] Set up Vercel strategy (patient-portal, clinician-portal)
 - [x] Configure environment variables strategy
-- [x] Set up Sentry strategy for error monitoring
+- [ ] Set up Sentry strategy for error monitoring
 
 ### 1.5 External Service Setup
 - [ ] Get Gemini API key (Google AI Studio / Vertex AI)
-- [ ] Get Deepgram API key and configure SDK
+- [x] Get Deepgram API key and configure SDK
 - [ ] Set up Resend for email
-- [ ] Test DailyMed API access  
-- [ ] Test RxNorm API access
+- [x] Test DailyMed API access  
+- [x] Test RxNorm API access
 - [ ] Obtain Syncfusion Community License key
 - [ ] Download and test MedGemma model access (Hugging Face / Vertex AI)
 
-### 1.6 MCP Server Scaffolding
-- [ ] Create MCP server base structure (`backend/app/mcp/`)
-- [ ] Implement `mcp-supabase` server (patient data queries)
-- [ ] Implement `mcp-dailymed` server (drug labels, ADR profiles)
-- [ ] Implement `mcp-rxnorm` server (drug normalization)
-- [ ] Implement `mcp-deepgram` server (STT/TTS access)
-- [ ] Test MCP servers with standalone MCP client
+### 1.6 Service Layer & MCP Servers (for AI Agents)
+- [x] DailyMed service — drug labels, ADR profiles (`app/services/dailymed_service.py`)
+- [x] RxNorm service — drug normalization (`app/services/rxnorm_service.py`)
+- [x] Supabase MCP server — patient data queries, shared connection (`app/mcp/supabase_server.py`)
+- [x] Deepgram MCP server — voice STT/TTS, shared client (`app/mcp/deepgram_server.py`)
+- [x] MCP base class and module init (`app/mcp/base.py`)
 
 ### 1.7 A2A Protocol Setup
 - [ ] Create Agent Card JSON schema for each agent
