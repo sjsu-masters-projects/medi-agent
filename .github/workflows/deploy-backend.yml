@@ -58,5 +58,6 @@ jobs:
             --min-instances 0 \
             --max-instances 2 \
             --allow-unauthenticated \
+            --service-account github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com \
             --set-env-vars="ENVIRONMENT=production" \
             --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest"
