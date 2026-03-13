@@ -1,0 +1,11 @@
+{
+  "name": "keep-latest-only",
+  "action": "DELETE",
+  "condition": {
+    "tagState": "ANY",
+    "olderThan": "0s"
+  },
+  "mostRecentVersions": {
+    "keepCount": 1
+  }
+}
