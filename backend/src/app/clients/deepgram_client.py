@@ -23,6 +23,7 @@ def get_async_deepgram_client() -> AsyncDeepgramClient:
 
 # Helper functions for common operations
 
+
 def transcribe_audio_file(
     audio_file: BinaryIO,
     model: str = "nova-3",
@@ -32,14 +33,14 @@ def transcribe_audio_file(
     """Transcribe audio file to text. Returns the transcript string."""
     client = get_deepgram_client()
     audio_data = audio_file.read()
-    
+
     response = client.listen.v1.media.transcribe_file(
         request=audio_data,
         model=model,
         language=language,
         smart_format=smart_format,
     )
-    
+
     return response.results.channels[0].alternatives[0].transcript
 
 
@@ -50,13 +51,13 @@ def generate_speech(
 ) -> bytes:
     """Convert text to speech. Returns audio bytes."""
     client = get_deepgram_client()
-    
+
     response = client.speak.v1.audio.generate(
         text=text,
         model=model,
         encoding=encoding,
     )
-    
+
     return response.stream.getvalue()
 
 
@@ -69,14 +70,14 @@ async def transcribe_audio_file_async(
     """Async transcribe audio file to text. Returns the transcript string."""
     client = get_async_deepgram_client()
     audio_data = audio_file.read()
-    
+
     response = await client.listen.v1.media.transcribe_file(
         request=audio_data,
         model=model,
         language=language,
         smart_format=smart_format,
     )
-    
+
     return response.results.channels[0].alternatives[0].transcript
 
 
@@ -87,18 +88,17 @@ async def generate_speech_async(
 ) -> bytes:
     """Async convert text to speech. Returns audio bytes."""
     client = get_async_deepgram_client()
-    
+
     # Deepgram async returns a generator, need to collect chunks
     response = client.speak.v1.audio.generate(
         text=text,
         model=model,
         encoding=encoding,
     )
-    
+
     # Collect all audio chunks
     audio_chunks = []
     async for chunk in response:
         audio_chunks.append(chunk)
-    
-    return b''.join(audio_chunks)
 
+    return b"".join(audio_chunks)

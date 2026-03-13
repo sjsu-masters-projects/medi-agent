@@ -4,8 +4,8 @@
 - Deepgram: Voice transcription (STT) and speech generation (TTS)
 """
 
-from app.mcp.supabase_server import supabase_server
 from app.mcp.deepgram_server import deepgram_server
+from app.mcp.supabase_server import supabase_server
 
 __all__ = [
     "supabase_server",

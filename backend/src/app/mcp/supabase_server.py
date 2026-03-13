@@ -5,7 +5,7 @@ Uses a shared Supabase connection via lazy-loaded admin client.
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -40,9 +40,7 @@ class SupabaseServer(MCPServer):
                 "description": "Get all active medications for a patient.",
                 "input_schema": {
                     "type": "object",
-                    "properties": {
-                        "patient_id": {"type": "string", "description": "Patient UUID"}
-                    },
+                    "properties": {"patient_id": {"type": "string", "description": "Patient UUID"}},
                     "required": ["patient_id"],
                 },
             },
@@ -51,9 +49,7 @@ class SupabaseServer(MCPServer):
                 "description": "Get all active conditions for a patient.",
                 "input_schema": {
                     "type": "object",
-                    "properties": {
-                        "patient_id": {"type": "string", "description": "Patient UUID"}
-                    },
+                    "properties": {"patient_id": {"type": "string", "description": "Patient UUID"}},
                     "required": ["patient_id"],
                 },
             },
@@ -62,9 +58,7 @@ class SupabaseServer(MCPServer):
                 "description": "Get all allergies for a patient.",
                 "input_schema": {
                     "type": "object",
-                    "properties": {
-                        "patient_id": {"type": "string", "description": "Patient UUID"}
-                    },
+                    "properties": {"patient_id": {"type": "string", "description": "Patient UUID"}},
                     "required": ["patient_id"],
                 },
             },
@@ -105,9 +99,7 @@ class SupabaseServer(MCPServer):
                 "description": "Get complete patient context (meds, conditions, allergies, symptoms, adherence).",
                 "input_schema": {
                     "type": "object",
-                    "properties": {
-                        "patient_id": {"type": "string", "description": "Patient UUID"}
-                    },
+                    "properties": {"patient_id": {"type": "string", "description": "Patient UUID"}},
                     "required": ["patient_id"],
                 },
             },
@@ -128,9 +120,7 @@ class SupabaseServer(MCPServer):
                     patient_id, arguments.get("days", 30)
                 )
             case "get_recent_symptoms":
-                return await self._get_recent_symptoms(
-                    patient_id, arguments.get("days", 7)
-                )
+                return await self._get_recent_symptoms(patient_id, arguments.get("days", 7))
             case "get_patient_context":
                 return await self._get_patient_context(patient_id)
             case _:
@@ -142,7 +132,9 @@ class SupabaseServer(MCPServer):
         try:
             response = (
                 self.client.table("medications")
-                .select("id, name, dosage, frequency, instructions, rxcui, start_date, end_date, prescriber_id")
+                .select(
+                    "id, name, dosage, frequency, instructions, rxcui, start_date, end_date, prescriber_id"
+                )
                 .eq("patient_id", patient_id)
                 .eq("active", True)
                 .order("start_date", desc=True)
@@ -194,9 +186,7 @@ class SupabaseServer(MCPServer):
             logger.error("patient_allergies_error", patient_id=patient_id, error=str(e))
             return {"patient_id": patient_id, "allergies": [], "count": 0, "error": str(e)}
 
-    async def _get_patient_adherence_stats(
-        self, patient_id: str, days: int = 30
-    ) -> dict[str, Any]:
+    async def _get_patient_adherence_stats(self, patient_id: str, days: int = 30) -> dict[str, Any]:
         try:
             response = self.client.rpc(
                 "get_adherence_stats",
@@ -234,14 +224,14 @@ class SupabaseServer(MCPServer):
                 "error": str(e),
             }
 
-    async def _get_recent_symptoms(
-        self, patient_id: str, days: int = 7
-    ) -> dict[str, Any]:
+    async def _get_recent_symptoms(self, patient_id: str, days: int = 7) -> dict[str, Any]:
         try:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
             response = (
                 self.client.table("symptom_reports")
-                .select("id, symptom, severity, onset_date, related_medication_id, notes, created_at")
+                .select(
+                    "id, symptom, severity, onset_date, related_medication_id, notes, created_at"
+                )
                 .eq("patient_id", patient_id)
                 .gte("created_at", cutoff)
                 .order("created_at", desc=True)
@@ -255,7 +245,13 @@ class SupabaseServer(MCPServer):
             }
         except Exception as e:
             logger.error("patient_symptoms_error", patient_id=patient_id, error=str(e))
-            return {"patient_id": patient_id, "symptoms": [], "count": 0, "days": days, "error": str(e)}
+            return {
+                "patient_id": patient_id,
+                "symptoms": [],
+                "count": 0,
+                "days": days,
+                "error": str(e),
+            }
 
     async def _get_patient_context(self, patient_id: str) -> dict[str, Any]:
         """Fetch all patient data in parallel."""
