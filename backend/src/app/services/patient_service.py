@@ -9,6 +9,7 @@ Handles:
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 from uuid import UUID
 
 from supabase import Client
@@ -26,39 +27,28 @@ class PatientService:
 
     # ── Profile ─────────────────────────────────────────
 
-    async def get_profile(self, patient_id: UUID) -> dict:
+    async def get_profile(self, patient_id: UUID) -> Any:
         """Fetch the patient's own profile by auth user ID."""
-        result = (
-            self.db.table("patients")
-            .select("*")
-            .eq("id", str(patient_id))
-            .single()
-            .execute()
-        )
+        result = self.db.table("patients").select("*").eq("id", str(patient_id)).single().execute()
         if not result.data:
             raise NotFoundError("Patient", str(patient_id))
         return result.data
 
-    async def update_profile(self, patient_id: UUID, updates: dict) -> dict:
+    async def update_profile(self, patient_id: UUID, updates: dict[str, Any]) -> Any:
         """Partial update — only non-None fields are sent."""
         # Filter out None values so we don't overwrite with nulls
         clean = {k: v for k, v in updates.items() if v is not None}
         if not clean:
             return await self.get_profile(patient_id)
 
-        result = (
-            self.db.table("patients")
-            .update(clean)
-            .eq("id", str(patient_id))
-            .execute()
-        )
+        result = self.db.table("patients").update(clean).eq("id", str(patient_id)).execute()
         if not result.data:
             raise NotFoundError("Patient", str(patient_id))
         return result.data[0]
 
     # ── Care Team ───────────────────────────────────────
 
-    async def get_care_team(self, patient_id: UUID) -> list[dict]:
+    async def get_care_team(self, patient_id: UUID) -> Any:
         """List all clinicians assigned to this patient, with their names."""
         result = (
             self.db.table("care_teams")
@@ -69,8 +59,8 @@ class PatientService:
         )
         # Flatten the joined clinician data for the response
         teams = []
-        for row in result.data or []:
-            clinician = row.pop("clinicians", {}) or {}
+        for row in cast(list[dict[str, Any]], result.data or []):
+            clinician = cast(dict[str, Any], row.pop("clinicians", {}) or {})
             row["clinician_first_name"] = clinician.get("first_name", "")
             row["clinician_last_name"] = clinician.get("last_name", "")
             row["specialty_context"] = clinician.get("specialty", "")
@@ -78,7 +68,7 @@ class PatientService:
             teams.append(row)
         return teams
 
-    async def join_care_team(self, patient_id: UUID, invite_code: str) -> dict:
+    async def join_care_team(self, patient_id: UUID, invite_code: str) -> Any:
         """Join a clinician's care team using an invite code.
 
         Invite codes are stored in the care_teams table as pending rows
@@ -97,7 +87,7 @@ class PatientService:
         if not result.data:
             raise ValidationError(f"Invalid or expired invite code: {invite_code}")
 
-        care_team_id = result.data["id"]
+        care_team_id = cast(dict[str, Any], result.data)["id"]
 
         # Claim the invite
         updated = (

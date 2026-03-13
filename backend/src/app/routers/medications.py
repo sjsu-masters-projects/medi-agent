@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -29,7 +30,7 @@ async def list_medications(
     active_only: bool = True,
     user: CurrentUser = Depends(get_current_user),
     service: MedicationService = Depends(_get_service),
-) -> list:
+) -> Any:
     return await service.list_medications(user.id, active_only)
 
 
@@ -43,11 +44,13 @@ async def create_medication(
     data: MedicationCreate,
     user: CurrentUser = Depends(get_current_user),
     service: MedicationService = Depends(_get_service),
-) -> dict:
+) -> Any:
     payload = data.model_dump(exclude_unset=True)
     # Convert enums and UUIDs to strings for Supabase
     if "route" in payload:
-        payload["route"] = payload["route"].value if hasattr(payload["route"], "value") else payload["route"]
+        payload["route"] = (
+            payload["route"].value if hasattr(payload["route"], "value") else payload["route"]
+        )
     if "prescribed_by_care_team_id" in payload and payload["prescribed_by_care_team_id"]:
         payload["prescribed_by_care_team_id"] = str(payload["prescribed_by_care_team_id"])
     if "source_document_id" in payload and payload["source_document_id"]:
@@ -69,10 +72,12 @@ async def update_medication(
     data: MedicationUpdate,
     user: CurrentUser = Depends(get_current_user),
     service: MedicationService = Depends(_get_service),
-) -> dict:
+) -> Any:
     payload = data.model_dump(exclude_unset=True)
     if "route" in payload and payload["route"]:
-        payload["route"] = payload["route"].value if hasattr(payload["route"], "value") else payload["route"]
+        payload["route"] = (
+            payload["route"].value if hasattr(payload["route"], "value") else payload["route"]
+        )
     if "end_date" in payload and payload["end_date"]:
         payload["end_date"] = str(payload["end_date"])
     return await service.update_medication(medication_id, user.id, payload)

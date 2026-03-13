@@ -5,6 +5,7 @@ All endpoints require authentication as a clinician.
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -30,7 +31,7 @@ def _get_service(db: Client = Depends(get_db)) -> ClinicianService:
 async def get_my_profile(
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.get_profile(user.id)
 
 
@@ -42,7 +43,7 @@ async def get_my_profile(
 async def get_my_patients(
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
-) -> list:
+) -> Any:
     return await service.get_patients(user.id)
 
 
@@ -56,7 +57,7 @@ async def get_patient_detail(
     patient_id: UUID,
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.get_patient_detail(user.id, patient_id)
 
 
@@ -68,5 +69,5 @@ async def get_patient_detail(
 async def generate_invite_code(
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.generate_invite_code(user.id)

@@ -9,6 +9,7 @@ Upload flow:
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -31,8 +32,10 @@ def _get_service(db: Client = Depends(get_db)) -> DocumentService:
 
 # ── Request schema (specific to this endpoint) ─────────
 
+
 class DocumentCreateRequest(BaseModel):
     """Metadata sent after the frontend uploads the file to Storage."""
+
     file_name: str = Field(..., min_length=1, max_length=255)
     file_path: str = Field(
         ...,
@@ -47,6 +50,7 @@ class DocumentCreateRequest(BaseModel):
 
 # ── Endpoints ───────────────────────────────────────────
 
+
 @router.post(
     "/",
     response_model=DocumentRead,
@@ -58,7 +62,7 @@ async def create_document(
     body: DocumentCreateRequest,
     user: CurrentUser = Depends(get_current_user),
     service: DocumentService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.create_document(
         patient_id=user.id,
         uploaded_by=user.id,
@@ -81,7 +85,7 @@ async def create_document(
 async def list_documents(
     user: CurrentUser = Depends(get_current_user),
     service: DocumentService = Depends(_get_service),
-) -> list:
+) -> Any:
     return await service.list_documents(user.id)
 
 
@@ -94,7 +98,7 @@ async def get_document(
     document_id: UUID,
     user: CurrentUser = Depends(get_current_user),
     service: DocumentService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.get_document(document_id, user.id)
 
 
@@ -107,7 +111,7 @@ async def get_document(
 async def explain_document(
     document_id: UUID,
     user: CurrentUser = Depends(get_current_user),
-) -> dict:
+) -> Any:
     # Placeholder — will be implemented when AI agents are built (Phase 4)
     return {
         "document_id": str(document_id),

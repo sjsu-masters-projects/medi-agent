@@ -13,7 +13,7 @@ from typing import Any
 class AgentInput:
     patient_id: str
     content: Any
-    context: dict | None = None
+    context: dict[str, Any] | None = None
     language: str = "en"
 
 
@@ -22,7 +22,7 @@ class AgentOutput:
     success: bool
     data: Any
     errors: list[str] = field(default_factory=list)
-    metadata: dict | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class BaseAgent(ABC):

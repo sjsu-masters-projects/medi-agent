@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from typing import Any, cast
 from uuid import UUID
 
 from supabase import Client
@@ -28,14 +29,10 @@ class ClinicianService:
 
     # ── Profile ─────────────────────────────────────────
 
-    async def get_profile(self, clinician_id: UUID) -> dict:
+    async def get_profile(self, clinician_id: UUID) -> Any:
         """Fetch the clinician's own profile."""
         result = (
-            self.db.table("clinicians")
-            .select("*")
-            .eq("id", str(clinician_id))
-            .single()
-            .execute()
+            self.db.table("clinicians").select("*").eq("id", str(clinician_id)).single().execute()
         )
         if not result.data:
             raise NotFoundError("Clinician", str(clinician_id))
@@ -43,7 +40,7 @@ class ClinicianService:
 
     # ── Patient List ────────────────────────────────────
 
-    async def get_patients(self, clinician_id: UUID) -> list[dict]:
+    async def get_patients(self, clinician_id: UUID) -> Any:
         """List all patients assigned to this clinician via active care teams."""
         result = (
             self.db.table("care_teams")
@@ -54,17 +51,15 @@ class ClinicianService:
         )
         # Flatten — pull patient data up to top level
         patients = []
-        for row in result.data or []:
-            patient = row.pop("patients", {}) or {}
+        for row in cast(list[dict[str, Any]], result.data or []):
+            patient = cast(dict[str, Any], row.pop("patients", {}) or {})
             if patient:
                 patient["care_team_id"] = row["id"]
                 patient["role"] = row.get("role", "")
                 patients.append(patient)
         return patients
 
-    async def get_patient_detail(
-        self, clinician_id: UUID, patient_id: UUID
-    ) -> dict:
+    async def get_patient_detail(self, clinician_id: UUID, patient_id: UUID) -> Any:
         """Get full patient profile — only if clinician is assigned.
 
         Security: checks the care_teams junction table to ensure
@@ -80,25 +75,17 @@ class ClinicianService:
             .execute()
         )
         if not assignment.data:
-            raise AuthorizationError(
-                "You are not assigned to this patient"
-            )
+            raise AuthorizationError("You are not assigned to this patient")
 
         # Fetch full patient profile
-        result = (
-            self.db.table("patients")
-            .select("*")
-            .eq("id", str(patient_id))
-            .single()
-            .execute()
-        )
+        result = self.db.table("patients").select("*").eq("id", str(patient_id)).single().execute()
         if not result.data:
             raise NotFoundError("Patient", str(patient_id))
         return result.data
 
     # ── Invite Codes ────────────────────────────────────
 
-    async def generate_invite_code(self, clinician_id: UUID) -> dict:
+    async def generate_invite_code(self, clinician_id: UUID) -> Any:
         """Create a pending care_team row with a unique invite code.
 
         The patient uses this code via POST /patients/me/care-team/join.
@@ -108,15 +95,20 @@ class ClinicianService:
 
         result = (
             self.db.table("care_teams")
-            .insert({
-                "clinician_id": str(clinician_id),
-                "invite_code": code,
-                "status": "pending",
-                "role": "provider",
-            })
+            .insert(
+                {
+                    "clinician_id": str(clinician_id),
+                    "invite_code": code,
+                    "status": "pending",
+                    "role": "provider",
+                }
+            )
             .execute()
         )
         if not result.data:
             raise Exception("Failed to generate invite code")
 
-        return {"invite_code": code, "care_team_id": result.data[0]["id"]}
+        return {
+            "invite_code": code,
+            "care_team_id": cast(list[dict[str, Any]], result.data)[0]["id"],
+        }

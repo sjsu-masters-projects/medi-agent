@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, status
 from supabase import Client
 
@@ -28,7 +30,7 @@ async def log_adherence(
     data: AdherenceLog,
     user: CurrentUser = Depends(get_current_user),
     service: AdherenceService = Depends(_get_service),
-) -> dict:
+) -> Any:
     payload = data.model_dump(exclude_unset=True)
     # Serialize enums and UUIDs for Supabase
     if "target_type" in payload:
@@ -39,9 +41,7 @@ async def log_adherence(
         )
     if "status" in payload:
         payload["status"] = (
-            payload["status"].value
-            if hasattr(payload["status"], "value")
-            else payload["status"]
+            payload["status"].value if hasattr(payload["status"], "value") else payload["status"]
         )
     if "target_id" in payload:
         payload["target_id"] = str(payload["target_id"])
@@ -58,5 +58,5 @@ async def get_adherence_stats(
     period_days: int = 30,
     user: CurrentUser = Depends(get_current_user),
     service: AdherenceService = Depends(_get_service),
-) -> dict:
+) -> Any:
     return await service.get_stats(user.id, period_days)

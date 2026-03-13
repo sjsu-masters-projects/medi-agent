@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
 from supabase import Client
@@ -28,7 +29,7 @@ class AdherenceService:
     def __init__(self, db: Client) -> None:
         self.db = db
 
-    async def log_adherence(self, patient_id: UUID, data: dict) -> dict:
+    async def log_adherence(self, patient_id: UUID, data: dict[str, Any]) -> Any:
         """Log a single adherence event (med taken, obligation done, or skipped).
 
         Validates that the target (medication or obligation) exists
@@ -64,7 +65,7 @@ class AdherenceService:
             raise Exception("Failed to log adherence")
         return result.data[0]
 
-    async def get_stats(self, patient_id: UUID, period_days: int = 30) -> dict:
+    async def get_stats(self, patient_id: UUID, period_days: int = 30) -> Any:
         """Calculate adherence statistics over a time window.
 
         Returns overall, medication-specific, and obligation-specific scores
@@ -80,7 +81,7 @@ class AdherenceService:
             .gte("logged_at", cutoff)
             .execute()
         )
-        log_data = logs.data or []
+        log_data = cast(list[dict[str, Any]], logs.data or [])
 
         # Count active items to estimate expected events
         med_count = len(
@@ -139,7 +140,7 @@ class AdherenceService:
     # ── Helpers ─────────────────────────────────────────
 
     @staticmethod
-    def _calculate_streak(logs: list[dict], daily_expected: int) -> int:
+    def _calculate_streak(logs: list[dict[str, Any]], daily_expected: int) -> int:
         """Count consecutive days (backwards from today) with full completion."""
         if not logs or daily_expected == 0:
             return 0
@@ -163,7 +164,7 @@ class AdherenceService:
         return streak
 
     @staticmethod
-    def _empty_stats(patient_id: UUID, period_days: int) -> dict:
+    def _empty_stats(patient_id: UUID, period_days: int) -> Any:
         return {
             "patient_id": str(patient_id),
             "overall_score": 0.0,
