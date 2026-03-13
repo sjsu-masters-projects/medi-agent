@@ -24,10 +24,10 @@ class SupabaseServer(MCPServer):
             name="supabase",
             description="Query patient data: medications, conditions, allergies, adherence, symptoms",
         )
-        self._client = None
+        self._client: Any = None
 
     @property
-    def client(self):
+    def client(self) -> Any:
         """Lazy-load Supabase admin client."""
         if self._client is None:
             self._client = get_admin_client()

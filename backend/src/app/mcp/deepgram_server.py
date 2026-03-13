@@ -28,10 +28,10 @@ class DeepgramServer(MCPServer):
             name="deepgram",
             description="Voice transcription (STT) and speech generation (TTS)",
         )
-        self._client = None
+        self._client: Any = None
 
     @property
-    def client(self):
+    def client(self) -> Any:
         """Lazy-load async Deepgram client."""
         if self._client is None:
             self._client = get_async_deepgram_client()
