@@ -26,6 +26,29 @@ mypy src/ --ignore-missing-imports     # type check
 PYTHONPATH=src pytest tests/ -v        # test
 ```
 
+### Testing & Coverage
+
+```bash
+# Run all tests with coverage report
+python -m pytest tests/ --cov=app --cov-report=term-missing --cov-report=html
+
+# Run specific test file
+python -m pytest tests/unit/services/test_dailymed_service.py -v
+
+# Run tests without coverage (faster for development)
+python -m pytest tests/ --no-cov
+
+# View coverage report
+open htmlcov/index.html
+```
+
+**Coverage Requirements:**
+- Minimum: 80% (enforced in CI/CD)
+- Current: 89.62%
+- All external APIs must be mocked in tests
+
+See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing documentation.
+
 ## Package Layout
 
 ```

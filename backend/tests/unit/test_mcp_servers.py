@@ -3,6 +3,7 @@
 import base64
 import os
 import pytest
+from unittest.mock import patch
 from app.mcp import supabase_server, deepgram_server
 
 
@@ -147,82 +148,85 @@ class TestDeepgramMCPServer:
             assert "description" in tool
             assert "input_schema" in tool
     
-    @skip_deepgram
     @pytest.mark.asyncio
     async def test_generate_speech_success(self):
-        """Test TTS generation."""
-        result = await deepgram_server.call_tool("generate_speech", {
-            "text": "Hello, this is a test",
-            "model": "aura-2-asteria-en",
-            "encoding": "mp3"
-        })
-        
-        assert result["success"] is True
-        assert "audio_base64" in result
-        assert len(result["audio_base64"]) > 0
-        assert result["model"] == "aura-2-asteria-en"
-        assert result["encoding"] == "mp3"
-        assert result["text_length"] > 0  # Text length varies slightly
-        assert result["audio_size"] > 0
-        
-        # Verify it's valid base64
-        audio_bytes = base64.b64decode(result["audio_base64"])
-        assert len(audio_bytes) > 0
+        """Test TTS generation with mocked Deepgram client."""
+        with patch('app.mcp.deepgram_server.generate_speech_async') as mock_generate:
+            # Mock the TTS response
+            mock_audio = b"fake_audio_data"
+            mock_generate.return_value = mock_audio
+            
+            result = await deepgram_server.call_tool("generate_speech", {
+                "text": "Hello, this is a test",
+                "model": "aura-2-asteria-en",
+                "encoding": "mp3"
+            })
+            
+            assert result["success"] is True
+            assert "audio_base64" in result
+            assert len(result["audio_base64"]) > 0
+            assert result["model"] == "aura-2-asteria-en"
+            assert result["encoding"] == "mp3"
+            assert result["text_length"] == 21  # "Hello, this is a test" without trailing space
+            assert result["audio_size"] > 0
+            
+            # Verify it's valid base64
+            audio_bytes = base64.b64decode(result["audio_base64"])
+            assert len(audio_bytes) > 0
+            
+            # Verify the mock was called
+            mock_generate.assert_called_once()
     
-    @skip_deepgram
     @pytest.mark.asyncio
     async def test_transcribe_audio_success(self):
-        """Test STT transcription."""
-        # First generate some audio
-        tts_result = await deepgram_server.call_tool("generate_speech", {
-            "text": "Hello world",
-            "model": "aura-2-asteria-en",
-            "encoding": "mp3"
-        })
-        
-        assert tts_result["success"] is True
-        
-        # Now transcribe it
-        stt_result = await deepgram_server.call_tool("transcribe_audio", {
-            "audio_base64": tts_result["audio_base64"],
-            "model": "nova-3",
-            "language": "en",
-            "smart_format": True
-        })
-        
-        assert stt_result["success"] is True
-        assert "transcript" in stt_result
-        assert len(stt_result["transcript"]) > 0
-        assert stt_result["model"] == "nova-3"
-        assert stt_result["language"] == "en"
-        
-        # Transcript should be similar to original text
-        assert "hello" in stt_result["transcript"].lower()
+        """Test STT transcription with mocked Deepgram client."""
+        with patch('app.mcp.deepgram_server.transcribe_audio_file_async') as mock_transcribe:
+            # Mock the STT response
+            mock_transcribe.return_value = "Hello world"
+            
+            # Create fake audio data
+            fake_audio = base64.b64encode(b"fake_audio_data").decode()
+            
+            stt_result = await deepgram_server.call_tool("transcribe_audio", {
+                "audio_base64": fake_audio,
+                "model": "nova-3",
+                "language": "en",
+                "smart_format": True
+            })
+            
+            assert stt_result["success"] is True
+            assert "transcript" in stt_result
+            assert stt_result["transcript"] == "Hello world"
+            assert stt_result["model"] == "nova-3"
+            assert stt_result["language"] == "en"
+            
+            # Verify the mock was called
+            mock_transcribe.assert_called_once()
     
-    @skip_deepgram
     @pytest.mark.asyncio
     async def test_transcribe_patient_message(self):
-        """Test patient message transcription."""
-        # Generate audio
-        tts_result = await deepgram_server.call_tool("generate_speech", {
-            "text": "I have a headache",
-            "model": "aura-2-asteria-en",
-            "encoding": "mp3"
-        })
-        
-        assert tts_result["success"] is True
-        
-        # Transcribe as patient message
-        result = await deepgram_server.call_tool("transcribe_patient_message", {
-            "audio_base64": tts_result["audio_base64"],
-            "patient_id": "00000000-0000-0000-0000-000000000000"
-        })
-        
-        assert result["success"] is True
-        assert "transcript" in result
-        assert "patient_id" in result
-        assert result["patient_id"] == "00000000-0000-0000-0000-000000000000"
-        assert result["model"] == "nova-3"
+        """Test patient message transcription with mocked Deepgram client."""
+        with patch('app.mcp.deepgram_server.transcribe_audio_file_async') as mock_transcribe:
+            # Mock the STT response
+            mock_transcribe.return_value = "I have a headache"
+            
+            # Create fake audio data
+            fake_audio = base64.b64encode(b"fake_audio_data").decode()
+            
+            result = await deepgram_server.call_tool("transcribe_patient_message", {
+                "audio_base64": fake_audio,
+                "patient_id": "00000000-0000-0000-0000-000000000000"
+            })
+            
+            assert result["success"] is True
+            assert "transcript" in result
+            assert result["transcript"] == "I have a headache"
+            assert "patient_id" in result
+            assert result["patient_id"] == "00000000-0000-0000-0000-000000000000"
+            assert result["model"] == "nova-3"
+            
+            # Verify the mock was called
+            mock_transcribe.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_transcribe_invalid_audio(self):
