@@ -97,6 +97,7 @@
 - [x] Supabase MCP server — patient data queries, shared connection (`app/mcp/supabase_server.py`)
 - [x] Deepgram MCP server — voice STT/TTS, shared client (`app/mcp/deepgram_server.py`)
 - [x] MCP base class and module init (`app/mcp/base.py`)
+- [x] Add comprehensive integration tests and strict type hints
 
 ### 1.7 A2A Protocol Setup
 - [ ] Create Agent Card JSON schema for each agent
@@ -125,21 +126,21 @@
 - [x] `GET /api/v1/auth/me` — current user from JWT
 - [x] JWT middleware for route protection
 - [x] Role-based access control (patient vs clinician)
-- [ ] Write auth integration tests
+- [x] Write auth integration tests
 
 ### 2.3 Patient API
 - [x] `GET /api/v1/patients/me` — get own profile
 - [x] `PUT /api/v1/patients/me` — update profile
 - [x] `GET /api/v1/patients/me/care-team` — list patient's providers
 - [x] `POST /api/v1/patients/me/care-team/join` — join clinic via code
-- [ ] Write patient API tests
+- [x] Write patient API tests
 
 ### 2.4 Clinician API
 - [x] `GET /api/v1/clinicians/me` — get own profile
 - [x] `GET /api/v1/clinicians/me/patients` — list assigned patients
 - [x] `GET /api/v1/clinicians/me/patients/{id}` — get patient detail
 - [x] `POST /api/v1/clinicians/me/invite-code` — generate patient invite code
-- [ ] Write clinician API tests
+- [x] Write clinician API tests
 
 ### 2.5 Document API
 - [x] `POST /api/v1/documents/` — register uploaded document (metadata-only)
@@ -147,7 +148,7 @@
 - [x] `GET /api/v1/documents/{id}` — get document detail + signed URL
 - [x] `POST /api/v1/documents/{id}/explain` — 501 placeholder (Phase 4)
 - [x] File validation + signed URL generation
-- [ ] Write document API tests
+- [x] Write document API tests
 
 ### 2.6 Medications & Obligations API
 - [x] `GET /api/v1/medications` — list patient's active medications
@@ -157,7 +158,7 @@
 - [x] `POST /api/v1/obligations` — create obligation
 - [x] `POST /api/v1/adherence` — log medication taken / obligation completed
 - [x] `GET /api/v1/adherence/stats` — adherence score + streak calculation
-- [ ] Write medication and adherence tests
+- [x] Write medication and adherence tests
 
 ### 2.7 Today Feed API
 - [ ] `GET /api/v1/feed/today` — aggregated daily tasks (meds + obligations from all providers)
