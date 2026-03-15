@@ -35,6 +35,7 @@ from app.models.enums import (
     ObligationType,
     UploaderRole,
 )
+from app.models.feed import FeedSummary, FeedTask, TaskProvider, TodayFeedResponse
 from app.models.medication import MedicationCreate, MedicationRead, MedicationUpdate
 from app.models.notification import NotificationCreate, NotificationRead
 from app.models.obligation import ObligationCreate, ObligationRead, ObligationUpdate
@@ -87,6 +88,11 @@ __all__ = [
     # Document
     "DocumentRead",
     "DocumentUpload",
+    # Feed
+    "FeedSummary",
+    "FeedTask",
+    "TaskProvider",
+    "TodayFeedResponse",
     # Medication
     "MedicationCreate",
     "MedicationRead",
