@@ -161,10 +161,10 @@
 - [x] Write medication and adherence tests
 
 ### 2.7 Today Feed API
-- [ ] `GET /api/v1/feed/today` — aggregated daily tasks (meds + obligations from all providers)
-- [ ] Include source provider info for each task
-- [ ] Calculate which tasks are pending/completed/missed
-- [ ] Write feed tests
+- [x] `GET /api/v1/feed/today` — aggregated daily tasks (meds + obligations from all providers)
+- [x] Include source provider info for each task
+- [x] Calculate which tasks are pending/completed/missed
+- [x] Write feed tests
 
 ---
 
