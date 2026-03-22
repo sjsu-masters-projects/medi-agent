@@ -88,7 +88,7 @@ class FeedService:
             )
             return result.data or []  # type: ignore[return-value]
         except Exception as e:
-            logger.error(f"Failed to fetch medications: {e}", extra={"patient_id": str(patient_id)})
+            logger.error(f"Failed to fetch medications: {e}")
             return []
 
     async def _get_obligations(self, patient_id: UUID) -> list[dict[str, Any]]:
@@ -121,7 +121,7 @@ class FeedService:
             )
             return result.data or []  # type: ignore[return-value]
         except Exception as e:
-            logger.error(f"Failed to fetch obligations: {e}", extra={"patient_id": str(patient_id)})
+            logger.error(f"Failed to fetch obligations: {e}")
             return []
 
     async def _get_today_adherence(
@@ -143,9 +143,7 @@ class FeedService:
             )
             return result.data or []  # type: ignore[return-value]
         except Exception as e:
-            logger.error(
-                f"Failed to fetch adherence logs: {e}", extra={"patient_id": str(patient_id)}
-            )
+            logger.error(f"Failed to fetch adherence logs: {e}")
             return []
 
     def _build_adherence_map(

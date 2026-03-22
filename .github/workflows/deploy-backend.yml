@@ -13,6 +13,9 @@ env:
   REGION: us-central1
   SERVICE_NAME: mediagent-backend
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Build & Deploy
