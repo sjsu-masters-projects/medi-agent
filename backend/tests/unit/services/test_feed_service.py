@@ -122,6 +122,28 @@ def test_build_adherence_map_multiple_logs_same_target(feed_service):
     assert result[key] == newer_log
 
 
+def test_build_adherence_map_multiple_logs_same_target_reverse_order(feed_service):
+    """Test adherence map uses most recent log even if newer log appears first."""
+    target_id = str(uuid4())
+    older_log = {
+        "target_id": target_id,
+        "target_type": "medication",
+        "status": "pending",
+        "logged_at": "2024-01-15T08:00:00Z",
+        "scheduled_time": "08:00:00",
+    }
+    newer_log = {
+        "target_id": target_id,
+        "target_type": "medication",
+        "status": "completed",
+        "logged_at": "2024-01-15T08:15:00Z",
+        "scheduled_time": "08:00:00",
+    }
+    result = feed_service._build_adherence_map([newer_log, older_log])
+    key = ("medication", target_id)
+    assert result[key] == newer_log
+
+
 def test_build_adherence_map_different_target_types(feed_service):
     """Test building adherence map with different target types."""
     med_id = str(uuid4())
@@ -399,6 +421,12 @@ async def test_get_today_empty_feed(feed_service, mock_supabase_client):
     assert result["tasks"] == []
     assert result["summary"]["total"] == 0
 
+    assert mock_supabase_client.table.call_count == 3
+    assert mock_table.select.call_count == 3
+    mock_table.eq.assert_any_call("patient_id", str(patient_id))
+    assert mock_table.gte.call_count == 1
+    assert mock_table.lt.call_count == 1
+
 
 @pytest.mark.asyncio
 async def test_get_today_with_custom_date(feed_service, mock_supabase_client):
@@ -443,3 +471,9 @@ async def test_get_today_with_timezone(feed_service, mock_supabase_client):
     result = await feed_service.get_today(patient_id, timezone="America/New_York")
 
     assert result["timezone"] == "America/New_York"
+
+    assert mock_supabase_client.table.call_count == 3
+    assert mock_table.select.call_count == 3
+    mock_table.eq.assert_any_call("patient_id", str(patient_id))
+    assert mock_table.gte.call_count == 1
+    assert mock_table.lt.call_count == 1

@@ -123,8 +123,7 @@ class SupabaseServer(MCPServer):
                 return await self._get_recent_symptoms(patient_id, arguments.get("days", 7))
             case "get_patient_context":
                 return await self._get_patient_context(patient_id)
-            case _:
-                raise ValueError(f"Unknown tool: {tool_name}")
+        raise ValueError(f"Unknown tool: {tool_name}")
 
     # ── Tool implementations ────────────────────────────
 
