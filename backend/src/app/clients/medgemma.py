@@ -114,7 +114,7 @@ class MedGemmaClient:
         max_tokens: int = 2048,
     ) -> str:
         """Generate text using Vertex AI endpoint.
-        
+
         Automatically detects endpoint type (standard vs vLLM) or uses configured type.
 
         Args:
@@ -131,12 +131,12 @@ class MedGemmaClient:
         """
         # Determine endpoint type
         endpoint_type = settings.vertex_ai_endpoint_type.lower()
-        
+
         if endpoint_type == "auto":
             # Auto-detect: vLLM endpoints typically have "vllm" in serving spec or use dedicated domains
             # Try vLLM format first (more common for MedGemma), fall back to standard
             endpoint_type = "vllm"
-        
+
         # Try the detected/configured format
         for attempt in range(self.max_retries):
             try:
@@ -150,14 +150,13 @@ class MedGemmaClient:
                     )
             except Exception as e:
                 error_msg = str(e)
-                
+
                 # If auto-detect and we get a format error, try the other format
-                if endpoint_type == "vllm" and settings.vertex_ai_endpoint_type == "auto":
-                    if "Dedicated Endpoint" in error_msg or "domain" in error_msg:
-                        logger.warning("vLLM format failed, trying standard format...")
-                        endpoint_type = "standard"
-                        continue
-                
+                if endpoint_type == "vllm" and settings.vertex_ai_endpoint_type == "auto" and ("Dedicated Endpoint" in error_msg or "domain" in error_msg):
+                    logger.warning("vLLM format failed, trying standard format...")
+                    endpoint_type = "standard"
+                    continue
+
                 logger.error(
                     f"Vertex AI MedGemma error (attempt {attempt + 1}/{self.max_retries}): {e}"
                 )
@@ -414,10 +413,10 @@ class MedGemmaClient:
             generated_text = response.predictions[0]
             if isinstance(generated_text, dict):
                 generated_text = generated_text.get("content", generated_text.get("text", ""))
-            
+
             if not generated_text:
                 raise LLMError("Empty response from Vertex AI MedGemma")
-            
+
             return str(generated_text)
         else:
             raise LLMError("No predictions in Vertex AI response")

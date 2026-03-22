@@ -80,14 +80,13 @@ class GeminiClient:
             try:
                 # Gemini 3.x preview models require Google Gen AI SDK with location="global"
                 is_preview_model = "3." in model and "preview" in model
-                
+
                 if is_preview_model:
                     # Use Google Gen AI SDK for preview models
                     from google import genai
-                    from google.genai import types
 
                     logger.info(f"Attempting Google Gen AI SDK init: project={settings.google_project_id}, location=global, model={model}")
-                    
+
                     self.genai_client = genai.Client(
                         vertexai=True,
                         project=settings.google_project_id,
@@ -103,7 +102,7 @@ class GeminiClient:
 
                     location = settings.vertex_ai_location
                     logger.info(f"Attempting Vertex AI init: project={settings.google_project_id}, location={location}, model={model}")
-                    
+
                     vertexai.init(
                         project=settings.google_project_id,
                         location=location,
@@ -114,7 +113,7 @@ class GeminiClient:
                     logger.info(f"✅ Successfully initialized GeminiClient with Vertex AI: {model} (location: {location})")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize Vertex AI: {type(e).__name__}: {e}")
-                logger.error(f"Falling back to AI Studio (free tier with quotas)")
+                logger.error("Falling back to AI Studio (free tier with quotas)")
                 self.use_vertex_ai = False
                 self.is_genai_sdk = False
 
@@ -178,7 +177,12 @@ class GeminiClient:
         max_tokens: int,
     ) -> str:
         """Generate using Vertex AI."""
-        from vertexai.generative_models import GenerationConfig, Part, HarmBlockThreshold, HarmCategory
+        from vertexai.generative_models import (
+            GenerationConfig,
+            HarmBlockThreshold,
+            HarmCategory,
+            Part,
+        )
 
         config = GenerationConfig(
             temperature=temperature,
@@ -298,12 +302,12 @@ class GeminiClient:
                 # The response.text property should contain the full response
                 # If it's truncated, we need to check the finish_reason
                 full_text = str(response.text)
-                
+
                 if hasattr(response, 'candidates') and response.candidates:
                     finish_reason = getattr(response.candidates[0], 'finish_reason', None)
                     if finish_reason and finish_reason != 'STOP':
                         logger.warning(f"Gen AI SDK response may be incomplete. Finish reason: {finish_reason}")
-                
+
                 return full_text
 
             except TimeoutError:
