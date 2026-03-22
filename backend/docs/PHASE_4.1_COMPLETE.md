@@ -427,7 +427,7 @@ def get_llm_client(task_type: str) -> BaseLLMClient:
 
 ```bash
 # Gemini API (Working)
-GOOGLE_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+GOOGLE_API_KEY=<your-google-api-key>
 
 # Vertex AI (Deployed)
 GOOGLE_PROJECT_ID=medi-agent-490106
@@ -436,7 +436,7 @@ VERTEX_AI_MEDGEMMA_ENDPOINT=projects/195473169073/locations/us-central1/endpoint
 VERTEX_AI_ENDPOINT_TYPE=auto  # Adapts to any endpoint format
 
 # Hugging Face (Configured)
-HUGGINGFACE_API_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+HUGGINGFACE_API_TOKEN=<your-huggingface-token>
 ```
 
 ### Endpoint Type Options

@@ -96,7 +96,7 @@ Comprehensive benchmarking results are available in:
 
 ```bash
 # Gemini API (Working)
-GOOGLE_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+GOOGLE_API_KEY=<your-google-api-key>
 
 # Vertex AI (Deployed)
 GOOGLE_PROJECT_ID=medi-agent-490106
