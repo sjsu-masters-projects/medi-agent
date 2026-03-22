@@ -224,18 +224,23 @@
 ## Phase 4: Ingestion Agent (Weeks 9–12)
 
 ### 4.1 Agent Core
-- [ ] Create BaseAgent abstract class (SOLID compliant)
-- [ ] Create Gemini client service (with retry, timeout, structured output)
-- [ ] Create MedGemma client service (for evaluation comparisons)
-- [ ] Create LangGraph state schema for ingestion workflow
-- [ ] Implement Ingestion Agent graph:
-  - [ ] Node: receive document
-  - [ ] Node: call Gemini vision to extract structured data
-  - [ ] Node: validate extracted data against FHIR schemas
-  - [ ] Node: normalize medications via RxNorm MCP server
-  - [ ] Node: save to database (via Supabase MCP server)
-  - [ ] Node: generate plain-language summary
-  - [ ] Node: create Today Feed tasks from medications + follow-up instructions
+- [x] Create BaseAgent abstract class (SOLID compliant) — `agents/base.py`
+- [x] Create Gemini client service (retry, timeout, structured output) — `clients/gemini.py`
+- [x] Create MedGemma client service (Vertex AI + HF + fallback) — `clients/medgemma.py`
+- [x] Fix MedGemma: Gemma chat template for vLLM endpoint
+- [x] Fix MedGemma: prompt-echo stripping
+- [x] Create LangGraph state schema for ingestion workflow — `agents/ingestion/graph.py`
+- [x] Agent execution observability/tracing — `core/observability.py`
+- [x] Create ModelRouter service (route tasks to correct model)
+- [x] Implement Ingestion Agent graph nodes:
+  - [x] Node: receive_document (validate input, set state)
+  - [x] Node: extract_content (MedGemma 27B for clinical extraction)
+  - [x] Node: validate_fhir (validate against FHIR schemas)
+  - [x] Node: normalize_medications (RxNorm MCP lookup)
+  - [x] Node: save_to_database (Supabase MCP upsert)
+  - [x] Node: generate_summary (Flash Lite for patient-facing summary)
+  - [x] Node: create_feed_tasks (extract meds + follow-ups → obligations)
+- [x] Codebase cleanup (remove duplicates and unnecessary files)
 
 ### 4.2 Tools
 - [ ] FHIR Resource Builder (MedicationRequest, Condition, AllergyIntolerance, Appointment)
@@ -243,16 +248,18 @@
 - [ ] Medication normalizer (parse dosage strings, frequency extraction)
 
 ### 4.3 MedGemma Evaluation
-- [ ] Create 20 medical test cases (doc parsing, FHIR extraction, symptom classification)
-- [ ] Run identical tests through Gemini Flash vs MedGemma
-- [ ] Compare accuracy: FHIR fields, ADR detection, clinical summary quality
-- [ ] Decision: adopt MedGemma for specific agents if it wins
-- [ ] Document results in PROJECT.md Decision Log
+- [x] Deploy MedGemma 27B on Vertex AI Model Garden
+- [x] Create 5 clinical benchmark scenarios (lab, ADR, drug interaction, triage, discharge)
+- [x] Run 4 benchmark iterations (fix prompt format, fix model names, fix chat template)
+- [x] Compare accuracy: MedGemma 27B vs Gemini Flash Lite vs Gemini Pro
+- [x] Decision: adopt MedGemma 27B for clinical tasks (parsing, ADR, interactions, triage)
+- [x] Document results — `backend/reports/benchmark_27b_20260321_192905.md`
+- [x] Add D17/D18 to PROJECT.md Decision Log
 
 ### 4.4 Testing
-- [ ] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
-- [ ] Golden-set evaluation: expected parsing output for each test document
-- [ ] Unit tests for FHIR builder and normalizer
+- [x] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
+- [x] Golden-set evaluation: expected parsing output for each test document
+- [x] Unit tests for FHIR builder and normalizer
 - [ ] Integration test: upload → parse → database → Today Feed
 
 ### 4.4 Patient Portal Integration

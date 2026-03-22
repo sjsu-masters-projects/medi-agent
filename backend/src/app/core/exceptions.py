@@ -53,3 +53,27 @@ class DocumentParseError(MediAgentError):
             message=f"Failed to parse document '{document_id}': {message}",
             code="DOCUMENT_PARSE_ERROR",
         )
+
+
+class AgentError(MediAgentError):
+    """Base exception for all agent errors."""
+
+    pass
+
+
+class LLMError(AgentError):
+    """Raised when LLM generation fails."""
+
+    pass
+
+
+class ParsingError(AgentError):
+    """Raised when document parsing fails."""
+
+    pass
+
+
+class NormalizationError(AgentError):
+    """Raised when data normalization fails."""
+
+    pass

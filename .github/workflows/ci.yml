@@ -1,4 +1,4 @@
-name: CI — Lint & Test
+name: CI Pipeline
 
 on:
   pull_request:
@@ -9,36 +9,53 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions:
+  contents: read
+
 jobs:
-  # ── Backend ──────────────────────────────────────
-  backend:
-    name: Backend (Python)
+  # ── Backend Pipeline ──────────────────────────────────────
+  backend-lint:
+    name: Backend Lint (Ruff & Mypy)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
-
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt -r requirements-dev.txt
-
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Lint (Ruff)
         run: ruff check src/
-
       - name: Format check (Ruff)
         run: ruff format --check src/
-
       - name: Type check (mypy)
         run: mypy src/ --ignore-missing-imports
 
+  backend-test:
+    name: Backend Test (pytest)
+    needs: backend-lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Test (pytest)
         env:
           SUPABASE_URL: "https://test.supabase.co"
@@ -47,54 +64,86 @@ jobs:
           SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
         run: pytest tests/ -v --tb=short
 
-  # ── Patient Portal ──────────────────────────────
-  patient-portal:
-    name: Patient Portal (Next.js)
+  # ── Patient Portal Pipeline ──────────────────────────────
+  patient-lint:
+    name: Patient Portal Lint
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/patient-portal
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: apps/patient-portal/package-lock.json
-
       - name: Install dependencies
         run: npm ci
-
       - name: Lint (ESLint)
         run: npm run lint
 
+  patient-build:
+    name: Patient Portal Build
+    needs: patient-lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/patient-portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/patient-portal/package-lock.json
+      - name: Install dependencies
+        run: npm ci
       - name: Build
         run: npm run build
 
-  # ── Clinician Portal ────────────────────────────
-  clinician-portal:
-    name: Clinician Portal (Next.js)
+  # ── Clinician Portal Pipeline ────────────────────────────
+  clinician-lint:
+    name: Clinician Portal Lint
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/clinician-portal
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: apps/clinician-portal/package-lock.json
-
       - name: Install dependencies
         run: npm ci
-
       - name: Lint (ESLint)
         run: npm run lint
 
+  clinician-build:
+    name: Clinician Portal Build
+    needs: clinician-lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/clinician-portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/clinician-portal/package-lock.json
+      - name: Install dependencies
+        run: npm ci
       - name: Build
         run: npm run build
+
+  # ── Pipeline Completion ──────────────────────────────────
+  ci-success:
+    name: CI Pipeline Passed 🎉
+    needs: [backend-test, patient-build, clinician-build]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All linting, testing, and building stages have completed successfully!"

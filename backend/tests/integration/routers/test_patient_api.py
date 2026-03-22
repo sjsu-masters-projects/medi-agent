@@ -3,14 +3,15 @@
 Uses FastAPI dependency overrides for proper authentication mocking.
 """
 
-import pytest
-from fastapi import status
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
-from app.main import app
+import pytest
+from fastapi import status
+
 from app.core.security import get_current_user
 from app.db.connection import get_db
+from app.main import app
 from app.models.auth import CurrentUser
 
 
@@ -23,11 +24,7 @@ def patient_id():
 @pytest.fixture
 def mock_patient_user(patient_id):
     """Mock authenticated patient user."""
-    return CurrentUser(
-        id=patient_id,
-        email="patient@test.com",
-        role="patient"
-    )
+    return CurrentUser(id=patient_id, email="patient@test.com", role="patient")
 
 
 @pytest.fixture
@@ -36,20 +33,21 @@ def mock_supabase_db():
     db = MagicMock()
     table = MagicMock()
     db.table.return_value = table
-    
+
     # Make all query methods chainable
-    for method in ['select', 'eq', 'single', 'update', 'insert', 'is_', 'order', 'gte']:
+    for method in ["select", "eq", "single", "update", "insert", "is_", "order", "gte"]:
         getattr(table, method).return_value = table
-    
+
     return db
 
 
 @pytest.fixture
 def override_auth(mock_patient_user):
     """Override authentication dependency."""
+
     def _get_current_user_override():
         return mock_patient_user
-    
+
     app.dependency_overrides[get_current_user] = _get_current_user_override
     yield
     app.dependency_overrides.clear()
@@ -58,9 +56,10 @@ def override_auth(mock_patient_user):
 @pytest.fixture
 def override_db(mock_supabase_db):
     """Override database dependency."""
+
     def _get_db_override():
         return mock_supabase_db
-    
+
     app.dependency_overrides[get_db] = _get_db_override
     yield
     app.dependency_overrides.clear()
@@ -82,15 +81,15 @@ class TestGetMyProfile:
             "phone": "+1234567890",
             "avatar_url": None,
             "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": None
+            "updated_at": None,
         }
-        
+
         mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
             data=profile_data
         )
-        
+
         response = client.get("/api/v1/patients/me")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["email"] == "patient@test.com"
@@ -99,12 +98,10 @@ class TestGetMyProfile:
 
     def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
         """Handle patient not found."""
-        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
-            data=None
-        )
-        
+        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(data=None)
+
         response = client.get("/api/v1/patients/me")
-        
+
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -124,18 +121,15 @@ class TestUpdateMyProfile:
             "phone": "+9876543210",
             "avatar_url": None,
             "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": "2025-01-15T00:00:00Z"
+            "updated_at": "2025-01-15T00:00:00Z",
         }
-        
-        mock_supabase_db.table().update().eq().execute.return_value = MagicMock(
-            data=[updated_data]
-        )
-        
+
+        mock_supabase_db.table().update().eq().execute.return_value = MagicMock(data=[updated_data])
+
         response = client.put(
-            "/api/v1/patients/me",
-            json={"first_name": "Jane", "phone": "+9876543210"}
+            "/api/v1/patients/me", json={"first_name": "Jane", "phone": "+9876543210"}
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["first_name"] == "Jane"
@@ -154,29 +148,21 @@ class TestUpdateMyProfile:
             "phone": None,
             "avatar_url": None,
             "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": "2025-01-15T00:00:00Z"
+            "updated_at": "2025-01-15T00:00:00Z",
         }
-        
-        mock_supabase_db.table().update().eq().execute.return_value = MagicMock(
-            data=[updated_data]
-        )
-        
-        response = client.put(
-            "/api/v1/patients/me",
-            json={"preferred_language": "es"}
-        )
-        
+
+        mock_supabase_db.table().update().eq().execute.return_value = MagicMock(data=[updated_data])
+
+        response = client.put("/api/v1/patients/me", json={"preferred_language": "es"})
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["preferred_language"] == "es"
 
     def test_invalid_gender(self, client, override_auth, override_db):
         """Reject invalid gender value."""
-        response = client.put(
-            "/api/v1/patients/me",
-            json={"gender": "invalid_gender"}
-        )
-        
+        response = client.put("/api/v1/patients/me", json={"gender": "invalid_gender"})
+
         assert response.status_code == 422
 
 
@@ -197,17 +183,17 @@ class TestGetMyCareTeam:
                     "first_name": "Dr. Sarah",
                     "last_name": "Smith",
                     "specialty": "Cardiology",
-                    "clinic_name": "Heart Health Clinic"
-                }
+                    "clinic_name": "Heart Health Clinic",
+                },
             }
         ]
-        
+
         mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(
             data=care_team_data
         )
-        
+
         response = client.get("/api/v1/patients/me/care-team")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert isinstance(data, list)
@@ -215,12 +201,10 @@ class TestGetMyCareTeam:
 
     def test_empty_care_team(self, client, override_auth, override_db, mock_supabase_db):
         """Handle empty care team."""
-        mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(
-            data=[]
-        )
-        
+        mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(data=[])
+
         response = client.get("/api/v1/patients/me/care-team")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert isinstance(data, list)
@@ -234,7 +218,7 @@ class TestJoinClinic:
         """Successfully join clinic with valid invite code."""
         care_team_id = uuid4()
         clinician_id = uuid4()
-        
+
         # Mock finding the pending invite - .single() returns dict directly
         invite_data = {
             "id": str(care_team_id),
@@ -243,14 +227,14 @@ class TestJoinClinic:
             "status": "pending",
             "patient_id": None,
             "role": "provider",
-            "created_at": "2025-01-01T00:00:00Z"
+            "created_at": "2025-01-01T00:00:00Z",
         }
-        
+
         # Create separate mock chains for the two different queries
         # First query: select().eq().eq().is_().single() - finding the invite
         find_mock = MagicMock()
         find_mock.execute.return_value = MagicMock(data=invite_data)
-        
+
         # Second query: update().eq() - updating the invite
         # Must include all CareTeamRead fields
         updated_data = {
@@ -263,28 +247,30 @@ class TestJoinClinic:
             "specialty_context": "Cardiology",
             "clinic_name": "Heart Health Clinic",
             "status": "active",
-            "created_at": "2025-01-01T00:00:00Z"
+            "created_at": "2025-01-01T00:00:00Z",
         }
         update_mock = MagicMock()
         update_mock.execute.return_value = MagicMock(data=[updated_data])
-        
+
         # Configure the table mock to return different chains based on method
         def table_side_effect(*args):
             table_mock = MagicMock()
             # For select chain
             select_chain = MagicMock()
-            select_chain.eq.return_value.eq.return_value.is_.return_value.single.return_value = find_mock
+            select_chain.eq.return_value.eq.return_value.is_.return_value.single.return_value = (
+                find_mock
+            )
             table_mock.select.return_value = select_chain
             # For update chain
             update_chain = MagicMock()
             update_chain.eq.return_value = update_mock
             table_mock.update.return_value = update_chain
             return table_mock
-        
+
         mock_supabase_db.table.side_effect = table_side_effect
-        
+
         response = client.post("/api/v1/patients/me/care-team/join?invite_code=ABC123")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["status"] == "active"
@@ -293,13 +279,12 @@ class TestJoinClinic:
     def test_invalid_code(self, client, override_auth, override_db, mock_supabase_db):
         """Reject invalid invite code."""
         # Mock raises exception when no data found
-        from app.core.exceptions import ValidationError
         mock_supabase_db.table().select().eq().eq().is_().single().execute.return_value = MagicMock(
             data=None
         )
-        
+
         response = client.post("/api/v1/patients/me/care-team/join?invite_code=INVALID")
-        
+
         # ValidationError is caught and returns 400
         assert response.status_code in [400, 422]
 
@@ -310,14 +295,13 @@ class TestAuthorization:
     def test_no_auth_header(self, client):
         """Reject request without authorization header."""
         response = client.get("/api/v1/patients/me")
-        
+
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_invalid_token(self, client):
         """Reject request with invalid token."""
         response = client.get(
-            "/api/v1/patients/me",
-            headers={"Authorization": "Bearer invalid-token"}
+            "/api/v1/patients/me", headers={"Authorization": "Bearer invalid-token"}
         )
-        
+
         assert response.status_code == status.HTTP_401_UNAUTHORIZED

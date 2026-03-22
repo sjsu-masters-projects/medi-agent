@@ -44,6 +44,8 @@ B2B2C SaaS — sold to clinics/health systems, deployed to their patients.
 | D14 | **Gemini 3.0 Pro thinking mode for pharmacovigilance** | 2026-03-03 | Transparent chain-of-thought reasoning for Naranjo scoring. Clinicians see WHY the AI scored an ADR, not just the score. |
 | D15 | **Explore Gemini Multimodal Live API** | 2026-03-03 | Could collapse STT→LLM→TTS into one WebSocket. Deepgram is primary pipeline; Gemini Live is stretch goal. |
 | D16 | **Evaluate MedGemma for medical tasks** | 2026-03-03 | Google's open healthcare model (based on Gemma 3). Benchmark against Gemini 3.0 Flash/Pro for: doc parsing, symptom triage, FHIR extraction. Use if quality is better for specific tasks. |
+| D17 | **Hybrid model routing: MedGemma 27B + Gemini Flash Lite + Pro** | 2026-03-21 | Benchmarked 5 clinical scenarios (4 runs). MedGemma wins clinical extraction (92% completeness, Naranjo 8-9). Flash Lite wins patient-facing UX (2.8s, 96%). Pro wins deep reasoning (SOAP/MedWatch). See `backend/reports/benchmark_27b_20260321_192905.md`. |
+| D18 | **Gemma chat template required for MedGemma vLLM endpoints** | 2026-03-21 | MedGemma-it expects `<start_of_turn>user\n...` format. Without it, model does text completion instead of instruction following. |
 
 > **Adding a decision?** Append to this table with date and rationale. Never delete entries — only mark as superseded if changed.
 
@@ -69,9 +71,9 @@ B2B2C SaaS — sold to clinics/health systems, deployed to their patients.
 | AI Orchestration | LangGraph |
 | Agent Tools | MCP Servers (standardized tool access) |
 | Agent Communication | A2A Protocol (inter-agent messaging) |
-| Primary LLM | Gemini 3.0 Flash |
-| Reasoning LLM | Gemini 3.0 Pro (thinking mode) |
-| Medical LLM (eval) | MedGemma (benchmark against Gemini for medical tasks) |
+| Clinical LLM | MedGemma 27B-it (Vertex AI — document parsing, ADR, interactions, triage) |
+| Patient-facing LLM | Gemini 3.1 Flash Lite Preview (chat, voice, explanations) |
+| Reasoning LLM | Gemini 3.1 Pro Preview (SOAP notes, MedWatch, batch analysis) |
 | STT | Deepgram Nova-2 |
 | TTS | Deepgram Aura |
 | Voice (explore) | Gemini Multimodal Live API (stretch goal) |
@@ -121,13 +123,13 @@ B2B2C SaaS — sold to clinics/health systems, deployed to their patients.
 
 | Agent | Trigger | LLM |
 |-------|---------|-----|
-| Ingestion | Document upload | Gemini 3.0 Flash (vision) |
-| Triage | Chat message | Gemini 3.0 Flash |
-| Symptom Analysis | Routed from Triage | Gemini 3.0 Flash |
-| Pharmacovigilance | After symptom / nightly batch | Gemini 3.0 Pro |
-| Pre-Visit Prep | 24hr before appointment | Gemini 3.0 Flash |
-| Summarization | On-demand / daily | Gemini 3.0 Flash |
-| Scheduling | Triage / proactive | Gemini 3.0 Flash |
+| Ingestion | Document upload | MedGemma 27B (extraction) + Flash Lite (summary) |
+| Triage | Chat message | MedGemma 27B (classification) + Flash Lite (response) |
+| Symptom Analysis | Routed from Triage | Flash Lite (follow-up) + MedGemma 27B (assessment) |
+| Pharmacovigilance | After symptom / nightly batch | MedGemma 27B (ADR) + Pro (MedWatch) |
+| Pre-Visit Prep | 24hr before appointment | Flash Lite |
+| Summarization / SOAP | On-demand / daily | Pro |
+| Scheduling | Triage / proactive | Flash Lite |
 
 ---
 

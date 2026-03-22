@@ -1,0 +1,222 @@
+[
+  {
+    "scenario": "Lab Result Explanation",
+    "models": [
+      {
+        "model": "MedGemma 27B",
+        "response": "Okay, let's talk about your white blood cell count.What it is: Think of white blood cells as your body's little soldiers. They fight off germs and infections. This test measures how many soldiers you have in your blood. Your count is 12.5, and the normal range is usually between 4.5 and 11.0. So, your count is a little higher than normal.Why it matters: A higher count often means your body is fighting something off, like an infection or inflammation. It could be a simple cold, or something more serious. Since you have diabetes, sometimes high blood sugar can also affect this number.What happens next: We need to figure out *why* your count is up. We'll check if you have any signs of infection, like a fever or cough. Sometimes, this number goes up for reasons that aren't serious, but we want to make sure everything is okay. We might do more tests or just keep an eye on it, depending on how you're feeling and other results.",
+        "time_s": 10.83,
+        "error": null,
+        "metrics": {
+          "word_count": 167,
+          "readability": 50.3,
+          "completeness": 80,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Flash",
+        "response": "Your white blood cell count is 12.5, which is slightly higher than the normal range of 11.0.\n\nThink of white blood cells as your body\u2019s internal security team. When this number goes up, it usually means your immune system is working hard to fight off something, like a minor infection, inflammation, or even stress on the body. Because you manage diabetes and high blood pressure, your body sometimes reacts to these conditions by keeping that security team on high alert.\n\nIt is important to know that a slightly high number is not always a cause for panic. It is just a signal that your body is responding to something.\n\nNext, I will share these results with your doctor. They will look at the full picture of your health, including your current medications and how you have been feeling lately. They might want to check for any symptoms of a cold or infection, or they may simply want to repeat the blood test in a few weeks to see if the number returns to your normal range on its own. Please let us know if you have noticed any new symptoms like a fever, cough, or pain. We are here to help you figure out exactly what your body needs.",
+        "time_s": 2.96,
+        "error": null,
+        "metrics": {
+          "word_count": 209,
+          "readability": 52.5,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Pro",
+        "response": "Hello! Let's talk about your blood test. We checked your white blood cells, which are your body's tiny soldiers that fight off germs. Your number is 12.5. This is just a little bit higher than the normal top number of 11.\n\nThis matters because having extra soldiers usually means your body is working hard to fight off a small bug, an infection, or dealing with stress. Since you have diabetes, it can sometimes be a bit easier to catch germs, so we always pay close attention to this. Your daily medicines for blood sugar and blood pressure do not cause this change. \n\nHere is what happens next. The doctor will look at this result and we will ask how you are feeling. We want to know if you have a fever, a cough, or any new sores, especially on your feet. If you feel perfectly fine, we might just wait and test your blood again later to make sure the number goes back down. We will take great care of you! Please let me know if you feel sick anywhere.",
+        "time_s": 15.26,
+        "error": null,
+        "metrics": {
+          "word_count": 180,
+          "readability": 58.4,
+          "completeness": 80,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "ADR Detection \u2014 Statin Myopathy",
+    "models": [
+      {
+        "model": "MedGemma 27B",
+        "response": "**Assessment:**The patient presents with symptoms highly suggestive of statin-induced myopathy, specifically rhabdomyolysis given the dark urine (myoglobinuria). The onset is within 3 weeks of starting Atorvastatin 80mg, a high dose. Muscle pain (myalgia) and weakness are classic symptoms. Dark urine indicates muscle breakdown releasing myoglobin into the bloodstream, which is filtered by the kidneys. Atorvastatin is a known cause of these adverse effects, particularly at higher doses. The temporal relationship (drug initiation followed by symptom onset) is strong. Other potential causes of myalgia and rhabdomyolysis (e.g., trauma, infection, hypothyroidism, other medications) should be considered but are less likely given the recent statin initiation.**Immediate Action:**1.**Discontinue Atorvastatin immediately.** This is the most crucial step to stop further muscle damage.2.**Check creatine kinase (CK) levels.** This blood test will quantify the extent of muscle injury. Markedly elevated CK (>10 times the upper limit of normal) confirms rhabdomyolysis.3.**Assess renal function.** Check serum creatinine and urine output to monitor for acute kidney injury secondary to myoglobinuria. Ensure adequate hydration, potentially with intravenous fluids, to promote myoglobin clearance and protect the kidneys.4.**Monitor electrolytes.** Rhabdomyolysis can cause electrolyte imbalances (hyperkalemia, hyperphosphatemia, hypocalcemia).5.**Advise the patient** to stop the medication and report any worsening symptoms, especially decreased urine output.**Follow-up:**1.**Monitor CK levels** until they return to baseline.2.**Monitor renal function** until stable.3.**Re-evaluate lipid management** once the acute episode resolves. If statin therapy is needed, consider restarting at a lower dose or switching to a different statin, carefully weighing risks and benefits. Non-statin lipid-lowering agents might be an alternative.4.**Educate the patient** about the signs and symptoms of statin myopathy and the importance of reporting them promptly.**Naranjo Score Estimate:**Based on the temporal relationship, known adverse effect, and symptom characteristics, the Naranjo score is likely **8-9** (definite/very probable).",
+        "time_s": 20.61,
+        "error": null,
+        "metrics": {
+          "word_count": 283,
+          "readability": -6.2,
+          "completeness": 80,
+          "has_code_leak": true,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Flash",
+        "response": "**Assessment**\nThe patient\u2019s presentation of myalgia, muscle weakness, and dark urine (myoglobinuria) is highly suggestive of statin-induced rhabdomyolysis. Atorvastatin 80mg is a high-intensity regimen, and the onset within three weeks is consistent with drug-induced myopathy. The presence of dark urine is a clinical red flag indicating significant muscle breakdown and potential renal compromise. Based on the Naranjo Adverse Drug Reaction Probability Scale, the estimated score is 8 (Probable), given the temporal relationship, the known association between high-dose statins and rhabdomyolysis, and the clinical severity of the symptoms.\n\n**Immediate Action**\nThe patient must discontinue Atorvastatin immediately. They should be directed to the nearest emergency department for urgent evaluation. Clinical management requires immediate laboratory assessment, specifically serum creatine kinase (CK) levels, serum creatinine, electrolytes, and a urinalysis to check for myoglobin. If rhabdomyolysis is confirmed, aggressive intravenous fluid resuscitation is essential to maintain urine output and prevent acute kidney injury (AKI).\n\n**Follow-up**\nOnce the patient is stabilized and CK levels have normalized, a thorough review of the patient\u2019s medication profile is necessary to identify potential drug-drug interactions (e.g., CYP3A4 inhibitors) that may have increased systemic exposure to Atorvastatin. Future lipid-lowering therapy should be deferred until renal function is stable. If statin therapy is required in the future, a lower-intensity dose or an alternative agent (e.g., Ezetimibe or a PCSK9 inhibitor) should be considered, with close monitoring of muscle symptoms and baseline CK levels. The event must be reported to the FDA MedWatch program or the relevant national pharmacovigilance authority.",
+        "time_s": 2.81,
+        "error": null,
+        "metrics": {
+          "word_count": 247,
+          "readability": -11.6,
+          "completeness": 80,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Pro",
+        "response": "**Assessment**\nThis is a highly probable adverse drug reaction (ADR), specifically statin-induced myopathy with suspected progression to rhabdomyolysis. Atorvastatin 80mg is a high-intensity dose, which carries an elevated risk of muscle toxicity, particularly in older adults. The classic triad of muscle pain, weakness, and dark urine (indicating myoglobinuria) presenting three weeks post-initiation strongly correlates with acute statin toxicity. \n\nEstimated Naranjo Score: 6 (Probable ADR). This score is derived from previous conclusive reports of this reaction (+1), the adverse event appearing after drug administration (+2), and a highly specific clinical presentation lacking an obvious alternative cause prior to full workup (+2), with pending dechallenge results (+1).\n\n**Immediate Action**\n1. Discontinue atorvastatin immediately; do not taper or hold for observation.\n2. Direct the patient to the nearest emergency department or urgent care for immediate medical evaluation.\n3. Order stat laboratory tests: Creatine kinase (CK) to quantify muscle breakdown, a comprehensive metabolic panel (CMP) to evaluate renal function (serum creatinine, BUN) and liver transaminases, and a urinalysis to detect myoglobin.\n4. Anticipate the initiation of aggressive intravenous fluid resuscitation to flush myoglobin from the renal tubules and prevent acute kidney injury (AKI).\n\n**Follow-up**\nMonitor the patient's CK and renal function daily until values normalize to baseline. Conduct a comprehensive medication reconciliation to identify any concurrent CYP3A4 inhibitors (e.g., diltiazem, amiodarone, grapefruit juice) that may have precipitated this toxic accumulation. Once the patient has fully recovered, reassess their cardiovascular risk profile. If lipid-lowering therapy remains strictly indicated, avoid re-challenging with high-dose lipophilic statins. Consider a low-dose hydrophilic statin (e.g., pravastatin) or non-statin alternatives such as ezetimibe or a PCSK9 inhibitor, accompanied by stringent clinical monitoring.",
+        "time_s": 21.48,
+        "error": null,
+        "metrics": {
+          "word_count": 271,
+          "readability": -13.9,
+          "completeness": 80,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "Drug Interaction \u2014 NSAID + ACE Inhibitor",
+    "models": [
+      {
+        "model": "MedGemma 27B",
+        "response": "Okay, let's talk about taking ibuprofen with your Lisinopril.The short answer is: **No, it's generally not recommended to take ibuprofen regularly while on Lisinopril.**Here's why: Both Lisinopril and ibuprofen can affect your kidneys and blood pressure. Lisinopril helps protect your kidneys, but ibuprofen can sometimes reduce its effectiveness and potentially cause kidney problems, especially with long-term use. Ibuprofen can also increase your blood pressure, counteracting the effect of Lisinopril.Since you have hypertension, it's best to avoid this combination if possible.A safer alternative for your back pain would be **acetaminophen (Tylenol)**. It doesn't have the same effects on the kidneys or blood pressure as ibuprofen. Always follow the dosage instructions on the label.",
+        "time_s": 7.98,
+        "error": null,
+        "metrics": {
+          "word_count": 112,
+          "readability": 3.9,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Flash",
+        "response": "No, you should avoid taking ibuprofen while you are on Lisinopril.\n\nWhen you take these two medications together, the ibuprofen can interfere with how well the Lisinopril works to control your blood pressure. More importantly, the combination can put extra stress on your kidneys, which increases the risk of kidney issues over time, even if you don't have any current problems. Since Lisinopril is designed to protect your kidneys, taking an NSAID like ibuprofen can work against that benefit.\n\nFor your back pain, I recommend using acetaminophen (Tylenol) instead. It is much safer to take alongside your blood pressure medication because it doesn't affect your kidneys or your blood pressure in the same way. \n\nJust be sure to follow the dosing instructions on the bottle, and if your back pain doesn't improve after a few days, please reach out to your doctor to discuss other options. Does that make sense?",
+        "time_s": 2.42,
+        "error": null,
+        "metrics": {
+          "word_count": 150,
+          "readability": 22.6,
+          "completeness": 80,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Pro",
+        "response": "Hi there! No, I recommend that you do not take ibuprofen while you are on lisinopril. \n\nHere is why: ibuprofen belongs to a group of medicines that can actually cause your blood pressure to rise. Taking it could undo the great job your lisinopril is doing to keep your blood pressure well-controlled. Additionally, combining ibuprofen with lisinopril can put extra, unnecessary strain on your kidneys. Even though your kidneys are perfectly healthy right now, we want to make sure they stay that way!\n\nInstead of ibuprofen, I suggest trying acetaminophen, which you might know as Tylenol. It is a fantastic alternative for back pain and won't interfere with your blood pressure medication or your kidneys. Let's walk over to the pain relief aisle together, and I can help you find the right dose.",
+        "time_s": 15.44,
+        "error": null,
+        "metrics": {
+          "word_count": 133,
+          "readability": 30.9,
+          "completeness": 80,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "Emergency Triage \u2014 Chest Pain",
+    "models": [
+      {
+        "model": "MedGemma 27B",
+        "response": "ESI Level 1 - Immediate Life ThreatThis sounds like a potential heart attack. Time is critical.1.**Call 911 immediately.** Tell them you are experiencing chest pain radiating to the left arm, shortness of breath, sweating, and nausea.2.**Chew one adult aspirin (325mg) thoroughly** unless you are allergic or have been told not to by your doctor.3.**Sit or lie down** and try to remain as calm as possible while waiting for emergency services.4.**Unlock your door** so paramedics can easily access you.",
+        "time_s": 6.17,
+        "error": null,
+        "metrics": {
+          "word_count": 78,
+          "readability": 27.2,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Flash",
+        "response": "**Urgency Level: ESI 1 (Immediate/Life-Threatening)**\n\nYou are describing symptoms highly suggestive of a myocardial infarction (heart attack). This is a medical emergency.\n\n1. **Call 911 immediately.** Do not attempt to drive yourself to the hospital. Request an ambulance with paramedics who can perform an EKG and provide cardiac intervention en route.\n2. **Chew one full-strength (325mg) aspirin** if you are not allergic and have no history of severe bleeding, unless instructed otherwise by emergency dispatch.\n3. **Unlock your front door** and sit or lie down in a position that makes breathing easiest. Stay as calm as possible while waiting for EMS.\n4. **Do not eat or drink anything.** If you have prescribed nitroglycerin, follow the instructions provided by your physician, but do not delay calling 911 to do so.\n\nEmergency responders are trained to manage these symptoms; prioritize getting them to your location now.",
+        "time_s": 2.89,
+        "error": null,
+        "metrics": {
+          "word_count": 144,
+          "readability": 29.7,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Pro",
+        "response": "**ESI Level 2: High-Risk Emergency**\n\nSir, based on your symptoms and medical history, you are showing classic signs of a heart attack. This is a critical medical emergency. I need you to stay calm, but we must act right now. Please follow these instructions exactly:\n\n1. **Hang up and dial 911 immediately.** Do not attempt to drive yourself to the hospital under any circumstances; you need paramedics to begin treatment in the ambulance. \n2. **Chew and swallow aspirin.** Take four baby aspirins (81mg each) or one regular adult aspirin (325mg) right now, provided you are not allergic to it. Chewing it helps it enter your bloodstream faster.\n3. **Unlock your front door.** Do this quickly so emergency responders can enter without delay.\n4. **Sit down and rest.** Find a comfortable chair, try to take slow breaths, and do not walk around or exert yourself while you wait for the ambulance. \n\nYour safety is the absolute priority right now. Please hang up and make that call to 911 immediately.",
+        "time_s": 16.76,
+        "error": null,
+        "metrics": {
+          "word_count": 168,
+          "readability": 48.3,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "Discharge Summary Explanation",
+    "models": [
+      {
+        "model": "MedGemma 27B",
+        "response": "Okay, let's go over your discharge plan.First, **what happened**: You came in because you had a heart attack. This means one of the arteries supplying blood to your heart muscle was blocked. We were able to open that blockage using a procedure called cardiac catheterization. During that procedure, we put a small tube called a stent inside the artery to keep it open and allow blood to flow freely again.Next, **your new medications**: You're going home with four important heart medications.1.**Clopidogrel (75mg)**: This is a blood thinner, like Aspirin, and helps prevent clots from forming on the stent. Take one tablet daily.2.**Atorvastatin (80mg)**: This is a statin medication that helps lower your cholesterol and protect your heart. Take one tablet daily.3.**Metoprolol (50mg twice a day)**: This is a beta-blocker that helps slow your heart rate and lower your blood pressure, making it easier for your heart to work. Take one tablet in the morning and one in the evening.4.**Aspirin (81mg)**: This is also a blood thinner to help prevent clots. Take one tablet daily.It's really important to take these medications exactly as prescribed.Now, let's talk about **activity restrictions**: For the next four weeks, please avoid heavy lifting, anything over 10 pounds. This helps your chest heal properly. Also, please do not drive for the next week.Finally, **follow-up appointments**: You need to see your cardiologist in about two weeks. They will check how you're doing and make sure everything is healing well. We've also enrolled you in cardiac rehabilitation, which is a program to help you get stronger and learn how to live a heart-healthy life. They will contact you to schedule that.Do you have any questions about any of this?",
+        "time_s": 17.62,
+        "error": null,
+        "metrics": {
+          "word_count": 280,
+          "readability": 34.1,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Flash",
+        "response": "Hello. I\u2019m here to go over your discharge instructions so you know exactly what to do once you get home.\n\n**What happened**\nYou were admitted because you had a heart attack. To fix this, our team performed a procedure called a cardiac catheterization. During this, we placed a small mesh tube called a stent into your artery to keep it open and improve blood flow to your heart.\n\n**Your new medications**\nIt is very important to take these exactly as prescribed to keep your heart healthy:\n*   **Clopidogrel (75mg):** This prevents blood clots from forming in your new stent.\n*   **Aspirin (81mg):** This also helps thin your blood to prevent clots.\n*   **Atorvastatin (80mg):** This lowers your cholesterol to protect your arteries.\n*   **Metoprolol (50mg):** You will take this twice a day to help your heart beat at a steady, relaxed pace.\n\n**Activity restrictions**\nYour body needs time to heal. For the next four weeks, do not lift anything heavier than 10 pounds\u2014that is about the weight of a gallon of milk. Additionally, please do not drive for at least one week. Avoid any strenuous exercise until your doctor says it is safe.\n\n**Follow-up appointments**\nWe have scheduled a follow-up visit with your cardiologist in two weeks to check on your progress. We have also set up a referral for cardiac rehab. This is a supervised program that will help you safely rebuild your strength and improve your heart health through guided exercise and education.\n\nDo you or your family members have any questions about these instructions before we finish?",
+        "time_s": 3.14,
+        "error": null,
+        "metrics": {
+          "word_count": 260,
+          "readability": 34.5,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      },
+      {
+        "model": "Gemini 2.5 Pro",
+        "response": "Hello! I want to go over your discharge instructions with you and your family before you head home. \n\n**What Happened**\nYou came to the hospital because you had a heart attack. To treat this, the doctor did a procedure to look inside your heart's blood vessels. They found a blockage and placed a \"stent.\" A stent is a tiny wire mesh tube that props the blood vessel open so blood can flow freely to your heart again.\n\n**Your New Medications**\nTo keep your heart healthy, you will be going home with four new medicines:\n* **Aspirin (81mg) and Clopidogrel (75mg):** You will take both of these once a day. They keep your blood from clotting inside your new stent.\n* **Atorvastatin (80mg):** Take this once a day to lower your cholesterol and protect your blood vessels.\n* **Metoprolol (50mg):** You will take this twice a day. It relaxes your heart and lowers your blood pressure so your heart doesn't have to work as hard.\n\n**Activity Restrictions**\nYour body needs time to heal. For the next four weeks, do not lift anything heavier than 10 pounds\u2014which is about the weight of a gallon of milk. Also, you cannot drive for the next week, so please have your family or friends help you get around and run errands.\n\n**Follow-Up Appointments**\nYou will need to see your heart doctor (cardiologist) in two weeks so they can check on your healing. We are also setting you up with cardiac rehab. This is a supervised exercise and education program where a team will help you safely rebuild your heart's strength. \n\nDo you have any questions about these instructions before you go?",
+        "time_s": 18.52,
+        "error": null,
+        "metrics": {
+          "word_count": 276,
+          "readability": 40.5,
+          "completeness": 100,
+          "has_code_leak": false,
+          "has_repetition": false
+        }
+      }
+    ]
+  }
+]

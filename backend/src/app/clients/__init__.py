@@ -5,6 +5,8 @@ from app.clients.deepgram_client import (
     get_async_deepgram_client,
     transcribe_audio_file_async,
 )
+from app.clients.gemini import GeminiClient
+from app.clients.medgemma import MedGemmaClient
 from app.clients.supabase import get_admin_client
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "get_async_deepgram_client",
     "transcribe_audio_file_async",
     "generate_speech_async",
+    "GeminiClient",
+    "MedGemmaClient",
 ]

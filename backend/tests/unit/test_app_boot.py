@@ -57,8 +57,7 @@ def test_all_expected_routes_registered():
     }
 
     all_expected = (
-        expected_auth | expected_patient | expected_clinician
-        | expected_document | expected_meds
+        expected_auth | expected_patient | expected_clinician | expected_document | expected_meds
     )
     missing = all_expected - paths
     assert not missing, f"Missing routes: {missing}"
