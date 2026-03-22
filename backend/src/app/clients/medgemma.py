@@ -81,7 +81,9 @@ class MedGemmaClient:
                 self.endpoint = aiplatform.Endpoint(vertex_endpoint)
                 self.use_vertex = True
                 self.use_hf = False
-                logger.info(f"Initialized MedGemmaClient with Vertex AI endpoint: {vertex_endpoint}")
+                logger.info(
+                    f"Initialized MedGemmaClient with Vertex AI endpoint: {vertex_endpoint}"
+                )
             except Exception as e:
                 logger.warning(f"Failed to initialize Vertex AI: {e}. Trying HF API.")
                 self.use_vertex = False
@@ -152,7 +154,11 @@ class MedGemmaClient:
                 error_msg = str(e)
 
                 # If auto-detect and we get a format error, try the other format
-                if endpoint_type == "vllm" and settings.vertex_ai_endpoint_type == "auto" and ("Dedicated Endpoint" in error_msg or "domain" in error_msg):
+                if (
+                    endpoint_type == "vllm"
+                    and settings.vertex_ai_endpoint_type == "auto"
+                    and ("Dedicated Endpoint" in error_msg or "domain" in error_msg)
+                ):
                     logger.warning("vLLM format failed, trying standard format...")
                     endpoint_type = "standard"
                     continue
@@ -215,7 +221,9 @@ class MedGemmaClient:
         """
         formatted_prompt = ""
         if system_instruction:
-            formatted_prompt += f"<start_of_turn>user\n{system_instruction}\n\n{prompt}<end_of_turn>\n"
+            formatted_prompt += (
+                f"<start_of_turn>user\n{system_instruction}\n\n{prompt}<end_of_turn>\n"
+            )
         else:
             formatted_prompt += f"<start_of_turn>user\n{prompt}<end_of_turn>\n"
         formatted_prompt += "<start_of_turn>model\n"
@@ -249,7 +257,7 @@ class MedGemmaClient:
         """
         # Extract endpoint ID from the full endpoint path
         # Format: projects/PROJECT_NUMBER/locations/LOCATION/endpoints/ENDPOINT_ID
-        endpoint_parts = settings.vertex_ai_medgemma_endpoint.split('/')
+        endpoint_parts = settings.vertex_ai_medgemma_endpoint.split("/")
         endpoint_id = endpoint_parts[-1]
         project_number = endpoint_parts[1]
         location = endpoint_parts[3]
@@ -404,8 +412,7 @@ class MedGemmaClient:
         # Make prediction (synchronous call, but we're in async context)
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
-            None,
-            lambda: self.endpoint.predict(instances=instances, parameters=parameters)
+            None, lambda: self.endpoint.predict(instances=instances, parameters=parameters)
         )
 
         # Extract generated text from response
@@ -534,17 +541,13 @@ class MedGemmaClient:
                     return str(generated_text)
 
             except httpx.TimeoutException:
-                logger.warning(
-                    f"MedGemma timeout (attempt {attempt + 1}/{self.max_retries})"
-                )
+                logger.warning(f"MedGemma timeout (attempt {attempt + 1}/{self.max_retries})")
                 if attempt == self.max_retries - 1:
                     raise LLMError("MedGemma request timed out") from None
                 await asyncio.sleep(2**attempt)
 
             except Exception as e:
-                logger.error(
-                    f"MedGemma error (attempt {attempt + 1}/{self.max_retries}): {e}"
-                )
+                logger.error(f"MedGemma error (attempt {attempt + 1}/{self.max_retries}): {e}")
                 if attempt == self.max_retries - 1:
                     raise LLMError(f"MedGemma generation failed: {e}") from e
                 await asyncio.sleep(2**attempt)

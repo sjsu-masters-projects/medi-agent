@@ -47,7 +47,9 @@ class IngestionState(TypedDict):
     normalized_medications: list[dict[str, Any]] | None
 
     # Stage 5: save_to_database
-    saved_ids: dict[str, list[str]] | None  # {"medications": [...], "conditions": [...], "appointments": [...]}
+    saved_ids: (
+        dict[str, list[str]] | None
+    )  # {"medications": [...], "conditions": [...], "appointments": [...]}
 
     # Stage 6: generate_summary
     patient_summary: str | None
@@ -70,7 +72,9 @@ async def receive_document(state: IngestionState) -> IngestionState:
     Action: Validate input, download from Supabase Storage, set state
     Output: raw_content in state
     """
-    logger.info(f"receive_document: document_id={state['document_id']}, type={state['document_type']}")
+    logger.info(
+        f"receive_document: document_id={state['document_id']}, type={state['document_type']}"
+    )
 
     try:
         # TODO: Download from Supabase Storage using file_url
@@ -114,7 +118,7 @@ Output as JSON with these exact keys."""
 
         prompt = f"""Extract structured medical data from this document:
 
-{state['raw_content']}
+{state["raw_content"]}
 
 Output as JSON."""
 
@@ -142,8 +146,10 @@ Output as JSON."""
         state["extracted_data"] = extracted_data
         state["error"] = None
 
-        logger.info(f"Successfully extracted data: {len(extracted_data.get('medications', []))} meds, "
-                   f"{len(extracted_data.get('conditions', []))} conditions")
+        logger.info(
+            f"Successfully extracted data: {len(extracted_data.get('medications', []))} meds, "
+            f"{len(extracted_data.get('conditions', []))} conditions"
+        )
         return state
 
     except Exception as e:
@@ -282,9 +288,9 @@ Be warm, supportive, and clear."""
 
         prompt = f"""Explain this medical information to the patient in simple terms:
 
-Medications: {json.dumps(extracted_data.get('medications', []), indent=2)}
-Conditions: {json.dumps(extracted_data.get('conditions', []), indent=2)}
-Follow-up Instructions: {json.dumps(extracted_data.get('follow_up_instructions', []), indent=2)}
+Medications: {json.dumps(extracted_data.get("medications", []), indent=2)}
+Conditions: {json.dumps(extracted_data.get("conditions", []), indent=2)}
+Follow-up Instructions: {json.dumps(extracted_data.get("follow_up_instructions", []), indent=2)}
 
 Create a friendly, easy-to-understand summary."""
 
@@ -388,4 +394,3 @@ def create_ingestion_graph() -> Any:
 
     # Compile
     return graph.compile()
-

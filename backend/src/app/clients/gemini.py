@@ -85,7 +85,9 @@ class GeminiClient:
                     # Use Google Gen AI SDK for preview models
                     from google import genai
 
-                    logger.info(f"Attempting Google Gen AI SDK init: project={settings.google_project_id}, location=global, model={model}")
+                    logger.info(
+                        f"Attempting Google Gen AI SDK init: project={settings.google_project_id}, location=global, model={model}"
+                    )
 
                     self.genai_client = genai.Client(
                         vertexai=True,
@@ -94,14 +96,18 @@ class GeminiClient:
                     )
                     self.model_name = model
                     self.is_genai_sdk = True
-                    logger.info(f"✅ Successfully initialized GeminiClient with Google Gen AI SDK: {model} (location: global)")
+                    logger.info(
+                        f"✅ Successfully initialized GeminiClient with Google Gen AI SDK: {model} (location: global)"
+                    )
                 else:
                     # Use Vertex AI SDK for non-preview models
                     import vertexai
                     from vertexai.generative_models import GenerativeModel
 
                     location = settings.vertex_ai_location
-                    logger.info(f"Attempting Vertex AI init: project={settings.google_project_id}, location={location}, model={model}")
+                    logger.info(
+                        f"Attempting Vertex AI init: project={settings.google_project_id}, location={location}, model={model}"
+                    )
 
                     vertexai.init(
                         project=settings.google_project_id,
@@ -110,7 +116,9 @@ class GeminiClient:
                     self.model = GenerativeModel(model)
                     self.vertex_ai_model = GenerativeModel  # Store for system instruction
                     self.is_genai_sdk = False
-                    logger.info(f"✅ Successfully initialized GeminiClient with Vertex AI: {model} (location: {location})")
+                    logger.info(
+                        f"✅ Successfully initialized GeminiClient with Vertex AI: {model} (location: {location})"
+                    )
             except Exception as e:
                 logger.error(f"❌ Failed to initialize Vertex AI: {type(e).__name__}: {e}")
                 logger.error("Falling back to AI Studio (free tier with quotas)")
@@ -155,7 +163,7 @@ class GeminiClient:
         if thinking_mode and "thinking" not in self.model_name:
             raise ValueError("Thinking mode requires gemini-2.0-flash-thinking-exp model")
 
-        if self.use_vertex_ai and hasattr(self, 'is_genai_sdk') and self.is_genai_sdk:
+        if self.use_vertex_ai and hasattr(self, "is_genai_sdk") and self.is_genai_sdk:
             return await self._generate_genai_sdk(
                 prompt, system_instruction, image, temperature, max_tokens
             )
@@ -223,7 +231,7 @@ class GeminiClient:
                 )
 
                 # Log finish reason for debugging
-                if hasattr(response, 'candidates') and response.candidates:
+                if hasattr(response, "candidates") and response.candidates:
                     finish_reason = response.candidates[0].finish_reason
                     logger.debug(f"Vertex AI finish_reason: {finish_reason}")
 
@@ -233,13 +241,17 @@ class GeminiClient:
                 return str(response.text)
 
             except TimeoutError:
-                logger.warning(f"Gemini (Vertex AI) timeout (attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(
+                    f"Gemini (Vertex AI) timeout (attempt {attempt + 1}/{self.max_retries})"
+                )
                 if attempt == self.max_retries - 1:
                     raise LLMError("Gemini (Vertex AI) request timed out") from None
                 await asyncio.sleep(2**attempt)
 
             except Exception as e:
-                logger.error(f"Gemini (Vertex AI) error (attempt {attempt + 1}/{self.max_retries}): {e}")
+                logger.error(
+                    f"Gemini (Vertex AI) error (attempt {attempt + 1}/{self.max_retries}): {e}"
+                )
                 if attempt == self.max_retries - 1:
                     raise LLMError(f"Gemini (Vertex AI) generation failed: {e}") from e
                 await asyncio.sleep(2**attempt)
@@ -290,11 +302,13 @@ class GeminiClient:
                 )
 
                 # Log finish reason for debugging
-                if hasattr(response, 'candidates') and response.candidates:
-                    finish_reason = getattr(response.candidates[0], 'finish_reason', 'UNKNOWN')
+                if hasattr(response, "candidates") and response.candidates:
+                    finish_reason = getattr(response.candidates[0], "finish_reason", "UNKNOWN")
                     logger.debug(f"Gen AI SDK finish_reason: {finish_reason}")
                     logger.debug(f"Gen AI SDK response type: {type(response)}")
-                    logger.debug(f"Gen AI SDK response.text length: {len(response.text) if response.text else 0}")
+                    logger.debug(
+                        f"Gen AI SDK response.text length: {len(response.text) if response.text else 0}"
+                    )
 
                 if not response.text:
                     raise LLMError("Empty response from Gemini (Gen AI SDK)")
@@ -303,21 +317,27 @@ class GeminiClient:
                 # If it's truncated, we need to check the finish_reason
                 full_text = str(response.text)
 
-                if hasattr(response, 'candidates') and response.candidates:
-                    finish_reason = getattr(response.candidates[0], 'finish_reason', None)
-                    if finish_reason and finish_reason != 'STOP':
-                        logger.warning(f"Gen AI SDK response may be incomplete. Finish reason: {finish_reason}")
+                if hasattr(response, "candidates") and response.candidates:
+                    finish_reason = getattr(response.candidates[0], "finish_reason", None)
+                    if finish_reason and finish_reason != "STOP":
+                        logger.warning(
+                            f"Gen AI SDK response may be incomplete. Finish reason: {finish_reason}"
+                        )
 
                 return full_text
 
             except TimeoutError:
-                logger.warning(f"Gemini (Gen AI SDK) timeout (attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(
+                    f"Gemini (Gen AI SDK) timeout (attempt {attempt + 1}/{self.max_retries})"
+                )
                 if attempt == self.max_retries - 1:
                     raise LLMError("Gemini (Gen AI SDK) request timed out") from None
                 await asyncio.sleep(2**attempt)
 
             except Exception as e:
-                logger.error(f"Gemini (Gen AI SDK) error (attempt {attempt + 1}/{self.max_retries}): {e}")
+                logger.error(
+                    f"Gemini (Gen AI SDK) error (attempt {attempt + 1}/{self.max_retries}): {e}"
+                )
                 if attempt == self.max_retries - 1:
                     raise LLMError(f"Gemini (Gen AI SDK) generation failed: {e}") from e
                 await asyncio.sleep(2**attempt)
@@ -374,13 +394,17 @@ class GeminiClient:
                 return str(response.text)
 
             except TimeoutError:
-                logger.warning(f"Gemini (AI Studio) timeout (attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(
+                    f"Gemini (AI Studio) timeout (attempt {attempt + 1}/{self.max_retries})"
+                )
                 if attempt == self.max_retries - 1:
                     raise LLMError("Gemini (AI Studio) request timed out") from None
                 await asyncio.sleep(2**attempt)
 
             except Exception as e:
-                logger.error(f"Gemini (AI Studio) error (attempt {attempt + 1}/{self.max_retries}): {e}")
+                logger.error(
+                    f"Gemini (AI Studio) error (attempt {attempt + 1}/{self.max_retries}): {e}"
+                )
                 if attempt == self.max_retries - 1:
                     raise LLMError(f"Gemini (AI Studio) generation failed: {e}") from e
                 await asyncio.sleep(2**attempt)
@@ -457,14 +481,20 @@ JSON response:"""
         Raises:
             LLMError: If streaming fails
         """
-        if self.use_vertex_ai and hasattr(self, 'is_genai_sdk') and self.is_genai_sdk:
-            async for chunk in self._generate_stream_genai_sdk(prompt, system_instruction, temperature):
+        if self.use_vertex_ai and hasattr(self, "is_genai_sdk") and self.is_genai_sdk:
+            async for chunk in self._generate_stream_genai_sdk(
+                prompt, system_instruction, temperature
+            ):
                 yield chunk
         elif self.use_vertex_ai:
-            async for chunk in self._generate_stream_vertex_ai(prompt, system_instruction, temperature):
+            async for chunk in self._generate_stream_vertex_ai(
+                prompt, system_instruction, temperature
+            ):
                 yield chunk
         else:
-            async for chunk in self._generate_stream_ai_studio(prompt, system_instruction, temperature):
+            async for chunk in self._generate_stream_ai_studio(
+                prompt, system_instruction, temperature
+            ):
                 yield chunk
 
     async def _generate_stream_vertex_ai(
@@ -560,4 +590,3 @@ JSON response:"""
 
         except Exception as e:
             raise LLMError(f"Gemini (AI Studio) streaming failed: {e}") from e
-

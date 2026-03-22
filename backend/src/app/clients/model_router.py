@@ -122,9 +122,7 @@ class ModelRouter:
             logger.info(f"Initialized Gemini Pro client: {settings.gemini_pro_model}")
         return self._pro_client
 
-    def get_client(
-        self, task_type: TaskType
-    ) -> MedGemmaClientType | GeminiClientType:
+    def get_client(self, task_type: TaskType) -> MedGemmaClientType | GeminiClientType:
         """Get the appropriate LLM client for the given task type.
 
         Args:
@@ -165,8 +163,7 @@ class ModelRouter:
             return self.get_client(task_type)
         except Exception as e:
             logger.error(
-                f"Failed to get primary client for {task_type}: {e}. "
-                f"Falling back to Flash Lite."
+                f"Failed to get primary client for {task_type}: {e}. Falling back to Flash Lite."
             )
             return self.flash_client
 
