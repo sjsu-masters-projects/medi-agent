@@ -165,7 +165,7 @@ class TestDeepgramMCPServer:
             assert len(result["audio_base64"]) > 0
             assert result["model"] == "aura-2-asteria-en"
             assert result["encoding"] == "mp3"
-            assert result["text_length"] == 21  # "Hello, this is a test" without trailing space
+            assert result["text_length"] == len("Hello, this is a test")
             assert result["audio_size"] > 0
 
             # Verify it's valid base64
