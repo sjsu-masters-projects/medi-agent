@@ -127,11 +127,11 @@ class GeminiClient:
 
         if not self.use_vertex_ai:
             # Use AI Studio API
-            import google.generativeai as genai  # type: ignore[import-untyped]
+            import google.generativeai as genai_studio  # type: ignore[import-untyped]
 
-            genai.configure(api_key=api_key or settings.google_api_key)  # type: ignore[attr-defined]
-            self.model = genai.GenerativeModel(model)  # type: ignore[attr-defined]
-            self.genai = genai
+            genai_studio.configure(api_key=api_key or settings.google_api_key)  # type: ignore[attr-defined]
+            self.model = genai_studio.GenerativeModel(model)  # type: ignore[attr-defined,assignment]
+            self.genai = genai_studio
             self.is_genai_sdk = False
             logger.info(f"Initialized GeminiClient with AI Studio: {model}")
 
@@ -225,7 +225,7 @@ class GeminiClient:
                     model.generate_content_async(
                         parts,
                         generation_config=config,
-                        safety_settings=safety_settings,
+                        safety_settings=safety_settings,  # type: ignore[arg-type]
                     ),
                     timeout=self.timeout,
                 )
@@ -369,7 +369,7 @@ class GeminiClient:
             parts.append({"mime_type": "image/jpeg", "data": image})
 
         # Create model with system instruction if provided
-        model = self.model
+        model: Any = self.model
         if system_instruction:
             model = self.genai.GenerativeModel(  # type: ignore[attr-defined]
                 self.model_name,
@@ -570,7 +570,7 @@ JSON response:"""
         config = GenerationConfig(temperature=temperature)
 
         # Create model with system instruction if provided
-        model = self.model
+        model: Any = self.model
         if system_instruction:
             model = self.genai.GenerativeModel(  # type: ignore[attr-defined]
                 self.model_name,
@@ -578,7 +578,7 @@ JSON response:"""
             )
 
         try:
-            response = await model.generate_content_async(  # type: ignore[call-arg]
+            response = await model.generate_content_async(
                 prompt,
                 generation_config=config,
                 stream=True,

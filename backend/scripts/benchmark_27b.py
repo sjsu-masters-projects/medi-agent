@@ -129,6 +129,7 @@ SCENARIOS = [
 # Metrics helpers
 # ──────────────────────────────────────────────
 
+
 def count_words(text: str) -> int:
     """Count the number of words in a text string."""
     return len(text.split())
@@ -166,19 +167,39 @@ def assess_completeness(text: str, scenario_name: str) -> int:
     """Score completeness 0-100 based on expected content markers."""
     markers = {
         "Lab Result Explanation": [
-            "white blood cell", "immune", "infection", "normal", "next",
+            "white blood cell",
+            "immune",
+            "infection",
+            "normal",
+            "next",
         ],
         "ADR Detection — Statin Myopathy": [
-            "rhabdomyolysis", "stop", "CK", "kidney", "emergency",
+            "rhabdomyolysis",
+            "stop",
+            "CK",
+            "kidney",
+            "emergency",
         ],
         "Drug Interaction — NSAID + ACE Inhibitor": [
-            "avoid", "kidney", "blood pressure", "acetaminophen", "alternative",
+            "avoid",
+            "kidney",
+            "blood pressure",
+            "acetaminophen",
+            "alternative",
         ],
         "Emergency Triage — Chest Pain": [
-            "911", "heart attack", "aspirin", "emergency", "immediate",
+            "911",
+            "heart attack",
+            "aspirin",
+            "emergency",
+            "immediate",
         ],
         "Discharge Summary Explanation": [
-            "stent", "clopidogrel", "atorvastatin", "metoprolol", "rehab",
+            "stent",
+            "clopidogrel",
+            "atorvastatin",
+            "metoprolol",
+            "rehab",
         ],
     }
     expected = markers.get(scenario_name, [])
@@ -191,6 +212,7 @@ def assess_completeness(text: str, scenario_name: str) -> int:
 # ──────────────────────────────────────────────
 # Model runners
 # ──────────────────────────────────────────────
+
 
 async def run_medgemma(scenario: dict) -> dict:
     """Run scenario through MedGemma 27B."""
@@ -286,6 +308,7 @@ async def run_gemini_pro(scenario: dict) -> dict:
 # Main
 # ──────────────────────────────────────────────
 
+
 async def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     reports_dir = Path(__file__).resolve().parent.parent / "reports"
@@ -346,9 +369,11 @@ async def main():
     # Markdown report
     md_path = reports_dir / f"benchmark_27b_{timestamp}.md"
     with open(md_path, "w") as f:
-        f.write(f"# MedGemma 27B vs Gemini — Benchmark Report\n\n")
+        f.write("# MedGemma 27B vs Gemini — Benchmark Report\n\n")
         f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
-        f.write(f"**Prompts:** Properly constrained (max_tokens=1024, temp=0.3, output format rules)\n\n")
+        f.write(
+            "**Prompts:** Properly constrained (max_tokens=1024, temp=0.3, output format rules)\n\n"
+        )
         f.write("---\n\n")
 
         # Summary table
@@ -359,7 +384,7 @@ async def main():
             row = f"| {r['scenario']} |"
             for m in r["models"]:
                 if m["error"]:
-                    row += f" ❌ Error |"
+                    row += " ❌ Error |"
                 else:
                     met = m["metrics"]
                     code = "⚠️" if met["has_code_leak"] else "✅"
@@ -382,12 +407,14 @@ async def main():
                     f.write(f"📊 **Completeness:** {met['completeness']}% | ")
                     f.write(f"📖 **Readability:** {met['readability']} | ")
                     f.write(f"🔒 **Code leak:** {'YES ⚠️' if met['has_code_leak'] else 'No ✅'} | ")
-                    f.write(f"🔄 **Repetition:** {'YES ⚠️' if met['has_repetition'] else 'No ✅'}\n\n")
+                    f.write(
+                        f"🔄 **Repetition:** {'YES ⚠️' if met['has_repetition'] else 'No ✅'}\n\n"
+                    )
                     f.write(f"**Response:**\n\n```\n{m['response']}\n```\n\n")
             f.write("---\n\n")
 
     print(f"\n{'=' * 70}")
-    print(f"✅ Benchmark complete!")
+    print("✅ Benchmark complete!")
     print(f"   JSON: {json_path}")
     print(f"   Report: {md_path}")
     print(f"{'=' * 70}")

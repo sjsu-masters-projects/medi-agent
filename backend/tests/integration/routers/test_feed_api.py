@@ -188,10 +188,9 @@ class TestGetTodayFeed:
         assert data["summary"]["completed"] == 1
         assert data["summary"]["pending"] == 1
 
-    def test_success_empty_feed(
-        self, client, override_patient_auth, override_db, mock_supabase_db
-    ):
+    def test_success_empty_feed(self, client, override_patient_auth, override_db, mock_supabase_db):
         """Successfully retrieve empty feed when no tasks exist."""
+
         # Mock empty responses
         def table_side_effect(table_name):
             mock_table = MagicMock()

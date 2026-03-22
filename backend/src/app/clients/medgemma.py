@@ -1,4 +1,4 @@
-"""MedGemma client for medical task evaluation via Hugging Face Inference API."""
+"""MedGemma client for medical tasks via Vertex AI."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from typing import Any, TypeVar
 import httpx
 from pydantic import BaseModel
 
-from app.clients.gemini import GeminiClient
 from app.config import settings
 from app.core.exceptions import LLMError
 
@@ -21,41 +20,27 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class MedGemmaClient:
-    """MedGemma client for medical tasks via Hugging Face Inference API.
+    """MedGemma client for medical tasks via Vertex AI.
 
     Uses same interface as GeminiClient for easy A/B testing.
     MedGemma is Google's medical-specialized model based on Gemma 3.
 
-    Supports two deployment modes:
-    1. Hugging Face Inference API (benchmarking) - requires HUGGINGFACE_API_TOKEN
-    2. Gemini fallback (development) - used when HF token not configured
-
     Available MedGemma models:
-    - google/medgemma-1.5-4b-it (smallest, fastest)
-    - google/medgemma-4b-it (medium)
-    - google/medgemma-27b-it (largest, best quality)
-
-    Example:
-        # Swap GeminiClient for MedGemmaClient
-        client = MedGemmaClient(model="google/medgemma-4b-it")
-        response = await client.generate(prompt="Explain this lab result")
+    - google/medgemma-1.5-4b-it
+    - google/medgemma-4b-it
+    - google/medgemma-27b-it
     """
-
-    # Hugging Face Serverless Inference API base URL
-    HF_API_BASE = "https://api-inference.huggingface.co/models"
 
     def __init__(
         self,
-        model: str = "google/medgemma-4b-it",
-        api_token: str | None = None,
+        model: str = "google/medgemma-27b-it",
         max_retries: int = 3,
         timeout: int = 60,
     ) -> None:
-        """Initialize MedGemma client.
+        """Initialize MedGemma client strictly for Vertex AI.
 
         Args:
-            model: MedGemma model ID (google/medgemma-4b-it, google/medgemma-27b-it, etc.)
-            api_token: Hugging Face API token (defaults to settings.huggingface_api_token)
+            model: MedGemma model ID
             max_retries: Max retry attempts
             timeout: Request timeout in seconds
         """
@@ -63,162 +48,44 @@ class MedGemmaClient:
         self.max_retries = max_retries
         self.timeout = timeout
 
-        # Get API token
-        self.api_token = api_token or settings.huggingface_api_token
-
-        # Check if Vertex AI endpoint is configured
         vertex_endpoint = settings.vertex_ai_medgemma_endpoint
+        if not vertex_endpoint:
+            raise ValueError("VERTEX_AI_MEDGEMMA_ENDPOINT must be set to use MedGemmaClient.")
 
-        if vertex_endpoint:
-            # Use Vertex AI
-            try:
-                from google.cloud import aiplatform
+        try:
+            from google.cloud import aiplatform
 
-                aiplatform.init(
-                    project=settings.google_project_id,
-                    location=settings.vertex_ai_location,
-                )
-                self.endpoint = aiplatform.Endpoint(vertex_endpoint)
-                self.use_vertex = True
-                self.use_hf = False
-                logger.info(
-                    f"Initialized MedGemmaClient with Vertex AI endpoint: {vertex_endpoint}"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to initialize Vertex AI: {e}. Trying HF API.")
-                self.use_vertex = False
-                self.use_hf = bool(self.api_token)
-        elif self.api_token:
-            # Use Hugging Face Inference API
-            self.use_hf = True
-            self.use_vertex = False
-            self.api_url = f"{self.HF_API_BASE}/{model}"
-            self.headers = {"Authorization": f"Bearer {self.api_token}"}
-            logger.info(f"Initialized MedGemmaClient with Hugging Face API: {model}")
-        else:
-            # Fallback to Gemini
-            logger.warning(
-                "Neither VERTEX_AI_MEDGEMMA_ENDPOINT nor HUGGINGFACE_API_TOKEN set. Falling back to Gemini."
+            aiplatform.init(
+                project=settings.google_project_id,
+                location=settings.vertex_ai_location,
             )
-            self.use_hf = False
-            self.use_vertex = False
-            self._fallback_client = GeminiClient(
-                model="gemini-2.5-flash",
-                max_retries=max_retries,
-                timeout=timeout,
-            )
-
-    async def _generate_vertex_ai(
-        self,
-        prompt: str,
-        system_instruction: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 2048,
-    ) -> str:
-        """Generate text using Vertex AI endpoint.
-
-        Automatically detects endpoint type (standard vs vLLM) or uses configured type.
-
-        Args:
-            prompt: User prompt
-            system_instruction: System instruction (optional)
-            temperature: Sampling temperature
-            max_tokens: Max output tokens
-
-        Returns:
-            Generated text
-
-        Raises:
-            LLMError: If generation fails
-        """
-        # Determine endpoint type
-        endpoint_type = settings.vertex_ai_endpoint_type.lower()
-
-        if endpoint_type == "auto":
-            # Auto-detect: vLLM endpoints typically have "vllm" in serving spec or use dedicated domains
-            # Try vLLM format first (more common for MedGemma), fall back to standard
-            endpoint_type = "vllm"
-
-        # Try the detected/configured format
-        for attempt in range(self.max_retries):
-            try:
-                if endpoint_type == "vllm":
-                    return await self._generate_vllm_format(
-                        prompt, system_instruction, temperature, max_tokens
-                    )
-                else:
-                    return await self._generate_standard_format(
-                        prompt, system_instruction, temperature, max_tokens
-                    )
-            except Exception as e:
-                error_msg = str(e)
-
-                # If auto-detect and we get a format error, try the other format
-                if (
-                    endpoint_type == "vllm"
-                    and settings.vertex_ai_endpoint_type == "auto"
-                    and ("Dedicated Endpoint" in error_msg or "domain" in error_msg)
-                ):
-                    logger.warning("vLLM format failed, trying standard format...")
-                    endpoint_type = "standard"
-                    continue
-
-                logger.error(
-                    f"Vertex AI MedGemma error (attempt {attempt + 1}/{self.max_retries}): {e}"
-                )
-                if attempt == self.max_retries - 1:
-                    raise LLMError(f"Vertex AI MedGemma generation failed: {e}") from e
-                await asyncio.sleep(2**attempt)
-
-        raise LLMError("Vertex AI MedGemma generation failed after all retries")
+            self.endpoint = aiplatform.Endpoint(vertex_endpoint)
+            logger.info(f"Initialized MedGemmaClient with Vertex AI endpoint: {vertex_endpoint}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Vertex AI for MedGemmaClient: {e}") from e
 
     @staticmethod
     def _strip_prompt_echo(text: str, prompt: str) -> str:
-        """Strip echoed prompt from vLLM response.
-
-        vLLM endpoints often echo the full prompt before the response.
-        Common patterns:
-          - '{prompt}\nOutput:\n{response}'
-          - '{prompt}\n\n{response}'
-          - '{system}\n\n{prompt}\nOutput:\n{response}'
-        """
-        # Pattern 1: explicit "Output:" separator
+        """Strip echoed prompt from vLLM response."""
         if "\nOutput:" in text:
             parts = text.split("\nOutput:", 1)
             cleaned = parts[1].strip()
             if cleaned:
                 return cleaned
 
-        # Pattern 2: response starts with prompt text (echo)
-        # Check if the first ~80 chars of the prompt appear at the start
         prompt_prefix = prompt.strip()[:80]
         if text.startswith(prompt_prefix):
-            # Find where the prompt ends and response begins
-            # Look for double-newline after the prompt
             prompt_end = text.find("\n\n", len(prompt_prefix))
             if prompt_end != -1:
                 cleaned = text[prompt_end:].strip()
                 if cleaned:
                     return cleaned
 
-        # No echo detected — return as-is
         return text.strip()
 
     @staticmethod
     def _format_gemma_chat_template(prompt: str, system_instruction: str | None = None) -> str:
-        """Format prompt using Gemma/MedGemma chat template.
-
-        This is critical: MedGemma-it is instruction-tuned and expects
-        this exact format. Without it, the model does text completion
-        instead of instruction following.
-
-        Args:
-            prompt: User prompt
-            system_instruction: Optional system instruction
-
-        Returns:
-            Formatted prompt with Gemma chat template markers
-        """
+        """Format prompt using Gemma/MedGemma chat template."""
         formatted_prompt = ""
         if system_instruction:
             formatted_prompt += (
@@ -250,19 +117,12 @@ class MedGemmaClient:
         }
 
     def _build_endpoint_urls(self) -> tuple[str, str]:
-        """Build chat and predict endpoint URLs from Vertex AI endpoint path.
-
-        Returns:
-            Tuple of (chat_url, predict_url)
-        """
-        # Extract endpoint ID from the full endpoint path
-        # Format: projects/PROJECT_NUMBER/locations/LOCATION/endpoints/ENDPOINT_ID
+        """Build chat and predict endpoint URLs from Vertex AI endpoint path."""
         endpoint_parts = settings.vertex_ai_medgemma_endpoint.split("/")
         endpoint_id = endpoint_parts[-1]
         project_number = endpoint_parts[1]
         location = endpoint_parts[3]
 
-        # Build dedicated endpoint URL
         base_url = f"https://{endpoint_id}.{location}-{project_number}.prediction.vertexai.goog"
         chat_url = f"{base_url}/v1/chat/completions"
         predict_url = f"{base_url}/v1/{settings.vertex_ai_medgemma_endpoint}:predict"
@@ -276,7 +136,7 @@ class MedGemmaClient:
 
         creds, _project = google.auth.default()
         auth_req = google.auth.transport.requests.Request()
-        creds.refresh(auth_req)
+        creds.refresh(auth_req)  # type: ignore[no-untyped-call]
         access_token = creds.token
 
         return {
@@ -299,12 +159,9 @@ class MedGemmaClient:
         logger.debug("MedGemma vLLM chat URL: %s", chat_url)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            # Try chat completions endpoint first
             response = await client.post(chat_url, headers=headers, json=request_body)
 
             if response.status_code == 404:
-                # Chat completions not available — fall back to raw predict
-                # with Gemma chat template format
                 logger.warning(
                     "Chat completions endpoint not found, "
                     "falling back to predict with Gemma chat template"
@@ -321,14 +178,13 @@ class MedGemmaClient:
             if response.status_code != 200:
                 raise LLMError(f"vLLM endpoint error {response.status_code}: {response.text}")
 
-            return response.json()
+            return response.json()  # type: ignore[no-any-return]
 
     def _parse_vllm_response(self, response_data: dict[str, Any], prompt: str) -> str:
         """Parse vLLM response and strip prompt echo."""
         generated_text = ""
 
         if "choices" in response_data and len(response_data["choices"]) > 0:
-            # OpenAI chat completions format
             choice = response_data["choices"][0]
             if "message" in choice and "content" in choice["message"]:
                 generated_text = choice["message"]["content"]
@@ -339,7 +195,6 @@ class MedGemmaClient:
             else:
                 raise LLMError(f"Unexpected vLLM response format: {response_data}")
         elif "predictions" in response_data and len(response_data["predictions"]) > 0:
-            # Vertex AI predict format
             generated_text = response_data["predictions"][0]
             if isinstance(generated_text, dict):
                 generated_text = generated_text.get("content", generated_text.get("text", ""))
@@ -351,7 +206,6 @@ class MedGemmaClient:
         if not generated_text:
             raise LLMError("Empty response from Vertex AI MedGemma")
 
-        # Safety: strip any residual prompt echo
         generated_text = self._strip_prompt_echo(str(generated_text), prompt)
 
         if not generated_text:
@@ -366,12 +220,7 @@ class MedGemmaClient:
         temperature: float,
         max_tokens: int,
     ) -> str:
-        """Generate using vLLM/OpenAI-compatible chat format (for dedicated endpoints).
-
-        Uses the OpenAI-compatible ``/v1/chat/completions`` endpoint exposed by
-        vLLM on Vertex AI dedicated endpoints.  This gives proper system/user
-        message separation and eliminates prompt-echo issues.
-        """
+        """Generate using vLLM/OpenAI-compatible chat format."""
         request_body = self._build_chat_request(prompt, system_instruction, temperature, max_tokens)
         chat_url, predict_url = self._build_endpoint_urls()
         headers = await self._get_auth_headers()
@@ -397,25 +246,21 @@ class MedGemmaClient:
         max_tokens: int,
     ) -> str:
         """Generate using standard Vertex AI format."""
-        # Build prompt with system instruction
         full_prompt = prompt
         if system_instruction:
             full_prompt = f"{system_instruction}\n\n{prompt}"
 
-        # Prepare prediction request
         instances = [{"prompt": full_prompt}]
         parameters = {
             "temperature": temperature,
             "maxOutputTokens": max_tokens,
         }
 
-        # Make prediction (synchronous call, but we're in async context)
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None, lambda: self.endpoint.predict(instances=instances, parameters=parameters)
         )
 
-        # Extract generated text from response
         if response.predictions:
             generated_text = response.predictions[0]
             if isinstance(generated_text, dict):
@@ -436,12 +281,12 @@ class MedGemmaClient:
         temperature: float = 0.7,
         max_tokens: int = 2048,
     ) -> str:
-        """Generate text completion.
+        """Generate text completion using Vertex AI endpoint.
 
         Args:
             prompt: User prompt
             system_instruction: System instruction (optional)
-            image: Image bytes for vision tasks (optional, not supported by MedGemma)
+            image: Image bytes (not supported)
             temperature: Sampling temperature
             max_tokens: Max output tokens
 
@@ -451,108 +296,42 @@ class MedGemmaClient:
         Raises:
             LLMError: If generation fails
         """
-        # Use Vertex AI if configured
-        if self.use_vertex:
-            return await self._generate_vertex_ai(
-                prompt=prompt,
-                system_instruction=system_instruction,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-
-        # Use Hugging Face if configured
-        if not self.use_hf:
-            return await self._fallback_client.generate(
-                prompt=prompt,
-                system_instruction=system_instruction,
-                image=image,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-
-        # Hugging Face API implementation
-        # Image not supported by MedGemma text models
         if image:
             logger.warning("Image input not supported by MedGemma. Ignoring image.")
 
-        # Build prompt with system instruction
-        full_prompt = prompt
-        if system_instruction:
-            full_prompt = f"{system_instruction}\n\n{prompt}"
+        endpoint_type = settings.vertex_ai_endpoint_type.lower()
+        if endpoint_type == "auto":
+            endpoint_type = "vllm"
 
-        # Retry logic with exponential backoff
         for attempt in range(self.max_retries):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(
-                        self.api_url,
-                        headers=self.headers,
-                        json={
-                            "inputs": full_prompt,
-                            "parameters": {
-                                "temperature": temperature,
-                                "max_new_tokens": max_tokens,
-                                "return_full_text": False,
-                            },
-                        },
+                if endpoint_type == "vllm":
+                    return await self._generate_vllm_format(
+                        prompt, system_instruction, temperature, max_tokens
                     )
-
-                    # Handle rate limiting (503) - model is loading
-                    if response.status_code == 503:
-                        error_data = response.json()
-                        if "estimated_time" in error_data:
-                            wait_time = error_data["estimated_time"]
-                            logger.warning(
-                                f"Model loading, waiting {wait_time}s "
-                                f"(attempt {attempt + 1}/{self.max_retries})"
-                            )
-                            await asyncio.sleep(wait_time)
-                            continue
-                        else:
-                            logger.warning(
-                                f"Service unavailable (attempt {attempt + 1}/{self.max_retries})"
-                            )
-                            await asyncio.sleep(2**attempt)
-                            continue
-
-                    # Handle other errors
-                    if response.status_code != 200:
-                        error_msg = f"HF API error {response.status_code}: {response.text}"
-                        logger.error(error_msg)
-                        if attempt == self.max_retries - 1:
-                            raise LLMError(error_msg)
-                        await asyncio.sleep(2**attempt)
-                        continue
-
-                    # Parse response
-                    result = response.json()
-
-                    # HF API returns list of dicts with "generated_text" key
-                    if isinstance(result, list) and len(result) > 0:
-                        generated_text = result[0].get("generated_text", "")
-                    elif isinstance(result, dict):
-                        generated_text = result.get("generated_text", "")
-                    else:
-                        raise LLMError(f"Unexpected HF API response format: {result}")
-
-                    if not generated_text:
-                        raise LLMError("Empty response from MedGemma")
-
-                    return str(generated_text)
-
-            except httpx.TimeoutException:
-                logger.warning(f"MedGemma timeout (attempt {attempt + 1}/{self.max_retries})")
-                if attempt == self.max_retries - 1:
-                    raise LLMError("MedGemma request timed out") from None
-                await asyncio.sleep(2**attempt)
-
+                else:
+                    return await self._generate_standard_format(
+                        prompt, system_instruction, temperature, max_tokens
+                    )
             except Exception as e:
-                logger.error(f"MedGemma error (attempt {attempt + 1}/{self.max_retries}): {e}")
+                error_msg = str(e)
+                if (
+                    endpoint_type == "vllm"
+                    and settings.vertex_ai_endpoint_type == "auto"
+                    and ("Dedicated Endpoint" in error_msg or "domain" in error_msg)
+                ):
+                    logger.warning("vLLM format failed, trying standard format...")
+                    endpoint_type = "standard"
+                    continue
+
+                logger.error(
+                    f"Vertex AI MedGemma error (attempt {attempt + 1}/{self.max_retries}): {e}"
+                )
                 if attempt == self.max_retries - 1:
-                    raise LLMError(f"MedGemma generation failed: {e}") from e
+                    raise LLMError(f"Vertex AI MedGemma generation failed: {e}") from e
                 await asyncio.sleep(2**attempt)
 
-        raise LLMError("MedGemma generation failed after all retries")
+        raise LLMError("Vertex AI MedGemma generation failed after all retries")
 
     async def generate_structured(
         self,
@@ -562,49 +341,18 @@ class MedGemmaClient:
         image: bytes | None = None,
         temperature: float = 0.7,
     ) -> T:
-        """Generate structured output (Pydantic model).
-
-        Args:
-            prompt: User prompt
-            response_model: Pydantic model class for output
-            system_instruction: System instruction (optional)
-            image: Image bytes for vision tasks (optional, not supported)
-            temperature: Sampling temperature
-
-        Returns:
-            Parsed Pydantic model instance
-
-        Raises:
-            LLMError: If generation or parsing fails
-        """
-        # Use fallback client if neither Vertex AI nor HF configured
-        if not self.use_hf and not self.use_vertex:
-            return await self._fallback_client.generate_structured(
-                prompt=prompt,
-                response_model=response_model,
-                system_instruction=system_instruction,
-                image=image,
-                temperature=temperature,
-            )
-
-        # Add JSON schema to prompt
+        """Generate structured output (Pydantic model)."""
         schema = response_model.model_json_schema()
-        enhanced_prompt = f"""{prompt}
-
-Respond with valid JSON matching this schema:
-{json.dumps(schema, indent=2)}
-
-JSON response:"""
+        enhanced_prompt = f"{prompt}\n\nRespond with valid JSON matching this schema:\n{json.dumps(schema, indent=2)}\n\nJSON response:"
 
         response_text = await self.generate(
             prompt=enhanced_prompt,
             system_instruction=system_instruction,
+            image=image,
             temperature=temperature,
         )
 
-        # Parse JSON response
         try:
-            # Extract JSON from markdown code blocks if present
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
@@ -622,32 +370,9 @@ JSON response:"""
     ) -> AsyncGenerator[str, None]:
         """Generate streaming response.
 
-        Note: Vertex AI and HF Inference API don't support streaming for MedGemma.
+        Note: Vertex AI doesn't support streaming for MedGemma in the current config.
         Falls back to non-streaming generation.
-
-        Args:
-            prompt: User prompt
-            system_instruction: System instruction (optional)
-            temperature: Sampling temperature
-
-        Yields:
-            Text chunks (single chunk for non-streaming)
-
-        Raises:
-            LLMError: If streaming fails
         """
-        # Use fallback client if neither Vertex AI nor HF configured
-        if not self.use_hf and not self.use_vertex:
-            async for chunk in self._fallback_client.generate_stream(
-                prompt=prompt,
-                system_instruction=system_instruction,
-                temperature=temperature,
-            ):
-                yield chunk
-            return
-
-        # Neither Vertex AI nor HF Inference API support streaming for MedGemma
-        # Fall back to non-streaming and yield as single chunk
         logger.warning("Streaming not supported by MedGemma. Using non-streaming.")
         response = await self.generate(
             prompt=prompt,

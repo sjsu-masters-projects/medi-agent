@@ -156,9 +156,8 @@ async def test_failing_agent_logs_error(caplog):
         test_data="hello",
     )
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(ValueError, match="Test error"):
-            await agent.process(test_input)
+    with caplog.at_level(logging.ERROR), pytest.raises(ValueError, match="Test error"):
+        await agent.process(test_input)
 
     assert "Agent failing_agent failed" in caplog.text
 

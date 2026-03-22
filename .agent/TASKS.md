@@ -231,15 +231,16 @@
 - [x] Fix MedGemma: prompt-echo stripping
 - [x] Create LangGraph state schema for ingestion workflow — `agents/ingestion/graph.py`
 - [x] Agent execution observability/tracing — `core/observability.py`
-- [ ] Create ModelRouter service (route tasks to correct model)
-- [ ] Implement Ingestion Agent graph nodes:
-  - [ ] Node: receive_document (validate input, set state)
-  - [ ] Node: extract_content (MedGemma 27B for clinical extraction)
-  - [ ] Node: validate_fhir (validate against FHIR schemas)
-  - [ ] Node: normalize_medications (RxNorm MCP lookup)
-  - [ ] Node: save_to_database (Supabase MCP upsert)
-  - [ ] Node: generate_summary (Flash Lite for patient-facing summary)
-  - [ ] Node: create_feed_tasks (extract meds + follow-ups → obligations)
+- [x] Create ModelRouter service (route tasks to correct model)
+- [x] Implement Ingestion Agent graph nodes:
+  - [x] Node: receive_document (validate input, set state)
+  - [x] Node: extract_content (MedGemma 27B for clinical extraction)
+  - [x] Node: validate_fhir (validate against FHIR schemas)
+  - [x] Node: normalize_medications (RxNorm MCP lookup)
+  - [x] Node: save_to_database (Supabase MCP upsert)
+  - [x] Node: generate_summary (Flash Lite for patient-facing summary)
+  - [x] Node: create_feed_tasks (extract meds + follow-ups → obligations)
+- [x] Codebase cleanup (remove duplicates and unnecessary files)
 
 ### 4.2 Tools
 - [ ] FHIR Resource Builder (MedicationRequest, Condition, AllergyIntolerance, Appointment)
@@ -253,12 +254,12 @@
 - [x] Compare accuracy: MedGemma 27B vs Gemini Flash Lite vs Gemini Pro
 - [x] Decision: adopt MedGemma 27B for clinical tasks (parsing, ADR, interactions, triage)
 - [x] Document results — `backend/reports/benchmark_27b_20260321_192905.md`
-- [ ] Add D17/D18 to PROJECT.md Decision Log
+- [x] Add D17/D18 to PROJECT.md Decision Log
 
 ### 4.4 Testing
-- [ ] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
-- [ ] Golden-set evaluation: expected parsing output for each test document
-- [ ] Unit tests for FHIR builder and normalizer
+- [x] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
+- [x] Golden-set evaluation: expected parsing output for each test document
+- [x] Unit tests for FHIR builder and normalizer
 - [ ] Integration test: upload → parse → database → Today Feed
 
 ### 4.4 Patient Portal Integration

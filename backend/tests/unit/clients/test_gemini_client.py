@@ -64,9 +64,7 @@ async def test_generate_success(gemini_client):
     mock_response = MagicMock()
     mock_response.text = "Generated text response"
 
-    gemini_client.model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    gemini_client.model.generate_content_async = AsyncMock(return_value=mock_response)
 
     result = await gemini_client.generate(prompt="Test prompt")
 
@@ -81,9 +79,7 @@ async def test_generate_with_system_instruction(gemini_client):
     mock_response.text = "Response with system instruction"
 
     mock_new_model = AsyncMock()
-    mock_new_model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    mock_new_model.generate_content_async = AsyncMock(return_value=mock_response)
     gemini_client.genai.GenerativeModel.return_value = mock_new_model
 
     result = await gemini_client.generate(
@@ -104,14 +100,10 @@ async def test_generate_with_image(gemini_client):
     mock_response = MagicMock()
     mock_response.text = "Image analysis response"
 
-    gemini_client.model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    gemini_client.model.generate_content_async = AsyncMock(return_value=mock_response)
 
     image_bytes = b"fake_image_data"
-    result = await gemini_client.generate(
-        prompt="Describe this image", image=image_bytes
-    )
+    result = await gemini_client.generate(prompt="Describe this image", image=image_bytes)
 
     assert result == "Image analysis response"
     call_args = gemini_client.model.generate_content_async.call_args
@@ -127,9 +119,7 @@ async def test_generate_empty_response(gemini_client):
     mock_response = MagicMock()
     mock_response.text = ""
 
-    gemini_client.model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    gemini_client.model.generate_content_async = AsyncMock(return_value=mock_response)
 
     with pytest.raises(LLMError, match="Empty response from Gemini"):
         await gemini_client.generate(prompt="Test prompt")
@@ -138,9 +128,7 @@ async def test_generate_empty_response(gemini_client):
 @pytest.mark.asyncio
 async def test_generate_timeout(gemini_client):
     """Test timeout handling with retries."""
-    gemini_client.model.generate_content_async = AsyncMock(
-        side_effect=TimeoutError()
-    )
+    gemini_client.model.generate_content_async = AsyncMock(side_effect=TimeoutError())
     gemini_client.max_retries = 2
 
     with pytest.raises(LLMError, match="timed out"):
@@ -169,9 +157,7 @@ async def test_generate_retry_then_success(gemini_client):
 @pytest.mark.asyncio
 async def test_generate_exception(gemini_client):
     """Test handling of general exceptions."""
-    gemini_client.model.generate_content_async = AsyncMock(
-        side_effect=ValueError("API error")
-    )
+    gemini_client.model.generate_content_async = AsyncMock(side_effect=ValueError("API error"))
     gemini_client.max_retries = 2
 
     with pytest.raises(LLMError, match="generation failed"):
@@ -189,9 +175,7 @@ async def test_generate_structured_success(gemini_client):
     mock_response = MagicMock()
     mock_response.text = '{"message": "Hello", "count": 42}'
 
-    gemini_client.model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    gemini_client.model.generate_content_async = AsyncMock(return_value=mock_response)
 
     result = await gemini_client.generate_structured(
         prompt="Generate structured data",
@@ -209,9 +193,7 @@ async def test_generate_structured_with_markdown(gemini_client):
     mock_response = MagicMock()
     mock_response.text = '```json\n{"message": "Hello", "count": 42}\n```'
 
-    gemini_client.model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    gemini_client.model.generate_content_async = AsyncMock(return_value=mock_response)
 
     result = await gemini_client.generate_structured(
         prompt="Generate structured data",
@@ -229,9 +211,7 @@ async def test_generate_structured_invalid_json(gemini_client):
     mock_response = MagicMock()
     mock_response.text = "Not valid JSON"
 
-    gemini_client.model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    gemini_client.model.generate_content_async = AsyncMock(return_value=mock_response)
 
     with pytest.raises(LLMError, match="Failed to parse structured output"):
         await gemini_client.generate_structured(
@@ -257,9 +237,7 @@ async def test_generate_stream(gemini_client):
         yield mock_chunk1
         yield mock_chunk2
 
-    gemini_client.model.generate_content_async = AsyncMock(
-        return_value=mock_stream()
-    )
+    gemini_client.model.generate_content_async = AsyncMock(return_value=mock_stream())
 
     chunks = []
     async for chunk in gemini_client.generate_stream(prompt="Test prompt"):
@@ -295,15 +273,11 @@ async def test_thinking_mode_with_thinking_model(mock_settings):
     with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
         from app.clients.gemini import GeminiClient
 
-        client = GeminiClient(
-            model="gemini-2.0-flash-thinking-exp-01-21"
-        )
+        client = GeminiClient(model="gemini-2.0-flash-thinking-exp-01-21")
 
     mock_response = MagicMock()
     mock_response.text = "Thinking response"
-    client.model.generate_content_async = AsyncMock(
-        return_value=mock_response
-    )
+    client.model.generate_content_async = AsyncMock(return_value=mock_response)
 
     result = await client.generate(prompt="Test", thinking_mode=True)
 
@@ -339,3 +313,116 @@ def test_client_initialization(mock_settings):
     assert client.is_genai_sdk is False
     # Verify genai module reference was stored on client
     assert hasattr(client, "genai")
+
+
+# ============================================================
+# Vertex AI Tests
+# ============================================================
+
+
+@pytest.fixture
+def mock_settings_vertex():
+    """Mock settings for Vertex AI mode."""
+    with patch("app.clients.gemini.settings") as mock:
+        mock.google_api_key = "test-api-key"
+        mock.google_project_id = "test-project"
+        mock.vertex_ai_location = "us-central1"
+        yield mock
+
+
+def test_client_initialization_vertex_ai_sdk(mock_settings_vertex):
+    """Test client initialization using Vertex AI SDK for non-preview models."""
+    with (
+        patch("vertexai.init") as mock_init,
+        patch("vertexai.generative_models.GenerativeModel") as mock_model,
+    ):
+        from app.clients.gemini import GeminiClient
+
+        client = GeminiClient(model="gemini-1.5-pro", use_vertex_ai=True)
+
+    assert client.model_name == "gemini-1.5-pro"
+    assert client.use_vertex_ai is True
+    assert client.is_genai_sdk is False
+    mock_init.assert_called_once_with(project="test-project", location="us-central1")
+    mock_model.assert_called_once_with("gemini-1.5-pro")
+
+
+def test_client_initialization_genai_sdk(mock_settings_vertex):
+    """Test client initialization using Gen AI SDK for preview models."""
+    with patch("google.genai.Client") as mock_client:
+        from app.clients.gemini import GeminiClient
+
+        client = GeminiClient(model="gemini-3.1-pro-preview", use_vertex_ai=True)
+
+    assert client.model_name == "gemini-3.1-pro-preview"
+    assert client.use_vertex_ai is True
+    assert client.is_genai_sdk is True
+    mock_client.assert_called_once_with(vertexai=True, project="test-project", location="global")
+
+
+def test_client_initialization_vertex_ai_fallback(mock_settings_vertex):
+    """Test fallback to AI Studio if Vertex AI init fails."""
+    with (
+        patch("vertexai.init", side_effect=Exception("Failed")),
+        patch("google.generativeai.configure") as mock_genai_configure,
+        patch("google.generativeai.GenerativeModel"),
+    ):
+        from app.clients.gemini import GeminiClient
+
+        client = GeminiClient(model="gemini-1.5-pro", use_vertex_ai=True)
+
+    assert client.use_vertex_ai is False
+    assert client.is_genai_sdk is False
+    mock_genai_configure.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_generate_vertex_ai_success(mock_settings_vertex):
+    """Test generation via Vertex AI SDK."""
+    with (
+        patch("vertexai.init"),
+        patch("vertexai.generative_models.GenerativeModel") as mock_model_cls,
+    ):
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Vertex response"
+
+        async def mock_gen(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_gen
+        mock_model_cls.return_value = mock_model
+
+        from app.clients.gemini import GeminiClient
+
+        client = GeminiClient(model="gemini-1.5-pro", use_vertex_ai=True)
+
+        # Patch Vertex abstractions to avoid importing them in test setup
+        with (
+            patch("vertexai.generative_models.GenerationConfig"),
+            patch("vertexai.generative_models.Part"),
+        ):
+            result = await client.generate("Test prompt")
+            assert result == "Vertex response"
+
+
+@pytest.mark.asyncio
+async def test_generate_genai_sdk_success(mock_settings_vertex):
+    """Test generation via Gen AI SDK."""
+    with patch("google.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "GenAI SDK response"
+
+        async def mock_generate_content(*args, **kwargs):
+            return mock_response
+
+        mock_client.aio.models.generate_content = mock_generate_content
+        mock_client_cls.return_value = mock_client
+
+        from app.clients.gemini import GeminiClient
+
+        client = GeminiClient(model="gemini-3.1-pro-preview", use_vertex_ai=True)
+
+        result = await client.generate("Test prompt")
+        assert result == "GenAI SDK response"

@@ -370,9 +370,7 @@ async def test_get_drug_label_http_error_500():
         mock_response = AsyncMock(status_code=500)
 
         def raise_for_status():
-            raise httpx.HTTPStatusError(
-                "Server error", request=AsyncMock(), response=mock_response
-            )
+            raise httpx.HTTPStatusError("Server error", request=AsyncMock(), response=mock_response)
 
         mock_response.raise_for_status = raise_for_status
         mock_get.return_value = mock_response

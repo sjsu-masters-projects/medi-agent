@@ -3,14 +3,15 @@
 Uses FastAPI dependency overrides for proper authentication mocking.
 """
 
-import pytest
-from fastapi import status
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from app.main import app
+import pytest
+from fastapi import status
+
 from app.core.security import get_current_user
 from app.db.connection import get_db
+from app.main import app
 from app.models.auth import CurrentUser
 
 
@@ -23,11 +24,7 @@ def clinician_id():
 @pytest.fixture
 def mock_clinician_user(clinician_id):
     """Mock authenticated clinician user."""
-    return CurrentUser(
-        id=clinician_id,
-        email="clinician@test.com",
-        role="clinician"
-    )
+    return CurrentUser(id=clinician_id, email="clinician@test.com", role="clinician")
 
 
 @pytest.fixture
@@ -36,20 +33,21 @@ def mock_supabase_db():
     db = MagicMock()
     table = MagicMock()
     db.table.return_value = table
-    
+
     # Make all query methods chainable
-    for method in ['select', 'eq', 'single', 'insert', 'order']:
+    for method in ["select", "eq", "single", "insert", "order"]:
         getattr(table, method).return_value = table
-    
+
     return db
 
 
 @pytest.fixture
 def override_auth(mock_clinician_user):
     """Override authentication dependency."""
+
     def _get_current_user_override():
         return mock_clinician_user
-    
+
     app.dependency_overrides[get_current_user] = _get_current_user_override
     yield
     app.dependency_overrides.clear()
@@ -58,9 +56,10 @@ def override_auth(mock_clinician_user):
 @pytest.fixture
 def override_db(mock_supabase_db):
     """Override database dependency."""
+
     def _get_db_override():
         return mock_supabase_db
-    
+
     app.dependency_overrides[get_db] = _get_db_override
     yield
     app.dependency_overrides.clear()
@@ -82,15 +81,15 @@ class TestGetMyProfile:
             "role": "provider",
             "avatar_url": None,
             "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": None
+            "updated_at": None,
         }
-        
+
         mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
             data=profile_data
         )
-        
+
         response = client.get("/api/v1/clinicians/me")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["email"] == "clinician@test.com"
@@ -99,12 +98,10 @@ class TestGetMyProfile:
 
     def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
         """Handle clinician not found."""
-        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
-            data=None
-        )
-        
+        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(data=None)
+
         response = client.get("/api/v1/clinicians/me")
-        
+
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -127,17 +124,17 @@ class TestGetMyPatients:
                     "first_name": "John",
                     "last_name": "Doe",
                     "date_of_birth": "1990-01-15",
-                    "avatar_url": None
-                }
+                    "avatar_url": None,
+                },
             }
         ]
-        
+
         mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(
             data=care_team_data
         )
-        
+
         response = client.get("/api/v1/clinicians/me/patients")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert isinstance(data, list)
@@ -146,12 +143,10 @@ class TestGetMyPatients:
 
     def test_empty_patient_list(self, client, override_auth, override_db, mock_supabase_db):
         """Handle empty patient list."""
-        mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(
-            data=[]
-        )
-        
+        mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(data=[])
+
         response = client.get("/api/v1/clinicians/me/patients")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert isinstance(data, list)
@@ -164,12 +159,12 @@ class TestGetPatientDetail:
     def test_success(self, client, override_auth, override_db, mock_supabase_db):
         """Successfully retrieve patient detail."""
         patient_id = uuid4()
-        
+
         # Mock care team assignment check
         mock_supabase_db.table().select().eq().eq().eq().execute.return_value = MagicMock(
             data=[{"id": str(uuid4())}]
         )
-        
+
         # Mock patient profile fetch
         patient_data = {
             "id": str(patient_id),
@@ -182,14 +177,14 @@ class TestGetPatientDetail:
             "phone": "+1234567890",
             "avatar_url": None,
             "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": None
+            "updated_at": None,
         }
         mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
             data=patient_data
         )
-        
+
         response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["first_name"] == "John"
@@ -198,32 +193,28 @@ class TestGetPatientDetail:
     def test_not_assigned(self, client, override_auth, override_db, mock_supabase_db):
         """Reject access to unassigned patient."""
         patient_id = uuid4()
-        
+
         # Mock no care team assignment
-        mock_supabase_db.table().select().eq().eq().eq().execute.return_value = MagicMock(
-            data=[]
-        )
-        
+        mock_supabase_db.table().select().eq().eq().eq().execute.return_value = MagicMock(data=[])
+
         response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}")
-        
+
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_patient_not_found(self, client, override_auth, override_db, mock_supabase_db):
         """Handle patient not found after authorization check."""
         patient_id = uuid4()
-        
+
         # Mock care team assignment exists
         mock_supabase_db.table().select().eq().eq().eq().execute.return_value = MagicMock(
             data=[{"id": str(uuid4())}]
         )
-        
+
         # Mock patient not found
-        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
-            data=None
-        )
-        
+        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(data=None)
+
         response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}")
-        
+
         # Service raises AuthorizationError first (403), not NotFoundError
         # because the check happens in sequence
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -236,19 +227,21 @@ class TestGenerateInviteCode:
         """Successfully generate invite code."""
         care_team_id = uuid4()
         invite_code = "A1B2C3D4"
-        
+
         mock_supabase_db.table().insert().execute.return_value = MagicMock(
-            data=[{
-                "id": str(care_team_id),
-                "clinician_id": str(clinician_id),
-                "invite_code": invite_code,
-                "status": "pending",
-                "role": "provider"
-            }]
+            data=[
+                {
+                    "id": str(care_team_id),
+                    "clinician_id": str(clinician_id),
+                    "invite_code": invite_code,
+                    "status": "pending",
+                    "role": "provider",
+                }
+            ]
         )
-        
+
         response = client.post("/api/v1/clinicians/me/invite-code")
-        
+
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "invite_code" in data
@@ -262,14 +255,13 @@ class TestAuthorization:
     def test_no_auth_header(self, client):
         """Reject request without authorization header."""
         response = client.get("/api/v1/clinicians/me")
-        
+
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_invalid_token(self, client):
         """Reject request with invalid token."""
         response = client.get(
-            "/api/v1/clinicians/me",
-            headers={"Authorization": "Bearer invalid-token"}
+            "/api/v1/clinicians/me", headers={"Authorization": "Bearer invalid-token"}
         )
-        
+
         assert response.status_code == status.HTTP_401_UNAUTHORIZED

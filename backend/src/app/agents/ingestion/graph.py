@@ -170,7 +170,7 @@ async def validate_fhir(state: IngestionState) -> IngestionState:
     try:
         # TODO: Implement FHIR validation using fhir.resources
         # For now, pass through with basic validation
-        extracted_data = state.get("extracted_data", {})
+        extracted_data = state.get("extracted_data") or {}
         validation_errors = []
 
         # Basic validation
@@ -202,7 +202,7 @@ async def normalize_medications(state: IngestionState) -> IngestionState:
     logger.info(f"normalize_medications: document_id={state['document_id']}")
 
     try:
-        validated_data = state.get("validated_data", {})
+        validated_data = state.get("validated_data") or {}
         medications = validated_data.get("medications", [])
 
         normalized_medications = []
@@ -247,7 +247,7 @@ async def save_to_database(state: IngestionState) -> IngestionState:
     try:
         # TODO: Implement Supabase upserts
         # For now, placeholder
-        saved_ids = {
+        saved_ids: dict[str, list[str]] = {
             "medications": [],
             "conditions": [],
             "appointments": [],
@@ -280,12 +280,11 @@ async def generate_summary(state: IngestionState) -> IngestionState:
         router = get_router()
         client = router.get_client(TaskType.PATIENT_EXPLANATION)
 
-        extracted_data = state.get("extracted_data", {})
-
         system_instruction = """You are a nurse explaining medical information to a patient and their family.
 Use simple language that anyone can understand. Keep under 350 words.
 Be warm, supportive, and clear."""
 
+        extracted_data = state.get("extracted_data") or {}
         prompt = f"""Explain this medical information to the patient in simple terms:
 
 Medications: {json.dumps(extracted_data.get("medications", []), indent=2)}
@@ -327,9 +326,9 @@ async def create_feed_tasks(state: IngestionState) -> IngestionState:
     try:
         # TODO: Create obligations in database
         # For now, count what would be created
-        normalized_medications = state.get("normalized_medications", [])
-        extracted_data = state.get("extracted_data", {})
-        follow_ups = extracted_data.get("follow_up_instructions", []) if extracted_data else []
+        normalized_medications = state.get("normalized_medications") or []
+        extracted_data = state.get("extracted_data") or {}
+        follow_ups = extracted_data.get("follow_up_instructions") or []
 
         created_tasks = len(normalized_medications) + len(follow_ups)
 

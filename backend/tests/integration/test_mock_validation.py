@@ -5,16 +5,13 @@ Supabase and Deepgram client behaviors. Run these periodically to catch
 any API changes that would break our mocks.
 """
 
-import pytest
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from app.db.connection import get_db
-from app.services.patient_service import PatientService
-from app.services.clinician_service import ClinicianService
+import pytest
+
 from app.services.medication_service import MedicationService
-from app.services.adherence_service import AdherenceService
-from app.services.document_service import DocumentService
+from app.services.patient_service import PatientService
 
 
 class TestSupabaseMockValidation:
@@ -26,19 +23,19 @@ class TestSupabaseMockValidation:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
         table.select.return_value = table
         table.eq.return_value = table
         table.single.return_value = table
-        
+
         # Set up response
         expected_data = {"id": "123", "name": "Test"}
         table.execute.return_value = MagicMock(data=expected_data)
-        
+
         # Execute the chain
         result = mock_db.table("test").select("*").eq("id", "123").single().execute()
-        
+
         # Verify
         assert result.data == expected_data
         mock_db.table.assert_called_once_with("test")
@@ -53,18 +50,24 @@ class TestSupabaseMockValidation:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
         table.select.return_value = table
         table.eq.return_value = table
-        
+
         # Set up response
         expected_data = [{"id": "1"}, {"id": "2"}]
         table.execute.return_value = MagicMock(data=expected_data)
-        
+
         # Execute the chain
-        result = mock_db.table("care_teams").select("*").eq("patient_id", "123").eq("status", "active").execute()
-        
+        result = (
+            mock_db.table("care_teams")
+            .select("*")
+            .eq("patient_id", "123")
+            .eq("status", "active")
+            .execute()
+        )
+
         # Verify
         assert result.data == expected_data
         assert table.eq.call_count == 2
@@ -75,18 +78,18 @@ class TestSupabaseMockValidation:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
         table.update.return_value = table
         table.eq.return_value = table
-        
+
         # Set up response
         expected_data = [{"id": "123", "name": "Updated"}]
         table.execute.return_value = MagicMock(data=expected_data)
-        
+
         # Execute the chain
         result = mock_db.table("patients").update({"name": "Updated"}).eq("id", "123").execute()
-        
+
         # Verify
         assert result.data == expected_data
         table.update.assert_called_once_with({"name": "Updated"})
@@ -98,17 +101,17 @@ class TestSupabaseMockValidation:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
         table.insert.return_value = table
-        
+
         # Set up response
         expected_data = [{"id": "123", "name": "New"}]
         table.execute.return_value = MagicMock(data=expected_data)
-        
+
         # Execute the chain
         result = mock_db.table("patients").insert({"name": "New"}).execute()
-        
+
         # Verify
         assert result.data == expected_data
         table.insert.assert_called_once_with({"name": "New"})
@@ -119,19 +122,25 @@ class TestSupabaseMockValidation:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
         table.select.return_value = table
         table.eq.return_value = table
         table.order.return_value = table
-        
+
         # Set up response
         expected_data = [{"id": "1"}, {"id": "2"}]
         table.execute.return_value = MagicMock(data=expected_data)
-        
+
         # Execute the chain
-        result = mock_db.table("medications").select("*").eq("patient_id", "123").order("created_at", desc=True).execute()
-        
+        result = (
+            mock_db.table("medications")
+            .select("*")
+            .eq("patient_id", "123")
+            .order("created_at", desc=True)
+            .execute()
+        )
+
         # Verify
         assert result.data == expected_data
         table.order.assert_called_once_with("created_at", desc=True)
@@ -142,19 +151,25 @@ class TestSupabaseMockValidation:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
         table.select.return_value = table
         table.eq.return_value = table
         table.gte.return_value = table
-        
+
         # Set up response
         expected_data = [{"id": "1", "logged_at": "2025-01-15"}]
         table.execute.return_value = MagicMock(data=expected_data)
-        
+
         # Execute the chain
-        result = mock_db.table("adherence_logs").select("*").eq("patient_id", "123").gte("logged_at", "2025-01-01").execute()
-        
+        result = (
+            mock_db.table("adherence_logs")
+            .select("*")
+            .eq("patient_id", "123")
+            .gte("logged_at", "2025-01-01")
+            .execute()
+        )
+
         # Verify
         assert result.data == expected_data
         table.gte.assert_called_once_with("logged_at", "2025-01-01")
@@ -165,20 +180,28 @@ class TestSupabaseMockValidation:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
         table.select.return_value = table
         table.eq.return_value = table
         table.is_.return_value = table
         table.single.return_value = table
-        
+
         # Set up response
         expected_data = {"id": "123", "invite_code": "ABC123"}
         table.execute.return_value = MagicMock(data=expected_data)
-        
+
         # Execute the chain
-        result = mock_db.table("care_teams").select("*").eq("invite_code", "ABC123").eq("status", "pending").is_("patient_id", "null").single().execute()
-        
+        result = (
+            mock_db.table("care_teams")
+            .select("*")
+            .eq("invite_code", "ABC123")
+            .eq("status", "pending")
+            .is_("patient_id", "null")
+            .single()
+            .execute()
+        )
+
         # Verify
         assert result.data == expected_data
         table.is_.assert_called_once_with("patient_id", "null")
@@ -190,18 +213,19 @@ class TestDeepgramMockValidation:
     @pytest.mark.asyncio
     async def test_generate_speech_async_signature(self):
         """Verify generate_speech_async function signature matches our mock."""
-        from app.clients.deepgram_client import generate_speech_async
         import inspect
-        
+
+        from app.clients.deepgram_client import generate_speech_async
+
         # Get function signature
         sig = inspect.signature(generate_speech_async)
         params = list(sig.parameters.keys())
-        
+
         # Verify expected parameters
         assert "text" in params
         assert "model" in params
         assert "encoding" in params
-        
+
         # Verify defaults
         assert sig.parameters["model"].default == "aura-2-asteria-en"
         assert sig.parameters["encoding"].default == "mp3"
@@ -209,23 +233,24 @@ class TestDeepgramMockValidation:
     @pytest.mark.asyncio
     async def test_transcribe_audio_file_async_signature(self):
         """Verify transcribe_audio_file_async function signature matches our mock."""
-        from app.clients.deepgram_client import transcribe_audio_file_async
         import inspect
-        
+
+        from app.clients.deepgram_client import transcribe_audio_file_async
+
         # Get function signature
         sig = inspect.signature(transcribe_audio_file_async)
         params = list(sig.parameters.keys())
-        
+
         # Verify expected parameters
         assert "audio_file" in params
         assert "model" in params
         assert "language" in params
         assert "smart_format" in params
-        
+
         # Verify defaults
         assert sig.parameters["model"].default == "nova-3"
         assert sig.parameters["language"].default == "en"
-        assert sig.parameters["smart_format"].default == True
+        assert sig.parameters["smart_format"].default is True
 
 
 class TestServiceMockIntegration:
@@ -237,23 +262,19 @@ class TestServiceMockIntegration:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
-        for method in ['select', 'eq', 'single']:
+        for method in ["select", "eq", "single"]:
             getattr(table, method).return_value = table
-        
+
         # Set up response
-        patient_data = {
-            "id": "123",
-            "email": "test@example.com",
-            "first_name": "Test"
-        }
+        patient_data = {"id": "123", "email": "test@example.com", "first_name": "Test"}
         table.execute.return_value = MagicMock(data=patient_data)
-        
+
         # Create service and call method
         service = PatientService(mock_db)
         result = await service.get_profile(uuid4())
-        
+
         # Verify result matches expected structure
         assert result == patient_data
         assert "id" in result
@@ -265,22 +286,19 @@ class TestServiceMockIntegration:
         mock_db = MagicMock()
         table = MagicMock()
         mock_db.table.return_value = table
-        
+
         # Make methods chainable
-        for method in ['select', 'eq', 'order']:
+        for method in ["select", "eq", "order"]:
             getattr(table, method).return_value = table
-        
+
         # Set up response
-        medications_data = [
-            {"id": "1", "name": "Med1"},
-            {"id": "2", "name": "Med2"}
-        ]
+        medications_data = [{"id": "1", "name": "Med1"}, {"id": "2", "name": "Med2"}]
         table.execute.return_value = MagicMock(data=medications_data)
-        
+
         # Create service and call method
         service = MedicationService(mock_db)
         result = await service.list_medications(uuid4(), active_only=True)
-        
+
         # Verify result matches expected structure
         assert result == medications_data
         assert len(result) == 2
@@ -293,7 +311,7 @@ class TestResponseStructureValidation:
         """Verify execute() response has .data attribute."""
         mock_response = MagicMock()
         mock_response.data = {"id": "123"}
-        
+
         # This is how services access the data
         assert hasattr(mock_response, "data")
         assert mock_response.data == {"id": "123"}
@@ -303,7 +321,7 @@ class TestResponseStructureValidation:
         # single() should return a dict directly in result.data
         mock_response = MagicMock()
         mock_response.data = {"id": "123", "name": "Test"}
-        
+
         # Not a list
         assert isinstance(mock_response.data, dict)
         assert not isinstance(mock_response.data, list)
@@ -313,7 +331,7 @@ class TestResponseStructureValidation:
         # Regular queries should return a list in result.data
         mock_response = MagicMock()
         mock_response.data = [{"id": "1"}, {"id": "2"}]
-        
+
         assert isinstance(mock_response.data, list)
 
     def test_deepgram_tts_response_structure(self):
@@ -325,9 +343,9 @@ class TestResponseStructureValidation:
             "encoding": "mp3",
             "text_length": 21,
             "audio_size": 1024,
-            "success": True
+            "success": True,
         }
-        
+
         # Verify all expected fields are present
         assert "audio_base64" in mock_response
         assert "model" in mock_response
@@ -343,9 +361,9 @@ class TestResponseStructureValidation:
             "transcript": "Hello world",
             "model": "nova-3",
             "language": "en",
-            "success": True
+            "success": True,
         }
-        
+
         # Verify all expected fields are present
         assert "transcript" in mock_response
         assert "model" in mock_response
