@@ -421,8 +421,8 @@ async def test_get_today_empty_feed(feed_service, mock_supabase_client):
     assert result["tasks"] == []
     assert result["summary"]["total"] == 0
 
-    mock_supabase_client.table.assert_called_once()
-    mock_table.select.assert_called_once()
+    assert mock_supabase_client.table.call_count == 3
+    assert mock_table.select.call_count == 3
     mock_table.eq.assert_any_call("patient_id", str(patient_id))
     assert mock_table.gte.call_count == 1
     assert mock_table.lt.call_count == 1
@@ -472,8 +472,8 @@ async def test_get_today_with_timezone(feed_service, mock_supabase_client):
 
     assert result["timezone"] == "America/New_York"
 
-    mock_supabase_client.table.assert_called_once()
-    mock_table.select.assert_called_once()
+    assert mock_supabase_client.table.call_count == 3
+    assert mock_table.select.call_count == 3
     mock_table.eq.assert_any_call("patient_id", str(patient_id))
     assert mock_table.gte.call_count == 1
     assert mock_table.lt.call_count == 1
