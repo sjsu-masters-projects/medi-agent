@@ -1,9 +1,5 @@
 """Tests for IngestionState and graph creation."""
 
-from typing import Any
-
-import pytest
-
 from app.agents.ingestion.graph import IngestionState, create_ingestion_graph
 
 
