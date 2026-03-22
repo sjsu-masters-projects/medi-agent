@@ -130,6 +130,7 @@ class DeepgramServer(MCPServer):
                     patient_id=arguments["patient_id"],
                 )
         raise ValueError(f"Unknown tool: {tool_name}")
+
     # ── Tool implementations ────────────────────────────
 
     async def _transcribe_audio(

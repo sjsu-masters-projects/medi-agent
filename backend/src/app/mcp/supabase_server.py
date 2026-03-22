@@ -124,6 +124,7 @@ class SupabaseServer(MCPServer):
             case "get_patient_context":
                 return await self._get_patient_context(patient_id)
         raise ValueError(f"Unknown tool: {tool_name}")
+
     # ── Tool implementations ────────────────────────────
 
     async def _get_patient_medications(self, patient_id: str) -> dict[str, Any]:
