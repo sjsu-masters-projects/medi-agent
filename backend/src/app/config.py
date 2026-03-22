@@ -33,6 +33,19 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     google_project_id: str = ""
 
+    # Model routing
+    gemini_flash_model: str = "gemini-3.1-flash-lite-preview"
+    gemini_pro_model: str = "gemini-3.1-pro-preview"
+    medgemma_model: str = "google/medgemma-27b-it"
+
+    # Vertex AI (for MedGemma deployment)
+    vertex_ai_location: str = "us-central1"
+    vertex_ai_medgemma_endpoint: str = ""
+    vertex_ai_endpoint_type: str = "auto"  # auto, standard, vllm
+
+    # Hugging Face (for MedGemma benchmarking)
+    huggingface_api_token: str = ""
+
     # Deepgram
     deepgram_api_key: str = ""
 

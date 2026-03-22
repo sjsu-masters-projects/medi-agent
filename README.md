@@ -153,7 +153,9 @@ docker compose up
 |-------|------|---------|
 | Backend | FastAPI + Pydantic | 0.135.1 / 2.12.5 |
 | Database | Supabase (Postgres + Auth + Storage) | 2.28.0 |
-| AI / LLM | Gemini 2.0 (Flash + Pro) via google-genai | 1.66.0 |
+| AI / Clinical | MedGemma 27B-it (Vertex AI) | — |
+| AI / Patient-facing | Gemini 3.1 Flash Lite Preview | — |
+| AI / Reasoning | Gemini 3.1 Pro Preview | — |
 | Agent Framework | LangGraph | 1.0.10 |
 | Voice | Deepgram SDK | 6.0.1 |
 | Frontend | Next.js 16 (App Router, Turbopack) | 16.1.6 |

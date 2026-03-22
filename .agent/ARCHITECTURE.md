@@ -1,6 +1,6 @@
 # MediAgent — System Architecture
 
-> Last updated: 2026-03-03
+> Last updated: 2026-03-21
 
 ---
 
@@ -63,12 +63,12 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                    EXTERNAL SERVICES                              │
 │  ┌─────────────────┐ ┌───────────────┐ ┌──────────────┐        │
-│  │ Gemini 3.0      │ │ Deepgram      │ │ Resend       │        │
-│  │ Flash + Pro     │ │ STT + TTS     │ │ (Email)      │        │
-│  │ (thinking mode) │ │               │ │              │        │
+│  │ Gemini 3.1      │ │ Deepgram      │ │ Resend       │        │
+│  │ Flash Lite +    │ │ STT + TTS     │ │ (Email)      │        │
+│  │ Pro (preview)   │ │               │ │              │        │
 │  ├─────────────────┤ └───────────────┘ └──────────────┘        │
-│  │ MedGemma (eval) │                                            │
-│  └─────────────────┘                                            │
+│  │ MedGemma 27B-it │                                            │
+│  │(clinical tasks) │                                            │
 └─────────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -168,14 +168,20 @@ Protocol Layers:
   MCP  = Agent ↔ Tools/Data (DailyMed, RxNorm, Supabase, Deepgram)
 ```
 
-### LLM Routing
+### LLM Routing (Benchmark-Validated, 2026-03-21)
 
-| Agent | Primary Model | Eval Model |
-|-------|-------------|------------|
-| Triage / Chat | Gemini 3.0 Flash | — |
-| Ingestion | Gemini 3.0 Flash (vision) | MedGemma |
-| Pharmacovigilance | Gemini 3.0 Pro (thinking) | — |
-| All others | Gemini 3.0 Flash | — |
+| Task Type | Model | Avg Latency | Completeness | Rationale |
+|-----------|-------|-------------|--------------|----------|
+| Document parsing | MedGemma 27B | 12.6s | 92% | Native clinical terminology, deepest extraction |
+| ADR detection | MedGemma 27B | 20.6s | 80% | Naranjo 8-9, electrolyte monitoring, 5 action steps |
+| Drug interaction check | MedGemma 27B | 8.0s | 100% | Both kidney + BP effects, most explicit |
+| Triage classification | MedGemma 27B | 6.2s | 100% | Correct ESI, most concise emergency response |
+| Patient-facing chat | Gemini 3.1 Flash Lite | 2.8s | 96% | Warmest tone, streaming, sub-3s |
+| Voice pipeline | Gemini 3.1 Flash Lite | 2.8s | 96% | Low latency for STT→LLM→TTS chain |
+| Lab/doc explanation | Gemini 3.1 Flash Lite | 2.8s | 100% | Best patient-friendly delivery |
+| SOAP notes | Gemini 3.1 Pro | 17.5s | 88% | Deepest reasoning for clinician review |
+| MedWatch drafting | Gemini 3.1 Pro | 21.5s | 80% | CYP3A4 reconciliation, FDA-grade |
+| Nightly ADR scan | Gemini 3.1 Pro | batch | — | No latency constraint, deep analysis |
 
 ---
 
@@ -203,8 +209,14 @@ SUPABASE_SERVICE_ROLE_KEY=
 GOOGLE_API_KEY=
 GOOGLE_PROJECT_ID=
 
-# MedGemma (if adopted after evaluation)
-# MEDGEMMA_MODEL_ID=
+# MedGemma (via Vertex AI MedGemma 27B endpoint)
+VERTEX_AI_MEDGEMMA_ENDPOINT=projects/.../locations/.../endpoints/...
+VERTEX_AI_ENDPOINT_TYPE=auto
+
+# Model names
+GEMINI_FLASH_MODEL=gemini-3.1-flash-lite-preview
+GEMINI_PRO_MODEL=gemini-3.1-pro-preview
+MEDGEMMA_MODEL=google/medgemma-27b-it
 
 # Deepgram
 DEEPGRAM_API_KEY=
