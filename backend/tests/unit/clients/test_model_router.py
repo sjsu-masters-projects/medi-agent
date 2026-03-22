@@ -2,15 +2,13 @@ from unittest.mock import patch
 
 import pytest
 
-import app.clients.model_router as router_module
 from app.clients.model_router import ModelRouter, TaskType, get_router
 
 
 @pytest.fixture
 def clean_router():
-    router_module._router = None
-    yield
-    router_module._router = None
+    with patch("app.clients.model_router._router", None):
+        yield
 
 
 @patch("app.clients.model_router.MedGemmaClient")
