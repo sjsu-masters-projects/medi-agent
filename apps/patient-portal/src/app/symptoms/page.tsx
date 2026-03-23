@@ -48,7 +48,7 @@ const SYMPTOMS: SymptomEntry[] = [
 
 export default function SymptomsPage() {
   const router = useRouter();
-  const [timeFilter, setTimeFilter] = useState("Past 30 Days");
+  const [timeFilter] = useState("Past 30 Days");
   const [showLogForm, setShowLogForm] = useState(false);
   const [newSymptom, setNewSymptom] = useState("");
   const [newSeverity, setNewSeverity] = useState<Severity>("MILD");
@@ -147,7 +147,7 @@ export default function SymptomsPage() {
                       {symptom.label}
                     </p>
                     <p className="text-sm italic mb-3" style={{ color: "var(--text-secondary)" }}>
-                      "{symptom.quote}"
+                      &quot;{symptom.quote}&quot;
                     </p>
                     {symptom.suspectedLink && (
                       <div

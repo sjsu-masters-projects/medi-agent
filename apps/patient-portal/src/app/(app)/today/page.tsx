@@ -134,7 +134,7 @@ export default function TodayPage() {
       {/* Today's Schedule */}
       <div className="px-5">
         <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-muted-dark)" }}>
-          TODAY'S SCHEDULE
+          TODAY&apos;S SCHEDULE
         </h2>
 
         <div className="flex flex-col gap-0">
@@ -220,7 +220,7 @@ export default function TodayPage() {
             <span className="text-xl">🩺</span>
             <div>
               <p className="text-sm font-medium text-white">Log a Symptom</p>
-              <p className="text-xs" style={{ color: "var(--text-muted-dark)" }}>Track how you're feeling</p>
+              <p className="text-xs" style={{ color: "var(--text-muted-dark)" }}>Track how you&apos;re feeling</p>
             </div>
           </div>
           <span style={{ color: "var(--text-muted-dark)" }}>›</span>
