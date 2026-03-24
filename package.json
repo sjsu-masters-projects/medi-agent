@@ -16,7 +16,7 @@
       "mypy --ignore-missing-imports"
     ],
     "apps/**/*.{ts,tsx}": [
-      "eslint --fix"
+      "bash -c 'cd apps/patient-portal && ./node_modules/.bin/eslint --fix \"$0\"'"
     ]
   }
 }
