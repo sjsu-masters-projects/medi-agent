@@ -3,6 +3,7 @@ import { authSlice } from "./slices/auth-slice";
 import { feedSlice } from "./slices/feed-slice";
 import { chatSlice } from "./slices/chat-slice";
 import { recordsSlice } from "./slices/records-slice";
+import { onboardingSlice } from "./slices/onboarding-slice";
 
 export const store = configureStore({
     reducer: {
@@ -10,6 +11,7 @@ export const store = configureStore({
         feed: feedSlice.reducer,
         chat: chatSlice.reducer,
         records: recordsSlice.reducer,
+        onboarding: onboardingSlice.reducer,
     },
 });
 

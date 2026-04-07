@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
-import type { RootState } from "@/store/store";
-
-const onboardingStorageKey = "mediagent-onboarding-profile";
+import { clearOnboardingProfile } from "@/store/slices/onboarding-slice";
+import type { AppDispatch, RootState } from "@/store/store";
 
 export default function OnboardingPage() {
     const router = useRouter();
     const token = useSelector((state: RootState) => state.auth.token);
+    const profileDraft = useSelector((state: RootState) => state.onboarding.profileDraft);
+    const dispatch = useDispatch<AppDispatch>();
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         allergies: "",
@@ -25,22 +26,11 @@ export default function OnboardingPage() {
     });
 
     useEffect(() => {
-        const storedValue = window.sessionStorage.getItem(onboardingStorageKey);
-        if (!storedValue) {
+        if (!profileDraft) {
             return;
         }
-
-        try {
-            const parsed = JSON.parse(storedValue) as {
-                dateOfBirth: string;
-                firstName: string;
-                lastName: string;
-            };
-            setFormData((current) => ({ ...current, ...parsed }));
-        } catch {
-            window.sessionStorage.removeItem(onboardingStorageKey);
-        }
-    }, []);
+        setFormData((current) => ({ ...current, ...profileDraft }));
+    }, [profileDraft]);
 
     async function handleFinish() {
         if (!token) {
@@ -70,7 +60,7 @@ export default function OnboardingPage() {
         } catch {
             // Keep onboarding resilient even while backend support for all fields is still evolving.
         } finally {
-            window.sessionStorage.removeItem(onboardingStorageKey);
+            dispatch(clearOnboardingProfile());
             router.replace("/today");
         }
     }

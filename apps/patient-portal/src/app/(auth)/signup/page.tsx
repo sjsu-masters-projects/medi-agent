@@ -7,10 +7,10 @@ import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
 import { hydrateSession } from "@/store/slices/auth-slice";
+import { setOnboardingProfile } from "@/store/slices/onboarding-slice";
 import type { AppDispatch } from "@/store/store";
 
 const authStorageKey = "mediagent-patient-auth";
-const onboardingStorageKey = "mediagent-onboarding-profile";
 
 interface SignupResponse {
     tokens: {
@@ -56,9 +56,8 @@ export default function SignupPage() {
 
             const session = { token: response.tokens.access_token, user: response.user };
             window.localStorage.setItem(authStorageKey, JSON.stringify(session));
-            window.sessionStorage.setItem(
-                onboardingStorageKey,
-                JSON.stringify({
+            dispatch(
+                setOnboardingProfile({
                     dateOfBirth: formData.dateOfBirth,
                     firstName: formData.firstName,
                     lastName: formData.lastName,
