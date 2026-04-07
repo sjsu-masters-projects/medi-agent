@@ -1,7 +1,9 @@
+import type { PayloadAction } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
+import type { Document } from "@/types";
 
 interface RecordsState {
-    documents: unknown[];
+    documents: Document[];
     loading: boolean;
 }
 
@@ -14,10 +16,10 @@ export const recordsSlice = createSlice({
     name: "records",
     initialState,
     reducers: {
-        setDocuments: (state, action) => {
+        setDocuments: (state, action: PayloadAction<Document[]>) => {
             state.documents = action.payload;
         },
-        setLoading: (state, action) => {
+        setLoading: (state, action: PayloadAction<boolean>) => {
             state.loading = action.payload;
         },
     },

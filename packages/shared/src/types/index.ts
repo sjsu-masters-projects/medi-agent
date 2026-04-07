@@ -204,6 +204,41 @@ export interface AdherenceStats {
     totalCompleted: number;
 }
 
+export interface FeedProvider {
+    id: string;
+    name: string;
+    specialty: string;
+    clinicName: string;
+}
+
+export interface FeedTask {
+    id: string;
+    type: "medication" | "obligation";
+    targetId: string;
+    name: string;
+    description?: string;
+    frequency: string;
+    scheduledTime?: string;
+    status: "pending" | "completed" | "skipped" | "missed";
+    completedAt?: string;
+    provider?: FeedProvider;
+}
+
+export interface FeedSummary {
+    total: number;
+    completed: number;
+    pending: number;
+    skipped: number;
+    missed: number;
+}
+
+export interface TodayFeedResponse {
+    date: string;
+    timezone: string;
+    tasks: FeedTask[];
+    summary: FeedSummary;
+}
+
 export interface SymptomReport {
     id: string;
     patientId: string;

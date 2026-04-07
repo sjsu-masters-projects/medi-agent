@@ -171,53 +171,53 @@
 ## Phase 3: Frontend Core (Weeks 5–8, parallel with Phase 2)
 
 ### 3.1 Design System
-- [ ] Set up TailwindCSS theme (colors, typography, spacing)
-- [ ] Create base UI components: Button, Input, Card, Badge, Modal, Dropdown
-- [ ] Create layout components: AppShell, Sidebar, TopBar, BottomNav
-- [ ] Create loading states (skeleton screens)
-- [ ] Create empty states
+- [x] Set up TailwindCSS theme (colors, typography, spacing)
+- [x] Create base UI components: Button, Input, Card, Badge, Modal, Dropdown
+- [x] Create layout components: AppShell, Sidebar, TopBar, BottomNav
+- [x] Create loading states (skeleton screens)
+- [x] Create empty states
 - [ ] Create error states
-- [ ] Make all components responsive (mobile-first for patient, desktop-first for clinician)
+- [x] Make all components responsive (mobile-first for patient, desktop-first for clinician)
 
 ### 3.2 Patient Portal — Auth
-- [ ] Sign-up page (magic link flow)
-- [ ] Onboarding flow (name, DOB, language, allergies)
-- [ ] Join clinic (enter code or use invite link)
-- [ ] Auth state management in Redux
-- [ ] Protected route wrapper
+- [x] Sign-up page (magic link flow)
+- [x] Onboarding flow (name, DOB, language, allergies)
+- [x] Join clinic (enter code or use invite link)
+- [x] Auth state management in Redux
+- [x] Protected route wrapper
 
 ### 3.3 Patient Portal — Today Feed
-- [ ] Today Feed page layout
-- [ ] Medication task card component (name, dosage, time, instructions)
-- [ ] Obligation task card component (type badge, description)
-- [ ] Provider grouping (show which doctor set each task)
-- [ ] Tap to mark done (optimistic update + API call)
-- [ ] Missed task visual indicator
-- [ ] Adherence score display (percentage + streak)
+- [x] Today Feed page layout
+- [x] Medication task card component (name, dosage, time, instructions)
+- [x] Obligation task card component (type badge, description)
+- [x] Provider grouping (show which doctor set each task)
+- [x] Tap to mark done (optimistic update + API call)
+- [x] Missed task visual indicator
+- [x] Adherence score display (percentage + streak)
 
 ### 3.4 Patient Portal — My Records
-- [ ] Document list view
-- [ ] Document upload button (file picker + camera capture)
-- [ ] Upload progress indicator
+- [x] Document list view
+- [x] Document upload button (file picker + camera capture)
+- [x] Upload progress indicator
 - [ ] Research and configure Syncfusion PDF viewer integration
 - [ ] Syncfusion PDF viewer UI component (in-app viewing)
-- [ ] "Explain This to Me" button + summary display
+- [x] "Explain This to Me" button + summary display
 - [ ] Language selector for explanation
 
 ### 3.5 Clinician Portal — Auth
-- [ ] Login page (email + password)
+- [x] Login page (email + password)
 - [ ] MFA setup flow
-- [ ] Clinic setup page (name, NPI)
+- [x] Clinic setup page (name, NPI)
 - [ ] Role management (Admin, Provider, Nurse)
-- [ ] Auth state in Redux
+- [x] Auth state in Redux
 - [ ] Protected routes
 
 ### 3.6 Clinician Portal — Dashboard Shell
-- [ ] Dashboard layout (sidebar + content area)
-- [ ] Navigation (Dashboard, Patients, MedWatch, Settings)
-- [ ] Patient list table component
-- [ ] Risk badge component (🟢🟡🔴)
-- [ ] Responsive layout
+- [x] Dashboard layout (sidebar + content area)
+- [x] Navigation (Dashboard, Patients, MedWatch, Settings)
+- [x] Patient list table component
+- [x] Risk badge component (🟢🟡🔴)
+- [x] Responsive layout
 
 ---
 

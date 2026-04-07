@@ -1,7 +1,9 @@
+import type { PayloadAction } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
+import type { ChatMessage } from "@/types";
 
 interface ChatState {
-    messages: unknown[];
+    messages: ChatMessage[];
     loading: boolean;
     isVoiceMode: boolean;
 }
@@ -16,13 +18,13 @@ export const chatSlice = createSlice({
     name: "chat",
     initialState,
     reducers: {
-        addMessage: (state, action) => {
+        addMessage: (state, action: PayloadAction<ChatMessage>) => {
             state.messages.push(action.payload);
         },
-        setMessages: (state, action) => {
+        setMessages: (state, action: PayloadAction<ChatMessage[]>) => {
             state.messages = action.payload;
         },
-        setLoading: (state, action) => {
+        setLoading: (state, action: PayloadAction<boolean>) => {
             state.loading = action.payload;
         },
         toggleVoiceMode: (state) => {

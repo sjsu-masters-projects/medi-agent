@@ -1,8 +1,10 @@
+import type { PayloadAction } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
+import type { MedWatchDraft } from "@/types";
 
 interface MedwatchState {
-    drafts: unknown[];
-    selectedDraft: unknown;
+    drafts: MedWatchDraft[];
+    selectedDraft: MedWatchDraft | null;
     loading: boolean;
 }
 
@@ -16,14 +18,14 @@ export const medwatchSlice = createSlice({
     name: "medwatch",
     initialState,
     reducers: {
-        setDrafts: (state, action) => {
+        setDrafts: (state, action: PayloadAction<MedWatchDraft[]>) => {
             state.drafts = action.payload;
             state.loading = false;
         },
-        setSelectedDraft: (state, action) => {
+        setSelectedDraft: (state, action: PayloadAction<MedWatchDraft | null>) => {
             state.selectedDraft = action.payload;
         },
-        setLoading: (state, action) => {
+        setLoading: (state, action: PayloadAction<boolean>) => {
             state.loading = action.payload;
         },
     },
