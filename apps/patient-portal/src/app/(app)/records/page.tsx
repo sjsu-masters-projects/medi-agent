@@ -34,6 +34,9 @@ const initialDocuments: PortalDocument[] = [
 export default function RecordsPage() {
     const [documents, setDocuments] = useState(initialDocuments);
     const [selectedDocument, setSelectedDocument] = useState<PortalDocument | null>(null);
+    const [explanationLang, setExplanationLang] = useState<"en" | "es">("en");
+    const [explanationText, setExplanationText] = useState<string | null>(null);
+    const [explanationLoading, setExplanationLoading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -90,6 +93,32 @@ export default function RecordsPage() {
         setUploadProgress(0);
     }
 
+    async function handleLanguageChange(lang: "en" | "es") {
+        setExplanationLang(lang);
+        if (!selectedDocument) {
+            return;
+        }
+
+        if (lang === "en") {
+            setExplanationText(selectedDocument.aiSummary ?? null);
+            return;
+        }
+
+        setExplanationLoading(true);
+        try {
+            const result = await api.post<{ summary: string }>(
+                `/api/v1/documents/${selectedDocument.id}/explain`,
+                { language: lang },
+                { token: token ?? undefined },
+            );
+            setExplanationText(result.summary);
+        } catch {
+            setExplanationText("Translation is currently unavailable. Please try again later.");
+        } finally {
+            setExplanationLoading(false);
+        }
+    }
+
     return (
         <div className="space-y-4 bg-gray-50 pb-8">
             <PageHeader
@@ -111,7 +140,12 @@ export default function RecordsPage() {
                         id={document.id}
                         key={document.id}
                         name={document.fileName}
-                        onClick={() => setSelectedDocument(document)}
+                        onClick={() => {
+                            setSelectedDocument(document);
+                            setExplanationLang("en");
+                            setExplanationLoading(false);
+                            setExplanationText(document.aiSummary ?? null);
+                        }}
                         provider={document.provider}
                         type={document.documentType.replaceAll("_", " ")}
                     />
@@ -121,9 +155,21 @@ export default function RecordsPage() {
                 <div className="space-y-4">
                     <p className="text-sm text-gray-500">{selectedDocument?.provider}</p>
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
+                            <select
+                                className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700"
+                                onChange={(event) => handleLanguageChange(event.target.value as "en" | "es")}
+                                value={explanationLang}
+                            >
+                                <option value="en">English</option>
+                                <option value="es">Español</option>
+                            </select>
+                        </div>
                         <p className="mt-2 text-sm text-gray-700">
-                            {selectedDocument?.aiSummary ?? "AI summary will appear here after parsing completes."}
+                            {explanationLoading
+                                ? "Translating..."
+                                : explanationText ?? "AI summary will appear here after parsing completes."}
                         </p>
                     </div>
                     <Button fullWidth onClick={() => setSelectedDocument(null)} variant="secondary">

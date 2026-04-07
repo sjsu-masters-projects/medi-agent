@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { RiskBadge } from "@/components/features/risk-badge";
-import { Card } from "@/components/ui";
+import { Card, DataTable } from "@/components/ui";
 import { setPatients } from "@/store/slices/patients-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import type { PatientSummary } from "@/types";
@@ -65,16 +65,7 @@ export default function PatientsPage() {
                     </select>
                 </div>
             </div>
-
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="grid grid-cols-6 gap-4 border-y border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    <span>Patient</span>
-                    <span>Risk level</span>
-                    <span>Adherence</span>
-                    <span>Active meds</span>
-                    <span>Last activity</span>
-                    <span>ADR alerts</span>
-                </div>
+            <DataTable headers={["Patient", "Risk level", "Adherence", "Active meds", "Last activity", "ADR alerts"]}>
                 {visiblePatients.map((patient) => (
                     <button
                         className="grid w-full grid-cols-6 gap-4 border-b border-gray-200 bg-white px-4 py-4 text-left hover:bg-gray-50"
@@ -92,7 +83,7 @@ export default function PatientsPage() {
                         <span className="text-gray-600">{patient.openAdrCount}</span>
                     </button>
                 ))}
-            </div>
+            </DataTable>
         </Card>
     );
 }
