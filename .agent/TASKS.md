@@ -219,6 +219,17 @@
 - [x] Risk badge component (🟢🟡🔴)
 - [x] Responsive layout
 
+### 3.7 Phase 3 — Known Limitations & Tech Debt
+- [ ] Create generic error state component (`components/ui/error-state.tsx`)
+- [ ] Research and configure Syncfusion PDF viewer integration
+- [ ] Language selector for AI record explanations
+- [ ] Clinician MFA setup flow
+- [ ] Clinician role management (Admin, Provider, Nurse)
+- [ ] Clinician protected route wrapper
+- [ ] Refactor clinician patients page to use reusable `DataTable` component
+- [ ] Revert `--webpack` build flag to Turbopack once infra supports it
+- [x] Fix vite path traversal vulnerability (upgrade to ≥7.3.2)
+
 ---
 
 ## Phase 4: Ingestion Agent (Weeks 9–12)
