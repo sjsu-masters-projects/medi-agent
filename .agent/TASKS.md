@@ -269,11 +269,20 @@
 
 ### 4.4 Testing
 - [x] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
+  - [x] `backend/tests/fixtures/discharge_summary.txt`
+  - [x] `backend/tests/fixtures/lab_report.txt`
+  - [x] `backend/tests/fixtures/prescription.txt`
+  - [x] `backend/tests/fixtures/diagnostic_report.txt`
 - [x] Golden-set evaluation: expected parsing output for each test document
+  - [x] `backend/tests/fixtures/discharge_summary_expected.json`
+  - [x] `backend/tests/fixtures/lab_report_expected.json`
+  - [x] `backend/tests/fixtures/prescription_expected.json`
+  - [x] `backend/tests/fixtures/diagnostic_report_expected.json`
+- [x] Golden-set integration test: load fixture → run pipeline → assert against expected JSON
 - [x] Unit tests for FHIR builder and normalizer
 - [x] Integration test: upload → parse → database → Today Feed
 
-### 4.4 Patient Portal Integration
+### 4.5 Patient Portal Integration
 - [x] Wire up document upload → API → Ingestion Agent → DB
 - [x] Today Feed auto-populates after document parsing
 - [x] "Explain This" calls AI and displays summary
@@ -288,6 +297,7 @@
 - [ ] Message persistence to `chat_messages` table
 - [ ] Conversation history retrieval (sliding window + summary)
 - [ ] Patient context injection (active meds, recent symptoms, conditions)
+- [ ] Document context injection: "Ask about this document" → chat opens with document summary pre-loaded
 
 ### 5.2 Triage Agent
 - [ ] Intent classification (symptom, medication_question, schedule, general, urgent)
@@ -315,6 +325,8 @@
 - [ ] Voice-to-voice pipeline: mic → STT → Triage Agent → response → TTS → speaker
 - [ ] Language detection from audio
 - [ ] Audio message storage (Supabase Storage, URL in chat_messages)
+- [ ] Voice readback of document summaries: 🔊 button on Records modal → TTS in selected language
+- [ ] Multilingual TTS beyond EN/ES (Hindi, Chinese, Vietnamese, Tagalog — top US non-English medical populations)
 
 ### 5.6 Patient Portal — Chat UI
 - [ ] Chat page layout (WhatsApp-style)
@@ -326,11 +338,18 @@
 - [ ] Real-time message streaming (typing indicator, progressive display)
 - [ ] Language indicator
 
-### 5.7 Testing
+### 5.7 Records → Chat Bridge
+- [ ] "Ask about this document" button in Records modal
+- [ ] Navigate to `/chat?context=doc:{document_id}`
+- [ ] Chat page reads query param → loads document AI summary as system context
+- [ ] Triage Agent uses document data for medication_question intent responses
+
+### 5.8 Testing
 - [ ] Golden-set for Triage Agent: 20+ test messages with expected intent + route
 - [ ] Golden-set for Symptom Agent: 10+ symptom conversations with expected structured output
 - [ ] Voice pipeline end-to-end test
 - [ ] Load test for WebSocket connections
+- [ ] Document→Chat context injection test: open chat from document → verify context available
 
 ---
 
@@ -365,6 +384,12 @@
 - [ ] Bidirectional sync: clinician upload → patient sees in My Records
 - [ ] Patient upload → clinician review queue
 - [ ] Trigger AI parsing on clinician uploads
+
+### 6.5 Structured Document Summary UI
+- [ ] Parse AI summary into sections: Medications | Watch For | Follow-up Dates
+- [ ] Display as accordion/cards instead of plain text blob
+- [ ] Each medication links to its Today Feed task
+- [ ] Clinician annotations: clinician adds notes that patient sees alongside AI summary
 
 ---
 

@@ -1,0 +1,59 @@
+{
+  "medications": [
+    {
+      "name": "Aspirin",
+      "dosage": "81mg",
+      "frequency": "daily",
+      "instructions": "Continue dual antiplatelet therapy",
+      "route": "oral"
+    },
+    {
+      "name": "Clopidogrel",
+      "dosage": "75mg",
+      "frequency": "daily",
+      "instructions": "Continue dual antiplatelet therapy",
+      "route": "oral"
+    },
+    {
+      "name": "Atorvastatin",
+      "dosage": "80mg",
+      "frequency": "daily",
+      "instructions": "Continue Atorvastatin 80mg daily",
+      "route": "oral"
+    }
+  ],
+  "conditions": [
+    {
+      "name": "Coronary artery disease",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Severe stenosis of mid-RCA",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Moderate stenosis of mid-LAD",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Bilateral pleural effusions",
+      "clinical_status": "active"
+    }
+  ],
+  "allergies": [],
+  "follow_up_instructions": [
+    {
+      "description": "Cardiology follow-up within 1 week to discuss RCA intervention options",
+      "timing": "1 week",
+      "provider": "Cardiology"
+    },
+    {
+      "description": "Repeat echocardiogram in 3 months to assess LV function",
+      "timing": "3 months"
+    },
+    {
+      "description": "Consider cardiac catheterization for definitive evaluation of RCA lesion",
+      "timing": "as directed"
+    }
+  ]
+}

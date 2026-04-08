@@ -1,0 +1,97 @@
+{
+  "medications": [
+    {
+      "name": "Metoprolol Succinate",
+      "dosage": "50mg",
+      "frequency": "twice daily",
+      "instructions": "take one tablet by mouth twice daily",
+      "route": "oral"
+    },
+    {
+      "name": "Lisinopril",
+      "dosage": "10mg",
+      "frequency": "once daily",
+      "instructions": "take one tablet by mouth once daily",
+      "route": "oral"
+    },
+    {
+      "name": "Furosemide",
+      "dosage": "40mg",
+      "frequency": "once daily",
+      "instructions": "take one tablet by mouth once daily in the morning",
+      "route": "oral"
+    },
+    {
+      "name": "Metformin",
+      "dosage": "500mg",
+      "frequency": "twice daily",
+      "instructions": "take one tablet by mouth twice daily with meals",
+      "route": "oral"
+    },
+    {
+      "name": "Atorvastatin",
+      "dosage": "40mg",
+      "frequency": "once daily",
+      "instructions": "take one tablet by mouth at bedtime",
+      "route": "oral"
+    }
+  ],
+  "conditions": [
+    {
+      "name": "Congestive heart failure",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Hypertension",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Type 2 Diabetes Mellitus",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Hyperlipidemia",
+      "clinical_status": "active"
+    }
+  ],
+  "allergies": [
+    {
+      "substance": "Penicillin",
+      "reaction": "rash, hives",
+      "severity": "severe"
+    },
+    {
+      "substance": "Sulfa drugs",
+      "reaction": "shortness of breath",
+      "severity": "moderate"
+    }
+  ],
+  "follow_up_instructions": [
+    {
+      "description": "Follow up with Dr. Patel (Cardiology) in 2 weeks",
+      "timing": "2 weeks",
+      "provider": "Dr. Patel"
+    },
+    {
+      "description": "Follow up with Dr. Chen (Primary Care) in 1 week",
+      "timing": "1 week",
+      "provider": "Dr. Chen"
+    },
+    {
+      "description": "Daily weight monitoring — weigh yourself every morning before breakfast, call if weight increases more than 3 lbs in 2 days",
+      "timing": "daily"
+    },
+    {
+      "description": "Low-sodium diet — limit to less than 2,000mg sodium per day",
+      "timing": "daily"
+    },
+    {
+      "description": "Fluid restriction — no more than 2 liters of fluid per day",
+      "timing": "daily"
+    },
+    {
+      "description": "Cardiac rehabilitation referral",
+      "timing": "as directed"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "medications": [],
+  "conditions": [
+    {
+      "name": "Elevated WBC",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Poor glycemic control",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Stage 3a Chronic Kidney Disease",
+      "clinical_status": "active"
+    },
+    {
+      "name": "Hyperlipidemia",
+      "clinical_status": "active"
+    }
+  ],
+  "allergies": [],
+  "follow_up_instructions": [
+    {
+      "description": "Follow-up labs in 3 months",
+      "timing": "3 months",
+      "provider": "Dr. Lisa Chen"
+    },
+    {
+      "description": "Consider statin therapy intensification",
+      "timing": "as directed"
+    }
+  ]
+}
