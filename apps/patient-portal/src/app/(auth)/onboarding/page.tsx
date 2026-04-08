@@ -70,15 +70,29 @@ export default function OnboardingPage() {
     }
 
     return (
-        <div className="app-shell min-h-dvh bg-gray-50 px-5 py-10">
-            <Card className="space-y-6" padding="lg">
-                <div>
-                    <p className="text-sm font-medium text-blue-600">Step {step} of 4</p>
-                    <h1 className="mt-1 text-2xl font-bold text-gray-900">Complete your profile</h1>
+        <div className="app-shell min-h-dvh bg-gray-50 pb-10">
+            <div className="rounded-b-[28px] bg-sky-700 px-5 pt-12 pb-8 text-white shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">Step {step} of 4</p>
+                <h1 className="mt-3 text-3xl font-bold">Complete your profile</h1>
+                <p className="mt-2 text-sm text-sky-100">A few details help us personalize reminders and connect you to your clinic.</p>
+                <div className="mt-5 flex items-center gap-2">
+                    {[1, 2, 3, 4].map((value) => (
+                        <span
+                            className={`h-2.5 flex-1 rounded-full ${value <= step ? "bg-white" : "bg-white/25"}`}
+                            key={value}
+                        />
+                    ))}
                 </div>
+            </div>
 
+            <div className="-mt-4 px-5">
+            <Card className="space-y-6 shadow-lg shadow-slate-100" padding="lg">
                 {step === 1 ? (
                     <div className="space-y-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Personal info</p>
+                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Tell us about yourself</h2>
+                        </div>
                         <Input label="First name" onChange={(event) => updateField("firstName", event.target.value)} value={formData.firstName} />
                         <Input label="Last name" onChange={(event) => updateField("lastName", event.target.value)} value={formData.lastName} />
                         <Input label="Date of birth" onChange={(event) => updateField("dateOfBirth", event.target.value)} type="date" value={formData.dateOfBirth} />
@@ -87,6 +101,10 @@ export default function OnboardingPage() {
 
                 {step === 2 ? (
                     <div className="space-y-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Preferences</p>
+                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Set your communication basics</h2>
+                        </div>
                         <label className="block text-sm font-medium text-gray-700">
                             Preferred language
                             <select
@@ -104,6 +122,10 @@ export default function OnboardingPage() {
 
                 {step === 3 ? (
                     <div className="space-y-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Medical info</p>
+                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Add context for your care team</h2>
+                        </div>
                         <Input label="Known allergies" onChange={(event) => updateField("allergies", event.target.value)} placeholder="Penicillin, peanuts..." value={formData.allergies} />
                         <Input label="Known conditions" onChange={(event) => updateField("conditions", event.target.value)} placeholder="Diabetes, hypertension..." value={formData.conditions} />
                     </div>
@@ -111,6 +133,10 @@ export default function OnboardingPage() {
 
                 {step === 4 ? (
                     <div className="space-y-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Join clinic</p>
+                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Connect your care team</h2>
+                        </div>
                         <Input label="Clinic invite code" onChange={(event) => updateField("inviteCode", event.target.value)} placeholder="CITY-8832" value={formData.inviteCode} />
                         <p className="text-sm text-gray-500">You can skip this now and link your clinic later from the portal.</p>
                     </div>
@@ -127,6 +153,7 @@ export default function OnboardingPage() {
                     )}
                 </div>
             </Card>
+            </div>
         </div>
     );
 }

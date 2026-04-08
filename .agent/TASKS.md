@@ -176,7 +176,7 @@
 - [x] Create layout components: AppShell, Sidebar, TopBar, BottomNav
 - [x] Create loading states (skeleton screens)
 - [x] Create empty states
-- [ ] Create error states
+- [x] Create error states
 - [x] Make all components responsive (mobile-first for patient, desktop-first for clinician)
 
 ### 3.2 Patient Portal — Auth

@@ -122,12 +122,24 @@ export default function RecordsPage() {
     return (
         <div className="space-y-4 bg-gray-50 pb-8">
             <PageHeader
-                rightAction={<Button onClick={() => fileInputRef.current?.click()}>Upload document</Button>}
+                rightAction={<Button onClick={() => fileInputRef.current?.click()} variant="secondary">Upload</Button>}
                 subtitle="View clinical records and plain-language explanations."
                 title="My Records"
             />
             <input className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
-            <div className="space-y-4 px-5">
+            <div className="-mt-4 space-y-4 px-5">
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-100">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Stored</p>
+                        <p className="mt-1 text-2xl font-bold text-slate-900">{documents.length}</p>
+                        <p className="text-xs text-slate-500">Secure records</p>
+                    </div>
+                    <div className="rounded-2xl bg-sky-50 px-4 py-3 shadow-sm ring-1 ring-sky-100">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">AI Ready</p>
+                        <p className="mt-1 text-2xl font-bold text-slate-900">{documents.filter((document) => document.aiSummary).length}</p>
+                        <p className="text-xs text-slate-500">Summaries available</p>
+                    </div>
+                </div>
                 {uploading ? <ProgressBar value={uploadProgress} /> : null}
                 {documents.length === 0 ? (
                     <EmptyState description="Upload PDFs or images from your clinic visits." icon="📁" title="No records yet" />
@@ -153,7 +165,10 @@ export default function RecordsPage() {
             </div>
             <Modal onClose={() => setSelectedDocument(null)} open={Boolean(selectedDocument)} title={selectedDocument?.fileName ?? "Record details"}>
                 <div className="space-y-4">
-                    <p className="text-sm text-gray-500">{selectedDocument?.provider}</p>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Source</p>
+                        <p className="mt-1 text-sm font-medium text-slate-700">{selectedDocument?.provider}</p>
+                    </div>
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                         <div className="flex items-center justify-between gap-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
@@ -172,9 +187,14 @@ export default function RecordsPage() {
                                 : explanationText ?? "AI summary will appear here after parsing completes."}
                         </p>
                     </div>
-                    <Button fullWidth onClick={() => setSelectedDocument(null)} variant="secondary">
-                        Close
-                    </Button>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Button fullWidth onClick={() => setSelectedDocument(null)} variant="secondary">
+                            Close
+                        </Button>
+                        <Button fullWidth onClick={() => fileInputRef.current?.click()}>
+                            Upload another
+                        </Button>
+                    </div>
                 </div>
             </Modal>
         </div>

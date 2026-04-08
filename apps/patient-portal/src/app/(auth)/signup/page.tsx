@@ -75,13 +75,22 @@ export default function SignupPage() {
     }
 
     return (
-        <div className="app-shell min-h-dvh bg-gray-50 px-5 py-10">
-            <div className="space-y-6">
-                <div className="space-y-2 text-center">
-                    <p className="text-sm font-medium text-blue-600">Create your account</p>
-                    <h1 className="text-3xl font-bold text-gray-900">Join MediAgent</h1>
-                </div>
-                <Card padding="lg">
+        <div className="app-shell min-h-dvh bg-gray-50 pb-10">
+            <div className="rounded-b-[28px] bg-sky-700 px-5 pt-12 pb-8 text-white shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">Patient signup</p>
+                <h1 className="mt-3 text-3xl font-bold">Join MediAgent</h1>
+                <p className="mt-2 max-w-sm text-sm text-sky-100">
+                    Set up your account to track medications, symptoms, and care updates in one place.
+                </p>
+            </div>
+
+            <div className="-mt-4 space-y-5 px-5">
+                <Card className="shadow-lg shadow-slate-100" padding="lg">
+                    <div className="mb-5 flex items-center gap-2">
+                        <span className="h-2.5 w-10 rounded-full bg-sky-700" />
+                        <span className="h-2.5 w-10 rounded-full bg-sky-200" />
+                        <span className="h-2.5 w-10 rounded-full bg-sky-200" />
+                    </div>
                     <form className="space-y-4" onSubmit={handleSubmit}>
                         <Input label="First name" onChange={(event) => updateField("firstName", event.target.value)} value={formData.firstName} />
                         <Input label="Last name" onChange={(event) => updateField("lastName", event.target.value)} value={formData.lastName} />
@@ -98,12 +107,13 @@ export default function SignupPage() {
                         <Button fullWidth type="submit">Create account</Button>
                     </form>
                 </Card>
-                <p className="text-center text-sm text-gray-500">
-                    Already have an account?{" "}
-                    <Link className="font-medium text-blue-600" href="/login">
+
+                <Card className="space-y-2 border-slate-100 bg-white" padding="md">
+                    <p className="text-sm text-slate-500">Already have an account?</p>
+                    <Link className="text-sm font-medium text-sky-700" href="/login">
                         Sign in
                     </Link>
-                </p>
+                </Card>
             </div>
         </div>
     );

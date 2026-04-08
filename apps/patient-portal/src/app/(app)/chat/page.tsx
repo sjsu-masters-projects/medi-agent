@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChatBubble } from "@/components/features";
-import { PageHeader } from "@/components/layouts";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { ChatRole, type ChatMessage } from "@/types";
 
 const welcomeMessage: ChatMessage = {
@@ -62,21 +61,36 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="flex min-h-full flex-col bg-gray-50">
-            <PageHeader subtitle="Secure messaging with your AI care companion." title="Care Companion" />
-            <div className="flex-1 space-y-4 px-5 pb-4">
-                <Card className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-semibold text-gray-900">Companion status</p>
-                        <p className="text-sm text-gray-500">Ready to help with medications, symptoms, and follow-up questions.</p>
+        <div className="flex min-h-full flex-col bg-slate-950 text-white">
+            <div className="border-b border-slate-800 bg-slate-950 px-5 pt-10 pb-4">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm text-sky-200">
+                            ✦
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-white">Care Companion</h1>
+                            <p className="mt-1 inline-flex items-center gap-2 text-sm text-slate-300">
+                                <span className="h-2 w-2 rounded-full bg-green-500" />
+                                Online
+                            </p>
+                        </div>
                     </div>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">
-                        <span className="h-2 w-2 rounded-full bg-green-500" />
-                        Online
-                    </span>
-                </Card>
+                    <button
+                        className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200"
+                        type="button"
+                    >
+                        EN / ES
+                    </button>
+                </div>
+            </div>
 
-                <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex-1 space-y-4 px-5 py-5">
+                <div className="mx-auto w-fit rounded-full bg-slate-800 px-3 py-1 text-[11px] text-slate-400">
+                    Today, {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                </div>
+
+                <div className="space-y-4">
                     {messages.map((message) => (
                         <ChatBubble
                             content={message.content}
@@ -86,25 +100,43 @@ export default function ChatPage() {
                         />
                     ))}
                     {isTyping ? (
-                        <div className="rounded-2xl rounded-tl-sm border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                        <div className="rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-slate-300">
                             Care Companion is typing...
                         </div>
                     ) : null}
+                    <div className="rounded-2xl border border-sky-900 bg-sky-950/70 px-4 py-3 text-sm text-sky-100 shadow-sm">
+                        Transferring context to Pharmacovigilance Agent via A2A
+                    </div>
                     <div ref={bottomRef} />
                 </div>
             </div>
 
-            <form className="sticky bottom-0 space-y-3 border-t border-gray-200 bg-white px-5 py-4" onSubmit={handleSend}>
-                <Input
-                    onChange={(event) => setInput(event.target.value)}
-                    placeholder="Type your question..."
-                    value={input}
-                />
-                <div className="flex items-center justify-between gap-3">
-                    <Button variant="secondary">Start voice</Button>
-                    <Button disabled={!input.trim()} type="submit">
-                        Send
-                    </Button>
+            <form className="sticky bottom-0 space-y-3 border-t border-slate-800 bg-slate-950/95 px-5 py-4 backdrop-blur" onSubmit={handleSend}>
+                <Button className="mx-auto block rounded-full px-5 py-2 text-sm font-semibold" variant="secondary">
+                    Start Voice-to-Voice Mode
+                </Button>
+                <div className="flex items-center gap-3">
+                    <button
+                        className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-300"
+                        type="button"
+                    >
+                        🎙
+                    </button>
+                    <div className="flex-1">
+                        <Input
+                            className="border-slate-700 bg-slate-900 text-white placeholder:text-slate-500 focus:border-sky-500 focus:ring-sky-500"
+                            onChange={(event) => setInput(event.target.value)}
+                            placeholder="Type or speak a message..."
+                            value={input}
+                        />
+                    </div>
+                    <button
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-700 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!input.trim()}
+                        type="submit"
+                    >
+                        ↑
+                    </button>
                 </div>
             </form>
         </div>

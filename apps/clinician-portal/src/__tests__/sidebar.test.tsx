@@ -30,11 +30,11 @@ describe("Sidebar", () => {
             </Provider>,
         );
 
-        expect(screen.getByText("Dashboard")).toBeInTheDocument();
-        expect(screen.getByText("Patients")).toBeInTheDocument();
-        expect(screen.getByText("MedWatch")).toBeInTheDocument();
+        expect(screen.getByText("Risk Radar")).toBeInTheDocument();
+        expect(screen.getByText("Patient Roster")).toBeInTheDocument();
+        expect(screen.getByText("MedWatch Queue")).toBeInTheDocument();
         expect(screen.getByText("Messages")).toBeInTheDocument();
-        expect(screen.getByText("Settings")).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /dashboard/i }).className).toContain("bg-blue-600");
+        expect(screen.getByText("Clinic Settings")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-blue-600");
     });
 });

@@ -54,15 +54,20 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="app-shell min-h-dvh bg-gray-50 px-5 py-10">
-            <div className="space-y-6">
-                <div className="space-y-2 text-center">
-                    <p className="text-sm font-medium text-blue-600">MediAgent</p>
-                    <h1 className="text-3xl font-bold text-gray-900">Welcome back</h1>
-                    <p className="text-sm text-gray-500">Sign in to your health companion.</p>
+        <div className="app-shell min-h-dvh bg-gray-50 pb-10">
+            <div className="rounded-b-[28px] bg-sky-700 px-5 pt-12 pb-8 text-white shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">MediAgent</p>
+                <h1 className="mt-3 text-3xl font-bold">Welcome back</h1>
+                <p className="mt-2 max-w-sm text-sm text-sky-100">
+                    Sign in to review today&apos;s schedule, records, and messages from your care team.
+                </p>
+                <div className="mt-5 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white">
+                    Patient portal
                 </div>
+            </div>
 
-                <Card padding="lg">
+            <div className="-mt-4 space-y-5 px-5">
+                <Card className="shadow-lg shadow-slate-100" padding="lg">
                     <form className="space-y-4" onSubmit={handleSubmit}>
                         <Input label="Email address" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
                         <Input label="Password" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
@@ -73,12 +78,13 @@ export default function LoginPage() {
                     </form>
                 </Card>
 
-                <p className="text-center text-sm text-gray-500">
-                    Need an account?{" "}
-                    <Link className="font-medium text-blue-600" href="/signup">
+                <Card className="space-y-3 border-sky-100 bg-sky-50" padding="md">
+                    <p className="text-sm font-semibold text-slate-900">New to MediAgent?</p>
+                    <p className="text-sm text-slate-600">Create your account to get medication reminders and clinician updates.</p>
+                    <Link className="inline-flex text-sm font-medium text-sky-700" href="/signup">
                         Create one
                     </Link>
-                </p>
+                </Card>
             </div>
         </div>
     );

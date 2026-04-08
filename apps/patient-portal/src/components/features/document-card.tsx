@@ -22,17 +22,22 @@ export function DocumentCard({
 }: DocumentCardProps) {
     return (
         <button className="w-full text-left" onClick={onClick} type="button">
-            <Card className="flex items-start gap-4 transition hover:border-blue-200 hover:shadow-md">
-                <span className="text-2xl">{icon}</span>
-                <div className="min-w-0 flex-1 space-y-2">
+            <Card className="flex items-start gap-4 border-slate-100 transition hover:border-sky-200 hover:shadow-md">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-2xl text-sky-700 shadow-sm">
+                    {icon}
+                </span>
+                <div className="min-w-0 flex-1 space-y-3">
                     <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <h3 className="truncate text-sm font-semibold text-gray-900">{name}</h3>
-                            <p className="text-xs text-gray-400">{provider}</p>
+                        <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold text-slate-900">{name}</h3>
+                            <p className="mt-1 text-xs text-slate-400">{provider}</p>
                         </div>
-                        {hasAiSummary ? <Badge variant="info">AI Summary</Badge> : null}
+                        <div className="flex items-center gap-2">
+                            {hasAiSummary ? <Badge variant="info">AI Summary</Badge> : null}
+                            <span className="text-sm text-slate-300">→</span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
                         <Badge variant="neutral">{type}</Badge>
                         <span>{date}</span>
                     </div>

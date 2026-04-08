@@ -14,23 +14,25 @@ export function PageHeader({ backButton = false, rightAction, subtitle, title }:
     const router = useRouter();
 
     return (
-        <div className="flex items-start justify-between gap-4 px-5 pt-10 pb-4">
-            <div className="flex items-start gap-3">
-                {backButton ? (
-                    <button
-                        className="rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm"
-                        onClick={() => router.back()}
-                        type="button"
-                    >
-                        ←
-                    </button>
-                ) : null}
-                <div>
-                    <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-                    {subtitle ? <p className="mt-1 text-sm text-gray-500">{subtitle}</p> : null}
+        <div className="rounded-b-[28px] bg-sky-700 px-5 pt-10 pb-6 text-white shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                    {backButton ? (
+                        <button
+                            className="rounded-full border border-white/20 bg-white/15 p-2 text-white backdrop-blur"
+                            onClick={() => router.back()}
+                            type="button"
+                        >
+                            ←
+                        </button>
+                    ) : null}
+                    <div>
+                        <h1 className="text-2xl font-bold text-white">{title}</h1>
+                        {subtitle ? <p className="mt-1 text-sm text-sky-100">{subtitle}</p> : null}
+                    </div>
                 </div>
+                {rightAction}
             </div>
-            {rightAction}
         </div>
     );
 }

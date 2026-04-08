@@ -25,23 +25,27 @@ export default function SymptomsPage() {
         <div className="space-y-4 bg-gray-50 pb-8">
             <PageHeader
                 backButton
-                rightAction={<Button onClick={() => setOpen(true)}>Log symptom</Button>}
+                rightAction={<Button onClick={() => setOpen(true)} variant="secondary">Log symptom</Button>}
                 subtitle="Track patterns and share updates with your clinicians."
                 title="Symptom Timeline"
             />
-            <div className="space-y-4 px-5">
-                <Card className="space-y-2 border-blue-200 bg-blue-50">
-                    <p className="text-sm font-semibold text-blue-700">AI pattern detected</p>
-                    <p className="text-sm text-gray-700">
+            <div className="-mt-4 space-y-4 px-5">
+                <Card className="space-y-3 border-sky-100 bg-gradient-to-br from-sky-600 to-sky-700 text-white shadow-lg shadow-sky-100">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">AI pattern detected</p>
+                    <p className="text-sm text-sky-50">
                         Your recent dizziness reports overlap with a new blood pressure medication change.
                     </p>
+                    <div className="inline-flex w-fit rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white">
+                        Care team notified
+                    </div>
                 </Card>
                 {symptomReports.map((report) => (
-                    <Card className="space-y-3" key={report.id}>
+                    <Card className="space-y-4 border-slate-100" key={report.id}>
                         <div className="flex items-start justify-between gap-4">
                             <div>
-                                <h2 className="text-sm font-semibold text-gray-900">{report.symptom}</h2>
-                                <p className="text-sm text-gray-500">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reported symptom</p>
+                                <h2 className="mt-1 text-base font-semibold text-slate-900">{report.symptom}</h2>
+                                <p className="mt-1 text-sm text-slate-500">
                                     {new Date(report.createdAt).toLocaleString("en-US", {
                                         dateStyle: "medium",
                                         timeStyle: "short",
@@ -52,7 +56,10 @@ export default function SymptomsPage() {
                                 Severity {report.severity}/10
                             </Badge>
                         </div>
-                        <p className="text-sm text-gray-600">{report.aiAssessment}</p>
+                        <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Assessment</p>
+                            <p className="mt-1 text-sm text-slate-600">{report.aiAssessment}</p>
+                        </div>
                     </Card>
                 ))}
             </div>

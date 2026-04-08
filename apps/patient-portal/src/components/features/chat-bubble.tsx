@@ -18,17 +18,17 @@ export function ChatBubble({ content, role, timestamp }: ChatBubbleProps) {
     return (
         <div className={`flex items-start gap-3 ${isUser ? "justify-end" : ""}`}>
             {!isUser ? (
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-sm text-blue-700">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-sky-200 shadow-sm">
                     AI
                 </span>
             ) : null}
             <div className={`max-w-[80%] space-y-1 ${isUser ? "items-end text-right" : ""}`}>
                 <div
-                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "rounded-tr-sm bg-blue-600 text-white" : "rounded-tl-sm border border-gray-200 bg-gray-50 text-gray-800"}`}
+                    className={`rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${isUser ? "rounded-tr-sm bg-sky-700 text-white" : "rounded-tl-sm border border-slate-700 bg-slate-800 text-slate-100"}`}
                 >
                     {content}
                 </div>
-                <p className="text-[10px] text-gray-400">{formatTimestamp(timestamp)}</p>
+                <p className="text-[10px] text-slate-500">{formatTimestamp(timestamp)}</p>
             </div>
         </div>
     );
