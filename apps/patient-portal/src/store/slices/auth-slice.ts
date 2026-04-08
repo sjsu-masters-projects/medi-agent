@@ -1,11 +1,14 @@
+import type { PayloadAction } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
 
+export interface PatientAuthUser {
+    id: string;
+    email: string;
+    role: "patient" | "clinician";
+}
+
 interface AuthState {
-    user: null | {
-        id: string;
-        email: string;
-        role: "patient" | "clinician";
-    };
+    user: PatientAuthUser | null;
     token: string | null;
     isAuthenticated: boolean;
     loading: boolean;
@@ -22,20 +25,33 @@ export const authSlice = createSlice({
     name: "auth",
     initialState,
     reducers: {
-        setUser: (state, action) => {
+        hydrateSession: (
+            state,
+            action: PayloadAction<{ token: string | null; user: PatientAuthUser } | null>,
+        ) => {
+            state.user = action.payload?.user ?? null;
+            state.token = action.payload?.token ?? null;
+            state.isAuthenticated = !!action.payload?.user;
+            state.loading = false;
+        },
+        setUser: (state, action: PayloadAction<PatientAuthUser | null>) => {
             state.user = action.payload;
             state.isAuthenticated = !!action.payload;
             state.loading = false;
         },
-        setToken: (state, action) => {
+        setToken: (state, action: PayloadAction<string | null>) => {
             state.token = action.payload;
+        },
+        finishHydration: (state) => {
+            state.loading = false;
         },
         logout: (state) => {
             state.user = null;
             state.token = null;
             state.isAuthenticated = false;
+            state.loading = false;
         },
     },
 });
 
-export const { setUser, setToken, logout } = authSlice.actions;
+export const { hydrateSession, setUser, setToken, finishHydration, logout } = authSlice.actions;

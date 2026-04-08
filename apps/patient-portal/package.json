@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "_buildNote": "Turbopack panics on CSS worker port binding (Next 16.1.x) — revisit on Next 16.2+",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",
@@ -25,12 +27,15 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.7",
+    "jsdom": "^29.0.1",
     "prettier": "^3.8.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "flatted": ">=3.4.2"
+    "flatted": ">=3.4.2",
+    "picomatch": ">=4.0.4",
+    "vite": ">=7.3.2"
   }
 }

@@ -1,8 +1,10 @@
+import type { PayloadAction } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
+import type { PatientSummary } from "@/types";
 
 interface PatientsState {
-    list: unknown[];
-    selectedPatient: unknown;
+    list: PatientSummary[];
+    selectedPatient: PatientSummary | null;
     loading: boolean;
 }
 
@@ -16,14 +18,14 @@ export const patientsSlice = createSlice({
     name: "patients",
     initialState,
     reducers: {
-        setPatients: (state, action) => {
+        setPatients: (state, action: PayloadAction<PatientSummary[]>) => {
             state.list = action.payload;
             state.loading = false;
         },
-        setSelectedPatient: (state, action) => {
+        setSelectedPatient: (state, action: PayloadAction<PatientSummary | null>) => {
             state.selectedPatient = action.payload;
         },
-        setLoading: (state, action) => {
+        setLoading: (state, action: PayloadAction<boolean>) => {
             state.loading = action.payload;
         },
     },

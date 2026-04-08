@@ -1,231 +1,175 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
+import { Badge, Card, EmptyState, Skeleton } from "@/components/ui";
+import { useFeedData } from "@/hooks/use-feed-data";
 
-interface ScheduleItem {
-  id: string;
-  time: string;
-  label: string;
-  subtitle: string;
-  type: "medication" | "obligation";
-  icon: string;
-  status: "completed" | "active" | "upcoming";
+function splitMedicationName(name: string) {
+    const match = name.match(/^(.*?)(\s+\d.*)$/);
+    return {
+        dosage: match?.[2]?.trim() ?? "",
+        name: match?.[1]?.trim() ?? name,
+    };
 }
 
-const SCHEDULE: ScheduleItem[] = [
-  {
-    id: "1",
-    time: "8:00 AM",
-    label: "Metformin 500mg",
-    subtitle: "Take with breakfast · Prescribed by Dr. Smith",
-    type: "medication",
-    icon: "💊",
-    status: "completed",
-  },
-  {
-    id: "2",
-    time: "12:00 PM",
-    label: "Low-Sodium Lunch",
-    subtitle: "Dietary Obligation",
-    type: "obligation",
-    icon: "🍽️",
-    status: "active",
-  },
-  {
-    id: "3",
-    time: "3:00 PM",
-    label: "30-Min Walk",
-    subtitle: "Exercise",
-    type: "obligation",
-    icon: "🚶",
-    status: "upcoming",
-  },
-  {
-    id: "4",
-    time: "6:00 PM",
-    label: "Lisinopril 10mg",
-    subtitle: "Take with dinner",
-    type: "medication",
-    icon: "💊",
-    status: "upcoming",
-  },
-  {
-    id: "5",
-    time: "10:00 PM",
-    label: "10-Point Sleep",
-    subtitle: "Sleep hygiene check-in",
-    type: "obligation",
-    icon: "😴",
-    status: "upcoming",
-  },
-];
+function mapTaskStatus(status: "completed" | "missed" | "pending" | "skipped") {
+    if (status === "pending") {
+        return "active";
+    }
 
-function CircularProgress({ percent }: { percent: number }) {
-  const r = 22;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (percent / 100) * circ;
-  return (
-    <div className="relative w-14 h-14 flex items-center justify-center">
-      <svg className="absolute inset-0 -rotate-90" width="56" height="56" viewBox="0 0 56 56">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
-        <circle
-          cx="28"
-          cy="28"
-          r={r}
-          fill="none"
-          stroke="white"
-          strokeWidth="4"
-          strokeDasharray={circ}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="text-xs font-bold text-white">{percent}%</span>
-    </div>
-  );
+    if (status === "skipped") {
+        return "upcoming";
+    }
+
+    return status;
+}
+
+function formatTimeLabel(scheduledTime?: string, status?: "completed" | "missed" | "pending" | "skipped") {
+    if (!scheduledTime) {
+        return "Any time";
+    }
+
+    const [hours = "0", minutes = "0"] = scheduledTime.split(":");
+    const value = new Date();
+    value.setHours(Number(hours), Number(minutes), 0, 0);
+    const label = value.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return status === "pending" ? `${label} • Now` : label;
 }
 
 export default function TodayPage() {
-  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set(["1"]));
+    const { adherenceStats, loading, markComplete, summary, tasks, usingMockData } = useFeedData();
+    const completionPercent = Math.round(adherenceStats.overallScore * 100);
+    const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
 
-  const totalTasks = SCHEDULE.length;
-  const completedCount = completedIds.size;
-  const progress = Math.round((completedCount / totalTasks) * 100);
-
-  function markComplete(id: string) {
-    setCompletedIds((prev) => new Set([...prev, id]));
-  }
-
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg-dark)", color: "var(--text-on-dark)" }}>
-      {/* Header */}
-      <div className="px-5 pt-12 pb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-            style={{ background: "var(--primary)" }}
-          >
-            S
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-white">Hi, Sarah</h1>
-            <p className="text-xs" style={{ color: "var(--text-muted-dark)" }}>
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Daily Progress Card */}
-      <div className="px-5 mb-6">
-        <div
-          className="rounded-2xl p-4 flex items-center justify-between"
-          style={{ background: "var(--primary)", boxShadow: "0 4px 24px rgba(51,115,209,0.4)" }}
-        >
-          <div>
-            <p className="text-white/80 text-xs font-medium mb-0.5">Daily Progress</p>
-            <p className="text-white font-semibold text-sm">{completedCount} of {totalTasks} tasks completed</p>
-          </div>
-          <CircularProgress percent={progress} />
-        </div>
-      </div>
-
-      {/* Today's Schedule */}
-      <div className="px-5">
-        <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-muted-dark)" }}>
-          TODAY&apos;S SCHEDULE
-        </h2>
-
-        <div className="flex flex-col gap-0">
-          {SCHEDULE.map((item, idx) => {
-            const isDone = completedIds.has(item.id);
-            const isActive = item.status === "active" && !isDone;
-            const dotColor = isDone
-              ? "var(--success)"
-              : isActive
-              ? "var(--primary)"
-              : "var(--border-dark)";
-
-            return (
-              <div key={item.id} className="flex gap-3">
-                {/* Timeline */}
-                <div className="flex flex-col items-center" style={{ minWidth: "60px" }}>
-                  <span className="text-xs mb-1 font-medium" style={{ color: "var(--text-muted-dark)" }}>
-                    {item.time}
-                  </span>
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0 z-10"
-                    style={{ background: dotColor, border: isActive ? "2px solid var(--primary)" : "none" }}
-                  />
-                  {idx < SCHEDULE.length - 1 && (
-                    <div className="flex-1 w-px mt-1" style={{ background: "var(--border-dark)", minHeight: "32px" }} />
-                  )}
-                </div>
-
-                {/* Card */}
-                <div className="flex-1 pb-4">
-                  {isActive ? (
-                    <div
-                      className="rounded-2xl p-4 border"
-                      style={{ background: "var(--bg-card-dark-2)", borderColor: "var(--primary)" }}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <p className="font-semibold text-white text-sm">{item.label}</p>
-                          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted-dark)" }}>{item.subtitle}</p>
-                        </div>
-                        <span className="text-lg">{item.icon}</span>
-                      </div>
-                      <button
-                        onClick={() => markComplete(item.id)}
-                        className="w-full rounded-xl py-2.5 text-sm font-semibold text-white"
-                        style={{ background: "var(--primary)" }}
-                      >
-                        Mark as Complete
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between py-1">
-                      <div>
-                        <p
-                          className="text-sm font-medium"
-                          style={{
-                            color: isDone ? "var(--text-muted-dark)" : "var(--text-on-dark)",
-                            textDecoration: isDone ? "line-through" : "none",
-                          }}
-                        >
-                          {item.label}
-                        </p>
-                        <p className="text-xs" style={{ color: "var(--text-muted-dark)" }}>{item.subtitle}</p>
-                      </div>
-                      <span className="text-base opacity-60">{item.icon}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Symptom report shortcut */}
-      <div className="px-5 mt-2 pb-4">
-        <Link
-          href="/symptoms"
-          className="flex items-center justify-between rounded-2xl p-4"
-          style={{ background: "var(--bg-card-dark)" }}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🩺</span>
-            <div>
-              <p className="text-sm font-medium text-white">Log a Symptom</p>
-              <p className="text-xs" style={{ color: "var(--text-muted-dark)" }}>Track how you&apos;re feeling</p>
+    if (loading && tasks.length === 0) {
+        return (
+            <div className="space-y-4 px-5 py-10">
+                <Skeleton className="h-24 w-full" variant="rect" />
+                <Skeleton className="h-28 w-full" variant="rect" />
+                <Skeleton className="h-28 w-full" variant="rect" />
             </div>
-          </div>
-          <span style={{ color: "var(--text-muted-dark)" }}>›</span>
-        </Link>
-      </div>
-    </div>
-  );
+        );
+    }
+
+    return (
+        <div className="bg-white pb-8">
+            <div className="rounded-b-[28px] bg-sky-700 px-5 pt-10 pb-6 text-white shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-[30px] font-bold leading-tight">Hi, Sarah</h1>
+                        <p className="mt-1 text-sm text-sky-100">
+                            {new Date().toLocaleDateString("en-US", {
+                                day: "numeric",
+                                month: "long",
+                                weekday: "long",
+                            })}
+                        </p>
+                    </div>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-lg font-bold text-sky-700 shadow-sm">
+                        S
+                    </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-4 rounded-2xl bg-white/15 p-4 backdrop-blur">
+                    <div className="space-y-1">
+                        <p className="text-lg font-semibold text-white">Daily Progress</p>
+                        <p className="text-sm text-sky-100">{completedLabel}</p>
+                        <p className="text-xs text-sky-100">{adherenceStats.currentStreakDays}-day streak</p>
+                    </div>
+                    <div className="space-y-2 text-right">
+                        {usingMockData ? <Badge variant="info">Demo data</Badge> : null}
+                        <CircularProgress
+                            percent={completionPercent}
+                            progressClassName="stroke-white"
+                            textClassName="text-white"
+                            trackClassName="stroke-white/30"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-5 px-5 pt-6">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-slate-800">Today&apos;s Schedule</h2>
+                    <p className="text-sm text-slate-500">{tasks.length} tasks</p>
+                </div>
+                {tasks.length === 0 ? (
+                    <EmptyState
+                        description="Your clinicians have not assigned anything for today."
+                        icon="🗓️"
+                        title="Nothing scheduled"
+                    />
+                ) : null}
+                <div className="ml-2 border-l-2 border-rose-100 pl-6">
+                {tasks.map((task) => {
+                    const status = mapTaskStatus(task.status);
+                    const dotClasses =
+                        status === "completed"
+                            ? "bg-blue-700 text-white"
+                            : status === "active"
+                              ? "border-4 border-blue-700 bg-white"
+                              : status === "missed"
+                                ? "bg-red-500"
+                                : "bg-slate-200";
+
+                    if (task.type === "medication") {
+                        const medication = splitMedicationName(task.name);
+                        return (
+                            <div className="relative pb-6 last:pb-0" key={task.id}>
+                                <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
+                                    {status === "completed" ? "✓" : null}
+                                </span>
+                                <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
+                                    {formatTimeLabel(task.scheduledTime, task.status)}
+                                </p>
+                                <MedicationCard
+                                    dosage={medication.dosage}
+                                    id={task.id}
+                                    instructions={task.description}
+                                    name={medication.name}
+                                    onMarkComplete={() => markComplete(task)}
+                                    prescriber={task.provider?.name}
+                                    status={status}
+                                    time=""
+                                />
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div className="relative pb-6 last:pb-0" key={task.id}>
+                            <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
+                                {status === "completed" ? "✓" : null}
+                            </span>
+                            <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
+                                {formatTimeLabel(task.scheduledTime, task.status)}
+                            </p>
+                            <ObligationCard
+                                description={task.name}
+                                id={task.id}
+                                onMarkComplete={() => markComplete(task)}
+                                status={status}
+                                time=""
+                                type={task.frequency.includes("walk") ? "exercise" : "custom"}
+                            />
+                        </div>
+                    );
+                })}
+                </div>
+            </div>
+
+            <div className="px-5 pt-2">
+                <Link href="/symptoms">
+                    <Card className="flex items-center justify-between border-sky-100 bg-sky-50">
+                        <div>
+                            <p className="text-sm font-semibold text-slate-900">Report a symptom</p>
+                            <p className="text-sm text-slate-500">Log how you feel and share updates with your care team.</p>
+                        </div>
+                        <span className="text-lg text-sky-700">→</span>
+                    </Card>
+                </Link>
+            </div>
+        </div>
+    );
 }

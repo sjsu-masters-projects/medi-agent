@@ -1,12 +1,23 @@
+import type { PayloadAction } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
+import type { PatientSummary } from "@/types";
+
+export interface DashboardStat {
+    change: string;
+    label: string;
+    trend: "up" | "down" | "neutral";
+    value: string;
+}
 
 interface DashboardState {
-    riskData: unknown[];
+    stats: DashboardStat[];
+    patients: PatientSummary[];
     loading: boolean;
 }
 
 const initialState: DashboardState = {
-    riskData: [],
+    stats: [],
+    patients: [],
     loading: false,
 };
 
@@ -14,14 +25,17 @@ export const dashboardSlice = createSlice({
     name: "dashboard",
     initialState,
     reducers: {
-        setRiskData: (state, action) => {
-            state.riskData = action.payload;
+        setPatients: (state, action: PayloadAction<PatientSummary[]>) => {
+            state.patients = action.payload;
             state.loading = false;
         },
-        setLoading: (state, action) => {
+        setStats: (state, action: PayloadAction<DashboardStat[]>) => {
+            state.stats = action.payload;
+        },
+        setLoading: (state, action: PayloadAction<boolean>) => {
             state.loading = action.payload;
         },
     },
 });
 
-export const { setRiskData, setLoading } = dashboardSlice.actions;
+export const { setPatients, setStats, setLoading } = dashboardSlice.actions;
