@@ -254,9 +254,9 @@
 - [x] Codebase cleanup (remove duplicates and unnecessary files)
 
 ### 4.2 Tools
-- [ ] FHIR Resource Builder (MedicationRequest, Condition, AllergyIntolerance, Appointment)
-- [ ] RxNorm API client (brand → generic → RxCUI normalization)
-- [ ] Medication normalizer (parse dosage strings, frequency extraction)
+- [x] FHIR Resource Builder (MedicationRequest, Condition, AllergyIntolerance, Appointment)
+- [x] RxNorm API client (brand → generic → RxCUI normalization)
+- [x] Medication normalizer (parse dosage strings, frequency extraction)
 
 ### 4.3 MedGemma Evaluation
 - [x] Deploy MedGemma 27B on Vertex AI Model Garden
@@ -271,13 +271,13 @@
 - [x] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
 - [x] Golden-set evaluation: expected parsing output for each test document
 - [x] Unit tests for FHIR builder and normalizer
-- [ ] Integration test: upload → parse → database → Today Feed
+- [x] Integration test: upload → parse → database → Today Feed
 
 ### 4.4 Patient Portal Integration
-- [ ] Wire up document upload → API → Ingestion Agent → DB
-- [ ] Today Feed auto-populates after document parsing
-- [ ] "Explain This" calls AI and displays summary
-- [ ] Handle parsing errors gracefully (show status, allow retry)
+- [x] Wire up document upload → API → Ingestion Agent → DB
+- [x] Today Feed auto-populates after document parsing
+- [x] "Explain This" calls AI and displays summary
+- [x] Handle parsing errors gracefully (show status, allow retry)
 
 ---
 

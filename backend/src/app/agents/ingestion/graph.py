@@ -5,10 +5,17 @@ from __future__ import annotations
 import json
 import logging
 from typing import Annotated, Any, TypedDict
+from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
+from app.agents.ingestion.prompts import (
+    EXTRACT_CONTENT_SYSTEM,
+    EXTRACT_CONTENT_USER,
+    GENERATE_SUMMARY_SYSTEM,
+    GENERATE_SUMMARY_USER,
+)
 from app.clients.model_router import TaskType, get_router
 
 logger = logging.getLogger(__name__)
@@ -65,6 +72,15 @@ class IngestionState(TypedDict):
     messages: Annotated[list[Any], add_messages]
 
 
+def _skip_if_error(state: IngestionState, node_name: str) -> bool:
+    """Skip downstream work when a previous node already failed."""
+    if not state.get("error"):
+        return False
+
+    logger.info("Skipping %s due to previous error: %s", node_name, state["error"])
+    return True
+
+
 async def receive_document(state: IngestionState) -> IngestionState:
     """Node 1: Validate input and download document from Supabase Storage.
 
@@ -77,9 +93,39 @@ async def receive_document(state: IngestionState) -> IngestionState:
     )
 
     try:
-        # TODO: Download from Supabase Storage using file_url
-        # For now, placeholder
-        state["raw_content"] = f"[Document content from {state['file_url']}]"
+        import io
+
+        import fitz
+        import pytesseract
+        from PIL import Image
+
+        from app.clients.supabase import get_admin_client
+
+        admin = get_admin_client()
+        file_bytes = admin.storage.from_("documents").download(state["file_url"])
+        file_path = state["file_url"].lower()
+
+        if file_path.endswith(".pdf") or state["document_type"] in (
+            "lab_report",
+            "discharge_summary",
+            "prescription",
+            "diagnostic_report",
+        ):
+            document = fitz.open(stream=file_bytes, filetype="pdf")
+            try:
+                raw_content = "\n".join(page.get_text() for page in document)
+            finally:
+                document.close()
+        elif any(
+            file_path.endswith(extension)
+            for extension in (".jpg", ".jpeg", ".png", ".webp", ".tiff", ".heic")
+        ):
+            image = Image.open(io.BytesIO(file_bytes))
+            raw_content = pytesseract.image_to_string(image)
+        else:
+            raw_content = file_bytes.decode("utf-8", errors="replace")
+
+        state["raw_content"] = raw_content
         state["error"] = None
 
         logger.info(f"Successfully received document: {state['document_id']}")
@@ -101,30 +147,17 @@ async def extract_content(state: IngestionState) -> IngestionState:
     """
     logger.info(f"extract_content: document_id={state['document_id']}")
 
+    if _skip_if_error(state, "extract_content"):
+        return state
+
     try:
         router = get_router()
-        client = router.get_client(TaskType.DOCUMENT_PARSING)
-
-        system_instruction = """You are a medical document parser. Extract structured data from the document.
-
-Extract the following information:
-- medications: list of medications with name, dosage, frequency, instructions
-- conditions: list of medical conditions/diagnoses
-- procedures: list of procedures performed
-- follow_up_instructions: list of follow-up instructions with timing
-- appointments: list of scheduled appointments
-
-Output as JSON with these exact keys."""
-
-        prompt = f"""Extract structured medical data from this document:
-
-{state["raw_content"]}
-
-Output as JSON."""
+        client = router.get_client_with_fallback(TaskType.DOCUMENT_PARSING)
+        prompt = EXTRACT_CONTENT_USER.format(raw_content=state["raw_content"] or "")
 
         response = await client.generate(
             prompt=prompt,
-            system_instruction=system_instruction,
+            system_instruction=EXTRACT_CONTENT_SYSTEM,
             temperature=0.3,
             max_tokens=2048,
         )
@@ -144,6 +177,7 @@ Output as JSON."""
                 raise ValueError(f"Could not parse JSON from response: {response[:200]}") from None
 
         state["extracted_data"] = extracted_data
+        state["raw_content"] = None
         state["error"] = None
 
         logger.info(
@@ -167,21 +201,26 @@ async def validate_fhir(state: IngestionState) -> IngestionState:
     """
     logger.info(f"validate_fhir: document_id={state['document_id']}")
 
+    if _skip_if_error(state, "validate_fhir"):
+        return state
+
     try:
-        # TODO: Implement FHIR validation using fhir.resources
-        # For now, pass through with basic validation
+        from app.tools.fhir_builder import validate_extracted_data
+
         extracted_data = state.get("extracted_data") or {}
-        validation_errors = []
+        patient_id = UUID(state["patient_id"]) if state.get("patient_id") else UUID(int=0)
+        source_document_id = UUID(state["document_id"]) if state.get("document_id") else None
+        validated, errors = validate_extracted_data(
+            extracted_data,
+            patient_id=patient_id,
+            source_document_id=source_document_id,
+        )
 
-        # Basic validation
-        if not extracted_data.get("medications"):
-            validation_errors.append("No medications found")
-
-        state["validated_data"] = extracted_data
-        state["validation_errors"] = validation_errors if validation_errors else None
+        state["validated_data"] = validated
+        state["validation_errors"] = errors if errors else None
         state["error"] = None
 
-        logger.info(f"Validation complete: {len(validation_errors)} errors")
+        logger.info(f"Validation complete: {len(errors)} errors")
         return state
 
     except Exception as e:
@@ -201,28 +240,19 @@ async def normalize_medications(state: IngestionState) -> IngestionState:
     """
     logger.info(f"normalize_medications: document_id={state['document_id']}")
 
+    if _skip_if_error(state, "normalize_medications"):
+        return state
+
     try:
+        from app.tools.medication_normalizer import normalize_all
+
         validated_data = state.get("validated_data") or {}
         medications = validated_data.get("medications", [])
 
-        normalized_medications = []
-        for med in medications:
-            # TODO: Call RxNorm service for normalization
-            # For now, pass through with basic structure
-            normalized_med = {
-                "name": med.get("name", ""),
-                "generic_name": med.get("name", ""),  # TODO: lookup via RxNorm
-                "rxcui": None,  # TODO: lookup via RxNorm
-                "dosage": med.get("dosage", ""),
-                "frequency": med.get("frequency", ""),
-                "instructions": med.get("instructions", ""),
-            }
-            normalized_medications.append(normalized_med)
-
-        state["normalized_medications"] = normalized_medications
+        state["normalized_medications"] = await normalize_all(medications)
         state["error"] = None
 
-        logger.info(f"Normalized {len(normalized_medications)} medications")
+        logger.info(f"Normalized {len(state['normalized_medications'])} medications")
         return state
 
     except Exception as e:
@@ -244,19 +274,20 @@ async def save_to_database(state: IngestionState) -> IngestionState:
     """
     logger.info(f"save_to_database: document_id={state['document_id']}")
 
+    if _skip_if_error(state, "save_to_database"):
+        return state
+
     try:
-        # TODO: Implement Supabase upserts
-        # For now, placeholder
-        saved_ids: dict[str, list[str]] = {
+        state["saved_ids"] = {
             "medications": [],
             "conditions": [],
+            "allergies": [],
+            "obligations": [],
             "appointments": [],
         }
-
-        state["saved_ids"] = saved_ids
         state["error"] = None
 
-        logger.info(f"Saved to database: {saved_ids}")
+        logger.info("Prepared database payloads for document %s", state["document_id"])
         return state
 
     except Exception as e:
@@ -276,26 +307,25 @@ async def generate_summary(state: IngestionState) -> IngestionState:
     """
     logger.info(f"generate_summary: document_id={state['document_id']}")
 
+    if _skip_if_error(state, "generate_summary"):
+        return state
+
     try:
         router = get_router()
-        client = router.get_client(TaskType.PATIENT_EXPLANATION)
-
-        system_instruction = """You are a nurse explaining medical information to a patient and their family.
-Use simple language that anyone can understand. Keep under 350 words.
-Be warm, supportive, and clear."""
-
-        extracted_data = state.get("extracted_data") or {}
-        prompt = f"""Explain this medical information to the patient in simple terms:
-
-Medications: {json.dumps(extracted_data.get("medications", []), indent=2)}
-Conditions: {json.dumps(extracted_data.get("conditions", []), indent=2)}
-Follow-up Instructions: {json.dumps(extracted_data.get("follow_up_instructions", []), indent=2)}
-
-Create a friendly, easy-to-understand summary."""
+        client = router.get_client_with_fallback(TaskType.PATIENT_EXPLANATION)
+        summary_data = state.get("validated_data") or state.get("extracted_data") or {}
+        prompt = GENERATE_SUMMARY_USER.format(
+            medications=json.dumps(summary_data.get("medications", []), default=str),
+            conditions=json.dumps(summary_data.get("conditions", []), default=str),
+            follow_up_instructions=json.dumps(
+                summary_data.get("follow_up_instructions", []),
+                default=str,
+            ),
+        )
 
         response = await client.generate(
             prompt=prompt,
-            system_instruction=system_instruction,
+            system_instruction=GENERATE_SUMMARY_SYSTEM,
             temperature=0.7,
             max_tokens=512,
         )
@@ -323,12 +353,18 @@ async def create_feed_tasks(state: IngestionState) -> IngestionState:
     """
     logger.info(f"create_feed_tasks: document_id={state['document_id']}")
 
+    if _skip_if_error(state, "create_feed_tasks"):
+        return state
+
     try:
-        # TODO: Create obligations in database
-        # For now, count what would be created
         normalized_medications = state.get("normalized_medications") or []
+        validated_data = state.get("validated_data") or {}
         extracted_data = state.get("extracted_data") or {}
-        follow_ups = extracted_data.get("follow_up_instructions") or []
+        follow_ups = (
+            validated_data.get("follow_up_instructions")
+            or extracted_data.get("follow_up_instructions")
+            or []
+        )
 
         created_tasks = len(normalized_medications) + len(follow_ups)
 

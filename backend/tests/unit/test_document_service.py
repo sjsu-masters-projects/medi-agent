@@ -51,6 +51,7 @@ class TestFileValidation:
 
     def test_allowed_mime_types_complete(self):
         """Ensure we haven't accidentally emptied the allowed list."""
-        assert len(ALLOWED_MIME_TYPES) >= 4
+        assert len(ALLOWED_MIME_TYPES) >= 7
         assert "application/pdf" in ALLOWED_MIME_TYPES
         assert "image/jpeg" in ALLOWED_MIME_TYPES
+        assert "text/plain" in ALLOWED_MIME_TYPES

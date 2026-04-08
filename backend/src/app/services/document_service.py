@@ -25,6 +25,9 @@ ALLOWED_MIME_TYPES = frozenset(
         "image/png",
         "image/webp",
         "image/heic",
+        "image/tiff",
+        "text/plain",
+        "text/csv",
     }
 )
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
@@ -73,6 +76,9 @@ class DocumentService:
             "document_type": document_type,
             "source_clinic": source_clinic,
             "notes": notes,
+            "parse_status": "pending",
+            "parse_error": None,
+            "parse_attempts": 0,
         }
 
         result = self.db.table("documents").insert(row).execute()
@@ -118,6 +124,16 @@ class DocumentService:
         if data.get("file_path"):
             data["file_url"] = self._generate_signed_url(data["file_path"])
         return data
+
+    async def update_summary(self, document_id: UUID, patient_id: UUID, summary: str) -> None:
+        """Cache an AI summary on the document row."""
+        (
+            self.db.table("documents")
+            .update({"ai_summary": summary, "parsed": True})
+            .eq("id", str(document_id))
+            .eq("patient_id", str(patient_id))
+            .execute()
+        )
 
     # ── Helpers ─────────────────────────────────────────
 

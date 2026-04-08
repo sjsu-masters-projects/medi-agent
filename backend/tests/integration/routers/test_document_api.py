@@ -1,9 +1,6 @@
-"""Integration tests for Document API endpoints.
+"""Integration tests for Document API endpoints."""
 
-Uses FastAPI dependency overrides for proper authentication mocking.
-"""
-
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -93,30 +90,39 @@ class TestCreateDocument:
             "notes": "Annual checkup results",
             "parsed": False,
             "ai_summary": None,
+            "parse_status": "pending",
+            "parse_error": None,
+            "parse_attempts": 0,
             "visibility": "all_providers",
             "created_at": "2025-01-15T00:00:00Z",
         }
 
         mock_supabase_db.table().insert().execute.return_value = MagicMock(data=[document_data])
 
-        response = client.post(
-            "/api/v1/documents/",
-            json={
-                "file_name": "lab-results.pdf",
-                "file_path": f"{patient_id}/lab-results.pdf",
-                "file_size_bytes": 1024000,
-                "mime_type": "application/pdf",
-                "document_type": "lab_report",
-                "source_clinic": "Test Clinic",
-                "notes": "Annual checkup results",
-            },
-        )
+        with patch(
+            "app.routers.documents._run_ingestion_safe",
+            new=AsyncMock(),
+        ) as mock_ingest:
+            response = client.post(
+                "/api/v1/documents/",
+                json={
+                    "file_name": "lab-results.pdf",
+                    "file_path": f"{patient_id}/lab-results.pdf",
+                    "file_size_bytes": 1024000,
+                    "mime_type": "application/pdf",
+                    "document_type": "lab_report",
+                    "source_clinic": "Test Clinic",
+                    "notes": "Annual checkup results",
+                },
+            )
 
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
         assert data["file_name"] == "lab-results.pdf"
         assert data["document_type"] == "lab_report"
         assert "file_url" in data
+        assert data["parse_status"] == "pending"
+        mock_ingest.assert_awaited_once()
 
     def test_invalid_mime_type(self, client, override_auth, override_db):
         """Reject unsupported file type."""
@@ -183,6 +189,9 @@ class TestListDocuments:
                 "source_clinic": None,
                 "parsed": False,
                 "ai_summary": None,
+                "parse_status": "pending",
+                "parse_error": None,
+                "parse_attempts": 1,
                 "visibility": "all_providers",
                 "created_at": "2025-01-15T00:00:00Z",
             },
@@ -200,6 +209,9 @@ class TestListDocuments:
                 "source_clinic": "Test Clinic",
                 "parsed": True,
                 "ai_summary": "Prescription for medication X",
+                "parse_status": "completed",
+                "parse_error": None,
+                "parse_attempts": 1,
                 "visibility": "all_providers",
                 "created_at": "2025-01-14T00:00:00Z",
             },
@@ -249,6 +261,9 @@ class TestGetDocument:
             "source_clinic": None,
             "parsed": False,
             "ai_summary": None,
+            "parse_status": "processing",
+            "parse_error": None,
+            "parse_attempts": 1,
             "visibility": "all_providers",
             "created_at": "2025-01-15T00:00:00Z",
         }
@@ -279,14 +294,6 @@ class TestGetDocument:
     def test_wrong_patient(self, client, override_auth, override_db, mock_supabase_db):
         """Reject access to another patient's document."""
         document_id = uuid4()
-        other_patient_id = uuid4()
-
-        # Document belongs to different patient
-        {
-            "id": str(document_id),
-            "patient_id": str(other_patient_id),
-            "file_name": "lab-results.pdf",
-        }
 
         mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
             data=None  # Query filters by patient_id, so returns None
@@ -298,17 +305,88 @@ class TestGetDocument:
 
 
 class TestExplainDocument:
-    """POST /api/v1/documents/{document_id}/explain - Trigger AI explanation."""
+    """POST /api/v1/documents/{document_id}/explain - Explain a document."""
 
-    def test_not_implemented(self, client, override_auth, override_db):
-        """Endpoint returns 501 Not Implemented (Phase 4 feature)."""
+    def test_returns_cached_english_summary(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        """English explanation returns cached ai_summary without LLM call."""
         document_id = uuid4()
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data={
+                "id": str(document_id),
+                "patient_id": str(patient_id),
+                "uploaded_by": str(patient_id),
+                "uploaded_by_role": "patient",
+                "file_name": "lab-results.pdf",
+                "file_path": f"{patient_id}/lab-results.pdf",
+                "file_url": "https://storage.example.com/signed-url",
+                "file_size_bytes": 1024000,
+                "mime_type": "application/pdf",
+                "document_type": "lab_report",
+                "source_clinic": None,
+                "parsed": True,
+                "ai_summary": "Cached summary",
+                "parse_status": "completed",
+                "parse_error": None,
+                "parse_attempts": 1,
+                "visibility": "all_providers",
+                "created_at": "2025-01-15T00:00:00Z",
+            }
+        )
 
-        response = client.post(f"/api/v1/documents/{document_id}/explain")
+        response = client.post(
+            f"/api/v1/documents/{document_id}/explain",
+            json={"language": "en"},
+        )
 
-        assert response.status_code == status.HTTP_501_NOT_IMPLEMENTED
+        assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert "Phase 4" in data["message"]
+        assert data["summary"] == "Cached summary"
+        assert data["cached"] is True
+
+    def test_translates_summary(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        """Non-English explanation uses the explanation service."""
+        document_id = uuid4()
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data={
+                "id": str(document_id),
+                "patient_id": str(patient_id),
+                "uploaded_by": str(patient_id),
+                "uploaded_by_role": "patient",
+                "file_name": "lab-results.pdf",
+                "file_path": f"{patient_id}/lab-results.pdf",
+                "file_url": "https://storage.example.com/signed-url",
+                "file_size_bytes": 1024000,
+                "mime_type": "application/pdf",
+                "document_type": "lab_report",
+                "source_clinic": None,
+                "parsed": True,
+                "ai_summary": "English summary",
+                "parse_status": "completed",
+                "parse_error": None,
+                "parse_attempts": 1,
+                "visibility": "all_providers",
+                "created_at": "2025-01-15T00:00:00Z",
+            }
+        )
+
+        with patch(
+            "app.routers.documents.ExplanationService.explain",
+            new=AsyncMock(return_value="Resumen en español"),
+        ) as mock_explain:
+            response = client.post(
+                f"/api/v1/documents/{document_id}/explain",
+                json={"language": "es"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["summary"] == "Resumen en español"
+        assert data["cached"] is False
+        mock_explain.assert_awaited_once()
 
 
 class TestAuthorization:

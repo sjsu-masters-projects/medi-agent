@@ -8,6 +8,8 @@ interface DocumentCardProps {
     provider: string;
     icon: string;
     hasAiSummary: boolean;
+    statusLabel?: string;
+    statusVariant?: "success" | "warning" | "danger" | "info" | "neutral";
     onClick: () => void;
 }
 
@@ -18,6 +20,8 @@ export function DocumentCard({
     name,
     onClick,
     provider,
+    statusLabel,
+    statusVariant = "neutral",
     type,
 }: DocumentCardProps) {
     return (
@@ -33,7 +37,8 @@ export function DocumentCard({
                             <p className="mt-1 text-xs text-slate-400">{provider}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            {hasAiSummary ? <Badge variant="info">AI Summary</Badge> : null}
+                            {statusLabel ? <Badge variant={statusVariant}>{statusLabel}</Badge> : null}
+                            {!statusLabel && hasAiSummary ? <Badge variant="info">AI Summary</Badge> : null}
                             <span className="text-sm text-slate-300">→</span>
                         </div>
                     </div>

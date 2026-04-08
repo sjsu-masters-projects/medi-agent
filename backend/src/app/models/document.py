@@ -27,6 +27,9 @@ class DocumentRead(BaseModel):
     file_size_bytes: int
     parsed: bool = False
     ai_summary: str | None = None
+    parse_status: str = "none"
+    parse_error: str | None = None
+    parse_attempts: int = 0
     source_clinic: str | None = None
     visibility: DocumentVisibility = DocumentVisibility.ALL_PROVIDERS
     created_at: str

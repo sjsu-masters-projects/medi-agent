@@ -177,6 +177,9 @@ export interface Document {
     fileSizeBytes: number;
     parsed: boolean;
     aiSummary?: string;
+    parseStatus: "none" | "pending" | "processing" | "completed" | "failed";
+    parseError?: string;
+    parseAttempts: number;
     sourceClinic?: string;
     visibility: DocumentVisibility;
     createdAt: string;
