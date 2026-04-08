@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from app.services.rxnorm_service import normalize_drug_name
 
@@ -131,6 +131,6 @@ async def normalize_all(medications: list[dict[str, Any]]) -> list[dict[str, Any
             }
             normalized.append(fallback)
             continue
-        normalized.append(result)
+        normalized.append(cast(dict[str, Any], result))
 
     return normalized

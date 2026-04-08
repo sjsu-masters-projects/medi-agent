@@ -8,7 +8,7 @@ our own tables on success.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from fhir.resources.allergyintolerance import AllergyIntolerance
@@ -48,6 +48,11 @@ def _condition_status_payload(clinical_status: str) -> dict[str, Any]:
     }
 
 
+def _validate_resource(resource_cls: Any, payload: dict[str, Any]) -> None:
+    """Run FHIR model validation through a dynamic boundary for mypy."""
+    cast(Any, resource_cls)(**payload)
+
+
 def build_medication_request(
     med: dict[str, Any],
     patient_id: UUID,
@@ -63,7 +68,7 @@ def build_medication_request(
     instructions = _string(med.get("instructions")) or None
     route = _normalize_route(_string(med.get("route")) or "oral")
 
-    payload = {
+    payload: dict[str, Any] = {
         "status": "active",
         "intent": "order",
         "subject": {"reference": f"Patient/{patient_id}"},
@@ -74,7 +79,7 @@ def build_medication_request(
     }
 
     try:
-        MedicationRequest(**payload)
+        _validate_resource(MedicationRequest, payload)
     except _FHIR_VALIDATION_ERRORS as exc:
         return None, f"Medication '{name}': {exc.errors()[0]['msg']}"
 
@@ -99,7 +104,7 @@ def build_condition(
 
     clinical_status = _string(condition.get("clinical_status")) or "active"
     onset_date = _string(condition.get("onset_date")) or None
-    payload = {
+    payload: dict[str, Any] = {
         "subject": {"reference": f"Patient/{patient_id}"},
         "code": {"text": name},
         "clinicalStatus": _condition_status_payload(clinical_status),
@@ -108,7 +113,7 @@ def build_condition(
         payload["onsetString"] = onset_date
 
     try:
-        Condition(**payload)
+        _validate_resource(Condition, payload)
     except _FHIR_VALIDATION_ERRORS as exc:
         return None, f"Condition '{name}': {exc.errors()[0]['msg']}"
 
@@ -142,7 +147,7 @@ def build_allergy_intolerance(
         payload["reaction"] = [{"manifestation": [{"concept": {"text": reaction}}]}]
 
     try:
-        AllergyIntolerance(**payload)
+        _validate_resource(AllergyIntolerance, payload)
     except _FHIR_VALIDATION_ERRORS as exc:
         return None, f"Allergy '{substance}': {exc.errors()[0]['msg']}"
 

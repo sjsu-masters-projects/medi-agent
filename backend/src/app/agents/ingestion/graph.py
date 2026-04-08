@@ -251,8 +251,9 @@ async def normalize_medications(state: IngestionState) -> IngestionState:
 
         state["normalized_medications"] = await normalize_all(medications)
         state["error"] = None
+        normalized_medications = state["normalized_medications"] or []
 
-        logger.info(f"Normalized {len(state['normalized_medications'])} medications")
+        logger.info(f"Normalized {len(normalized_medications)} medications")
         return state
 
     except Exception as e:
