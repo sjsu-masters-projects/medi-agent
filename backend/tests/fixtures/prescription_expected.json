@@ -1,0 +1,53 @@
+{
+  "medications": [
+    {
+      "name": "Ozempic (Semaglutide)",
+      "dosage": "0.5mg",
+      "frequency": "once weekly",
+      "instructions": "Inject 0.5mg subcutaneously once weekly on the same day each week. Start at 0.25mg for first 4 weeks, then increase to 0.5mg",
+      "route": "subcutaneous"
+    },
+    {
+      "name": "Metformin ER",
+      "dosage": "1000mg",
+      "frequency": "once daily",
+      "instructions": "Take one tablet by mouth once daily with evening meal",
+      "route": "oral"
+    },
+    {
+      "name": "Jardiance (Empagliflozin)",
+      "dosage": "10mg",
+      "frequency": "once daily",
+      "instructions": "Take one tablet by mouth once daily in the morning",
+      "route": "oral"
+    },
+    {
+      "name": "Lantus (Insulin Glargine)",
+      "dosage": "20 units",
+      "frequency": "once daily",
+      "instructions": "Inject 20 units subcutaneously at bedtime, adjust per blood sugar log",
+      "route": "subcutaneous"
+    }
+  ],
+  "conditions": [],
+  "allergies": [],
+  "follow_up_instructions": [
+    {
+      "description": "Monitor blood glucose before meals and at bedtime for the first 2 weeks",
+      "timing": "2 weeks"
+    },
+    {
+      "description": "Report any signs of hypoglycemia (shakiness, sweating, confusion) immediately",
+      "timing": "immediately"
+    },
+    {
+      "description": "Schedule follow-up appointment in 6 weeks to review blood sugar logs",
+      "timing": "6 weeks",
+      "provider": "Dr. Robert Kim"
+    },
+    {
+      "description": "Continue current diet and exercise plan",
+      "timing": "daily"
+    }
+  ]
+}

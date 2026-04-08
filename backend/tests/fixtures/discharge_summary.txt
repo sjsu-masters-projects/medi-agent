@@ -1,0 +1,40 @@
+DISCHARGE SUMMARY
+
+Patient: Maria Garcia  DOB: 03/15/1958  MRN: 4827193
+Admission Date: 01/10/2026  Discharge Date: 01/15/2026
+Attending Physician: Dr. Anita Patel, MD — Cardiology
+Facility: Valley Medical Center
+
+ADMITTING DIAGNOSIS:
+Acute decompensated heart failure (CHF exacerbation)
+
+HOSPITAL COURSE:
+Patient presented to the ED with worsening dyspnea, bilateral lower extremity edema, and weight gain of 8 lbs over 5 days. BNP was elevated at 1,450 pg/mL. Chest X-ray showed bilateral pleural effusions and pulmonary congestion. Patient was admitted to the telemetry unit for IV diuresis with Furosemide 40mg IV q12h. Over the course of 5 days, patient diuresed approximately 6L with improvement in symptoms. Transitioned to oral medications on day 4. Echocardiogram showed EF of 35%, unchanged from prior.
+
+DISCHARGE DIAGNOSES:
+1. Congestive heart failure, systolic (HFrEF), EF 35%
+2. Hypertension, controlled
+3. Type 2 Diabetes Mellitus
+4. Hyperlipidemia
+
+ALLERGIES:
+1. Penicillin — rash, hives (severe)
+2. Sulfa drugs — shortness of breath (moderate)
+
+DISCHARGE MEDICATIONS:
+1. Metoprolol Succinate 50mg — take one tablet by mouth twice daily
+2. Lisinopril 10mg — take one tablet by mouth once daily
+3. Furosemide 40mg — take one tablet by mouth once daily in the morning
+4. Metformin 500mg — take one tablet by mouth twice daily with meals
+5. Atorvastatin 40mg — take one tablet by mouth at bedtime
+
+FOLLOW-UP INSTRUCTIONS:
+1. Follow up with Dr. Patel (Cardiology) in 2 weeks — call 555-0142 to schedule
+2. Follow up with Dr. Chen (Primary Care) in 1 week
+3. Daily weight monitoring — weigh yourself every morning before breakfast, call if weight increases more than 3 lbs in 2 days
+4. Low-sodium diet — limit to less than 2,000mg sodium per day
+5. Fluid restriction — no more than 2 liters of fluid per day
+6. Cardiac rehabilitation referral — enrollment paperwork included
+
+Dictated by: Dr. Anita Patel, MD
+Electronically signed: 01/15/2026 14:32

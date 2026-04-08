@@ -1,0 +1,48 @@
+DIAGNOSTIC RADIOLOGY REPORT
+
+Patient: David Martinez   DOB: 09/14/1962   MRN: 3948271
+Ordering Physician: Dr. Anita Patel, MD — Cardiology
+Procedure Date: 01/22/2026
+Exam: CT Angiography of the Chest with Contrast
+
+CLINICAL INDICATION:
+64-year-old male with history of coronary artery disease, status post CABG (2022), presenting with recurrent chest pain on exertion. Evaluate for graft patency and progression of native coronary artery disease.
+
+TECHNIQUE:
+CT angiography was performed on a 256-slice scanner with retrospective ECG gating. 85mL of Omnipaque 350 was administered IV at 5mL/sec. Images were reconstructed at 0.75mm slice thickness.
+
+FINDINGS:
+
+Heart:
+- Heart size is normal. Left ventricular ejection fraction estimated at 50%.
+- No pericardial effusion.
+
+Coronary Arteries:
+- Left main: Patent, no significant stenosis.
+- LAD: Moderate stenosis (50-60%) in the mid-segment. Calcified plaque noted.
+- LIMA-to-LAD graft: Patent with good distal runoff.
+- LCx: Mild stenosis (30%) in the proximal segment.
+- RCA: Severe stenosis (80-90%) in the mid-segment with mixed plaque.
+- SVG-to-RCA graft: Patent but with moderate stenosis (40-50%) at the distal anastomosis.
+
+Lungs:
+- Small bilateral pleural effusions, left greater than right.
+- No pulmonary embolism.
+- Mild bibasilar atelectasis.
+
+IMPRESSION:
+1. Severe stenosis of the mid-RCA (80-90%) with mixed plaque — recommend cardiology consultation for possible intervention
+2. Moderate stenosis of the mid-LAD (50-60%) — stable compared to prior
+3. SVG-to-RCA graft with moderate distal anastomotic stenosis (40-50%) — correlate clinically
+4. Small bilateral pleural effusions, likely related to underlying cardiac status
+5. LIMA-to-LAD graft patent — no intervention needed
+
+RECOMMENDATIONS:
+- Cardiology follow-up within 1 week to discuss RCA intervention options
+- Continue dual antiplatelet therapy (Aspirin 81mg + Clopidogrel 75mg)
+- Continue Atorvastatin 80mg daily
+- Repeat echocardiogram in 3 months to assess LV function
+- Consider cardiac catheterization for definitive evaluation of RCA lesion
+
+Interpreting Radiologist: Dr. Michael Torres, MD — Cardiovascular Radiology
+Electronically signed: 01/22/2026 16:45

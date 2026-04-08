@@ -1,46 +1,203 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DocumentCard } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
-import { Button, EmptyState, Modal, ProgressBar } from "@/components/ui";
+import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
 import { api } from "@/services/api";
+import { uploadDocumentToStorage } from "@/services/storage";
 import type { RootState } from "@/store/store";
 import { DocumentType, type Document } from "@/types";
 import { useSelector } from "react-redux";
 
 type PortalDocument = Document & { icon: string; provider: string };
 
-const initialDocuments: PortalDocument[] = [
-    {
-        aiSummary: "Your blood pressure is stable. LDL is slightly elevated, so keep taking your medication as directed.",
-        createdAt: "2026-03-15T00:00:00Z",
-        documentType: DocumentType.LAB_REPORT,
-        fileName: "Blood Panel Results",
-        fileSizeBytes: 120000,
-        fileUrl: "#",
-        icon: "🩸",
-        id: "doc-1",
-        mimeType: "application/pdf",
-        parsed: true,
-        patientId: "demo-patient",
-        provider: "Dr. Smith",
-        uploadedBy: "demo-patient",
-        uploadedByRole: "patient",
-        visibility: "all_providers",
-    },
-];
+interface DocumentApiRecord {
+    id: string;
+    patient_id: string;
+    uploaded_by: string;
+    uploaded_by_role: "patient" | "clinician";
+    document_type: DocumentType;
+    file_name: string;
+    file_url: string;
+    mime_type: string;
+    file_size_bytes: number;
+    parsed: boolean;
+    ai_summary?: string | null;
+    parse_status?: "none" | "pending" | "processing" | "completed" | "failed";
+    parse_error?: string | null;
+    parse_attempts?: number;
+    source_clinic?: string | null;
+    visibility: "all_providers" | "specific_provider";
+    created_at: string;
+}
+
+function getDocumentIcon(documentType: DocumentType) {
+    switch (documentType) {
+        case DocumentType.LAB_REPORT:
+            return "🩸";
+        case DocumentType.PRESCRIPTION:
+            return "💊";
+        case DocumentType.DISCHARGE_SUMMARY:
+            return "🏥";
+        case DocumentType.DIAGNOSTIC_REPORT:
+            return "🧪";
+        default:
+            return "📄";
+    }
+}
+
+function mapDocument(record: DocumentApiRecord): PortalDocument {
+    return {
+        aiSummary: record.ai_summary ?? undefined,
+        createdAt: record.created_at,
+        documentType: record.document_type,
+        fileName: record.file_name,
+        fileSizeBytes: record.file_size_bytes,
+        fileUrl: record.file_url,
+        icon: getDocumentIcon(record.document_type),
+        id: record.id,
+        mimeType: record.mime_type,
+        parseAttempts: record.parse_attempts ?? 0,
+        parseError: record.parse_error ?? undefined,
+        parseStatus: record.parse_status ?? (record.parsed ? "completed" : "none"),
+        parsed: record.parsed,
+        patientId: record.patient_id,
+        provider: record.source_clinic ?? "Care team",
+        sourceClinic: record.source_clinic ?? undefined,
+        uploadedBy: record.uploaded_by,
+        uploadedByRole: record.uploaded_by_role,
+        visibility: record.visibility,
+    };
+}
+
+function getDocumentStatus(document: PortalDocument) {
+    if (document.parseStatus === "processing" || document.parseStatus === "pending") {
+        return { label: "Processing...", variant: "warning" as const };
+    }
+    if (document.parseStatus === "failed") {
+        return { label: "Parse failed", variant: "danger" as const };
+    }
+    if (document.parsed && document.aiSummary) {
+        return { label: "AI Summary", variant: "info" as const };
+    }
+    return null;
+}
+
+function inferDocumentType(file: File): DocumentType {
+    const normalizedName = file.name.toLowerCase();
+    const normalizedType = file.type.toLowerCase();
+
+    if (normalizedType.includes("pdf") || normalizedName.endsWith(".pdf")) {
+        return DocumentType.LAB_REPORT;
+    }
+    if (normalizedType.startsWith("image/")) {
+        return DocumentType.DIAGNOSTIC_REPORT;
+    }
+    if (normalizedType === "text/csv" || normalizedName.endsWith(".csv")) {
+        return DocumentType.LAB_REPORT;
+    }
+    if (normalizedType === "text/plain" || normalizedName.endsWith(".txt")) {
+        return DocumentType.DISCHARGE_SUMMARY;
+    }
+    return DocumentType.OTHER;
+}
 
 export default function RecordsPage() {
-    const [documents, setDocuments] = useState(initialDocuments);
+    const [documents, setDocuments] = useState<PortalDocument[]>([]);
     const [selectedDocument, setSelectedDocument] = useState<PortalDocument | null>(null);
     const [explanationLang, setExplanationLang] = useState<"en" | "es">("en");
     const [explanationText, setExplanationText] = useState<string | null>(null);
     const [explanationLoading, setExplanationLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [pageError, setPageError] = useState<string | null>(null);
+    const [parseError, setParseError] = useState<string | null>(null);
+    const [parsingDocIds, setParsingDocIds] = useState<Set<string>>(new Set());
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const token = useSelector((state: RootState) => state.auth.token);
+    const { token, user } = useSelector((state: RootState) => state.auth);
+
+    const loadDocuments = useCallback(async () => {
+        if (!token) {
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const result = await api.get<DocumentApiRecord[]>("/api/v1/documents/", {
+                token,
+            });
+            setDocuments(result.map(mapDocument));
+            setPageError(null);
+        } catch (error) {
+            setPageError((error as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        if (!token) {
+            return;
+        }
+
+        void loadDocuments();
+    }, [loadDocuments, token]);
+
+    async function pollForParsedStatus(docId: string) {
+        setParsingDocIds((current) => new Set(current).add(docId));
+
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 3000));
+
+            try {
+                const record = await api.get<DocumentApiRecord>(
+                    `/api/v1/documents/${docId}`,
+                    { token: token ?? undefined },
+                );
+                const nextDocument = mapDocument(record);
+
+                setDocuments((current) =>
+                    current.map((document) =>
+                        document.id === docId ? nextDocument : document,
+                    ),
+                );
+
+                if (nextDocument.parsed || nextDocument.parseStatus === "completed") {
+                    setParsingDocIds((current) => {
+                        const next = new Set(current);
+                        next.delete(docId);
+                        return next;
+                    });
+                    return;
+                }
+
+                if (nextDocument.parseStatus === "failed") {
+                    setParseError(
+                        nextDocument.parseError
+                            ? `Failed to process document: ${nextDocument.parseError}`
+                            : "Failed to process document.",
+                    );
+                    setParsingDocIds((current) => {
+                        const next = new Set(current);
+                        next.delete(docId);
+                        return next;
+                    });
+                    return;
+                }
+            } catch {
+                // Keep polling until attempts are exhausted.
+            }
+        }
+
+        setParsingDocIds((current) => {
+            const next = new Set(current);
+            next.delete(docId);
+            return next;
+        });
+        setParseError("Timed out while waiting for document processing to finish.");
+    }
 
     async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
@@ -48,6 +205,13 @@ export default function RecordsPage() {
             return;
         }
 
+        if (!token || !user) {
+            setPageError("Please sign in again before uploading a document.");
+            return;
+        }
+
+        setPageError(null);
+        setParseError(null);
         setUploading(true);
         for (const value of [20, 45, 70, 100]) {
             setUploadProgress(value);
@@ -55,47 +219,41 @@ export default function RecordsPage() {
         }
 
         try {
-            await api.post(
+            const filePath = await uploadDocumentToStorage({
+                file,
+                patientId: user.id,
+                token,
+            });
+            const created = await api.post<DocumentApiRecord>(
                 "/api/v1/documents/",
                 {
-                    document_type: "other",
+                    document_type: inferDocumentType(file),
                     file_name: file.name,
-                    file_path: `uploads/${file.name}`,
+                    file_path: filePath,
                     file_size_bytes: file.size,
                     mime_type: file.type || "application/octet-stream",
                 },
-                { token: token ?? undefined },
+                { token },
             );
-        } catch {
-            // Allow local-only demo uploads while backend/storage wiring is incomplete.
+            const nextDocument = mapDocument(created);
+            setDocuments((current) => [nextDocument, ...current]);
+            void pollForParsedStatus(nextDocument.id);
+        } catch (error) {
+            setPageError((error as Error).message || "Upload failed. Please try again.");
+        } finally {
+            setUploading(false);
+            setUploadProgress(0);
+            event.target.value = "";
         }
-
-        setDocuments((current) => [
-            {
-                createdAt: new Date().toISOString(),
-                documentType: DocumentType.OTHER,
-                fileName: file.name,
-                fileSizeBytes: file.size,
-                fileUrl: "#",
-                icon: "📄",
-                id: `${Date.now()}`,
-                mimeType: file.type || "application/octet-stream",
-                parsed: false,
-                patientId: "demo-patient",
-                provider: "Recently uploaded",
-                uploadedBy: "demo-patient",
-                uploadedByRole: "patient",
-                visibility: "all_providers",
-            },
-            ...current,
-        ]);
-        setUploading(false);
-        setUploadProgress(0);
     }
 
     async function handleLanguageChange(lang: "en" | "es") {
         setExplanationLang(lang);
         if (!selectedDocument) {
+            return;
+        }
+
+        if (selectedDocument.parseStatus !== "completed") {
             return;
         }
 
@@ -119,6 +277,13 @@ export default function RecordsPage() {
         }
     }
 
+    const processingCount = documents.filter(
+        (document) =>
+            parsingDocIds.has(document.id)
+            || document.parseStatus === "pending"
+            || document.parseStatus === "processing",
+    ).length;
+
     return (
         <div className="space-y-4 bg-gray-50 pb-8">
             <PageHeader
@@ -135,19 +300,63 @@ export default function RecordsPage() {
                         <p className="text-xs text-slate-500">Secure records</p>
                     </div>
                     <div className="rounded-2xl bg-sky-50 px-4 py-3 shadow-sm ring-1 ring-sky-100">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">AI Ready</p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">{documents.filter((document) => document.aiSummary).length}</p>
-                        <p className="text-xs text-slate-500">Summaries available</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                            {processingCount > 0 ? "Parsing" : "AI Ready"}
+                        </p>
+                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                            {processingCount > 0
+                                ? processingCount
+                                : documents.filter((document) => document.parsed && document.aiSummary).length}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                            {processingCount > 0 ? "Documents in progress" : "Summaries available"}
+                        </p>
                     </div>
                 </div>
                 {uploading ? <ProgressBar value={uploadProgress} /> : null}
-                {documents.length === 0 ? (
+                {pageError && documents.length === 0 ? (
+                    <ErrorState
+                        description={pageError}
+                        onRetry={() => void loadDocuments()}
+                        title="Could not load records"
+                    />
+                ) : null}
+                {pageError && documents.length > 0 ? (
+                    <ErrorState
+                        description={pageError}
+                        onRetry={() => {
+                            setPageError(null);
+                            void loadDocuments();
+                        }}
+                        title="Action failed"
+                    />
+                ) : null}
+                {parseError ? (
+                    <ErrorState
+                        description={parseError}
+                        onRetry={() => {
+                            setParseError(null);
+                            fileInputRef.current?.click();
+                        }}
+                        title="Document processing failed"
+                    />
+                ) : null}
+                {loading ? (
+                    <p className="text-sm text-slate-500">Loading documents...</p>
+                ) : null}
+                {!loading && !pageError && documents.length === 0 ? (
                     <EmptyState description="Upload PDFs or images from your clinic visits." icon="📁" title="No records yet" />
                 ) : null}
-                {documents.map((document) => (
+                {documents.map((document) => {
+                    const displayDocument = parsingDocIds.has(document.id)
+                        ? { ...document, parseStatus: "processing" as const }
+                        : document;
+                    const status = getDocumentStatus(displayDocument);
+
+                    return (
                     <DocumentCard
                         date={new Date(document.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        hasAiSummary={Boolean(document.aiSummary)}
+                        hasAiSummary={document.parsed && Boolean(document.aiSummary)}
                         icon={document.icon}
                         id={document.id}
                         key={document.id}
@@ -156,12 +365,31 @@ export default function RecordsPage() {
                             setSelectedDocument(document);
                             setExplanationLang("en");
                             setExplanationLoading(false);
+                            if (document.parseStatus === "failed") {
+                                setExplanationText(
+                                    document.parseError ?? "This document could not be processed.",
+                                );
+                                return;
+                            }
+                            if (
+                                document.parseStatus === "pending"
+                                || document.parseStatus === "processing"
+                                || parsingDocIds.has(document.id)
+                            ) {
+                                setExplanationText(
+                                    "Processing this document. AI summary will appear when parsing completes.",
+                                );
+                                return;
+                            }
                             setExplanationText(document.aiSummary ?? null);
                         }}
                         provider={document.provider}
+                        statusLabel={status?.label}
+                        statusVariant={status?.variant}
                         type={document.documentType.replaceAll("_", " ")}
                     />
-                ))}
+                    );
+                })}
             </div>
             <Modal onClose={() => setSelectedDocument(null)} open={Boolean(selectedDocument)} title={selectedDocument?.fileName ?? "Record details"}>
                 <div className="space-y-4">

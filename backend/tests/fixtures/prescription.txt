@@ -1,0 +1,45 @@
+PRESCRIPTION
+
+Prescriber: Dr. Robert Kim, MD — Endocrinology
+NPI: 1234567890
+DEA: BK1234567
+Practice: Bay Area Endocrine Associates
+Address: 1200 Market Street, Suite 400, San Jose, CA 95112
+Phone: (408) 555-0198
+
+Patient: Sarah Williams   DOB: 11/03/1985   MRN: 7214856
+Date: 01/20/2026
+
+Rx 1:
+  Medication: Ozempic (Semaglutide) 0.5mg/dose
+  Directions: Inject 0.5mg subcutaneously once weekly on the same day each week
+  Quantity: 1 pen (4 doses)
+  Refills: 2
+  Note: Start at 0.25mg for first 4 weeks, then increase to 0.5mg
+
+Rx 2:
+  Medication: Metformin ER 1000mg
+  Directions: Take one tablet by mouth once daily with evening meal
+  Quantity: 30 tablets
+  Refills: 5
+
+Rx 3:
+  Medication: Jardiance (Empagliflozin) 10mg
+  Directions: Take one tablet by mouth once daily in the morning
+  Quantity: 30 tablets
+  Refills: 5
+
+Rx 4:
+  Medication: Lantus (Insulin Glargine) 100 units/mL
+  Directions: Inject 20 units subcutaneously at bedtime, adjust per blood sugar log
+  Quantity: 1 vial (10mL)
+  Refills: 3
+
+Special Instructions:
+- Monitor blood glucose before meals and at bedtime for the first 2 weeks
+- Report any signs of hypoglycemia (shakiness, sweating, confusion) immediately
+- Schedule follow-up appointment in 6 weeks to review blood sugar logs
+- Continue current diet and exercise plan
+
+Prescriber Signature: Dr. Robert Kim, MD
+Date: 01/20/2026

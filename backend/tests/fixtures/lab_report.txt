@@ -1,0 +1,43 @@
+LABORATORY REPORT
+
+Patient: James Thompson   DOB: 07/22/1970   MRN: 5931847
+Ordering Provider: Dr. Lisa Chen, MD — Internal Medicine
+Collection Date: 01/18/2026 07:15   Report Date: 01/18/2026 14:00
+Specimen: Venous Blood
+
+COMPLETE BLOOD COUNT (CBC):
+  WBC:          11.2 x10^3/uL   [H]   (Ref: 4.5-11.0)
+  RBC:          4.85 x10^6/uL         (Ref: 4.50-5.50)
+  Hemoglobin:   14.2 g/dL             (Ref: 13.5-17.5)
+  Hematocrit:   42.1 %                (Ref: 38.0-50.0)
+  Platelets:    245 x10^3/uL          (Ref: 150-400)
+
+COMPREHENSIVE METABOLIC PANEL (CMP):
+  Glucose:      187 mg/dL   [H]   (Ref: 70-100)
+  BUN:          28 mg/dL    [H]   (Ref: 7-20)
+  Creatinine:   1.4 mg/dL   [H]   (Ref: 0.7-1.3)
+  eGFR:         55 mL/min         (Ref: >60)
+  Sodium:       139 mEq/L         (Ref: 136-145)
+  Potassium:    4.8 mEq/L         (Ref: 3.5-5.0)
+  Calcium:      9.2 mg/dL         (Ref: 8.5-10.5)
+  AST:          22 U/L             (Ref: 10-40)
+  ALT:          31 U/L             (Ref: 7-56)
+
+HEMOGLOBIN A1C:
+  HbA1c:        8.2 %   [H]   (Ref: <5.7%)
+
+LIPID PANEL:
+  Total Cholesterol:  242 mg/dL   [H]   (Ref: <200)
+  LDL Cholesterol:    158 mg/dL   [H]   (Ref: <100)
+  HDL Cholesterol:    38 mg/dL    [L]   (Ref: >40)
+  Triglycerides:      230 mg/dL   [H]   (Ref: <150)
+
+INTERPRETATION:
+- Elevated WBC may suggest mild infection or stress response — recommend clinical correlation
+- Fasting glucose significantly elevated, HbA1c 8.2% indicates poor glycemic control
+- Creatinine mildly elevated with eGFR 55, consistent with early Stage 3a CKD
+- Lipid panel significantly abnormal — consider statin therapy intensification
+- Recommend follow-up labs in 3 months
+
+Reported by: Quest Diagnostics
+Reviewed by: Dr. Lisa Chen, MD — 01/18/2026
