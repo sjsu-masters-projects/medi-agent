@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Syncfusion PDF viewer WASM/JS library (vendored, not our code)
+    "public/assets/ej2-pdfviewer-lib/**",
   ]),
 ]);
 

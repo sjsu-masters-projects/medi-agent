@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "_buildNote": "Turbopack panics on CSS worker port binding (Next 16.1.x) — revisit on Next 16.2+",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"
