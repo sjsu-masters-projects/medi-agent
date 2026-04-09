@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { HiArrowUp, HiMicrophone, HiSparkles } from "react-icons/hi2";
 import { ChatBubble } from "@/components/features";
 import { Button, Input } from "@/components/ui";
 import { ChatRole, type ChatMessage } from "@/types";
@@ -66,7 +67,7 @@ export default function ChatPage() {
                 <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm text-sky-200">
-                            ✦
+                            <HiSparkles className="h-5 w-5" />
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-white">Care Companion</h1>
@@ -120,7 +121,7 @@ export default function ChatPage() {
                         className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-300"
                         type="button"
                     >
-                        🎙
+                        <HiMicrophone className="h-5 w-5" />
                     </button>
                     <div className="flex-1">
                         <Input
@@ -135,7 +136,7 @@ export default function ChatPage() {
                         disabled={!input.trim()}
                         type="submit"
                     >
-                        ↑
+                        <HiArrowUp className="h-5 w-5" />
                     </button>
                 </div>
             </form>

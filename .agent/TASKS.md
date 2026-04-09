@@ -180,7 +180,7 @@
 - [x] Make all components responsive (mobile-first for patient, desktop-first for clinician)
 
 ### 3.2 Patient Portal — Auth
-- [x] Sign-up page (magic link flow)
+- [x] Sign-up page (email/password flow via Supabase Auth)
 - [x] Onboarding flow (name, DOB, language, allergies)
 - [x] Join clinic (enter code or use invite link)
 - [x] Auth state management in Redux

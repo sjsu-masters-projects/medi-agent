@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { HiOutlineBeaker, HiOutlineClipboardDocumentList, HiOutlineDocumentText, HiOutlineFolder } from "react-icons/hi2";
 import { DocumentCard } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
@@ -10,7 +12,7 @@ import type { RootState } from "@/store/store";
 import { DocumentType, type Document } from "@/types";
 import { useSelector } from "react-redux";
 
-type PortalDocument = Document & { icon: string; provider: string };
+type PortalDocument = Document & { icon: ReactNode; provider: string };
 
 interface DocumentApiRecord {
     id: string;
@@ -35,15 +37,15 @@ interface DocumentApiRecord {
 function getDocumentIcon(documentType: DocumentType) {
     switch (documentType) {
         case DocumentType.LAB_REPORT:
-            return "🩸";
+            return <HiOutlineBeaker />;
         case DocumentType.PRESCRIPTION:
-            return "💊";
+            return <HiOutlineClipboardDocumentList />;
         case DocumentType.DISCHARGE_SUMMARY:
-            return "🏥";
+            return <HiOutlineDocumentText />;
         case DocumentType.DIAGNOSTIC_REPORT:
-            return "🧪";
+            return <HiOutlineBeaker />;
         default:
-            return "📄";
+            return <HiOutlineDocumentText />;
     }
 }
 
@@ -116,17 +118,17 @@ export default function RecordsPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const { token, user } = useSelector((state: RootState) => state.auth);
+    const { accessToken, user } = useSelector((state: RootState) => state.auth);
 
     const loadDocuments = useCallback(async () => {
-        if (!token) {
+        if (!accessToken) {
             return;
         }
 
         setLoading(true);
         try {
             const result = await api.get<DocumentApiRecord[]>("/api/v1/documents/", {
-                token,
+                token: accessToken,
             });
             setDocuments(result.map(mapDocument));
             setPageError(null);
@@ -135,15 +137,15 @@ export default function RecordsPage() {
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, [accessToken]);
 
     useEffect(() => {
-        if (!token) {
+        if (!accessToken) {
             return;
         }
 
         void loadDocuments();
-    }, [loadDocuments, token]);
+    }, [accessToken, loadDocuments]);
 
     async function pollForParsedStatus(docId: string) {
         setParsingDocIds((current) => new Set(current).add(docId));
@@ -154,7 +156,7 @@ export default function RecordsPage() {
             try {
                 const record = await api.get<DocumentApiRecord>(
                     `/api/v1/documents/${docId}`,
-                    { token: token ?? undefined },
+                    { token: accessToken ?? undefined },
                 );
                 const nextDocument = mapDocument(record);
 
@@ -205,7 +207,7 @@ export default function RecordsPage() {
             return;
         }
 
-        if (!token || !user) {
+        if (!accessToken || !user) {
             setPageError("Please sign in again before uploading a document.");
             return;
         }
@@ -222,7 +224,7 @@ export default function RecordsPage() {
             const filePath = await uploadDocumentToStorage({
                 file,
                 patientId: user.id,
-                token,
+                token: accessToken,
             });
             const created = await api.post<DocumentApiRecord>(
                 "/api/v1/documents/",
@@ -233,7 +235,7 @@ export default function RecordsPage() {
                     file_size_bytes: file.size,
                     mime_type: file.type || "application/octet-stream",
                 },
-                { token },
+                { token: accessToken },
             );
             const nextDocument = mapDocument(created);
             setDocuments((current) => [nextDocument, ...current]);
@@ -267,7 +269,7 @@ export default function RecordsPage() {
             const result = await api.post<{ summary: string }>(
                 `/api/v1/documents/${selectedDocument.id}/explain`,
                 { language: lang },
-                { token: token ?? undefined },
+                { token: accessToken ?? undefined },
             );
             setExplanationText(result.summary);
         } catch {
@@ -345,7 +347,7 @@ export default function RecordsPage() {
                     <p className="text-sm text-slate-500">Loading documents...</p>
                 ) : null}
                 {!loading && !pageError && documents.length === 0 ? (
-                    <EmptyState description="Upload PDFs or images from your clinic visits." icon="📁" title="No records yet" />
+                    <EmptyState description="Upload PDFs or images from your clinic visits." icon={<HiOutlineFolder />} title="No records yet" />
                 ) : null}
                 {documents.map((document) => {
                     const displayDocument = parsingDocIds.has(document.id)

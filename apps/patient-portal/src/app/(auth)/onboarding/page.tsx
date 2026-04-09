@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
@@ -10,33 +10,31 @@ import type { AppDispatch, RootState } from "@/store/store";
 
 export default function OnboardingPage() {
     const router = useRouter();
-    const token = useSelector((state: RootState) => state.auth.token);
+    const accessToken = useSelector((state: RootState) => state.auth.accessToken);
     const profileDraft = useSelector((state: RootState) => state.onboarding.profileDraft);
     const dispatch = useDispatch<AppDispatch>();
+    const [error, setError] = useState("");
+    const [submitting, setSubmitting] = useState(false);
     const [step, setStep] = useState(1);
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState(() => ({
         allergies: "",
         conditions: "",
-        dateOfBirth: "",
-        firstName: "",
+        dateOfBirth: profileDraft?.dateOfBirth ?? "",
+        firstName: profileDraft?.firstName ?? "",
         gender: "",
         inviteCode: "",
         language: "en",
-        lastName: "",
-    });
-
-    useEffect(() => {
-        if (!profileDraft) {
-            return;
-        }
-        setFormData((current) => ({ ...current, ...profileDraft }));
-    }, [profileDraft]);
+        lastName: profileDraft?.lastName ?? "",
+    }));
 
     async function handleFinish() {
-        if (!token) {
+        if (!accessToken) {
             router.replace("/login");
             return;
         }
+
+        setSubmitting(true);
+        setError("");
 
         try {
             await api.put(
@@ -47,26 +45,37 @@ export default function OnboardingPage() {
                     last_name: formData.lastName,
                     preferred_language: formData.language,
                 },
-                { token },
+                { token: accessToken },
             );
 
             if (formData.inviteCode.trim()) {
-                await api.post(
+                await api.post<{ clinician_first_name: string }>(
                     `/api/v1/patients/me/care-team/join?invite_code=${encodeURIComponent(formData.inviteCode.trim())}`,
                     undefined,
-                    { token },
+                    { token: accessToken },
                 );
             }
-        } catch {
-            // Keep onboarding resilient even while backend support for all fields is still evolving.
-        } finally {
-            dispatch(clearOnboardingProfile());
-            router.replace("/today");
+        } catch (submissionError) {
+            setError((submissionError as Error).message);
+            setSubmitting(false);
+            return;
+        }
+
+        dispatch(clearOnboardingProfile());
+        router.replace("/today");
+    }
+    function updateField(field: keyof typeof formData, value: string) {
+        setFormData((current) => ({ ...current, [field]: value }));
+        if (error) {
+            setError("");
         }
     }
 
-    function updateField(field: keyof typeof formData, value: string) {
-        setFormData((current) => ({ ...current, [field]: value }));
+    function handleContinueAfterInviteError() {
+        updateField("inviteCode", "");
+        setSubmitting(false);
+        dispatch(clearOnboardingProfile());
+        router.replace("/today");
     }
 
     return (
@@ -86,7 +95,7 @@ export default function OnboardingPage() {
             </div>
 
             <div className="-mt-4 px-5">
-            <Card className="space-y-6 shadow-lg shadow-slate-100" padding="lg">
+                <Card className="space-y-6 shadow-lg shadow-slate-100" padding="lg">
                 {step === 1 ? (
                     <div className="space-y-4">
                         <div>
@@ -142,17 +151,32 @@ export default function OnboardingPage() {
                     </div>
                 ) : null}
 
+                {error ? (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {error}
+                    </div>
+                ) : null}
+
                 <div className="flex items-center justify-between gap-3">
-                    <Button disabled={step === 1} onClick={() => setStep((current) => Math.max(1, current - 1))} variant="secondary">
+                    <Button disabled={step === 1 || submitting} onClick={() => setStep((current) => Math.max(1, current - 1))} variant="secondary">
                         Back
                     </Button>
                     {step < 4 ? (
-                        <Button onClick={() => setStep((current) => Math.min(4, current + 1))}>Next</Button>
+                        <Button disabled={submitting} onClick={() => setStep((current) => Math.min(4, current + 1))}>Next</Button>
                     ) : (
-                        <Button onClick={handleFinish}>Finish setup</Button>
+                        <div className="flex items-center gap-3">
+                            {error && formData.inviteCode.trim() ? (
+                                <Button disabled={submitting} onClick={handleContinueAfterInviteError} variant="secondary">
+                                    Skip clinic for now
+                                </Button>
+                            ) : null}
+                            <Button disabled={submitting} onClick={handleFinish}>
+                                {submitting ? "Saving..." : "Finish setup"}
+                            </Button>
+                        </div>
                     )}
                 </div>
-            </Card>
+                </Card>
             </div>
         </div>
     );

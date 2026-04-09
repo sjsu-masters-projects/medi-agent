@@ -14,7 +14,7 @@ from supabase import Client
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
-from app.models.clinician import ClinicianRead
+from app.models.clinician import ClinicianRead, ClinicianUpdate
 from app.models.patient import PatientRead
 from app.services.clinician_service import ClinicianService
 
@@ -33,6 +33,15 @@ async def get_my_profile(
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
     return await service.get_profile(user.id)
+
+
+@router.put("/me", response_model=ClinicianRead, summary="Update my clinician profile")
+async def update_my_profile(
+    data: ClinicianUpdate,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.update_profile(user.id, data.model_dump(exclude_unset=True))
 
 
 @router.get(

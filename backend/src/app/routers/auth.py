@@ -120,7 +120,10 @@ async def refresh_token(
     body: TokenRefreshRequest,
     service: AuthService = Depends(_get_auth_service),
 ) -> AuthResponse:
-    result = await service.refresh_token(body.refresh_token)
+    result = await service.refresh_token(
+        body.refresh_token,
+        expected_role=body.expected_role,
+    )
     return AuthResponse(
         tokens=AuthTokens(**result["tokens"]),
         user=UserInfo(**result["user"]),

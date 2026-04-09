@@ -6,15 +6,15 @@ import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
-import { hydrateSession, type ClinicianAuthUser } from "@/store/slices/auth-slice";
+import { writeStoredSession } from "@/services/auth-session";
+import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
-
-const storageKey = "mediagent-clinician-auth";
-const isDevelopment = process.env.NODE_ENV === "development";
 
 interface LoginResponse {
     tokens: {
         access_token: string;
+        expires_at: number;
+        refresh_token: string;
     };
     user: {
         email: string;
@@ -26,8 +26,8 @@ interface LoginResponse {
 export default function ClinicianLoginPage() {
     const router = useRouter();
     const dispatch = useDispatch<AppDispatch>();
-    const [email, setEmail] = useState(isDevelopment ? "dr.smith@cityhealth.org" : "");
-    const [password, setPassword] = useState(isDevelopment ? "password123" : "");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
@@ -38,17 +38,22 @@ export default function ClinicianLoginPage() {
 
         try {
             const response = await api.post<LoginResponse>("/api/v1/auth/login", { email, password });
-            const user: ClinicianAuthUser = {
-                email: response.user.email,
-                id: response.user.id,
-                role: "clinician",
-            };
-            const session = {
-                token: response.tokens.access_token,
-                user,
+            if (response.user.role !== "clinician") {
+                throw new Error("This login belongs to a patient account.");
+            }
+
+            const session: ClinicianAuthSession = {
+                accessToken: response.tokens.access_token,
+                expiresAt: response.tokens.expires_at,
+                refreshToken: response.tokens.refresh_token,
+                user: {
+                    email: response.user.email,
+                    id: response.user.id,
+                    role: "clinician",
+                },
             };
 
-            window.localStorage.setItem(storageKey, JSON.stringify(session));
+            writeStoredSession(session);
             dispatch(hydrateSession(session));
             router.replace("/dashboard");
         } catch (submissionError) {
@@ -87,8 +92,8 @@ export default function ClinicianLoginPage() {
                         </Button>
                     </form>
                     <div className="flex items-center justify-between text-sm">
-                        <Link className="text-blue-600" href="/setup">
-                            First-time clinic setup
+                        <Link className="text-blue-600" href="/signup">
+                            Create clinician account
                         </Link>
                         <span className="text-gray-400">Forgot password?</span>
                     </div>

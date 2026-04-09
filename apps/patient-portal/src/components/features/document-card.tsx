@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { HiOutlineChevronRight } from "react-icons/hi2";
 import { Badge, Card } from "@/components/ui";
 
 interface DocumentCardProps {
@@ -6,7 +8,7 @@ interface DocumentCardProps {
     type: string;
     date: string;
     provider: string;
-    icon: string;
+    icon: ReactNode;
     hasAiSummary: boolean;
     statusLabel?: string;
     statusVariant?: "success" | "warning" | "danger" | "info" | "neutral";
@@ -39,7 +41,7 @@ export function DocumentCard({
                         <div className="flex items-center gap-2">
                             {statusLabel ? <Badge variant={statusVariant}>{statusLabel}</Badge> : null}
                             {!statusLabel && hasAiSummary ? <Badge variant="info">AI Summary</Badge> : null}
-                            <span className="text-sm text-slate-300">→</span>
+                            <HiOutlineChevronRight className="text-sm text-slate-300" />
                         </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-500">

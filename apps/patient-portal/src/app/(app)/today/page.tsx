@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import { Badge, Card, EmptyState, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
@@ -97,7 +98,7 @@ export default function TodayPage() {
                 {tasks.length === 0 ? (
                     <EmptyState
                         description="Your clinicians have not assigned anything for today."
-                        icon="🗓️"
+                        icon={<HiOutlineCalendarDays />}
                         title="Nothing scheduled"
                     />
                 ) : null}
@@ -118,7 +119,7 @@ export default function TodayPage() {
                         return (
                             <div className="relative pb-6 last:pb-0" key={task.id}>
                                 <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
-                                    {status === "completed" ? "✓" : null}
+                                    {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
                                 </span>
                                 <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
                                     {formatTimeLabel(task.scheduledTime, task.status)}
@@ -140,7 +141,7 @@ export default function TodayPage() {
                     return (
                         <div className="relative pb-6 last:pb-0" key={task.id}>
                             <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
-                                {status === "completed" ? "✓" : null}
+                                {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
                             </span>
                             <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
                                 {formatTimeLabel(task.scheduledTime, task.status)}

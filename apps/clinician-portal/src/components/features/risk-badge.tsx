@@ -1,3 +1,4 @@
+import { FaCircle } from "react-icons/fa6";
 import { Badge } from "@/components/ui";
 
 interface RiskBadgeProps {
@@ -5,16 +6,16 @@ interface RiskBadgeProps {
 }
 
 const riskConfig = {
-    high: { icon: "🔴", label: "High", variant: "danger" as const },
-    low: { icon: "🟢", label: "Low", variant: "success" as const },
-    medium: { icon: "🟡", label: "Medium", variant: "warning" as const },
+    high: { iconClassName: "text-red-500", label: "High", variant: "danger" as const },
+    low: { iconClassName: "text-green-500", label: "Low", variant: "success" as const },
+    medium: { iconClassName: "text-yellow-500", label: "Medium", variant: "warning" as const },
 };
 
 export function RiskBadge({ level }: RiskBadgeProps) {
     const config = riskConfig[level];
     return (
         <Badge variant={config.variant}>
-            <span className="mr-1">{config.icon}</span>
+            <FaCircle className={`mr-1 text-[10px] ${config.iconClassName}`} />
             {config.label}
         </Badge>
     );

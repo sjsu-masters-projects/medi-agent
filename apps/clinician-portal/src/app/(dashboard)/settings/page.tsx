@@ -1,3 +1,4 @@
+import { HiOutlineClipboardDocument, HiOutlineMagnifyingGlass, HiOutlinePrinter } from "react-icons/hi2";
 import { Badge, Button, Card, Input } from "@/components/ui";
 
 const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Integrations (MCP)"] as const;
@@ -48,7 +49,7 @@ export default function SettingsPage() {
                         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
                             <h3 className="text-xl font-bold text-slate-900">Active Staff (4)</h3>
                             <label className="relative block">
-                                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">🔎</span>
+                                <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                 <input
                                     className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                     placeholder="Search team..."
@@ -89,14 +90,14 @@ export default function SettingsPage() {
                         <div className="mt-6 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-5">
                             <span className="text-3xl font-bold tracking-[0.14em]">CITY-8832</span>
                             <button className="rounded-md bg-slate-800 px-3 py-2 text-slate-300" type="button">
-                                📋
+                                <HiOutlineClipboardDocument className="h-5 w-5" />
                             </button>
                         </div>
                         <button
                             className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/15"
                             type="button"
                         >
-                            🖨️
+                            <HiOutlinePrinter className="h-5 w-5" />
                             <span>Print Handouts for Front Desk</span>
                         </button>
                     </div>

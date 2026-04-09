@@ -30,23 +30,28 @@ def auth_service(mock_supabase_client):
 @pytest.mark.asyncio
 async def test_signup_patient_success(auth_service, mock_supabase_client):
     """Test successful patient signup."""
-    # Mock auth.sign_up response
-    mock_user = Mock()
-    mock_user.id = "user-123"
-    mock_user.email = "patient@example.com"
-    mock_user.created_at = "2024-01-01T00:00:00Z"
-    mock_user.app_metadata = {"user_role": "patient"}
+    signup_user = Mock()
+    signup_user.id = "user-123"
+    signup_response = Mock()
+    signup_response.user = signup_user
+    mock_supabase_client.auth.sign_up.return_value = signup_response
 
-    mock_session = Mock()
-    mock_session.access_token = "access-token-123"
-    mock_session.refresh_token = "refresh-token-123"
-    mock_session.expires_at = 1234567890
+    login_user = Mock()
+    login_user.id = "user-123"
+    login_user.email = "patient@example.com"
+    login_user.created_at = "2024-01-01T00:00:00Z"
+    login_user.app_metadata = {"user_role": "patient"}
 
-    mock_auth_response = Mock()
-    mock_auth_response.user = mock_user
-    mock_auth_response.session = mock_session
+    login_session = Mock()
+    login_session.access_token = "access-token-123"
+    login_session.refresh_token = "refresh-token-123"
+    login_session.expires_at = 1234567890
 
-    mock_supabase_client.auth.sign_up.return_value = mock_auth_response
+    login_response = Mock()
+    login_response.user = login_user
+    login_response.session = login_session
+
+    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
 
     # Mock table insert
     mock_insert = MagicMock()
@@ -72,7 +77,10 @@ async def test_signup_patient_success(auth_service, mock_supabase_client):
     mock_supabase_client.table.assert_called_once_with("patients")
     mock_supabase_client.table.return_value.insert.assert_called_once()
 
-    # Verify response format
+    mock_supabase_client.auth.sign_in_with_password.assert_called_once_with(
+        {"email": "patient@example.com", "password": "SecurePass123!"}
+    )
+
     assert result["tokens"]["access_token"] == "access-token-123"
     assert result["tokens"]["refresh_token"] == "refresh-token-123"
     assert result["user"]["id"] == "user-123"
@@ -137,23 +145,28 @@ async def test_signup_patient_profile_creation_failure(auth_service, mock_supaba
 @pytest.mark.asyncio
 async def test_signup_clinician_success(auth_service, mock_supabase_client):
     """Test successful clinician signup."""
-    # Mock auth.sign_up response
-    mock_user = Mock()
-    mock_user.id = "clinician-123"
-    mock_user.email = "doctor@example.com"
-    mock_user.created_at = "2024-01-01T00:00:00Z"
-    mock_user.app_metadata = {"user_role": "clinician"}
+    signup_user = Mock()
+    signup_user.id = "clinician-123"
+    signup_response = Mock()
+    signup_response.user = signup_user
+    mock_supabase_client.auth.sign_up.return_value = signup_response
 
-    mock_session = Mock()
-    mock_session.access_token = "access-token-456"
-    mock_session.refresh_token = "refresh-token-456"
-    mock_session.expires_at = 1234567890
+    login_user = Mock()
+    login_user.id = "clinician-123"
+    login_user.email = "doctor@example.com"
+    login_user.created_at = "2024-01-01T00:00:00Z"
+    login_user.app_metadata = {"user_role": "clinician"}
 
-    mock_auth_response = Mock()
-    mock_auth_response.user = mock_user
-    mock_auth_response.session = mock_session
+    login_session = Mock()
+    login_session.access_token = "access-token-456"
+    login_session.refresh_token = "refresh-token-456"
+    login_session.expires_at = 1234567890
 
-    mock_supabase_client.auth.sign_up.return_value = mock_auth_response
+    login_response = Mock()
+    login_response.user = login_user
+    login_response.session = login_session
+
+    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
 
     # Mock table insert
     mock_insert = MagicMock()
@@ -179,7 +192,10 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
     # Verify clinician profile was created
     mock_supabase_client.table.assert_called_once_with("clinicians")
 
-    # Verify response format
+    mock_supabase_client.auth.sign_in_with_password.assert_called_once_with(
+        {"email": "doctor@example.com", "password": "SecurePass123!"}
+    )
+
     assert result["tokens"]["access_token"] == "access-token-456"
     assert result["user"]["id"] == "clinician-123"
     assert result["user"]["role"] == "clinician"
@@ -267,6 +283,30 @@ async def test_login_invalid_credentials(auth_service, mock_supabase_client):
         await auth_service.login(email="wrong@example.com", password="wrongpass")
 
 
+@pytest.mark.asyncio
+async def test_login_rejects_unknown_role(auth_service, mock_supabase_client):
+    """Reject sessions that do not include a supported user_role claim."""
+    mock_user = Mock()
+    mock_user.id = "user-123"
+    mock_user.email = "user@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = {}
+
+    mock_session = Mock()
+    mock_session.access_token = "login-access-token"
+    mock_session.refresh_token = "login-refresh-token"
+    mock_session.expires_at = 1234567890
+
+    mock_auth_response = Mock()
+    mock_auth_response.user = mock_user
+    mock_auth_response.session = mock_session
+
+    mock_supabase_client.auth.sign_in_with_password.return_value = mock_auth_response
+
+    with pytest.raises(AuthenticationError, match="invalid user role"):
+        await auth_service.login(email="user@example.com", password="password123")
+
+
 # ── Token Refresh Tests ───────────────────────────────────────
 
 
@@ -292,7 +332,10 @@ async def test_refresh_token_success(auth_service, mock_supabase_client):
     mock_supabase_client.auth.refresh_session.return_value = mock_auth_response
 
     # Call refresh_token
-    result = await auth_service.refresh_token(refresh_token="old-refresh-token")
+    result = await auth_service.refresh_token(
+        refresh_token="old-refresh-token",
+        expected_role="patient",
+    )
 
     # Verify refresh_session was called
     mock_supabase_client.auth.refresh_session.assert_called_once_with("old-refresh-token")
@@ -300,6 +343,33 @@ async def test_refresh_token_success(auth_service, mock_supabase_client):
     # Verify response format
     assert result["tokens"]["access_token"] == "new-access-token"
     assert result["tokens"]["refresh_token"] == "new-refresh-token"
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_rejects_mismatched_role(auth_service, mock_supabase_client):
+    """Reject refresh responses that do not match the expected role."""
+    mock_user = Mock()
+    mock_user.id = "user-123"
+    mock_user.email = "user@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = {"user_role": "clinician"}
+
+    mock_session = Mock()
+    mock_session.access_token = "new-access-token"
+    mock_session.refresh_token = "new-refresh-token"
+    mock_session.expires_at = 1234567890
+
+    mock_auth_response = Mock()
+    mock_auth_response.user = mock_user
+    mock_auth_response.session = mock_session
+
+    mock_supabase_client.auth.refresh_session.return_value = mock_auth_response
+
+    with pytest.raises(AuthenticationError, match="expected 'patient' role"):
+        await auth_service.refresh_token(
+            refresh_token="old-refresh-token",
+            expected_role="patient",
+        )
 
 
 @pytest.mark.asyncio
@@ -395,7 +465,7 @@ async def test_format_session_missing_email(auth_service):
 
 @pytest.mark.asyncio
 async def test_format_session_missing_app_metadata(auth_service):
-    """Test _format_session with missing app_metadata."""
+    """Reject sessions with missing role metadata."""
     mock_user = Mock()
     mock_user.id = "user-123"
     mock_user.email = "user@example.com"
@@ -411,10 +481,8 @@ async def test_format_session_missing_app_metadata(auth_service):
     mock_response.user = mock_user
     mock_response.session = mock_session
 
-    result = auth_service._format_session(mock_response)
-
-    # Should default to "unknown"
-    assert result["user"]["role"] == "unknown"
+    with pytest.raises(AuthenticationError, match="invalid user role"):
+        auth_service._format_session(mock_response)
 
 
 @pytest.mark.asyncio

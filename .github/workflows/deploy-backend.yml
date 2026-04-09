@@ -42,11 +42,15 @@ jobs:
             --repository-format=docker \
             --location=${REGION} \
             --description="Docker repository for Cloud Run deployments" || true
-          
-          # Set cleanup policy to keep only 1 most recent image
+
+      - name: Apply Artifact Registry cleanup policy
+        run: |
           gcloud artifacts repositories set-cleanup-policies cloud-run-source-deploy \
             --location=${REGION} \
-            --policy=backend/cleanup-policy.json || true
+            --policy=backend/cleanup-policy.json
+
+          gcloud artifacts repositories list-cleanup-policies cloud-run-source-deploy \
+            --location=${REGION}
 
       - name: Build Docker Image
         run: |
@@ -56,16 +60,21 @@ jobs:
 
       - name: Clean up old images
         run: |
-          # List all images and delete old ones (keep only latest)
-          # This runs AFTER the new image is pushed, so old images no longer have the "latest" tag
+          IMAGE_REPO="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}"
+
           gcloud artifacts docker images list \
-            ${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME} \
+            "${IMAGE_REPO}" \
+            --include-tags \
             --format="get(version)" \
-            --filter="NOT tags:latest" | while read digest; do
+            --filter="NOT tags:latest" | sort -u | while read -r digest; do
+              if [ -z "${digest}" ]; then
+                continue
+              fi
+
               echo "Deleting old image: $digest"
               gcloud artifacts docker images delete \
-                "${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}@${digest}" \
-                --quiet || true
+                "${IMAGE_REPO}@${digest}" \
+                --quiet
           done
 
       - name: Deploy to Cloud Run

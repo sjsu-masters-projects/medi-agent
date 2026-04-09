@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HiOutlineClipboardDocumentList, HiOutlineExclamationTriangle, HiOutlineMagnifyingGlass, HiOutlineUsers } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { Card } from "@/components/ui";
 import { setPatients, setStats, type DashboardStat } from "@/store/slices/dashboard-slice";
@@ -95,7 +96,13 @@ export default function DashboardPage() {
                     return (
                         <Card className="flex items-center gap-4 px-6 py-5" key={stat.label} padding="sm">
                             <div className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${emphasis}`}>
-                                {stat.label === "Monitored Patients" ? "👥" : stat.label === "Critical Risk (< 70% or ADR)" ? "⚠️" : "📝"}
+                                {stat.label === "Monitored Patients" ? (
+                                    <HiOutlineUsers className="h-7 w-7" />
+                                ) : stat.label === "Critical Risk (< 70% or ADR)" ? (
+                                    <HiOutlineExclamationTriangle className="h-7 w-7" />
+                                ) : (
+                                    <HiOutlineClipboardDocumentList className="h-7 w-7" />
+                                )}
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-500">{stat.label}</p>
@@ -110,7 +117,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
                     <h2 className="text-xl font-bold text-slate-900">Active Patient Alerts</h2>
                     <label className="relative block">
-                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">🔎</span>
+                        <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                             onChange={(event) => setQuery(event.target.value)}

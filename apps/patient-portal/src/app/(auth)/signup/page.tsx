@@ -6,15 +6,16 @@ import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
-import { hydrateSession } from "@/store/slices/auth-slice";
+import { writeStoredSession } from "@/services/auth-session";
+import { hydrateSession, type PatientAuthSession } from "@/store/slices/auth-slice";
 import { setOnboardingProfile } from "@/store/slices/onboarding-slice";
 import type { AppDispatch } from "@/store/store";
-
-const authStorageKey = "mediagent-patient-auth";
 
 interface SignupResponse {
     tokens: {
         access_token: string;
+        expires_at: number;
+        refresh_token: string;
     };
     user: {
         email: string;
@@ -54,8 +55,17 @@ export default function SignupPage() {
                 password: formData.password,
             });
 
-            const session = { token: response.tokens.access_token, user: response.user };
-            window.localStorage.setItem(authStorageKey, JSON.stringify(session));
+            if (response.user.role !== "patient") {
+                throw new Error("Signup did not create a patient account.");
+            }
+
+            const session: PatientAuthSession = {
+                accessToken: response.tokens.access_token,
+                expiresAt: response.tokens.expires_at,
+                refreshToken: response.tokens.refresh_token,
+                user: { ...response.user, role: "patient" },
+            };
+            writeStoredSession(session);
             dispatch(
                 setOnboardingProfile({
                     dateOfBirth: formData.dateOfBirth,
