@@ -1,11 +1,27 @@
-{
-  "name": "keep-latest-only",
-  "action": "DELETE",
-  "condition": {
-    "tagState": "ANY",
-    "olderThan": "0s"
+[
+  {
+    "name": "keep-most-recent-backend-image",
+    "action": {
+      "type": "Keep"
+    },
+    "mostRecentVersions": {
+      "packageNamePrefixes": [
+        "mediagent-backend"
+      ],
+      "keepCount": 1
+    }
   },
-  "mostRecentVersions": {
-    "keepCount": 1
+  {
+    "name": "delete-old-untagged-backend-images",
+    "action": {
+      "type": "Delete"
+    },
+    "condition": {
+      "tagState": "untagged",
+      "olderThan": "1d",
+      "packageNamePrefixes": [
+        "mediagent-backend"
+      ]
+    }
   }
-}
+]
