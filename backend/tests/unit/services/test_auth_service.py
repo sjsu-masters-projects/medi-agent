@@ -332,7 +332,10 @@ async def test_refresh_token_success(auth_service, mock_supabase_client):
     mock_supabase_client.auth.refresh_session.return_value = mock_auth_response
 
     # Call refresh_token
-    result = await auth_service.refresh_token(refresh_token="old-refresh-token")
+    result = await auth_service.refresh_token(
+        refresh_token="old-refresh-token",
+        expected_role="patient",
+    )
 
     # Verify refresh_session was called
     mock_supabase_client.auth.refresh_session.assert_called_once_with("old-refresh-token")
@@ -340,6 +343,33 @@ async def test_refresh_token_success(auth_service, mock_supabase_client):
     # Verify response format
     assert result["tokens"]["access_token"] == "new-access-token"
     assert result["tokens"]["refresh_token"] == "new-refresh-token"
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_rejects_mismatched_role(auth_service, mock_supabase_client):
+    """Reject refresh responses that do not match the expected role."""
+    mock_user = Mock()
+    mock_user.id = "user-123"
+    mock_user.email = "user@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = {"user_role": "clinician"}
+
+    mock_session = Mock()
+    mock_session.access_token = "new-access-token"
+    mock_session.refresh_token = "new-refresh-token"
+    mock_session.expires_at = 1234567890
+
+    mock_auth_response = Mock()
+    mock_auth_response.user = mock_user
+    mock_auth_response.session = mock_session
+
+    mock_supabase_client.auth.refresh_session.return_value = mock_auth_response
+
+    with pytest.raises(AuthenticationError, match="expected 'patient' role"):
+        await auth_service.refresh_token(
+            refresh_token="old-refresh-token",
+            expected_role="patient",
+        )
 
 
 @pytest.mark.asyncio

@@ -25,7 +25,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                             id: string;
                             role: "patient" | "clinician";
                         };
-                    }>("/api/v1/auth/refresh", { refresh_token: refreshToken });
+                    }>("/api/v1/auth/refresh", {
+                        expected_role: "clinician",
+                        refresh_token: refreshToken,
+                    });
 
                     if (response.user.role !== "clinician") {
                         throw new Error("This session belongs to a patient account.");

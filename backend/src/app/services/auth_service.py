@@ -152,7 +152,11 @@ class AuthService:
 
     # ── Token Refresh ───────────────────────────────────────
 
-    async def refresh_token(self, refresh_token: str) -> Any:
+    async def refresh_token(
+        self,
+        refresh_token: str,
+        expected_role: str | None = None,
+    ) -> Any:
         """Exchange a refresh token for a new access token."""
         try:
             response = self.db.auth.refresh_session(refresh_token)
@@ -160,7 +164,7 @@ class AuthService:
             logger.warning("Token refresh failed: %s", e)
             raise AuthenticationError("Invalid or expired refresh token") from None
 
-        return self._format_session(response)
+        return self._format_session(response, expected_role=expected_role)
 
     # ── Password Reset ──────────────────────────────────────
 

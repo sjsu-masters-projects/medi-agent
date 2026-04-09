@@ -10,9 +10,9 @@ import type { RootState } from "@/store/store";
 export default function ClinicSetupPage() {
     const router = useRouter();
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
-    const [clinicName, setClinicName] = useState("City Health Primary Care");
-    const [npiNumber, setNpiNumber] = useState("1234567890");
-    const [specialty, setSpecialty] = useState("Primary Care");
+    const [clinicName, setClinicName] = useState("");
+    const [npiNumber, setNpiNumber] = useState("");
+    const [specialty, setSpecialty] = useState("");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
 

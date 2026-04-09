@@ -8,11 +8,14 @@ request validation; the service returns these for responses.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
 from app.models.enums import Language
+
+AuthRole = Literal["patient", "clinician"]
 
 # ── Requests ────────────────────────────────────────────────
 
@@ -55,6 +58,7 @@ class TokenRefreshRequest(BaseModel):
     """Exchange a refresh token for a new access token."""
 
     refresh_token: str = Field(..., min_length=1)
+    expected_role: AuthRole | None = None
 
 
 class PasswordResetRequest(BaseModel):
@@ -80,7 +84,7 @@ class UserInfo(BaseModel):
 
     id: UUID
     email: str
-    role: str = Field(description="'patient' or 'clinician'")
+    role: AuthRole = Field(description="'patient' or 'clinician'")
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

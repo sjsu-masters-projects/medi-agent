@@ -183,18 +183,32 @@ class TestRefresh:
 
         response = client.post(
             "/api/v1/auth/refresh",
-            json={"refresh_token": "refresh-token-123"},
+            json={"expected_role": "patient", "refresh_token": "refresh-token-123"},
         )
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["tokens"]["access_token"] == "patient-access-token"
+
+    def test_rejects_mismatched_expected_role(self, client, override_db, mock_supabase_db):
+        mock_supabase_db.auth.refresh_session.return_value = _make_auth_response(
+            user_id=str(uuid4()),
+            email="doctor@example.com",
+            role="clinician",
+        )
+
+        response = client.post(
+            "/api/v1/auth/refresh",
+            json={"expected_role": "patient", "refresh_token": "refresh-token-123"},
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_invalid_token(self, client, override_db, mock_supabase_db):
         mock_supabase_db.auth.refresh_session.side_effect = Exception("Invalid refresh")
 
         response = client.post(
             "/api/v1/auth/refresh",
-            json={"refresh_token": "bad-token"},
+            json={"expected_role": "patient", "refresh_token": "bad-token"},
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
