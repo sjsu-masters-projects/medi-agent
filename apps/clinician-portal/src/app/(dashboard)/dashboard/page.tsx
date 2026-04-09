@@ -1,181 +1,295 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { HiOutlineClipboardDocumentList, HiOutlineExclamationTriangle, HiOutlineMagnifyingGlass, HiOutlineUsers } from "react-icons/hi2";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+    HiOutlineClipboardDocumentList,
+    HiOutlineExclamationTriangle,
+    HiOutlineMagnifyingGlass,
+    HiOutlineUsers,
+    HiOutlineArrowPath,
+} from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { Card } from "@/components/ui";
-import { setPatients, setStats, type DashboardStat } from "@/store/slices/dashboard-slice";
+import { RiskBadge } from "@/components/features/risk-badge";
+import { loadDashboard } from "@/store/slices/dashboard-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import type { PatientSummary } from "@/types";
+import { useState } from "react";
+import type { PatientRiskData } from "@/services/clinicians";
 
-const dashboardStats: DashboardStat[] = [
-    { change: "", label: "Monitored Patients", trend: "neutral", value: "204" },
-    { change: "", label: "Critical Risk (< 70% or ADR)", trend: "up", value: "12" },
-    { change: "", label: "FDA MedWatch Drafts", trend: "neutral", value: "2 Pending" },
-];
+// ── Risk level configuration ─────────────────────────────────────────────────
 
-const patients: PatientSummary[] = [
-    { activeMedCount: 6, adherenceScore: 45, firstName: "Maria", id: "8832", lastActivity: "Reported via Voice Agent (2h ago)", lastName: "Garcia", openAdrCount: 1, riskLevel: "high" },
-    { activeMedCount: 4, adherenceScore: 75, firstName: "James", id: "9104", lastActivity: "Missed Metformin 3 days in a row", lastName: "Wilson", openAdrCount: 0, riskLevel: "medium" },
-    { activeMedCount: 5, adherenceScore: 98, firstName: "Robert", id: "7721", lastActivity: "Stable vitals reported", lastName: "Chen", openAdrCount: 0, riskLevel: "low" },
-];
-
-const alertMeta = {
+const riskConfig = {
     high: {
-        accent: "bg-red-100 text-red-600",
+        accent: "bg-red-100 text-red-700",
+        progressBar: "bg-red-500",
         action: "Review",
-        progress: "bg-red-600",
-        sharedCare: "Dr. Patel (Cardiology)",
-        sharedCareDetail: "Lisinopril conflict detected",
-        summary: "Severe Dizziness",
-        text: "text-red-600",
-    },
-    low: {
-        accent: "bg-green-100 text-green-600",
-        action: "View Profile",
-        progress: "bg-green-600",
-        sharedCare: "Dr. Lee (Endocrinology)",
-        sharedCareDetail: "",
-        summary: "On Track",
-        text: "text-green-600",
+        actionClass: "border border-red-200 text-red-600 hover:bg-red-50",
     },
     medium: {
         accent: "bg-yellow-100 text-yellow-700",
+        progressBar: "bg-amber-500",
         action: "View Profile",
-        progress: "bg-amber-600",
-        sharedCare: "No other active providers",
-        sharedCareDetail: "",
-        summary: "Missed Doses",
-        text: "text-amber-600",
+        actionClass: "text-slate-500 hover:bg-slate-50 border border-slate-200",
     },
-} satisfies Record<
-    PatientSummary["riskLevel"],
-    {
-        accent: string;
-        action: string;
-        progress: string;
-        sharedCare: string;
-        sharedCareDetail: string;
-        summary: string;
-        text: string;
-    }
->;
+    low: {
+        accent: "bg-green-100 text-green-700",
+        progressBar: "bg-green-500",
+        action: "View Profile",
+        actionClass: "text-slate-500 hover:bg-slate-50 border border-slate-200",
+    },
+} satisfies Record<PatientRiskData["risk_level"], {
+    accent: string;
+    progressBar: string;
+    action: string;
+    actionClass: string;
+}>;
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
     const dispatch = useDispatch<AppDispatch>();
+    const router = useRouter();
     const stats = useSelector((state: RootState) => state.dashboard.stats);
-    const activePatients = useSelector((state: RootState) => state.dashboard.patients);
+    const patients = useSelector((state: RootState) => state.dashboard.patients);
+    const loading = useSelector((state: RootState) => state.dashboard.loading);
+    const error = useSelector((state: RootState) => state.dashboard.error);
     const [query, setQuery] = useState("");
 
+    // Fetch real data on mount
     useEffect(() => {
-        dispatch(setStats(dashboardStats));
-        dispatch(setPatients(patients));
+        void dispatch(loadDashboard());
     }, [dispatch]);
 
-    const visiblePatients = activePatients.filter((patient) =>
-        `${patient.firstName} ${patient.lastName}`.toLowerCase().includes(query.toLowerCase()),
-    );
+    const visiblePatients = patients
+        .filter((p) =>
+            `${p.first_name} ${p.last_name}`.toLowerCase().includes(query.toLowerCase()),
+        )
+        // Sort high risk first
+        .sort((a, b) => {
+            const order = { high: 0, medium: 1, low: 2 };
+            return order[a.risk_level] - order[b.risk_level];
+        });
 
     return (
         <div className="mx-auto max-w-7xl space-y-8">
-            <section className="grid gap-5 xl:grid-cols-3">
-                {stats.map((stat) => {
-                    const emphasis =
-                        stat.label === "Critical Risk (< 70% or ADR)"
-                            ? "bg-red-50 text-red-600"
-                            : stat.label === "FDA MedWatch Drafts"
-                              ? "bg-amber-100 text-amber-600"
-                              : "bg-slate-100 text-slate-600";
-                    const valueColor =
-                        stat.label === "Critical Risk (< 70% or ADR)"
-                            ? "text-red-600"
-                            : stat.label === "FDA MedWatch Drafts"
-                              ? "text-amber-600"
-                              : "text-slate-900";
+            {/* Error banner */}
+            {error && (
+                <div
+                    className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700"
+                    role="alert"
+                >
+                    <span>⚠ {error} — showing cached data</span>
+                    <button
+                        className="rounded px-3 py-1 text-xs font-medium hover:bg-red-100"
+                        onClick={() => void dispatch(loadDashboard())}
+                        type="button"
+                    >
+                        Retry
+                    </button>
+                </div>
+            )}
 
-                    return (
-                        <Card className="flex items-center gap-4 px-6 py-5" key={stat.label} padding="sm">
-                            <div className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${emphasis}`}>
-                                {stat.label === "Monitored Patients" ? (
-                                    <HiOutlineUsers className="h-7 w-7" />
-                                ) : stat.label === "Critical Risk (< 70% or ADR)" ? (
-                                    <HiOutlineExclamationTriangle className="h-7 w-7" />
-                                ) : (
-                                    <HiOutlineClipboardDocumentList className="h-7 w-7" />
-                                )}
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-                                <p className={`text-3xl font-bold ${valueColor}`}>{stat.value}</p>
-                            </div>
-                        </Card>
-                    );
-                })}
+            {/* Stats cards */}
+            <section aria-label="Dashboard statistics" className="grid gap-5 xl:grid-cols-3">
+                {loading && stats.length === 0
+                    ? Array.from({ length: 3 }).map((_, i) => (
+                          <div className="h-24 animate-pulse rounded-2xl bg-slate-100" key={i} />
+                      ))
+                    : stats.map((stat) => {
+                          const emphasis =
+                              stat.label.includes("Critical")
+                                  ? "bg-red-50 text-red-600"
+                                  : stat.label.includes("MedWatch")
+                                    ? "bg-amber-100 text-amber-600"
+                                    : "bg-slate-100 text-slate-600";
+                          const valueColor = stat.label.includes("Critical")
+                              ? "text-red-600"
+                              : stat.label.includes("MedWatch")
+                                ? "text-amber-600"
+                                : "text-slate-900";
+
+                          return (
+                              <Card
+                                  className="flex items-center gap-4 px-6 py-5"
+                                  key={stat.label}
+                                  padding="sm"
+                              >
+                                  <div
+                                      className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${emphasis}`}
+                                  >
+                                      {stat.label.includes("Monitored") ? (
+                                          <HiOutlineUsers className="h-7 w-7" />
+                                      ) : stat.label.includes("Critical") ? (
+                                          <HiOutlineExclamationTriangle className="h-7 w-7" />
+                                      ) : (
+                                          <HiOutlineClipboardDocumentList className="h-7 w-7" />
+                                      )}
+                                  </div>
+                                  <div>
+                                      <p className="text-sm font-medium text-slate-500">
+                                          {stat.label}
+                                      </p>
+                                      <p className={`text-3xl font-bold ${valueColor}`}>
+                                          {stat.value}
+                                      </p>
+                                  </div>
+                              </Card>
+                          );
+                      })}
             </section>
 
+            {/* Patient alerts table */}
             <Card className="overflow-hidden px-0 py-0" padding="sm">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
-                    <h2 className="text-xl font-bold text-slate-900">Active Patient Alerts</h2>
-                    <label className="relative block">
-                        <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Search patients..."
-                            value={query}
-                        />
-                    </label>
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-bold text-slate-900">
+                            Active Patient Alerts
+                        </h2>
+                        {loading && (
+                            <HiOutlineArrowPath
+                                aria-hidden="true"
+                                className="h-4 w-4 animate-spin text-slate-400"
+                            />
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <label className="sr-only" htmlFor="dashboard-patient-search">
+                            Search patients
+                        </label>
+                        <div className="relative">
+                            <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                id="dashboard-patient-search"
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Search patients…"
+                                value={query}
+                            />
+                        </div>
+
+                        <button
+                            aria-label="Refresh dashboard"
+                            className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+                            id="dashboard-refresh-btn"
+                            onClick={() => void dispatch(loadDashboard())}
+                            type="button"
+                        >
+                            <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-[1.25fr_1fr_1.6fr_1.6fr_0.8fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                {/* Table header */}
+                <div className="grid grid-cols-[1.25fr_0.7fr_1fr_1.4fr_1.4fr_0.8fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                     <span>Patient</span>
+                    <span>Risk</span>
                     <span>Adherence</span>
-                    <span>Recent Flag / Symptom</span>
-                    <span>Shared Care</span>
+                    <span>Recent Flag</span>
+                    <span>ADR / Meds</span>
                     <span className="text-right">Actions</span>
                 </div>
 
-                {visiblePatients.map((patient, index) => {
-                    const meta = alertMeta[patient.riskLevel];
+                {/* Rows */}
+                {loading && patients.length === 0 ? (
+                    <div className="space-y-px">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <div
+                                className="h-16 animate-pulse border-b border-slate-100 bg-slate-50"
+                                key={i}
+                            />
+                        ))}
+                    </div>
+                ) : visiblePatients.length === 0 ? (
+                    <div className="flex h-40 items-center justify-center text-sm text-slate-400">
+                        {patients.length === 0 ? "No patients assigned yet" : "No results found"}
+                    </div>
+                ) : (
+                    visiblePatients.map((patient, index) => {
+                        const config = riskConfig[patient.risk_level];
+                        const adherencePct = Math.round(patient.adherence_score * 100);
 
-                    return (
-                        <div
-                            className={`grid grid-cols-[1.25fr_1fr_1.6fr_1.6fr_0.8fr] gap-4 px-6 py-5 ${index > 0 ? "border-t border-slate-100" : ""}`}
-                            key={patient.id}
-                        >
-                            <div>
-                                <p className="text-sm font-bold text-slate-900">
-                                    {patient.firstName} {patient.lastName}
-                                </p>
-                                <p className="text-xs text-slate-500">ID: P-{patient.id}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="h-2 w-16 rounded-full bg-slate-200">
-                                    <div className={`h-2 rounded-full ${meta.progress}`} style={{ width: `${patient.adherenceScore}%` }} />
+                        return (
+                            <div
+                                className={`grid grid-cols-[1.25fr_0.7fr_1fr_1.4fr_1.4fr_0.8fr] items-center gap-4 px-6 py-5 ${
+                                    index > 0 ? "border-t border-slate-100" : ""
+                                } hover:bg-slate-50/60 transition-colors`}
+                                key={patient.patient_id}
+                            >
+                                {/* Name */}
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900">
+                                        {patient.first_name} {patient.last_name}
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                        ID: {patient.patient_id.slice(0, 8)}
+                                    </p>
                                 </div>
-                                <span className={`text-sm font-bold ${meta.text}`}>{patient.adherenceScore}%</span>
+
+                                {/* Risk badge */}
+                                <RiskBadge level={patient.risk_level} />
+
+                                {/* Adherence bar */}
+                                <div className="flex items-center gap-2">
+                                    <div className="h-2 w-16 rounded-full bg-slate-200">
+                                        <div
+                                            className={`h-2 rounded-full ${config.progressBar}`}
+                                            style={{ width: `${adherencePct}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-sm font-semibold text-slate-700">
+                                        {adherencePct}%
+                                    </span>
+                                </div>
+
+                                {/* Recent flag */}
+                                <div>
+                                    <span
+                                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${config.accent}`}
+                                    >
+                                        {patient.recent_symptom_severity > 0
+                                            ? `Symptom severity ${patient.recent_symptom_severity}/10`
+                                            : patient.risk_level === "low"
+                                              ? "On Track"
+                                              : "Missed Doses"}
+                                    </span>
+                                    <p className="mt-1.5 truncate text-xs text-slate-400">
+                                        {patient.last_activity}
+                                    </p>
+                                </div>
+
+                                {/* ADR / Meds */}
+                                <div className="flex items-center gap-4 text-sm text-slate-600">
+                                    {patient.open_adr_count > 0 ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                                            ⚠ {patient.open_adr_count} ADR
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-slate-400">No ADRs</span>
+                                    )}
+                                    <span className="text-xs text-slate-400">
+                                        {patient.active_med_count} meds
+                                    </span>
+                                </div>
+
+                                {/* Action button */}
+                                <div className="text-right">
+                                    <button
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${config.actionClass}`}
+                                        id={`patient-action-btn-${patient.patient_id}`}
+                                        onClick={() =>
+                                            router.push(`/patients/${patient.patient_id}`)
+                                        }
+                                        type="button"
+                                    >
+                                        {config.action}
+                                    </button>
+                                </div>
                             </div>
-                            <div>
-                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${meta.accent}`}>
-                                    {meta.summary}
-                                </span>
-                                <p className="mt-2 text-xs text-slate-500">{patient.lastActivity}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs font-medium text-slate-700">{meta.sharedCare}</p>
-                                {meta.sharedCareDetail ? <p className="mt-1 text-xs text-slate-500">{meta.sharedCareDetail}</p> : null}
-                            </div>
-                            <div className="text-right">
-                                <button
-                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${meta.action === "Review" ? "border border-blue-200 text-blue-600" : "text-slate-500"}`}
-                                    type="button"
-                                >
-                                    {meta.action}
-                                </button>
-                            </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })
+                )}
             </Card>
         </div>
     );

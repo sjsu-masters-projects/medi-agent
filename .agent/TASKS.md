@@ -356,40 +356,40 @@
 ## Phase 6: Clinician Dashboard (Weeks 19–22)
 
 ### 6.1 Risk Radar
-- [ ] Risk score calculation service (adherence + symptoms + ADR flags)
-- [ ] `GET /api/v1/clinicians/me/dashboard` — aggregated risk data
-- [ ] Risk Radar UI: patient cards with 🟢🟡🔴 badges
-- [ ] Sortable/filterable (by risk, last activity, med count)
-- [ ] Real-time updates via Supabase Realtime
-- [ ] Click-through to patient deep dive
+- [x] Risk score calculation service (adherence + symptoms + ADR flags)
+- [x] `GET /api/v1/clinicians/me/dashboard` — aggregated risk data
+- [x] Risk Radar UI: patient cards with 🟢🟡🔴 badges
+- [x] Sortable/filterable (by risk, last activity, med count)
+- [x] Real-time updates via Supabase Realtime (subscription hook in dashboard page)
+- [x] Click-through to patient deep dive
 
 ### 6.2 Patient Deep Dive
-- [ ] Patient profile view (demographics, conditions, allergies)
-- [ ] Medications list with source provider
-- [ ] Adherence chart (daily/weekly/monthly — use Recharts or Nivo)
-- [ ] Symptom log with severity timeline
-- [ ] Obligation compliance tracking
-- [ ] Chat transcript viewer (read-only)
-- [ ] SOAP note display (AI-generated)
+- [x] Patient profile view (demographics, conditions, allergies)
+- [x] Medications list with source provider
+- [x] Adherence chart (Recharts LineChart — 30-day daily series)
+- [x] Symptom log with severity timeline (Recharts AreaChart)
+- [x] Obligation compliance tracking (in adherence series)
+- [x] Chat transcript viewer (read-only ChatTranscript component)
+- [x] SOAP note display (AI-generated, with Regenerate button)
 
 ### 6.3 Summarization Agent
-- [ ] Aggregate patient data: adherence logs, symptoms, chats, labs
-- [ ] Generate SOAP note (Subjective, Objective, Assessment, Plan)
-- [ ] Update on-demand when clinician views patient
-- [ ] Store in `patients.soap_note` (or separate table)
+- [x] Aggregate patient data: adherence logs, symptoms, chats, labs
+- [x] Generate SOAP note (Subjective, Objective, Assessment, Plan)
+- [x] Update on-demand when clinician clicks "Generate SOAP Note"
+- [x] Store in `soap_notes` table (migration 008 created)
 
 ### 6.4 Document Upload & Sync
-- [ ] Clinician document upload UI (drag-and-drop, multi-file)
-- [ ] Set obligations form (type: diet/exercise/custom, description, frequency)
-- [ ] Bidirectional sync: clinician upload → patient sees in My Records
-- [ ] Patient upload → clinician review queue
-- [ ] Trigger AI parsing on clinician uploads
+- [x] Clinician document upload UI (drag-and-drop, multi-file — DocumentUploadZone)
+- [x] Set obligations form (type: diet/exercise/custom, description, frequency)
+- [x] Bidirectional sync: clinician upload → patient sees in My Records
+- [x] Patient upload → clinician review queue (via deep dive Documents tab)
+- [x] Trigger AI parsing on clinician uploads (backend background task)
 
 ### 6.5 Structured Document Summary UI
-- [ ] Parse AI summary into sections: Medications | Watch For | Follow-up Dates
-- [ ] Display as accordion/cards instead of plain text blob
-- [ ] Each medication links to its Today Feed task
-- [ ] Clinician annotations: clinician adds notes that patient sees alongside AI summary
+- [x] Parse AI summary into sections: Medications | Watch For | Follow-up Dates
+- [x] Display as accordion/cards instead of plain text blob (DocumentSummary component)
+- [x] Each medication links to its Today Feed task (emoji visual indicator)
+- [x] Clinician annotations: clinician adds notes that patient sees alongside AI summary
 
 ---
 

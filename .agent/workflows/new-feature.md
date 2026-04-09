@@ -31,6 +31,12 @@ description: How to start a new feature development workflow
    - Follow file organization from CODING_STANDARDS.md
    - Follow SOLID principles
    - Write tests alongside code
+   - **Database**: add a migration in `backend/src/app/db/migrations/` (e.g. `009_*.sql`) — run manually in Supabase SQL Editor
+   - **Backend new service**: place in `backend/src/app/services/`, add to `__init__.py`
+   - **Backend new agent**: follow `agents/summarization/` pattern (agent.py, graph.py, prompts.py)
+   - **Frontend API**: add typed functions in `apps/clinician-portal/src/services/`
+   - **Frontend state**: add Redux slice in `apps/clinician-portal/src/store/slices/`, register in `store.ts`
+   - **Supabase Realtime**: if feature requires live updates, enable table in Supabase Dashboard → Database → Replication
 
 5. **Self-review checklist**
    ```markdown
@@ -38,12 +44,29 @@ description: How to start a new feature development workflow
    - [ ] No hallucinated imports
    - [ ] No dead code
    - [ ] Matches existing patterns
-   - [ ] Types are correct
+   - [ ] Types are correct (run `tsc --noEmit`)
    - [ ] Error handling is proper
-   - [ ] Tests pass
+   - [ ] Backend tests pass (pytest --noconftest for unit tests)
+   - [ ] Frontend tests pass (vitest run)
+   - [ ] DB migration tested in Supabase SQL Editor
    ```
 
-6. **Create Pull Request**
+6. **Run tests before committing**
+   ```bash
+   # Backend unit tests (no live DB needed)
+   cd backend && PYTHONPATH=src SUPABASE_URL=http://localhost \
+     SUPABASE_ANON_KEY=test SUPABASE_SERVICE_ROLE_KEY=test \
+     SUPABASE_JWT_SECRET=test \
+     python3 -m pytest tests/unit/ -v --no-cov --noconftest --override-ini="addopts="
+
+   # Frontend tests
+   cd apps/clinician-portal && ./node_modules/.bin/vitest run
+
+   # TypeScript check
+   cd apps/clinician-portal && ./node_modules/.bin/tsc --noEmit
+   ```
+
+7. **Create Pull Request**
    ```bash
    git add .
    git commit -m "feat({scope}): {description}"
@@ -51,7 +74,8 @@ description: How to start a new feature development workflow
    ```
    - PR title: conventional commit format
    - PR description: what changed, why, how to test, screenshots
+   - Include migration file path if DB changes were made
 
-7. **Request review from a team member**
+8. **Request review from a team member**
 
-8. **After merge, mark task as done (`[x]`) in TASKS.md**
+9. **After merge, mark task as done (`[x]`) in TASKS.md**

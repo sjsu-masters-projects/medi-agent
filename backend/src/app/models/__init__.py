@@ -8,6 +8,17 @@ from app.models.care_team import CareTeamCreate, CareTeamRead
 from app.models.chat import ChatMessage, ChatMessageCreate
 from app.models.clinician import ClinicianCreate, ClinicianRead, ClinicianUpdate
 from app.models.clinician_message import ClinicianMessageCreate, ClinicianMessageRead
+from app.models.dashboard import (
+    AdherenceDataPoint,
+    AnnotationCreate,
+    DashboardResponse,
+    ObligationSetRequest,
+    PatientDeepDive,
+    PatientRiskData,
+    SoapNote,
+    SoapNoteRead,
+    SoapNoteRequest,
+)
 
 # Schemas
 from app.models.common import ErrorResponse, PaginatedResponse, SuccessResponse, TimestampMixin
@@ -124,4 +135,14 @@ __all__ = [
     # Clinician Messages
     "ClinicianMessageCreate",
     "ClinicianMessageRead",
+    # Dashboard (Phase 6)
+    "AdherenceDataPoint",
+    "AnnotationCreate",
+    "DashboardResponse",
+    "ObligationSetRequest",
+    "PatientDeepDive",
+    "PatientRiskData",
+    "SoapNote",
+    "SoapNoteRead",
+    "SoapNoteRequest",
 ]
