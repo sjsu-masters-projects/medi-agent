@@ -143,7 +143,30 @@ jobs:
   # ── Pipeline Completion ──────────────────────────────────
   ci-success:
     name: CI Pipeline Passed 🎉
-    needs: [backend-test, patient-build, clinician-build]
+    if: ${{ always() }}
+    needs:
+      - backend-lint
+      - backend-test
+      - patient-lint
+      - patient-build
+      - clinician-lint
+      - clinician-build
     runs-on: ubuntu-latest
     steps:
-      - run: echo "All linting, testing, and building stages have completed successfully!"
+      - name: Report dependency results
+        run: |
+          echo "backend-lint=${{ needs.backend-lint.result }}"
+          echo "backend-test=${{ needs.backend-test.result }}"
+          echo "patient-lint=${{ needs.patient-lint.result }}"
+          echo "patient-build=${{ needs.patient-build.result }}"
+          echo "clinician-lint=${{ needs.clinician-lint.result }}"
+          echo "clinician-build=${{ needs.clinician-build.result }}"
+
+      - name: Fail if any dependency did not succeed
+        run: |
+          [[ "${{ needs.backend-lint.result }}" == "success" ]] || exit 1
+          [[ "${{ needs.backend-test.result }}" == "success" ]] || exit 1
+          [[ "${{ needs.patient-lint.result }}" == "success" ]] || exit 1
+          [[ "${{ needs.patient-build.result }}" == "success" ]] || exit 1
+          [[ "${{ needs.clinician-lint.result }}" == "success" ]] || exit 1
+          [[ "${{ needs.clinician-build.result }}" == "success" ]] || exit 1
