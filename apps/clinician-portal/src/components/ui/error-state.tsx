@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { HiOutlineExclamationTriangle } from "react-icons/hi2";
 
 interface ErrorStateProps {
     title?: string;
     description?: string;
-    icon?: string;
+    icon?: ReactNode;
     onRetry?: () => void;
     action?: ReactNode;
 }
@@ -11,13 +12,13 @@ interface ErrorStateProps {
 export function ErrorState({
     action,
     description = "Something went wrong. Please try again.",
-    icon = "⚠️",
+    icon = <HiOutlineExclamationTriangle />,
     onRetry,
     title = "Error",
 }: ErrorStateProps) {
     return (
         <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-red-200 bg-red-50 px-6 py-10 text-center shadow-sm">
-            <span className="text-4xl">{icon}</span>
+            <span className="text-4xl text-red-500">{icon}</span>
             <div className="space-y-1">
                 <h3 className="text-base font-semibold text-gray-900">{title}</h3>
                 <p className="text-sm text-gray-600">{description}</p>

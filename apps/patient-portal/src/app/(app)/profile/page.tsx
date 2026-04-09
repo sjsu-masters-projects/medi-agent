@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { HiOutlineBuildingOffice2 } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { PageHeader } from "@/components/layouts";
 import { api } from "@/services/api";
@@ -253,7 +254,7 @@ export default function ProfilePage() {
                             ) : (
                                 <EmptyState
                                     description="Add a clinic invite code to connect your account with a care team."
-                                    icon="MD"
+                                    icon={<HiOutlineBuildingOffice2 />}
                                     title="No care teams linked yet"
                                 />
                             )}

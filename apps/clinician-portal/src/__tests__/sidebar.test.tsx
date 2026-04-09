@@ -13,7 +13,9 @@ describe("Sidebar", () => {
     beforeEach(() => {
         store.dispatch(
             hydrateSession({
-                token: "test-token",
+                accessToken: "test-token",
+                expiresAt: 1234567890,
+                refreshToken: "refresh-token",
                 user: {
                     email: "dr.smith@cityhealth.org",
                     id: "clinician-1",

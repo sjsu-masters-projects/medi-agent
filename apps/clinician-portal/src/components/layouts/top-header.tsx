@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
+import { HiOutlineBell, HiOutlineUserPlus } from "react-icons/hi2";
 import { Button } from "@/components/ui";
 
 export function TopHeader() {
@@ -15,11 +16,14 @@ export function TopHeader() {
                 rightContent: (
                     <div className="flex items-center gap-4">
                         <div className="relative text-slate-400">
-                            <span className="text-lg">🔔</span>
+                            <HiOutlineBell className="h-5 w-5" />
                             <span className="absolute -right-0.5 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-600" />
                         </div>
                         <Button className="px-4 py-2 text-xs font-semibold leading-tight">
-                            + Invite
+                            <span className="inline-flex items-center gap-1">
+                                <HiOutlineUserPlus className="h-4 w-4" />
+                                Invite
+                            </span>
                             <br />
                             Patient
                         </Button>

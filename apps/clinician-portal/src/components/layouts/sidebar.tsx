@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { HiOutlineChartBarSquare, HiOutlineChatBubbleLeftRight, HiOutlineCog6Tooth, HiOutlineExclamationTriangle, HiOutlineUsers } from "react-icons/hi2";
 
 const primaryNavigation = [
-    { href: "/dashboard", icon: "📊", label: "Risk Radar" },
-    { href: "/patients", icon: "👥", label: "Patient Roster" },
-    { href: "/medwatch", icon: "⚠️", label: "MedWatch Queue" },
-    { href: "/messages", icon: "💬", label: "Messages" },
+    { href: "/dashboard", icon: HiOutlineChartBarSquare, label: "Risk Radar" },
+    { href: "/patients", icon: HiOutlineUsers, label: "Patient Roster" },
+    { href: "/medwatch", icon: HiOutlineExclamationTriangle, label: "MedWatch Queue" },
+    { href: "/messages", icon: HiOutlineChatBubbleLeftRight, label: "Messages" },
 ];
 
 export function Sidebar() {
@@ -24,6 +25,7 @@ export function Sidebar() {
             <nav className="flex-1 space-y-2 px-4 py-6">
                 {primaryNavigation.map((item) => {
                     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    const Icon = item.icon;
 
                     return (
                         <Link
@@ -31,7 +33,7 @@ export function Sidebar() {
                             href={item.href}
                             key={item.href}
                         >
-                            <span>{item.icon}</span>
+                            <Icon className="h-5 w-5" />
                             <span>{item.label}</span>
                         </Link>
                     );
@@ -43,7 +45,7 @@ export function Sidebar() {
                         className={`mt-3 flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition ${pathname === "/settings" ? "bg-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}
                         href="/settings"
                     >
-                        <span>⚙️</span>
+                        <HiOutlineCog6Tooth className="h-5 w-5" />
                         <span>Clinic Settings</span>
                     </Link>
                 </div>

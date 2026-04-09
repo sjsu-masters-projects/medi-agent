@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { HiOutlineBeaker, HiOutlineClipboardDocumentList, HiOutlineDocumentText, HiOutlineFolder } from "react-icons/hi2";
 import { DocumentCard } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
@@ -10,7 +12,7 @@ import type { RootState } from "@/store/store";
 import { DocumentType, type Document } from "@/types";
 import { useSelector } from "react-redux";
 
-type PortalDocument = Document & { icon: string; provider: string };
+type PortalDocument = Document & { icon: ReactNode; provider: string };
 
 interface DocumentApiRecord {
     id: string;
@@ -35,15 +37,15 @@ interface DocumentApiRecord {
 function getDocumentIcon(documentType: DocumentType) {
     switch (documentType) {
         case DocumentType.LAB_REPORT:
-            return "🩸";
+            return <HiOutlineBeaker />;
         case DocumentType.PRESCRIPTION:
-            return "💊";
+            return <HiOutlineClipboardDocumentList />;
         case DocumentType.DISCHARGE_SUMMARY:
-            return "🏥";
+            return <HiOutlineDocumentText />;
         case DocumentType.DIAGNOSTIC_REPORT:
-            return "🧪";
+            return <HiOutlineBeaker />;
         default:
-            return "📄";
+            return <HiOutlineDocumentText />;
     }
 }
 
@@ -345,7 +347,7 @@ export default function RecordsPage() {
                     <p className="text-sm text-slate-500">Loading documents...</p>
                 ) : null}
                 {!loading && !pageError && documents.length === 0 ? (
-                    <EmptyState description="Upload PDFs or images from your clinic visits." icon="📁" title="No records yet" />
+                    <EmptyState description="Upload PDFs or images from your clinic visits." icon={<HiOutlineFolder />} title="No records yet" />
                 ) : null}
                 {documents.map((document) => {
                     const displayDocument = parsingDocIds.has(document.id)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HiOutlineCalendarDays } from "react-icons/hi2";
 import { PageHeader } from "@/components/layouts";
 import { Badge, Button, Card, EmptyState, Modal } from "@/components/ui";
 import type { Appointment } from "@/types";
@@ -45,7 +46,11 @@ export default function VisitsPage() {
                     </Card>
                 ) : null}
                 {appointments.length === 0 ? (
-                    <EmptyState description="Your upcoming appointments will appear here." icon="📅" title="No visits scheduled" />
+                    <EmptyState
+                        description="Your upcoming appointments will appear here."
+                        icon={<HiOutlineCalendarDays />}
+                        title="No visits scheduled"
+                    />
                 ) : null}
                 {appointments.map((appointment) => (
                     <button className="w-full text-left" key={appointment.id} onClick={() => setSelected(appointment)} type="button">

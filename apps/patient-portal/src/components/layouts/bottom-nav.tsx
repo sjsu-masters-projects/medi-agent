@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { HiSparkles } from "react-icons/hi2";
 
 interface BottomNavProps {
     currentPath: string;
@@ -89,7 +90,7 @@ export function BottomNav({ currentPath }: BottomNavProps) {
                 className="flex h-14 w-14 -translate-y-5 items-center justify-center rounded-full border-4 border-white bg-sky-700 text-2xl text-white shadow-[0_10px_18px_-8px_rgba(2,132,199,0.65)]"
                 href="/chat"
             >
-                ✦
+                <HiSparkles className="h-6 w-6" />
             </Link>
             <NavItem active={currentPath === "/visits"} href="/visits" icon={<CalendarIcon active={currentPath === "/visits"} />} label="Visits" />
             <NavItem active={currentPath === "/profile"} href="/profile" icon={<UserIcon active={currentPath === "/profile"} />} label="Profile" />
