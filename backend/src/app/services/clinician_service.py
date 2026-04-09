@@ -146,7 +146,7 @@ class ClinicianService:
                 patient_risk = await risk_service.get_patient_risk(pid)
                 risk_data.append(patient_risk.model_dump())
             except Exception:
-                logger.warning("Failed to compute risk for patient %s", pid)
+                logger.warning("Failed to compute risk for a patient — skipping")
 
         high = sum(1 for p in risk_data if p["risk_level"] == "high")
         medium = sum(1 for p in risk_data if p["risk_level"] == "medium")

@@ -220,16 +220,16 @@ class RiskScoreService:
                 latest_log_time = datetime.fromisoformat(
                     log_rows[0]["logged_at"].replace("Z", "+00:00")
                 )
-            except (ValueError, KeyError):
-                pass
+            except (ValueError, KeyError) as exc:
+                logger.debug("Unable to parse latest adherence log timestamp: %s", exc)
 
         if symptom_rows:
             try:
                 latest_symptom_time = datetime.fromisoformat(
                     symptom_rows[0]["created_at"].replace("Z", "+00:00")
                 )
-            except (ValueError, KeyError):
-                pass
+            except (ValueError, KeyError) as exc:
+                logger.debug("Unable to parse latest symptom report timestamp: %s", exc)
 
         now = datetime.now(UTC)
 

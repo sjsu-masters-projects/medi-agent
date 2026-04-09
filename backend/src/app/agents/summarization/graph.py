@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict, cast
-from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
 
@@ -69,7 +68,7 @@ async def gather_patient_data(state: SummarizationState, db: Any) -> Summarizati
     lookback_days = state.get("lookback_days", 30)
     cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).isoformat()
 
-    logger.info("Gathering patient data for summarization", extra={"patient_id": patient_id})
+    logger.info("Gathering patient data for summarization")
 
     # Patient profile
     patient_row = (
@@ -194,19 +193,12 @@ async def generate_soap_note(state: SummarizationState) -> SummarizationState:
             temperature=0.3,  # low temperature for clinical consistency
         )
 
-        logger.info(
-            "SOAP note generated successfully",
-            extra={"patient_id": state["patient_id"]},
-        )
+        logger.info("SOAP note generated successfully")
 
         return {**state, "soap_note": soap_note.model_dump(), "error": None}
 
     except Exception as exc:
-        logger.error(
-            "SOAP note generation failed: %s",
-            exc,
-            extra={"patient_id": state["patient_id"]},
-        )
+        logger.error("SOAP note generation failed: %s", exc)
         return {
             **state,
             "soap_note": {},
@@ -238,10 +230,7 @@ async def store_soap_note(state: SummarizationState, db: Any) -> SummarizationSt
     inserted = cast(list[dict[str, Any]], result.data or [])
     note_id = inserted[0]["id"] if inserted else "unknown"
 
-    logger.info(
-        "SOAP note stored",
-        extra={"patient_id": state["patient_id"], "note_id": note_id},
-    )
+    logger.info("SOAP note stored (note_id=%s)", note_id)
 
     return {**state, "stored_note_id": note_id}
 
