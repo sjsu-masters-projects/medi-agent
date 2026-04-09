@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { HiOutlineBeaker, HiOutlineClipboardDocumentList, HiOutlineDocumentText, HiOutlineFolder } from "react-icons/hi2";
-import { DocumentCard } from "@/components/features";
+import { DocumentCard, PdfViewer } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
 import { api } from "@/services/api";
@@ -399,6 +399,9 @@ export default function RecordsPage() {
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Source</p>
                         <p className="mt-1 text-sm font-medium text-slate-700">{selectedDocument?.provider}</p>
                     </div>
+                    {selectedDocument?.mimeType === "application/pdf" && selectedDocument.fileUrl ? (
+                        <PdfViewer documentUrl={selectedDocument.fileUrl} height="400px" />
+                    ) : null}
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                         <div className="flex items-center justify-between gap-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
