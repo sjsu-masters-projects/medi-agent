@@ -29,7 +29,7 @@ interface Factor {
 
 export default function MFASetupPage() {
     const router = useRouter();
-    const token = useSelector((state: RootState) => state.auth.token);
+    const token = useSelector((state: RootState) => state.auth.accessToken);
     const [step, setStep] = useState<MFAStep>("loading");
     const [enrollData, setEnrollData] = useState<EnrollData | null>(null);
     const [factors, setFactors] = useState<Factor[]>([]);

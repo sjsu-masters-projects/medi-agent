@@ -46,7 +46,7 @@ function getRoleLabel(role: string) {
 }
 
 export default function SettingsPage() {
-    const token = useSelector((state: RootState) => state.auth.token);
+    const token = useSelector((state: RootState) => state.auth.accessToken);
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [clinicName, setClinicName] = useState("");
     const [loading, setLoading] = useState(true);
