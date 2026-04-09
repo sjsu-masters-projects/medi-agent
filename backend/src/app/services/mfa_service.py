@@ -44,9 +44,9 @@ class MFAService:
         return {
             "factor_id": str(response.id),
             "totp": {
-                "qr_code": response.totp.qr_code,
-                "secret": response.totp.secret,
-                "uri": response.totp.uri,
+                "qr_code": response.totp.qr_code if response.totp else "",
+                "secret": response.totp.secret if response.totp else "",
+                "uri": response.totp.uri if response.totp else "",
             },
             "friendly_name": friendly_name,
         }

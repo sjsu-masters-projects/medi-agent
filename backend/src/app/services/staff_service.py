@@ -32,9 +32,10 @@ class StaffService:
             .single()
             .execute()
         )
-        if not result.data:
+        data = cast("dict[str, Any]", result.data)
+        if not data:
             raise NotFoundError("Clinician", str(clinician_id))
-        return cast("str", result.data["clinic_name"])
+        return cast("str", data["clinic_name"])
 
     async def _require_admin(self, clinician_id: UUID) -> str:
         """Verify the clinician has admin role. Returns their clinic_name."""
@@ -45,11 +46,12 @@ class StaffService:
             .single()
             .execute()
         )
-        if not result.data:
+        data = cast("dict[str, Any]", result.data)
+        if not data:
             raise NotFoundError("Clinician", str(clinician_id))
-        if result.data["role"] != "admin":
+        if data["role"] != "admin":
             raise AuthorizationError("Only clinic admins can manage staff")
-        return cast("str", result.data["clinic_name"])
+        return cast("str", data["clinic_name"])
 
     async def list_staff(self, clinician_id: UUID) -> dict[str, Any]:
         """List all clinicians in the same clinic."""
@@ -80,7 +82,8 @@ class StaffService:
             .single()
             .execute()
         )
-        if not target.data or target.data["clinic_name"] != clinic_name:
+        target_data = cast("dict[str, Any]", target.data)
+        if not target_data or target_data.get("clinic_name") != clinic_name:
             raise NotFoundError("Staff member", str(target_id))
 
         self.db.table("clinicians").update({"role": new_role}).eq("id", str(target_id)).execute()
@@ -101,7 +104,8 @@ class StaffService:
             .single()
             .execute()
         )
-        if not target.data or target.data["clinic_name"] != clinic_name:
+        target_data = cast("dict[str, Any]", target.data)
+        if not target_data or target_data.get("clinic_name") != clinic_name:
             raise NotFoundError("Staff member", str(target_id))
 
         self.db.table("clinicians").update({"clinic_name": f"_removed_{clinic_name}"}).eq(
@@ -123,12 +127,12 @@ class StaffService:
         )
 
         if existing.data:
-            target = existing.data[0]
-            if target["clinic_name"] == clinic_name:
+            target = cast("dict[str, Any]", existing.data[0])
+            if target.get("clinic_name") == clinic_name:
                 raise ValidationError("This person is already in your clinic")
 
             self.db.table("clinicians").update({"clinic_name": clinic_name, "role": role}).eq(
-                "id", target["id"]
+                "id", str(target.get("id"))
             ).execute()
 
             return {"status": "added", "email": email, "role": role}
