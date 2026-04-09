@@ -9,18 +9,21 @@ import type { RootState } from "@/store/store";
 
 export default function ClinicSetupPage() {
     const router = useRouter();
-    const token = useSelector((state: RootState) => state.auth.token);
+    const accessToken = useSelector((state: RootState) => state.auth.accessToken);
     const [clinicName, setClinicName] = useState("City Health Primary Care");
     const [npiNumber, setNpiNumber] = useState("1234567890");
     const [specialty, setSpecialty] = useState("Primary Care");
     const [error, setError] = useState("");
+    const [submitting, setSubmitting] = useState(false);
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError("");
+        setSubmitting(true);
 
-        if (!token) {
+        if (!accessToken) {
             setError("Please sign in first so we can save your clinician profile.");
+            setSubmitting(false);
             return;
         }
 
@@ -32,11 +35,12 @@ export default function ClinicSetupPage() {
                     npi_number: npiNumber,
                     specialty,
                 },
-                { token },
+                { token: accessToken },
             );
             router.replace("/dashboard");
         } catch (submissionError) {
             setError((submissionError as Error).message);
+            setSubmitting(false);
         }
     }
 
@@ -52,7 +56,9 @@ export default function ClinicSetupPage() {
                     <Input label="NPI number" onChange={(event) => setNpiNumber(event.target.value)} value={npiNumber} />
                     <Input label="Specialty" onChange={(event) => setSpecialty(event.target.value)} value={specialty} />
                     {error ? <p className="text-sm text-red-600">{error}</p> : null}
-                    <Button fullWidth type="submit">Save and continue</Button>
+                    <Button disabled={submitting} fullWidth type="submit">
+                        {submitting ? "Saving..." : "Save and continue"}
+                    </Button>
                 </form>
             </Card>
         </div>

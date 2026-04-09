@@ -23,6 +23,7 @@ from supabase import Client
 from app.core.exceptions import AuthenticationError, ValidationError
 
 logger = logging.getLogger(__name__)
+_SUPPORTED_ROLES = {"patient", "clinician"}
 
 
 class AuthService:
@@ -81,7 +82,16 @@ class AuthService:
             self.db.auth.admin.delete_user(user_id)
             raise ValidationError(f"Profile creation failed: {e}") from e
 
-        return self._format_session(auth_response)
+        try:
+            return self._sign_in_and_format(
+                email=email,
+                password=password,
+                expected_role="patient",
+            )
+        except Exception as e:
+            logger.error("Failed to finalize patient signup for %s: %s", user_id, e)
+            self._cleanup_signup("patients", user_id)
+            raise
 
     async def signup_clinician(
         self,
@@ -123,24 +133,22 @@ class AuthService:
             self.db.auth.admin.delete_user(user_id)
             raise ValidationError(f"Profile creation failed: {e}") from e
 
-        return self._format_session(auth_response)
+        try:
+            return self._sign_in_and_format(
+                email=email,
+                password=password,
+                expected_role="clinician",
+            )
+        except Exception as e:
+            logger.error("Failed to finalize clinician signup for %s: %s", user_id, e)
+            self._cleanup_signup("clinicians", user_id)
+            raise
 
     # ── Login ───────────────────────────────────────────────
 
     async def login(self, email: str, password: str) -> Any:
         """Authenticate with email + password. Works for both roles."""
-        try:
-            response = self.db.auth.sign_in_with_password(
-                {
-                    "email": email,
-                    "password": password,
-                }
-            )
-        except Exception as e:
-            logger.warning("Login failed for %s: %s", email, e)
-            raise AuthenticationError("Invalid email or password") from None
-
-        return self._format_session(response)
+        return self._sign_in_and_format(email=email, password=password)
 
     # ── Token Refresh ───────────────────────────────────────
 
@@ -166,14 +174,62 @@ class AuthService:
 
     # ── Helpers ─────────────────────────────────────────────
 
+    def _sign_in_and_format(
+        self,
+        *,
+        email: str,
+        password: str,
+        expected_role: str | None = None,
+    ) -> Any:
+        """Sign in with email/password and validate the returned role."""
+        try:
+            response = self.db.auth.sign_in_with_password(
+                {
+                    "email": email,
+                    "password": password,
+                }
+            )
+        except Exception as e:
+            logger.warning("Login failed for %s: %s", email, e)
+            raise AuthenticationError("Invalid email or password") from None
+
+        return self._format_session(response, expected_role=expected_role)
+
+    def _cleanup_signup(self, profile_table: str, user_id: str) -> None:
+        """Best-effort rollback for partially created signup records."""
+        try:
+            self.db.table(profile_table).delete().eq("id", user_id).execute()
+        except Exception as e:
+            logger.warning("Failed to delete %s profile for %s: %s", profile_table, user_id, e)
+
+        try:
+            self.db.auth.admin.delete_user(user_id)
+        except Exception as e:
+            logger.warning("Failed to delete auth user %s during rollback: %s", user_id, e)
+
     @staticmethod
-    def _format_session(response: Any) -> Any:
+    def _validate_role(role: str, expected_role: str | None = None) -> str:
+        """Reject unknown roles and mismatched role expectations."""
+        if role not in _SUPPORTED_ROLES:
+            raise AuthenticationError("Authentication failed — invalid user role")
+        if expected_role and role != expected_role:
+            raise AuthenticationError(
+                f"Authentication failed — expected '{expected_role}' role but received '{role}'"
+            )
+        return role
+
+    @classmethod
+    def _format_session(cls, response: Any, expected_role: str | None = None) -> Any:
         """Normalize Supabase auth response into our standard shape."""
         session = response.session
         user = response.user
 
         if not session or not user:
             raise AuthenticationError("Authentication failed — no session returned")
+
+        role = cls._validate_role(
+            (user.app_metadata or {}).get("user_role", "unknown"), expected_role
+        )
 
         return {
             "tokens": {
@@ -185,7 +241,7 @@ class AuthService:
             "user": {
                 "id": str(user.id),
                 "email": user.email or "",
-                "role": (user.app_metadata or {}).get("user_role", "unknown"),
+                "role": role,
                 "created_at": user.created_at,
             },
         }

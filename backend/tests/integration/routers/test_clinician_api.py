@@ -35,7 +35,7 @@ def mock_supabase_db():
     db.table.return_value = table
 
     # Make all query methods chainable
-    for method in ["select", "eq", "single", "insert", "order"]:
+    for method in ["select", "eq", "single", "insert", "order", "update"]:
         getattr(table, method).return_value = table
 
     return db
@@ -151,6 +151,37 @@ class TestGetMyPatients:
         data = response.json()
         assert isinstance(data, list)
         assert len(data) == 0
+
+
+class TestUpdateMyProfile:
+    """PUT /api/v1/clinicians/me - Update clinician profile."""
+
+    def test_success(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
+        updated_data = {
+            "id": str(clinician_id),
+            "email": "clinician@test.com",
+            "first_name": "Dr. Sarah",
+            "last_name": "Smith",
+            "specialty": "Internal Medicine",
+            "clinic_name": "City Health",
+            "npi_number": "1234567890",
+            "role": "provider",
+            "avatar_url": None,
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-15T00:00:00Z",
+        }
+
+        mock_supabase_db.table().update().eq().execute.return_value = MagicMock(data=[updated_data])
+
+        response = client.put(
+            "/api/v1/clinicians/me",
+            json={"specialty": "Internal Medicine", "clinic_name": "City Health"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["specialty"] == "Internal Medicine"
+        assert data["clinic_name"] == "City Health"
 
 
 class TestGetPatientDetail:

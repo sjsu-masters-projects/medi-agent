@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useDispatch } from "react-redux";
 import { PageHeader } from "@/components/layouts";
+import { clearStoredSession } from "@/services/auth-session";
 import { Badge, Button, Card } from "@/components/ui";
 import { logout } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
@@ -37,7 +38,7 @@ export default function ProfilePage() {
     const router = useRouter();
 
     function handleLogout() {
-        window.localStorage.removeItem("mediagent-patient-auth");
+        clearStoredSession();
         dispatch(logout());
         router.replace("/login");
     }

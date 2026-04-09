@@ -38,6 +38,17 @@ class ClinicianService:
             raise NotFoundError("Clinician", str(clinician_id))
         return result.data
 
+    async def update_profile(self, clinician_id: UUID, updates: dict[str, Any]) -> Any:
+        """Partial update for the clinician's own profile."""
+        clean = {key: value for key, value in updates.items() if value is not None}
+        if not clean:
+            return await self.get_profile(clinician_id)
+
+        result = self.db.table("clinicians").update(clean).eq("id", str(clinician_id)).execute()
+        if not result.data:
+            raise NotFoundError("Clinician", str(clinician_id))
+        return result.data[0]
+
     # ── Patient List ────────────────────────────────────
 
     async def get_patients(self, clinician_id: UUID) -> Any:

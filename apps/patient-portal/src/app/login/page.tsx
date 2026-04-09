@@ -6,15 +6,15 @@ import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
-import { hydrateSession } from "@/store/slices/auth-slice";
+import { writeStoredSession } from "@/services/auth-session";
+import { hydrateSession, type PatientAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
-
-const storageKey = "mediagent-patient-auth";
-const isDevelopment = process.env.NODE_ENV === "development";
 
 interface AuthResponse {
     tokens: {
         access_token: string;
+        expires_at: number;
+        refresh_token: string;
     };
     user: {
         email: string;
@@ -26,8 +26,8 @@ interface AuthResponse {
 export default function LoginPage() {
     const router = useRouter();
     const dispatch = useDispatch<AppDispatch>();
-    const [email, setEmail] = useState(isDevelopment ? "sarah@example.com" : "");
-    const [password, setPassword] = useState(isDevelopment ? "password123" : "");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
@@ -41,9 +41,13 @@ export default function LoginPage() {
             if (response.user.role !== "patient") {
                 throw new Error("This login belongs to a clinician account.");
             }
-
-            const session = { token: response.tokens.access_token, user: response.user };
-            window.localStorage.setItem(storageKey, JSON.stringify(session));
+            const session: PatientAuthSession = {
+                accessToken: response.tokens.access_token,
+                expiresAt: response.tokens.expires_at,
+                refreshToken: response.tokens.refresh_token,
+                user: { ...response.user, role: "patient" },
+            };
+            writeStoredSession(session);
             dispatch(hydrateSession(session));
             router.replace("/today");
         } catch (submissionError) {

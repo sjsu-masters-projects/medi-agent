@@ -99,22 +99,22 @@ function getMissedTaskIds(tasks: FeedTask[]) {
 export function useFeedData() {
     const dispatch = useDispatch<AppDispatch>();
     const feed = useSelector((state: RootState) => state.feed);
-    const token = useSelector((state: RootState) => state.auth.token);
+    const accessToken = useSelector((state: RootState) => state.auth.accessToken);
     const [adherenceStats, setAdherenceStats] = useState<AdherenceStats>(mockAdherenceStats);
 
     useEffect(() => {
-        dispatch(fetchTodayFeed({ token }))
+        dispatch(fetchTodayFeed({ token: accessToken }))
             .unwrap()
             .catch(() => {
                 dispatch(loadMockFeed({ summary: mockFeedSummary, tasks: mockFeedTasks }));
             });
-    }, [dispatch, token]);
+    }, [accessToken, dispatch]);
 
     useEffect(() => {
-        api.get<AdherenceStats>("/api/v1/adherence/stats", { token: token ?? undefined })
+        api.get<AdherenceStats>("/api/v1/adherence/stats", { token: accessToken ?? undefined })
             .then((response) => setAdherenceStats(response))
             .catch(() => setAdherenceStats(mockAdherenceStats));
-    }, [token]);
+    }, [accessToken]);
 
     useEffect(() => {
         const missedIds = getMissedTaskIds(feed.tasks);
@@ -127,7 +127,7 @@ export function useFeedData() {
         const completedAt = new Date().toISOString();
         dispatch(markTaskComplete({ completedAt, taskId: task.id }));
 
-        if (!token) {
+        if (!accessToken) {
             return;
         }
 
@@ -139,7 +139,7 @@ export function useFeedData() {
                     target_id: task.targetId,
                     target_type: task.type,
                 },
-                { token },
+                { token: accessToken },
             );
         } catch {
             // Keep optimistic UI state even when backend is unavailable.
