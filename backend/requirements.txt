@@ -1,52 +1,52 @@
-# ============================================================
+# >=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=
 # MediAgent Backend — Pinned Production Dependencies
-# ============================================================
+# >=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=
 
 # -- Web Framework --
-fastapi==0.135.1
-uvicorn[standard]==0.34.0
-python-multipart>=0.0.22
+fastapi
+uvicorn[standard]
+python-multipart
 
 # -- Data Validation & Settings --
-pydantic==2.12.5
-pydantic-settings==2.13.1
-email-validator==2.2.0
+pydantic
+pydantic-settings
+email-validator
 
 # -- Database --
-supabase==2.28.0
+supabase
 
 # -- AI / LLM --
-google-genai==1.66.0
-google-generativeai==0.8.6
-google-cloud-aiplatform==1.133.0
-langgraph==1.0.10
-langchain-google-genai==4.2.1
+google-genai
+google-generativeai
+google-cloud-aiplatform
+langgraph
+langchain-google-genai
 
 # -- Voice --
-deepgram-sdk==6.0.1
+deepgram-sdk
 
 # -- Email --
-resend==2.23.0
+resend
 
 # -- Auth --
-python-jose[cryptography]==3.5.0
-passlib[bcrypt]==1.7.4
+python-jose[cryptography]
+passlib[bcrypt]
 
 # -- HTTP Client --
-httpx==0.28.1
+httpx
 
 # -- Logging --
-structlog==25.1.0
+structlog
 
 # -- Document Processing --
-PyMuPDF==1.24.0
-pytesseract==0.3.10
-Pillow>=12.1.1
+PyMuPDF
+pytesseract
+Pillow
 
 # -- PII Redaction --
-presidio-analyzer==2.2.354
-presidio-anonymizer==2.2.354
-spacy==3.7.0
+presidio-analyzer
+presidio-anonymizer
+spacy
 
 # -- FHIR --
-fhir.resources==7.1.0
+fhir.resources

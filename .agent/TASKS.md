@@ -199,16 +199,16 @@
 - [x] Document list view
 - [x] Document upload button (file picker + camera capture)
 - [x] Upload progress indicator
-- [ ] Research and configure Syncfusion PDF viewer integration
-- [ ] Syncfusion PDF viewer UI component (in-app viewing)
+- [x] Research and configure Syncfusion PDF viewer integration
+- [x] Syncfusion PDF viewer UI component (in-app viewing)
 - [x] "Explain This to Me" button + summary display
 - [x] Language selector for explanation
 
 ### 3.5 Clinician Portal — Auth
 - [x] Login page (email + password)
-- [ ] MFA setup flow
+- [x] MFA setup flow
 - [x] Clinic setup page (name, NPI)
-- [ ] Role management (Admin, Provider, Nurse)
+- [x] Role management (Admin, Provider, Nurse)
 - [x] Auth state in Redux
 - [x] Protected routes
 
@@ -221,13 +221,13 @@
 
 ### 3.7 Phase 3 — Known Limitations & Tech Debt
 - [x] Create generic error state component (`components/ui/error-state.tsx`)
-- [ ] Research and configure Syncfusion PDF viewer integration
+- [x] Research and configure Syncfusion PDF viewer integration
 - [x] Language selector for AI record explanations
-- [ ] Clinician MFA setup flow
-- [ ] Clinician role management (Admin, Provider, Nurse)
+- [x] Clinician MFA setup flow
+- [x] Clinician role management (Admin, Provider, Nurse)
 - [x] Clinician protected route wrapper
 - [x] Refactor clinician patients page to use reusable `DataTable` component
-- [ ] Revert `--webpack` build flag to Turbopack once infra supports it
+- [x] Revert `--webpack` build flag to Turbopack once infra supports it
 - [x] Fix vite path traversal vulnerability (upgrade to ≥7.3.2)
 
 ---

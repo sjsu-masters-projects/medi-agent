@@ -22,9 +22,11 @@ from app.routers import (
     documents,
     feed,
     medications,
+    mfa,
     notifications,
     obligations,
     patients,
+    staff,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,6 +82,7 @@ def create_app() -> FastAPI:
     # ── Routers ─────────────────────────────────────────
     api = "/api/v1"
     application.include_router(auth.router, prefix=f"{api}/auth", tags=["Auth"])
+    application.include_router(mfa.router, prefix=f"{api}/auth/mfa", tags=["MFA"])
     application.include_router(patients.router, prefix=f"{api}/patients", tags=["Patients"])
     application.include_router(clinicians.router, prefix=f"{api}/clinicians", tags=["Clinicians"])
     application.include_router(documents.router, prefix=f"{api}/documents", tags=["Documents"])
@@ -99,6 +102,7 @@ def create_app() -> FastAPI:
     application.include_router(
         notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
     )
+    application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
 
     # ── Health Check ────────────────────────────────────
     @application.get("/health", tags=["Health"])
