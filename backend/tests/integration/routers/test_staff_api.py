@@ -6,8 +6,6 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 
-from app.core.security import get_current_user, require_role
-from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
 from app.services.staff_service import StaffService

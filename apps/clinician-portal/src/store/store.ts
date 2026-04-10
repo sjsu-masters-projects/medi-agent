@@ -3,6 +3,7 @@ import { authSlice } from "./slices/auth-slice";
 import { dashboardSlice } from "./slices/dashboard-slice";
 import { patientsSlice } from "./slices/patients-slice";
 import { medwatchSlice } from "./slices/medwatch-slice";
+import { patientDetailSlice } from "./slices/patient-detail-slice";
 
 export const store = configureStore({
     reducer: {
@@ -10,6 +11,7 @@ export const store = configureStore({
         dashboard: dashboardSlice.reducer,
         patients: patientsSlice.reducer,
         medwatch: medwatchSlice.reducer,
+        patientDetail: patientDetailSlice.reducer,
     },
 });
 

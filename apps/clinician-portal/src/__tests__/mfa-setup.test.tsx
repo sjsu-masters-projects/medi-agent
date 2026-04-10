@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import MFASetupPage from "../app/(dashboard)/settings/mfa/page";
 import { api } from "@/services/api";

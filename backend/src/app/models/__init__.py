@@ -12,6 +12,17 @@ from app.models.clinician_message import ClinicianMessageCreate, ClinicianMessag
 # Schemas
 from app.models.common import ErrorResponse, PaginatedResponse, SuccessResponse, TimestampMixin
 from app.models.condition import AllergyCreate, AllergyRead, ConditionCreate, ConditionRead
+from app.models.dashboard import (
+    AdherenceDataPoint,
+    AnnotationCreate,
+    DashboardResponse,
+    ObligationSetRequest,
+    PatientDeepDive,
+    PatientRiskData,
+    SoapNote,
+    SoapNoteRead,
+    SoapNoteRequest,
+)
 from app.models.document import DocumentRead, DocumentUpload
 from app.models.enums import (
     AdherenceStatus,
@@ -124,4 +135,14 @@ __all__ = [
     # Clinician Messages
     "ClinicianMessageCreate",
     "ClinicianMessageRead",
+    # Dashboard (Phase 6)
+    "AdherenceDataPoint",
+    "AnnotationCreate",
+    "DashboardResponse",
+    "ObligationSetRequest",
+    "PatientDeepDive",
+    "PatientRiskData",
+    "SoapNote",
+    "SoapNoteRead",
+    "SoapNoteRequest",
 ]
