@@ -109,6 +109,21 @@ async def test_signup_patient_auth_failure(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
+async def test_signup_patient_auth_exception(auth_service, mock_supabase_client):
+    """Test patient signup when Supabase sign_up raises unexpectedly."""
+    mock_supabase_client.auth.sign_up.side_effect = Exception("User already registered")
+
+    with pytest.raises(ValidationError, match="already registered"):
+        await auth_service.signup_patient(
+            email="patient@example.com",
+            password="SecurePass123!",
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+        )
+
+
+@pytest.mark.asyncio
 async def test_signup_patient_profile_creation_failure(auth_service, mock_supabase_client):
     """Test patient signup when profile creation fails."""
     # Mock successful auth.sign_up
@@ -256,6 +271,7 @@ async def test_login_success(auth_service, mock_supabase_client):
     mock_auth_response.session = mock_session
 
     mock_supabase_client.auth.sign_in_with_password.return_value = mock_auth_response
+    auth_service._list_verified_mfa_factors = MagicMock(return_value=[])  # type: ignore[method-assign]
 
     # Call login
     result = await auth_service.login(email="user@example.com", password="password123")
@@ -268,6 +284,46 @@ async def test_login_success(auth_service, mock_supabase_client):
     # Verify response format
     assert result["tokens"]["access_token"] == "login-access-token"
     assert result["user"]["id"] == "user-123"
+    assert result["mfa_required"] is False
+
+
+@pytest.mark.asyncio
+async def test_login_requires_mfa_for_clinician_with_verified_factor(
+    auth_service, mock_supabase_client
+):
+    mock_user = Mock()
+    mock_user.id = "clinician-123"
+    mock_user.email = "doctor@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = {"user_role": "clinician"}
+
+    mock_session = Mock()
+    mock_session.access_token = "login-access-token"
+    mock_session.refresh_token = "login-refresh-token"
+    mock_session.expires_at = 1234567890
+
+    mock_auth_response = Mock()
+    mock_auth_response.user = mock_user
+    mock_auth_response.session = mock_session
+
+    mock_supabase_client.auth.sign_in_with_password.return_value = mock_auth_response
+    auth_service._extract_aal = MagicMock(return_value="aal1")  # type: ignore[method-assign]
+    auth_service._list_verified_mfa_factors = MagicMock(  # type: ignore[method-assign]
+        return_value=[
+            {
+                "id": "factor-1",
+                "friendly_name": "Authenticator",
+                "factor_type": "totp",
+                "status": "verified",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        ]
+    )
+
+    result = await auth_service.login(email="doctor@example.com", password="password123")
+
+    assert result["mfa_required"] is True
+    assert result["mfa_factors"][0]["id"] == "factor-1"
 
 
 @pytest.mark.asyncio

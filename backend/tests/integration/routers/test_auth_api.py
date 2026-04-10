@@ -132,6 +132,24 @@ class TestClinicianSignup:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.json()["user"]["role"] == "clinician"
 
+    def test_signup_exception_returns_validation_error(self, client, override_db, mock_supabase_db):
+        mock_supabase_db.auth.sign_up.side_effect = Exception("User already registered")
+
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "doctor@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Amir",
+                "last_name": "Khan",
+                "clinic_name": "City Health",
+                "specialty": "Primary Care",
+                "npi_number": "1234567890",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
 
 class TestLogin:
     def test_success_for_both_roles(self, client, override_db, mock_supabase_db):
@@ -148,19 +166,62 @@ class TestLogin:
             ),
         ]
 
-        patient_response = client.post(
-            "/api/v1/auth/login",
-            json={"email": "patient@example.com", "password": "SecurePass123!"},
-        )
-        clinician_response = client.post(
-            "/api/v1/auth/login",
-            json={"email": "doctor@example.com", "password": "SecurePass123!"},
-        )
+        from app.services.auth_service import AuthService
+
+        original = AuthService._list_verified_mfa_factors
+        AuthService._list_verified_mfa_factors = staticmethod(lambda _access, _refresh: [])
+        try:
+            patient_response = client.post(
+                "/api/v1/auth/login",
+                json={"email": "patient@example.com", "password": "SecurePass123!"},
+            )
+            clinician_response = client.post(
+                "/api/v1/auth/login",
+                json={"email": "doctor@example.com", "password": "SecurePass123!"},
+            )
+        finally:
+            AuthService._list_verified_mfa_factors = original
 
         assert patient_response.status_code == status.HTTP_200_OK
         assert patient_response.json()["user"]["role"] == "patient"
+        assert patient_response.json()["mfa_required"] is False
         assert clinician_response.status_code == status.HTTP_200_OK
         assert clinician_response.json()["user"]["role"] == "clinician"
+        assert clinician_response.json()["mfa_required"] is False
+
+    def test_clinician_login_can_require_mfa(self, client, override_db, mock_supabase_db):
+        response = _make_auth_response(
+            user_id=str(uuid4()),
+            email="doctor@example.com",
+            role="clinician",
+        )
+        mock_supabase_db.auth.sign_in_with_password.return_value = response
+
+        from app.services.auth_service import AuthService
+
+        original = AuthService._list_verified_mfa_factors
+        AuthService._list_verified_mfa_factors = staticmethod(
+            lambda _access, _refresh: [
+                {
+                    "id": "factor-1",
+                    "friendly_name": "Authenticator",
+                    "factor_type": "totp",
+                    "status": "verified",
+                    "created_at": "2026-01-01T00:00:00Z",
+                }
+            ]
+        )
+        try:
+            result = client.post(
+                "/api/v1/auth/login",
+                json={"email": "doctor@example.com", "password": "SecurePass123!"},
+            )
+        finally:
+            AuthService._list_verified_mfa_factors = original
+
+        assert result.status_code == status.HTTP_200_OK
+        assert result.json()["mfa_required"] is True
+        assert result.json()["mfa_factors"][0]["id"] == "factor-1"
 
     def test_invalid_credentials(self, client, override_db, mock_supabase_db):
         mock_supabase_db.auth.sign_in_with_password.side_effect = Exception("Invalid login")

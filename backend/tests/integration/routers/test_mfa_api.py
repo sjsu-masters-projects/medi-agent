@@ -9,7 +9,7 @@ from fastapi import status
 from app.core.security import get_current_user
 from app.main import app
 from app.models.auth import CurrentUser
-from app.routers.mfa import _extract_token, _get_mfa_service
+from app.routers.mfa import _extract_refresh_token, _extract_token, _get_mfa_service
 from app.services.mfa_service import MFAService
 
 
@@ -28,6 +28,7 @@ def override_deps(mock_clinician_user, mock_mfa_service):
     app.dependency_overrides[get_current_user] = lambda: mock_clinician_user
     app.dependency_overrides[_get_mfa_service] = lambda: mock_mfa_service
     app.dependency_overrides[_extract_token] = lambda: "fake-jwt-token"
+    app.dependency_overrides[_extract_refresh_token] = lambda: "fake-refresh-token"
     yield
     app.dependency_overrides.clear()
 
@@ -60,6 +61,7 @@ class TestMFAVerify:
     async def test_success(self, client, mock_mfa_service):
         mock_mfa_service.verify.return_value = {
             "access_token": "new-access",
+            "expires_at": 1234567890,
             "refresh_token": "new-refresh",
             "token_type": "bearer",
         }

@@ -18,8 +18,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from supabase import Client
+from jose import JWTError, jwt
+from supabase import Client, create_client
 
+from app.config import settings
 from app.core.exceptions import AuthenticationError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -52,15 +54,14 @@ class AuthService:
         Returns the Supabase session (access_token, refresh_token, user).
         """
         # 1. Create the auth user via Supabase Auth
-        auth_response = self.db.auth.sign_up(
-            {
-                "email": email,
-                "password": password,
-            }
-        )
+        auth_response = self._create_auth_user(email=email, password=password)
 
         if not auth_response.user:
-            raise ValidationError("Signup failed — check email format or try a different email")
+            raise ValidationError(
+                self._build_signup_validation_message(
+                    getattr(auth_response, "error", None),
+                )
+            )
 
         user_id = auth_response.user.id
 
@@ -79,7 +80,7 @@ class AuthService:
         except Exception as e:
             logger.error("Failed to create patient profile for %s: %s", user_id, e)
             # Clean up the orphaned auth user
-            self.db.auth.admin.delete_user(user_id)
+            self._delete_auth_user(user_id)
             raise ValidationError(f"Profile creation failed: {e}") from e
 
         try:
@@ -104,15 +105,14 @@ class AuthService:
         npi_number: str | None = None,
     ) -> Any:
         """Create a clinician account: auth user + profile row."""
-        auth_response = self.db.auth.sign_up(
-            {
-                "email": email,
-                "password": password,
-            }
-        )
+        auth_response = self._create_auth_user(email=email, password=password)
 
         if not auth_response.user:
-            raise ValidationError("Signup failed — check email format or try a different email")
+            raise ValidationError(
+                self._build_signup_validation_message(
+                    getattr(auth_response, "error", None),
+                )
+            )
 
         user_id = auth_response.user.id
 
@@ -130,7 +130,7 @@ class AuthService:
             ).execute()
         except Exception as e:
             logger.error("Failed to create clinician profile for %s: %s", user_id, e)
-            self.db.auth.admin.delete_user(user_id)
+            self._delete_auth_user(user_id)
             raise ValidationError(f"Profile creation failed: {e}") from e
 
         try:
@@ -148,7 +148,24 @@ class AuthService:
 
     async def login(self, email: str, password: str) -> Any:
         """Authenticate with email + password. Works for both roles."""
-        return self._sign_in_and_format(email=email, password=password)
+        response = self._sign_in_and_format(email=email, password=password)
+
+        if response["user"]["role"] != "clinician":
+            return {
+                **response,
+                "mfa_required": False,
+                "mfa_factors": [],
+            }
+
+        factors = self._list_verified_mfa_factors(
+            response["tokens"]["access_token"],
+            response["tokens"]["refresh_token"],
+        )
+        return {
+            **response,
+            "mfa_required": bool(factors) and self._extract_aal(response["tokens"]["access_token"]) != "aal2",
+            "mfa_factors": factors,
+        }
 
     # ── Token Refresh ───────────────────────────────────────
 
@@ -206,10 +223,75 @@ class AuthService:
         except Exception as e:
             logger.warning("Failed to delete %s profile for %s: %s", profile_table, user_id, e)
 
+        self._delete_auth_user(user_id)
+
+    def _create_auth_user(self, *, email: str, password: str) -> Any:
+        """Create Supabase auth user and map SDK failures to ValidationError."""
+        try:
+            return self.db.auth.sign_up(
+                {
+                    "email": email,
+                    "password": password,
+                }
+            )
+        except Exception as e:
+            logger.warning("Supabase signup failed for %s: %s", email, e)
+            raise ValidationError(self._build_signup_validation_message(e)) from None
+
+    @staticmethod
+    def _build_signup_validation_message(error: Any) -> str:
+        """Generate client-safe signup error text from Supabase responses/exceptions."""
+        detail = str(error).lower() if error else ""
+
+        duplicate_hints = (
+            "already registered",
+            "already exists",
+            "duplicate",
+            "user already",
+        )
+        if any(hint in detail for hint in duplicate_hints):
+            return "Signup failed — email is already registered"
+
+        return "Signup failed — check email format or try a different email"
+
+    def _delete_auth_user(self, user_id: str) -> None:
+        """Best-effort auth cleanup without masking original failures."""
         try:
             self.db.auth.admin.delete_user(user_id)
         except Exception as e:
             logger.warning("Failed to delete auth user %s during rollback: %s", user_id, e)
+
+    @staticmethod
+    def _extract_aal(access_token: str) -> str:
+        """Read the current MFA assurance level from the JWT."""
+        try:
+            claims = jwt.get_unverified_claims(access_token)
+        except JWTError:
+            return "aal1"
+        return str(claims.get("aal", "aal1"))
+
+    @staticmethod
+    def _list_verified_mfa_factors(access_token: str, refresh_token: str) -> list[dict[str, Any]]:
+        """Return verified MFA factors for the just-authenticated user."""
+        client = create_client(settings.supabase_url, settings.supabase_anon_key)
+        try:
+            client.auth.set_session(access_token, refresh_token)
+            response = client.auth.mfa.list_factors()
+        except Exception as e:
+            logger.warning("Failed to determine MFA status after login: %s", e)
+            raise AuthenticationError("Unable to determine MFA status") from None
+
+        return [
+            {
+                "id": str(factor.id),
+                "friendly_name": factor.friendly_name,
+                "factor_type": factor.factor_type,
+                "status": factor.status,
+                "created_at": str(factor.created_at) if factor.created_at else None,
+            }
+            for factor in (response.totp or [])
+            if factor.status == "verified"
+        ]
 
     @staticmethod
     def _validate_role(role: str, expected_role: str | None = None) -> str:

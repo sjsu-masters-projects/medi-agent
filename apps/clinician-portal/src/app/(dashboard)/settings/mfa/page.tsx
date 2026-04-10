@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
+import { writeStoredSession } from "@/services/auth-session";
+import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { RootState } from "@/store/store";
 
 type MFAStep = "loading" | "already_enrolled" | "enroll" | "verify" | "success";
@@ -27,9 +29,17 @@ interface Factor {
     created_at: string | null;
 }
 
+interface MFAVerifyResponse {
+    access_token: string;
+    expires_at: number;
+    refresh_token: string;
+    token_type: string;
+}
+
 export default function MFASetupPage() {
     const router = useRouter();
-    const token = useSelector((state: RootState) => state.auth.accessToken);
+    const dispatch = useDispatch();
+    const { accessToken, refreshToken, user } = useSelector((state: RootState) => state.auth);
     const [step, setStep] = useState<MFAStep>("loading");
     const [enrollData, setEnrollData] = useState<EnrollData | null>(null);
     const [factors, setFactors] = useState<Factor[]>([]);
@@ -38,13 +48,16 @@ export default function MFASetupPage() {
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
-        if (!token) {
+        if (!accessToken || !refreshToken) {
             return;
         }
 
         async function checkFactors() {
             try {
-                const result = await api.get<{ factors: Factor[] }>("/api/v1/auth/mfa/factors", { token: token! });
+                const result = await api.get<{ factors: Factor[] }>("/api/v1/auth/mfa/factors", {
+                    headers: { "X-Refresh-Token": refreshToken },
+                    token: accessToken,
+                });
                 const verified = result.factors.filter((f) => f.status === "verified");
                 if (verified.length > 0) {
                     setFactors(verified);
@@ -58,10 +71,10 @@ export default function MFASetupPage() {
         }
 
         void checkFactors();
-    }, [token]);
+    }, [accessToken, refreshToken]);
 
     async function handleEnroll() {
-        if (!token) {
+        if (!accessToken || !refreshToken) {
             return;
         }
 
@@ -71,7 +84,10 @@ export default function MFASetupPage() {
             const result = await api.post<EnrollData>(
                 "/api/v1/auth/mfa/enroll",
                 { friendly_name: "Authenticator" },
-                { token },
+                {
+                    headers: { "X-Refresh-Token": refreshToken },
+                    token: accessToken,
+                },
             );
             setEnrollData(result);
             setStep("verify");
@@ -84,18 +100,29 @@ export default function MFASetupPage() {
 
     async function handleVerify(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!token || !enrollData) {
+        if (!accessToken || !refreshToken || !enrollData || !user) {
             return;
         }
 
         setError("");
         setSubmitting(true);
         try {
-            await api.post(
+            const response = await api.post<MFAVerifyResponse>(
                 "/api/v1/auth/mfa/verify",
                 { factor_id: enrollData.factor_id, code },
-                { token },
+                {
+                    headers: { "X-Refresh-Token": refreshToken },
+                    token: accessToken,
+                },
             );
+            const session: ClinicianAuthSession = {
+                accessToken: response.access_token,
+                expiresAt: response.expires_at,
+                refreshToken: response.refresh_token,
+                user,
+            };
+            writeStoredSession(session);
+            dispatch(hydrateSession(session));
             setStep("success");
         } catch (e) {
             setError((e as Error).message);
@@ -105,13 +132,16 @@ export default function MFASetupPage() {
     }
 
     async function handleUnenroll(factorId: string) {
-        if (!token) {
+        if (!accessToken || !refreshToken) {
             return;
         }
 
         setError("");
         try {
-            await api.post("/api/v1/auth/mfa/unenroll", { factor_id: factorId }, { token });
+            await api.post("/api/v1/auth/mfa/unenroll", { factor_id: factorId }, {
+                headers: { "X-Refresh-Token": refreshToken },
+                token: accessToken,
+            });
             setFactors((current) => current.filter((f) => f.id !== factorId));
             setStep("enroll");
         } catch (e) {

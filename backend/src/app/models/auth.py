@@ -97,6 +97,25 @@ class AuthResponse(BaseModel):
     user: UserInfo
 
 
+class MFAFactorSummary(BaseModel):
+    """Summary of a verified MFA factor returned during login."""
+
+    id: str
+    friendly_name: str | None = None
+    factor_type: str
+    status: str
+    created_at: str | None = None
+
+
+class AuthLoginResponse(BaseModel):
+    """Login response, optionally indicating a second-factor challenge is required."""
+
+    tokens: AuthTokens
+    user: UserInfo
+    mfa_required: bool = False
+    mfa_factors: list[MFAFactorSummary] = Field(default_factory=list)
+
+
 # ── JWT Claims (internal) ──────────────────────────────────
 
 
@@ -110,3 +129,4 @@ class CurrentUser(BaseModel):
     id: UUID
     email: str
     role: str  # "patient" | "clinician" | "unknown"
+    aal: str = "aal1"
