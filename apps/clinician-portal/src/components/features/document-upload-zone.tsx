@@ -44,15 +44,15 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
 
     // ── File validation ──────────────────────────────────────────────────────
 
-    function validateFiles(files: File[]): File[] {
+    const validateFiles = useCallback((files: File[]): File[] => {
         return files.filter((file) => {
             if (!ALLOWED_TYPES.has(file.type)) return false;
             if (file.size > MAX_SIZE_MB * 1024 * 1024) return false;
             return true;
         });
-    }
+    }, []);
 
-    function addToQueue(files: File[]) {
+    const addToQueue = useCallback((files: File[]) => {
         const valid = validateFiles(files);
         const newItems: QueuedFile[] = valid.map((f) => ({
             id: makeId(),
@@ -60,7 +60,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
             status: "pending",
         }));
         setQueue((prev) => [...prev, ...newItems]);
-    }
+    }, [validateFiles]);
 
     // ── Drag-and-drop handlers ───────────────────────────────────────────────
 
@@ -78,8 +78,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
             const files = Array.from(e.dataTransfer.files);
             addToQueue(files);
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [],
+        [addToQueue],
     );
 
     const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {

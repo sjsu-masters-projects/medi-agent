@@ -8,9 +8,10 @@ These tests verify:
 All Supabase/Gemini calls are mocked — no real network calls.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from app.agents.summarization.agent import SummarizationAgent, SummarizationInput
 from app.agents.summarization.graph import (
@@ -18,7 +19,6 @@ from app.agents.summarization.graph import (
     prepare_context,
 )
 from app.agents.summarization.prompts import build_soap_prompt
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -84,10 +84,23 @@ def mock_db():
     def table_mock(table_name):
         data_map = {
             "patients": patient_data,
-            "medications": [{"name": "Metformin", "dosage": "500mg", "frequency": "once daily", "is_active": True}],
+            "medications": [
+                {
+                    "name": "Metformin",
+                    "dosage": "500mg",
+                    "frequency": "once daily",
+                    "is_active": True,
+                }
+            ],
             "adherence_logs": adherence_data,
             "symptom_reports": symptom_data,
-            "chat_messages": [{"role": "user", "content": "Feeling better today", "created_at": "2026-03-20T12:00:00Z"}],
+            "chat_messages": [
+                {
+                    "role": "user",
+                    "content": "Feeling better today",
+                    "created_at": "2026-03-20T12:00:00Z",
+                }
+            ],
             "conditions": [{"name": "Type 2 Diabetes", "icd10_code": "E11"}],
             "allergies": [{"allergen": "Penicillin", "severity": "severe"}],
             "adr_assessments": [],
@@ -197,9 +210,18 @@ class TestBuildSoapPrompt:
 
     def test_includes_patient_name(self):
         context = {
-            "patient_info": {"first_name": "Alice", "last_name": "Brown", "date_of_birth": "1980-01-01"},
+            "patient_info": {
+                "first_name": "Alice",
+                "last_name": "Brown",
+                "date_of_birth": "1980-01-01",
+            },
             "medications": [],
-            "adherence_stats": {"overall_score": 0.75, "medication_score": 0.8, "obligation_score": 0.7, "current_streak_days": 5},
+            "adherence_stats": {
+                "overall_score": 0.75,
+                "medication_score": 0.8,
+                "obligation_score": 0.7,
+                "current_streak_days": 5,
+            },
             "symptom_reports": [],
             "chat_messages": [],
             "conditions": [],
@@ -214,7 +236,12 @@ class TestBuildSoapPrompt:
         context = {
             "patient_info": {},
             "medications": [],
-            "adherence_stats": {"overall_score": 0.65, "medication_score": 0.70, "obligation_score": 0.60, "current_streak_days": 3},
+            "adherence_stats": {
+                "overall_score": 0.65,
+                "medication_score": 0.70,
+                "obligation_score": 0.60,
+                "current_streak_days": 3,
+            },
             "symptom_reports": [],
             "chat_messages": [],
             "conditions": [],
@@ -226,11 +253,19 @@ class TestBuildSoapPrompt:
         assert "65%" in prompt or "Adherence" in prompt
 
     def test_caps_medications_at_20(self):
-        meds = [{"name": f"Med{i}", "dosage": "10mg", "frequency": "daily", "is_active": True} for i in range(30)]
+        meds = [
+            {"name": f"Med{i}", "dosage": "10mg", "frequency": "daily", "is_active": True}
+            for i in range(30)
+        ]
         context = {
             "patient_info": {},
             "medications": meds,
-            "adherence_stats": {"overall_score": 0, "medication_score": 0, "obligation_score": 0, "current_streak_days": 0},
+            "adherence_stats": {
+                "overall_score": 0,
+                "medication_score": 0,
+                "obligation_score": 0,
+                "current_streak_days": 0,
+            },
             "symptom_reports": [],
             "chat_messages": [],
             "conditions": [],
@@ -247,7 +282,12 @@ class TestBuildSoapPrompt:
         context = {
             "patient_info": {},
             "medications": [],
-            "adherence_stats": {"overall_score": 0, "medication_score": 0, "obligation_score": 0, "current_streak_days": 0},
+            "adherence_stats": {
+                "overall_score": 0,
+                "medication_score": 0,
+                "obligation_score": 0,
+                "current_streak_days": 0,
+            },
             "symptom_reports": [],
             "chat_messages": [],
             "conditions": [],
@@ -291,7 +331,9 @@ class TestSummarizationAgent:
             }
         )
 
-        with patch("app.agents.summarization.agent.build_summarization_graph", return_value=mock_graph):
+        with patch(
+            "app.agents.summarization.agent.build_summarization_graph", return_value=mock_graph
+        ):
             agent_input = SummarizationInput(
                 user_id=clinician_id,
                 patient_id=patient_id,

@@ -24,6 +24,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.core.exceptions import AuthorizationError, NotFoundError
+from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 
 logger = logging.getLogger(__name__)
 
@@ -134,9 +135,9 @@ class ClinicianService:
         self,
         clinician_id: UUID,
         *,
-        sort_by: str = "risk",
-        sort_order: str = "desc",
-        risk_filter: str | None = None,
+        sort_by: DashboardSortBy = "risk",
+        sort_order: DashboardSortOrder = "desc",
+        risk_filter: RiskLevel | None = None,
         min_med_count: int | None = None,
         max_last_activity_days: int | None = None,
         page: int = 1,
@@ -159,11 +160,10 @@ class ClinicianService:
         )
 
         risk_data: list[dict[str, Any]] = []
-        for pid, result in zip(patient_ids, risk_results, strict=False):
+        for _pid, result in zip(patient_ids, risk_results, strict=False):
             if isinstance(result, BaseException):
                 logger.warning(
-                    "Failed to compute risk for patient_id=%s",
-                    pid,
+                    "Failed to compute risk for an assigned patient",
                     exc_info=result,
                 )
                 continue
@@ -341,7 +341,8 @@ class ClinicianService:
             adherence_score = risk_data.adherence_score
         except Exception as exc:
             logger.warning(
-                "Failed to compute risk for deep dive patient_id=%s", patient_id, exc_info=exc
+                "Failed to compute risk during deep dive",
+                exc_info=exc,
             )
             risk_level = "unknown"
             adherence_score = 0.0

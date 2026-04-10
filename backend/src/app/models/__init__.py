@@ -8,6 +8,10 @@ from app.models.care_team import CareTeamCreate, CareTeamRead
 from app.models.chat import ChatMessage, ChatMessageCreate
 from app.models.clinician import ClinicianCreate, ClinicianRead, ClinicianUpdate
 from app.models.clinician_message import ClinicianMessageCreate, ClinicianMessageRead
+
+# Schemas
+from app.models.common import ErrorResponse, PaginatedResponse, SuccessResponse, TimestampMixin
+from app.models.condition import AllergyCreate, AllergyRead, ConditionCreate, ConditionRead
 from app.models.dashboard import (
     AdherenceDataPoint,
     AnnotationCreate,
@@ -19,10 +23,6 @@ from app.models.dashboard import (
     SoapNoteRead,
     SoapNoteRequest,
 )
-
-# Schemas
-from app.models.common import ErrorResponse, PaginatedResponse, SuccessResponse, TimestampMixin
-from app.models.condition import AllergyCreate, AllergyRead, ConditionCreate, ConditionRead
 from app.models.document import DocumentRead, DocumentUpload
 from app.models.enums import (
     AdherenceStatus,

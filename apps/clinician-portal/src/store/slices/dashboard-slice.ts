@@ -7,7 +7,11 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import { fetchDashboard } from "@/services/clinicians";
-import type { DashboardResponse, PatientRiskData } from "@/services/clinicians";
+import type {
+    DashboardQueryParams,
+    DashboardResponse,
+    PatientRiskData,
+} from "@/services/clinicians";
 
 export interface DashboardStat {
     change: string;
@@ -36,20 +40,7 @@ const initialState: DashboardState = {
 
 export const loadDashboard = createAsyncThunk(
     "dashboard/loadDashboard",
-    async (
-        params:
-            | {
-                  sortBy?: "risk" | "adherence" | "last_activity" | "med_count";
-                  sortOrder?: "asc" | "desc";
-                  riskFilter?: "low" | "medium" | "high" | "unknown";
-                  minMedCount?: number;
-                  maxLastActivityDays?: number;
-                  page?: number;
-                  pageSize?: number;
-              }
-            | undefined,
-        { rejectWithValue },
-    ) => {
+    async (params: DashboardQueryParams | undefined, { rejectWithValue }) => {
         try {
             return await fetchDashboard(params);
         } catch (err) {

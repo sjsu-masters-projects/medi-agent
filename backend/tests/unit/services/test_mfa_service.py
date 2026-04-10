@@ -45,9 +45,11 @@ async def test_enroll_success(service, mock_client):
 async def test_enroll_failure(service, mock_client):
     mock_client.auth.mfa.enroll.side_effect = Exception("enroll error")
 
-    with patch.object(MFAService, "_user_client", return_value=mock_client):
-        with pytest.raises(ValidationError, match="enrollment failed"):
-            await service.enroll("token-abc")
+    with (
+        patch.object(MFAService, "_user_client", return_value=mock_client),
+        pytest.raises(ValidationError, match="enrollment failed"),
+    ):
+        await service.enroll("token-abc")
 
 
 # ── verify ──────────────────────────────────────────────────
@@ -79,9 +81,11 @@ async def test_verify_success(service, mock_client):
 async def test_verify_invalid_code(service, mock_client):
     mock_client.auth.mfa.challenge.side_effect = Exception("bad code")
 
-    with patch.object(MFAService, "_user_client", return_value=mock_client):
-        with pytest.raises(AuthenticationError, match="Invalid verification code"):
-            await service.verify("token-abc", "factor-123", "000000")
+    with (
+        patch.object(MFAService, "_user_client", return_value=mock_client),
+        pytest.raises(AuthenticationError, match="Invalid verification code"),
+    ):
+        await service.verify("token-abc", "factor-123", "000000")
 
 
 # ── list_factors ────────────────────────────────────────────
@@ -124,9 +128,11 @@ async def test_list_factors_empty(service, mock_client):
 async def test_list_factors_failure(service, mock_client):
     mock_client.auth.mfa.list_factors.side_effect = Exception("api error")
 
-    with patch.object(MFAService, "_user_client", return_value=mock_client):
-        with pytest.raises(ValidationError, match="Could not list"):
-            await service.list_factors("token-abc")
+    with (
+        patch.object(MFAService, "_user_client", return_value=mock_client),
+        pytest.raises(ValidationError, match="Could not list"),
+    ):
+        await service.list_factors("token-abc")
 
 
 # ── unenroll ────────────────────────────────────────────────
@@ -147,6 +153,8 @@ async def test_unenroll_success(service, mock_client):
 async def test_unenroll_failure(service, mock_client):
     mock_client.auth.mfa.unenroll.side_effect = Exception("not found")
 
-    with patch.object(MFAService, "_user_client", return_value=mock_client):
-        with pytest.raises(ValidationError, match="Could not remove"):
-            await service.unenroll("token-abc", "factor-999")
+    with (
+        patch.object(MFAService, "_user_client", return_value=mock_client),
+        pytest.raises(ValidationError, match="Could not remove"),
+    ):
+        await service.unenroll("token-abc", "factor-999")

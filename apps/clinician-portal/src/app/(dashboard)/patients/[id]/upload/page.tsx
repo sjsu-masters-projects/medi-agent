@@ -25,6 +25,15 @@ const FREQUENCIES = [
     "As needed",
 ] as const;
 
+type ObligationType = (typeof OBLIGATION_TYPES)[number]["value"];
+
+interface ObligationFormState {
+    obligation_type: ObligationType;
+    description: string;
+    frequency: string;
+    notes: string;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ClinicianUploadPage() {
@@ -38,7 +47,7 @@ export default function ClinicianUploadPage() {
     const [obligationSuccess, setObligationSuccess] = useState(false);
     const [obligationError, setObligationError] = useState<string | null>(null);
 
-    const [obligationForm, setObligationForm] = useState({
+    const [obligationForm, setObligationForm] = useState<ObligationFormState>({
         obligation_type: "diet",
         description: "",
         frequency: "Daily",
@@ -156,7 +165,7 @@ export default function ClinicianUploadPage() {
                                 onChange={(e) =>
                                     setObligationForm((prev) => ({
                                         ...prev,
-                                        obligation_type: e.target.value,
+                                        obligation_type: e.target.value as ObligationType,
                                     }))
                                 }
                                 required

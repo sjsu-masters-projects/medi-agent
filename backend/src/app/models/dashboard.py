@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 # ── Risk level type alias ────────────────────────────────────────────────────
 
 RiskLevel = Literal["low", "medium", "high", "unknown"]
+DashboardSortBy = Literal["risk", "adherence", "last_activity", "med_count"]
+DashboardSortOrder = Literal["asc", "desc"]
 
 
 # ── Per-patient risk card ────────────────────────────────────────────────────

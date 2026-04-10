@@ -83,11 +83,29 @@ export default function SettingsPage() {
         void loadStaff();
     }, [loadStaff]);
 
-    useEffect(() => {
-        if (!token) return;
-        void handleGenerateInviteCode();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    const handleGenerateInviteCode = useCallback(async () => {
+        if (!token) {
+            return;
+        }
+        setInviteCodeLoading(true);
+        setError(null);
+        try {
+            const result = await api.post<{ invite_code: string }>(
+                "/api/v1/clinicians/me/invite-code",
+                {},
+                { token },
+            );
+            setInviteCode(result.invite_code);
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setInviteCodeLoading(false);
+        }
     }, [token]);
+
+    useEffect(() => {
+        void handleGenerateInviteCode();
+    }, [handleGenerateInviteCode]);
 
     async function handleInvite() {
         if (!token || !inviteEmail) {
@@ -137,26 +155,6 @@ export default function SettingsPage() {
             setError((e as Error).message);
         }
         setActionMenuId(null);
-    }
-
-    async function handleGenerateInviteCode() {
-        if (!token) {
-            return;
-        }
-        setInviteCodeLoading(true);
-        setError(null);
-        try {
-            const result = await api.post<{ invite_code: string }>(
-                "/api/v1/clinicians/me/invite-code",
-                {},
-                { token },
-            );
-            setInviteCode(result.invite_code);
-        } catch (e) {
-            setError((e as Error).message);
-        } finally {
-            setInviteCodeLoading(false);
-        }
     }
 
     async function handleCopyInviteCode() {

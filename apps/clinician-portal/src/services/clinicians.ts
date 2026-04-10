@@ -5,13 +5,7 @@
  * Functions return typed data or throw on HTTP errors.
  */
 
-import type {
-    AdherenceStats,
-    Appointment,
-    Document,
-    Medication,
-    SymptomReport,
-} from "@/types";
+import type { Medication, SymptomReport } from "@/types";
 
 // ── Base config ──────────────────────────────────────────────────────────────
 
@@ -43,11 +37,25 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
 // ── Dashboard types ──────────────────────────────────────────────────────────
 
+export type RiskLevel = "low" | "medium" | "high" | "unknown";
+export type DashboardSortBy = "risk" | "adherence" | "last_activity" | "med_count";
+export type DashboardSortOrder = "asc" | "desc";
+
+export interface DashboardQueryParams {
+    sortBy?: DashboardSortBy;
+    sortOrder?: DashboardSortOrder;
+    riskFilter?: RiskLevel;
+    minMedCount?: number;
+    maxLastActivityDays?: number;
+    page?: number;
+    pageSize?: number;
+}
+
 export interface PatientRiskData {
     patient_id: string;
     first_name: string;
     last_name: string;
-    risk_level: "low" | "medium" | "high" | "unknown";
+    risk_level: RiskLevel;
     adherence_score: number;
     open_adr_count: number;
     active_med_count: number;
@@ -97,7 +105,7 @@ export interface PatientDeepDive {
     email: string;
     date_of_birth?: string;
     avatar_url?: string;
-    risk_level: "low" | "medium" | "high" | "unknown";
+    risk_level: RiskLevel;
     adherence_score: number;
     medications: Medication[];
     adherence_series: AdherenceDataPoint[];
@@ -206,15 +214,7 @@ function normalizeSymptomReport(raw: Record<string, unknown>): SymptomReport {
 // ── API functions ─────────────────────────────────────────────────────────────
 
 /** Fetch aggregated risk dashboard for all assigned patients. */
-export async function fetchDashboard(params?: {
-    sortBy?: "risk" | "adherence" | "last_activity" | "med_count";
-    sortOrder?: "asc" | "desc";
-    riskFilter?: "low" | "medium" | "high" | "unknown";
-    minMedCount?: number;
-    maxLastActivityDays?: number;
-    page?: number;
-    pageSize?: number;
-}): Promise<DashboardResponse> {
+export async function fetchDashboard(params?: DashboardQueryParams): Promise<DashboardResponse> {
     const search = new URLSearchParams();
     if (params?.sortBy) search.set("sort_by", params.sortBy);
     if (params?.sortOrder) search.set("sort_order", params.sortOrder);

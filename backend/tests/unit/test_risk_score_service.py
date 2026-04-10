@@ -4,10 +4,11 @@ Tests the risk classification algorithm with all boundary conditions.
 No DB required — these tests exercise the pure calculate_risk_level() method.
 """
 
+from datetime import timedelta
+
 import pytest
 
 from app.services.risk_score_service import RiskScoreService, _humanize_delta
-from datetime import timedelta
 
 
 class TestCalculateRiskLevel:
@@ -152,7 +153,9 @@ class TestCalculateRiskLevel:
         ]
         for adherence, adrs, severity in test_cases:
             result = service.calculate_risk_level(adherence, adrs, severity)
-            assert result in valid, f"Unexpected result '{result}' for inputs: {adherence}, {adrs}, {severity}"
+            assert result in valid, (
+                f"Unexpected result '{result}' for inputs: {adherence}, {adrs}, {severity}"
+            )
 
 
 class TestHumanizeDelta:

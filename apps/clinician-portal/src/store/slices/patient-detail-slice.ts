@@ -4,7 +4,7 @@
 
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { fetchPatientDeepDive, generateSoapNote } from "@/services/clinicians";
-import type { PatientDeepDive, SoapNoteResponse } from "@/services/clinicians";
+import type { PatientDeepDive } from "@/services/clinicians";
 
 interface PatientDetailState {
     data: PatientDeepDive | null;

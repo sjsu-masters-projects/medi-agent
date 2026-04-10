@@ -12,7 +12,7 @@ New in Phase 6:
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -26,8 +26,11 @@ from app.models.dashboard import (
     AnnotationCreate,
     AnnotationSaveResponse,
     DashboardResponse,
+    DashboardSortBy,
+    DashboardSortOrder,
     ObligationSetRequest,
     PatientDeepDive,
+    RiskLevel,
     SoapNoteGenerationResponse,
     SoapNoteRequest,
 )
@@ -115,9 +118,9 @@ async def generate_invite_code(
     ),
 )
 async def get_dashboard(
-    sort_by: Literal["risk", "adherence", "last_activity", "med_count"] = Query(default="risk"),
-    sort_order: Literal["asc", "desc"] = Query(default="desc"),
-    risk_filter: Literal["low", "medium", "high", "unknown"] | None = Query(default=None),
+    sort_by: DashboardSortBy = Query(default="risk"),
+    sort_order: DashboardSortOrder = Query(default="desc"),
+    risk_filter: RiskLevel | None = Query(default=None),
     min_med_count: int | None = Query(default=None, ge=0),
     max_last_activity_days: int | None = Query(default=None, ge=0),
     page: int = Query(default=1, ge=1),

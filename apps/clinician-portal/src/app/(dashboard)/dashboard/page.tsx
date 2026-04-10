@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
     HiOutlineClipboardDocumentList,
@@ -14,8 +14,11 @@ import { Card } from "@/components/ui";
 import { RiskBadge } from "@/components/features/risk-badge";
 import { loadDashboard } from "@/store/slices/dashboard-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import { useState } from "react";
-import type { PatientRiskData } from "@/services/clinicians";
+import type {
+    DashboardSortBy,
+    DashboardSortOrder,
+    PatientRiskData,
+} from "@/services/clinicians";
 
 // ── Risk level configuration ─────────────────────────────────────────────────
 
@@ -62,11 +65,11 @@ export default function DashboardPage() {
     const error = useSelector((state: RootState) => state.dashboard.error);
     const [query, setQuery] = useState("");
     const [riskFilter, setRiskFilter] = useState<"all" | PatientRiskData["risk_level"]>("all");
-    const [sortBy, setSortBy] = useState<"risk" | "adherence" | "last_activity" | "med_count">("risk");
-    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+    const [sortBy, setSortBy] = useState<DashboardSortBy>("risk");
+    const [sortOrder, setSortOrder] = useState<DashboardSortOrder>("desc");
     const [minMedCount, setMinMedCount] = useState("0");
 
-    function reloadDashboard() {
+    const reloadDashboard = useCallback(() => {
         void dispatch(
             loadDashboard({
                 sortBy,
@@ -75,13 +78,12 @@ export default function DashboardPage() {
                 minMedCount: Number(minMedCount) || 0,
             }),
         );
-    }
+    }, [dispatch, minMedCount, riskFilter, sortBy, sortOrder]);
 
     // Fetch real data on mount and when sort/filter changes
     useEffect(() => {
         reloadDashboard();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dispatch, sortBy, sortOrder, riskFilter, minMedCount]);
+    }, [reloadDashboard]);
 
     const visiblePatients = patients
         .filter((p) =>
