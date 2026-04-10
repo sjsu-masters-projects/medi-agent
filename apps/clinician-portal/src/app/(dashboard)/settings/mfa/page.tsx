@@ -36,6 +36,19 @@ interface MFAVerifyResponse {
     token_type: string;
 }
 
+interface RefreshResponse {
+    tokens: {
+        access_token: string;
+        expires_at: number;
+        refresh_token: string;
+    };
+    user: {
+        email: string;
+        id: string;
+        role: "clinician";
+    };
+}
+
 export default function MFASetupPage() {
     const router = useRouter();
     const dispatch = useDispatch();
@@ -142,6 +155,18 @@ export default function MFASetupPage() {
                 headers: { "X-Refresh-Token": refreshToken },
                 token: accessToken,
             });
+            const refreshed = await api.post<RefreshResponse>("/api/v1/auth/refresh", {
+                expected_role: "clinician",
+                refresh_token: refreshToken,
+            });
+            const session: ClinicianAuthSession = {
+                accessToken: refreshed.tokens.access_token,
+                expiresAt: refreshed.tokens.expires_at,
+                refreshToken: refreshed.tokens.refresh_token,
+                user: refreshed.user,
+            };
+            writeStoredSession(session);
+            dispatch(hydrateSession(session));
             setFactors((current) => current.filter((f) => f.id !== factorId));
             setStep("enroll");
         } catch (e) {

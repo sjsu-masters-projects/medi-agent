@@ -140,4 +140,48 @@ describe("MFA Setup Page", () => {
         });
         expect(dispatch).toHaveBeenCalled();
     });
+
+    it("refreshes the stored session after unenrolling MFA", async () => {
+        vi.mocked(api.get).mockResolvedValue({
+            factors: [
+                { id: "factor-1", friendly_name: "My Phone", status: "verified", created_at: "2026-01-01" },
+            ],
+        });
+        vi.mocked(api.post)
+            .mockResolvedValueOnce({ status: "removed", factor_id: "factor-1" })
+            .mockResolvedValueOnce({
+                tokens: {
+                    access_token: "aal1-access",
+                    expires_at: 3234567890,
+                    refresh_token: "aal1-refresh",
+                },
+                user: {
+                    email: "doctor@example.com",
+                    id: "clinician-1",
+                    role: "clinician",
+                },
+            });
+
+        render(<MFASetupPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("MFA is enabled")).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+        await waitFor(() => {
+            expect(writeStoredSession).toHaveBeenCalledWith({
+                accessToken: "aal1-access",
+                expiresAt: 3234567890,
+                refreshToken: "aal1-refresh",
+                user: {
+                    email: "doctor@example.com",
+                    id: "clinician-1",
+                    role: "clinician",
+                },
+            });
+        });
+        expect(dispatch).toHaveBeenCalled();
+    });
 });
