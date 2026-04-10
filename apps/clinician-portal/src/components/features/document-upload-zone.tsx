@@ -24,6 +24,13 @@ const ALLOWED_TYPES = new Set([
     "text/plain",
 ]);
 const MAX_SIZE_MB = 20;
+const DOCUMENT_TYPES = [
+    { label: "Clinical Note", value: "clinical_note" },
+    { label: "Lab Result", value: "lab_result" },
+    { label: "Prescription", value: "prescription" },
+    { label: "Discharge Summary", value: "discharge_summary" },
+    { label: "Other", value: "other" },
+] as const;
 
 function makeId(): string {
     return Math.random().toString(36).slice(2, 10);
@@ -33,6 +40,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
     const [queue, setQueue] = useState<QueuedFile[]>([]);
     const [dragging, setDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [documentType, setDocumentType] = useState<string>("clinical_note");
 
     // ── File validation ──────────────────────────────────────────────────────
 
@@ -107,7 +115,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
                 const formData = new FormData();
                 formData.append("file", item.file);
                 formData.append("patient_id", patientId);
-                formData.append("document_type", "clinical_note");
+                formData.append("document_type", documentType);
                 formData.append("uploaded_by_role", "clinician");
 
                 const response = await fetch(`${apiBase}/api/v1/documents/`, {
@@ -151,6 +159,22 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
 
     return (
         <div className="space-y-4">
+            <label className="block" htmlFor="upload-document-type">
+                <span className="mb-1 block text-sm font-medium text-gray-700">Document type</span>
+                <select
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    id="upload-document-type"
+                    onChange={(e) => setDocumentType(e.target.value)}
+                    value={documentType}
+                >
+                    {DOCUMENT_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                            {type.label}
+                        </option>
+                    ))}
+                </select>
+            </label>
+
             {/* Drop zone */}
             <div
                 className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 transition-colors ${

@@ -38,6 +38,12 @@ const riskConfig = {
         action: "View Profile",
         actionClass: "text-slate-500 hover:bg-slate-50 border border-slate-200",
     },
+    unknown: {
+        accent: "bg-slate-100 text-slate-700",
+        progressBar: "bg-slate-400",
+        action: "Review",
+        actionClass: "text-slate-500 hover:bg-slate-50 border border-slate-200",
+    },
 } satisfies Record<PatientRiskData["risk_level"], {
     accent: string;
     progressBar: string;
@@ -55,21 +61,32 @@ export default function DashboardPage() {
     const loading = useSelector((state: RootState) => state.dashboard.loading);
     const error = useSelector((state: RootState) => state.dashboard.error);
     const [query, setQuery] = useState("");
+    const [riskFilter, setRiskFilter] = useState<"all" | PatientRiskData["risk_level"]>("all");
+    const [sortBy, setSortBy] = useState<"risk" | "adherence" | "last_activity" | "med_count">("risk");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+    const [minMedCount, setMinMedCount] = useState("0");
 
-    // Fetch real data on mount
+    function reloadDashboard() {
+        void dispatch(
+            loadDashboard({
+                sortBy,
+                sortOrder,
+                riskFilter: riskFilter === "all" ? undefined : riskFilter,
+                minMedCount: Number(minMedCount) || 0,
+            }),
+        );
+    }
+
+    // Fetch real data on mount and when sort/filter changes
     useEffect(() => {
-        void dispatch(loadDashboard());
-    }, [dispatch]);
+        reloadDashboard();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dispatch, sortBy, sortOrder, riskFilter, minMedCount]);
 
     const visiblePatients = patients
         .filter((p) =>
             `${p.first_name} ${p.last_name}`.toLowerCase().includes(query.toLowerCase()),
-        )
-        // Sort high risk first
-        .sort((a, b) => {
-            const order = { high: 0, medium: 1, low: 2 };
-            return order[a.risk_level] - order[b.risk_level];
-        });
+        );
 
     return (
         <div className="mx-auto max-w-7xl space-y-8">
@@ -82,7 +99,7 @@ export default function DashboardPage() {
                     <span>⚠ {error} — showing cached data</span>
                     <button
                         className="rounded px-3 py-1 text-xs font-medium hover:bg-red-100"
-                        onClick={() => void dispatch(loadDashboard())}
+                        onClick={reloadDashboard}
                         type="button"
                     >
                         Retry
@@ -173,12 +190,63 @@ export default function DashboardPage() {
                             aria-label="Refresh dashboard"
                             className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
                             id="dashboard-refresh-btn"
-                            onClick={() => void dispatch(loadDashboard())}
+                            onClick={reloadDashboard}
                             type="button"
                         >
                             <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
                         </button>
                     </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-6 py-3 md:grid-cols-4">
+                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Risk Filter
+                        <select
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
+                            onChange={(e) => setRiskFilter(e.target.value as typeof riskFilter)}
+                            value={riskFilter}
+                        >
+                            <option value="all">All</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                            <option value="unknown">Unknown</option>
+                        </select>
+                    </label>
+                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Sort By
+                        <select
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
+                            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                            value={sortBy}
+                        >
+                            <option value="risk">Risk</option>
+                            <option value="last_activity">Last Activity</option>
+                            <option value="adherence">Adherence</option>
+                            <option value="med_count">Medication Count</option>
+                        </select>
+                    </label>
+                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Sort Order
+                        <select
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
+                            onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
+                            value={sortOrder}
+                        >
+                            <option value="desc">Descending</option>
+                            <option value="asc">Ascending</option>
+                        </select>
+                    </label>
+                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Min Med Count
+                        <input
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
+                            min={0}
+                            onChange={(e) => setMinMedCount(e.target.value)}
+                            type="number"
+                            value={minMedCount}
+                        />
+                    </label>
                 </div>
 
                 {/* Table header */}

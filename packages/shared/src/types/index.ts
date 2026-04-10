@@ -146,6 +146,7 @@ export interface Medication {
     frequency: string;
     route: MedicationRoute;
     prescribedByCareTeamId?: string;
+    prescribedByName?: string;
     startDate?: string;
     endDate?: string;
     instructions?: string;

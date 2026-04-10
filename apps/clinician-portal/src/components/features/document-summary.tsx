@@ -65,7 +65,7 @@ function parseSummary(text: string): ParsedSection[] {
                 if (!sections.find((s) => s.type === "general")) {
                     sections.push({ type: "general", title: "Summary", items: [item] });
                 } else {
-                    sections[0]?.items.push(item);
+                    sections.find((s) => s.type === "general")?.items.push(item);
                 }
             }
         }
@@ -175,7 +175,16 @@ export function DocumentSummary({
                                             className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400"
                                         />
                                     )}
-                                    {item}
+                                    {section.type === "medications" ? (
+                                        <a
+                                            className="text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
+                                            href={`/patients/${patientId}?tab=adherence&med=${encodeURIComponent(item)}`}
+                                        >
+                                            {item}
+                                        </a>
+                                    ) : (
+                                        item
+                                    )}
                                 </li>
                             ))}
                         </ul>

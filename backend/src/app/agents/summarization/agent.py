@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from typing import Any
 from uuid import UUID
 
 from supabase import Client
@@ -38,7 +39,7 @@ class SummarizationOutput(AgentOutput):
     """Output from the Summarization Agent."""
 
     soap_note_id: str | None = None
-    soap_note: dict | None = None
+    soap_note: dict[str, Any] | None = None
 
 
 class SummarizationAgent(BaseAgent[SummarizationInput, SummarizationOutput]):

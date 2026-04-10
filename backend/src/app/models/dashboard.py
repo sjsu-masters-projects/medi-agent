@@ -5,15 +5,14 @@ Used by GET /api/v1/clinicians/me/dashboard and patient deep-dive endpoints.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # ── Risk level type alias ────────────────────────────────────────────────────
 
-RiskLevel = Literal["low", "medium", "high"]
+RiskLevel = Literal["low", "medium", "high", "unknown"]
 
 
 # ── Per-patient risk card ────────────────────────────────────────────────────
@@ -82,6 +81,14 @@ class SoapNoteRequest(BaseModel):
     lookback_days: int = Field(default=30, ge=7, le=365)
 
 
+class SoapNoteGenerationResponse(BaseModel):
+    """Response payload for on-demand SOAP generation endpoint."""
+
+    status: str
+    soap_note_id: UUID | None = None
+    soap_note: SoapNote | SoapNoteRead | None = None
+
+
 # ── Patient deep dive ────────────────────────────────────────────────────────
 
 
@@ -110,14 +117,16 @@ class PatientDeepDive(BaseModel):
     adherence_score: float
 
     # Sub-resources
-    medications: list[dict] = Field(default_factory=list)
+    medications: list[dict[str, Any]] = Field(default_factory=list)
     adherence_series: list[AdherenceDataPoint] = Field(default_factory=list)
-    symptom_reports: list[dict] = Field(default_factory=list)
-    chat_messages: list[dict] = Field(default_factory=list)
-    conditions: list[dict] = Field(default_factory=list)
-    allergies: list[dict] = Field(default_factory=list)
-    documents: list[dict] = Field(default_factory=list)
+    symptom_reports: list[dict[str, Any]] = Field(default_factory=list)
+    chat_messages: list[dict[str, Any]] = Field(default_factory=list)
+    conditions: list[dict[str, Any]] = Field(default_factory=list)
+    allergies: list[dict[str, Any]] = Field(default_factory=list)
+    documents: list[dict[str, Any]] = Field(default_factory=list)
     latest_soap_note: SoapNoteRead | None = None
+    obligations: list[dict[str, Any]] = Field(default_factory=list)
+    obligation_completion_rate: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 # ── Clinician annotation ──────────────────────────────────────────────────────
@@ -129,10 +138,17 @@ class AnnotationCreate(BaseModel):
     annotation_text: str = Field(..., min_length=1, max_length=2000)
 
 
+class AnnotationSaveResponse(BaseModel):
+    """Response after saving clinician annotation."""
+
+    status: str
+    document_id: str
+
+
 class ObligationSetRequest(BaseModel):
     """Clinician sets an obligation for a patient."""
 
-    obligation_type: str = Field(..., description="diet | exercise | custom")
+    obligation_type: Literal["diet", "exercise", "custom"]
     description: str = Field(..., min_length=1, max_length=500)
     frequency: str = Field(..., examples=["daily", "3x per week", "with each meal"])
     notes: str | None = None

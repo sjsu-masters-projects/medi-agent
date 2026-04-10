@@ -47,9 +47,23 @@ function CustomTooltip({
 }
 
 export function AdherenceChart({ data }: AdherenceChartProps) {
-    // Only show every 5th label to avoid crowding on the x-axis
-    const tickFormatter = (_: string, index: number) =>
-        index % 5 === 0 ? formatDate(data[index]?.date ?? "") : "";
+    if (data.length === 0) {
+        return (
+            <div
+                aria-label="30-day adherence chart"
+                className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400"
+            >
+                No adherence data available for this period.
+            </div>
+        );
+    }
+
+    // Use the axis tick value itself, not array indexing, so labels stay correct.
+    const tickFormatter = (value: string) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.getDate() % 5 === 0 ? formatDate(value) : "";
+    };
 
     return (
         <div className="w-full" aria-label="30-day adherence chart">

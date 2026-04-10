@@ -12,17 +12,26 @@ New in Phase 6:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from supabase import Client
 
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
 from app.models.clinician import ClinicianRead, ClinicianUpdate
-from app.models.dashboard import AnnotationCreate, ObligationSetRequest, SoapNoteRequest
+from app.models.dashboard import (
+    AnnotationCreate,
+    AnnotationSaveResponse,
+    DashboardResponse,
+    ObligationSetRequest,
+    PatientDeepDive,
+    SoapNoteGenerationResponse,
+    SoapNoteRequest,
+)
+from app.models.obligation import ObligationRead
 from app.models.patient import PatientRead
 from app.services.clinician_service import ClinicianService
 
@@ -98,6 +107,7 @@ async def generate_invite_code(
 
 @router.get(
     "/me/dashboard",
+    response_model=DashboardResponse,
     summary="Risk Radar — clinician dashboard",
     description=(
         "Returns risk level, adherence score, ADR count, and last activity "
@@ -105,6 +115,13 @@ async def generate_invite_code(
     ),
 )
 async def get_dashboard(
+    sort_by: Literal["risk", "adherence", "last_activity", "med_count"] = Query(default="risk"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    risk_filter: Literal["low", "medium", "high", "unknown"] | None = Query(default=None),
+    min_med_count: int | None = Query(default=None, ge=0),
+    max_last_activity_days: int | None = Query(default=None, ge=0),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
@@ -112,11 +129,21 @@ async def get_dashboard(
 
     Risk Radar endpoint — see DashboardResponse model.
     """
-    return await service.get_dashboard_data(user.id)
+    return await service.get_dashboard_data(
+        user.id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        risk_filter=risk_filter,
+        min_med_count=min_med_count,
+        max_last_activity_days=max_last_activity_days,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get(
     "/me/patients/{patient_id}/deep-dive",
+    response_model=PatientDeepDive,
     summary="Patient Deep Dive — full aggregated view",
     description=(
         "Returns demographics, active medications, 30-day adherence series, "
@@ -135,6 +162,7 @@ async def get_patient_deep_dive(
 
 @router.post(
     "/me/patients/{patient_id}/soap-note",
+    response_model=SoapNoteGenerationResponse,
     summary="Generate AI SOAP note",
     description=(
         "Triggers the LangGraph Summarization Agent (Gemini 3.1 Pro Preview) "
@@ -176,6 +204,7 @@ async def generate_soap_note(
 
 @router.post(
     "/me/patients/{patient_id}/obligations",
+    response_model=ObligationRead,
     summary="Set an obligation for a patient",
     description="Clinician creates a diet, exercise, or custom obligation for a patient.",
 )
@@ -186,13 +215,12 @@ async def set_patient_obligation(
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
     """POST /api/v1/clinicians/me/patients/{patient_id}/obligations"""
-    return await service.set_patient_obligation(
-        user.id, patient_id, data.model_dump()
-    )
+    return await service.set_patient_obligation(user.id, patient_id, data.model_dump())
 
 
 @router.post(
     "/me/patients/{patient_id}/documents/{document_id}/annotate",
+    response_model=AnnotationSaveResponse,
     summary="Add clinician annotation to a document summary",
     description="Saves free-text clinician annotation alongside the AI document summary.",
 )

@@ -12,8 +12,6 @@ import { setPatientObligation } from "@/services/clinicians";
 const OBLIGATION_TYPES = [
     { value: "diet", label: "Diet / Nutrition" },
     { value: "exercise", label: "Exercise / Physical Activity" },
-    { value: "medication", label: "Medication" },
-    { value: "monitoring", label: "Monitoring (BP, glucose, etc.)" },
     { value: "custom", label: "Custom" },
 ] as const;
 
@@ -65,6 +63,17 @@ export default function ClinicianUploadPage() {
         } finally {
             setObligationSubmitting(false);
         }
+    }
+
+    function resetObligationForm() {
+        setObligationForm({
+            obligation_type: "diet",
+            description: "",
+            frequency: "Daily",
+            notes: "",
+        });
+        setObligationSuccess(false);
+        setObligationError(null);
     }
 
     return (
@@ -250,12 +259,21 @@ export default function ClinicianUploadPage() {
                             </div>
                         )}
 
+                        {obligationSuccess && (
+                            <button
+                                className="w-full rounded-xl border border-green-300 px-4 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50"
+                                onClick={resetObligationForm}
+                                type="button"
+                            >
+                                Add Another Obligation
+                            </button>
+                        )}
+
                         <button
                             className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={
                                 obligationSubmitting ||
-                                !obligationForm.description.trim() ||
-                                obligationSuccess
+                                !obligationForm.description.trim()
                             }
                             id="obligation-submit-btn"
                             type="submit"

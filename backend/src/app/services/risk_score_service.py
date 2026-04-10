@@ -15,6 +15,7 @@ Algorithm:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -46,26 +47,31 @@ class RiskScoreService:
 
     def calculate_risk_level(
         self,
-        adherence_score: float,
+        adherence_score: float | None,
         open_adr_count: int,
         recent_symptom_severity: int,
     ) -> RiskLevel:
         """Pure function — derive risk level from three signals.
 
         Args:
-            adherence_score: 0.0–1.0 (from AdherenceService)
+            adherence_score: 0.0–1.0 (from AdherenceService), or None if no logs
             open_adr_count: number of unresolved ADR assessments
             recent_symptom_severity: max severity (1–10) in last 7 days
 
         Returns:
-            "high", "medium", or "low"
+            "high", "medium", "low", or "unknown"
         """
         # HIGH: any single critical signal triggers high risk
-        if (
-            adherence_score < _HIGH_ADHERENCE_THRESHOLD
-            or open_adr_count >= 1
-            or recent_symptom_severity >= _HIGH_SEVERITY_THRESHOLD
-        ):
+        if open_adr_count >= 1 or recent_symptom_severity >= _HIGH_SEVERITY_THRESHOLD:
+            return "high"
+
+        # No adherence data should not auto-mark new patients as high risk.
+        if adherence_score is None:
+            if recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD:
+                return "medium"
+            return "unknown"
+
+        if adherence_score < _HIGH_ADHERENCE_THRESHOLD:
             return "high"
 
         # MEDIUM: borderline adherence or significant symptom severity
@@ -88,12 +94,11 @@ class RiskScoreService:
         5. Active medication count
         """
         # ── 1. Patient profile ─────────────────────────
-        patient_row = (
+        patient_row = await self._execute(
             self.db.table("patients")
             .select("id, first_name, last_name, email")
             .eq("id", str(patient_id))
             .single()
-            .execute()
         )
         patient = cast(dict[str, Any], patient_row.data or {})
         first_name = patient.get("first_name", "Unknown")
@@ -124,7 +129,7 @@ class RiskScoreService:
             first_name=first_name,
             last_name=last_name,
             risk_level=risk_level,
-            adherence_score=adherence_score,
+            adherence_score=adherence_score if adherence_score is not None else 0.0,
             open_adr_count=open_adr_count,
             active_med_count=active_med_count,
             recent_symptom_severity=recent_symptom_severity,
@@ -133,44 +138,41 @@ class RiskScoreService:
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
-    async def _fetch_adherence_score(self, patient_id: UUID) -> float:
-        """Return 30-day overall adherence score (0.0–1.0)."""
+    async def _fetch_adherence_score(self, patient_id: UUID) -> float | None:
+        """Return 30-day overall adherence score (0.0–1.0), or None if no logs."""
         cutoff = (datetime.now(UTC) - timedelta(days=30)).isoformat()
-        logs = (
+        logs = await self._execute(
             self.db.table("adherence_logs")
             .select("status")
             .eq("patient_id", str(patient_id))
             .gte("logged_at", cutoff)
-            .execute()
         )
         log_data = cast(list[dict[str, Any]], logs.data or [])
         if not log_data:
-            return 0.0
+            return None
 
         completed = sum(1 for log in log_data if log.get("status") == "completed")
         total = len(log_data)
-        return completed / total if total > 0 else 0.0
+        return completed / total if total > 0 else None
 
     async def _fetch_open_adr_count(self, patient_id: UUID) -> int:
         """Count ADR assessments that need clinician review."""
-        result = (
+        result = await self._execute(
             self.db.table("adr_assessments")
-            .select("id", count="exact")
+            .select("id", count="exact")  # type: ignore[arg-type]
             .eq("patient_id", str(patient_id))
             .in_("status", ["open", "draft"])
-            .execute()
         )
         return result.count or 0
 
     async def _fetch_recent_symptom_severity(self, patient_id: UUID) -> int:
         """Return max symptom severity in last 7 days (0 if none)."""
         cutoff = (datetime.now(UTC) - timedelta(days=_RECENT_SYMPTOM_DAYS)).isoformat()
-        result = (
+        result = await self._execute(
             self.db.table("symptom_reports")
             .select("severity")
             .eq("patient_id", str(patient_id))
             .gte("created_at", cutoff)
-            .execute()
         )
         rows = cast(list[dict[str, Any]], result.data or [])
         if not rows:
@@ -179,37 +181,33 @@ class RiskScoreService:
 
     async def _fetch_active_med_count(self, patient_id: UUID) -> int:
         """Count active medications."""
-        result = (
+        result = await self._execute(
             self.db.table("medications")
-            .select("id", count="exact")
+            .select("id", count="exact")  # type: ignore[arg-type]
             .eq("patient_id", str(patient_id))
             .eq("is_active", True)
-            .execute()
         )
         return result.count or 0
 
     async def _fetch_last_activity(self, patient_id: UUID) -> str:
         """Return a human-readable last activity string."""
         # Check most recent adherence log
-        logs = (
+        logs_task = self._execute(
             self.db.table("adherence_logs")
             .select("logged_at, status, target_type")
             .eq("patient_id", str(patient_id))
             .order("logged_at", desc=True)
             .limit(1)
-            .execute()
         )
-        log_rows = cast(list[dict[str, Any]], logs.data or [])
-
-        # Check most recent symptom report
-        symptoms = (
+        symptoms_task = self._execute(
             self.db.table("symptom_reports")
             .select("created_at, symptom")
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
             .limit(1)
-            .execute()
         )
+        logs, symptoms = await asyncio.gather(logs_task, symptoms_task)
+        log_rows = cast(list[dict[str, Any]], logs.data or [])
         symptom_rows = cast(list[dict[str, Any]], symptoms.data or [])
 
         latest_log_time: datetime | None = None
@@ -233,9 +231,7 @@ class RiskScoreService:
 
         now = datetime.now(UTC)
 
-        if latest_symptom_time and (
-            not latest_log_time or latest_symptom_time > latest_log_time
-        ):
+        if latest_symptom_time and (not latest_log_time or latest_symptom_time > latest_log_time):
             symptom_name = symptom_rows[0].get("symptom", "symptom") if symptom_rows else "symptom"
             delta = now - latest_symptom_time
             return f"Reported '{symptom_name}' {_humanize_delta(delta)}"
@@ -246,6 +242,10 @@ class RiskScoreService:
             return f"Logged {log_type} {_humanize_delta(delta)}"
 
         return "No recent activity"
+
+    async def _execute(self, query: Any) -> Any:
+        """Run blocking Supabase execute() off the event loop."""
+        return await asyncio.to_thread(query.execute)
 
 
 def _humanize_delta(delta: timedelta) -> str:

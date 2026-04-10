@@ -9,14 +9,7 @@ import {
     XAxis,
     YAxis,
 } from "recharts";
-
-interface SymptomReport {
-    id: string;
-    symptom: string;
-    severity: number;
-    created_at: string;
-    flagged_for_adr?: boolean;
-}
+import type { SymptomReport } from "@/types";
 
 interface SymptomTimelineProps {
     data: SymptomReport[];
@@ -31,12 +24,27 @@ interface ChartPoint {
 
 function buildChartData(reports: SymptomReport[]): ChartPoint[] {
     return [...reports]
-        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .sort((a, b) => {
+            const aCreated = (a as SymptomReport & { created_at?: string }).createdAt ??
+                (a as SymptomReport & { created_at?: string }).created_at ??
+                "";
+            const bCreated = (b as SymptomReport & { created_at?: string }).createdAt ??
+                (b as SymptomReport & { created_at?: string }).created_at ??
+                "";
+            return aCreated.localeCompare(bCreated);
+        })
         .map((r) => ({
-            date: r.created_at.slice(0, 10),
+            date: (
+                (r as SymptomReport & { created_at?: string }).createdAt ??
+                (r as SymptomReport & { created_at?: string }).created_at ??
+                ""
+            ).slice(0, 10),
             severity: r.severity,
             symptom: r.symptom,
-            flagged: r.flagged_for_adr ?? false,
+            flagged:
+                (r as SymptomReport & { flagged_for_adr?: boolean }).flaggedForAdr ??
+                (r as SymptomReport & { flagged_for_adr?: boolean }).flagged_for_adr ??
+                false,
         }));
 }
 

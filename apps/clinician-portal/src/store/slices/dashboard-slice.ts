@@ -36,9 +36,22 @@ const initialState: DashboardState = {
 
 export const loadDashboard = createAsyncThunk(
     "dashboard/loadDashboard",
-    async (_, { rejectWithValue }) => {
+    async (
+        params:
+            | {
+                  sortBy?: "risk" | "adherence" | "last_activity" | "med_count";
+                  sortOrder?: "asc" | "desc";
+                  riskFilter?: "low" | "medium" | "high" | "unknown";
+                  minMedCount?: number;
+                  maxLastActivityDays?: number;
+                  page?: number;
+                  pageSize?: number;
+              }
+            | undefined,
+        { rejectWithValue },
+    ) => {
         try {
-            return await fetchDashboard();
+            return await fetchDashboard(params);
         } catch (err) {
             return rejectWithValue(err instanceof Error ? err.message : "Failed to load dashboard");
         }

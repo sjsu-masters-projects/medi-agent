@@ -9,6 +9,7 @@ import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 
 const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Integrations (MCP)"] as const;
+type SettingsTab = (typeof settingsTabs)[number];
 
 const ROLE_OPTIONS = [
     { label: "Clinic Admin", value: "admin" },
@@ -55,6 +56,10 @@ export default function SettingsPage() {
     const [inviteStatus, setInviteStatus] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<SettingsTab>("Team & Roles");
+    const [staffQuery, setStaffQuery] = useState("");
+    const [inviteCode, setInviteCode] = useState<string>("");
+    const [inviteCodeLoading, setInviteCodeLoading] = useState(false);
 
     const loadStaff = useCallback(async () => {
         if (!token) {
@@ -77,6 +82,12 @@ export default function SettingsPage() {
     useEffect(() => {
         void loadStaff();
     }, [loadStaff]);
+
+    useEffect(() => {
+        if (!token) return;
+        void handleGenerateInviteCode();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token]);
 
     async function handleInvite() {
         if (!token || !inviteEmail) {
@@ -128,13 +139,48 @@ export default function SettingsPage() {
         setActionMenuId(null);
     }
 
+    async function handleGenerateInviteCode() {
+        if (!token) {
+            return;
+        }
+        setInviteCodeLoading(true);
+        setError(null);
+        try {
+            const result = await api.post<{ invite_code: string }>(
+                "/api/v1/clinicians/me/invite-code",
+                {},
+                { token },
+            );
+            setInviteCode(result.invite_code);
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setInviteCodeLoading(false);
+        }
+    }
+
+    async function handleCopyInviteCode() {
+        if (!inviteCode || typeof navigator === "undefined" || !navigator.clipboard) {
+            return;
+        }
+        await navigator.clipboard.writeText(inviteCode);
+        setInviteStatus("Invite code copied");
+    }
+
+    const filteredStaffList = staffList.filter((member) => {
+        const q = staffQuery.trim().toLowerCase();
+        if (!q) return true;
+        return `${member.first_name} ${member.last_name} ${member.email}`.toLowerCase().includes(q);
+    });
+
     return (
         <div className="mx-auto max-w-7xl space-y-8">
             <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
                 {settingsTabs.map((tab) => (
                     <button
-                        className={`rounded-lg px-5 py-2.5 text-sm ${tab === "Team & Roles" ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-600"}`}
+                        className={`rounded-lg px-5 py-2.5 text-sm ${tab === activeTab ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-600"}`}
                         key={tab}
+                        onClick={() => setActiveTab(tab)}
                         type="button"
                     >
                         {tab}
@@ -188,7 +234,9 @@ export default function SettingsPage() {
                                 <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                 <input
                                     className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    onChange={(event) => setStaffQuery(event.target.value)}
                                     placeholder="Search team..."
+                                    value={staffQuery}
                                 />
                             </label>
                         </div>
@@ -198,7 +246,7 @@ export default function SettingsPage() {
                             <span>Status</span>
                             <span className="text-right">Actions</span>
                         </div>
-                        {staffList.map((member, index) => (
+                        {filteredStaffList.map((member, index) => (
                             <div
                                 className={`grid grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 px-6 py-4 ${index > 0 ? "border-t border-slate-100" : ""}`}
                                 key={member.id}
@@ -253,7 +301,7 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                         ))}
-                        {!loading && staffList.length === 0 ? (
+                        {!loading && filteredStaffList.length === 0 ? (
                             <p className="px-6 py-8 text-center text-sm text-slate-400">No staff members yet.</p>
                         ) : null}
                     </Card>
@@ -266,11 +314,20 @@ export default function SettingsPage() {
                             Share this unique code with patients so they can link their MediAgent mobile app to your clinic.
                         </p>
                         <div className="mt-6 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-5">
-                            <span className="text-3xl font-bold tracking-[0.14em]">CITY-8832</span>
-                            <button className="rounded-md bg-slate-800 px-3 py-2 text-slate-300" type="button">
+                            <span className="text-3xl font-bold tracking-[0.14em]">
+                                {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
+                            </span>
+                            <button className="rounded-md bg-slate-800 px-3 py-2 text-slate-300" onClick={() => void handleCopyInviteCode()} type="button">
                                 <HiOutlineClipboardDocument className="h-5 w-5" />
                             </button>
                         </div>
+                        <button
+                            className="mt-3 w-full rounded-lg border border-white/25 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15"
+                            onClick={() => void handleGenerateInviteCode()}
+                            type="button"
+                        >
+                            {inviteCodeLoading ? "Generating…" : "Generate New Invite Code"}
+                        </button>
                         <button
                             className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/15"
                             type="button"

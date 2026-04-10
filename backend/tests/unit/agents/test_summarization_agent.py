@@ -277,28 +277,21 @@ class TestSummarizationAgent:
             "objective": "Adherence 67%, no ADRs",
             "assessment": "Medication adherence concern",
             "plan": "1. Review medication schedule",
-        }
-
-        mock_stored = {
-            "id": str(uuid4()),
-            "subjective": mock_soap["subjective"],
-            "objective": mock_soap["objective"],
-            "assessment": mock_soap["assessment"],
-            "plan": mock_soap["plan"],
             "generated_at": "2026-04-09T00:00:00Z",
+            "model_used": "gemini-pro-test",
         }
 
-        # Mock the whole graph invocation
-        with patch.object(agent, "process", new_callable=AsyncMock) as mock_process:
-            from app.agents.summarization.agent import SummarizationOutput
-            mock_process.return_value = SummarizationOutput(
-                agent_id="test",
-                status="success",
-                soap_note_id=mock_stored["id"],
-                soap_note=mock_soap,
-                result={"note_id": mock_stored["id"]},
-            )
+        stored_id = str(uuid4())
+        mock_graph = MagicMock()
+        mock_graph.ainvoke = AsyncMock(
+            return_value={
+                "stored_note_id": stored_id,
+                "soap_note": mock_soap,
+                "error": None,
+            }
+        )
 
+        with patch("app.agents.summarization.agent.build_summarization_graph", return_value=mock_graph):
             agent_input = SummarizationInput(
                 user_id=clinician_id,
                 patient_id=patient_id,
@@ -307,8 +300,9 @@ class TestSummarizationAgent:
 
             output = await agent.process(agent_input)
             assert output.status == "success"
-            assert output.soap_note is not None
-            assert output.soap_note_id is not None
+            assert output.soap_note == mock_soap
+            assert output.soap_note_id == stored_id
+            mock_graph.ainvoke.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_agent_input_model_validation(self, clinician_id, patient_id):

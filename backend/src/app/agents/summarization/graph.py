@@ -11,6 +11,7 @@ Each node is a pure async function that receives and returns a typed state dict.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict, cast
@@ -71,74 +72,66 @@ async def gather_patient_data(state: SummarizationState, db: Any) -> Summarizati
     logger.info("Gathering patient data for summarization")
 
     # Patient profile
-    patient_row = (
+    patient_row = await _execute(
         db.table("patients")
         .select("id, first_name, last_name, email, date_of_birth")
         .eq("id", patient_id)
         .single()
-        .execute()
     )
     patient_info = cast(dict[str, Any], patient_row.data or {})
 
     # Active medications
-    meds = (
-        db.table("medications")
-        .select("*")
-        .eq("patient_id", patient_id)
-        .eq("is_active", True)
-        .execute()
+    meds = await _execute(
+        db.table("medications").select("*").eq("patient_id", patient_id).eq("is_active", True)
     )
     medications = cast(list[dict[str, Any]], meds.data or [])
 
     # Adherence stats (last lookback_days)
-    logs = (
+    logs = await _execute(
         db.table("adherence_logs")
         .select("status, target_type, logged_at")
         .eq("patient_id", patient_id)
         .gte("logged_at", cutoff)
-        .execute()
     )
     log_data = cast(list[dict[str, Any]], logs.data or [])
     adherence_stats = _calculate_adherence_stats(log_data)
 
     # Symptom reports
-    symptoms = (
+    symptoms = await _execute(
         db.table("symptom_reports")
         .select("*")
         .eq("patient_id", patient_id)
         .gte("created_at", cutoff)
         .order("created_at", desc=True)
-        .execute()
     )
     symptom_reports = cast(list[dict[str, Any]], symptoms.data or [])
 
     # Chat messages (last 20)
-    chats = (
+    chats = await _execute(
         db.table("chat_messages")
         .select("role, content, created_at")
         .eq("patient_id", patient_id)
         .order("created_at", desc=True)
         .limit(20)
-        .execute()
     )
-    chat_messages = cast(list[dict[str, Any]], chats.data or [])
+    # Prompt context should be chronological for coherent summarization.
+    chat_messages = list(reversed(cast(list[dict[str, Any]], chats.data or [])))
 
     # Conditions
-    conds = db.table("conditions").select("*").eq("patient_id", patient_id).execute()
+    conds = await _execute(db.table("conditions").select("*").eq("patient_id", patient_id))
     conditions = cast(list[dict[str, Any]], conds.data or [])
 
     # Allergies
-    allergies_res = db.table("allergies").select("*").eq("patient_id", patient_id).execute()
+    allergies_res = await _execute(db.table("allergies").select("*").eq("patient_id", patient_id))
     allergies = cast(list[dict[str, Any]], allergies_res.data or [])
 
     # ADR assessments
-    adrs = (
+    adrs = await _execute(
         db.table("adr_assessments")
         .select("*")
         .eq("patient_id", patient_id)
         .order("created_at", desc=True)
         .limit(5)
-        .execute()
     )
     adr_assessments = cast(list[dict[str, Any]], adrs.data or [])
 
@@ -209,10 +202,10 @@ async def generate_soap_note(state: SummarizationState) -> SummarizationState:
 async def store_soap_note(state: SummarizationState, db: Any) -> SummarizationState:
     """Node 4: Upsert the SOAP note into the soap_notes table.
 
-    Raises ValueError if the LLM step failed (error propagates to agent layer).
+    No-op if the LLM step failed, allowing graph to terminate cleanly.
     """
     if state.get("error"):
-        raise ValueError(state["error"])
+        return state
 
     soap = state["soap_note"]
     row = {
@@ -226,19 +219,21 @@ async def store_soap_note(state: SummarizationState, db: Any) -> SummarizationSt
         "generated_at": datetime.now(UTC).isoformat(),
     }
 
-    result = db.table("soap_notes").insert(row).execute()
+    result = await _execute(db.table("soap_notes").insert(row))
     inserted = cast(list[dict[str, Any]], result.data or [])
     note_id = inserted[0]["id"] if inserted else "unknown"
 
     logger.info("SOAP note stored (note_id=%s)", note_id)
 
-    return {**state, "stored_note_id": note_id}
+    stored_note = inserted[0] if inserted else {**row, "id": note_id}
+
+    return {**state, "stored_note_id": note_id, "soap_note": stored_note}
 
 
 # ── Graph builder ─────────────────────────────────────────────────────────────
 
 
-def build_summarization_graph(db: Any):
+def build_summarization_graph(db: Any) -> Any:
     """Compile and return the LangGraph summarization workflow.
 
     The `db` (Supabase client) is bound via closure so nodes stay pure functions
@@ -258,7 +253,7 @@ def build_summarization_graph(db: Any):
     async def _store(state: SummarizationState) -> SummarizationState:
         return await store_soap_note(state, db)
 
-    workflow: StateGraph = StateGraph(SummarizationState)
+    workflow: StateGraph[SummarizationState] = StateGraph(SummarizationState)
 
     workflow.add_node("gather_patient_data", _gather)
     workflow.add_node("prepare_context", prepare_context)
@@ -269,7 +264,11 @@ def build_summarization_graph(db: Any):
     workflow.add_edge(START, "gather_patient_data")
     workflow.add_edge("gather_patient_data", "prepare_context")
     workflow.add_edge("prepare_context", "generate_soap_note")
-    workflow.add_edge("generate_soap_note", "store_soap_note")
+    workflow.add_conditional_edges(
+        "generate_soap_note",
+        _next_node_after_generation,
+        {"store_soap_note": "store_soap_note", END: END},
+    )
     workflow.add_edge("store_soap_note", END)
 
     return workflow.compile()
@@ -295,10 +294,48 @@ def _calculate_adherence_stats(logs: list[dict[str, Any]]) -> dict[str, Any]:
 
     med_completed = sum(1 for log in med_logs if log.get("status") == "completed")
     obl_completed = sum(1 for log in obl_logs if log.get("status") == "completed")
+    current_streak_days = _calculate_current_streak_days(logs)
 
     return {
         "overall_score": completed / total if total else 0.0,
         "medication_score": med_completed / len(med_logs) if med_logs else 0.0,
         "obligation_score": obl_completed / len(obl_logs) if obl_logs else 0.0,
-        "current_streak_days": 0,  # simplified for summarization context
+        "current_streak_days": current_streak_days,
     }
+
+
+def _next_node_after_generation(state: SummarizationState) -> str:
+    """Route to store node only when generation succeeded."""
+    if state.get("error"):
+        return END
+    return "store_soap_note"
+
+
+def _calculate_current_streak_days(logs: list[dict[str, Any]]) -> int:
+    """Calculate consecutive-day streak from the most recent logged day."""
+    by_day_completed: dict[str, bool] = {}
+    for log in logs:
+        logged_at = log.get("logged_at")
+        if not isinstance(logged_at, str) or len(logged_at) < 10:
+            continue
+        day = logged_at[:10]
+        completed = log.get("status") == "completed"
+        by_day_completed[day] = by_day_completed.get(day, False) or completed
+
+    if not by_day_completed:
+        return 0
+
+    latest_day = datetime.fromisoformat(max(by_day_completed)).date()
+    streak = 0
+    cursor = latest_day
+
+    while by_day_completed.get(cursor.isoformat(), False):
+        streak += 1
+        cursor -= timedelta(days=1)
+
+    return streak
+
+
+async def _execute(query: Any) -> Any:
+    """Run blocking Supabase execute() off the event loop."""
+    return await asyncio.to_thread(query.execute)

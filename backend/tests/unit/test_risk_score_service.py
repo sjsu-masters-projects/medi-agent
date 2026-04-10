@@ -31,7 +31,7 @@ class TestCalculateRiskLevel:
         result = service.calculate_risk_level(
             adherence_score=0.60, open_adr_count=0, recent_symptom_severity=0
         )
-        assert result in ("medium", "high")  # 0.60 is medium threshold start
+        assert result == "medium"
 
     def test_high_risk_below_threshold(self, service):
         result = service.calculate_risk_level(

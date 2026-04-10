@@ -43,7 +43,7 @@ export const triggerSoapNote = createAsyncThunk(
     ) => {
         try {
             const result = await generateSoapNote(patientId, lookbackDays);
-            return result.soap_note as SoapNoteResponse;
+            return result.soap_note;
         } catch (err) {
             return rejectWithValue(
                 err instanceof Error ? err.message : "Failed to generate SOAP note",
@@ -79,6 +79,7 @@ export const patientDetailSlice = createSlice({
             })
             .addCase(triggerSoapNote.pending, (state) => {
                 state.generatingSoap = true;
+                state.error = null;
             })
             .addCase(triggerSoapNote.fulfilled, (state, action) => {
                 state.generatingSoap = false;

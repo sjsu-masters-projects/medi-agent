@@ -97,6 +97,8 @@ export default function PatientDeepDivePage() {
     if (!patient) return null;
 
     const adherencePct = Math.round(patient.adherence_score * 100);
+    const obligationCount = patient.obligations?.length ?? 0;
+    const obligationCompletionPct = Math.round((patient.obligation_completion_rate ?? 0) * 100);
 
     return (
         <div className="mx-auto max-w-6xl space-y-6">
@@ -273,6 +275,7 @@ export default function PatientDeepDivePage() {
                                                     <th className="py-2 pr-4 text-left">Dosage</th>
                                                     <th className="py-2 pr-4 text-left">Frequency</th>
                                                     <th className="py-2 text-left">Route</th>
+                                                    <th className="py-2 text-left">Source Provider</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -297,6 +300,9 @@ export default function PatientDeepDivePage() {
                                                         </td>
                                                         <td className="py-2.5 text-gray-600 capitalize">
                                                             {med.route}
+                                                        </td>
+                                                        <td className="py-2.5 text-gray-600">
+                                                            {med.prescribedByName ?? "Unknown"}
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -325,7 +331,7 @@ export default function PatientDeepDivePage() {
                         <AdherenceChart data={patient.adherence_series} />
 
                         {/* Summary stats */}
-                        <div className="mt-6 grid grid-cols-3 gap-4">
+                        <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
                             {[
                                 {
                                     label: "Overall Score",
@@ -346,7 +352,12 @@ export default function PatientDeepDivePage() {
                                 },
                                 {
                                     label: "Active Obligations",
-                                    value: patient.medications.length,
+                                    value: obligationCount,
+                                    color: "text-gray-900",
+                                },
+                                {
+                                    label: "Obligation Completion",
+                                    value: `${obligationCompletionPct}%`,
                                     color: "text-gray-900",
                                 },
                             ].map(({ label, value, color }) => (
@@ -375,8 +386,7 @@ export default function PatientDeepDivePage() {
                         <p className="mb-6 text-sm text-gray-500">
                             Patient-reported symptoms with severity ratings
                         </p>
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        <SymptomTimeline data={patient.symptom_reports as any} />
+                        <SymptomTimeline data={patient.symptom_reports} />
 
                         {/* Symptom list */}
                         {patient.symptom_reports.length > 0 && (
@@ -477,6 +487,12 @@ export default function PatientDeepDivePage() {
                                 <Skeleton className="h-20 w-full" />
                                 <Skeleton className="h-20 w-full" />
                                 <Skeleton className="h-20 w-full" />
+                            </div>
+                        )}
+
+                        {error && !generatingSoap && (
+                            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                Failed to generate SOAP note: {error}
                             </div>
                         )}
 

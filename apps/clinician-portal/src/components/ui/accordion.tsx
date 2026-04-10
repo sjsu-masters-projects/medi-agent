@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { ReactNode } from "react";
+import { Children, cloneElement, isValidElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -86,9 +87,31 @@ export function AccordionItem({
 // ── Accordion wrapper (handles single-open logic) ─────────────────────────────
 
 export function Accordion({ children, className = "", multi = false }: AccordionProps) {
+    const [openIndices, setOpenIndices] = useState<number[]>([]);
+
+    function toggleIndex(index: number) {
+        setOpenIndices((prev) => {
+            const isOpen = prev.includes(index);
+            if (multi) {
+                return isOpen ? prev.filter((i) => i !== index) : [...prev, index];
+            }
+            return isOpen ? [] : [index];
+        });
+    }
+
+    const items = Children.map(children, (child, index) => {
+        if (!isValidElement(child)) return child;
+        const typedChild = child as ReactElement<AccordionItemProps>;
+        const controlledOpen = openIndices.includes(index);
+        return cloneElement(typedChild, {
+            isOpen: typedChild.props.isOpen ?? controlledOpen,
+            onToggle: typedChild.props.onToggle ?? (() => toggleIndex(index)),
+        });
+    });
+
     return (
         <div className={`flex flex-col gap-2 ${className}`} role="list">
-            {children}
+            {items}
         </div>
     );
 }
