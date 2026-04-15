@@ -81,6 +81,17 @@ class ClinicianService:
 
         clinics = cast("list[dict[str, Any]]", clinic_result.data or [])
         if not clinics:
+            fallback_result = await self._execute(
+                self.db.table("clinics")
+                .select("id, code, display_name, status")
+                .ilike("code", f"%{normalized_code}%")
+            )
+            clinics = [
+                row
+                for row in cast("list[dict[str, Any]]", fallback_result.data or [])
+                if str(row.get("code", "")).strip().upper() == normalized_code
+            ]
+        if not clinics:
             raise ValidationError("Clinic code is invalid")
 
         clinic = clinics[0]

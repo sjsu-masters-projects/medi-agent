@@ -19,13 +19,7 @@ class ClinicService:
     async def resolve_clinic_code(self, clinic_code: str) -> dict[str, Any]:
         """Resolve a clinic code for clinician auth gating."""
         normalized_code = clinic_code.strip().upper()
-
-        result = await self._execute(
-            self.db.table("clinics")
-            .select("id, code, display_name, status")
-            .eq("code", normalized_code)
-        )
-        rows = cast("list[dict[str, Any]]", result.data or [])
+        rows = await self._find_matching_clinics(normalized_code)
         if not rows:
             raise ValidationError("Clinic code is invalid")
 
@@ -39,6 +33,29 @@ class ClinicService:
             "clinic_name": clinic["display_name"],
             "status": clinic["status"],
         }
+
+    async def _find_matching_clinics(self, normalized_code: str) -> list[dict[str, Any]]:
+        """Find clinics by exact code, with a fallback for whitespace-corrupted rows."""
+        exact_result = await self._execute(
+            self.db.table("clinics")
+            .select("id, code, display_name, status")
+            .eq("code", normalized_code)
+        )
+        exact_rows = [row for row in cast("list[dict[str, Any]]", exact_result.data or [])]
+        if exact_rows:
+            return exact_rows
+
+        fallback_result = await self._execute(
+            self.db.table("clinics")
+            .select("id, code, display_name, status")
+            .ilike("code", f"%{normalized_code}%")
+        )
+        fallback_rows = cast("list[dict[str, Any]]", fallback_result.data or [])
+        return [
+            row
+            for row in fallback_rows
+            if str(row.get("code", "")).strip().upper() == normalized_code
+        ]
 
     async def provision_clinic(
         self, clinic_name: str, type2_npi: str | None = None

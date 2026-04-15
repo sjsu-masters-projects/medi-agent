@@ -311,7 +311,6 @@ class AuthService:
     def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
         """Resolve clinic identity by code and enforce active status."""
         normalized_code = clinic_code.strip().upper()
-
         response = (
             self.db.table("clinics")
             .select("id, code, display_name, status")
@@ -320,6 +319,19 @@ class AuthService:
         )
 
         clinics = [row for row in (response.data or []) if isinstance(row, dict)]
+        if not clinics:
+            fallback_response = (
+                self.db.table("clinics")
+                .select("id, code, display_name, status")
+                .ilike("code", f"%{normalized_code}%")
+                .execute()
+            )
+            clinics = [
+                row
+                for row in (fallback_response.data or [])
+                if isinstance(row, dict)
+                and str(row.get("code", "")).strip().upper() == normalized_code
+            ]
         if not clinics:
             raise ValidationError("Clinic code is invalid")
 
