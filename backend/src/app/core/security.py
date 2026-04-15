@@ -22,7 +22,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypedDict
 from uuid import UUID
 
 import httpx
@@ -40,8 +40,14 @@ logger = logging.getLogger(__name__)
 _LEGACY_ALGORITHM = "HS256"
 _ASYMMETRIC_ALGORITHMS = {"RS256", "ES256"}
 _JWKS_CACHE_TTL_SECONDS = 300
-_jwks_cache: dict[str, Any] | None = None
-_jwks_cache_expires_at = 0.0
+
+
+class JwksCacheState(TypedDict):
+    keys: list[dict[str, Any]]
+    expires_at: float
+
+
+_jwks_cache_state: JwksCacheState = {"keys": [], "expires_at": 0.0}
 _jwks_cache_lock = threading.Lock()
 
 # HTTPBearer extracts the token from "Authorization: Bearer <token>"
@@ -62,14 +68,15 @@ def _coerce_jwks_keys(value: Any) -> list[dict[str, Any]]:
 
 def _load_jwks(*, force_refresh: bool = False) -> list[dict[str, Any]]:
     """Load and cache Supabase JWKS for asymmetric token verification."""
-    global _jwks_cache
-    global _jwks_cache_expires_at
-
     now = time.time()
 
     with _jwks_cache_lock:
-        if not force_refresh and _jwks_cache and now < _jwks_cache_expires_at:
-            return _coerce_jwks_keys(_jwks_cache.get("keys"))
+        if (
+            not force_refresh
+            and _jwks_cache_state["keys"]
+            and now < _jwks_cache_state["expires_at"]
+        ):
+            return _coerce_jwks_keys(_jwks_cache_state["keys"])
 
     url = f"{_supabase_issuer()}/.well-known/jwks.json"
     try:
@@ -79,15 +86,15 @@ def _load_jwks(*, force_refresh: bool = False) -> list[dict[str, Any]]:
     except Exception as exc:
         logger.warning("Failed to fetch Supabase JWKS: %s", exc)
         with _jwks_cache_lock:
-            if _jwks_cache:
-                return _coerce_jwks_keys(_jwks_cache.get("keys"))
+            if _jwks_cache_state["keys"]:
+                return _coerce_jwks_keys(_jwks_cache_state["keys"])
         raise JWTError("Unable to load Supabase signing keys") from None
 
     keys = _coerce_jwks_keys(payload.get("keys") if isinstance(payload, dict) else None)
 
     with _jwks_cache_lock:
-        _jwks_cache = {"keys": keys}
-        _jwks_cache_expires_at = now + _JWKS_CACHE_TTL_SECONDS
+        _jwks_cache_state["keys"] = keys
+        _jwks_cache_state["expires_at"] = now + _JWKS_CACHE_TTL_SECONDS
 
     return keys
 

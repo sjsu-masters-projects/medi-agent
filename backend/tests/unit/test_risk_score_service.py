@@ -11,7 +11,6 @@ from uuid import uuid4
 
 import pytest
 
-import app.services.risk_score_service as risk_score_module
 from app.services.risk_score_service import RiskScoreService, _humanize_delta
 
 
@@ -240,7 +239,7 @@ class TestRiskSignalFetching:
                 _response(data=[{"created_at": "2026-04-08T11:00:00Z", "symptom": "cough"}]),
             ]
         )
-        monkeypatch.setattr(risk_score_module, "_humanize_delta", lambda _: "2h ago")
+        monkeypatch.setattr("app.services.risk_score_service._humanize_delta", lambda _: "2h ago")
 
         activity = await service._fetch_last_activity(uuid4())
 
@@ -264,7 +263,7 @@ class TestRiskSignalFetching:
                 _response(data=[{"created_at": "not-a-date", "symptom": "cough"}]),
             ]
         )
-        monkeypatch.setattr(risk_score_module, "_humanize_delta", lambda _: "3h ago")
+        monkeypatch.setattr("app.services.risk_score_service._humanize_delta", lambda _: "3h ago")
 
         activity = await service._fetch_last_activity(uuid4())
 
