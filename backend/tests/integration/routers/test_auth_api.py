@@ -373,7 +373,9 @@ class TestLogin:
         from app.services.auth_service import AuthService
 
         original = AuthService._list_verified_mfa_factors
+        original_clinic_check = AuthService._assert_clinician_matches_clinic
         AuthService._list_verified_mfa_factors = staticmethod(lambda _access, _refresh: [])
+        AuthService._assert_clinician_matches_clinic = lambda self, _id, _code: None
         try:
             patient_response = client.post(
                 "/api/v1/auth/login",
@@ -381,10 +383,15 @@ class TestLogin:
             )
             clinician_response = client.post(
                 "/api/v1/auth/login",
-                json={"email": "doctor@example.com", "password": "SecurePass123!"},
+                json={
+                    "clinic_code": "ABC123",
+                    "email": "doctor@example.com",
+                    "password": "SecurePass123!",
+                },
             )
         finally:
             AuthService._list_verified_mfa_factors = original
+            AuthService._assert_clinician_matches_clinic = original_clinic_check
 
         assert patient_response.status_code == status.HTTP_200_OK
         assert patient_response.json()["user"]["role"] == "patient"
@@ -404,6 +411,7 @@ class TestLogin:
         from app.services.auth_service import AuthService
 
         original = AuthService._list_verified_mfa_factors
+        original_clinic_check = AuthService._assert_clinician_matches_clinic
         AuthService._list_verified_mfa_factors = staticmethod(
             lambda _access, _refresh: [
                 {
@@ -415,17 +423,39 @@ class TestLogin:
                 }
             ]
         )
+        AuthService._assert_clinician_matches_clinic = lambda self, _id, _code: None
         try:
             result = client.post(
                 "/api/v1/auth/login",
-                json={"email": "doctor@example.com", "password": "SecurePass123!"},
+                json={
+                    "clinic_code": "ABC123",
+                    "email": "doctor@example.com",
+                    "password": "SecurePass123!",
+                },
             )
         finally:
             AuthService._list_verified_mfa_factors = original
+            AuthService._assert_clinician_matches_clinic = original_clinic_check
 
         assert result.status_code == status.HTTP_200_OK
         assert result.json()["mfa_required"] is True
         assert result.json()["mfa_factors"][0]["id"] == "factor-1"
+
+    def test_clinician_login_requires_clinic_code(self, client, override_db, mock_supabase_db):
+        response = _make_auth_response(
+            user_id=str(uuid4()),
+            email="doctor@example.com",
+            role="clinician",
+        )
+        mock_supabase_db.auth.sign_in_with_password.return_value = response
+
+        result = client.post(
+            "/api/v1/auth/login",
+            json={"email": "doctor@example.com", "password": "SecurePass123!"},
+        )
+
+        assert result.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Clinic code is required" in result.json()["error"]["message"]
 
     def test_invalid_credentials(self, client, override_db, mock_supabase_db):
         mock_supabase_db.auth.sign_in_with_password.side_effect = Exception("Invalid login")

@@ -138,6 +138,9 @@ async def test_signup_patient_auth_hook_exception(auth_service, mock_supabase_cl
             last_name="Doe",
             date_of_birth="1990-01-01",
         )
+
+
+@pytest.mark.asyncio
 async def test_signup_patient_profile_creation_failure(auth_service, mock_supabase_client):
     """Test patient signup when profile creation fails."""
     # Mock successful auth.sign_up
@@ -563,6 +566,7 @@ async def test_login_requires_mfa_for_clinician_with_verified_factor(
     mock_auth_response.session = mock_session
 
     mock_supabase_client.auth.sign_in_with_password.return_value = mock_auth_response
+    auth_service._assert_clinician_matches_clinic = MagicMock(return_value=None)  # type: ignore[method-assign]
     auth_service._extract_aal = MagicMock(return_value="aal1")  # type: ignore[method-assign]
     auth_service._list_verified_mfa_factors = MagicMock(  # type: ignore[method-assign]
         return_value=[
@@ -580,6 +584,65 @@ async def test_login_requires_mfa_for_clinician_with_verified_factor(
 
     assert result["mfa_required"] is True
     assert result["mfa_factors"][0]["id"] == "factor-1"
+
+
+@pytest.mark.asyncio
+async def test_login_requires_clinic_code_for_clinicians(auth_service, mock_supabase_client):
+    mock_user = Mock()
+    mock_user.id = "clinician-123"
+    mock_user.email = "doctor@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = {"user_role": "clinician"}
+
+    mock_session = Mock()
+    mock_session.access_token = "login-access-token"
+    mock_session.refresh_token = "login-refresh-token"
+    mock_session.expires_at = 1234567890
+
+    mock_auth_response = Mock()
+    mock_auth_response.user = mock_user
+    mock_auth_response.session = mock_session
+
+    mock_supabase_client.auth.sign_in_with_password.return_value = mock_auth_response
+
+    with pytest.raises(AuthenticationError, match="Clinic code is required"):
+        await auth_service.login(email="doctor@example.com", password="password123")
+
+
+@pytest.mark.asyncio
+async def test_assert_clinician_matches_clinic_rejects_different_clinic(
+    auth_service, mock_supabase_client
+):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "ABC123",
+                "display_name": "Heart Health Clinic",
+                "status": "active",
+            }
+        ]
+    )
+
+    clinician_query = MagicMock()
+    clinician_query.select.return_value = clinician_query
+    clinician_query.eq.return_value = clinician_query
+    clinician_query.execute.return_value = Mock(
+        data=[
+            {
+                "clinic_id": "clinic-2",
+                "clinic_name": "Different Clinic",
+            }
+        ]
+    )
+
+    mock_supabase_client.table.side_effect = [clinic_query, clinician_query]
+
+    with pytest.raises(AuthenticationError, match="does not belong to the selected clinic"):
+        auth_service._assert_clinician_matches_clinic("clinician-123", "ABC123")
 
 
 @pytest.mark.asyncio

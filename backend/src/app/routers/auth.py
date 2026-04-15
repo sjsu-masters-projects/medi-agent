@@ -130,7 +130,11 @@ async def login(
     body: LoginRequest,
     service: AuthService = Depends(_get_auth_service),
 ) -> AuthLoginResponse:
-    result = await service.login(email=body.email, password=body.password)
+    result = await service.login(
+        email=body.email,
+        password=body.password,
+        clinic_code=body.clinic_code,
+    )
     return AuthLoginResponse(
         tokens=AuthTokens(**result["tokens"]),
         user=UserInfo(**result["user"]),

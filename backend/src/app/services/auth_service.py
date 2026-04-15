@@ -205,7 +205,12 @@ class AuthService:
 
     # ── Login ───────────────────────────────────────────────
 
-    async def login(self, email: str, password: str) -> Any:
+    async def login(
+        self,
+        email: str,
+        password: str,
+        clinic_code: str | None = None,
+    ) -> Any:
         """Authenticate with email + password. Works for both roles."""
         response = self._sign_in_and_format(email=email, password=password)
 
@@ -216,6 +221,7 @@ class AuthService:
                 "mfa_factors": [],
             }
 
+        self._assert_clinician_matches_clinic(response["user"]["id"], clinic_code)
         factors = self._list_verified_mfa_factors(
             response["tokens"]["access_token"],
             response["tokens"]["refresh_token"],
@@ -322,6 +328,38 @@ class AuthService:
             raise ValidationError("Clinic code is inactive")
 
         return clinic
+
+    def _assert_clinician_matches_clinic(
+        self,
+        clinician_id: str,
+        clinic_code: str | None,
+    ) -> None:
+        """Ensure clinician logins are bound to the verified clinic workspace."""
+        if not clinic_code:
+            raise AuthenticationError("Clinic code is required for clinician login")
+
+        clinic = self._resolve_active_clinic(clinic_code)
+        response = (
+            self.db.table("clinicians")
+            .select("clinic_id, clinic_name")
+            .eq("id", clinician_id)
+            .execute()
+        )
+        clinicians = [row for row in (response.data or []) if isinstance(row, dict)]
+        if not clinicians:
+            raise AuthenticationError("Clinician account is not linked to a clinic")
+
+        profile = cast("dict[str, Any]", clinicians[0])
+        clinic_id = profile.get("clinic_id")
+        clinic_name = profile.get("clinic_name")
+
+        if clinic_id and str(clinic_id) == str(clinic["id"]):
+            return
+
+        if clinic_name and str(clinic_name).strip().lower() == str(clinic["display_name"]).strip().lower():
+            return
+
+        raise AuthenticationError("Clinician account does not belong to the selected clinic")
 
     @staticmethod
     def _build_signup_validation_message(error: Any) -> str:

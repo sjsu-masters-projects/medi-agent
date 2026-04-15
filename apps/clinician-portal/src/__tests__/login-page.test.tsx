@@ -88,6 +88,11 @@ describe("Clinician login page", () => {
         });
         fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
+        expect(post).toHaveBeenNthCalledWith(2, "/api/v1/auth/login", {
+            clinic_code: "ABC123",
+            email: "patient@example.com",
+            password: "SecurePass123!",
+        });
         expect(await screen.findByText(/patient account/i)).toBeInTheDocument();
         expect(writeStoredClinicContext).toHaveBeenCalledWith(
             expect.objectContaining({ clinicCode: "ABC123", clinicName: "City Health" }),
@@ -162,6 +167,11 @@ describe("Clinician login page", () => {
         });
         fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
+        expect(post).toHaveBeenNthCalledWith(2, "/api/v1/auth/login", {
+            clinic_code: "ABC123",
+            email: "doctor@example.com",
+            password: "SecurePass123!",
+        });
         expect(await screen.findByText(/verify mfa/i)).toBeInTheDocument();
         expect(screen.getByText(/clinic authenticator/i)).toBeInTheDocument();
         expect(writeStoredSession).not.toHaveBeenCalled();

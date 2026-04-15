@@ -67,6 +67,7 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str = Field(..., min_length=1)
+    clinic_code: str | None = Field(default=None, min_length=6, max_length=20)
 
 
 class TokenRefreshRequest(BaseModel):

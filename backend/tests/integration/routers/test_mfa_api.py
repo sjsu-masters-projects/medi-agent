@@ -15,7 +15,7 @@ from app.services.mfa_service import MFAService
 
 @pytest.fixture
 def mock_clinician_user():
-    return CurrentUser(id=uuid4(), email="doc@test.com", role="clinician")
+    return CurrentUser(id=uuid4(), email="doc@test.com", role="clinician", aal="aal2")
 
 
 @pytest.fixture

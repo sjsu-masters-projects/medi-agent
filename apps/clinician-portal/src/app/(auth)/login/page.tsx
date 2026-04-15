@@ -135,7 +135,11 @@ export default function ClinicianLoginPage() {
         }
 
         try {
-            const response = await api.post<LoginResponse>("/api/v1/auth/login", { email, password });
+            const response = await api.post<LoginResponse>("/api/v1/auth/login", {
+                clinic_code: clinicContext.clinicCode,
+                email,
+                password,
+            });
             if (response.user.role !== "clinician") {
                 throw new Error("This login belongs to a patient account.");
             }

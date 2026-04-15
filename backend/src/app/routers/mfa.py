@@ -112,7 +112,7 @@ async def mfa_list_factors(
 )
 async def mfa_unenroll(
     body: MFAUnenrollRequest,
-    _user: CurrentUser = Depends(require_role("clinician", allow_unverified_mfa=True)),
+    _user: CurrentUser = Depends(require_role("clinician")),
     token: str = Depends(_extract_token),
     refresh_token: str = Depends(_extract_refresh_token),
     service: MFAService = Depends(_get_mfa_service),
