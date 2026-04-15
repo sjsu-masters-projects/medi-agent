@@ -219,9 +219,10 @@ All endpoints live under `/api/v1/`. Full interactive docs at `/docs` (Swagger) 
 
 | Resource | Prefix | Key Endpoints |
 |----------|--------|---------------|
-| Auth | `/auth` | signup, login, refresh |
+| Auth | `/auth` | signup, clinic-admin signup, login, refresh, password reset |
+| Clinics | `/clinics` | resolve clinic code, internal clinic provisioning |
 | Patients | `/patients` | profile, care team, join clinic |
-| Clinicians | `/clinicians` | profile, patient list, invite codes |
+| Clinicians | `/clinicians` | profile, patient list, invite code generate/list/revoke |
 | Documents | `/documents` | upload, list, explain (AI) |
 | Medications | `/medications` | CRUD, active/inactive |
 | Obligations | `/obligations` | CRUD (diet, exercise, custom) |

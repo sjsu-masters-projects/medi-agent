@@ -19,6 +19,7 @@ from app.routers import (
     auth,
     chat,
     clinicians,
+    clinics,
     documents,
     feed,
     medications,
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     api = "/api/v1"
     application.include_router(auth.router, prefix=f"{api}/auth", tags=["Auth"])
     application.include_router(mfa.router, prefix=f"{api}/auth/mfa", tags=["MFA"])
+    application.include_router(clinics.router, prefix=f"{api}/clinics", tags=["Clinics"])
     application.include_router(patients.router, prefix=f"{api}/patients", tags=["Patients"])
     application.include_router(clinicians.router, prefix=f"{api}/clinicians", tags=["Clinicians"])
     application.include_router(documents.router, prefix=f"{api}/documents", tags=["Documents"])

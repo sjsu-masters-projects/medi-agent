@@ -80,6 +80,11 @@ Migrations are plain SQL files in `src/app/db/migrations/`:
 | `002_rls_policies.sql` | RLS on all tables, 56 policies |
 | `003_storage_and_auth.sql` | 3 storage buckets + storage RLS |
 | `004_jwt_claims_hook.sql` | JWT hook — adds `user_role` claim |
+| `005_document_parse_tracking.sql` | Tracks document parse lifecycle metadata |
+| `006_care_team_invite_compat.sql` | Adds pending invite support to `care_teams` |
+| `007_clinic_identity_foundation.sql` | Adds canonical `clinics` table and clinician clinic binding |
+| `008_soap_notes.sql` | Adds clinician SOAP note generation storage |
+| `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT `user_role` hook parsing and grants |
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 

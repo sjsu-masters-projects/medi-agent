@@ -8,6 +8,8 @@ import { api } from "@/services/api";
 import { clearOnboardingProfile } from "@/store/slices/onboarding-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 
+const allowedGenders = ["male", "female", "other", "prefer_not_to_say"] as const;
+
 export default function OnboardingPage() {
     const router = useRouter();
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
@@ -36,25 +38,44 @@ export default function OnboardingPage() {
         setSubmitting(true);
         setError("");
 
+        if (!formData.firstName.trim() || !formData.lastName.trim()) {
+            setError("First name and last name are required.");
+            setStep(1);
+            setSubmitting(false);
+            return;
+        }
+
+        const normalizedGender = formData.gender.trim().toLowerCase();
+        if (normalizedGender && !allowedGenders.includes(normalizedGender as (typeof allowedGenders)[number])) {
+            setError("Please choose a valid gender option.");
+            setStep(2);
+            setSubmitting(false);
+            return;
+        }
+
+        if (!formData.inviteCode.trim()) {
+            setError("Clinic invite code is required to complete onboarding.");
+            setSubmitting(false);
+            return;
+        }
+
         try {
             await api.put(
                 "/api/v1/patients/me",
                 {
-                    first_name: formData.firstName,
-                    gender: formData.gender || undefined,
-                    last_name: formData.lastName,
+                    first_name: formData.firstName.trim(),
+                    gender: normalizedGender || undefined,
+                    last_name: formData.lastName.trim(),
                     preferred_language: formData.language,
                 },
                 { token: accessToken },
             );
 
-            if (formData.inviteCode.trim()) {
-                await api.post<{ clinician_first_name: string }>(
-                    `/api/v1/patients/me/care-team/join?invite_code=${encodeURIComponent(formData.inviteCode.trim())}`,
-                    undefined,
-                    { token: accessToken },
-                );
-            }
+            await api.post<{ clinician_first_name: string }>(
+                `/api/v1/patients/me/care-team/join?invite_code=${encodeURIComponent(formData.inviteCode.trim())}`,
+                undefined,
+                { token: accessToken },
+            );
         } catch (submissionError) {
             setError((submissionError as Error).message);
             setSubmitting(false);
@@ -69,13 +90,6 @@ export default function OnboardingPage() {
         if (error) {
             setError("");
         }
-    }
-
-    function handleContinueAfterInviteError() {
-        updateField("inviteCode", "");
-        setSubmitting(false);
-        dispatch(clearOnboardingProfile());
-        router.replace("/today");
     }
 
     return (
@@ -125,7 +139,20 @@ export default function OnboardingPage() {
                                 <option value="es">Spanish</option>
                             </select>
                         </label>
-                        <Input label="Gender (optional)" onChange={(event) => updateField("gender", event.target.value)} value={formData.gender} />
+                        <label className="block text-sm font-medium text-gray-700">
+                            Gender (optional)
+                            <select
+                                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                onChange={(event) => updateField("gender", event.target.value)}
+                                value={formData.gender}
+                            >
+                                <option value="">Prefer not to say</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="other">Other</option>
+                                <option value="prefer_not_to_say">Prefer not to say</option>
+                            </select>
+                        </label>
                     </div>
                 ) : null}
 
@@ -147,7 +174,7 @@ export default function OnboardingPage() {
                             <h2 className="mt-1 text-lg font-semibold text-slate-900">Connect your care team</h2>
                         </div>
                         <Input label="Clinic invite code" onChange={(event) => updateField("inviteCode", event.target.value)} placeholder="CITY-8832" value={formData.inviteCode} />
-                        <p className="text-sm text-gray-500">You can skip this now and link your clinic later from the portal.</p>
+                        <p className="text-sm text-gray-500">This code is required to finish setup and connect your clinic care team.</p>
                     </div>
                 ) : null}
 
@@ -164,16 +191,9 @@ export default function OnboardingPage() {
                     {step < 4 ? (
                         <Button disabled={submitting} onClick={() => setStep((current) => Math.min(4, current + 1))}>Next</Button>
                     ) : (
-                        <div className="flex items-center gap-3">
-                            {error && formData.inviteCode.trim() ? (
-                                <Button disabled={submitting} onClick={handleContinueAfterInviteError} variant="secondary">
-                                    Skip clinic for now
-                                </Button>
-                            ) : null}
-                            <Button disabled={submitting} onClick={handleFinish}>
-                                {submitting ? "Saving..." : "Finish setup"}
-                            </Button>
-                        </div>
+                        <Button disabled={submitting} onClick={handleFinish}>
+                            {submitting ? "Saving..." : "Finish setup"}
+                        </Button>
                     )}
                 </div>
                 </Card>

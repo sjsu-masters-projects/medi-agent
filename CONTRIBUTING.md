@@ -73,6 +73,11 @@ psql "$DB_URL" -f backend/src/app/db/migrations/001_initial_schema.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/002_rls_policies.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/005_document_parse_tracking.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/006_care_team_invite_compat.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/007_clinic_identity_foundation.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
 ```
 
 After running migrations, wire up the JWT claims hook in the Supabase Dashboard → Auth → Hooks. See the setup guide for details.

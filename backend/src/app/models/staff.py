@@ -42,3 +42,4 @@ class StaffListResponse(BaseModel):
 
     staff: list[StaffMember]
     clinic_name: str
+    clinic_code: str | None = None

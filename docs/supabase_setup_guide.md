@@ -39,6 +39,21 @@ psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
 
 # 4. JWT claims hook: adds user_role to every JWT
 psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
+
+# 5. Document parse tracking metadata
+psql "$DB_URL" -f backend/src/app/db/migrations/005_document_parse_tracking.sql
+
+# 6. Care-team invite compatibility (pending + invite codes)
+psql "$DB_URL" -f backend/src/app/db/migrations/006_care_team_invite_compat.sql
+
+# 7. Canonical clinic identity foundation
+psql "$DB_URL" -f backend/src/app/db/migrations/007_clinic_identity_foundation.sql
+
+# 8. SOAP notes table and indexes
+psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
+
+# 9. JWT hook hardening (safe re-apply + grants)
+psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
 ```
 
 > [!IMPORTANT]
@@ -52,11 +67,16 @@ psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
 | `002_rls_policies.sql` | Enables RLS on all tables, creates 56 policies + 3 helper functions |
 | `003_storage_and_auth.sql` | 3 storage buckets (documents, avatars, voice-messages) + 9 storage RLS policies |
 | `004_jwt_claims_hook.sql` | Custom JWT hook — injects `user_role` claim into every token |
+| `005_document_parse_tracking.sql` | Adds document parse lifecycle tracking fields |
+| `006_care_team_invite_compat.sql` | Supports pending clinician invites and invite-code indexes |
+| `007_clinic_identity_foundation.sql` | Adds canonical `clinics` table and links clinicians to `clinic_id` |
+| `008_soap_notes.sql` | Adds SOAP note persistence table for clinician workflows |
+| `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT role-hook parsing and grant posture |
 
 ### Adding New Migrations
 
 When you need to change the schema:
-1. Create a new file: `005_descriptive_name.sql`
+1. Create a new file: `<next_number>_descriptive_name.sql`
 2. Always number sequentially — never reorder existing files
 3. If adding a new enum value: `ALTER TYPE my_enum ADD VALUE 'new_value';`
 4. If adding a new column: `ALTER TABLE my_table ADD COLUMN new_col type;`
@@ -148,6 +168,38 @@ Every JWT token includes a `user_role` claim (`"patient"` or `"clinician"`) so t
 
 The dashboard will automatically run the required permission grants (execute for `supabase_auth_admin`, revoke from `authenticated`/`anon`/`public`).
 
+### JWT Hook Verification (Required)
+
+Run these checks in SQL Editor after migrations:
+
+```sql
+-- 1) Function exists in public schema
+select n.nspname as schema_name, p.proname as function_name
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+	and p.proname = 'custom_access_token_hook';
+
+-- 2) Hook runtime role can execute it
+select has_function_privilege(
+	'supabase_auth_admin',
+	'public.custom_access_token_hook(jsonb)',
+	'EXECUTE'
+) as supabase_auth_admin_can_execute;
+```
+
+Then verify dashboard wiring:
+1. Auth → Hooks → Customize Access Token (JWT) Claims
+2. Hook is enabled
+3. Hook type is Postgres
+4. Schema is public
+5. Function is custom_access_token_hook
+
+End-to-end verification (local backend):
+1. Call `POST /api/v1/auth/signup/patient` or `POST /api/v1/auth/signup/clinic-admin`
+2. Confirm response status is `201`
+3. Confirm response `user.role` is exactly `patient` or `clinician`
+
 ### Reading the Role in Code
 
 **Backend (Python):**
@@ -179,7 +231,7 @@ SUPABASE_SERVICE_ROLE_KEY=<from dashboard → Settings → API>
 
 ## Verification Checklist
 
-After running all 4 migrations:
+After running all migrations:
 
 - [ ] **Table Editor** → all 16 tables visible
 - [ ] **Auth → Policies** → RLS enabled on all tables

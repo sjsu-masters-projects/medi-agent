@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import LoginPage from "@/app/login/page";
 
-const { dispatch, post, replace, writeStoredSession } = vi.hoisted(() => ({
+const { dispatch, get, post, replace, writeStoredSession } = vi.hoisted(() => ({
     dispatch: vi.fn(),
+    get: vi.fn(),
     post: vi.fn(),
     replace: vi.fn(),
     writeStoredSession: vi.fn(),
@@ -18,7 +19,7 @@ vi.mock("react-redux", () => ({
 }));
 
 vi.mock("@/services/api", () => ({
-    api: { post },
+    api: { get, post },
 }));
 
 vi.mock("@/services/auth-session", () => ({
@@ -29,6 +30,7 @@ describe("Patient login page", () => {
     beforeEach(() => {
         replace.mockReset();
         dispatch.mockReset();
+        get.mockReset();
         post.mockReset();
         writeStoredSession.mockReset();
     });
@@ -46,6 +48,7 @@ describe("Patient login page", () => {
                 role: "patient",
             },
         });
+        get.mockResolvedValue([{ id: "team-1" }]);
 
         render(<LoginPage />);
         fireEvent.change(screen.getByLabelText(/email address/i), {
@@ -69,6 +72,35 @@ describe("Patient login page", () => {
             });
         });
         expect(replace).toHaveBeenCalledWith("/today");
+    });
+
+    it("redirects patients with no linked care team to profile join flow", async () => {
+        post.mockResolvedValue({
+            tokens: {
+                access_token: "access-token",
+                expires_at: 1234567890,
+                refresh_token: "refresh-token",
+            },
+            user: {
+                email: "newpatient@example.com",
+                id: "patient-2",
+                role: "patient",
+            },
+        });
+        get.mockResolvedValue([]);
+
+        render(<LoginPage />);
+        fireEvent.change(screen.getByLabelText(/email address/i), {
+            target: { value: "newpatient@example.com" },
+        });
+        fireEvent.change(screen.getByLabelText(/^password$/i), {
+            target: { value: "SecurePass123!" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+        await waitFor(() => {
+            expect(replace).toHaveBeenCalledWith("/profile?joinClinic=1");
+        });
     });
 
     it("shows an error for clinician credentials", async () => {
