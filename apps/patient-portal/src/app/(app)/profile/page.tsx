@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HiOutlineBuildingOffice2 } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { PageHeader } from "@/components/layouts";
@@ -70,7 +70,8 @@ function formatLanguage(language: Language) {
 
 export default function ProfilePage() {
     const dispatch = useDispatch<AppDispatch>();
-    const router = useRouter();
+    const { replace } = useRouter();
+    const searchParams = useSearchParams();
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
     const [patientProfile, setPatientProfile] = useState<Patient | null>(null);
     const [careTeam, setCareTeam] = useState<CareTeamMember[]>([]);
@@ -80,6 +81,7 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const [pageError, setPageError] = useState("");
     const [joining, setJoining] = useState(false);
+    const showJoinClinicPrompt = searchParams.get("joinClinic") === "1" && careTeam.length === 0;
 
     async function fetchCareTeam(token: string) {
         const response = await api.get<CareTeamResponse[]>("/api/v1/patients/me/care-team", {
@@ -90,7 +92,7 @@ export default function ProfilePage() {
 
     useEffect(() => {
         if (!accessToken) {
-            router.replace("/login");
+            replace("/login");
             return;
         }
 
@@ -130,19 +132,19 @@ export default function ProfilePage() {
         return () => {
             isMounted = false;
         };
-    }, [accessToken, router]);
+    }, [accessToken, replace]);
 
     function handleLogout() {
         clearStoredSession();
         dispatch(logout());
-        router.replace("/login");
+        replace("/login");
     }
 
     async function handleJoinClinic(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
         if (!accessToken) {
-            router.replace("/login");
+            replace("/login");
             return;
         }
 
@@ -194,6 +196,14 @@ export default function ProfilePage() {
 
                 {!loading && !pageError && patientProfile ? (
                     <>
+                        {showJoinClinicPrompt ? (
+                            <Card className="border-amber-200 bg-amber-50 text-amber-900">
+                                <p className="text-sm font-medium">
+                                    No active care team is linked yet. Enter your clinic invite code below to complete onboarding.
+                                </p>
+                            </Card>
+                        ) : null}
+
                         <Card className="overflow-hidden border-sky-100 bg-gradient-to-br from-sky-600 to-sky-700 text-white shadow-lg shadow-sky-100">
                             <div className="flex items-center gap-4">
                                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 text-2xl font-semibold">

@@ -23,6 +23,11 @@ class ClinicianRole(StrEnum):
     NURSE = "nurse"
 
 
+class ClinicStatus(StrEnum):
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+
+
 # ── Care Team ─────────────────────────────────────
 
 

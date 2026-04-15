@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     patient_portal_url: str = "http://localhost:3000"
     clinician_portal_url: str = "http://localhost:3001"
+    internal_admin_token: str = ""
     environment: str = "development"
     log_level: str = "DEBUG"
 
@@ -66,7 +67,12 @@ class Settings(BaseSettings):
     def allowed_origins(self) -> Any:
         origins = {self.patient_portal_url, self.clinician_portal_url}
         if self.environment == "development":
-            origins |= {"http://localhost:3000", "http://localhost:3001"}
+            origins |= {
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3001",
+            }
         return list(origins)
 
     @property

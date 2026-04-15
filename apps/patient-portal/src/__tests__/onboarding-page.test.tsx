@@ -40,7 +40,7 @@ describe("Patient onboarding page", () => {
         put.mockReset();
     });
 
-    it("surfaces join-clinic errors and lets the user continue", async () => {
+    it("requires invite code and surfaces join-clinic errors", async () => {
         put.mockResolvedValue({});
         post.mockRejectedValue(new Error("Invalid or expired invite code"));
 
@@ -48,17 +48,16 @@ describe("Patient onboarding page", () => {
         fireEvent.click(screen.getByRole("button", { name: /next/i }));
         fireEvent.click(screen.getByRole("button", { name: /next/i }));
         fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+        fireEvent.click(screen.getByRole("button", { name: /finish setup/i }));
+        expect(await screen.findByText(/clinic invite code is required/i)).toBeInTheDocument();
+
         fireEvent.change(screen.getByLabelText(/clinic invite code/i), {
             target: { value: "BAD-CODE" },
         });
         fireEvent.click(screen.getByRole("button", { name: /finish setup/i }));
 
         expect(await screen.findByText(/invalid or expired invite code/i)).toBeInTheDocument();
-
-        fireEvent.click(screen.getByRole("button", { name: /skip clinic for now/i }));
-
-        await waitFor(() => {
-            expect(replace).toHaveBeenCalledWith("/today");
-        });
+        await waitFor(() => expect(replace).not.toHaveBeenCalledWith("/today"));
     });
 });

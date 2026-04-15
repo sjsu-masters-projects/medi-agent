@@ -18,7 +18,7 @@ from uuid import UUID
 
 from supabase import Client
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import ExternalServiceError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class AdherenceService:
         }
         result = self.db.table("adherence_logs").insert(row).execute()
         if not result.data:
-            raise Exception("Failed to log adherence")
+            raise ExternalServiceError("Supabase", "Failed to log adherence")
         return result.data[0]
 
     async def get_stats(self, patient_id: UUID, period_days: int = 30) -> Any:

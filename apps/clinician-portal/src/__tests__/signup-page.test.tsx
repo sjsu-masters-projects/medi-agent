@@ -9,6 +9,10 @@ const { dispatch, post, replace, writeStoredSession } = vi.hoisted(() => ({
     writeStoredSession: vi.fn(),
 }));
 
+const { readStoredClinicContext } = vi.hoisted(() => ({
+    readStoredClinicContext: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace }),
 }));
@@ -25,16 +29,27 @@ vi.mock("@/services/auth-session", () => ({
     writeStoredSession,
 }));
 
+vi.mock("@/services/clinic-context", () => ({
+    readStoredClinicContext,
+}));
+
 describe("Clinician signup page", () => {
     beforeEach(() => {
         replace.mockReset();
         dispatch.mockReset();
         post.mockReset();
         writeStoredSession.mockReset();
+        readStoredClinicContext.mockReset();
+        readStoredClinicContext.mockReturnValue({
+            clinicCode: "ABC123",
+            clinicId: "clinic-1",
+            clinicName: "City Health",
+            status: "active",
+        });
     });
 
     it("stores the full session and routes to the dashboard", async () => {
-        post.mockResolvedValue({
+        post.mockResolvedValueOnce({
             tokens: {
                 access_token: "access-token",
                 expires_at: 1234567890,
@@ -52,7 +67,7 @@ describe("Clinician signup page", () => {
         fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: "Khan" } });
         fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "doctor@example.com" } });
         fireEvent.change(screen.getByLabelText(/^specialty$/i), { target: { value: "Primary Care" } });
-        fireEvent.change(screen.getByLabelText(/clinic name/i), { target: { value: "City Health" } });
+        fireEvent.change(screen.getByLabelText(/role access/i), { target: { value: "nurse" } });
         fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "SecurePass123!" } });
         fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "SecurePass123!" } });
         fireEvent.click(screen.getByRole("button", { name: /create clinician account/i }));
@@ -69,6 +84,11 @@ describe("Clinician signup page", () => {
                 },
             });
         });
+        expect(post).toHaveBeenNthCalledWith(
+            1,
+            "/api/v1/auth/signup/clinician",
+            expect.objectContaining({ clinic_code: "ABC123", role: "nurse" }),
+        );
         expect(replace).toHaveBeenCalledWith("/dashboard");
     });
 });

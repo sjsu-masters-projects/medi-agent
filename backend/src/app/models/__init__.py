@@ -6,6 +6,12 @@ from app.models.adr import ADRAssessmentRead, MedWatchDraft
 from app.models.appointment import AppointmentCreate, AppointmentRead, AppointmentUpdate
 from app.models.care_team import CareTeamCreate, CareTeamRead
 from app.models.chat import ChatMessage, ChatMessageCreate
+from app.models.clinic import (
+    ClinicCodeResolveRequest,
+    ClinicCodeResolveResponse,
+    ClinicRead,
+    InternalClinicProvisionRequest,
+)
 from app.models.clinician import ClinicianCreate, ClinicianRead, ClinicianUpdate
 from app.models.clinician_message import ClinicianMessageCreate, ClinicianMessageRead
 
@@ -34,6 +40,7 @@ from app.models.enums import (
     CareTeamStatus,
     ChatRole,
     ClinicianRole,
+    ClinicStatus,
     DocumentType,
     DocumentVisibility,
     Gender,
@@ -63,6 +70,7 @@ __all__ = [
     "AppointmentType",
     "CareTeamStatus",
     "ChatRole",
+    "ClinicStatus",
     "ClinicianRole",
     "DocumentType",
     "DocumentVisibility",
@@ -88,6 +96,11 @@ __all__ = [
     "ClinicianCreate",
     "ClinicianRead",
     "ClinicianUpdate",
+    # Clinic
+    "ClinicCodeResolveRequest",
+    "ClinicCodeResolveResponse",
+    "ClinicRead",
+    "InternalClinicProvisionRequest",
     # Care Team
     "CareTeamCreate",
     "CareTeamRead",

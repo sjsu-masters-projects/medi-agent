@@ -120,12 +120,15 @@
 ### 2.2 Authentication API
 - [x] `POST /api/v1/auth/signup/patient` — patient signup
 - [x] `POST /api/v1/auth/signup/clinician` — clinician signup
+- [x] `POST /api/v1/auth/signup/clinic-admin` — bootstrap clinic + first clinic admin
 - [x] `POST /api/v1/auth/login` — email/password login
 - [x] `POST /api/v1/auth/refresh` — token refresh
 - [x] `POST /api/v1/auth/password-reset` — password reset email
 - [x] `GET /api/v1/auth/me` — current user from JWT
+- [x] Validate clinician signup against active clinic codes + allowed roles
 - [x] JWT middleware for route protection
 - [x] Role-based access control (patient vs clinician)
+- [x] Harden JWT claims parsing + role extraction fallback for auth sessions
 - [x] Write auth integration tests
 
 ### 2.3 Patient API
@@ -133,6 +136,7 @@
 - [x] `PUT /api/v1/patients/me` — update profile
 - [x] `GET /api/v1/patients/me/care-team` — list patient's providers
 - [x] `POST /api/v1/patients/me/care-team/join` — join clinic via code
+- [x] Enforce invite lifecycle checks (invalid, expired, claimed, already linked)
 - [x] Write patient API tests
 
 ### 2.4 Clinician API
@@ -140,6 +144,11 @@
 - [x] `GET /api/v1/clinicians/me/patients` — list assigned patients
 - [x] `GET /api/v1/clinicians/me/patients/{id}` — get patient detail
 - [x] `POST /api/v1/clinicians/me/invite-code` — generate patient invite code
+- [x] `GET /api/v1/clinicians/me/invite-code` — read latest pending invite code
+- [x] `GET /api/v1/clinicians/me/invite-codes` — list invite lifecycle history
+- [x] `POST /api/v1/clinicians/me/invite-codes/{care_team_id}/revoke` — revoke pending invite code
+- [x] `POST /api/v1/clinics/resolve-code` — resolve clinic code pre-auth
+- [x] `POST /api/v1/clinics/internal/provision` — internal clinic provisioning endpoint
 - [x] Write clinician API tests
 
 ### 2.5 Document API
@@ -183,6 +192,7 @@
 - [x] Sign-up page (email/password flow via Supabase Auth)
 - [x] Onboarding flow (name, DOB, language, allergies)
 - [x] Join clinic (enter code or use invite link)
+- [x] Redirect patients without care team to profile join-clinic flow
 - [x] Auth state management in Redux
 - [x] Protected route wrapper
 
@@ -209,6 +219,8 @@
 - [x] MFA setup flow
 - [x] Clinic setup page (name, NPI)
 - [x] Role management (Admin, Provider, Nurse)
+- [x] Clinic-code verification gate before clinician login/signup
+- [x] Clinic-admin bootstrap signup page (`/signup/admin`)
 - [x] Auth state in Redux
 - [x] Protected routes
 

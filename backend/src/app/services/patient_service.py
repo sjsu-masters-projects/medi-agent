@@ -9,6 +9,7 @@ Handles:
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -74,28 +75,93 @@ class PatientService:
         Invite codes are stored in the care_teams table as pending rows
         with a code column. The patient "claims" the row.
         """
-        # Look up the pending invite
+        normalized_code = invite_code.strip().upper()
+
+        # Look up invite regardless of status so errors can be precise.
         result = (
             self.db.table("care_teams")
             .select("*")
-            .eq("invite_code", invite_code)
-            .eq("status", "pending")
-            .is_("patient_id", "null")
+            .eq("invite_code", normalized_code)
             .single()
             .execute()
         )
         if not result.data:
-            raise ValidationError(f"Invalid or expired invite code: {invite_code}")
+            raise ValidationError("Invite code is invalid")
 
-        care_team_id = cast(dict[str, Any], result.data)["id"]
+        raw_invite = result.data
+        if isinstance(raw_invite, list):
+            if not raw_invite:
+                raise ValidationError("Invite code is invalid")
+            invite = cast(dict[str, Any], raw_invite[0])
+        else:
+            invite = cast(dict[str, Any], raw_invite)
+
+        expires_at = invite.get("invite_expires_at")
+        if isinstance(expires_at, str):
+            try:
+                if datetime.fromisoformat(expires_at.replace("Z", "+00:00")) <= datetime.now(UTC):
+                    self.db.table("care_teams").update({"status": "inactive"}).eq(
+                        "id", invite["id"]
+                    ).execute()
+                    raise ValidationError(
+                        "Invite code has expired. Request a new active invite code"
+                    )
+            except ValueError:
+                logger.warning(
+                    "Invalid invite_expires_at value on care_teams row %s", invite.get("id")
+                )
+
+        if invite.get("status") != "pending":
+            if invite.get("status") == "active":
+                raise ValidationError("Invite code is already active and cannot be reused")
+            raise ValidationError("Invite code is no longer active. Request a new code")
+
+        if invite.get("patient_id"):
+            raise ValidationError("Invite code has already been claimed")
+
+        existing_link = (
+            self.db.table("care_teams")
+            .select("id")
+            .eq("patient_id", str(patient_id))
+            .eq("clinician_id", str(invite["clinician_id"]))
+            .eq("status", "active")
+            .execute()
+        )
+        if existing_link.data:
+            raise ValidationError("You are already linked to this care team")
+
+        care_team_id = invite["id"]
 
         # Claim the invite
         updated = (
             self.db.table("care_teams")
-            .update({"patient_id": str(patient_id), "status": "active"})
+            .update(
+                {
+                    "invite_claimed_at": datetime.now(UTC).isoformat(),
+                    "patient_id": str(patient_id),
+                    "status": "active",
+                }
+            )
             .eq("id", care_team_id)
             .execute()
         )
         if not updated.data:
             raise ValidationError("Failed to join care team")
-        return updated.data[0]
+
+        joined = (
+            self.db.table("care_teams")
+            .select("*, clinicians(first_name, last_name, specialty, clinic_name)")
+            .eq("id", care_team_id)
+            .single()
+            .execute()
+        )
+        if not joined.data:
+            raise ValidationError("Failed to load care team after joining")
+
+        row = cast(dict[str, Any], joined.data)
+        clinician = cast(dict[str, Any], row.pop("clinicians", {}) or {})
+        row["clinician_first_name"] = clinician.get("first_name", "")
+        row["clinician_last_name"] = clinician.get("last_name", "")
+        row["specialty_context"] = clinician.get("specialty", "")
+        row["clinic_name"] = clinician.get("clinic_name", "")
+        return row
