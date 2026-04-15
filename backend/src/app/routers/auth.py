@@ -7,7 +7,7 @@ service, and returns a structured response.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from supabase import Client
 
 from app.core.security import get_current_user
@@ -16,6 +16,7 @@ from app.models.auth import (
     AuthLoginResponse,
     AuthResponse,
     AuthTokens,
+    ClinicAdminSignupRequest,
     ClinicianSignupRequest,
     CurrentUser,
     LoginRequest,
@@ -63,6 +64,33 @@ async def signup_patient(
 
 
 @router.post(
+    "/signup/clinic-admin",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register clinic and first admin",
+    description="Creates a clinic and provisions the first clinician account with admin role.",
+)
+async def signup_clinic_admin(
+    body: ClinicAdminSignupRequest,
+    service: AuthService = Depends(_get_auth_service),
+) -> AuthResponse:
+    result = await service.signup_clinic_admin(
+        email=body.email,
+        password=body.password,
+        first_name=body.first_name,
+        last_name=body.last_name,
+        specialty=body.specialty,
+        clinic_name=body.clinic_name,
+        type1_npi=body.type1_npi,
+        type2_npi=body.type2_npi,
+    )
+    return AuthResponse(
+        tokens=AuthTokens(**result["tokens"]),
+        user=UserInfo(**result["user"]),
+    )
+
+
+@router.post(
     "/signup/clinician",
     response_model=AuthResponse,
     status_code=status.HTTP_201_CREATED,
@@ -79,8 +107,9 @@ async def signup_clinician(
         first_name=body.first_name,
         last_name=body.last_name,
         specialty=body.specialty,
-        clinic_name=body.clinic_name,
-        npi_number=body.npi_number,
+        clinic_code=body.clinic_code,
+        type1_npi=body.type1_npi,
+        role=body.role,
     )
     return AuthResponse(
         tokens=AuthTokens(**result["tokens"]),
@@ -139,6 +168,8 @@ async def refresh_token(
 @router.post(
     "/password-reset",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
     summary="Request password reset email",
     description="Sends a reset link. Always returns 204 (doesn't reveal if email exists).",
 )

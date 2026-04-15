@@ -16,7 +16,7 @@ from uuid import UUID
 
 from supabase import Client
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ExternalServiceError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class ObligationService:
         row = {"patient_id": str(patient_id), **data}
         result = self.db.table("obligations").insert(row).execute()
         if not result.data:
-            raise Exception("Failed to create obligation")
+            raise ExternalServiceError("Supabase", "Failed to create obligation")
         return result.data[0]
 
     async def update_obligation(

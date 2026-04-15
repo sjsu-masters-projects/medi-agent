@@ -20,7 +20,7 @@ def mock_supabase_db():
     db.auth.admin = MagicMock()
     table = MagicMock()
     db.table.return_value = table
-    for method in ["insert", "delete", "eq", "execute"]:
+    for method in ["select", "insert", "delete", "eq", "execute"]:
         getattr(table, method).return_value = table
     return db
 
@@ -81,6 +81,7 @@ class TestPatientSignup:
 
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
+        assert set(data.keys()) == {"tokens", "user"}
         assert data["user"]["role"] == "patient"
         assert data["tokens"]["refresh_token"] == "patient-refresh-token"
 
@@ -102,11 +103,48 @@ class TestPatientSignup:
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        payload = response.json()
+        assert "error" in payload
+        assert payload["error"]["code"] == "VALIDATION_ERROR"
+        assert isinstance(payload["error"]["message"], str)
+
+    def test_request_validation_error_shape(self, client, override_db):
+        response = client.post(
+            "/api/v1/auth/signup/patient",
+            json={
+                "email": "patient@example.com",
+                "password": "SecurePass123!",
+                "last_name": "Jones",
+                "date_of_birth": "1990-01-01",
+                "preferred_language": "en",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        payload = response.json()
+        assert "error" in payload
+        assert payload["error"]["code"] == "VALIDATION_ERROR"
+        assert "first_name" in payload["error"]["message"]
 
 
 class TestClinicianSignup:
     def test_success(self, client, override_db, mock_supabase_db):
         user_id = str(uuid4())
+        table = mock_supabase_db.table.return_value
+        table.execute.side_effect = [
+            Mock(
+                data=[
+                    {
+                        "id": "clinic-1",
+                        "code": "ABC123",
+                        "display_name": "City Health",
+                        "status": "active",
+                    }
+                ]
+            ),
+            Mock(data=[]),
+        ]
+
         signup_response = Mock()
         signup_response.user = Mock(id=user_id)
         mock_supabase_db.auth.sign_up.return_value = signup_response
@@ -123,9 +161,175 @@ class TestClinicianSignup:
                 "password": "SecurePass123!",
                 "first_name": "Amir",
                 "last_name": "Khan",
-                "clinic_name": "City Health",
+                "clinic_code": "ABC123",
                 "specialty": "Primary Care",
-                "npi_number": "1234567890",
+                "type1_npi": "1234567890",
+            },
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["user"]["role"] == "clinician"
+
+    def test_signup_exception_returns_validation_error(self, client, override_db, mock_supabase_db):
+        table = mock_supabase_db.table.return_value
+        table.execute.return_value = Mock(
+            data=[
+                {
+                    "id": "clinic-1",
+                    "code": "ABC123",
+                    "display_name": "City Health",
+                    "status": "active",
+                }
+            ]
+        )
+        mock_supabase_db.auth.sign_up.side_effect = Exception("User already registered")
+
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "doctor@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Amir",
+                "last_name": "Khan",
+                "clinic_code": "ABC123",
+                "specialty": "Primary Care",
+                "type1_npi": "1234567890",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        payload = response.json()
+        assert "error" in payload
+        assert payload["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_signup_rejects_invalid_clinic_code(self, client, override_db, mock_supabase_db):
+        table = mock_supabase_db.table.return_value
+        table.execute.return_value = Mock(data=[])
+
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "doctor@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Amir",
+                "last_name": "Khan",
+                "clinic_code": "INVALID",
+                "specialty": "Primary Care",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_signup_supports_nurse_role(self, client, override_db, mock_supabase_db):
+        user_id = str(uuid4())
+        table = mock_supabase_db.table.return_value
+        table.execute.side_effect = [
+            Mock(
+                data=[
+                    {
+                        "id": "clinic-1",
+                        "code": "ABC123",
+                        "display_name": "City Health",
+                        "status": "active",
+                    }
+                ]
+            ),
+            Mock(data=[]),
+        ]
+
+        signup_response = Mock()
+        signup_response.user = Mock(id=user_id)
+        mock_supabase_db.auth.sign_up.return_value = signup_response
+        mock_supabase_db.auth.sign_in_with_password.return_value = _make_auth_response(
+            user_id=user_id,
+            email="nurse@example.com",
+            role="clinician",
+        )
+
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "nurse@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Nora",
+                "last_name": "Lane",
+                "clinic_code": "ABC123",
+                "specialty": "Care Coordination",
+                "role": "nurse",
+            },
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["user"]["role"] == "clinician"
+
+    def test_signup_rejects_admin_role_in_public_clinician_signup(
+        self, client, override_db, mock_supabase_db
+    ):
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "adminlike@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Alex",
+                "last_name": "Reed",
+                "clinic_code": "ABC123",
+                "specialty": "Primary Care",
+                "role": "admin",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+class TestClinicAdminSignup:
+    def test_success(self, client, override_db, mock_supabase_db):
+        user_id = str(uuid4())
+        table = mock_supabase_db.table.return_value
+        table.execute.side_effect = [
+            Mock(data=[]),
+            Mock(
+                data=[
+                    {
+                        "id": "clinic-1",
+                        "code": "ABC123",
+                        "display_name": "City Health",
+                        "status": "active",
+                    }
+                ]
+            ),
+            Mock(
+                data=[
+                    {
+                        "id": "clinic-1",
+                        "code": "ABC123",
+                        "display_name": "City Health",
+                        "status": "active",
+                    }
+                ]
+            ),
+            Mock(data=[]),
+        ]
+
+        signup_response = Mock()
+        signup_response.user = Mock(id=user_id)
+        mock_supabase_db.auth.sign_up.return_value = signup_response
+        mock_supabase_db.auth.sign_in_with_password.return_value = _make_auth_response(
+            user_id=user_id,
+            email="admin@example.com",
+            role="clinician",
+        )
+
+        response = client.post(
+            "/api/v1/auth/signup/clinic-admin",
+            json={
+                "clinic_name": "City Health",
+                "email": "admin@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Amina",
+                "last_name": "Khan",
+                "specialty": "Primary Care",
+                "type1_npi": "1234567890",
+                "type2_npi": "0987654321",
             },
         )
 

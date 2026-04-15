@@ -16,6 +16,7 @@ from pydantic import BaseModel, EmailStr, Field
 from app.models.enums import Language
 
 AuthRole = Literal["patient", "clinician"]
+ClinicianSignupRole = Literal["provider", "nurse"]
 
 # ── Requests ────────────────────────────────────────────────
 
@@ -43,8 +44,22 @@ class ClinicianSignupRequest(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     specialty: str = Field(..., min_length=1, max_length=100)
+    clinic_code: str = Field(..., min_length=6, max_length=20)
+    type1_npi: str | None = Field(default=None, pattern=r"^\d{10}$")
+    role: ClinicianSignupRole = "provider"
+
+
+class ClinicAdminSignupRequest(BaseModel):
+    """Initial clinic onboarding signup for the first clinic admin account."""
+
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    specialty: str = Field(..., min_length=1, max_length=100)
     clinic_name: str = Field(..., min_length=1, max_length=200)
-    npi_number: str | None = Field(default=None, max_length=20)
+    type1_npi: str | None = Field(default=None, pattern=r"^\d{10}$")
+    type2_npi: str | None = Field(default=None, pattern=r"^\d{10}$")
 
 
 class LoginRequest(BaseModel):

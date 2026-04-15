@@ -536,14 +536,20 @@ class TestGetTodayFeed:
         response = client.get("/api/v1/feed/today?date=invalid-date")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Invalid date format" in response.json()["detail"]
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "BAD_REQUEST"
+        assert "Invalid date format" in data["error"]["message"]
 
     def test_error_non_patient_user(self, client, override_clinician_auth, override_db):
         """Return 403 for non-patient user."""
         response = client.get("/api/v1/feed/today")
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "Only patients can access the feed" in response.json()["detail"]
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "AUTHORIZATION_ERROR"
+        assert "Only patients can access the feed" in data["error"]["message"]
 
     def test_error_unauthenticated_user(self, client):
         """Return 401 for unauthenticated user."""

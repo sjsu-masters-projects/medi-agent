@@ -5,8 +5,6 @@ All endpoints require authentication as a patient.
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, Depends
 from supabase import Client
 
@@ -31,8 +29,9 @@ def _get_service(db: Client = Depends(get_db)) -> PatientService:
 async def get_my_profile(
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> Any:
-    return await service.get_profile(user.id)
+) -> PatientRead:
+    payload = await service.get_profile(user.id)
+    return PatientRead.model_validate(payload)
 
 
 @router.put("/me", response_model=PatientRead, summary="Update my patient profile")
@@ -40,8 +39,9 @@ async def update_my_profile(
     data: PatientUpdate,
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> Any:
-    return await service.update_profile(user.id, data.model_dump(exclude_unset=True))
+) -> PatientRead:
+    payload = await service.update_profile(user.id, data.model_dump(exclude_unset=True))
+    return PatientRead.model_validate(payload)
 
 
 @router.get(
@@ -52,8 +52,9 @@ async def update_my_profile(
 async def get_my_care_team(
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> Any:
-    return await service.get_care_team(user.id)
+) -> list[CareTeamRead]:
+    payload = await service.get_care_team(user.id)
+    return [CareTeamRead.model_validate(item) for item in payload]
 
 
 @router.post(
@@ -65,5 +66,6 @@ async def join_clinic(
     invite_code: str,
     user: CurrentUser = Depends(_patient_dep),
     service: PatientService = Depends(_get_service),
-) -> Any:
-    return await service.join_care_team(user.id, invite_code)
+) -> CareTeamRead:
+    payload = await service.join_care_team(user.id, invite_code)
+    return CareTeamRead.model_validate(payload)

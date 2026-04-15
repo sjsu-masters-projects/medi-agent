@@ -138,8 +138,9 @@ class TestExceptionHandlers:
 
         assert response.status_code == 422
         data = response.json()
-        # Pydantic validation errors have a different format
-        assert "detail" in data or "error" in data
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
+        assert isinstance(data["error"]["message"], str)
 
     def test_authorization_error_handler(
         self, client, override_auth, override_db, mock_supabase_db

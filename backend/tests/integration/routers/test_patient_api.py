@@ -219,7 +219,6 @@ class TestJoinClinic:
         care_team_id = uuid4()
         clinician_id = uuid4()
 
-        # Mock finding the pending invite - .single() returns dict directly
         invite_data = {
             "id": str(care_team_id),
             "clinician_id": str(clinician_id),
@@ -228,46 +227,57 @@ class TestJoinClinic:
             "patient_id": None,
             "role": "provider",
             "created_at": "2025-01-01T00:00:00Z",
+            "invite_expires_at": "2099-01-01T00:00:00+00:00",
         }
 
-        # Create separate mock chains for the two different queries
-        # First query: select().eq().eq().is_().single() - finding the invite
-        find_mock = MagicMock()
-        find_mock.execute.return_value = MagicMock(data=invite_data)
-
-        # Second query: update().eq() - updating the invite
-        # Must include all CareTeamRead fields
         updated_data = {
             "id": str(care_team_id),
             "patient_id": str(patient_id),
             "clinician_id": str(clinician_id),
-            "clinician_first_name": "Dr. Sarah",
-            "clinician_last_name": "Smith",
             "role": "provider",
-            "specialty_context": "Cardiology",
-            "clinic_name": "Heart Health Clinic",
             "status": "active",
             "created_at": "2025-01-01T00:00:00Z",
+            "invite_claimed_at": "2026-04-10T00:00:00+00:00",
         }
-        update_mock = MagicMock()
-        update_mock.execute.return_value = MagicMock(data=[updated_data])
 
-        # Configure the table mock to return different chains based on method
-        def table_side_effect(*args):
-            table_mock = MagicMock()
-            # For select chain
-            select_chain = MagicMock()
-            select_chain.eq.return_value.eq.return_value.is_.return_value.single.return_value = (
-                find_mock
-            )
-            table_mock.select.return_value = select_chain
-            # For update chain
-            update_chain = MagicMock()
-            update_chain.eq.return_value = update_mock
-            table_mock.update.return_value = update_chain
-            return table_mock
+        joined_data = {
+            "id": str(care_team_id),
+            "patient_id": str(patient_id),
+            "clinician_id": str(clinician_id),
+            "role": "provider",
+            "status": "active",
+            "created_at": "2025-01-01T00:00:00Z",
+            "clinicians": {
+                "first_name": "Dr. Sarah",
+                "last_name": "Smith",
+                "specialty": "Cardiology",
+                "clinic_name": "Heart Health Clinic",
+            },
+        }
 
-        mock_supabase_db.table.side_effect = table_side_effect
+        table_mock = MagicMock()
+        mock_supabase_db.table.return_value = table_mock
+
+        invite_select = MagicMock()
+        invite_select.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=invite_data
+        )
+
+        existing_select = MagicMock()
+        existing_select.eq.return_value.eq.return_value.eq.return_value.execute.return_value = (
+            MagicMock(data=[])
+        )
+
+        joined_select = MagicMock()
+        joined_select.eq.return_value.single.return_value.execute.return_value = MagicMock(
+            data=joined_data
+        )
+
+        table_mock.select.side_effect = [invite_select, existing_select, joined_select]
+
+        update_chain = MagicMock()
+        update_chain.eq.return_value.execute.return_value = MagicMock(data=[updated_data])
+        table_mock.update.return_value = update_chain
 
         response = client.post("/api/v1/patients/me/care-team/join?invite_code=ABC123")
 
@@ -278,15 +288,63 @@ class TestJoinClinic:
 
     def test_invalid_code(self, client, override_auth, override_db, mock_supabase_db):
         """Reject invalid invite code."""
-        # Mock raises exception when no data found
-        mock_supabase_db.table().select().eq().eq().is_().single().execute.return_value = MagicMock(
-            data=None
-        )
+        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(data=None)
 
         response = client.post("/api/v1/patients/me/care-team/join?invite_code=INVALID")
 
-        # ValidationError is caught and returns 400
-        assert response.status_code in [400, 422]
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "invalid" in response.json()["error"]["message"].lower()
+
+    def test_missing_invite_code_uses_validation_contract(self, client, override_auth, override_db):
+        """Missing required query params should use unified error envelope."""
+        response = client.post("/api/v1/patients/me/care-team/join")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        payload = response.json()
+        assert "error" in payload
+        assert payload["error"]["code"] == "VALIDATION_ERROR"
+        assert "invite_code" in payload["error"]["message"]
+
+    def test_expired_code(self, client, override_auth, override_db, mock_supabase_db):
+        """Reject expired invite code with explicit message."""
+        invite_data = {
+            "id": str(uuid4()),
+            "clinician_id": str(uuid4()),
+            "invite_code": "EXPIRED1",
+            "status": "pending",
+            "patient_id": None,
+            "invite_expires_at": "2000-01-01T00:00:00+00:00",
+        }
+
+        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
+            data=invite_data
+        )
+        mock_supabase_db.table().update().eq().execute.return_value = MagicMock(data=[invite_data])
+
+        response = client.post("/api/v1/patients/me/care-team/join?invite_code=EXPIRED1")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "expired" in response.json()["error"]["message"].lower()
+
+    def test_already_active_code(self, client, override_auth, override_db, mock_supabase_db):
+        """Reject invite code that has already been claimed/activated."""
+        invite_data = {
+            "id": str(uuid4()),
+            "clinician_id": str(uuid4()),
+            "invite_code": "CLAIMED1",
+            "status": "active",
+            "patient_id": str(uuid4()),
+            "invite_expires_at": "2099-01-01T00:00:00+00:00",
+        }
+
+        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
+            data=invite_data
+        )
+
+        response = client.post("/api/v1/patients/me/care-team/join?invite_code=CLAIMED1")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "already active" in response.json()["error"]["message"].lower()
 
 
 class TestAuthorization:

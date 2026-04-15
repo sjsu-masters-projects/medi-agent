@@ -41,6 +41,8 @@ def test_all_expected_routes_registered():
         "/api/v1/clinicians/me/patients",
         "/api/v1/clinicians/me/patients/{patient_id}",
         "/api/v1/clinicians/me/invite-code",
+        "/api/v1/clinicians/me/invite-codes",
+        "/api/v1/clinicians/me/invite-codes/{care_team_id}/revoke",
     }
     expected_document = {
         "/api/v1/documents/",

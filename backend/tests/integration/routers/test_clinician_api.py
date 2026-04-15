@@ -35,7 +35,7 @@ def mock_supabase_db():
     db.table.return_value = table
 
     # Make all query methods chainable
-    for method in ["select", "eq", "single", "insert", "order", "update"]:
+    for method in ["select", "eq", "single", "insert", "order", "update", "limit"]:
         getattr(table, method).return_value = table
 
     return db
@@ -183,6 +183,50 @@ class TestUpdateMyProfile:
         assert data["specialty"] == "Internal Medicine"
         assert data["clinic_name"] == "City Health"
 
+    def test_success_with_clinic_code_resolution(
+        self, client, override_auth, override_db, mock_supabase_db, clinician_id
+    ):
+        updated_data = {
+            "id": str(clinician_id),
+            "email": "clinician@test.com",
+            "first_name": "Dr. Sarah",
+            "last_name": "Smith",
+            "specialty": "Internal Medicine",
+            "clinic_name": "City Health",
+            "npi_number": "1234567890",
+            "role": "provider",
+            "avatar_url": None,
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-15T00:00:00Z",
+        }
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(
+                data=[
+                    {
+                        "id": "clinic-1",
+                        "code": "ABC123",
+                        "display_name": "City Health",
+                        "status": "active",
+                    }
+                ]
+            ),
+            MagicMock(data=[updated_data]),
+        ]
+
+        response = client.put(
+            "/api/v1/clinicians/me",
+            json={
+                "specialty": "Internal Medicine",
+                "clinic_code": "ABC123",
+                "type1_npi": "1234567890",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["specialty"] == "Internal Medicine"
+        assert data["clinic_name"] == "City Health"
+
 
 class TestGetPatientDetail:
     """GET /api/v1/clinicians/me/patients/{patient_id} - Get patient detail."""
@@ -278,6 +322,134 @@ class TestGenerateInviteCode:
         assert "invite_code" in data
         assert "care_team_id" in data
         assert len(data["invite_code"]) == 8
+
+
+class TestGetCurrentInviteCode:
+    """GET /api/v1/clinicians/me/invite-code - Read latest pending patient invite code."""
+
+    def test_success(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
+        """Returns latest pending invite code when available."""
+        care_team_id = uuid4()
+
+        mock_supabase_db.table().select().eq().eq().order().execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": str(care_team_id),
+                    "invite_code": "QWERTY12",
+                    "created_at": "2026-04-10T00:00:00Z",
+                }
+            ]
+        )
+
+        response = client.get("/api/v1/clinicians/me/invite-code")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["invite_code"] == "QWERTY12"
+        assert data["care_team_id"] == str(care_team_id)
+
+    def test_empty(self, client, override_auth, override_db, mock_supabase_db):
+        """Returns null payload when no pending invite exists."""
+        mock_supabase_db.table().select().eq().eq().order().execute.return_value = MagicMock(
+            data=[]
+        )
+
+        response = client.get("/api/v1/clinicians/me/invite-code")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["invite_code"] is None
+        assert data["care_team_id"] is None
+
+
+class TestListInviteCodes:
+    """GET /api/v1/clinicians/me/invite-codes - Read invite lifecycle list."""
+
+    def test_success(self, client, override_auth, override_db, mock_supabase_db):
+        mock_supabase_db.table().select().eq().order().limit().execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": str(uuid4()),
+                    "invite_code": "ACTIVE123",
+                    "status": "pending",
+                    "patient_id": None,
+                    "role": "provider",
+                    "created_at": "2026-04-10T00:00:00Z",
+                    "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                    "invite_claimed_at": None,
+                    "patients": None,
+                },
+                {
+                    "id": str(uuid4()),
+                    "invite_code": "USED1234",
+                    "status": "active",
+                    "patient_id": str(uuid4()),
+                    "role": "provider",
+                    "created_at": "2026-04-09T00:00:00Z",
+                    "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                    "invite_claimed_at": "2026-04-09T09:00:00Z",
+                    "patients": {
+                        "id": str(uuid4()),
+                        "first_name": "Sam",
+                        "last_name": "Lee",
+                        "email": "sam@example.com",
+                    },
+                },
+            ]
+        )
+
+        response = client.get("/api/v1/clinicians/me/invite-codes")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "invites" in data
+        assert "counts" in data
+        assert data["counts"]["active"] == 1
+        assert data["counts"]["claimed"] == 1
+
+
+class TestRevokeInviteCode:
+    """POST /api/v1/clinicians/me/invite-codes/{care_team_id}/revoke"""
+
+    def test_success(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
+        care_team_id = uuid4()
+
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(
+                data={
+                    "id": str(care_team_id),
+                    "clinician_id": str(clinician_id),
+                    "status": "pending",
+                    "patient_id": None,
+                    "invite_code": "REVOKE12",
+                }
+            ),
+            MagicMock(data=[{"id": str(care_team_id), "status": "inactive"}]),
+        ]
+
+        response = client.post(f"/api/v1/clinicians/me/invite-codes/{care_team_id}/revoke")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["care_team_id"] == str(care_team_id)
+        assert data["status"] == "inactive"
+
+    def test_reject_non_pending(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
+        care_team_id = uuid4()
+
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data={
+                "id": str(care_team_id),
+                "clinician_id": str(clinician_id),
+                "status": "active",
+                "patient_id": str(uuid4()),
+                "invite_code": "USED1234",
+            }
+        )
+
+        response = client.post(f"/api/v1/clinicians/me/invite-codes/{care_team_id}/revoke")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 class TestAuthorization:

@@ -6,15 +6,21 @@
  */
 
 import type { Medication, SymptomReport } from "@/types";
+import { readStoredSession } from "@/services/auth-session";
 
 // ── Base config ──────────────────────────────────────────────────────────────
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-    // The auth token is stored in localStorage (set by Supabase Auth on login)
     const token =
-        typeof window !== "undefined" ? localStorage.getItem("access_token") ?? "" : "";
+        typeof window !== "undefined"
+            ? readStoredSession()?.accessToken ?? localStorage.getItem("access_token") ?? ""
+            : "";
+
+    if (!token) {
+        throw new Error("Missing authorization header");
+    }
 
     const response = await fetch(`${API_BASE}${path}`, {
         ...options,

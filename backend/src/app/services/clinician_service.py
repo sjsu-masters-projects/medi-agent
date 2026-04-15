@@ -23,7 +23,12 @@ from uuid import UUID
 
 from supabase import Client
 
-from app.core.exceptions import AuthorizationError, NotFoundError
+from app.core.exceptions import (
+    AuthorizationError,
+    ExternalServiceError,
+    NotFoundError,
+    ValidationError,
+)
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 
 logger = logging.getLogger(__name__)
@@ -52,12 +57,37 @@ class ClinicianService:
         if not clean:
             return await self.get_profile(clinician_id)
 
+        clinic_code = clean.pop("clinic_code", None)
+        if clinic_code:
+            clinic = await self._resolve_active_clinic(str(clinic_code))
+            clean["clinic_id"] = clinic["id"]
+            clean["clinic_name"] = clinic["display_name"]
+
         result = await self._execute(
             self.db.table("clinicians").update(clean).eq("id", str(clinician_id))
         )
         if not result.data:
             raise NotFoundError("Clinician", str(clinician_id))
         return result.data[0]
+
+    async def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
+        """Resolve clinic identity by code and enforce active status."""
+        normalized_code = clinic_code.strip().upper()
+        clinic_result = await self._execute(
+            self.db.table("clinics")
+            .select("id, code, display_name, status")
+            .eq("code", normalized_code)
+        )
+
+        clinics = cast("list[dict[str, Any]]", clinic_result.data or [])
+        if not clinics:
+            raise ValidationError("Clinic code is invalid")
+
+        clinic = clinics[0]
+        if clinic.get("status") != "active":
+            raise ValidationError("Clinic code is inactive")
+
+        return clinic
 
     # ── Patient List ────────────────────────────────────
 
@@ -110,23 +140,171 @@ class ClinicianService:
         Codes are 8-char uppercase alphanumeric for easy sharing.
         """
         code = secrets.token_hex(4).upper()
+        expires_at = (datetime.now(UTC) + timedelta(days=7)).isoformat()
 
         result = await self._execute(
             self.db.table("care_teams").insert(
                 {
                     "clinician_id": str(clinician_id),
                     "invite_code": code,
+                    "invite_expires_at": expires_at,
                     "status": "pending",
                     "role": "provider",
                 }
             )
         )
         if not result.data:
-            raise Exception("Failed to generate invite code")
+            raise ExternalServiceError("Supabase", "Failed to generate invite code")
 
         return {
             "invite_code": code,
             "care_team_id": cast(list[dict[str, Any]], result.data)[0]["id"],
+        }
+
+    async def list_invite_codes(self, clinician_id: UUID) -> dict[str, Any]:
+        """List invite codes created by the clinician with lifecycle buckets.
+
+        Lifecycle states:
+            - active: pending + unclaimed + not expired
+            - claimed: linked to a patient and active
+            - inactive: revoked/expired/otherwise not actionable
+        """
+        result = await self._execute(
+            self.db.table("care_teams")
+            .select(
+                "id, invite_code, status, role, patient_id, "
+                "created_at, invite_expires_at, invite_claimed_at, "
+                "patients(id, first_name, last_name, email)"
+            )
+            .eq("clinician_id", str(clinician_id))
+            .order("created_at", desc=True)
+            .limit(100)
+        )
+
+        now = datetime.now(UTC)
+        expired_pending_ids: list[str] = []
+        invites: list[dict[str, Any]] = []
+        counts = {"active": 0, "claimed": 0, "inactive": 0}
+
+        for row in cast(list[dict[str, Any]], result.data or []):
+            invite_id = str(row.get("id", ""))
+            status = str(row.get("status") or "")
+            patient_id = row.get("patient_id")
+            is_expired = self._is_invite_expired(row.get("invite_expires_at"), now)
+
+            if status == "pending" and not patient_id and is_expired and invite_id:
+                expired_pending_ids.append(invite_id)
+                status = "inactive"
+
+            lifecycle_state = self._derive_invite_lifecycle_state(
+                status=status,
+                has_patient=bool(patient_id),
+                is_expired=is_expired,
+            )
+            counts[lifecycle_state] += 1
+
+            patient_data = cast(dict[str, Any], row.get("patients") or {})
+            invites.append(
+                {
+                    "care_team_id": invite_id,
+                    "invite_code": row.get("invite_code"),
+                    "status": status,
+                    "role": row.get("role"),
+                    "created_at": row.get("created_at"),
+                    "invite_expires_at": row.get("invite_expires_at"),
+                    "invite_claimed_at": row.get("invite_claimed_at"),
+                    "is_expired": is_expired,
+                    "lifecycle_state": lifecycle_state,
+                    "patient": (
+                        {
+                            "id": patient_data.get("id"),
+                            "first_name": patient_data.get("first_name"),
+                            "last_name": patient_data.get("last_name"),
+                            "email": patient_data.get("email"),
+                        }
+                        if patient_data
+                        else None
+                    ),
+                }
+            )
+
+        for invite_id in expired_pending_ids:
+            await self._execute(
+                self.db.table("care_teams").update({"status": "inactive"}).eq("id", invite_id)
+            )
+
+        return {"invites": invites, "counts": counts}
+
+    async def revoke_invite_code(self, clinician_id: UUID, care_team_id: UUID) -> dict[str, Any]:
+        """Revoke a pending invite code created by this clinician."""
+        invite_result = await self._execute(
+            self.db.table("care_teams")
+            .select("id, clinician_id, status, patient_id, invite_code")
+            .eq("id", str(care_team_id))
+            .eq("clinician_id", str(clinician_id))
+            .single()
+        )
+        if not invite_result.data:
+            raise NotFoundError("Invite code", str(care_team_id))
+
+        invite = cast(dict[str, Any], invite_result.data)
+        if invite.get("status") != "pending" or invite.get("patient_id"):
+            raise ValidationError("Only pending unclaimed invite codes can be revoked")
+
+        updated_result = await self._execute(
+            self.db.table("care_teams")
+            .update({"status": "inactive"})
+            .eq("id", str(care_team_id))
+            .eq("clinician_id", str(clinician_id))
+        )
+        if not updated_result.data:
+            raise ValidationError("Failed to revoke invite code")
+
+        return {
+            "care_team_id": str(care_team_id),
+            "invite_code": invite.get("invite_code"),
+            "status": "inactive",
+        }
+
+    async def get_current_invite_code(self, clinician_id: UUID) -> dict[str, str | None]:
+        """Return the latest pending invite code for this clinician.
+
+        This is a read-only lookup used by settings screens so page load does
+        not create additional pending invite rows.
+        """
+        result = await self._execute(
+            self.db.table("care_teams")
+            .select("id, invite_code, created_at, invite_expires_at")
+            .eq("clinician_id", str(clinician_id))
+            .eq("status", "pending")
+            .order("created_at", desc=True)
+        )
+
+        now = datetime.now(UTC)
+        rows = cast(list[dict[str, Any]], result.data or [])
+        for row in rows:
+            invite_code = row.get("invite_code")
+            expires_at = row.get("invite_expires_at")
+            if not invite_code:
+                continue
+
+            if isinstance(expires_at, str):
+                normalized = expires_at.replace("Z", "+00:00")
+                try:
+                    if datetime.fromisoformat(normalized) <= now:
+                        continue
+                except ValueError:
+                    logger.warning("Invalid invite_expires_at on care_teams row %s", row.get("id"))
+
+            if invite_code:
+                return {
+                    "invite_code": str(invite_code),
+                    "care_team_id": str(row.get("id")) if row.get("id") else None,
+                }
+
+        return {
+            "invite_code": None,
+            "care_team_id": None,
         }
 
     # ── Dashboard ────────────────────────────────────────
@@ -396,7 +574,7 @@ class ClinicianService:
 
         result = await self._execute(self.db.table("obligations").insert(row))
         if not result.data:
-            raise Exception("Failed to create obligation")
+            raise ExternalServiceError("Supabase", "Failed to create obligation")
 
         return cast(list[dict[str, Any]], result.data)[0]
 
@@ -522,6 +700,33 @@ class ClinicianService:
 
         completed = sum(1 for row in rows if row.get("status") == "completed")
         return completed / len(rows)
+
+    def _is_invite_expired(self, expires_at: Any, now: datetime) -> bool:
+        """Return True when invite expiry is in the past."""
+        if not isinstance(expires_at, str):
+            return False
+
+        try:
+            return datetime.fromisoformat(expires_at.replace("Z", "+00:00")) <= now
+        except ValueError:
+            logger.warning("Invalid invite_expires_at value on care_teams row")
+            return False
+
+    def _derive_invite_lifecycle_state(
+        self,
+        *,
+        status: str,
+        has_patient: bool,
+        is_expired: bool,
+    ) -> str:
+        """Map invite row fields to clinician-facing lifecycle state labels."""
+        if status == "pending" and not has_patient and not is_expired:
+            return "active"
+        if status == "active" and has_patient:
+            return "claimed"
+        if has_patient and status != "pending":
+            return "claimed"
+        return "inactive"
 
     def _last_activity_age_days(self, last_activity: str) -> float | None:
         """Parse an activity string like 'Logged medication 2h ago' into days."""

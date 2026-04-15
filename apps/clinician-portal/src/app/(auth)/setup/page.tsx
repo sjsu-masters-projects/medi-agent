@@ -10,7 +10,6 @@ import type { RootState } from "@/store/store";
 export default function ClinicSetupPage() {
     const router = useRouter();
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
-    const [clinicName, setClinicName] = useState("");
     const [npiNumber, setNpiNumber] = useState("");
     const [specialty, setSpecialty] = useState("");
     const [error, setError] = useState("");
@@ -31,8 +30,7 @@ export default function ClinicSetupPage() {
             await api.put(
                 "/api/v1/clinicians/me",
                 {
-                    clinic_name: clinicName,
-                    npi_number: npiNumber,
+                    type1_npi: npiNumber || undefined,
                     specialty,
                 },
                 { token: accessToken },
@@ -52,7 +50,6 @@ export default function ClinicSetupPage() {
                     <h1 className="mt-1 text-3xl font-bold text-gray-900">Configure your workspace</h1>
                 </div>
                 <form className="space-y-4" onSubmit={handleSubmit}>
-                    <Input label="Clinic name" onChange={(event) => setClinicName(event.target.value)} value={clinicName} />
                     <Input label="NPI number" onChange={(event) => setNpiNumber(event.target.value)} value={npiNumber} />
                     <Input label="Specialty" onChange={(event) => setSpecialty(event.target.value)} value={specialty} />
                     {error ? <p className="text-sm text-red-600">{error}</p> : null}

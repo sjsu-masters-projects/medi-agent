@@ -23,6 +23,10 @@ interface AuthResponse {
     };
 }
 
+interface CareTeamMembership {
+    id: string;
+}
+
 export default function LoginPage() {
     const router = useRouter();
     const dispatch = useDispatch<AppDispatch>();
@@ -49,7 +53,16 @@ export default function LoginPage() {
             };
             writeStoredSession(session);
             dispatch(hydrateSession(session));
-            router.replace("/today");
+
+            const careTeams = await api.get<CareTeamMembership[]>("/api/v1/patients/me/care-team", {
+                token: session.accessToken,
+            });
+
+            if (careTeams.length === 0) {
+                router.replace("/profile?joinClinic=1");
+            } else {
+                router.replace("/today");
+            }
         } catch (submissionError) {
             setError((submissionError as Error).message);
         } finally {

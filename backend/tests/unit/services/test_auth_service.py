@@ -124,6 +124,20 @@ async def test_signup_patient_auth_exception(auth_service, mock_supabase_client)
 
 
 @pytest.mark.asyncio
+async def test_signup_patient_auth_hook_exception(auth_service, mock_supabase_client):
+    """Return a clear error when Supabase custom access-token hook fails."""
+    mock_supabase_client.auth.sign_up.side_effect = Exception(
+        "Error running hook URI: pg-functions://postgres/public/custom_access_token_hook"
+    )
+
+    with pytest.raises(ValidationError, match="access token hook"):
+        await auth_service.signup_patient(
+            email="patient@example.com",
+            password="SecurePass123!",
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+        )
 async def test_signup_patient_profile_creation_failure(auth_service, mock_supabase_client):
     """Test patient signup when profile creation fails."""
     # Mock successful auth.sign_up
@@ -183,10 +197,26 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
 
     mock_supabase_client.auth.sign_in_with_password.return_value = login_response
 
-    # Mock table insert
-    mock_insert = MagicMock()
-    mock_insert.execute.return_value = Mock()
-    mock_supabase_client.table.return_value.insert.return_value = mock_insert
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "ABC123",
+                "display_name": "Heart Health Clinic",
+                "status": "active",
+            }
+        ]
+    )
+
+    clinician_table = MagicMock()
+    clinician_insert = MagicMock()
+    clinician_table.insert.return_value = clinician_insert
+    clinician_insert.execute.return_value = Mock()
+
+    mock_supabase_client.table.side_effect = [clinic_query, clinician_table]
 
     # Call signup
     result = await auth_service.signup_clinician(
@@ -195,8 +225,8 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
         first_name="Jane",
         last_name="Smith",
         specialty="Cardiology",
-        clinic_name="Heart Health Clinic",
-        npi_number="1234567890",
+        clinic_code="abc123",
+        type1_npi="1234567890",
     )
 
     # Verify auth.sign_up was called
@@ -205,7 +235,8 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
     )
 
     # Verify clinician profile was created
-    mock_supabase_client.table.assert_called_once_with("clinicians")
+    mock_supabase_client.table.assert_any_call("clinics")
+    mock_supabase_client.table.assert_any_call("clinicians")
 
     mock_supabase_client.auth.sign_in_with_password.assert_called_once_with(
         {"email": "doctor@example.com", "password": "SecurePass123!"}
@@ -228,10 +259,25 @@ async def test_signup_clinician_profile_creation_failure(auth_service, mock_supa
 
     mock_supabase_client.auth.sign_up.return_value = mock_auth_response
 
-    # Mock table insert failure
-    mock_insert = MagicMock()
-    mock_insert.execute.side_effect = Exception("Database constraint violation")
-    mock_supabase_client.table.return_value.insert.return_value = mock_insert
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "ABC123",
+                "display_name": "Heart Health Clinic",
+                "status": "active",
+            }
+        ]
+    )
+
+    clinician_table = MagicMock()
+    clinician_insert = MagicMock()
+    clinician_insert.execute.side_effect = Exception("Database constraint violation")
+    clinician_table.insert.return_value = clinician_insert
+    mock_supabase_client.table.side_effect = [clinic_query, clinician_table]
 
     # Should raise ValidationError and clean up auth user
     with pytest.raises(ValidationError, match="Profile creation failed"):
@@ -241,11 +287,221 @@ async def test_signup_clinician_profile_creation_failure(auth_service, mock_supa
             first_name="Jane",
             last_name="Smith",
             specialty="Cardiology",
-            clinic_name="Heart Health Clinic",
+            clinic_code="ABC123",
         )
 
     # Verify cleanup
     mock_supabase_client.auth.admin.delete_user.assert_called_once_with("clinician-123")
+
+
+@pytest.mark.asyncio
+async def test_signup_clinician_invalid_clinic_code(auth_service, mock_supabase_client):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(data=[])
+    mock_supabase_client.table.return_value = clinic_query
+
+    with pytest.raises(ValidationError, match="Clinic code is invalid"):
+        await auth_service.signup_clinician(
+            email="doctor@example.com",
+            password="SecurePass123!",
+            first_name="Jane",
+            last_name="Smith",
+            specialty="Cardiology",
+            clinic_code="INVALID",
+        )
+
+
+@pytest.mark.asyncio
+async def test_signup_clinician_inactive_clinic_code(auth_service, mock_supabase_client):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[{"id": "clinic-1", "display_name": "Heart Health Clinic", "status": "suspended"}]
+    )
+    mock_supabase_client.table.return_value = clinic_query
+
+    with pytest.raises(ValidationError, match="Clinic code is inactive"):
+        await auth_service.signup_clinician(
+            email="doctor@example.com",
+            password="SecurePass123!",
+            first_name="Jane",
+            last_name="Smith",
+            specialty="Cardiology",
+            clinic_code="ABC123",
+        )
+
+
+@pytest.mark.asyncio
+async def test_signup_clinician_supports_nurse_role(auth_service, mock_supabase_client):
+    signup_user = Mock()
+    signup_user.id = "clinician-nurse-123"
+    signup_response = Mock()
+    signup_response.user = signup_user
+    mock_supabase_client.auth.sign_up.return_value = signup_response
+
+    login_user = Mock()
+    login_user.id = "clinician-nurse-123"
+    login_user.email = "nurse@example.com"
+    login_user.created_at = "2024-01-01T00:00:00Z"
+    login_user.app_metadata = {"user_role": "clinician"}
+
+    login_session = Mock()
+    login_session.access_token = "access-token-nurse"
+    login_session.refresh_token = "refresh-token-nurse"
+    login_session.expires_at = 1234567890
+
+    login_response = Mock()
+    login_response.user = login_user
+    login_response.session = login_session
+    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
+
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "ABC123",
+                "display_name": "City Health",
+                "status": "active",
+            }
+        ]
+    )
+
+    clinician_table = MagicMock()
+    clinician_insert = MagicMock()
+    clinician_insert.execute.return_value = Mock()
+    clinician_table.insert.return_value = clinician_insert
+    mock_supabase_client.table.side_effect = [clinic_query, clinician_table]
+
+    await auth_service.signup_clinician(
+        email="nurse@example.com",
+        password="SecurePass123!",
+        first_name="Nora",
+        last_name="Lane",
+        specialty="Care Coordination",
+        clinic_code="ABC123",
+        role="nurse",
+    )
+
+    inserted_payload = clinician_table.insert.call_args.args[0]
+    assert inserted_payload["role"] == "nurse"
+
+
+@pytest.mark.asyncio
+async def test_signup_clinician_rejects_admin_role_by_default(auth_service, mock_supabase_client):
+    with pytest.raises(ValidationError, match="Invalid clinician role"):
+        await auth_service.signup_clinician(
+            email="adminlike@example.com",
+            password="SecurePass123!",
+            first_name="Alex",
+            last_name="Reed",
+            specialty="Primary Care",
+            clinic_code="ABC123",
+            role="admin",
+        )
+
+
+@pytest.mark.asyncio
+async def test_signup_clinic_admin_success(auth_service, mock_supabase_client):
+    signup_user = Mock()
+    signup_user.id = "admin-123"
+    signup_response = Mock()
+    signup_response.user = signup_user
+    mock_supabase_client.auth.sign_up.return_value = signup_response
+
+    login_user = Mock()
+    login_user.id = "admin-123"
+    login_user.email = "admin@example.com"
+    login_user.created_at = "2024-01-01T00:00:00Z"
+    login_user.app_metadata = {"user_role": "clinician"}
+
+    login_session = Mock()
+    login_session.access_token = "access-token-admin"
+    login_session.refresh_token = "refresh-token-admin"
+    login_session.expires_at = 1234567890
+
+    login_response = Mock()
+    login_response.user = login_user
+    login_response.session = login_session
+    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
+
+    clinics_lookup = MagicMock()
+    clinics_lookup.select.return_value = clinics_lookup
+    clinics_lookup.eq.return_value = clinics_lookup
+    clinics_lookup.execute.side_effect = [
+        Mock(data=[]),
+        Mock(
+            data=[
+                {
+                    "id": "clinic-1",
+                    "code": "ABC123",
+                    "display_name": "City Health",
+                    "status": "active",
+                }
+            ]
+        ),
+        Mock(
+            data=[
+                {
+                    "id": "clinic-1",
+                    "code": "ABC123",
+                    "display_name": "City Health",
+                    "status": "active",
+                }
+            ]
+        ),
+    ]
+    clinics_insert = MagicMock()
+    clinics_insert.insert.return_value = clinics_insert
+    clinics_insert.select.return_value = clinics_insert
+    clinics_insert.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "ABC123",
+                "display_name": "City Health",
+                "status": "active",
+            }
+        ]
+    )
+
+    clinicians_table = MagicMock()
+    clinicians_insert = MagicMock()
+    clinicians_insert.execute.return_value = Mock(data=[])
+    clinicians_table.insert.return_value = clinicians_insert
+
+    clinic_calls = {"count": 0}
+
+    def table_side_effect(name):
+        if name == "clinics":
+            clinic_calls["count"] += 1
+            if clinic_calls["count"] in {1, 3}:
+                return clinics_lookup
+            return clinics_insert
+        return clinicians_table
+
+    mock_supabase_client.table.side_effect = table_side_effect
+
+    result = await auth_service.signup_clinic_admin(
+        clinic_name="City Health",
+        email="admin@example.com",
+        password="SecurePass123!",
+        first_name="Amina",
+        last_name="Khan",
+        specialty="Primary Care",
+        type1_npi="1234567890",
+        type2_npi="0987654321",
+    )
+
+    assert result["user"]["id"] == "admin-123"
+    clinicians_table.insert.assert_called_once()
+    inserted_payload = clinicians_table.insert.call_args.args[0]
+    assert inserted_payload["role"] == "admin"
 
 
 # ── Login Tests ───────────────────────────────────────────────
@@ -536,6 +792,61 @@ async def test_format_session_missing_app_metadata(auth_service):
     mock_response = Mock()
     mock_response.user = mock_user
     mock_response.session = mock_session
+
+    with pytest.raises(AuthenticationError, match="invalid user role"):
+        auth_service._format_session(mock_response)
+
+
+@pytest.mark.asyncio
+async def test_format_session_uses_jwt_claim_role_when_metadata_missing(auth_service, monkeypatch):
+    """Accept sessions where role exists in JWT claims but not app metadata."""
+    mock_user = Mock()
+    mock_user.id = "user-123"
+    mock_user.email = "user@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = None
+
+    mock_session = Mock()
+    mock_session.access_token = "valid-jwt-token"
+    mock_session.refresh_token = "refresh"
+    mock_session.expires_at = 1234567890
+
+    mock_response = Mock()
+    mock_response.user = mock_user
+    mock_response.session = mock_session
+
+    monkeypatch.setattr(
+        "app.services.auth_service.jwt.get_unverified_claims",
+        lambda _: {"user_role": "clinician"},
+    )
+
+    result = auth_service._format_session(mock_response, expected_role="clinician")
+
+    assert result["user"]["role"] == "clinician"
+
+
+@pytest.mark.asyncio
+async def test_format_session_rejects_unsupported_jwt_claim_role(auth_service, monkeypatch):
+    """Keep role validation strict even when role comes from JWT claims fallback."""
+    mock_user = Mock()
+    mock_user.id = "user-123"
+    mock_user.email = "user@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = None
+
+    mock_session = Mock()
+    mock_session.access_token = "valid-jwt-token"
+    mock_session.refresh_token = "refresh"
+    mock_session.expires_at = 1234567890
+
+    mock_response = Mock()
+    mock_response.user = mock_user
+    mock_response.session = mock_session
+
+    monkeypatch.setattr(
+        "app.services.auth_service.jwt.get_unverified_claims",
+        lambda _: {"user_role": "admin"},
+    )
 
     with pytest.raises(AuthenticationError, match="invalid user role"):
         auth_service._format_session(mock_response)

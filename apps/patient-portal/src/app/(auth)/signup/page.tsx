@@ -101,6 +101,9 @@ export default function SignupPage() {
                         <span className="h-2.5 w-10 rounded-full bg-sky-200" />
                         <span className="h-2.5 w-10 rounded-full bg-sky-200" />
                     </div>
+                    <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+                        Clinic invite code is entered on onboarding step 4 (Connect your care team) after account creation.
+                    </div>
                     <form className="space-y-4" onSubmit={handleSubmit}>
                         <Input label="First name" onChange={(event) => updateField("firstName", event.target.value)} value={formData.firstName} />
                         <Input label="Last name" onChange={(event) => updateField("lastName", event.target.value)} value={formData.lastName} />

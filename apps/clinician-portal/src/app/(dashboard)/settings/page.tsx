@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { HiOutlineClipboardDocument, HiOutlineMagnifyingGlass, HiOutlinePrinter } from "react-icons/hi2";
+import { HiOutlineClipboardDocument, HiOutlineMagnifyingGlass } from "react-icons/hi2";
 import { useSelector } from "react-redux";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
@@ -27,6 +27,47 @@ interface StaffMember {
     created_at: string | null;
 }
 
+interface ClinicianProfile {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    specialty: string;
+    role: string;
+}
+
+interface InviteCodePayload {
+    invite_code: string | null;
+    care_team_id: string | null;
+}
+
+interface InviteCodeRecord {
+    care_team_id: string;
+    invite_code: string | null;
+    status: string;
+    role: string | null;
+    created_at: string | null;
+    invite_expires_at: string | null;
+    invite_claimed_at: string | null;
+    is_expired: boolean;
+    lifecycle_state: "active" | "claimed" | "inactive";
+    patient: {
+        id: string | null;
+        first_name: string | null;
+        last_name: string | null;
+        email: string | null;
+    } | null;
+}
+
+interface InviteCodeListPayload {
+    invites: InviteCodeRecord[];
+    counts: {
+        active: number;
+        claimed: number;
+        inactive: number;
+    };
+}
+
 function getInitials(first: string, last: string) {
     return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
 }
@@ -46,32 +87,68 @@ function getRoleLabel(role: string) {
     return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
 }
 
+function formatDateTime(value: string | null | undefined) {
+    if (!value) {
+        return "—";
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return "—";
+    }
+
+    return parsed.toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    });
+}
+
+function getPatientLabel(record: InviteCodeRecord) {
+    if (!record.patient) {
+        return "—";
+    }
+
+    const first = record.patient.first_name?.trim() || "";
+    const last = record.patient.last_name?.trim() || "";
+    const fullName = `${first} ${last}`.trim();
+    return fullName || record.patient.email || "—";
+}
+
 export default function SettingsPage() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [clinicName, setClinicName] = useState("");
+    const [clinicCode, setClinicCode] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteRole, setInviteRole] = useState("provider");
     const [inviteStatus, setInviteStatus] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [profileSaving, setProfileSaving] = useState(false);
+    const [profile, setProfile] = useState<ClinicianProfile | null>(null);
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [specialty, setSpecialty] = useState("");
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<SettingsTab>("Team & Roles");
+    const [activeTab, setActiveTab] = useState<SettingsTab>("General Profile");
     const [staffQuery, setStaffQuery] = useState("");
     const [inviteCode, setInviteCode] = useState<string>("");
     const [inviteCodeLoading, setInviteCodeLoading] = useState(false);
+    const [inviteRecords, setInviteRecords] = useState<InviteCodeRecord[]>([]);
+    const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
 
     const loadStaff = useCallback(async () => {
         if (!token) {
             return;
         }
         try {
-            const result = await api.get<{ staff: StaffMember[]; clinic_name: string }>(
+            const result = await api.get<{ staff: StaffMember[]; clinic_name: string; clinic_code?: string | null }>(
                 "/api/v1/staff/",
                 { token },
             );
             setStaffList(result.staff);
             setClinicName(result.clinic_name);
+            setClinicCode(result.clinic_code ?? null);
         } catch (e) {
             setError((e as Error).message);
         } finally {
@@ -83,19 +160,42 @@ export default function SettingsPage() {
         void loadStaff();
     }, [loadStaff]);
 
-    const handleGenerateInviteCode = useCallback(async () => {
+    const loadProfile = useCallback(async () => {
         if (!token) {
             return;
         }
+
+        try {
+            const result = await api.get<ClinicianProfile>("/api/v1/clinicians/me", { token });
+            setProfile(result);
+            setFirstName(result.first_name);
+            setLastName(result.last_name);
+            setSpecialty(result.specialty || "");
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        void loadProfile();
+    }, [loadProfile]);
+
+    const loadInviteCodes = useCallback(async () => {
+        if (!token) {
+            return;
+        }
+
         setInviteCodeLoading(true);
         setError(null);
+
         try {
-            const result = await api.post<{ invite_code: string }>(
-                "/api/v1/clinicians/me/invite-code",
-                {},
-                { token },
-            );
-            setInviteCode(result.invite_code);
+            const result = await api.get<InviteCodeListPayload>("/api/v1/clinicians/me/invite-codes", {
+                token,
+            });
+            const records = result.invites || [];
+            setInviteRecords(records);
+            const firstActiveCode = records.find((record) => record.lifecycle_state === "active")?.invite_code;
+            setInviteCode(firstActiveCode ?? "");
         } catch (e) {
             setError((e as Error).message);
         } finally {
@@ -104,8 +204,49 @@ export default function SettingsPage() {
     }, [token]);
 
     useEffect(() => {
-        void handleGenerateInviteCode();
-    }, [handleGenerateInviteCode]);
+        void loadInviteCodes();
+    }, [loadInviteCodes]);
+
+    const handleGenerateInviteCode = useCallback(async () => {
+        if (!token) {
+            return;
+        }
+
+        setInviteCodeLoading(true);
+        setError(null);
+
+        try {
+            await api.post<InviteCodePayload>("/api/v1/clinicians/me/invite-code", {}, { token });
+            await loadInviteCodes();
+            setInviteStatus("New patient invite code generated");
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setInviteCodeLoading(false);
+        }
+    }, [loadInviteCodes, token]);
+
+    const handleRevokeInviteCode = useCallback(
+        async (careTeamId: string) => {
+            if (!token) {
+                return;
+            }
+
+            setRevokingInviteId(careTeamId);
+            setError(null);
+
+            try {
+                await api.post(`/api/v1/clinicians/me/invite-codes/${careTeamId}/revoke`, {}, { token });
+                await loadInviteCodes();
+                setInviteStatus("Invite code revoked");
+            } catch (e) {
+                setError((e as Error).message);
+            } finally {
+                setRevokingInviteId(null);
+            }
+        },
+        [loadInviteCodes, token],
+    );
 
     async function handleInvite() {
         if (!token || !inviteEmail) {
@@ -131,38 +272,120 @@ export default function SettingsPage() {
         if (!token) {
             return;
         }
+
+        if (profile?.id && memberId === profile.id) {
+            setError("You cannot change your own role.");
+            return;
+        }
+
+        const member = staffList.find((entry) => entry.id === memberId);
+        if (!member) {
+            setError("Unable to find selected staff member.");
+            return;
+        }
+
+        if (member.role === newRole) {
+            setActionMenuId(null);
+            return;
+        }
+
+        if (typeof window !== "undefined") {
+            const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
+            if (newRole === "admin") {
+                const confirmed = window.confirm(
+                    `Grant Clinic Admin access to ${fullName}? This allows full staff and clinic management.`,
+                );
+                if (!confirmed) {
+                    return;
+                }
+            }
+
+            if (member.role === "admin" && newRole !== "admin") {
+                const confirmed = window.confirm(
+                    `Remove Clinic Admin access from ${fullName}? They will lose admin permissions.`,
+                );
+                if (!confirmed) {
+                    return;
+                }
+            }
+        }
+
         setError(null);
         try {
             await api.put(`/api/v1/staff/${memberId}/role`, { role: newRole }, { token });
-            setStaffList((current) =>
-                current.map((m) => (m.id === memberId ? { ...m, role: newRole } : m)),
-            );
+            await loadStaff();
+            setActionMenuId(null);
         } catch (e) {
             setError((e as Error).message);
         }
-        setActionMenuId(null);
     }
 
     async function handleRemove(memberId: string) {
         if (!token) {
             return;
         }
+
+        if (profile?.id && memberId === profile.id) {
+            setError("You cannot remove yourself from the clinic.");
+            return;
+        }
+
         setError(null);
         try {
             await api.delete(`/api/v1/staff/${memberId}`, { token });
-            setStaffList((current) => current.filter((m) => m.id !== memberId));
+            await loadStaff();
+            setActionMenuId(null);
         } catch (e) {
             setError((e as Error).message);
         }
-        setActionMenuId(null);
     }
 
-    async function handleCopyInviteCode() {
-        if (!inviteCode || typeof navigator === "undefined" || !navigator.clipboard) {
+    async function handleCopyInviteCode(code: string | null = inviteCode) {
+        if (!code || typeof navigator === "undefined" || !navigator.clipboard) {
             return;
         }
-        await navigator.clipboard.writeText(inviteCode);
+
+        await navigator.clipboard.writeText(code);
         setInviteStatus("Invite code copied");
+    }
+
+    async function handleCopyClinicCode() {
+        if (!clinicCode || typeof navigator === "undefined" || !navigator.clipboard) {
+            return;
+        }
+        await navigator.clipboard.writeText(clinicCode);
+        setInviteStatus("Clinic code copied");
+    }
+
+    async function handleSaveProfile() {
+        if (!token) {
+            return;
+        }
+
+        setProfileSaving(true);
+        setError(null);
+        setInviteStatus(null);
+
+        try {
+            const result = await api.put<ClinicianProfile>(
+                "/api/v1/clinicians/me",
+                {
+                    first_name: firstName.trim(),
+                    last_name: lastName.trim(),
+                    specialty: specialty.trim(),
+                },
+                { token },
+            );
+            setProfile(result);
+            setFirstName(result.first_name);
+            setLastName(result.last_name);
+            setSpecialty(result.specialty || "");
+            setInviteStatus("Profile updated");
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setProfileSaving(false);
+        }
     }
 
     const filteredStaffList = staffList.filter((member) => {
@@ -170,6 +393,10 @@ export default function SettingsPage() {
         if (!q) return true;
         return `${member.first_name} ${member.last_name} ${member.email}`.toLowerCase().includes(q);
     });
+
+    const activeInvites = inviteRecords.filter((record) => record.lifecycle_state === "active");
+    const claimedInvites = inviteRecords.filter((record) => record.lifecycle_state === "claimed");
+    const inactiveInvites = inviteRecords.filter((record) => record.lifecycle_state === "inactive");
 
     return (
         <div className="mx-auto max-w-7xl space-y-8">
@@ -189,7 +416,104 @@ export default function SettingsPage() {
             {error ? <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
             {inviteStatus ? <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{inviteStatus}</p> : null}
 
-            <div className="grid gap-8 xl:grid-cols-[2fr_1fr]">
+            {activeTab === "General Profile" ? (
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <Card className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-xl font-bold text-slate-900">Clinic Profile</h3>
+                        </div>
+                        <div className="space-y-4 text-sm">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Clinic Name</p>
+                                <p className="mt-1 font-medium text-slate-900">{clinicName || "—"}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Clinic Code</p>
+                                <div className="mt-1 flex items-center gap-3">
+                                    <p className="font-mono text-base font-semibold tracking-[0.08em] text-slate-900">
+                                        {clinicCode || "Unavailable"}
+                                    </p>
+                                    <Button
+                                        className="px-3 py-1.5 text-xs"
+                                        onClick={() => void handleCopyClinicCode()}
+                                        size="sm"
+                                        variant="secondary"
+                                    >
+                                        Copy
+                                    </Button>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    New clinicians can join with this clinic code. Sending an invite is optional.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="space-y-4">
+                        <h3 className="text-xl font-bold text-slate-900">My Profile</h3>
+                        <div className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <Input
+                                    label="First Name"
+                                    onChange={(event) => setFirstName(event.target.value)}
+                                    placeholder="First name"
+                                    value={firstName}
+                                />
+                                <Input
+                                    label="Last Name"
+                                    onChange={(event) => setLastName(event.target.value)}
+                                    placeholder="Last name"
+                                    value={lastName}
+                                />
+                            </div>
+                            <Input
+                                label="Specialty"
+                                onChange={(event) => setSpecialty(event.target.value)}
+                                placeholder="Family Medicine"
+                                value={specialty}
+                            />
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Role</p>
+                                    <p className="mt-1 font-semibold text-slate-900">{getRoleLabel(profile?.role || "provider")}</p>
+                                </div>
+                                <div className="mt-3">
+                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Email</p>
+                                    <p className="mt-1 font-medium text-slate-800">{profile?.email || "—"}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Button onClick={() => void handleSaveProfile()}>{profileSaving ? "Saving…" : "Save Profile"}</Button>
+                                <Button onClick={() => setActiveTab("Team & Roles")} variant="secondary">
+                                    Register a doctor now
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="space-y-4 lg:col-span-2">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-xl font-bold text-slate-900">Security</h3>
+                        </div>
+                        <div className="space-y-3 text-sm">
+                            <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                                <div>
+                                    <p className="font-medium text-slate-900">Multi-Factor Authentication</p>
+                                    <p className="text-xs text-slate-500">Protect your account with a TOTP authenticator app.</p>
+                                </div>
+                                <Link
+                                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                                    href="/settings/mfa"
+                                >
+                                    Configure
+                                </Link>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            ) : null}
+
+            {activeTab === "Team & Roles" ? (
                 <div className="space-y-8">
                     <Card className="space-y-6">
                         <div>
@@ -221,22 +545,33 @@ export default function SettingsPage() {
                                 Send Invite
                             </Button>
                         </div>
+                        <p className="text-xs text-slate-500">Clinic code for self-registration is available under General Profile.</p>
                     </Card>
 
-                    <Card className="overflow-hidden px-0 py-0" padding="sm">
+                    <Card className="overflow-visible px-0 py-0" padding="sm">
                         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
                             <h3 className="text-xl font-bold text-slate-900">
                                 {loading ? "Loading staff..." : `Active Staff (${staffList.length})`}
                             </h3>
-                            <label className="relative block">
-                                <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                    onChange={(event) => setStaffQuery(event.target.value)}
-                                    placeholder="Search team..."
-                                    value={staffQuery}
-                                />
-                            </label>
+                            <div className="flex items-center gap-3">
+                                <Button
+                                    className="px-3 py-2 text-xs"
+                                    onClick={() => void loadStaff()}
+                                    size="sm"
+                                    variant="secondary"
+                                >
+                                    Refresh
+                                </Button>
+                                <label className="relative block">
+                                    <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        onChange={(event) => setStaffQuery(event.target.value)}
+                                        placeholder="Search team..."
+                                        value={staffQuery}
+                                    />
+                                </label>
+                            </div>
                         </div>
                         <div className="grid grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                             <span>Name &amp; Email</span>
@@ -267,15 +602,20 @@ export default function SettingsPage() {
                                     <Badge variant="success">Active</Badge>
                                 </div>
                                 <div className="relative flex items-center justify-end">
+                                    {profile?.id && member.id === profile.id ? (
+                                        <span className="text-xs font-medium text-slate-400">You</span>
+                                    ) : null}
                                     <button
-                                        className="rounded-md px-2 py-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                                        className="rounded-md px-2 py-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                                        disabled={Boolean(profile?.id && member.id === profile.id)}
                                         onClick={() => setActionMenuId(actionMenuId === member.id ? null : member.id)}
+                                        title={profile?.id && member.id === profile.id ? "No actions available for your own account" : "Open actions"}
                                         type="button"
                                     >
                                         &#x22EE;
                                     </button>
                                     {actionMenuId === member.id ? (
-                                        <div className="absolute right-0 top-full z-10 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                                        <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
                                             {ROLE_OPTIONS.filter((r) => r.value !== member.role).map((option) => (
                                                 <button
                                                     className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
@@ -304,70 +644,165 @@ export default function SettingsPage() {
                         ) : null}
                     </Card>
                 </div>
+            ) : null}
 
-                <div className="space-y-6">
+            {activeTab === "Patient Invites" ? (
+                <div className="max-w-5xl space-y-6">
                     <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-800 to-slate-950 p-6 text-white shadow-lg">
-                        <h3 className="text-2xl font-bold">Patient Invite Code</h3>
-                        <p className="mt-2 max-w-sm text-sm text-slate-300">
-                            Share this unique code with patients so they can link their MediAgent mobile app to your clinic.
+                        <h3 className="text-2xl font-bold">Patient Invite Codes</h3>
+                        <p className="mt-2 max-w-xl text-sm text-slate-300">
+                            Generate single-use codes for patient onboarding. New codes remain active until claimed, revoked, or expired.
+                        </p>
+                        <p className="mt-1 max-w-xl text-xs text-slate-400">
+                            Invite history shows codes created by your account.
                         </p>
                         <div className="mt-6 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-5">
-                            <span className="text-3xl font-bold tracking-[0.14em]">
-                                {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
-                            </span>
-                            <button className="rounded-md bg-slate-800 px-3 py-2 text-slate-300" onClick={() => void handleCopyInviteCode()} type="button">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Latest Active Code</p>
+                                <span className="mt-1 block text-3xl font-bold tracking-[0.14em]">
+                                    {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
+                                </span>
+                            </div>
+                            <button
+                                className="rounded-md bg-slate-800 px-3 py-2 text-slate-300"
+                                onClick={() => void handleCopyInviteCode()}
+                                type="button"
+                            >
                                 <HiOutlineClipboardDocument className="h-5 w-5" />
                             </button>
                         </div>
                         <button
-                            className="mt-3 w-full rounded-lg border border-white/25 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15"
+                            className="mt-3 w-full rounded-lg border border-white/25 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={inviteCodeLoading}
                             onClick={() => void handleGenerateInviteCode()}
                             type="button"
                         >
                             {inviteCodeLoading ? "Generating…" : "Generate New Invite Code"}
                         </button>
-                        <button
-                            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/15"
-                            type="button"
-                        >
-                            <HiOutlinePrinter className="h-5 w-5" />
-                            <span>Print Handouts for Front Desk</span>
-                        </button>
                     </div>
 
                     <Card className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-900">Security</h3>
+                            <h4 className="text-lg font-bold text-slate-900">Active Codes ({activeInvites.length})</h4>
+                            <p className="text-xs text-slate-500">Share these with new patients</p>
                         </div>
-                        <div className="space-y-3 text-sm">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium text-slate-900">Multi-Factor Authentication</p>
-                                    <p className="text-xs text-slate-500">Protect your account with a TOTP authenticator app.</p>
-                                </div>
-                                <Link
-                                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-                                    href="/settings/mfa"
-                                >
-                                    Configure
-                                </Link>
+                        {activeInvites.length === 0 ? (
+                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                No active invite codes yet.
+                            </p>
+                        ) : (
+                            <div className="space-y-3">
+                                {activeInvites.map((record) => (
+                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Invite Code</p>
+                                                <p className="font-mono text-lg font-semibold text-slate-900">{record.invite_code || "—"}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    className="px-3 py-1.5 text-xs"
+                                                    onClick={() => void handleCopyInviteCode(record.invite_code)}
+                                                    size="sm"
+                                                    variant="secondary"
+                                                >
+                                                    Copy
+                                                </Button>
+                                                <Button
+                                                    className="px-3 py-1.5 text-xs"
+                                                    onClick={() => void handleRevokeInviteCode(record.care_team_id)}
+                                                    size="sm"
+                                                    variant="secondary"
+                                                >
+                                                    {revokingInviteId === record.care_team_id ? "Revoking…" : "Revoke"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
+                                            <p>Created: {formatDateTime(record.created_at)}</p>
+                                            <p>Expires: {formatDateTime(record.invite_expires_at)}</p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        </div>
+                        )}
                     </Card>
 
                     <Card className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-900">Clinic Profile</h3>
+                            <h4 className="text-lg font-bold text-slate-900">Claimed Codes ({claimedInvites.length})</h4>
+                            <p className="text-xs text-slate-500">Successfully linked patients</p>
                         </div>
-                        <div className="space-y-4 text-sm">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Clinic Name</p>
-                                <p className="mt-1 font-medium text-slate-900">{clinicName || "—"}</p>
+                        {claimedInvites.length === 0 ? (
+                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                No claimed invite codes yet.
+                            </p>
+                        ) : (
+                            <div className="space-y-3">
+                                {claimedInvites.map((record) => (
+                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
+                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
+                                            <p>
+                                                <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-slate-900">Patient:</span> {getPatientLabel(record)}
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-slate-900">Claimed:</span> {formatDateTime(record.invite_claimed_at)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
+                        )}
+                    </Card>
+
+                    <Card className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-lg font-bold text-slate-900">Inactive Codes ({inactiveInvites.length})</h4>
+                            <p className="text-xs text-slate-500">Revoked or expired history</p>
                         </div>
+                        {inactiveInvites.length === 0 ? (
+                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                No inactive codes.
+                            </p>
+                        ) : (
+                            <div className="space-y-3">
+                                {inactiveInvites.map((record) => (
+                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
+                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
+                                            <p>
+                                                <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-slate-900">Created:</span> {formatDateTime(record.created_at)}
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-slate-900">Expired:</span> {record.is_expired ? "Yes" : "No"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </Card>
                 </div>
-            </div>
+            ) : null}
+
+            {activeTab === "Integrations (MCP)" ? (
+                <div className="max-w-3xl">
+                    <Card className="space-y-4">
+                        <h3 className="text-xl font-bold text-slate-900">MCP Integrations</h3>
+                        <p className="text-sm text-slate-600">
+                            Configure external assistant and automation integrations for your clinic workspace.
+                        </p>
+                        <p className="text-sm text-slate-500">
+                            Integration setup is available through backend admin tooling. This panel is read-only for now.
+                        </p>
+                    </Card>
+                </div>
+            ) : null}
         </div>
     );
 }

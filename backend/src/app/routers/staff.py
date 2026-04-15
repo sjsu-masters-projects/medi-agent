@@ -46,6 +46,7 @@ async def list_staff(
     return StaffListResponse(
         staff=[StaffMember(**s) for s in result["staff"]],
         clinic_name=result["clinic_name"],
+        clinic_code=result.get("clinic_code"),
     )
 
 
