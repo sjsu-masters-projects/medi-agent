@@ -64,12 +64,14 @@ export default function MFASetupPage() {
         if (!accessToken || !refreshToken) {
             return;
         }
+        const currentAccessToken = accessToken;
+        const currentRefreshToken = refreshToken;
 
         async function checkFactors() {
             try {
                 const result = await api.get<{ factors: Factor[] }>("/api/v1/auth/mfa/factors", {
-                    headers: { "X-Refresh-Token": refreshToken },
-                    token: accessToken,
+                    headers: { "X-Refresh-Token": currentRefreshToken },
+                    token: currentAccessToken,
                 });
                 const verified = result.factors.filter((f) => f.status === "verified");
                 if (verified.length > 0) {
@@ -90,6 +92,8 @@ export default function MFASetupPage() {
         if (!accessToken || !refreshToken) {
             return;
         }
+        const currentAccessToken = accessToken;
+        const currentRefreshToken = refreshToken;
 
         setError("");
         setSubmitting(true);
@@ -98,8 +102,8 @@ export default function MFASetupPage() {
                 "/api/v1/auth/mfa/enroll",
                 { friendly_name: "Authenticator" },
                 {
-                    headers: { "X-Refresh-Token": refreshToken },
-                    token: accessToken,
+                    headers: { "X-Refresh-Token": currentRefreshToken },
+                    token: currentAccessToken,
                 },
             );
             setEnrollData(result);
@@ -116,6 +120,8 @@ export default function MFASetupPage() {
         if (!accessToken || !refreshToken || !enrollData || !user) {
             return;
         }
+        const currentAccessToken = accessToken;
+        const currentRefreshToken = refreshToken;
 
         setError("");
         setSubmitting(true);
@@ -124,8 +130,8 @@ export default function MFASetupPage() {
                 "/api/v1/auth/mfa/verify",
                 { factor_id: enrollData.factor_id, code },
                 {
-                    headers: { "X-Refresh-Token": refreshToken },
-                    token: accessToken,
+                    headers: { "X-Refresh-Token": currentRefreshToken },
+                    token: currentAccessToken,
                 },
             );
             const session: ClinicianAuthSession = {
@@ -148,16 +154,18 @@ export default function MFASetupPage() {
         if (!accessToken || !refreshToken) {
             return;
         }
+        const currentAccessToken = accessToken;
+        const currentRefreshToken = refreshToken;
 
         setError("");
         try {
             await api.post("/api/v1/auth/mfa/unenroll", { factor_id: factorId }, {
-                headers: { "X-Refresh-Token": refreshToken },
-                token: accessToken,
+                headers: { "X-Refresh-Token": currentRefreshToken },
+                token: currentAccessToken,
             });
             const refreshed = await api.post<RefreshResponse>("/api/v1/auth/refresh", {
                 expected_role: "clinician",
-                refresh_token: refreshToken,
+                refresh_token: currentRefreshToken,
             });
             const session: ClinicianAuthSession = {
                 accessToken: refreshed.tokens.access_token,

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, cast
 
 from supabase import Client
 
 from app.core.exceptions import ValidationError
+from app.db.supabase_execute import execute_async
 
 
 class ClinicService:
@@ -36,19 +36,25 @@ class ClinicService:
 
     async def _find_matching_clinics(self, normalized_code: str) -> list[dict[str, Any]]:
         """Find clinics by exact code, with a fallback for whitespace-corrupted rows."""
-        exact_result = await self._execute(
-            self.db.table("clinics")
+        exact_result = await execute_async(
+            self,
+            lambda db: db.table("clinics")
             .select("id, code, display_name, status")
-            .eq("code", normalized_code)
+            .eq("code", normalized_code),
+            operation="clinic lookup",
+            retry_transient=True,
         )
         exact_rows = [row for row in cast("list[dict[str, Any]]", exact_result.data or [])]
         if exact_rows:
             return exact_rows
 
-        fallback_result = await self._execute(
-            self.db.table("clinics")
+        fallback_result = await execute_async(
+            self,
+            lambda db: db.table("clinics")
             .select("id, code, display_name, status")
-            .ilike("code", f"%{normalized_code}%")
+            .ilike("code", f"%{normalized_code}%"),
+            operation="clinic lookup",
+            retry_transient=True,
         )
         fallback_rows = cast("list[dict[str, Any]]", fallback_result.data or [])
         return [
@@ -110,4 +116,9 @@ class ClinicService:
 
     async def _execute(self, query: Any) -> Any:
         """Run blocking Supabase execute() off the event loop."""
-        return await asyncio.to_thread(query.execute)
+        return await execute_async(
+            self,
+            lambda _db: query,
+            operation="Supabase query",
+            retry_transient=False,
+        )

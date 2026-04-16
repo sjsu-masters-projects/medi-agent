@@ -524,7 +524,10 @@
 
 ### 10.3 Security Audit
 - [ ] RLS policy review: verify no data leakage across patients/clinicians
-- [ ] Auth flow review: verify MFA, token expiry, session management
+- [/] Auth flow review: verify MFA, token expiry, session management
+  - [x] Local auth regression verification: clinic-code gate, clinician login, MFA setup/login, protected-route access
+  - [ ] Token expiry / refresh-session expiry behavior validated end to end
+  - [ ] Deployed-environment parity validated
 - [ ] Input validation: verify all user inputs are sanitized
 - [ ] File upload validation: verify type/size restrictions
 - [ ] OWASP Top 10 review

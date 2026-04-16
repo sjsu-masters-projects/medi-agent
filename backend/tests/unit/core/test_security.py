@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-import httpx
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
 
@@ -16,25 +16,21 @@ from app.models.auth import CurrentUser
 
 @pytest.mark.asyncio
 async def test_has_verified_mfa_factor_returns_true_when_factor_exists():
-    response = MagicMock()
-    response.json.return_value = [{"id": "factor-1"}]
-    response.raise_for_status.return_value = None
+    factor = SimpleNamespace(status="verified")
+    response = SimpleNamespace(user=SimpleNamespace(factors=[factor]))
+    client = MagicMock()
+    client.auth.get_user.return_value = response
 
-    client = AsyncMock()
-    client.get.return_value = response
-
-    with patch("app.core.security.httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__.return_value = client
+    with patch("app.core.security.create_anon_client", return_value=client):
         assert await _has_verified_mfa_factor("access-token") is True
 
 
 @pytest.mark.asyncio
 async def test_has_verified_mfa_factor_maps_http_errors_to_authentication_error():
-    client = AsyncMock()
-    client.get.side_effect = httpx.ConnectError("boom")
+    client = MagicMock()
+    client.auth.get_user.side_effect = RuntimeError("boom")
 
-    with patch("app.core.security.httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__.return_value = client
+    with patch("app.core.security.create_anon_client", return_value=client):
         with pytest.raises(AuthenticationError, match="Unable to determine MFA status"):
             await _has_verified_mfa_factor("access-token")
 

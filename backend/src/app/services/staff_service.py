@@ -13,6 +13,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from app.db.supabase_execute import execute_sync
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,11 @@ class StaffService:
     def _lookup_code_by_clinic_id(self, clinic_id: str) -> str | None:
         """Lookup clinic code by clinic UUID with best-effort error handling."""
         try:
-            clinic_result = (
-                self.db.table("clinics").select("code").eq("id", clinic_id).single().execute()
+            clinic_result = execute_sync(
+                self,
+                lambda db: db.table("clinics").select("code").eq("id", clinic_id).single(),
+                operation=f"clinic code lookup by clinic_id={clinic_id}",
+                retry_transient=True,
             )
             clinic_data = cast("dict[str, Any]", clinic_result.data)
             if clinic_data and clinic_data.get("code"):
@@ -68,12 +72,14 @@ class StaffService:
         normalized_name = self._normalize_clinic_name(clinic_name)
         if normalized_name:
             try:
-                clinic_result = (
-                    self.db.table("clinics")
+                clinic_result = execute_sync(
+                    self,
+                    lambda db: db.table("clinics")
                     .select("code")
                     .eq("canonical_name", normalized_name)
-                    .limit(1)
-                    .execute()
+                    .limit(1),
+                    operation=f"clinic code lookup by canonical_name={normalized_name}",
+                    retry_transient=True,
                 )
                 rows = self._as_dict_rows(clinic_result.data)
                 if rows:
@@ -90,12 +96,14 @@ class StaffService:
 
         if clinic_name:
             try:
-                clinic_result = (
-                    self.db.table("clinics")
+                clinic_result = execute_sync(
+                    self,
+                    lambda db: db.table("clinics")
                     .select("code")
                     .eq("display_name", clinic_name)
-                    .limit(1)
-                    .execute()
+                    .limit(1),
+                    operation=f"clinic code lookup by display_name={clinic_name}",
+                    retry_transient=True,
                 )
                 rows = self._as_dict_rows(clinic_result.data)
                 if rows:
@@ -112,12 +120,14 @@ class StaffService:
 
         if clinic_name:
             try:
-                clinicians_result = (
-                    self.db.table("clinicians")
+                clinicians_result = execute_sync(
+                    self,
+                    lambda db: db.table("clinicians")
                     .select("clinic_id")
                     .eq("clinic_name", clinic_name)
-                    .limit(50)
-                    .execute()
+                    .limit(50),
+                    operation=f"peer clinician clinic code lookup by clinic_name={clinic_name}",
+                    retry_transient=True,
                 )
                 rows = self._as_dict_rows(clinicians_result.data)
                 for row in rows:
@@ -143,12 +153,14 @@ class StaffService:
         Uses clinic_id when available and falls back to legacy clinic_name.
         """
         try:
-            result = (
-                self.db.table("clinicians")
+            result = execute_sync(
+                self,
+                lambda db: db.table("clinicians")
                 .select("clinic_id, clinic_name")
                 .eq("id", str(clinician_id))
-                .single()
-                .execute()
+                .single(),
+                operation="staff clinic context lookup",
+                retry_transient=True,
             )
         except Exception as exc:
             if self._is_no_rows_error(exc):
@@ -170,12 +182,14 @@ class StaffService:
     async def _require_admin(self, clinician_id: UUID) -> dict[str, Any]:
         """Verify the clinician has admin role and return clinic context."""
         try:
-            result = (
-                self.db.table("clinicians")
+            result = execute_sync(
+                self,
+                lambda db: db.table("clinicians")
                 .select("clinic_id, clinic_name, role")
                 .eq("id", str(clinician_id))
-                .single()
-                .execute()
+                .single(),
+                operation="staff admin context lookup",
+                retry_transient=True,
             )
         except Exception as exc:
             if self._is_no_rows_error(exc):
@@ -217,9 +231,9 @@ class StaffService:
 
         return False
 
-    def _build_staff_list_query(self) -> Any:
+    def _build_staff_list_query(self, db: Client) -> Any:
         return (
-            self.db.table("clinicians")
+            db.table("clinicians")
             .select(
                 "id, email, first_name, last_name, role, specialty, created_at, clinic_id, clinic_name"
             )
@@ -234,8 +248,11 @@ class StaffService:
         seen_ids: set[str] = set()
 
         if context["clinic_id"]:
-            by_id_result = (
-                self._build_staff_list_query().eq("clinic_id", str(context["clinic_id"])).execute()
+            by_id_result = execute_sync(
+                self,
+                lambda db: self._build_staff_list_query(db).eq("clinic_id", str(context["clinic_id"])),
+                operation="staff list by clinic_id",
+                retry_transient=True,
             )
             for row in by_id_result.data or []:
                 row_id = str(row.get("id") or "")
@@ -244,8 +261,11 @@ class StaffService:
                     staff_rows.append(cast("dict[str, Any]", row))
 
             # Add same-name peers as a safety net for clinic identity drift.
-            by_name_result = (
-                self._build_staff_list_query().eq("clinic_name", context["clinic_name"]).execute()
+            by_name_result = execute_sync(
+                self,
+                lambda db: self._build_staff_list_query(db).eq("clinic_name", context["clinic_name"]),
+                operation="staff list by clinic_name",
+                retry_transient=True,
             )
             for row in by_name_result.data or []:
                 row_id = str(row.get("id") or "")
@@ -253,8 +273,11 @@ class StaffService:
                     seen_ids.add(row_id)
                     staff_rows.append(cast("dict[str, Any]", row))
         else:
-            by_name_result = (
-                self._build_staff_list_query().eq("clinic_name", context["clinic_name"]).execute()
+            by_name_result = execute_sync(
+                self,
+                lambda db: self._build_staff_list_query(db).eq("clinic_name", context["clinic_name"]),
+                operation="staff list by clinic_name",
+                retry_transient=True,
             )
             for row in by_name_result.data or []:
                 row_id = str(row.get("id") or "")
@@ -275,12 +298,14 @@ class StaffService:
         if str(admin_id) == str(target_id):
             raise ValidationError("Cannot change your own role")
 
-        target = (
-            self.db.table("clinicians")
+        target = execute_sync(
+            self,
+            lambda db: db.table("clinicians")
             .select("id, clinic_id, clinic_name")
             .eq("id", str(target_id))
-            .single()
-            .execute()
+            .single(),
+            operation="staff role target lookup",
+            retry_transient=True,
         )
         target_data = cast("dict[str, Any]", target.data)
         if not target_data or not self._is_same_clinic(
@@ -302,12 +327,14 @@ class StaffService:
         if str(admin_id) == str(target_id):
             raise ValidationError("Cannot remove yourself from the clinic")
 
-        target = (
-            self.db.table("clinicians")
+        target = execute_sync(
+            self,
+            lambda db: db.table("clinicians")
             .select("id, clinic_id, clinic_name")
             .eq("id", str(target_id))
-            .single()
-            .execute()
+            .single(),
+            operation="staff removal target lookup",
+            retry_transient=True,
         )
         target_data = cast("dict[str, Any]", target.data)
         if not target_data or not self._is_same_clinic(
@@ -335,11 +362,13 @@ class StaffService:
         """
         context = await self._require_admin(admin_id)
 
-        existing = (
-            self.db.table("clinicians")
+        existing = execute_sync(
+            self,
+            lambda db: db.table("clinicians")
             .select("id, clinic_id, clinic_name")
-            .eq("email", email)
-            .execute()
+            .eq("email", email),
+            operation="staff invite existing clinician lookup",
+            retry_transient=True,
         )
 
         if existing.data:

@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Clinician Portal
 
-## Getting Started
+Next.js app for clinician and clinic-admin workflows in MediAgent.
 
-First, run the development server:
+## Local Development
+
+Install dependencies from the repo root, then run the portal:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Default local URLs:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- portal: `http://127.0.0.1:3001`
+- backend API: `http://127.0.0.1:8000`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Typecheck and tests:
 
-## Learn More
+```bash
+./node_modules/.bin/tsc --noEmit
+./node_modules/.bin/vitest run
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Current Auth Workflow
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Clinic Admin Bootstrap
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- First clinic admin signs up at `/signup/admin`
+- That flow creates the clinic and provisions the initial clinic code
+- Clinic admins land in the clinician dashboard after successful auth
 
-## Deploy on Vercel
+### Clinician Login
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. User enters a clinic code on `/login`
+2. Frontend verifies the clinic through `POST /api/v1/clinics/resolve-code`
+3. Verified clinic context is stored locally and reused on refresh
+4. User chooses login and submits email/password through `POST /api/v1/auth/login`
+5. If MFA is required, the user completes TOTP verification before session hydration
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Clinician MFA
+
+- MFA setup is managed from `/settings/mfa`
+- Backend routes:
+  - `POST /api/v1/auth/mfa/enroll`
+  - `POST /api/v1/auth/mfa/verify`
+  - `POST /api/v1/auth/mfa/unenroll`
+  - `GET /api/v1/auth/mfa/factors`
+- Session tokens are refreshed after successful MFA changes so protected routes continue to work with the updated auth state
+
+## Invite-Code Behavior
+
+Invite history is intentionally role-sensitive:
+
+- clinic admins can see clinic-wide invite history
+- admins also see who generated each code
+- non-admin clinicians only see invite codes they created
+- revoke remains owner-scoped, so admins do not revoke peer-issued codes from the current UI
+
+## Relevant Files
+
+- login flow: `src/app/(auth)/login/page.tsx`
+- admin bootstrap: `src/app/(auth)/signup/admin/page.tsx`
+- settings / invite history: `src/app/(dashboard)/settings/page.tsx`
+- MFA setup: `src/app/(dashboard)/settings/mfa/page.tsx`
+- API client: `src/services/api.ts`
+- stored clinic context: `src/services/clinic-context.ts`
+
+## Notes
+
+- A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.
+- QA account expectations are documented in [docs/qa-auth-accounts.md](../docs/qa-auth-accounts.md).

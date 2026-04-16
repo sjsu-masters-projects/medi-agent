@@ -17,6 +17,13 @@ class InvitePatientSummary(BaseModel):
     email: str | None = None
 
 
+class InviteCreatorSummary(BaseModel):
+    id: UUID
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+
+
 class InviteCodeRead(BaseModel):
     care_team_id: UUID
     invite_code: str | None = None
@@ -28,6 +35,7 @@ class InviteCodeRead(BaseModel):
     is_expired: bool = False
     lifecycle_state: InviteLifecycleState
     patient: InvitePatientSummary | None = None
+    created_by: InviteCreatorSummary | None = None
 
 
 class InviteCounts(BaseModel):

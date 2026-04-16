@@ -176,6 +176,14 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
     service._execute = AsyncMock(  # type: ignore[method-assign]
         side_effect=[
             _response(
+                data={
+                    "id": str(clinician_id),
+                    "clinic_id": "clinic-1",
+                    "clinic_name": "City Health",
+                    "role": "provider",
+                }
+            ),
+            _response(
                 data=[
                     {
                         "id": active_id,
@@ -187,6 +195,12 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
                         "invite_expires_at": "2099-01-01T00:00:00+00:00",
                         "invite_claimed_at": None,
                         "patients": None,
+                        "clinicians": {
+                            "id": str(clinician_id),
+                            "first_name": "Casey",
+                            "last_name": "Jones",
+                            "email": "casey@example.com",
+                        },
                     },
                     {
                         "id": claimed_id,
@@ -203,6 +217,12 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
                             "last_name": "Doe",
                             "email": "john@example.com",
                         },
+                        "clinicians": {
+                            "id": str(clinician_id),
+                            "first_name": "Casey",
+                            "last_name": "Jones",
+                            "email": "casey@example.com",
+                        },
                     },
                     {
                         "id": expired_id,
@@ -214,6 +234,12 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
                         "invite_expires_at": "2000-01-01T00:00:00+00:00",
                         "invite_claimed_at": None,
                         "patients": None,
+                        "clinicians": {
+                            "id": str(clinician_id),
+                            "first_name": "Casey",
+                            "last_name": "Jones",
+                            "email": "casey@example.com",
+                        },
                     },
                 ]
             ),
@@ -228,6 +254,68 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
     assert by_id[active_id]["lifecycle_state"] == "active"
     assert by_id[claimed_id]["lifecycle_state"] == "claimed"
     assert by_id[expired_id]["lifecycle_state"] == "inactive"
+    assert by_id[active_id]["created_by"]["email"] == "casey@example.com"
+
+
+@pytest.mark.asyncio
+async def test_list_invite_codes_uses_clinic_scope_for_admin(service):
+    admin_id = uuid4()
+    own_id = str(admin_id)
+    peer_id = str(uuid4())
+    chain = MagicMock()
+    for method in ("select", "in_", "order", "limit"):
+        getattr(chain, method).return_value = chain
+    service.db.table.return_value = chain
+
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _response(
+                data={
+                    "id": own_id,
+                    "clinic_id": "clinic-1",
+                    "clinic_name": "City Health",
+                    "role": "admin",
+                }
+            ),
+            _response(data=[{"id": own_id}, {"id": peer_id}]),
+            _response(data=[{"id": peer_id}]),
+            _response(
+                data=[
+                    {
+                        "id": str(uuid4()),
+                        "invite_code": "ADMIN001",
+                        "status": "pending",
+                        "patient_id": None,
+                        "role": "provider",
+                        "created_at": "2026-04-10T20:00:00Z",
+                        "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                        "invite_claimed_at": None,
+                        "patients": None,
+                        "clinicians": {
+                            "id": peer_id,
+                            "first_name": "Taylor",
+                            "last_name": "Mills",
+                            "email": "taylor@example.com",
+                        },
+                    }
+                ]
+            ),
+        ]
+    )
+
+    result = await service.list_invite_codes(admin_id)
+
+    invite_query = service._execute.await_args_list[3]
+    assert invite_query.kwargs["operation"] == "invite code list lookup"
+    query = invite_query.args[0](service.db)
+    assert query is chain
+    query.in_.assert_called_once()
+    field_name, clinician_ids = query.in_.call_args.args
+    assert field_name == "clinician_id"
+    assert clinician_ids == sorted([own_id, peer_id])
+    assert result["counts"] == {"active": 1, "claimed": 0, "inactive": 0}
+    assert result["invites"][0]["created_by"]["id"] == peer_id
+    assert result["invites"][0]["created_by"]["email"] == "taylor@example.com"
 
 
 @pytest.mark.asyncio

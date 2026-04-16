@@ -29,6 +29,7 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.db.supabase_execute import execute_async
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 
 logger = logging.getLogger(__name__)
@@ -74,17 +75,21 @@ class ClinicianService:
         """Resolve clinic identity by code and enforce active status."""
         normalized_code = clinic_code.strip().upper()
         clinic_result = await self._execute(
-            self.db.table("clinics")
+            lambda db: db.table("clinics")
             .select("id, code, display_name, status")
-            .eq("code", normalized_code)
+            .eq("code", normalized_code),
+            operation="clinic lookup",
+            retry_transient=True,
         )
 
         clinics = cast("list[dict[str, Any]]", clinic_result.data or [])
         if not clinics:
             fallback_result = await self._execute(
-                self.db.table("clinics")
+                lambda db: db.table("clinics")
                 .select("id, code, display_name, status")
-                .ilike("code", f"%{normalized_code}%")
+                .ilike("code", f"%{normalized_code}%"),
+                operation="clinic lookup",
+                retry_transient=True,
             )
             clinics = [
                 row
@@ -180,16 +185,20 @@ class ClinicianService:
             - claimed: linked to a patient and active
             - inactive: revoked/expired/otherwise not actionable
         """
+        clinician_ids = await self._get_invite_scope_clinician_ids(clinician_id)
         result = await self._execute(
-            self.db.table("care_teams")
+            lambda db: db.table("care_teams")
             .select(
                 "id, invite_code, status, role, patient_id, "
                 "created_at, invite_expires_at, invite_claimed_at, "
-                "patients(id, first_name, last_name, email)"
+                "patients(id, first_name, last_name, email), "
+                "clinicians(id, first_name, last_name, email)"
             )
-            .eq("clinician_id", str(clinician_id))
+            .in_("clinician_id", clinician_ids)
             .order("created_at", desc=True)
-            .limit(100)
+            .limit(100),
+            operation="invite code list lookup",
+            retry_transient=True,
         )
 
         now = datetime.now(UTC)
@@ -215,6 +224,7 @@ class ClinicianService:
             counts[lifecycle_state] += 1
 
             patient_data = cast(dict[str, Any], row.get("patients") or {})
+            creator_data = cast(dict[str, Any], row.get("clinicians") or {})
             invites.append(
                 {
                     "care_team_id": invite_id,
@@ -236,6 +246,16 @@ class ClinicianService:
                         if patient_data
                         else None
                     ),
+                    "created_by": (
+                        {
+                            "id": creator_data.get("id"),
+                            "first_name": creator_data.get("first_name"),
+                            "last_name": creator_data.get("last_name"),
+                            "email": creator_data.get("email"),
+                        }
+                        if creator_data
+                        else None
+                    ),
                 }
             )
 
@@ -245,6 +265,59 @@ class ClinicianService:
             )
 
         return {"invites": invites, "counts": counts}
+
+    async def _get_invite_scope_clinician_ids(self, clinician_id: UUID) -> list[str]:
+        """Admins can see clinic-wide invite codes; others see only their own."""
+        context_result = await self._execute(
+            lambda db: db.table("clinicians")
+            .select("id, clinic_id, clinic_name, role")
+            .eq("id", str(clinician_id))
+            .single(),
+            operation="invite scope lookup",
+            retry_transient=True,
+        )
+        context = cast("dict[str, Any]", context_result.data or {})
+        if not context:
+            raise NotFoundError("Clinician", str(clinician_id))
+
+        if context.get("role") != "admin":
+            return [str(clinician_id)]
+
+        clinician_ids: set[str] = {str(clinician_id)}
+        clinic_id = context.get("clinic_id")
+        clinic_name = str(context.get("clinic_name") or "")
+
+        if clinic_id:
+            by_id_result = await self._execute(
+                lambda db: db.table("clinicians")
+                .select("id")
+                .eq("clinic_id", str(clinic_id))
+                .limit(200),
+                operation="clinic member invite scope lookup",
+                retry_transient=True,
+            )
+            clinician_ids.update(
+                str(row["id"])
+                for row in cast(list[dict[str, Any]], by_id_result.data or [])
+                if row.get("id")
+            )
+
+        if clinic_name:
+            by_name_result = await self._execute(
+                lambda db: db.table("clinicians")
+                .select("id")
+                .eq("clinic_name", clinic_name)
+                .limit(200),
+                operation="clinic member invite scope lookup",
+                retry_transient=True,
+            )
+            clinician_ids.update(
+                str(row["id"])
+                for row in cast(list[dict[str, Any]], by_name_result.data or [])
+                if row.get("id")
+            )
+
+        return sorted(clinician_ids)
 
     async def revoke_invite_code(self, clinician_id: UUID, care_team_id: UUID) -> dict[str, Any]:
         """Revoke a pending invite code created by this clinician."""
@@ -753,6 +826,24 @@ class ClinicianService:
             return value / 24
         return float(value)
 
-    async def _execute(self, query: Any) -> Any:
-        """Run blocking Supabase execute() off the event loop."""
-        return await asyncio.to_thread(query.execute)
+    async def _execute(
+        self,
+        query: Any,
+        *,
+        operation: str = "Supabase query",
+        retry_transient: bool = False,
+    ) -> Any:
+        """Run blocking Supabase execute() off the event loop with shared retry semantics."""
+        if callable(query) and not hasattr(query, "execute"):
+            return await execute_async(
+                self,
+                query,
+                operation=operation,
+                retry_transient=retry_transient,
+            )
+        return await execute_async(
+            self,
+            lambda _db: query,
+            operation=operation,
+            retry_transient=False,
+        )

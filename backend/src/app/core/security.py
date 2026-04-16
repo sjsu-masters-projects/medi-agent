@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import threading
@@ -30,6 +31,7 @@ from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
+from app.clients.supabase import create_anon_client
 from app.config import settings
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.models.auth import CurrentUser
@@ -52,9 +54,6 @@ _jwks_cache_lock = threading.Lock()
 
 # HTTPBearer extracts the token from "Authorization: Bearer <token>"
 _bearer_scheme = HTTPBearer(auto_error=False)
-_MFA_FACTOR_ENDPOINT = "/rest/v1/auth/factors"
-
-
 def _supabase_issuer() -> str:
     return f"{settings.supabase_url.rstrip('/')}/auth/v1"
 
@@ -180,30 +179,20 @@ async def get_current_user(
 
 async def _has_verified_mfa_factor(access_token: str) -> bool:
     """Check whether the current user already has a verified MFA factor."""
-    headers = {
-        "apikey": settings.supabase_anon_key,
-        "Authorization": f"Bearer {access_token}",
-    }
-    params = {
-        "select": "id",
-        "status": "eq.verified",
-        "limit": "1",
-    }
+    def _load_user_factors() -> list[Any]:
+        client = create_anon_client()
+        response = client.auth.get_user(access_token)
+        user = getattr(response, "user", None) if response else None
+        factors = getattr(user, "factors", None)
+        return list(factors or [])
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(
-                f"{settings.supabase_url.rstrip('/')}{_MFA_FACTOR_ENDPOINT}",
-                headers=headers,
-                params=params,
-            )
-            response.raise_for_status()
-    except httpx.HTTPError as exc:
+        factors = await asyncio.to_thread(_load_user_factors)
+    except Exception as exc:
         logger.warning("Unable to determine MFA factor state: %s", exc)
         raise AuthenticationError("Unable to determine MFA status") from None
 
-    data = response.json()
-    return isinstance(data, list) and len(data) > 0
+    return any(getattr(factor, "status", None) == "verified" for factor in factors)
 
 
 def require_role(role: str, *, allow_unverified_mfa: bool = False) -> Callable[..., Any]:

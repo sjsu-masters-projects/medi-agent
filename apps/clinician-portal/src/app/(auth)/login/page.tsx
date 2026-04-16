@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
-import { api } from "@/services/api";
+import { api, isRetryableApiError } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import {
     clearStoredClinicContext,
@@ -55,6 +55,23 @@ interface ClinicResolveResponse {
 
 type LoginStage = "verify" | "choose" | "login";
 
+async function retryableClinicResolve(clinicCode: string): Promise<ClinicResolveResponse> {
+    try {
+        return await api.post<ClinicResolveResponse>("/api/v1/clinics/resolve-code", {
+            clinic_code: clinicCode,
+        });
+    } catch (error) {
+        if (!isRetryableApiError(error)) {
+            throw error;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        return api.post<ClinicResolveResponse>("/api/v1/clinics/resolve-code", {
+            clinic_code: clinicCode,
+        });
+    }
+}
+
 export default function ClinicianLoginPage() {
     const router = useRouter();
     const dispatch = useDispatch<AppDispatch>();
@@ -67,18 +84,86 @@ export default function ClinicianLoginPage() {
     const [error, setError] = useState("");
     const [clinicCodeError, setClinicCodeError] = useState("");
     const [pendingMFA, setPendingMFA] = useState<PendingMFALogin | null>(null);
+    const [restoringClinicContext, setRestoringClinicContext] = useState(true);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         const stored = readStoredClinicContext();
         if (!stored) {
+            setRestoringClinicContext(false);
             return;
         }
+        const storedContext = stored;
 
-        setClinicCode(stored.clinicCode);
-        setClinicContext(stored);
-        setStage("choose");
+        let cancelled = false;
+
+        async function restoreClinicContext() {
+            setClinicCode(storedContext.clinicCode);
+
+            try {
+                const resolved = await retryableClinicResolve(storedContext.clinicCode);
+
+                if (cancelled) {
+                    return;
+                }
+
+                const context: ClinicContext = {
+                    clinicCode: resolved.clinic_code,
+                    clinicId: resolved.clinic_id,
+                    clinicName: resolved.clinic_name,
+                    status: resolved.status,
+                };
+
+                writeStoredClinicContext(context);
+                setClinicCode(resolved.clinic_code);
+                setClinicContext(context);
+                setStage("choose");
+            } catch (error) {
+                if (cancelled) {
+                    return;
+                }
+
+                if (!isRetryableApiError(error)) {
+                    clearStoredClinicContext();
+                }
+                setClinicContext(null);
+                setClinicCode(storedContext.clinicCode);
+                setClinicCodeError(
+                    isRetryableApiError(error)
+                        ? "Clinic verification is temporarily unavailable. Please retry."
+                        : "Saved clinic access expired. Verify your clinic code again.",
+                );
+                setStage("verify");
+            } finally {
+                if (!cancelled) {
+                    setRestoringClinicContext(false);
+                }
+            }
+        }
+
+        void restoreClinicContext();
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
+
+    function resetClinicContext(clinicCodeValue = "", message = "") {
+        clearStoredClinicContext();
+        setClinicContext(null);
+        setClinicCode(clinicCodeValue);
+        setClinicCodeError(message);
+        setPendingMFA(null);
+        setCode("");
+        setError("");
+        setPassword("");
+        setStage("verify");
+    }
+
+    function useDifferentClinicCode() {
+        resetClinicContext();
+        setEmail("");
+    }
 
     async function handleVerifyClinicCode(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -101,9 +186,7 @@ export default function ClinicianLoginPage() {
         setSubmitting(true);
 
         try {
-            const resolved = await api.post<ClinicResolveResponse>("/api/v1/clinics/resolve-code", {
-                clinic_code: normalizedClinicCode,
-            });
+            const resolved = await retryableClinicResolve(normalizedClinicCode);
 
             const context: ClinicContext = {
                 clinicCode: resolved.clinic_code,
@@ -117,7 +200,11 @@ export default function ClinicianLoginPage() {
             setClinicContext(context);
             setStage("choose");
         } catch (submissionError) {
-            setClinicCodeError((submissionError as Error).message);
+            setClinicCodeError(
+                isRetryableApiError(submissionError)
+                    ? "Clinic verification is temporarily unavailable. Please retry."
+                    : (submissionError as Error).message,
+            );
         } finally {
             setSubmitting(false);
         }
@@ -173,7 +260,23 @@ export default function ClinicianLoginPage() {
             dispatch(hydrateSession(session));
             router.replace("/dashboard");
         } catch (submissionError) {
-            setError((submissionError as Error).message);
+            if (isRetryableApiError(submissionError)) {
+                setError("Login is temporarily unavailable. Please retry.");
+                return;
+            }
+
+            const message = (submissionError as Error).message;
+            if (message === "Clinic code is invalid" || message === "Clinic code is inactive") {
+                resetClinicContext(
+                    clinicContext.clinicCode,
+                    message === "Clinic code is inactive"
+                        ? message
+                        : "Saved clinic access expired. Verify your clinic code again.",
+                );
+                return;
+            }
+
+            setError(message);
         } finally {
             setSubmitting(false);
         }
@@ -215,18 +318,6 @@ export default function ClinicianLoginPage() {
         }
     }
 
-    function useDifferentClinicCode() {
-        clearStoredClinicContext();
-        setClinicContext(null);
-        setClinicCode("");
-        setEmail("");
-        setPassword("");
-        setPendingMFA(null);
-        setCode("");
-        setError("");
-        setStage("verify");
-    }
-
     return (
         <div className="flex min-h-screen bg-gray-50">
             <div className="hidden w-1/2 bg-gray-900 px-12 py-16 text-white lg:flex lg:flex-col lg:justify-between">
@@ -266,7 +357,13 @@ export default function ClinicianLoginPage() {
                         </p>
                     </div>
 
-                    {pendingMFA ? (
+                    {restoringClinicContext ? (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                            Checking saved clinic access...
+                        </div>
+                    ) : null}
+
+                    {!restoringClinicContext && pendingMFA ? (
                         <form className="space-y-4" onSubmit={handleMFAVerify}>
                             <Input
                                 autoComplete="one-time-code"
@@ -296,7 +393,7 @@ export default function ClinicianLoginPage() {
                         </form>
                     ) : null}
 
-                    {!pendingMFA && stage === "verify" ? (
+                    {!restoringClinicContext && !pendingMFA && stage === "verify" ? (
                         <form className="space-y-4" onSubmit={handleVerifyClinicCode}>
                             <Input
                                 error={clinicCodeError}
@@ -318,7 +415,7 @@ export default function ClinicianLoginPage() {
                         </form>
                     ) : null}
 
-                    {!pendingMFA && stage === "choose" && clinicContext ? (
+                    {!restoringClinicContext && !pendingMFA && stage === "choose" && clinicContext ? (
                         <div className="space-y-4">
                             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                                 <p className="font-semibold">Clinic verified: {clinicContext.clinicName}</p>
@@ -343,7 +440,7 @@ export default function ClinicianLoginPage() {
                         </div>
                     ) : null}
 
-                    {!pendingMFA && stage === "login" && clinicContext ? (
+                    {!restoringClinicContext && !pendingMFA && stage === "login" && clinicContext ? (
                         <>
                             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                                 Signing into clinic: <span className="font-semibold">{clinicContext.clinicName}</span>

@@ -97,6 +97,60 @@ def test_lookup_clinic_code_uses_peer_clinician_clinic_id_when_name_queries_miss
     assert code == "0901CA82DC"
 
 
+def test_lookup_code_by_clinic_id_retries_transient_failures(raw_service, mock_db):
+    clinic_chain = MagicMock()
+    for method in ("select", "eq", "single"):
+        getattr(clinic_chain, method).return_value = clinic_chain
+    clinic_chain.execute.side_effect = [
+        Exception("Resource temporarily unavailable"),
+        Mock(data={"code": "0901CA82DC"}),
+    ]
+
+    mock_db.table.return_value = clinic_chain
+
+    code = raw_service._lookup_code_by_clinic_id("clinic-uuid-1")
+
+    assert code == "0901CA82DC"
+    assert clinic_chain.execute.call_count == 2
+
+
+def test_lookup_clinic_code_returns_none_after_transient_failures_on_all_paths(raw_service, mock_db):
+    failing_id_chain = MagicMock()
+    for method in ("select", "eq", "single"):
+        getattr(failing_id_chain, method).return_value = failing_id_chain
+    failing_id_chain.execute.side_effect = Exception("Resource temporarily unavailable")
+
+    canonical_chain = MagicMock()
+    for method in ("select", "eq", "limit"):
+        getattr(canonical_chain, method).return_value = canonical_chain
+    canonical_chain.execute.side_effect = Exception("Resource temporarily unavailable")
+
+    display_chain = MagicMock()
+    for method in ("select", "eq", "limit"):
+        getattr(display_chain, method).return_value = display_chain
+    display_chain.execute.side_effect = Exception("Resource temporarily unavailable")
+
+    peer_chain = MagicMock()
+    for method in ("select", "eq", "limit"):
+        getattr(peer_chain, method).return_value = peer_chain
+    peer_chain.execute.side_effect = Exception("Resource temporarily unavailable")
+
+    mock_db.table.side_effect = [
+        failing_id_chain,
+        failing_id_chain,
+        canonical_chain,
+        canonical_chain,
+        display_chain,
+        display_chain,
+        peer_chain,
+        peer_chain,
+    ]
+
+    code = raw_service._lookup_clinic_code("clinic-uuid-1", "San Jose Health Clinic")
+
+    assert code is None
+
+
 @pytest.mark.asyncio
 async def test_require_admin_not_found(service, mock_db):
     _chain(mock_db, data=None)

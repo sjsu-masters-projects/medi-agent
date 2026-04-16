@@ -19,10 +19,11 @@ import logging
 from typing import Any, cast
 
 from jose import JWTError, jwt
-from supabase import Client, create_client
+from supabase import Client
 
-from app.config import settings
+from app.clients.supabase import create_anon_client
 from app.core.exceptions import AuthenticationError, ValidationError
+from app.db.supabase_execute import execute_sync
 from app.models.enums import ClinicianRole
 from app.services.clinic_service import ClinicService
 
@@ -39,6 +40,7 @@ class AuthService:
 
     def __init__(self, db: Client) -> None:
         self.db = db
+        self.auth_client = create_anon_client()
 
     # ── Signup ──────────────────────────────────────────────
 
@@ -242,7 +244,7 @@ class AuthService:
     ) -> Any:
         """Exchange a refresh token for a new access token."""
         try:
-            response = self.db.auth.refresh_session(refresh_token)
+            response = self.auth_client.auth.refresh_session(refresh_token)
         except Exception as e:
             logger.warning("Token refresh failed: %s", e)
             raise AuthenticationError("Invalid or expired refresh token") from None
@@ -254,7 +256,7 @@ class AuthService:
     async def request_password_reset(self, email: str) -> None:
         """Send a password reset email via Supabase."""
         try:
-            self.db.auth.reset_password_email(email)
+            self.auth_client.auth.reset_password_email(email)
         except Exception as e:
             logger.info("Password reset requested for %s: %s", email, e)
 
@@ -269,7 +271,7 @@ class AuthService:
     ) -> Any:
         """Sign in with email/password and validate the returned role."""
         try:
-            response = self.db.auth.sign_in_with_password(
+            response = self.auth_client.auth.sign_in_with_password(
                 {
                     "email": email,
                     "password": password,
@@ -298,7 +300,7 @@ class AuthService:
     def _create_auth_user(self, *, email: str, password: str) -> Any:
         """Create Supabase auth user and map SDK failures to ValidationError."""
         try:
-            return self.db.auth.sign_up(
+            return self.auth_client.auth.sign_up(
                 {
                     "email": email,
                     "password": password,
@@ -311,20 +313,24 @@ class AuthService:
     def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
         """Resolve clinic identity by code and enforce active status."""
         normalized_code = clinic_code.strip().upper()
-        response = (
-            self.db.table("clinics")
+        response = execute_sync(
+            self,
+            lambda db: db.table("clinics")
             .select("id, code, display_name, status")
-            .eq("code", normalized_code)
-            .execute()
+            .eq("code", normalized_code),
+            operation="clinic lookup",
+            retry_transient=True,
         )
 
         clinics = [row for row in (response.data or []) if isinstance(row, dict)]
         if not clinics:
-            fallback_response = (
-                self.db.table("clinics")
+            fallback_response = execute_sync(
+                self,
+                lambda db: db.table("clinics")
                 .select("id, code, display_name, status")
-                .ilike("code", f"%{normalized_code}%")
-                .execute()
+                .ilike("code", f"%{normalized_code}%"),
+                operation="clinic lookup",
+                retry_transient=True,
             )
             clinics = [
                 row
@@ -351,11 +357,13 @@ class AuthService:
             raise AuthenticationError("Clinic code is required for clinician login")
 
         clinic = self._resolve_active_clinic(clinic_code)
-        response = (
-            self.db.table("clinicians")
+        response = execute_sync(
+            self,
+            lambda db: db.table("clinicians")
             .select("clinic_id, clinic_name")
-            .eq("id", clinician_id)
-            .execute()
+            .eq("id", clinician_id),
+            operation="clinician clinic binding lookup",
+            retry_transient=True,
         )
         clinicians = [row for row in (response.data or []) if isinstance(row, dict)]
         if not clinicians:
@@ -419,7 +427,7 @@ class AuthService:
         refresh_token: str,
     ) -> list[dict[str, Any]]:
         """Return verified MFA factors for the just-authenticated user."""
-        client = create_client(settings.supabase_url, settings.supabase_anon_key)
+        client = create_anon_client()
         try:
             client.auth.set_session(access_token, refresh_token)
             response = client.auth.mfa.list_factors()

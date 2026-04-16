@@ -121,6 +121,10 @@ export class ApiClientError extends Error {
     }
 }
 
+export function isRetryableApiError(error: unknown): error is ApiClientError {
+    return error instanceof ApiClientError && [502, 503, 504].includes(error.status);
+}
+
 class ApiClient {
     private baseUrl: string;
 
