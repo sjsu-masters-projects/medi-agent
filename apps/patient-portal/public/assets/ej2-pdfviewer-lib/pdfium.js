@@ -54,7 +54,7 @@ var PDFiumModule = (() => {
         } else if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
             try {
                 scriptDirectory = new URL(".", _scriptName).href
-            } catch {} {
+            } catch {
                 if (ENVIRONMENT_IS_WORKER) {
                     readBinary = url => {
                         var xhr = new XMLHttpRequest;

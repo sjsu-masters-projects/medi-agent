@@ -9,6 +9,9 @@
     "husky": "^9.1.0",
     "lint-staged": "^15.3.0"
   },
+  "overrides": {
+    "picomatch": "4.0.4"
+  },
   "lint-staged": {
     "backend/src/**/*.py": [
       "backend/.venv/bin/ruff check --fix --unsafe-fixes",
