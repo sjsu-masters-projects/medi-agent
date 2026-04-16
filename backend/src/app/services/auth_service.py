@@ -376,7 +376,10 @@ class AuthService:
         if clinic_id and str(clinic_id) == str(clinic["id"]):
             return
 
-        if clinic_name and str(clinic_name).strip().lower() == str(clinic["display_name"]).strip().lower():
+        if (
+            clinic_name
+            and str(clinic_name).strip().lower() == str(clinic["display_name"]).strip().lower()
+        ):
             return
 
         raise AuthenticationError("Clinician account does not belong to the selected clinic")

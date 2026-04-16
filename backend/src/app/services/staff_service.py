@@ -250,7 +250,9 @@ class StaffService:
         if context["clinic_id"]:
             by_id_result = execute_sync(
                 self,
-                lambda db: self._build_staff_list_query(db).eq("clinic_id", str(context["clinic_id"])),
+                lambda db: self._build_staff_list_query(db).eq(
+                    "clinic_id", str(context["clinic_id"])
+                ),
                 operation="staff list by clinic_id",
                 retry_transient=True,
             )
@@ -263,7 +265,9 @@ class StaffService:
             # Add same-name peers as a safety net for clinic identity drift.
             by_name_result = execute_sync(
                 self,
-                lambda db: self._build_staff_list_query(db).eq("clinic_name", context["clinic_name"]),
+                lambda db: self._build_staff_list_query(db).eq(
+                    "clinic_name", context["clinic_name"]
+                ),
                 operation="staff list by clinic_name",
                 retry_transient=True,
             )
@@ -275,7 +279,9 @@ class StaffService:
         else:
             by_name_result = execute_sync(
                 self,
-                lambda db: self._build_staff_list_query(db).eq("clinic_name", context["clinic_name"]),
+                lambda db: self._build_staff_list_query(db).eq(
+                    "clinic_name", context["clinic_name"]
+                ),
                 operation="staff list by clinic_name",
                 retry_transient=True,
             )

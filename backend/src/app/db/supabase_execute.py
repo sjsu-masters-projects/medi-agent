@@ -72,9 +72,13 @@ def execute_sync(
                 time.sleep(0.2 * attempt)
                 continue
 
-            raise ExternalServiceError("Supabase", f"{operation} is temporarily unavailable") from exc
+            raise ExternalServiceError(
+                "Supabase", f"{operation} is temporarily unavailable"
+            ) from exc
 
-    raise ExternalServiceError("Supabase", f"{operation} is temporarily unavailable") from last_error
+    raise ExternalServiceError(
+        "Supabase", f"{operation} is temporarily unavailable"
+    ) from last_error
 
 
 async def execute_async(
@@ -110,6 +114,10 @@ async def execute_async(
                 await asyncio.sleep(0.2 * attempt)
                 continue
 
-            raise ExternalServiceError("Supabase", f"{operation} is temporarily unavailable") from exc
+            raise ExternalServiceError(
+                "Supabase", f"{operation} is temporarily unavailable"
+            ) from exc
 
-    raise ExternalServiceError("Supabase", f"{operation} is temporarily unavailable") from last_error
+    raise ExternalServiceError(
+        "Supabase", f"{operation} is temporarily unavailable"
+    ) from last_error

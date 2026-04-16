@@ -54,6 +54,8 @@ _jwks_cache_lock = threading.Lock()
 
 # HTTPBearer extracts the token from "Authorization: Bearer <token>"
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+
 def _supabase_issuer() -> str:
     return f"{settings.supabase_url.rstrip('/')}/auth/v1"
 
@@ -179,6 +181,7 @@ async def get_current_user(
 
 async def _has_verified_mfa_factor(access_token: str) -> bool:
     """Check whether the current user already has a verified MFA factor."""
+
     def _load_user_factors() -> list[Any]:
         client = create_anon_client()
         response = client.auth.get_user(access_token)
@@ -210,11 +213,7 @@ def require_role(role: str, *, allow_unverified_mfa: bool = False) -> Callable[.
             raise AuthorizationError(
                 f"This endpoint requires '{role}' role, but you are '{user.role}'"
             )
-        if (
-            role == "clinician"
-            and not allow_unverified_mfa
-            and user.aal != "aal2"
-        ):
+        if role == "clinician" and not allow_unverified_mfa and user.aal != "aal2":
             if credentials is None:
                 raise AuthenticationError("Missing authorization header")
             if await _has_verified_mfa_factor(credentials.credentials):
