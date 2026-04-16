@@ -38,9 +38,9 @@ class AuthService:
     so it can create profile rows during signup.
     """
 
-    def __init__(self, db: Client) -> None:
+    def __init__(self, db: Client, auth_client: Client | None = None) -> None:
         self.db = db
-        self.auth_client = create_anon_client()
+        self.auth_client = auth_client or create_anon_client()
 
     # ── Signup ──────────────────────────────────────────────
 
