@@ -472,6 +472,68 @@ class TestRevokeInviteCode:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
+class TestPatientA2ATimeline:
+    """GET /api/v1/clinicians/me/patients/{patient_id}/a2a-timeline"""
+
+    def test_success(self, client, override_auth, override_db, mock_supabase_db):
+        patient_id = uuid4()
+        task_id = uuid4()
+
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(data=[{"id": str(uuid4())}]),
+            MagicMock(data={"id": str(patient_id), "first_name": "John"}),
+            MagicMock(
+                data=[
+                    {
+                        "id": str(task_id),
+                        "patient_id": str(patient_id),
+                        "symptom_event_id": str(uuid4()),
+                        "idempotency_key": "symptom_event:test-1",
+                        "conversation_session_id": "session-1",
+                        "source_agent": "symptom",
+                        "target_agent": "pharmacovigilance",
+                        "task_type": "symptom_adr_screen",
+                        "status": "retrying",
+                        "retry_attempt": 1,
+                        "max_retries": 3,
+                        "next_retry_at": "2026-04-17T12:00:00Z",
+                        "dead_lettered_at": None,
+                        "error_message": "worker timeout",
+                        "created_at": "2026-04-17T11:59:00Z",
+                        "started_at": "2026-04-17T11:59:05Z",
+                        "completed_at": None,
+                        "input_payload": {},
+                        "output_payload": None,
+                        "worker_payload": {},
+                    }
+                ]
+            ),
+        ]
+
+        response = client.get(
+            f"/api/v1/clinicians/me/patients/{patient_id}/a2a-timeline",
+            params={"session_id": "session-1", "limit": 25},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["patient_id"] == str(patient_id)
+        assert data["session_id"] == "session-1"
+        assert len(data["tasks"]) == 1
+        assert data["tasks"][0]["status"] == "retrying"
+        assert data["tasks"][0]["id"] == str(task_id)
+
+    def test_not_assigned(self, client, override_auth, override_db, mock_supabase_db):
+        patient_id = uuid4()
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(data=[]),
+        ]
+
+        response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/a2a-timeline")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
 class TestAuthorization:
     """Test authorization requirements."""
 

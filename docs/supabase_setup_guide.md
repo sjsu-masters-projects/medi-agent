@@ -54,6 +54,9 @@ psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
 
 # 9. JWT hook hardening (safe re-apply + grants)
 psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
+
+# 10. Persistent chat state + A2A task lifecycle tables
+psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
 ```
 
 > [!IMPORTANT]
@@ -72,6 +75,7 @@ psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sq
 | `007_clinic_identity_foundation.sql` | Adds canonical `clinics` table and links clinicians to `clinic_id` |
 | `008_soap_notes.sql` | Adds SOAP note persistence table for clinician workflows |
 | `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT role-hook parsing and grant posture |
+| `010_chat_state_and_a2a_tasks.sql` | Adds persistent conversation state + A2A lifecycle persistence |
 
 ### Adding New Migrations
 

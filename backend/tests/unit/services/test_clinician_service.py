@@ -409,6 +409,47 @@ async def test_save_document_annotation_updates_document_for_assigned_patient(se
 
 
 @pytest.mark.asyncio
+async def test_get_patient_a2a_timeline_returns_session_filtered_tasks(service, mock_db):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+    task = {
+        "id": str(uuid4()),
+        "patient_id": str(patient_id),
+        "conversation_session_id": "session-1",
+        "status": "completed",
+    }
+    chain = MagicMock()
+    for method in ("select", "eq", "order", "limit"):
+        getattr(chain, method).return_value = chain
+    mock_db.table.return_value = chain
+
+    service.get_patient_detail = AsyncMock(return_value={"id": str(patient_id)})  # type: ignore[method-assign]
+    service._execute = AsyncMock(return_value=_response(data=[task]))  # type: ignore[method-assign]
+
+    result = await service.get_patient_a2a_timeline(
+        clinician_id,
+        patient_id,
+        session_id="session-1",
+        limit=25,
+    )
+
+    assert result["patient_id"] == str(patient_id)
+    assert result["session_id"] == "session-1"
+    assert result["tasks"][0]["id"] == task["id"]
+    chain.eq.assert_any_call("conversation_session_id", "session-1")
+
+
+@pytest.mark.asyncio
+async def test_get_patient_a2a_timeline_requires_assignment(service):
+    service.get_patient_detail = AsyncMock(  # type: ignore[method-assign]
+        side_effect=AuthorizationError("You are not assigned to this patient")
+    )
+
+    with pytest.raises(AuthorizationError, match="not assigned"):
+        await service.get_patient_a2a_timeline(uuid4(), uuid4())
+
+
+@pytest.mark.asyncio
 async def test_build_adherence_series_aggregates_recent_days(service):
     patient_id = uuid4()
     today = datetime.now(UTC).date()

@@ -23,6 +23,7 @@ from app.db.connection import get_db
 from app.models.auth import CurrentUser
 from app.models.clinician import ClinicianRead, ClinicianUpdate
 from app.models.dashboard import (
+    A2ATimelineResponse,
     AnnotationCreate,
     AnnotationSaveResponse,
     DashboardResponse,
@@ -215,6 +216,31 @@ async def get_patient_deep_dive(
 ) -> Any:
     """GET /api/v1/clinicians/me/patients/{patient_id}/deep-dive"""
     return await service.get_patient_deep_dive(user.id, patient_id)
+
+
+@router.get(
+    "/me/patients/{patient_id}/a2a-timeline",
+    response_model=A2ATimelineResponse,
+    summary="Patient A2A lifecycle timeline",
+    description=(
+        "Returns A2A delegation task timeline for a patient, "
+        "optionally filtered by chat session_id."
+    ),
+)
+async def get_patient_a2a_timeline(
+    patient_id: UUID,
+    session_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    """GET /api/v1/clinicians/me/patients/{patient_id}/a2a-timeline"""
+    return await service.get_patient_a2a_timeline(
+        user.id,
+        patient_id,
+        session_id=session_id,
+        limit=limit,
+    )
 
 
 @router.post(

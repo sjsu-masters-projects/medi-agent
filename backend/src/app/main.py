@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.clients.supabase import get_admin_client
 from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.routers import (
@@ -29,6 +30,7 @@ from app.routers import (
     patients,
     staff,
 )
+from app.services.a2a_retry_worker import A2ARetryWorker
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """
     logger.info("Starting MediAgent backend")
 
+    retry_worker: A2ARetryWorker | None = None
+    if settings.a2a_retry_worker_enabled:
+        retry_worker = A2ARetryWorker(
+            db=get_admin_client(),
+            poll_interval_seconds=settings.a2a_retry_poll_seconds,
+            batch_size=settings.a2a_retry_batch_size,
+        )
+        retry_worker.start()
+        logger.info("A2A retry worker enabled")
+
     yield  # app is running
+
+    if retry_worker:
+        await retry_worker.stop()
 
     logger.info("Shutting down MediAgent backend")
 
@@ -99,6 +114,7 @@ def create_app() -> FastAPI:
         notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
     )
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
+    application.add_api_websocket_route("/ws/chat/{patient_id}", chat.chat_websocket_endpoint)
 
     # ── Health Check ────────────────────────────────────
     @application.get("/health", tags=["Health"])

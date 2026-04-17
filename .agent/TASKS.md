@@ -305,25 +305,28 @@
 ## Phase 5: Chat & Voice — Triage + Symptom Agents (Weeks 13–16)
 
 ### 5.1 Chat Backend
-- [ ] WebSocket endpoint `/ws/chat/{patient_id}`
-- [ ] Message persistence to `chat_messages` table
-- [ ] Conversation history retrieval (sliding window + summary)
-- [ ] Patient context injection (active meds, recent symptoms, conditions)
-- [ ] Document context injection: "Ask about this document" → chat opens with document summary pre-loaded
+- [x] WebSocket endpoint `/ws/chat/{patient_id}`
+- [x] Message persistence to `chat_messages` table
+- [x] Conversation history retrieval (sliding window + summary)
+- [x] Patient context injection (active meds, recent symptoms, conditions)
+- [/] Document context injection: "Ask about this document" → chat opens with document summary pre-loaded
 
 ### 5.2 Triage Agent
-- [ ] Intent classification (symptom, medication_question, schedule, general, urgent)
-- [ ] Multi-turn conversation state management
-- [ ] Routing logic: intent → appropriate sub-agent/tool
-- [ ] Safety rails: detect urgent/emergency → escalation response + clinician notification
-- [ ] Bilingual response generation (auto-detect language, respond in same)
+- [x] Intent classification (symptom, medication_question, schedule, general, urgent)
+- [x] Multi-turn conversation state management
+- [/] Routing logic: intent → appropriate sub-agent/tool
+- [x] Safety rails: detect urgent/emergency → escalation response + clinician notification
+- [x] Bilingual response generation (auto-detect language, respond in same)
 
 ### 5.3 Symptom Analysis Agent
-- [ ] Follow-up question generation (severity, timing, related meds, recent changes)
-- [ ] Structured symptom report creation (symptom, severity 1-10, onset, related_med)
-- [ ] Save to `symptom_reports` table
-- [ ] Delegate to Pharmacovigilance Agent via A2A protocol (not direct function call)
-- [ ] Verify A2A task lifecycle: submitted → working → completed
+- [/] Follow-up question generation (severity, timing, related meds, recent changes)
+- [/] Structured symptom report creation (symptom, severity 1-10, onset, related_med)
+- [x] Save to `symptom_reports` table
+- [/] Delegate to Pharmacovigilance Agent via A2A protocol (not direct function call)
+- [x] Verify A2A task lifecycle: submitted → working → completed
+- [x] Enforce per-symptom-event A2A idempotency keys for task creation
+- [x] Add A2A retry/backoff policy with dead-letter terminal state
+- [x] Add background retry worker: process `retrying` tasks where `next_retry_at <= now`
 
 ### 5.4 Medical RAG
 - [ ] Populate pgvector with drug information (from DailyMed)
@@ -353,15 +356,22 @@
 ### 5.7 Records → Chat Bridge
 - [ ] "Ask about this document" button in Records modal
 - [ ] Navigate to `/chat?context=doc:{document_id}`
-- [ ] Chat page reads query param → loads document AI summary as system context
-- [ ] Triage Agent uses document data for medication_question intent responses
+- [/] Chat page reads query param → loads document AI summary as system context
+- [/] Triage Agent uses document data for medication_question intent responses
 
 ### 5.8 Testing
-- [ ] Golden-set for Triage Agent: 20+ test messages with expected intent + route
+- [x] Golden-set for Triage Agent: 20+ test messages with expected intent + route
 - [ ] Golden-set for Symptom Agent: 10+ symptom conversations with expected structured output
 - [ ] Voice pipeline end-to-end test
-- [ ] Load test for WebSocket connections
-- [ ] Document→Chat context injection test: open chat from document → verify context available
+- [x] Load test for WebSocket connections
+- [/] Document→Chat context injection test: open chat from document → verify context available
+- [x] Unit tests for A2A idempotency and retry/dead-letter transitions
+
+### 5.9 Production Hardening Follow-ups
+- [x] Remove same-session conversation state race under concurrent WebSocket writers (optimistic lock/version check or equivalent DB claim strategy)
+- [ ] Enforce runtime topology for retry worker ownership (single logical worker owner in production)
+- [ ] Add multi-worker safety for retry processing (DB claim/update locking or Redis distributed lock if multiple worker-enabled instances run)
+- [ ] Add observability for A2A retry worker: dashboards/alerts for `retrying` and `dead_letter` counts, backlog age, and worker cycle failures
 
 ---
 
