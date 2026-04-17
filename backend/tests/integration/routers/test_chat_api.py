@@ -1,5 +1,6 @@
 """Integration tests for chat history API and websocket endpoint."""
 
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ import pytest
 from fastapi import status
 from starlette.websockets import WebSocketDisconnect
 
+from app.agents.symptom.agent import SymptomOutput
 from app.agents.triage.agent import TriageOutput
 from app.core.exceptions import ValidationError
 from app.core.security import get_current_user
@@ -29,7 +31,13 @@ def mock_supabase_db():
     for method in ["select", "eq", "single", "insert", "order", "limit", "lt"]:
         getattr(table, method).return_value = table
 
+    table.execute.return_value = MagicMock(data=[])
+
     return db
+
+
+def _response_rows(*rows: list[dict[str, Any]] | list[Any]) -> list[MagicMock]:
+    return [MagicMock(data=row) for row in rows]
 
 
 @pytest.fixture
@@ -121,6 +129,32 @@ class TestGetChatHistory:
 
 
 class TestChatWebSocket:
+    @pytest.fixture(autouse=True)
+    def _patch_conversation_state_methods(self, monkeypatch):
+        async def _get_or_create_state(_self, patient_id, options):
+            return {
+                "patient_id": patient_id,
+                "session_id": str(options.get("session_id") or "default"),
+                "turn_count": 0,
+                "last_intent": "general",
+                "last_urgency": "routine",
+                "last_route": "triage",
+                "summary": "",
+                "document_context": None,
+            }
+
+        async def _update_state(_self, patient_id, updates):
+            return updates
+
+        monkeypatch.setattr(
+            "app.routers.chat.ChatService.get_or_create_conversation_state",
+            _get_or_create_state,
+        )
+        monkeypatch.setattr(
+            "app.routers.chat.ChatService.update_conversation_state",
+            _update_state,
+        )
+
     def test_rejects_websocket_when_patient_id_mismatch(self, client, override_db, monkeypatch):
         token_user = CurrentUser(id=uuid4(), email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
@@ -140,8 +174,10 @@ class TestChatWebSocket:
     ):
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+        captured_context: dict[str, Any] = {}
 
         async def _mock_triage_process(_self, _agent_input):
+            captured_context["patient_context"] = _agent_input.patient_context
             return TriageOutput(
                 agent_id="triage-test",
                 status="success",
@@ -174,11 +210,14 @@ class TestChatWebSocket:
             "created_at": "2026-04-16T12:00:01Z",
         }
 
-        mock_supabase_db.table().execute.side_effect = [
-            MagicMock(data=[]),
-            MagicMock(data=[user_row]),
-            MagicMock(data=[assistant_row]),
-        ]
+        mock_supabase_db.table().execute.side_effect = _response_rows(
+            [],
+            [{"id": str(uuid4()), "name": "Metformin", "dosage": "500mg"}],
+            [{"id": str(uuid4()), "name": "Type 2 diabetes", "status": "active"}],
+            [{"id": str(uuid4()), "symptom": "fatigue", "severity": 3}],
+            [user_row],
+            [assistant_row],
+        )
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             history_event = websocket.receive_json()
@@ -205,6 +244,7 @@ class TestChatWebSocket:
             assert assistant_complete is not None
             assert assistant_complete["type"] == "assistant_complete"
             assert assistant_complete["message"]["role"] == "assistant"
+            assert captured_context["patient_context"]["medications"]
 
     def test_websocket_returns_error_for_unsupported_event(
         self,
@@ -216,7 +256,7 @@ class TestChatWebSocket:
     ):
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-        mock_supabase_db.table().execute.side_effect = [MagicMock(data=[])]
+        mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             history_event = websocket.receive_json()
@@ -238,7 +278,7 @@ class TestChatWebSocket:
     ):
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-        mock_supabase_db.table().execute.side_effect = [MagicMock(data=[])]
+        mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             history_event = websocket.receive_json()
@@ -260,7 +300,7 @@ class TestChatWebSocket:
     ):
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-        mock_supabase_db.table().execute.side_effect = [MagicMock(data=[])]
+        mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             history_event = websocket.receive_json()
@@ -285,7 +325,7 @@ class TestChatWebSocket:
     ):
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-        mock_supabase_db.table().execute.side_effect = [MagicMock(data=[])]
+        mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
@@ -340,11 +380,16 @@ class TestChatWebSocket:
             "audio_url": None,
             "created_at": "2026-04-16T12:00:01Z",
         }
-        mock_supabase_db.table().execute.side_effect = [
-            MagicMock(data=[]),
-            MagicMock(data=[user_row]),
-            MagicMock(data=[assistant_row]),
-        ]
+        mock_supabase_db.table().execute.side_effect = _response_rows(
+            [],
+            [],
+            [],
+            [],
+            [user_row],
+            [assistant_row],
+            [{"clinician_id": str(uuid4())}],
+            [{"id": str(uuid4())}],
+        )
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             history_event = websocket.receive_json()
@@ -378,6 +423,7 @@ class TestChatWebSocket:
 
             escalation_event = websocket.receive_json()
             assert escalation_event["type"] == "escalation_recommended"
+            assert escalation_event["clinicians_notified"] == 1
 
     def test_websocket_returns_validation_error_when_service_raises(
         self,
@@ -389,7 +435,7 @@ class TestChatWebSocket:
     ):
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-        mock_supabase_db.table().execute.side_effect = [MagicMock(data=[])]
+        mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
         async def _raise_validation(_self, **_kwargs):
             raise ValidationError("Message rejected")
@@ -416,7 +462,7 @@ class TestChatWebSocket:
     ):
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-        mock_supabase_db.table().execute.side_effect = [MagicMock(data=[])]
+        mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
         async def _raise_runtime(_self, **_kwargs):
             raise RuntimeError("Database offline")
@@ -435,3 +481,171 @@ class TestChatWebSocket:
             with pytest.raises(WebSocketDisconnect) as disconnect_info:
                 websocket.receive_json()
             assert disconnect_info.value.code == status.WS_1011_INTERNAL_ERROR
+
+    def test_websocket_emits_document_context_loaded_event(
+        self,
+        client,
+        override_db,
+        mock_supabase_db,
+        patient_id,
+        monkeypatch,
+    ):
+        token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
+        monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
+        document_id = str(uuid4())
+        mock_supabase_db.table().execute.side_effect = _response_rows(
+            [],
+            [],
+            [],
+            [],
+            [
+                {
+                    "id": document_id,
+                    "file_name": "lab.pdf",
+                    "document_type": "lab",
+                    "ai_summary": "A1C elevated",
+                    "notes": None,
+                    "parse_status": "completed",
+                }
+            ],
+        )
+
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}?token=test-token&context=doc:{document_id}"
+        ) as websocket:
+            assert websocket.receive_json()["type"] == "chat_history"
+            context_event = websocket.receive_json()
+
+            assert context_event["type"] == "chat_context_loaded"
+            assert context_event["document"]["id"] == document_id
+
+    def test_websocket_emits_a2a_lifecycle_events_for_adr_flagged_symptom(
+        self,
+        client,
+        override_db,
+        mock_supabase_db,
+        patient_id,
+        monkeypatch,
+    ):
+        token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
+        monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
+        async def _mock_triage_process(_self, _agent_input):
+            return TriageOutput(
+                agent_id="triage-test",
+                status="success",
+                intent="symptom",
+                urgency="urgent",
+                response_text="Please share when this started.",
+                escalation_required=False,
+                route="symptom",
+            )
+
+        async def _mock_symptom_process(_self, _agent_input):
+            return SymptomOutput(
+                agent_id="symptom-test",
+                status="success",
+                symptom_report={
+                    "symptom": "dizziness",
+                    "severity": 8,
+                    "flagged_for_adr": True,
+                    "ai_assessment": "Potential medication-related symptom.",
+                },
+                response_text="I logged this urgently for your care team.",
+                follow_up_question="When did this start?",
+                flagged_for_adr=True,
+            )
+
+        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
+        monkeypatch.setattr("app.routers.chat.SymptomAgent.process", _mock_symptom_process)
+        symptom_event_id = str(uuid4())
+
+        async def _mock_a2a(_self, patient_id, payload):
+            assert payload["symptom_event_id"] == symptom_event_id
+            assert payload["idempotency_key"] == f"symptom_event:{symptom_event_id}"
+            return {
+                "task_id": str(uuid4()),
+                "status": "completed",
+                "events": [
+                    {"task_id": "t1", "target_agent": "pharmacovigilance", "status": "submitted"},
+                    {"task_id": "t1", "target_agent": "pharmacovigilance", "status": "working"},
+                    {"task_id": "t1", "target_agent": "pharmacovigilance", "status": "completed"},
+                ],
+            }
+
+        monkeypatch.setattr(
+            "app.routers.chat.A2ATaskService.run_symptom_to_pharmacovigilance",
+            _mock_a2a,
+        )
+
+        user_row = {
+            "id": str(uuid4()),
+            "patient_id": str(patient_id),
+            "content": "I feel dizzy after taking medication",
+            "role": "user",
+            "intent": None,
+            "language": "en",
+            "audio_url": None,
+            "created_at": "2026-04-16T12:00:00Z",
+        }
+        assistant_row = {
+            "id": str(uuid4()),
+            "patient_id": str(patient_id),
+            "content": "I logged this urgently for your care team.",
+            "role": "assistant",
+            "intent": "symptom",
+            "language": "en",
+            "audio_url": None,
+            "created_at": "2026-04-16T12:00:01Z",
+        }
+
+        mock_supabase_db.table().execute.side_effect = _response_rows(
+            [],
+            [],
+            [],
+            [],
+            [user_row],
+            [
+                {
+                    "id": symptom_event_id,
+                    "patient_id": str(patient_id),
+                    "symptom": "dizziness",
+                    "severity": 8,
+                    "flagged_for_adr": True,
+                }
+            ],
+            [assistant_row],
+            [{"clinician_id": str(uuid4())}],
+            [{"id": str(uuid4())}],
+        )
+
+        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+            assert websocket.receive_json()["type"] == "chat_history"
+
+            websocket.send_json(
+                {
+                    "type": "user_message",
+                    "content": "I feel dizzy after taking medication",
+                    "language": "en",
+                }
+            )
+
+            assert websocket.receive_json()["type"] == "user_message_saved"
+            assert websocket.receive_json()["type"] == "assistant_start"
+
+            while True:
+                event = websocket.receive_json()
+                if event["type"] == "assistant_complete":
+                    break
+                assert event["type"] == "assistant_chunk"
+
+            status_events: list[dict[str, Any]] = []
+            for _ in range(6):
+                event = websocket.receive_json()
+                if event["type"] == "a2a_task_status":
+                    status_events.append(event)
+                if len(status_events) == 3:
+                    break
+
+            assert [item["status"] for item in status_events] == ["submitted", "working", "completed"]

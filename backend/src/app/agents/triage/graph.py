@@ -112,9 +112,13 @@ class TriageState(TypedDict, total=False):
     language: str
     message: str
     history: list[dict[str, Any]]
+    patient_context: dict[str, Any]
+    document_context: dict[str, Any] | None
+    conversation_state: dict[str, Any]
 
     intent: str
     urgency: str
+    route: str
     classification_reason: str
     escalation_required: bool
 
@@ -127,6 +131,9 @@ class _MessageContext:
     message: str
     language: str
     history: list[dict[str, Any]]
+    patient_context: dict[str, Any]
+    document_context: dict[str, Any] | None
+    conversation_state: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -197,6 +204,9 @@ async def _classify_with_llm(
         message=context.message,
         language=context.language,
         history=context.history,
+        patient_context=context.patient_context,
+        document_context=context.document_context,
+        conversation_state=context.conversation_state,
     )
 
     try:
@@ -219,6 +229,9 @@ async def _generate_response_with_llm(router: ModelRouter, request: _ResponseReq
         urgency=request.urgency,
         language=request.context.language,
         history=request.context.history,
+        patient_context=request.context.patient_context,
+        document_context=request.context.document_context,
+        conversation_state=request.context.conversation_state,
     )
 
     try:
@@ -335,6 +348,9 @@ def _build_context(state: TriageState) -> _MessageContext:
         message=str(state.get("message", "")).strip(),
         language=str(state.get("language", "en")),
         history=state.get("history", []),
+        patient_context=state.get("patient_context", {}),
+        document_context=state.get("document_context"),
+        conversation_state=state.get("conversation_state", {}),
     )
 
 
@@ -342,10 +358,12 @@ def _merge_classification(
     state: TriageState,
     result: TriageClassificationResult,
 ) -> TriageState:
+    route = _route_for_intent(result.intent)
     return {
         **state,
         "intent": result.intent,
         "urgency": result.urgency,
+        "route": route,
         "classification_reason": result.reason,
         "escalation_required": result.urgency in {"urgent", "emergency"},
     }
@@ -372,6 +390,7 @@ def _empty_message_state(state: TriageState) -> TriageState:
         **state,
         "intent": "general",
         "urgency": "routine",
+        "route": "triage",
         "classification_reason": "Empty patient message",
         "escalation_required": False,
     }
@@ -396,3 +415,9 @@ def _apply_safety_override(
 
 def _matches_any(text: str, keywords: frozenset[str]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+def _route_for_intent(intent: str) -> str:
+    if intent == "symptom":
+        return "symptom"
+    return "triage"

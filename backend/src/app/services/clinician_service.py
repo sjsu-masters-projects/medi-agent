@@ -612,6 +612,40 @@ class ClinicianService:
 
         return {"status": "saved", "document_id": str(document_id)}
 
+    async def get_patient_a2a_timeline(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        *,
+        session_id: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Return A2A lifecycle timeline for an assigned patient.
+
+        Optional session_id scopes timeline to a chat session.
+        """
+        await self.get_patient_detail(clinician_id, patient_id)
+
+        safe_limit = max(1, min(limit, 200))
+        query = (
+            self.db.table("a2a_tasks")
+            .select("*")
+            .eq("patient_id", str(patient_id))
+            .order("created_at", desc=True)
+            .limit(safe_limit)
+        )
+        if session_id:
+            query = query.eq("conversation_session_id", session_id)
+
+        result = await self._execute(query)
+        tasks = [row for row in (result.data or []) if isinstance(row, dict)]
+
+        return {
+            "patient_id": str(patient_id),
+            "session_id": session_id,
+            "tasks": tasks,
+        }
+
     # ── Private helpers ──────────────────────────────────────────────────────
 
     async def _get_assigned_patient_ids(self, clinician_id: UUID) -> list[UUID]:

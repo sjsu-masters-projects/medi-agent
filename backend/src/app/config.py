@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "DEBUG"
 
+    # A2A retry worker
+    a2a_retry_worker_enabled: bool = True
+    a2a_retry_poll_seconds: int = 15
+    a2a_retry_batch_size: int = 25
+
     @property
     def allowed_origins(self) -> Any:
         origins = {self.patient_portal_url, self.clinician_portal_url}

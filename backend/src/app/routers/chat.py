@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, W
 from starlette import status
 from supabase import Client
 
+from app.agents.symptom import SymptomAgent, SymptomInput
 from app.agents.triage import TriageAgent, TriageInput
 from app.config import settings
 from app.core.exceptions import AgentError, AuthorizationError, ValidationError
@@ -20,6 +21,7 @@ from app.db.connection import get_db
 from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
+from app.services.a2a_task_service import A2ATaskService
 from app.services.chat_service import ChatService
 
 router = APIRouter()
@@ -41,6 +43,71 @@ def _chunk_text(text: str, chunk_size: int = 140) -> list[str]:
     return [
         normalized[index : index + chunk_size] for index in range(0, len(normalized), chunk_size)
     ]
+
+
+def _extract_document_context_id(websocket: WebSocket) -> str | None:
+    context = str(websocket.query_params.get("context", "")).strip()
+    if context.startswith("doc:"):
+        return context[4:].strip() or None
+
+    document_id = str(websocket.query_params.get("document_id", "")).strip()
+    return document_id or None
+
+
+def _build_conversation_state(
+    conversation_history: list[dict[str, Any]],
+    *,
+    prior_state: dict[str, Any],
+    last_intent: str,
+    last_urgency: str,
+    last_route: str,
+) -> dict[str, Any]:
+    recent_lines: list[str] = []
+    for item in conversation_history[-6:]:
+        role = str(item.get("role", "unknown"))
+        content = str(item.get("content", "")).strip()
+        if not content:
+            continue
+        recent_lines.append(f"{role}: {content[:120]}")
+
+    previous_summary = str(prior_state.get("summary") or "").strip()
+    recent_summary = " | ".join(recent_lines)
+    summary = recent_summary or previous_summary
+
+    return {
+        "turn_count": int(prior_state.get("turn_count") or 0) + 1,
+        "last_intent": last_intent,
+        "last_urgency": last_urgency,
+        "last_route": last_route,
+        "summary": summary[:2000],
+    }
+
+
+def _read_session_id(websocket: WebSocket) -> str:
+    session_id = str(websocket.query_params.get("session_id") or "default").strip()
+    return session_id or "default"
+
+
+def _conversation_state_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "turn_count": int(record.get("turn_count") or 0),
+        "last_intent": str(record.get("last_intent") or "general"),
+        "last_urgency": str(record.get("last_urgency") or "routine"),
+        "last_route": str(record.get("last_route") or "triage"),
+        "summary": str(record.get("summary") or ""),
+    }
+
+
+async def _emit_a2a_task_events(websocket: WebSocket, events: list[dict[str, Any]]) -> None:
+    for event in events:
+        await websocket.send_json(
+            {
+                "type": "a2a_task_status",
+                "task_id": event.get("task_id"),
+                "target_agent": event.get("target_agent"),
+                "status": event.get("status"),
+            }
+        )
 
 
 async def _ensure_chat_access(user: CurrentUser, patient_id: UUID, db: Client) -> None:
@@ -139,11 +206,57 @@ async def chat_websocket_endpoint(
 
     await websocket.accept()
     service = ChatService(db)
+    a2a_service = A2ATaskService(db)
     triage_agent = TriageAgent()
+    symptom_agent = SymptomAgent()
 
     history = await service.get_history(str(patient_id), limit=50)
     conversation_history = [_serialize_chat_message(item) for item in history]
     await websocket.send_json({"type": "chat_history", "messages": conversation_history})
+
+    context_document_id = _extract_document_context_id(websocket)
+    chat_context = await service.get_context(
+        patient_id=str(patient_id),
+        document_id=context_document_id,
+    )
+    patient_context = {
+        "medications": chat_context.get("medications", []),
+        "conditions": chat_context.get("conditions", []),
+        "recent_symptoms": chat_context.get("recent_symptoms", []),
+    }
+    document_context = chat_context.get("document")
+    sent_document_context_event = False
+    if document_context:
+        await websocket.send_json(
+            {
+                "type": "chat_context_loaded",
+                "context_type": "document",
+                "document": document_context,
+            }
+        )
+        sent_document_context_event = True
+
+    session_id = _read_session_id(websocket)
+    state_record = await service.get_or_create_conversation_state(
+        patient_id=str(patient_id),
+        options={
+            "session_id": session_id,
+            "language": Language.EN,
+            "document_context": document_context,
+            "turn_count": len(conversation_history),
+        },
+    )
+    if not document_context and isinstance(state_record.get("document_context"), dict):
+        document_context = state_record["document_context"]
+    if document_context and not sent_document_context_event:
+        await websocket.send_json(
+            {
+                "type": "chat_context_loaded",
+                "context_type": "document",
+                "document": document_context,
+            }
+        )
+    conversation_state = _conversation_state_from_record(state_record)
 
     try:
         while True:
@@ -215,9 +328,13 @@ async def chat_websocket_endpoint(
                     TriageInput(
                         user_id=current_user.id,
                         patient_id=patient_id,
+                        session_id=session_id,
                         message=incoming.content,
                         language=incoming.language,
                         history=conversation_history[-12:],
+                        patient_context=patient_context,
+                        document_context=document_context,
+                        conversation_state=conversation_state,
                     )
                 )
                 if triage_result.status != "success":
@@ -226,6 +343,7 @@ async def chat_websocket_endpoint(
                 assistant_intent = str(triage_result.intent or "general")
                 assistant_urgency = str(triage_result.urgency or "routine")
                 escalation_required = bool(triage_result.escalation_required)
+                route = str(triage_result.route or "triage")
             except Exception as exc:
                 logger.warning("Triage processing failed, using deterministic fallback: %s", exc)
                 assistant_content = (
@@ -235,6 +353,74 @@ async def chat_websocket_endpoint(
                 assistant_intent = "general"
                 assistant_urgency = "routine"
                 escalation_required = False
+                route = "triage"
+
+            if route == "symptom":
+                delegation_events: list[dict[str, Any]] = []
+                saved_report: dict[str, Any] | None = None
+                try:
+                    symptom_result = await symptom_agent(
+                        SymptomInput(
+                            user_id=current_user.id,
+                            patient_id=patient_id,
+                            session_id=session_id,
+                            language=incoming.language,
+                            message=incoming.content,
+                            history=conversation_history[-12:],
+                            patient_context=patient_context,
+                        )
+                    )
+                    if symptom_result.status == "success" and symptom_result.response_text:
+                        assistant_content = symptom_result.response_text
+
+                    if symptom_result.symptom_report:
+                        saved_report = await service.save_symptom_report(
+                            patient_id=str(patient_id),
+                            report=symptom_result.symptom_report,
+                        )
+                        if saved_report:
+                            recent_symptoms = patient_context.get("recent_symptoms", [])
+                            patient_context["recent_symptoms"] = [saved_report, *recent_symptoms][
+                                :6
+                            ]
+
+                    if symptom_result.flagged_for_adr:
+                        escalation_required = True
+                        if assistant_urgency == "routine":
+                            assistant_urgency = "urgent"
+
+                        symptom_event_id = str((saved_report or {}).get("id") or "").strip()
+                        if symptom_result.symptom_report and symptom_event_id:
+                            lifecycle = await a2a_service.run_symptom_to_pharmacovigilance(
+                                patient_id=str(patient_id),
+                                payload={
+                                    "session_id": session_id,
+                                    "symptom_event_id": symptom_event_id,
+                                    "idempotency_key": f"symptom_event:{symptom_event_id}",
+                                    "symptom_report": saved_report,
+                                    "flagged_for_adr": True,
+                                    "document_context": document_context,
+                                    "conversation_state": conversation_state,
+                                },
+                            )
+                            delegation_events = [
+                                event
+                                for event in (lifecycle.get("events") or [])
+                                if isinstance(event, dict)
+                            ]
+                        elif symptom_result.symptom_report:
+                            logger.warning(
+                                "Skipping A2A delegation: unable to persist symptom event id "
+                                "for patient %s",
+                                patient_id,
+                            )
+
+                    assistant_intent = "symptom"
+                except Exception as exc:
+                    logger.warning("Symptom routing failed, continuing triage response: %s", exc)
+                    delegation_events = []
+            else:
+                delegation_events = []
 
             await websocket.send_json(
                 {
@@ -263,6 +449,29 @@ async def chat_websocket_endpoint(
             )
             assistant_payload = _serialize_chat_message(assistant_message)
             conversation_history.append(assistant_payload)
+            conversation_state = _build_conversation_state(
+                conversation_history,
+                prior_state=conversation_state,
+                last_intent=assistant_intent,
+                last_urgency=assistant_urgency,
+                last_route=route,
+            )
+            await service.update_conversation_state(
+                patient_id=str(patient_id),
+                updates={
+                    "session_id": session_id,
+                    "language": incoming.language,
+                    "turn_count": conversation_state["turn_count"],
+                    "last_intent": conversation_state["last_intent"],
+                    "last_urgency": conversation_state["last_urgency"],
+                    "last_route": conversation_state["last_route"],
+                    "summary": conversation_state["summary"],
+                    "state_json": {
+                        "history_window": conversation_history[-12:],
+                    },
+                    "document_context": document_context,
+                },
+            )
 
             await websocket.send_json(
                 {
@@ -273,7 +482,17 @@ async def chat_websocket_endpoint(
                     "escalation_required": escalation_required,
                 }
             )
+            if delegation_events:
+                await _emit_a2a_task_events(websocket, delegation_events)
             if escalation_required:
+                clinicians_notified = await service.notify_assigned_clinicians(
+                    patient_id=str(patient_id),
+                    payload={
+                        "urgency": assistant_urgency,
+                        "intent": assistant_intent,
+                        "message_excerpt": incoming.content,
+                    },
+                )
                 await websocket.send_json(
                     {
                         "type": "escalation_recommended",
@@ -281,6 +500,7 @@ async def chat_websocket_endpoint(
                             "Please contact your care team today. If severe symptoms appear, seek "
                             "emergency care immediately."
                         ),
+                        "clinicians_notified": clinicians_notified,
                     }
                 )
     except WebSocketDisconnect:

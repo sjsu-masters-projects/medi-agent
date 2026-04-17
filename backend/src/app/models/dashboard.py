@@ -15,6 +15,14 @@ from pydantic import BaseModel, Field
 RiskLevel = Literal["low", "medium", "high", "unknown"]
 DashboardSortBy = Literal["risk", "adherence", "last_activity", "med_count"]
 DashboardSortOrder = Literal["asc", "desc"]
+A2ATaskStatus = Literal[
+    "submitted",
+    "working",
+    "retrying",
+    "completed",
+    "failed",
+    "dead_letter",
+]
 
 
 # ── Per-patient risk card ────────────────────────────────────────────────────
@@ -154,3 +162,36 @@ class ObligationSetRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=500)
     frequency: str = Field(..., examples=["daily", "3x per week", "with each meal"])
     notes: str | None = None
+
+
+class A2ATimelineTask(BaseModel):
+    """Single A2A task event shown in clinician timeline views."""
+
+    id: UUID
+    patient_id: UUID
+    symptom_event_id: UUID | None = None
+    idempotency_key: str
+    conversation_session_id: str
+    source_agent: str
+    target_agent: str
+    task_type: str
+    status: A2ATaskStatus
+    retry_attempt: int = Field(default=0, ge=0)
+    max_retries: int = Field(default=0, ge=0)
+    next_retry_at: str | None = None
+    dead_lettered_at: str | None = None
+    error_message: str | None = None
+    created_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    input_payload: dict[str, Any] = Field(default_factory=dict)
+    output_payload: dict[str, Any] | None = None
+    worker_payload: dict[str, Any] | None = None
+
+
+class A2ATimelineResponse(BaseModel):
+    """Clinician-facing A2A timeline for a patient/session."""
+
+    patient_id: UUID
+    session_id: str | None = None
+    tasks: list[A2ATimelineTask]

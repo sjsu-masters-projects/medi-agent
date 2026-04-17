@@ -21,6 +21,9 @@ class TriageInput(AgentInput):
     message: str = Field(..., min_length=1)
     language: Language = Language.EN
     history: list[dict[str, Any]] = Field(default_factory=list)
+    patient_context: dict[str, Any] = Field(default_factory=dict)
+    document_context: dict[str, Any] | None = None
+    conversation_state: dict[str, Any] = Field(default_factory=dict)
 
 
 class TriageOutput(AgentOutput):
@@ -30,6 +33,7 @@ class TriageOutput(AgentOutput):
     urgency: str | None = None
     response_text: str | None = None
     escalation_required: bool = False
+    route: str = "triage"
 
 
 class TriageAgent(BaseAgent[TriageInput, TriageOutput]):
@@ -53,6 +57,9 @@ class TriageAgent(BaseAgent[TriageInput, TriageOutput]):
                     "language": agent_input.language.value,
                     "message": agent_input.message,
                     "history": agent_input.history,
+                    "patient_context": agent_input.patient_context,
+                    "document_context": agent_input.document_context,
+                    "conversation_state": agent_input.conversation_state,
                 }
             )
 
@@ -67,6 +74,7 @@ class TriageAgent(BaseAgent[TriageInput, TriageOutput]):
                 urgency=str(final_state.get("urgency", "routine")),
                 response_text=response_text,
                 escalation_required=bool(final_state.get("escalation_required", False)),
+                route=str(final_state.get("route", "triage")),
                 result={
                     "patient_id": str(agent_input.patient_id),
                 },

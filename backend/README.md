@@ -85,6 +85,7 @@ Migrations are plain SQL files in `src/app/db/migrations/`:
 | `007_clinic_identity_foundation.sql` | Adds canonical `clinics` table and clinician clinic binding |
 | `008_soap_notes.sql` | Adds clinician SOAP note generation storage |
 | `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT `user_role` hook parsing and grants |
+| `010_chat_state_and_a2a_tasks.sql` | Adds persistent chat state and A2A task lifecycle storage |
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 
