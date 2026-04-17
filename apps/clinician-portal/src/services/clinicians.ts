@@ -5,6 +5,7 @@
  * Functions return typed data or throw on HTTP errors.
  */
 
+import { ChatRole } from "@/types";
 import type { Medication, SymptomReport } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
 
@@ -116,7 +117,12 @@ export interface PatientDeepDive {
     medications: Medication[];
     adherence_series: AdherenceDataPoint[];
     symptom_reports: SymptomReport[];
-    chat_messages: Array<{ role: string; content: string; created_at: string }>;
+    chat_messages: Array<{
+        role: typeof ChatRole[keyof typeof ChatRole];
+        content: string;
+        created_at: string;
+        audio_url?: string;
+    }>;
     conditions: Array<{ name?: string; icd10_code?: string; created_at?: string }>;
     allergies: Array<{ allergen: string; severity?: string }>;
     documents: Array<{
@@ -139,6 +145,21 @@ export interface PatientDeepDive {
         created_at?: string;
     }>;
     obligation_completion_rate?: number;
+}
+
+type ApiMedicationRecord = Partial<Medication> & Record<string, unknown>;
+type ApiSymptomReportRecord = Partial<SymptomReport> & Record<string, unknown>;
+interface ApiChatMessageRecord {
+    role: string;
+    content: string;
+    created_at: string;
+    audio_url?: string;
+}
+
+interface PatientDeepDiveResponse extends Omit<PatientDeepDive, "medications" | "symptom_reports" | "chat_messages"> {
+    medications: ApiMedicationRecord[];
+    symptom_reports: ApiSymptomReportRecord[];
+    chat_messages: ApiChatMessageRecord[];
 }
 
 export interface ObligationSetPayload {
@@ -217,6 +238,17 @@ function normalizeSymptomReport(raw: Record<string, unknown>): SymptomReport {
     };
 }
 
+function normalizeChatRole(role: string): typeof ChatRole[keyof typeof ChatRole] {
+    switch (role) {
+        case ChatRole.USER:
+            return ChatRole.USER;
+        case ChatRole.ASSISTANT:
+            return ChatRole.ASSISTANT;
+        default:
+            return ChatRole.SYSTEM;
+    }
+}
+
 // ── API functions ─────────────────────────────────────────────────────────────
 
 /** Fetch aggregated risk dashboard for all assigned patients. */
@@ -238,18 +270,20 @@ export async function fetchDashboard(params?: DashboardQueryParams): Promise<Das
 
 /** Fetch full patient deep dive data (all sub-resources). */
 export async function fetchPatientDeepDive(patientId: string): Promise<PatientDeepDive> {
-    const data = await apiFetch<PatientDeepDive>(
+    const data = await apiFetch<PatientDeepDiveResponse>(
         `/api/v1/clinicians/me/patients/${patientId}/deep-dive`,
     );
 
     return {
         ...data,
-        medications: (data.medications ?? []).map((m) =>
-            normalizeMedication(m as unknown as Record<string, unknown>),
+        medications: (data.medications ?? []).map((medication) => normalizeMedication(medication)),
+        symptom_reports: (data.symptom_reports ?? []).map((report) =>
+            normalizeSymptomReport(report),
         ),
-        symptom_reports: (data.symptom_reports ?? []).map((s) =>
-            normalizeSymptomReport(s as unknown as Record<string, unknown>),
-        ),
+        chat_messages: (data.chat_messages ?? []).map((message) => ({
+            ...message,
+            role: normalizeChatRole(message.role),
+        })),
     };
 }
 

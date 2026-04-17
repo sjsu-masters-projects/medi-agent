@@ -10,6 +10,7 @@ import { writeStoredSession } from "@/services/auth-session";
 import { readStoredClinicContext, type ClinicContext } from "@/services/clinic-context";
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
+import { ClinicianRole, PortalUserRole } from "@/types";
 
 interface SignupResponse {
     tokens: {
@@ -20,7 +21,7 @@ interface SignupResponse {
     user: {
         email: string;
         id: string;
-        role: "patient" | "clinician";
+        role: typeof PortalUserRole[keyof typeof PortalUserRole];
     };
 }
 
@@ -37,7 +38,7 @@ export default function ClinicianSignupPage() {
         lastName: "",
         npiNumber: "",
         password: "",
-        role: "provider",
+        role: ClinicianRole.PROVIDER,
         specialty: "",
     });
 
@@ -78,7 +79,7 @@ export default function ClinicianSignupPage() {
                 specialty: formData.specialty,
             });
 
-            if (response.user.role !== "clinician") {
+            if (response.user.role !== PortalUserRole.CLINICIAN) {
                 throw new Error("This signup produced a non-clinician account.");
             }
 
@@ -89,7 +90,7 @@ export default function ClinicianSignupPage() {
                 user: {
                     email: response.user.email,
                     id: response.user.id,
-                    role: "clinician",
+                    role: PortalUserRole.CLINICIAN,
                 },
             };
             writeStoredSession(session);
@@ -146,8 +147,8 @@ export default function ClinicianSignupPage() {
                                 onChange={(event) => updateField("role", event.target.value)}
                                 value={formData.role}
                             >
-                                <option value="provider">Provider</option>
-                                <option value="nurse">Nurse / MA</option>
+                                <option value={ClinicianRole.PROVIDER}>Provider</option>
+                                <option value={ClinicianRole.NURSE}>Nurse / MA</option>
                             </select>
                         </label>
                         <Input label="NPI number (optional)" onChange={(event) => updateField("npiNumber", event.target.value)} value={formData.npiNumber} />

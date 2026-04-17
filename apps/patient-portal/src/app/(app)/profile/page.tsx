@@ -10,7 +10,8 @@ import { clearStoredSession } from "@/services/auth-session";
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Skeleton } from "@/components/ui";
 import { logout } from "@/store/slices/auth-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import type { CareTeamMember, Language, Patient } from "@/types";
+import { Language } from "@/types";
+import type { CareTeamMember, Patient } from "@/types";
 
 interface PatientProfileResponse {
     id: string;
@@ -65,7 +66,7 @@ function mapCareTeamMember(member: CareTeamResponse): CareTeamMember {
 }
 
 function formatLanguage(language: Language) {
-    return language === "es" ? "Spanish" : "English";
+    return language === Language.ES ? "Spanish" : "English";
 }
 
 export default function ProfilePage() {

@@ -10,6 +10,7 @@ import { writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type PatientAuthSession } from "@/store/slices/auth-slice";
 import { setOnboardingProfile } from "@/store/slices/onboarding-slice";
 import type { AppDispatch } from "@/store/store";
+import { PortalUserRole } from "@/types";
 
 interface SignupResponse {
     tokens: {
@@ -20,7 +21,7 @@ interface SignupResponse {
     user: {
         email: string;
         id: string;
-        role: "patient" | "clinician";
+        role: typeof PortalUserRole[keyof typeof PortalUserRole];
     };
 }
 
@@ -55,7 +56,7 @@ export default function SignupPage() {
                 password: formData.password,
             });
 
-            if (response.user.role !== "patient") {
+            if (response.user.role !== PortalUserRole.PATIENT) {
                 throw new Error("Signup did not create a patient account.");
             }
 
@@ -63,7 +64,7 @@ export default function SignupPage() {
                 accessToken: response.tokens.access_token,
                 expiresAt: response.tokens.expires_at,
                 refreshToken: response.tokens.refresh_token,
-                user: { ...response.user, role: "patient" },
+                user: { ...response.user, role: PortalUserRole.PATIENT },
             };
             writeStoredSession(session);
             dispatch(

@@ -1,14 +1,16 @@
 "use client";
 
-interface ChatMessage {
-    role: string;
+import { ChatRole } from "@/types";
+
+interface TranscriptMessage {
+    role: typeof ChatRole[keyof typeof ChatRole];
     content: string;
     created_at: string;
     audio_url?: string;
 }
 
 interface ChatTranscriptProps {
-    messages: ChatMessage[];
+    messages: TranscriptMessage[];
 }
 
 function formatTime(isoString: string): string {
@@ -36,7 +38,7 @@ export function ChatTranscript({ messages }: ChatTranscriptProps) {
             className="flex max-h-[480px] flex-col gap-3 overflow-y-auto px-1 py-2"
         >
             {messages.map((msg, idx) => {
-                const isUser = msg.role === "user";
+                const isUser = msg.role === ChatRole.USER;
 
                 return (
                     <div

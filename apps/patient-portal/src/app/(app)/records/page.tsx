@@ -44,6 +44,26 @@ interface DocumentApiRecord {
     created_at: string;
 }
 
+const EXPLANATION_UNAVAILABLE_MESSAGE =
+    "Translation is currently unavailable. Please try again later.";
+const PARSING_IN_PROGRESS_MESSAGE =
+    "Processing this document. AI summary will appear when parsing completes.";
+const PARSING_FAILED_FALLBACK_MESSAGE = "This document could not be processed.";
+const PARSING_TIMEOUT_MESSAGE =
+    "Timed out while waiting for document processing to finish.";
+
+function addTrackedDocumentId(current: Set<string>, documentId: string) {
+    const next = new Set(current);
+    next.add(documentId);
+    return next;
+}
+
+function removeTrackedDocumentId(current: Set<string>, documentId: string) {
+    const next = new Set(current);
+    next.delete(documentId);
+    return next;
+}
+
 function getDocumentIcon(documentType: DocumentType) {
     switch (documentType) {
         case DocumentType.LAB_REPORT:
@@ -150,6 +170,28 @@ export default function RecordsPage() {
         }
     }, [accessToken]);
 
+    const openDocument = useCallback((document: PortalDocument) => {
+        setSelectedDocument(document);
+        setExplanationLang(Language.EN);
+        setExplanationLoading(false);
+
+        if (document.parseStatus === "failed") {
+            setExplanationText(document.parseError ?? PARSING_FAILED_FALLBACK_MESSAGE);
+            return;
+        }
+
+        if (
+            document.parseStatus === "pending"
+            || document.parseStatus === "processing"
+            || parsingDocIds.has(document.id)
+        ) {
+            setExplanationText(PARSING_IN_PROGRESS_MESSAGE);
+            return;
+        }
+
+        setExplanationText(document.aiSummary ?? null);
+    }, [parsingDocIds]);
+
     useEffect(() => {
         if (!accessToken) {
             return;
@@ -159,7 +201,7 @@ export default function RecordsPage() {
     }, [accessToken, loadDocuments]);
 
     async function pollForParsedStatus(docId: string) {
-        setParsingDocIds((current) => new Set(current).add(docId));
+        setParsingDocIds((current) => addTrackedDocumentId(current, docId));
 
         for (let attempt = 0; attempt < 10; attempt += 1) {
             await new Promise((resolve) => window.setTimeout(resolve, 3000));
@@ -178,11 +220,7 @@ export default function RecordsPage() {
                 );
 
                 if (nextDocument.parsed || nextDocument.parseStatus === "completed") {
-                    setParsingDocIds((current) => {
-                        const next = new Set(current);
-                        next.delete(docId);
-                        return next;
-                    });
+                    setParsingDocIds((current) => removeTrackedDocumentId(current, docId));
                     return;
                 }
 
@@ -192,11 +230,7 @@ export default function RecordsPage() {
                             ? `Failed to process document: ${nextDocument.parseError}`
                             : "Failed to process document.",
                     );
-                    setParsingDocIds((current) => {
-                        const next = new Set(current);
-                        next.delete(docId);
-                        return next;
-                    });
+                    setParsingDocIds((current) => removeTrackedDocumentId(current, docId));
                     return;
                 }
             } catch {
@@ -204,12 +238,8 @@ export default function RecordsPage() {
             }
         }
 
-        setParsingDocIds((current) => {
-            const next = new Set(current);
-            next.delete(docId);
-            return next;
-        });
-        setParseError("Timed out while waiting for document processing to finish.");
+        setParsingDocIds((current) => removeTrackedDocumentId(current, docId));
+        setParseError(PARSING_TIMEOUT_MESSAGE);
     }
 
     async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -266,7 +296,6 @@ export default function RecordsPage() {
             setExplanationText(selectedDocument.aiSummary ?? null);
             return;
         }
-
         if (!selectedDocument) {
             return;
         }
@@ -284,7 +313,7 @@ export default function RecordsPage() {
             );
             setExplanationText(result.summary);
         } catch {
-            setExplanationText("Translation is currently unavailable. Please try again later.");
+            setExplanationText(EXPLANATION_UNAVAILABLE_MESSAGE);
         } finally {
             setExplanationLoading(false);
         }
@@ -398,28 +427,7 @@ export default function RecordsPage() {
                         id={document.id}
                         key={document.id}
                         name={document.fileName}
-                        onClick={() => {
-                            setSelectedDocument(document);
-                            setExplanationLang(Language.EN);
-                            setExplanationLoading(false);
-                            if (document.parseStatus === "failed") {
-                                setExplanationText(
-                                    document.parseError ?? "This document could not be processed.",
-                                );
-                                return;
-                            }
-                            if (
-                                document.parseStatus === "pending"
-                                || document.parseStatus === "processing"
-                                || parsingDocIds.has(document.id)
-                            ) {
-                                setExplanationText(
-                                    "Processing this document. AI summary will appear when parsing completes.",
-                                );
-                                return;
-                            }
-                            setExplanationText(document.aiSummary ?? null);
-                        }}
+                        onClick={() => openDocument(document)}
                         provider={document.provider}
                         statusLabel={status?.label}
                         statusVariant={status?.variant}

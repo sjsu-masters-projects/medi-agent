@@ -5,24 +5,32 @@ import { useCallback, useEffect, useState } from "react";
 import { HiOutlineClipboardDocument, HiOutlineMagnifyingGlass } from "react-icons/hi2";
 import { useSelector } from "react-redux";
 import { Badge, Button, Card, Input } from "@/components/ui";
-import { api, isRetryableApiError } from "@/services/api";
+import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
+import { ClinicianRole } from "@/types";
 
 const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Integrations (MCP)"] as const;
 type SettingsTab = (typeof settingsTabs)[number];
 
 const ROLE_OPTIONS = [
-    { label: "Clinic Admin", value: "admin" },
-    { label: "Provider", value: "provider" },
-    { label: "Nurse / MA", value: "nurse" },
+    { label: "Clinic Admin", value: ClinicianRole.ADMIN },
+    { label: "Provider", value: ClinicianRole.PROVIDER },
+    { label: "Nurse / MA", value: ClinicianRole.NURSE },
 ] as const;
+
+const InviteLifecycleState = {
+    ACTIVE: "active",
+    CLAIMED: "claimed",
+    INACTIVE: "inactive",
+} as const;
+type InviteLifecycleState = (typeof InviteLifecycleState)[keyof typeof InviteLifecycleState];
 
 interface StaffMember {
     id: string;
     email: string;
     first_name: string;
     last_name: string;
-    role: string;
+    role: ClinicianRole;
     specialty: string;
     created_at: string | null;
 }
@@ -33,7 +41,7 @@ interface ClinicianProfile {
     first_name: string;
     last_name: string;
     specialty: string;
-    role: string;
+    role: ClinicianRole;
 }
 
 interface InviteCodePayload {
@@ -45,20 +53,14 @@ interface InviteCodeRecord {
     care_team_id: string;
     invite_code: string | null;
     status: string;
-    role: string | null;
+    role: ClinicianRole | null;
     created_at: string | null;
     invite_expires_at: string | null;
     invite_claimed_at: string | null;
     is_expired: boolean;
-    lifecycle_state: "active" | "claimed" | "inactive";
+    lifecycle_state: InviteLifecycleState;
     patient: {
         id: string | null;
-        first_name: string | null;
-        last_name: string | null;
-        email: string | null;
-    } | null;
-    created_by: {
-        id: string;
         first_name: string | null;
         last_name: string | null;
         email: string | null;
@@ -78,18 +80,18 @@ function getInitials(first: string, last: string) {
     return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
 }
 
-function getRoleTone(role: string) {
+function getRoleTone(role: ClinicianRole) {
     switch (role) {
-        case "admin":
+        case ClinicianRole.ADMIN:
             return "bg-slate-800 text-white";
-        case "nurse":
+        case ClinicianRole.NURSE:
             return "bg-purple-100 text-purple-700";
         default:
             return "bg-green-100 text-blue-700";
     }
 }
 
-function getRoleLabel(role: string) {
+function getRoleLabel(role: ClinicianRole) {
     return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
 }
 
@@ -120,30 +122,6 @@ function getPatientLabel(record: InviteCodeRecord) {
     return fullName || record.patient.email || "—";
 }
 
-function getCreatorLabel(record: InviteCodeRecord) {
-    if (!record.created_by) {
-        return "—";
-    }
-
-    const first = record.created_by.first_name?.trim() || "";
-    const last = record.created_by.last_name?.trim() || "";
-    const fullName = `${first} ${last}`.trim();
-    return fullName || record.created_by.email || "—";
-}
-
-async function withReadRetry<T>(read: () => Promise<T>): Promise<T> {
-    try {
-        return await read();
-    } catch (error) {
-        if (!isRetryableApiError(error)) {
-            throw error;
-        }
-
-        await new Promise((resolve) => window.setTimeout(resolve, 250));
-        return read();
-    }
-}
-
 export default function SettingsPage() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -151,7 +129,7 @@ export default function SettingsPage() {
     const [clinicCode, setClinicCode] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [inviteEmail, setInviteEmail] = useState("");
-    const [inviteRole, setInviteRole] = useState("provider");
+    const [inviteRole, setInviteRole] = useState<ClinicianRole>(ClinicianRole.PROVIDER);
     const [inviteStatus, setInviteStatus] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [profileSaving, setProfileSaving] = useState(false);
@@ -172,21 +150,15 @@ export default function SettingsPage() {
             return;
         }
         try {
-            const result = await withReadRetry(() =>
-                api.get<{ staff: StaffMember[]; clinic_name: string; clinic_code?: string | null }>(
-                    "/api/v1/staff/",
-                    { token },
-                ),
+            const result = await api.get<{ staff: StaffMember[]; clinic_name: string; clinic_code?: string | null }>(
+                "/api/v1/staff/",
+                { token },
             );
             setStaffList(result.staff);
             setClinicName(result.clinic_name);
             setClinicCode(result.clinic_code ?? null);
         } catch (e) {
-            setError(
-                isRetryableApiError(e)
-                    ? "Clinic settings are temporarily unavailable. Please retry."
-                    : (e as Error).message,
-            );
+            setError((e as Error).message);
         } finally {
             setLoading(false);
         }
@@ -202,17 +174,13 @@ export default function SettingsPage() {
         }
 
         try {
-            const result = await withReadRetry(() => api.get<ClinicianProfile>("/api/v1/clinicians/me", { token }));
+            const result = await api.get<ClinicianProfile>("/api/v1/clinicians/me", { token });
             setProfile(result);
             setFirstName(result.first_name);
             setLastName(result.last_name);
             setSpecialty(result.specialty || "");
         } catch (e) {
-            setError(
-                isRetryableApiError(e)
-                    ? "Profile details are temporarily unavailable. Please retry."
-                    : (e as Error).message,
-            );
+            setError((e as Error).message);
         }
     }, [token]);
 
@@ -229,21 +197,17 @@ export default function SettingsPage() {
         setError(null);
 
         try {
-            const result = await withReadRetry(() =>
-                api.get<InviteCodeListPayload>("/api/v1/clinicians/me/invite-codes", {
-                    token,
-                }),
-            );
+            const result = await api.get<InviteCodeListPayload>("/api/v1/clinicians/me/invite-codes", {
+                token,
+            });
             const records = result.invites || [];
             setInviteRecords(records);
-            const firstActiveCode = records.find((record) => record.lifecycle_state === "active")?.invite_code;
+            const firstActiveCode = records.find(
+                (record) => record.lifecycle_state === InviteLifecycleState.ACTIVE,
+            )?.invite_code;
             setInviteCode(firstActiveCode ?? "");
         } catch (e) {
-            setError(
-                isRetryableApiError(e)
-                    ? "Invite codes are temporarily unavailable. Please retry."
-                    : (e as Error).message,
-            );
+            setError((e as Error).message);
         } finally {
             setInviteCodeLoading(false);
         }
@@ -314,7 +278,7 @@ export default function SettingsPage() {
         }
     }
 
-    async function handleRoleChange(memberId: string, newRole: string) {
+    async function handleRoleChange(memberId: string, newRole: ClinicianRole) {
         if (!token) {
             return;
         }
@@ -337,7 +301,7 @@ export default function SettingsPage() {
 
         if (typeof window !== "undefined") {
             const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
-            if (newRole === "admin") {
+            if (newRole === ClinicianRole.ADMIN) {
                 const confirmed = window.confirm(
                     `Grant Clinic Admin access to ${fullName}? This allows full staff and clinic management.`,
                 );
@@ -346,7 +310,7 @@ export default function SettingsPage() {
                 }
             }
 
-            if (member.role === "admin" && newRole !== "admin") {
+            if (member.role === ClinicianRole.ADMIN && newRole !== ClinicianRole.ADMIN) {
                 const confirmed = window.confirm(
                     `Remove Clinic Admin access from ${fullName}? They will lose admin permissions.`,
                 );
@@ -440,11 +404,15 @@ export default function SettingsPage() {
         return `${member.first_name} ${member.last_name} ${member.email}`.toLowerCase().includes(q);
     });
 
-    const isClinicAdmin = profile?.role === "admin";
-    const activeInvites = inviteRecords.filter((record) => record.lifecycle_state === "active");
-    const claimedInvites = inviteRecords.filter((record) => record.lifecycle_state === "claimed");
-    const inactiveInvites = inviteRecords.filter((record) => record.lifecycle_state === "inactive");
-    const latestActiveInvite = activeInvites[0] ?? null;
+    const activeInvites = inviteRecords.filter(
+        (record) => record.lifecycle_state === InviteLifecycleState.ACTIVE,
+    );
+    const claimedInvites = inviteRecords.filter(
+        (record) => record.lifecycle_state === InviteLifecycleState.CLAIMED,
+    );
+    const inactiveInvites = inviteRecords.filter(
+        (record) => record.lifecycle_state === InviteLifecycleState.INACTIVE,
+    );
 
     return (
         <div className="mx-auto max-w-7xl space-y-8">
@@ -523,7 +491,9 @@ export default function SettingsPage() {
                             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                                 <div>
                                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Role</p>
-                                    <p className="mt-1 font-semibold text-slate-900">{getRoleLabel(profile?.role || "provider")}</p>
+                                    <p className="mt-1 font-semibold text-slate-900">
+                                        {getRoleLabel(profile?.role || ClinicianRole.PROVIDER)}
+                                    </p>
                                 </div>
                                 <div className="mt-3">
                                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Email</p>
@@ -579,7 +549,7 @@ export default function SettingsPage() {
                                 <span className="mb-1 block text-sm font-bold uppercase tracking-[0.12em] text-slate-700">Role Access</span>
                                 <select
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                    onChange={(event) => setInviteRole(event.target.value)}
+                                    onChange={(event) => setInviteRole(event.target.value as ClinicianRole)}
                                     value={inviteRole}
                                 >
                                     {ROLE_OPTIONS.map((option) => (
@@ -702,9 +672,7 @@ export default function SettingsPage() {
                             Generate single-use codes for patient onboarding. New codes remain active until claimed, revoked, or expired.
                         </p>
                         <p className="mt-1 max-w-xl text-xs text-slate-400">
-                            {isClinicAdmin
-                                ? "Invite history shows clinic-wide codes and who issued each one."
-                                : "Invite history shows codes created by your account."}
+                            Invite history shows codes created by your account.
                         </p>
                         <div className="mt-6 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-5">
                             <div>
@@ -712,11 +680,6 @@ export default function SettingsPage() {
                                 <span className="mt-1 block text-3xl font-bold tracking-[0.14em]">
                                     {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
                                 </span>
-                                {isClinicAdmin && latestActiveInvite?.created_by ? (
-                                    <p className="mt-2 text-xs text-slate-400">
-                                        Issued by {getCreatorLabel(latestActiveInvite)}
-                                    </p>
-                                ) : null}
                             </div>
                             <button
                                 className="rounded-md bg-slate-800 px-3 py-2 text-slate-300"
@@ -753,11 +716,6 @@ export default function SettingsPage() {
                                             <div>
                                                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Invite Code</p>
                                                 <p className="font-mono text-lg font-semibold text-slate-900">{record.invite_code || "—"}</p>
-                                                {isClinicAdmin && record.created_by ? (
-                                                    <p className="mt-1 text-xs text-slate-500">
-                                                        Generated by {getCreatorLabel(record)}
-                                                    </p>
-                                                ) : null}
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Button
@@ -768,16 +726,14 @@ export default function SettingsPage() {
                                                 >
                                                     Copy
                                                 </Button>
-                                                {!record.created_by || profile?.id === record.created_by.id ? (
-                                                    <Button
-                                                        className="px-3 py-1.5 text-xs"
-                                                        onClick={() => void handleRevokeInviteCode(record.care_team_id)}
-                                                        size="sm"
-                                                        variant="secondary"
-                                                    >
-                                                        {revokingInviteId === record.care_team_id ? "Revoking…" : "Revoke"}
-                                                    </Button>
-                                                ) : null}
+                                                <Button
+                                                    className="px-3 py-1.5 text-xs"
+                                                    onClick={() => void handleRevokeInviteCode(record.care_team_id)}
+                                                    size="sm"
+                                                    variant="secondary"
+                                                >
+                                                    {revokingInviteId === record.care_team_id ? "Revoking…" : "Revoke"}
+                                                </Button>
                                             </div>
                                         </div>
                                         <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
@@ -803,7 +759,7 @@ export default function SettingsPage() {
                             <div className="space-y-3">
                                 {claimedInvites.map((record) => (
                                     <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
-                                        <div className={`grid gap-2 text-sm text-slate-700 ${isClinicAdmin ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
                                             <p>
                                                 <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
                                             </p>
@@ -813,11 +769,6 @@ export default function SettingsPage() {
                                             <p>
                                                 <span className="font-semibold text-slate-900">Claimed:</span> {formatDateTime(record.invite_claimed_at)}
                                             </p>
-                                            {isClinicAdmin && record.created_by ? (
-                                                <p>
-                                                    <span className="font-semibold text-slate-900">Generated By:</span> {getCreatorLabel(record)}
-                                                </p>
-                                            ) : null}
                                         </div>
                                     </div>
                                 ))}
@@ -838,7 +789,7 @@ export default function SettingsPage() {
                             <div className="space-y-3">
                                 {inactiveInvites.map((record) => (
                                     <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
-                                        <div className={`grid gap-2 text-sm text-slate-700 ${isClinicAdmin ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
                                             <p>
                                                 <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
                                             </p>
@@ -848,11 +799,6 @@ export default function SettingsPage() {
                                             <p>
                                                 <span className="font-semibold text-slate-900">Expired:</span> {record.is_expired ? "Yes" : "No"}
                                             </p>
-                                            {isClinicAdmin && record.created_by ? (
-                                                <p>
-                                                    <span className="font-semibold text-slate-900">Generated By:</span> {getCreatorLabel(record)}
-                                                </p>
-                                            ) : null}
                                         </div>
                                     </div>
                                 ))}
