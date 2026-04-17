@@ -23,7 +23,7 @@ from supabase import Client
 
 from app.clients.supabase import create_anon_client
 from app.core.exceptions import AuthenticationError, ValidationError
-from app.db.supabase_execute import execute_sync
+from app.db.repositories import ClinicianRepository, ClinicRepository
 from app.models.enums import ClinicianRole
 from app.services.clinic_service import ClinicService
 
@@ -41,6 +41,8 @@ class AuthService:
     def __init__(self, db: Client, auth_client: Client | None = None) -> None:
         self.db = db
         self.auth_client = auth_client or create_anon_client()
+        self.clinic_repo = ClinicRepository(self)
+        self.clinician_repo = ClinicianRepository(self)
 
     # ── Signup ──────────────────────────────────────────────
 
@@ -312,32 +314,7 @@ class AuthService:
 
     def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
         """Resolve clinic identity by code and enforce active status."""
-        normalized_code = clinic_code.strip().upper()
-        response = execute_sync(
-            self,
-            lambda db: db.table("clinics")
-            .select("id, code, display_name, status")
-            .eq("code", normalized_code),
-            operation="clinic lookup",
-            retry_transient=True,
-        )
-
-        clinics = [row for row in (response.data or []) if isinstance(row, dict)]
-        if not clinics:
-            fallback_response = execute_sync(
-                self,
-                lambda db: db.table("clinics")
-                .select("id, code, display_name, status")
-                .ilike("code", f"%{normalized_code}%"),
-                operation="clinic lookup",
-                retry_transient=True,
-            )
-            clinics = [
-                row
-                for row in (fallback_response.data or [])
-                if isinstance(row, dict)
-                and str(row.get("code", "")).strip().upper() == normalized_code
-            ]
+        clinics = self.clinic_repo.find_matching_by_code(clinic_code)
         if not clinics:
             raise ValidationError("Clinic code is invalid")
 
@@ -357,19 +334,9 @@ class AuthService:
             raise AuthenticationError("Clinic code is required for clinician login")
 
         clinic = self._resolve_active_clinic(clinic_code)
-        response = execute_sync(
-            self,
-            lambda db: db.table("clinicians")
-            .select("clinic_id, clinic_name")
-            .eq("id", clinician_id),
-            operation="clinician clinic binding lookup",
-            retry_transient=True,
-        )
-        clinicians = [row for row in (response.data or []) if isinstance(row, dict)]
-        if not clinicians:
+        profile = self.clinician_repo.get_context(clinician_id)
+        if not profile:
             raise AuthenticationError("Clinician account is not linked to a clinic")
-
-        profile = cast("dict[str, Any]", clinicians[0])
         clinic_id = profile.get("clinic_id")
         clinic_name = profile.get("clinic_name")
 

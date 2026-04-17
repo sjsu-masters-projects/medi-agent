@@ -29,6 +29,7 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 
@@ -40,6 +41,9 @@ class ClinicianService:
 
     def __init__(self, db: Client) -> None:
         self.db = db
+        self.clinic_repo = ClinicRepository(self)
+        self.clinician_repo = ClinicianRepository(self)
+        self.care_team_repo = CareTeamRepository(self)
 
     # ── Profile ─────────────────────────────────────
 
@@ -73,29 +77,7 @@ class ClinicianService:
 
     async def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
         """Resolve clinic identity by code and enforce active status."""
-        normalized_code = clinic_code.strip().upper()
-        clinic_result = await self._execute(
-            lambda db: db.table("clinics")
-            .select("id, code, display_name, status")
-            .eq("code", normalized_code),
-            operation="clinic lookup",
-            retry_transient=True,
-        )
-
-        clinics = cast("list[dict[str, Any]]", clinic_result.data or [])
-        if not clinics:
-            fallback_result = await self._execute(
-                lambda db: db.table("clinics")
-                .select("id, code, display_name, status")
-                .ilike("code", f"%{normalized_code}%"),
-                operation="clinic lookup",
-                retry_transient=True,
-            )
-            clinics = [
-                row
-                for row in cast("list[dict[str, Any]]", fallback_result.data or [])
-                if str(row.get("code", "")).strip().upper() == normalized_code
-            ]
+        clinics = await self.clinic_repo.find_matching_by_code_async(clinic_code)
         if not clinics:
             raise ValidationError("Clinic code is invalid")
 
@@ -130,14 +112,11 @@ class ClinicianService:
         Security: checks the care_teams junction table to ensure
         the clinician has an active relationship with this patient.
         """
-        assignment = await self._execute(
-            self.db.table("care_teams")
-            .select("id")
-            .eq("clinician_id", str(clinician_id))
-            .eq("patient_id", str(patient_id))
-            .eq("status", "active")
+        assignment_rows = await self.care_team_repo.find_active_assignment(
+            str(clinician_id),
+            str(patient_id),
         )
-        if not assignment.data:
+        if not assignment_rows:
             raise AuthorizationError("You are not assigned to this patient")
 
         result = await self._execute(
@@ -186,27 +165,14 @@ class ClinicianService:
             - inactive: revoked/expired/otherwise not actionable
         """
         clinician_ids = await self._get_invite_scope_clinician_ids(clinician_id)
-        result = await self._execute(
-            lambda db: db.table("care_teams")
-            .select(
-                "id, invite_code, status, role, patient_id, "
-                "created_at, invite_expires_at, invite_claimed_at, "
-                "patients(id, first_name, last_name, email), "
-                "clinicians(id, first_name, last_name, email)"
-            )
-            .in_("clinician_id", clinician_ids)
-            .order("created_at", desc=True)
-            .limit(100),
-            operation="invite code list lookup",
-            retry_transient=True,
-        )
+        rows = await self.care_team_repo.list_invites_for_clinician_ids(clinician_ids)
 
         now = datetime.now(UTC)
         expired_pending_ids: list[str] = []
         invites: list[dict[str, Any]] = []
         counts = {"active": 0, "claimed": 0, "inactive": 0}
 
-        for row in cast(list[dict[str, Any]], result.data or []):
+        for row in rows:
             invite_id = str(row.get("id", ""))
             status = str(row.get("status") or "")
             patient_id = row.get("patient_id")
@@ -260,23 +226,13 @@ class ClinicianService:
             )
 
         for invite_id in expired_pending_ids:
-            await self._execute(
-                self.db.table("care_teams").update({"status": "inactive"}).eq("id", invite_id)
-            )
+            await self.care_team_repo.deactivate_invite(invite_id)
 
         return {"invites": invites, "counts": counts}
 
     async def _get_invite_scope_clinician_ids(self, clinician_id: UUID) -> list[str]:
         """Admins can see clinic-wide invite codes; others see only their own."""
-        context_result = await self._execute(
-            lambda db: db.table("clinicians")
-            .select("id, clinic_id, clinic_name, role")
-            .eq("id", str(clinician_id))
-            .single(),
-            operation="invite scope lookup",
-            retry_transient=True,
-        )
-        context = cast("dict[str, Any]", context_result.data or {})
+        context = await self.clinician_repo.get_context_async(str(clinician_id), include_role=True)
         if not context:
             raise NotFoundError("Clinician", str(clinician_id))
 
@@ -288,60 +244,24 @@ class ClinicianService:
         clinic_name = str(context.get("clinic_name") or "")
 
         if clinic_id:
-            by_id_result = await self._execute(
-                lambda db: db.table("clinicians")
-                .select("id")
-                .eq("clinic_id", str(clinic_id))
-                .limit(200),
-                operation="clinic member invite scope lookup",
-                retry_transient=True,
-            )
-            clinician_ids.update(
-                str(row["id"])
-                for row in cast(list[dict[str, Any]], by_id_result.data or [])
-                if row.get("id")
-            )
+            clinician_ids.update(await self.clinician_repo.list_ids_by_clinic_id_async(str(clinic_id)))
 
         if clinic_name:
-            by_name_result = await self._execute(
-                lambda db: db.table("clinicians")
-                .select("id")
-                .eq("clinic_name", clinic_name)
-                .limit(200),
-                operation="clinic member invite scope lookup",
-                retry_transient=True,
-            )
-            clinician_ids.update(
-                str(row["id"])
-                for row in cast(list[dict[str, Any]], by_name_result.data or [])
-                if row.get("id")
-            )
+            clinician_ids.update(await self.clinician_repo.list_ids_by_clinic_name_async(clinic_name))
 
         return sorted(clinician_ids)
 
     async def revoke_invite_code(self, clinician_id: UUID, care_team_id: UUID) -> dict[str, Any]:
         """Revoke a pending invite code created by this clinician."""
-        invite_result = await self._execute(
-            self.db.table("care_teams")
-            .select("id, clinician_id, status, patient_id, invite_code")
-            .eq("id", str(care_team_id))
-            .eq("clinician_id", str(clinician_id))
-            .single()
-        )
-        if not invite_result.data:
+        invite = await self.care_team_repo.find_invite_for_creator(str(care_team_id), str(clinician_id))
+        if not invite:
             raise NotFoundError("Invite code", str(care_team_id))
 
-        invite = cast(dict[str, Any], invite_result.data)
         if invite.get("status") != "pending" or invite.get("patient_id"):
             raise ValidationError("Only pending unclaimed invite codes can be revoked")
 
-        updated_result = await self._execute(
-            self.db.table("care_teams")
-            .update({"status": "inactive"})
-            .eq("id", str(care_team_id))
-            .eq("clinician_id", str(clinician_id))
-        )
-        if not updated_result.data:
+        updated_rows = await self.care_team_repo.deactivate_invite(str(care_team_id), str(clinician_id))
+        if not updated_rows:
             raise ValidationError("Failed to revoke invite code")
 
         return {
@@ -356,16 +276,8 @@ class ClinicianService:
         This is a read-only lookup used by settings screens so page load does
         not create additional pending invite rows.
         """
-        result = await self._execute(
-            self.db.table("care_teams")
-            .select("id, invite_code, created_at, invite_expires_at")
-            .eq("clinician_id", str(clinician_id))
-            .eq("status", "pending")
-            .order("created_at", desc=True)
-        )
-
         now = datetime.now(UTC)
-        rows = cast(list[dict[str, Any]], result.data or [])
+        rows = await self.care_team_repo.list_pending_invites_for_clinician(str(clinician_id))
         for row in rows:
             invite_code = row.get("invite_code")
             expires_at = row.get("invite_expires_at")
@@ -489,14 +401,11 @@ class ClinicianService:
 
         Security: verifies care_team assignment before fetching.
         """
-        assignment = await self._execute(
-            self.db.table("care_teams")
-            .select("id")
-            .eq("clinician_id", str(clinician_id))
-            .eq("patient_id", str(patient_id))
-            .eq("status", "active")
+        assignment_rows = await self.care_team_repo.find_active_assignment(
+            str(clinician_id),
+            str(patient_id),
         )
-        if not assignment.data:
+        if not assignment_rows:
             raise AuthorizationError("You are not assigned to this patient")
 
         pid = str(patient_id)
@@ -634,17 +543,14 @@ class ClinicianService:
         self, clinician_id: UUID, patient_id: UUID, obligation_data: dict[str, Any]
     ) -> Any:
         """Create an obligation for a patient on behalf of a clinician."""
-        assignment = await self._execute(
-            self.db.table("care_teams")
-            .select("id")
-            .eq("clinician_id", str(clinician_id))
-            .eq("patient_id", str(patient_id))
-            .eq("status", "active")
+        assignment_rows = await self.care_team_repo.find_active_assignment(
+            str(clinician_id),
+            str(patient_id),
         )
-        if not assignment.data:
+        if not assignment_rows:
             raise AuthorizationError("You are not assigned to this patient")
 
-        care_team_id = cast(list[dict[str, Any]], assignment.data)[0]["id"]
+        care_team_id = assignment_rows[0]["id"]
 
         row = {
             "patient_id": str(patient_id),
@@ -669,14 +575,11 @@ class ClinicianService:
 
         Security: verifies both care_team assignment AND document belongs to patient.
         """
-        assignment = await self._execute(
-            self.db.table("care_teams")
-            .select("id")
-            .eq("clinician_id", str(clinician_id))
-            .eq("patient_id", str(patient_id))
-            .eq("status", "active")
+        assignment_rows = await self.care_team_repo.find_active_assignment(
+            str(clinician_id),
+            str(patient_id),
         )
-        if not assignment.data:
+        if not assignment_rows:
             raise AuthorizationError("You are not assigned to this patient")
 
         doc_check = await self._execute(
@@ -705,13 +608,7 @@ class ClinicianService:
 
     async def _get_assigned_patient_ids(self, clinician_id: UUID) -> list[UUID]:
         """Return list of patient UUIDs assigned to this clinician."""
-        result = await self._execute(
-            self.db.table("care_teams")
-            .select("patient_id")
-            .eq("clinician_id", str(clinician_id))
-            .eq("status", "active")
-        )
-        rows = cast(list[dict[str, Any]], result.data or [])
+        rows = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
         return [UUID(row["patient_id"]) for row in rows if row.get("patient_id")]
 
     async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:

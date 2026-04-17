@@ -7,6 +7,7 @@ from typing import Any, cast
 from supabase import Client
 
 from app.core.exceptions import ValidationError
+from app.db.repositories import ClinicRepository
 from app.db.supabase_execute import execute_async
 
 
@@ -15,11 +16,11 @@ class ClinicService:
 
     def __init__(self, db: Client) -> None:
         self.db = db
+        self.clinic_repo = ClinicRepository(self)
 
     async def resolve_clinic_code(self, clinic_code: str) -> dict[str, Any]:
         """Resolve a clinic code for clinician auth gating."""
-        normalized_code = clinic_code.strip().upper()
-        rows = await self._find_matching_clinics(normalized_code)
+        rows = await self.clinic_repo.find_matching_by_code_async(clinic_code)
         if not rows:
             raise ValidationError("Clinic code is invalid")
 
@@ -34,35 +35,6 @@ class ClinicService:
             "status": clinic["status"],
         }
 
-    async def _find_matching_clinics(self, normalized_code: str) -> list[dict[str, Any]]:
-        """Find clinics by exact code, with a fallback for whitespace-corrupted rows."""
-        exact_result = await execute_async(
-            self,
-            lambda db: db.table("clinics")
-            .select("id, code, display_name, status")
-            .eq("code", normalized_code),
-            operation="clinic lookup",
-            retry_transient=True,
-        )
-        exact_rows = [row for row in cast("list[dict[str, Any]]", exact_result.data or [])]
-        if exact_rows:
-            return exact_rows
-
-        fallback_result = await execute_async(
-            self,
-            lambda db: db.table("clinics")
-            .select("id, code, display_name, status")
-            .ilike("code", f"%{normalized_code}%"),
-            operation="clinic lookup",
-            retry_transient=True,
-        )
-        fallback_rows = cast("list[dict[str, Any]]", fallback_result.data or [])
-        return [
-            row
-            for row in fallback_rows
-            if str(row.get("code", "")).strip().upper() == normalized_code
-        ]
-
     async def provision_clinic(
         self, clinic_name: str, type2_npi: str | None = None
     ) -> dict[str, Any]:
@@ -73,10 +45,7 @@ class ClinicService:
 
         canonical_name = clean_name.lower()
 
-        existing = await self._execute(
-            self.db.table("clinics").select("id").eq("canonical_name", canonical_name)
-        )
-        existing_rows = cast("list[dict[str, Any]]", existing.data or [])
+        existing_rows = await self.clinic_repo.find_existing_by_canonical_name(canonical_name)
         if existing_rows:
             raise ValidationError("Clinic already exists")
 
@@ -88,7 +57,7 @@ class ClinicService:
         }
 
         try:
-            created = await self._execute(self.db.table("clinics").insert(payload))
+            created = await self.clinic_repo.insert_clinic(payload)
         except Exception as exc:  # pragma: no cover - defensive branch
             detail = str(exc).lower()
             if "duplicate" in detail or "unique" in detail:
@@ -102,12 +71,7 @@ class ClinicService:
         rows = cast("list[dict[str, Any]]", created.data or [])
         if not rows:
             # Some Supabase client versions return no insert payload by default.
-            fetched = await self._execute(
-                self.db.table("clinics")
-                .select("id, code, display_name, canonical_name, type2_npi, status, created_at")
-                .eq("canonical_name", canonical_name)
-            )
-            rows = cast("list[dict[str, Any]]", fetched.data or [])
+            rows = await self.clinic_repo.find_provisioned_by_canonical_name(canonical_name)
 
         if not rows:
             raise ValidationError("Clinic provisioning failed")

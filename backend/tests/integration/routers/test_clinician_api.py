@@ -237,12 +237,6 @@ class TestGetPatientDetail:
         """Successfully retrieve patient detail."""
         patient_id = uuid4()
 
-        # Mock care team assignment check
-        mock_supabase_db.table().select().eq().eq().eq().execute.return_value = MagicMock(
-            data=[{"id": str(uuid4())}]
-        )
-
-        # Mock patient profile fetch
         patient_data = {
             "id": str(patient_id),
             "email": "patient@test.com",
@@ -256,9 +250,10 @@ class TestGetPatientDetail:
             "created_at": "2025-01-01T00:00:00Z",
             "updated_at": None,
         }
-        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
-            data=patient_data
-        )
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(data=[{"id": str(uuid4())}]),
+            MagicMock(data=patient_data),
+        ]
 
         response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}")
 
