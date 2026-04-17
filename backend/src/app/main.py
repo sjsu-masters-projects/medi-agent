@@ -99,6 +99,7 @@ def create_app() -> FastAPI:
         notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
     )
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
+    application.add_api_websocket_route("/ws/chat/{patient_id}", chat.chat_websocket_endpoint)
 
     # ── Health Check ────────────────────────────────────
     @application.get("/health", tags=["Health"])

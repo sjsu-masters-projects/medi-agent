@@ -145,24 +145,14 @@ def _decode_supabase_token(token: str) -> dict[str, Any]:
     raise JWTError("Unsupported token signing algorithm")
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
-) -> CurrentUser:
-    """Verify the JWT and return the authenticated user's identity.
-
-    Raises AuthenticationError if the token is missing, expired, or invalid.
-    """
-    if credentials is None:
-        raise AuthenticationError("Missing authorization header")
-
-    token = credentials.credentials
+def decode_access_token(token: str) -> CurrentUser:
+    """Decode and validate an access token into the internal user model."""
     try:
         payload = _decode_supabase_token(token)
     except JWTError as e:
         logger.warning("JWT verification failed: %s", e)
         raise AuthenticationError("Invalid or expired token") from None
 
-    # Extract claims — Supabase puts user ID in "sub"
     user_id = payload.get("sub")
     email = payload.get("email", "")
     role = payload.get("user_role", "unknown")
@@ -177,6 +167,19 @@ async def get_current_user(
         role=role,
         aal=str(aal),
     )
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> CurrentUser:
+    """Verify the JWT and return the authenticated user's identity.
+
+    Raises AuthenticationError if the token is missing, expired, or invalid.
+    """
+    if credentials is None:
+        raise AuthenticationError("Missing authorization header")
+
+    return decode_access_token(credentials.credentials)
 
 
 async def _has_verified_mfa_factor(access_token: str) -> bool:
