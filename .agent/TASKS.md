@@ -344,18 +344,18 @@
 - [ ] Multilingual TTS beyond EN/ES (Hindi, Chinese, Vietnamese, Tagalog — top US non-English medical populations)
 
 ### 5.6 Patient Portal — Chat UI
-- [ ] Chat page layout (WhatsApp-style)
-- [ ] Message bubble components (user, assistant)
-- [ ] Text input with send button
-- [ ] Voice input button (hold-to-record or tap-to-toggle)
-- [ ] Voice mode toggle (switch to full voice-to-voice)
-- [ ] Audio playback for TTS responses
-- [ ] Real-time message streaming (typing indicator, progressive display)
-- [ ] Language indicator
+- [x] Chat page layout (WhatsApp-style)
+- [x] Message bubble components (user, assistant)
+- [x] Text input with send button
+- [x] Voice input button (hold-to-record or tap-to-toggle)
+- [x] Voice mode toggle (switch to full voice-to-voice)
+- [x] Audio playback for TTS responses
+- [x] Real-time message streaming (typing indicator, progressive display)
+- [x] Language indicator
 
 ### 5.7 Records → Chat Bridge
-- [ ] "Ask about this document" button in Records modal
-- [ ] Navigate to `/chat?context=doc:{document_id}`
+- [x] "Ask about this document" button in Records modal
+- [x] Navigate to `/chat?document={document_id}`
 - [/] Chat page reads query param → loads document AI summary as system context
 - [/] Triage Agent uses document data for medication_question intent responses
 
@@ -364,7 +364,7 @@
 - [ ] Golden-set for Symptom Agent: 10+ symptom conversations with expected structured output
 - [ ] Voice pipeline end-to-end test
 - [x] Load test for WebSocket connections
-- [/] Document→Chat context injection test: open chat from document → verify context available
+- [x] Document→Chat context injection test: open chat from document → verify context available
 - [x] Unit tests for A2A idempotency and retry/dead-letter transitions
 
 ### 5.9 Production Hardening Follow-ups

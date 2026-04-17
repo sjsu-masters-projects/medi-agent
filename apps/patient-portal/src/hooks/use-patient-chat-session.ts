@@ -312,7 +312,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                             audioUrl: assistantMessage.audioUrl,
                             language: assistantMessage.language,
                             onEnd: () => {
-                                setVoiceStatus(voiceModeRef.current ? "idle" : "unsupported");
+                                setVoiceStatus("idle");
                             },
                             onStart: () => {
                                 setVoiceStatus("playing");
