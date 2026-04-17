@@ -11,10 +11,12 @@ import { storePendingChatDocumentContext } from "@/services/chat-bridge";
 const {
     buildChatWebSocketUrl,
     fetchChatHistory,
+    getVoiceCapabilities,
     replace,
 } = vi.hoisted(() => ({
     buildChatWebSocketUrl: vi.fn(),
     fetchChatHistory: vi.fn(),
+    getVoiceCapabilities: vi.fn(() => ({ recognition: false, synthesis: false })),
     replace: vi.fn(),
 }));
 
@@ -39,7 +41,7 @@ vi.mock("@/services/chat-api", async () => {
 
 vi.mock("@/services/browser-voice", () => ({
     createSpeechRecognitionController: vi.fn(() => null),
-    getVoiceCapabilities: vi.fn(() => ({ recognition: false, synthesis: false })),
+    getVoiceCapabilities,
     playAssistantVoiceResponse: vi.fn(() => null),
     stopAssistantVoicePlayback: vi.fn(),
 }));
@@ -97,6 +99,7 @@ describe("Patient chat page", () => {
     beforeEach(() => {
         buildChatWebSocketUrl.mockReset();
         fetchChatHistory.mockReset();
+        getVoiceCapabilities.mockReset();
         replace.mockReset();
         searchParamsValue = new URLSearchParams();
         MockWebSocket.reset();
@@ -124,6 +127,7 @@ describe("Patient chat page", () => {
 
         buildChatWebSocketUrl.mockReturnValue("ws://chat.test/patient-1");
         fetchChatHistory.mockResolvedValue([]);
+        getVoiceCapabilities.mockReturnValue({ recognition: false, synthesis: false });
     });
 
     it("renders assistant chunks progressively before completion", async () => {
@@ -230,6 +234,7 @@ describe("Patient chat page", () => {
     });
 
     it("turns off voice mode when the websocket disconnects", async () => {
+        getVoiceCapabilities.mockReturnValue({ recognition: true, synthesis: true });
         renderPage();
 
         await screen.findByText(/I can help explain results/i);
