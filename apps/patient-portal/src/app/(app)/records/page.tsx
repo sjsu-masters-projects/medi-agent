@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { HiOutlineBeaker, HiOutlineClipboardDocumentList, HiOutlineDocumentText, HiOutlineFolder } from "react-icons/hi2";
 import { DocumentCard, PdfViewer } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
 import { api } from "@/services/api";
+import {
+    buildDocumentChatHref,
+    buildSuggestedDocumentQuestion,
+    storePendingChatDocumentContext,
+} from "@/services/chat-bridge";
 import { uploadDocumentToStorage } from "@/services/storage";
 import type { RootState } from "@/store/store";
-import { DocumentType, type Document } from "@/types";
+import { DocumentType, Language, type Document } from "@/types";
 import { useSelector } from "react-redux";
 
 type PortalDocument = Document & { icon: ReactNode; provider: string };
@@ -106,6 +112,7 @@ function inferDocumentType(file: File): DocumentType {
 }
 
 export default function RecordsPage() {
+    const router = useRouter();
     const [documents, setDocuments] = useState<PortalDocument[]>([]);
     const [selectedDocument, setSelectedDocument] = useState<PortalDocument | null>(null);
     const [explanationLang, setExplanationLang] = useState<"en" | "es">("en");
@@ -279,6 +286,33 @@ export default function RecordsPage() {
         }
     }
 
+    function handleAskAboutDocument() {
+        if (!selectedDocument) {
+            return;
+        }
+
+        const preferredLanguage =
+            explanationLang === "es" ? Language.ES : Language.EN;
+
+        storePendingChatDocumentContext({
+            documentId: selectedDocument.id,
+            documentName: selectedDocument.fileName,
+            documentType: selectedDocument.documentType,
+            preferredLanguage,
+            provider: selectedDocument.provider,
+            suggestedQuestion: buildSuggestedDocumentQuestion({
+                documentName: selectedDocument.fileName,
+                documentType: selectedDocument.documentType,
+                preferredLanguage,
+                provider: selectedDocument.provider,
+            }),
+            summary: explanationText ?? selectedDocument.aiSummary,
+        });
+
+        setSelectedDocument(null);
+        router.push(buildDocumentChatHref(selectedDocument.id));
+    }
+
     const processingCount = documents.filter(
         (document) =>
             parsingDocIds.has(document.id)
@@ -420,13 +454,18 @@ export default function RecordsPage() {
                                 : explanationText ?? "AI summary will appear here after parsing completes."}
                         </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <Button fullWidth onClick={() => setSelectedDocument(null)} variant="secondary">
-                            Close
+                    <div className="space-y-3">
+                        <Button fullWidth onClick={handleAskAboutDocument}>
+                            Ask about this document
                         </Button>
-                        <Button fullWidth onClick={() => fileInputRef.current?.click()}>
-                            Upload another
-                        </Button>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button fullWidth onClick={() => setSelectedDocument(null)} variant="secondary">
+                                Close
+                            </Button>
+                            <Button fullWidth onClick={() => fileInputRef.current?.click()} variant="secondary">
+                                Upload another
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </Modal>
