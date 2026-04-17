@@ -174,20 +174,14 @@ async def _persist_conversation_state_with_retry(
             if attempt == max_attempts - 1:
                 break
             logger.debug(
-                "Conversation state optimistic-lock conflict for patient %s session %s; "
-                "retrying (%s/%s)",
-                patient_id,
-                session_id,
+                "Conversation state optimistic-lock conflict; retrying (%s/%s)",
                 attempt + 1,
                 max_attempts,
             )
 
     logger.warning(
-        "Conversation state update conflicted after %s attempts for patient %s session %s; "
-        "continuing with in-memory state",
+        "Conversation state update conflicted after %s attempts; continuing with in-memory state",
         max_attempts,
-        patient_id,
-        session_id,
     )
     return fallback_state
 
@@ -492,9 +486,7 @@ async def chat_websocket_endpoint(
                             ]
                         elif symptom_result.symptom_report:
                             logger.warning(
-                                "Skipping A2A delegation: unable to persist symptom event id "
-                                "for patient %s",
-                                patient_id,
+                                "Skipping A2A delegation: unable to persist symptom event id"
                             )
 
                     assistant_intent = "symptom"
@@ -582,7 +574,7 @@ async def chat_websocket_endpoint(
                     }
                 )
     except WebSocketDisconnect:
-        logger.info("Chat websocket disconnected for patient %s", patient_id)
+        logger.info("Chat websocket disconnected")
     except ValidationError as exc:
         await websocket.send_json(
             {
