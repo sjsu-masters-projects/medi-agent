@@ -228,4 +228,29 @@ describe("Patient chat page", () => {
         );
         expect(replace).toHaveBeenCalledWith("/chat");
     });
+
+    it("turns off voice mode when the websocket disconnects", async () => {
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }));
+        expect(
+            screen.getByRole("button", { name: /Stop Voice-to-Voice Mode/i }),
+        ).toBeInTheDocument();
+
+        await act(async () => {
+            socket.close();
+        });
+
+        await waitFor(() => {
+            expect(
+                screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }),
+            ).toBeInTheDocument();
+        });
+    });
 });

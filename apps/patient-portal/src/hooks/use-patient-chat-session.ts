@@ -174,6 +174,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
         if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
             dispatch(setChatError("Chat is reconnecting. Try sending in a moment."));
+            setVoiceStatus("idle");
             return;
         }
 
@@ -335,6 +336,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     resetAssistantDraft();
                     dispatch(setTyping(false));
                     dispatch(setChatError(payload.message || "Chat request failed."));
+                    setVoiceStatus("idle");
+                    setVoiceModeEnabled(false);
+                    voiceModeRef.current = false;
                     return;
                 default:
                     return;
@@ -350,6 +354,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             dispatch(setConnectionStatus("error"));
             dispatch(setTyping(false));
             dispatch(setChatError("Live chat connection encountered an issue."));
+            setVoiceStatus("idle");
+            setVoiceModeEnabled(false);
+            voiceModeRef.current = false;
         };
 
         socket.onclose = () => {
@@ -359,6 +366,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setTyping(false));
+            setVoiceStatus("idle");
+            setVoiceModeEnabled(false);
+            voiceModeRef.current = false;
         };
 
         return () => {
