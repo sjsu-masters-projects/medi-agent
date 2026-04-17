@@ -367,6 +367,12 @@
 - [/] Document→Chat context injection test: open chat from document → verify context available
 - [x] Unit tests for A2A idempotency and retry/dead-letter transitions
 
+### 5.9 Production Hardening Follow-ups
+- [x] Remove same-session conversation state race under concurrent WebSocket writers (optimistic lock/version check or equivalent DB claim strategy)
+- [ ] Enforce runtime topology for retry worker ownership (single logical worker owner in production)
+- [ ] Add multi-worker safety for retry processing (DB claim/update locking or Redis distributed lock if multiple worker-enabled instances run)
+- [ ] Add observability for A2A retry worker: dashboards/alerts for `retrying` and `dead_letter` counts, backlog age, and worker cycle failures
+
 ---
 
 ## Phase 6: Clinician Dashboard (Weeks 19–22)

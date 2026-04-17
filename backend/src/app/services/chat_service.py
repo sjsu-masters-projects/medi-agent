@@ -13,6 +13,10 @@ from app.models.enums import ChatRole, Language
 DEFAULT_CHAT_SESSION_ID = "default"
 
 
+class ConversationStateConflictError(Exception):
+    """Raised when a conversation state update loses an optimistic-lock race."""
+
+
 class ChatService:
     """Persist and retrieve patient chat messages."""
 
@@ -119,6 +123,8 @@ class ChatService:
         self,
         patient_id: str,
         updates: dict[str, Any],
+        *,
+        expected_updated_at: str | None = None,
     ) -> dict[str, Any]:
         session_id = self._normalize_session_id(updates.get("session_id"))
         payload: dict[str, Any] = {
@@ -132,15 +138,32 @@ class ChatService:
             "document_context": updates.get("document_context"),
             "status": str(updates.get("status") or "active"),
         }
-        update_result = await self._execute(
+
+        update_query = (
             self.db.table("chat_conversation_states")
             .update(payload)
             .eq("patient_id", patient_id)
             .eq("session_id", session_id)
         )
+        if expected_updated_at:
+            update_query = update_query.eq("updated_at", expected_updated_at)
+
+        update_result = await self._execute(update_query)
         updated_rows = [row for row in (update_result.data or []) if isinstance(row, dict)]
         if updated_rows:
             return updated_rows[0]
+
+        if expected_updated_at:
+            existing = await self._execute(
+                self.db.table("chat_conversation_states")
+                .select("id")
+                .eq("patient_id", patient_id)
+                .eq("session_id", session_id)
+                .limit(1)
+            )
+            existing_rows = [row for row in (existing.data or []) if isinstance(row, dict)]
+            if existing_rows:
+                raise ConversationStateConflictError("Conversation state changed concurrently")
 
         return await self.get_or_create_conversation_state(
             patient_id,

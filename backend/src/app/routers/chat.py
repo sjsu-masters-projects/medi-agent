@@ -22,7 +22,7 @@ from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
 from app.services.a2a_task_service import A2ATaskService
-from app.services.chat_service import ChatService
+from app.services.chat_service import ChatService, ConversationStateConflictError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -108,6 +108,88 @@ async def _emit_a2a_task_events(websocket: WebSocket, events: list[dict[str, Any
                 "status": event.get("status"),
             }
         )
+
+
+async def _persist_conversation_state_with_retry(
+    service: ChatService,
+    *,
+    patient_id: str,
+    session_id: str,
+    language: Language,
+    document_context: dict[str, Any] | None,
+    conversation_history: list[dict[str, Any]],
+    fallback_state: dict[str, Any],
+    last_intent: str,
+    last_urgency: str,
+    last_route: str,
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    for attempt in range(max_attempts):
+        state_record = await service.get_or_create_conversation_state(
+            patient_id=patient_id,
+            options={
+                "session_id": session_id,
+                "language": language,
+                "document_context": document_context,
+                "turn_count": len(conversation_history),
+            },
+        )
+        prior_state = _conversation_state_from_record(state_record)
+        next_state = _build_conversation_state(
+            conversation_history,
+            prior_state=prior_state,
+            last_intent=last_intent,
+            last_urgency=last_urgency,
+            last_route=last_route,
+        )
+        updates = {
+            "session_id": session_id,
+            "language": language,
+            "turn_count": next_state["turn_count"],
+            "last_intent": next_state["last_intent"],
+            "last_urgency": next_state["last_urgency"],
+            "last_route": next_state["last_route"],
+            "summary": next_state["summary"],
+            "state_json": {
+                "history_window": conversation_history[-12:],
+            },
+            "document_context": document_context,
+        }
+
+        updated_at_token = state_record.get("updated_at")
+        try:
+            if isinstance(updated_at_token, str) and updated_at_token.strip():
+                await service.update_conversation_state(
+                    patient_id=patient_id,
+                    updates=updates,
+                    expected_updated_at=updated_at_token,
+                )
+            else:
+                await service.update_conversation_state(
+                    patient_id=patient_id,
+                    updates=updates,
+                )
+            return next_state
+        except ConversationStateConflictError:
+            if attempt == max_attempts - 1:
+                break
+            logger.debug(
+                "Conversation state optimistic-lock conflict for patient %s session %s; "
+                "retrying (%s/%s)",
+                patient_id,
+                session_id,
+                attempt + 1,
+                max_attempts,
+            )
+
+    logger.warning(
+        "Conversation state update conflicted after %s attempts for patient %s session %s; "
+        "continuing with in-memory state",
+        max_attempts,
+        patient_id,
+        session_id,
+    )
+    return fallback_state
 
 
 async def _ensure_chat_access(user: CurrentUser, patient_id: UUID, db: Client) -> None:
@@ -449,28 +531,24 @@ async def chat_websocket_endpoint(
             )
             assistant_payload = _serialize_chat_message(assistant_message)
             conversation_history.append(assistant_payload)
-            conversation_state = _build_conversation_state(
+            next_state = _build_conversation_state(
                 conversation_history,
                 prior_state=conversation_state,
                 last_intent=assistant_intent,
                 last_urgency=assistant_urgency,
                 last_route=route,
             )
-            await service.update_conversation_state(
+            conversation_state = await _persist_conversation_state_with_retry(
+                service,
                 patient_id=str(patient_id),
-                updates={
-                    "session_id": session_id,
-                    "language": incoming.language,
-                    "turn_count": conversation_state["turn_count"],
-                    "last_intent": conversation_state["last_intent"],
-                    "last_urgency": conversation_state["last_urgency"],
-                    "last_route": conversation_state["last_route"],
-                    "summary": conversation_state["summary"],
-                    "state_json": {
-                        "history_window": conversation_history[-12:],
-                    },
-                    "document_context": document_context,
-                },
+                session_id=session_id,
+                language=incoming.language,
+                document_context=document_context,
+                conversation_history=conversation_history,
+                fallback_state=next_state,
+                last_intent=assistant_intent,
+                last_urgency=assistant_urgency,
+                last_route=route,
             )
 
             await websocket.send_json(

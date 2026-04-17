@@ -8,7 +8,7 @@ import pytest
 
 from app.core.exceptions import ExternalServiceError
 from app.models.enums import ChatRole, Language
-from app.services.chat_service import ChatService
+from app.services.chat_service import ChatService, ConversationStateConflictError
 
 
 def _response(data):
@@ -21,7 +21,7 @@ def mock_db():
     table = MagicMock()
     db.table.return_value = table
 
-    for method in ["select", "eq", "order", "limit", "lt", "insert"]:
+    for method in ["select", "eq", "order", "limit", "lt", "insert", "update"]:
         getattr(table, method).return_value = table
 
     return db
@@ -208,3 +208,28 @@ async def test_update_conversation_state_updates_existing_row(mock_db):
 
     assert result["summary"] == "latest summary"
     assert result["turn_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_update_conversation_state_raises_conflict_on_stale_updated_at(mock_db):
+    patient_id = str(uuid4())
+    mock_db.table().execute.side_effect = [
+        _response([]),
+        _response([{"id": str(uuid4())}]),
+    ]
+
+    service = ChatService(mock_db)
+
+    with pytest.raises(ConversationStateConflictError, match="changed concurrently"):
+        await service.update_conversation_state(
+            patient_id=patient_id,
+            updates={
+                "session_id": "s-1",
+                "summary": "latest summary",
+                "turn_count": 4,
+                "last_intent": "symptom",
+                "last_urgency": "urgent",
+                "last_route": "symptom",
+            },
+            expected_updated_at="2026-04-17T00:00:00Z",
+        )
