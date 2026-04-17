@@ -29,6 +29,9 @@ export type DocumentVisibility = (typeof DocumentVisibility)[keyof typeof Docume
 export const UploaderRole = { PATIENT: "patient", CLINICIAN: "clinician" } as const;
 export type UploaderRole = (typeof UploaderRole)[keyof typeof UploaderRole];
 
+export const PortalUserRole = { PATIENT: "patient", CLINICIAN: "clinician" } as const;
+export type PortalUserRole = (typeof PortalUserRole)[keyof typeof PortalUserRole];
+
 export const MedicationRoute = {
     ORAL: "oral", TOPICAL: "topical", IV: "iv", IM: "im",
     SUBCUTANEOUS: "subcutaneous", INHALED: "inhaled", OTHER: "other",

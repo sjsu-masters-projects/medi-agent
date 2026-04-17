@@ -1,4 +1,5 @@
 import { Badge, Button, Card } from "@/components/ui";
+import type { TaskCardStatus } from "./task-card.types";
 
 interface MedicationCardProps {
     id: string;
@@ -7,7 +8,7 @@ interface MedicationCardProps {
     time: string;
     instructions?: string;
     prescriber?: string;
-    status: "completed" | "active" | "upcoming" | "missed";
+    status: TaskCardStatus;
     onMarkComplete: (id: string) => void;
 }
 

@@ -2,11 +2,20 @@
 
 import { useState, useCallback } from "react";
 import { HiOutlineCloudArrowUp, HiOutlineDocumentText, HiOutlineXMark } from "react-icons/hi2";
+import { DocumentType, UploaderRole } from "@/types";
+
+const UploadStatus = {
+    PENDING: "pending",
+    UPLOADING: "uploading",
+    DONE: "done",
+    ERROR: "error",
+} as const;
+type UploadStatus = (typeof UploadStatus)[keyof typeof UploadStatus];
 
 interface QueuedFile {
     id: string;
     file: File;
-    status: "pending" | "uploading" | "done" | "error";
+    status: UploadStatus;
     error?: string;
 }
 
@@ -25,12 +34,17 @@ const ALLOWED_TYPES = new Set([
 ]);
 const MAX_SIZE_MB = 20;
 const DOCUMENT_TYPES = [
-    { label: "Clinical Note", value: "clinical_note" },
-    { label: "Lab Result", value: "lab_result" },
-    { label: "Prescription", value: "prescription" },
-    { label: "Discharge Summary", value: "discharge_summary" },
-    { label: "Other", value: "other" },
+    { label: "Clinical Note", value: DocumentType.OTHER },
+    { label: "Lab Report", value: DocumentType.LAB_REPORT },
+    { label: "Prescription", value: DocumentType.PRESCRIPTION },
+    { label: "Discharge Summary", value: DocumentType.DISCHARGE_SUMMARY },
+    { label: "Diagnostic Report", value: DocumentType.DIAGNOSTIC_REPORT },
+    { label: "Referral", value: DocumentType.REFERRAL },
 ] as const;
+
+function parseDocumentType(value: string): DocumentType {
+    return DOCUMENT_TYPES.find((type) => type.value === value)?.value ?? DocumentType.OTHER;
+}
 
 function makeId(): string {
     return Math.random().toString(36).slice(2, 10);
@@ -40,7 +54,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
     const [queue, setQueue] = useState<QueuedFile[]>([]);
     const [dragging, setDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const [documentType, setDocumentType] = useState<string>("clinical_note");
+    const [documentType, setDocumentType] = useState<DocumentType>(DocumentType.OTHER);
 
     // ── File validation ──────────────────────────────────────────────────────
 
@@ -57,7 +71,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
         const newItems: QueuedFile[] = valid.map((f) => ({
             id: makeId(),
             file: f,
-            status: "pending",
+            status: UploadStatus.PENDING,
         }));
         setQueue((prev) => [...prev, ...newItems]);
     }, [validateFiles]);
@@ -95,7 +109,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
     // ── Upload handler ───────────────────────────────────────────────────────
 
     async function handleUpload() {
-        const pendingItems = queue.filter((item) => item.status === "pending");
+        const pendingItems = queue.filter((item) => item.status === UploadStatus.PENDING);
         if (pendingItems.length === 0) return;
 
         setUploading(true);
@@ -107,7 +121,9 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
         for (const item of pendingItems) {
             // Mark as uploading
             setQueue((prev) =>
-                prev.map((q) => (q.id === item.id ? { ...q, status: "uploading" } : q)),
+                prev.map((q) =>
+                    q.id === item.id ? { ...q, status: UploadStatus.UPLOADING } : q,
+                ),
             );
 
             try {
@@ -115,7 +131,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
                 formData.append("file", item.file);
                 formData.append("patient_id", patientId);
                 formData.append("document_type", documentType);
-                formData.append("uploaded_by_role", "clinician");
+                formData.append("uploaded_by_role", UploaderRole.CLINICIAN);
 
                 const response = await fetch(`${apiBase}/api/v1/documents/`, {
                     method: "POST",
@@ -131,7 +147,9 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
                 if (data.id) completedIds.push(data.id);
 
                 setQueue((prev) =>
-                    prev.map((q) => (q.id === item.id ? { ...q, status: "done" } : q)),
+                    prev.map((q) =>
+                        q.id === item.id ? { ...q, status: UploadStatus.DONE } : q,
+                    ),
                 );
             } catch (err) {
                 setQueue((prev) =>
@@ -139,7 +157,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
                         q.id === item.id
                             ? {
                                   ...q,
-                                  status: "error",
+                                  status: UploadStatus.ERROR,
                                   error: err instanceof Error ? err.message : "Upload failed",
                               }
                             : q,
@@ -163,7 +181,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
                 <select
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     id="upload-document-type"
-                    onChange={(e) => setDocumentType(e.target.value)}
+                    onChange={(e) => setDocumentType(parseDocumentType(e.target.value))}
                     value={documentType}
                 >
                     {DOCUMENT_TYPES.map((type) => (
@@ -245,17 +263,17 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
 
                             <div className="flex items-center gap-3">
                                 {/* Status pill */}
-                                {item.status === "uploading" && (
+                                {item.status === UploadStatus.UPLOADING && (
                                     <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
                                         <span className="animate-pulse">●</span> Uploading
                                     </span>
                                 )}
-                                {item.status === "done" && (
+                                {item.status === UploadStatus.DONE && (
                                     <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
                                         ✓ Done
                                     </span>
                                 )}
-                                {item.status === "error" && (
+                                {item.status === UploadStatus.ERROR && (
                                     <span
                                         className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
                                         title={item.error}
@@ -265,7 +283,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
                                 )}
 
                                 {/* Remove button */}
-                                {item.status !== "uploading" && (
+                                {item.status !== UploadStatus.UPLOADING && (
                                     <button
                                         aria-label={`Remove ${item.file.name}`}
                                         className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
@@ -282,7 +300,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
             )}
 
             {/* Upload button */}
-            {queue.some((item) => item.status === "pending") && (
+            {queue.some((item) => item.status === UploadStatus.PENDING) && (
                 <button
                     className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={uploading}
@@ -292,7 +310,7 @@ export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZone
                 >
                     {uploading
                         ? "Uploading..."
-                        : `Upload ${queue.filter((q) => q.status === "pending").length} file(s)`}
+                        : `Upload ${queue.filter((q) => q.status === UploadStatus.PENDING).length} file(s)`}
                 </button>
             )}
         </div>

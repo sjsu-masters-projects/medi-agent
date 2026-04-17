@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
+import type { TaskCardStatus } from "@/components/features/task-card.types";
 import { Badge, Card, EmptyState, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
+import type { FeedTask } from "@/types";
 
 function splitMedicationName(name: string) {
     const match = name.match(/^(.*?)(\s+\d.*)$/);
@@ -14,7 +16,7 @@ function splitMedicationName(name: string) {
     };
 }
 
-function mapTaskStatus(status: "completed" | "missed" | "pending" | "skipped") {
+function mapTaskStatus(status: FeedTask["status"]): TaskCardStatus {
     if (status === "pending") {
         return "active";
     }
@@ -26,7 +28,7 @@ function mapTaskStatus(status: "completed" | "missed" | "pending" | "skipped") {
     return status;
 }
 
-function formatTimeLabel(scheduledTime?: string, status?: "completed" | "missed" | "pending" | "skipped") {
+function formatTimeLabel(scheduledTime?: string, status?: FeedTask["status"]) {
     if (!scheduledTime) {
         return "Any time";
     }

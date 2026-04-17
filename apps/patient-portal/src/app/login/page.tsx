@@ -9,6 +9,7 @@ import { api } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type PatientAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
+import { PortalUserRole } from "@/types";
 
 interface AuthResponse {
     tokens: {
@@ -19,7 +20,7 @@ interface AuthResponse {
     user: {
         email: string;
         id: string;
-        role: "patient" | "clinician";
+        role: typeof PortalUserRole[keyof typeof PortalUserRole];
     };
 }
 
@@ -42,14 +43,14 @@ export default function LoginPage() {
 
         try {
             const response = await api.post<AuthResponse>("/api/v1/auth/login", { email, password });
-            if (response.user.role !== "patient") {
+            if (response.user.role !== PortalUserRole.PATIENT) {
                 throw new Error("This login belongs to a clinician account.");
             }
             const session: PatientAuthSession = {
                 accessToken: response.tokens.access_token,
                 expiresAt: response.tokens.expires_at,
                 refreshToken: response.tokens.refresh_token,
-                user: { ...response.user, role: "patient" },
+                user: { ...response.user, role: PortalUserRole.PATIENT },
             };
             writeStoredSession(session);
             dispatch(hydrateSession(session));

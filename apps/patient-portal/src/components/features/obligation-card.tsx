@@ -1,11 +1,12 @@
 import { Badge, Button, Card } from "@/components/ui";
+import type { TaskCardStatus } from "./task-card.types";
 
 interface ObligationCardProps {
     id: string;
     description: string;
     type: "diet" | "exercise" | "custom";
     time: string;
-    status: "completed" | "active" | "upcoming" | "missed";
+    status: TaskCardStatus;
     onMarkComplete: (id: string) => void;
 }
 

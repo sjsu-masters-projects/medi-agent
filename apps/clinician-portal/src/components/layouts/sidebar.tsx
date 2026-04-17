@@ -8,7 +8,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { clearStoredSession } from "@/services/auth-session";
 import { api } from "@/services/api";
 import { logout } from "@/store/slices/auth-slice";
-import type { RootState } from "@/store/store";
+import type { AppDispatch, RootState } from "@/store/store";
+import { ClinicianRole, PortalUserRole } from "@/types";
 
 const primaryNavigation = [
     { href: "/dashboard", icon: HiOutlineChartBarSquare, label: "Risk Radar" },
@@ -20,16 +21,18 @@ const primaryNavigation = [
 interface SidebarClinicianProfile {
     first_name: string;
     last_name: string;
-    role: string;
+    role: ClinicianRole;
 }
 
-function getRoleMeta(role: string) {
+type SidebarRole = ClinicianRole | typeof PortalUserRole.CLINICIAN;
+
+function getRoleMeta(role: SidebarRole) {
     switch (role) {
-        case "admin":
+        case ClinicianRole.ADMIN:
             return { label: "Clinic Admin", tone: "bg-blue-500/20 text-blue-200" };
-        case "nurse":
+        case ClinicianRole.NURSE:
             return { label: "Nurse / MA", tone: "bg-purple-500/20 text-purple-200" };
-        case "provider":
+        case ClinicianRole.PROVIDER:
             return { label: "Provider", tone: "bg-emerald-500/20 text-emerald-200" };
         default:
             return { label: "Clinician", tone: "bg-slate-500/20 text-slate-200" };
@@ -39,7 +42,7 @@ function getRoleMeta(role: string) {
 export function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
-    const dispatch = useDispatch();
+    const dispatch = useDispatch<AppDispatch>();
     const user = useSelector((state: RootState) => state.auth.user);
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [profile, setProfile] = useState<SidebarClinicianProfile | null>(null);
@@ -74,7 +77,7 @@ export function Sidebar() {
 
     const email = user?.email ?? "clinician@mediagent.local";
     const displayName = profile ? `${profile.first_name} ${profile.last_name}` : "Clinician";
-    const roleMeta = getRoleMeta(profile?.role ?? user?.role ?? "clinician");
+    const roleMeta = getRoleMeta(profile?.role ?? user?.role ?? PortalUserRole.CLINICIAN);
     const initials = displayName
         .split(" ")
         .filter(Boolean)

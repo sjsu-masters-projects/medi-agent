@@ -23,6 +23,8 @@ export type {
     TodayFeedResponse,
     Condition,
     Allergy,
+    DocumentVisibility,
+    UploaderRole,
     ApiErrorResponse,
     PaginatedResponse,
 } from "../../../../packages/shared/src/types";
@@ -32,6 +34,7 @@ export {
     Gender,
     ChatRole,
     DocumentType,
+    PortalUserRole,
     MedicationRoute,
     ObligationType,
     AdherenceStatus,

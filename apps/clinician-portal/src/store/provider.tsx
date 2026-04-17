@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { api } from "@/services/api";
 import { clearStoredSession, restoreStoredSession } from "@/services/auth-session";
 import { Provider } from "react-redux";
+import { PortalUserRole } from "@/types";
 import { finishHydration, hydrateSession, type ClinicianAuthSession } from "./slices/auth-slice";
 import { store } from "./store";
 
@@ -23,14 +24,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                         user: {
                             email: string;
                             id: string;
-                            role: "patient" | "clinician";
+                            role: typeof PortalUserRole[keyof typeof PortalUserRole];
                         };
                     }>("/api/v1/auth/refresh", {
-                        expected_role: "clinician",
+                        expected_role: PortalUserRole.CLINICIAN,
                         refresh_token: refreshToken,
                     });
 
-                    if (response.user.role !== "clinician") {
+                    if (response.user.role !== PortalUserRole.CLINICIAN) {
                         throw new Error("This session belongs to a patient account.");
                     }
 
@@ -41,7 +42,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                         user: {
                             email: response.user.email,
                             id: response.user.id,
-                            role: "clinician",
+                            role: PortalUserRole.CLINICIAN,
                         },
                     } satisfies ClinicianAuthSession;
                 },

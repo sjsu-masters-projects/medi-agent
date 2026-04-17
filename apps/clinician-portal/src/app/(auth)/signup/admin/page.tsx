@@ -9,6 +9,7 @@ import { api } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
+import { PortalUserRole } from "@/types";
 
 interface SignupResponse {
     tokens: {
@@ -19,7 +20,7 @@ interface SignupResponse {
     user: {
         email: string;
         id: string;
-        role: "patient" | "clinician";
+        role: typeof PortalUserRole[keyof typeof PortalUserRole];
     };
 }
 
@@ -89,7 +90,7 @@ export default function ClinicAdminSignupPage() {
                 type2_npi: formData.type2Npi || undefined,
             });
 
-            if (response.user.role !== "clinician") {
+            if (response.user.role !== PortalUserRole.CLINICIAN) {
                 throw new Error("This signup produced a non-clinician account.");
             }
 
@@ -100,7 +101,7 @@ export default function ClinicAdminSignupPage() {
                 user: {
                     email: response.user.email,
                     id: response.user.id,
-                    role: "clinician",
+                    role: PortalUserRole.CLINICIAN,
                 },
             };
 

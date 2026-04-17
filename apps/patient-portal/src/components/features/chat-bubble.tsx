@@ -1,8 +1,8 @@
 import { HiMiniSpeakerWave } from "react-icons/hi2";
-import type { Language } from "@/types";
+import { ChatRole, Language } from "@/types";
 
 interface ChatBubbleProps {
-    role: "user" | "assistant";
+    role: typeof ChatRole.USER | typeof ChatRole.ASSISTANT;
     content: string;
     timestamp: Date | string;
     language?: Language;
@@ -23,7 +23,7 @@ function formatLanguage(language?: Language): string | null {
         return null;
     }
 
-    return language === "es" ? "ES" : "EN";
+    return language === Language.ES ? "ES" : "EN";
 }
 
 export function ChatBubble({
@@ -34,7 +34,7 @@ export function ChatBubble({
     role,
     timestamp,
 }: ChatBubbleProps) {
-    const isUser = role === "user";
+    const isUser = role === ChatRole.USER;
     const languageLabel = formatLanguage(language);
 
     return (

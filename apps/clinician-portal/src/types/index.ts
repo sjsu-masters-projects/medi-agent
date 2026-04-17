@@ -31,6 +31,9 @@ export type {
 export {
     Language,
     ClinicianRole,
+    PortalUserRole,
+    ChatRole,
+    UploaderRole,
     NaranjoCausality,
     ADRStatus,
     MedWatchStatus,

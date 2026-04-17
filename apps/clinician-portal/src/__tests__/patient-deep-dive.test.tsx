@@ -12,6 +12,8 @@ import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { DocumentSummary } from "@/components/features/document-summary";
 import { AccordionItem } from "@/components/ui/accordion";
+import { ChatRole } from "@/types";
+import type { SymptomReport } from "@/types";
 
 // ── Mock recharts ─────────────────────────────────────────────────────────────
 // Recharts uses ResizeObserver which is not available in jsdom
@@ -21,10 +23,14 @@ vi.mock("recharts", () => ({
         <div data-testid="responsive-container">{children}</div>
     ),
     LineChart: ({ children }: { children: React.ReactNode }) => (
-        <div data-testid="line-chart">{children}</div>
+        <svg data-testid="line-chart" viewBox="0 0 100 100">
+            {children}
+        </svg>
     ),
     AreaChart: ({ children }: { children: React.ReactNode }) => (
-        <div data-testid="area-chart">{children}</div>
+        <svg data-testid="area-chart" viewBox="0 0 100 100">
+            {children}
+        </svg>
     ),
     Line: () => <div data-testid="recharts-line" />,
     Area: () => <div data-testid="recharts-area" />,
@@ -74,10 +80,10 @@ describe("AdherenceChart", () => {
 // ── SymptomTimeline tests ─────────────────────────────────────────────────────
 
 describe("SymptomTimeline", () => {
-    const mockSymptoms = [
+    const mockSymptoms: SymptomReport[] = [
         {
             id: "s1",
-            patientId: "patient-1",
+            patientId: "p1",
             symptom: "headache",
             severity: 3,
             createdAt: "2026-03-10T09:00:00Z",
@@ -85,7 +91,7 @@ describe("SymptomTimeline", () => {
         },
         {
             id: "s2",
-            patientId: "patient-1",
+            patientId: "p1",
             symptom: "nausea",
             severity: 7,
             createdAt: "2026-03-15T14:00:00Z",
@@ -115,13 +121,13 @@ describe("SymptomTimeline", () => {
 
 describe("ChatTranscript", () => {
     const mockMessages = [
-        { role: "user", content: "I have a headache today", created_at: "2026-03-20T10:00:00Z" },
+        { role: ChatRole.USER, content: "I have a headache today", created_at: "2026-03-20T10:00:00Z" },
         {
-            role: "assistant",
+            role: ChatRole.ASSISTANT,
             content: "I understand. Can you rate the severity 1–10?",
             created_at: "2026-03-20T10:01:00Z",
         },
-        { role: "user", content: "About a 5", created_at: "2026-03-20T10:02:00Z" },
+        { role: ChatRole.USER, content: "About a 5", created_at: "2026-03-20T10:02:00Z" },
     ];
 
     it("renders all messages", () => {
@@ -147,7 +153,7 @@ describe("ChatTranscript", () => {
 
     it("renders voice message indicator when audio_url present", () => {
         const voiceMsg = {
-            role: "user",
+            role: ChatRole.USER,
             content: "Voice note",
             created_at: "2026-03-20T10:00:00Z",
             audio_url: "https://example.com/audio.wav",
