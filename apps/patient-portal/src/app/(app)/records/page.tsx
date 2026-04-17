@@ -290,18 +290,12 @@ export default function RecordsPage() {
         }
     }
 
-<<<<<<< HEAD
     async function handleLanguageChange(language: Language) {
         setExplanationLang(language);
         if (language === Language.EN && selectedDocument?.parseStatus === "completed") {
             setExplanationText(selectedDocument.aiSummary ?? null);
             return;
         }
-
-=======
-    async function handleLanguageChange(lang: Language) {
-        setExplanationLang(lang);
->>>>>>> c0aa63a (refactor(frontend): tighten shared portal typing and UI contracts)
         if (!selectedDocument) {
             return;
         }
@@ -310,14 +304,6 @@ export default function RecordsPage() {
             return;
         }
 
-<<<<<<< HEAD
-=======
-        if (lang === Language.EN) {
-            setExplanationText(selectedDocument.aiSummary ?? null);
-            return;
-        }
-
->>>>>>> c0aa63a (refactor(frontend): tighten shared portal typing and UI contracts)
         setExplanationLoading(true);
         try {
             const result = await api.post<{ summary: string }>(
@@ -441,32 +427,7 @@ export default function RecordsPage() {
                         id={document.id}
                         key={document.id}
                         name={document.fileName}
-<<<<<<< HEAD
-                        onClick={() => {
-                            setSelectedDocument(document);
-                            setExplanationLang(Language.EN);
-                            setExplanationLoading(false);
-                            if (document.parseStatus === "failed") {
-                                setExplanationText(
-                                    document.parseError ?? "This document could not be processed.",
-                                );
-                                return;
-                            }
-                            if (
-                                document.parseStatus === "pending"
-                                || document.parseStatus === "processing"
-                                || parsingDocIds.has(document.id)
-                            ) {
-                                setExplanationText(
-                                    "Processing this document. AI summary will appear when parsing completes.",
-                                );
-                                return;
-                            }
-                            setExplanationText(document.aiSummary ?? null);
-                        }}
-=======
                         onClick={() => openDocument(document)}
->>>>>>> c0aa63a (refactor(frontend): tighten shared portal typing and UI contracts)
                         provider={document.provider}
                         statusLabel={status?.label}
                         statusVariant={status?.variant}
@@ -489,17 +450,7 @@ export default function RecordsPage() {
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
                             <select
                                 className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700"
-<<<<<<< HEAD
                                 onChange={(event) => handleLanguageChange(event.target.value as Language)}
-=======
-                                onChange={(event) =>
-                                    handleLanguageChange(
-                                        event.target.value === Language.ES
-                                            ? Language.ES
-                                            : Language.EN,
-                                    )
-                                }
->>>>>>> c0aa63a (refactor(frontend): tighten shared portal typing and UI contracts)
                                 value={explanationLang}
                             >
                                 <option value={Language.EN}>English</option>

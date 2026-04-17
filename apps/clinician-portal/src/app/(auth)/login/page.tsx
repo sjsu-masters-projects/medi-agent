@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
-import { api } from "@/services/api";
+import { api, isRetryableApiError } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import {
     clearStoredClinicContext,
@@ -18,6 +18,8 @@ import type { AppDispatch } from "@/store/store";
 import { PortalUserRole } from "@/types";
 
 interface LoginResponse {
+    mfa_factors?: MFAFactorSummary[];
+    mfa_required?: boolean;
     tokens: {
         access_token: string;
         expires_at: number;
@@ -30,6 +32,11 @@ interface LoginResponse {
     };
 }
 
+interface MFAFactorSummary {
+    friendly_name?: string | null;
+    id: string;
+}
+
 interface ClinicResolveResponse {
     clinic_code: string;
     clinic_id: string;
@@ -37,7 +44,16 @@ interface ClinicResolveResponse {
     status: "active" | "suspended";
 }
 
-type LoginStage = "verify" | "choose" | "login";
+type LoginStage = "verify" | "choose" | "login" | "mfa";
+
+function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
+    return {
+        clinicCode: response.clinic_code,
+        clinicId: response.clinic_id,
+        clinicName: response.clinic_name,
+        status: response.status,
+    };
+}
 
 export default function ClinicianLoginPage() {
     const router = useRouter();
@@ -49,6 +65,7 @@ export default function ClinicianLoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [clinicCodeError, setClinicCodeError] = useState("");
+    const [mfaFactors, setMfaFactors] = useState<MFAFactorSummary[]>([]);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -57,15 +74,36 @@ export default function ClinicianLoginPage() {
             return;
         }
 
-        setClinicCode(stored.clinicCode);
-        setClinicContext(stored);
-        setStage("choose");
+        const revalidateStoredClinicContext = async () => {
+            setClinicCode(stored.clinicCode);
+            setSubmitting(true);
+
+            try {
+                const resolved = await api.post<ClinicResolveResponse>("/api/v1/clinics/resolve-code", {
+                    clinic_code: stored.clinicCode,
+                });
+                const nextClinicContext = mapClinicContext(resolved);
+                writeStoredClinicContext(nextClinicContext);
+                setClinicContext(nextClinicContext);
+                setStage("choose");
+            } catch {
+                clearStoredClinicContext();
+                setClinicContext(null);
+                setStage("verify");
+                setError("Saved clinic access expired. Please verify your clinic code again.");
+            } finally {
+                setSubmitting(false);
+            }
+        };
+
+        void revalidateStoredClinicContext();
     }, []);
 
     async function handleVerifyClinicCode(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError("");
         setClinicCodeError("");
+        setMfaFactors([]);
 
         const normalizedClinicCode = clinicCode.trim().toUpperCase();
         setClinicCode(normalizedClinicCode);
@@ -86,16 +124,10 @@ export default function ClinicianLoginPage() {
             const resolved = await api.post<ClinicResolveResponse>("/api/v1/clinics/resolve-code", {
                 clinic_code: normalizedClinicCode,
             });
-
-            const context: ClinicContext = {
-                clinicCode: resolved.clinic_code,
-                clinicId: resolved.clinic_id,
-                clinicName: resolved.clinic_name,
-                status: resolved.status,
-            };
+            const context = mapClinicContext(resolved);
 
             writeStoredClinicContext(context);
-            setClinicCode(resolved.clinic_code);
+            setClinicCode(context.clinicCode);
             setClinicContext(context);
             setStage("choose");
         } catch (submissionError) {
@@ -105,10 +137,21 @@ export default function ClinicianLoginPage() {
         }
     }
 
+    function expireClinicContext(message: string) {
+        const retainedClinicCode = clinicContext?.clinicCode ?? clinicCode;
+        clearStoredClinicContext();
+        setClinicContext(null);
+        setMfaFactors([]);
+        setStage("verify");
+        setClinicCode(retainedClinicCode);
+        setError(message);
+    }
+
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setSubmitting(true);
         setError("");
+        setMfaFactors([]);
 
         if (!clinicContext) {
             setError("Enter and verify your clinic code first.");
@@ -117,9 +160,19 @@ export default function ClinicianLoginPage() {
         }
 
         try {
-            const response = await api.post<LoginResponse>("/api/v1/auth/login", { email, password });
+            const response = await api.post<LoginResponse>("/api/v1/auth/login", {
+                clinic_code: clinicContext.clinicCode,
+                email,
+                password,
+            });
             if (response.user.role !== PortalUserRole.CLINICIAN) {
                 throw new Error("This login belongs to a patient account.");
+            }
+
+            if (response.mfa_required) {
+                setMfaFactors(response.mfa_factors ?? []);
+                setStage("mfa");
+                return;
             }
 
             const session: ClinicianAuthSession = {
@@ -137,7 +190,12 @@ export default function ClinicianLoginPage() {
             dispatch(hydrateSession(session));
             router.replace("/dashboard");
         } catch (submissionError) {
-            setError((submissionError as Error).message);
+            const message = (submissionError as Error).message;
+            if (!isRetryableApiError(submissionError) && message.toLowerCase().includes("clinic code")) {
+                expireClinicContext("Saved clinic access expired. Please verify your clinic code again.");
+                return;
+            }
+            setError(message);
         } finally {
             setSubmitting(false);
         }
@@ -148,6 +206,9 @@ export default function ClinicianLoginPage() {
         setClinicContext(null);
         setClinicCode("");
         setEmail("");
+        setError("");
+        setClinicCodeError("");
+        setMfaFactors([]);
         setPassword("");
         setStage("verify");
     }
@@ -170,14 +231,22 @@ export default function ClinicianLoginPage() {
                     <div className="space-y-2">
                         <p className="text-sm font-medium text-blue-600">Clinic access</p>
                         <h2 className="text-3xl font-bold text-gray-900">
-                            {stage === "verify" ? "Enter clinic code" : stage === "choose" ? "Choose sign-in path" : "Sign in"}
+                            {stage === "verify"
+                                ? "Enter clinic code"
+                                : stage === "choose"
+                                    ? "Choose sign-in path"
+                                    : stage === "login"
+                                        ? "Sign in"
+                                        : "Verify MFA"}
                         </h2>
                         <p className="text-sm text-gray-500">
                             {stage === "verify"
                                 ? "Verify your clinic workspace before continuing to login or registration."
                                 : stage === "choose"
-                                                                    ? "Clinic verified. Continue to sign in with your account or join this clinic."
-                                  : "Access your dashboard, roster, and active alerts."}
+                                    ? "Clinic verified. Continue to sign in with your account or join this clinic."
+                                    : stage === "login"
+                                        ? "Access your dashboard, roster, and active alerts."
+                                        : "Use your authenticator app to complete sign-in."}
                         </p>
                     </div>
 
@@ -194,6 +263,7 @@ export default function ClinicianLoginPage() {
                                 }}
                                 value={clinicCode}
                             />
+                            {error ? <p className="text-sm text-red-600">{error}</p> : null}
                             <Button disabled={submitting} fullWidth type="submit">
                                 {submitting ? "Verifying..." : "Verify clinic code"}
                             </Button>
@@ -221,6 +291,36 @@ export default function ClinicianLoginPage() {
                             <button className="w-full text-sm text-slate-500 underline" onClick={useDifferentClinicCode} type="button">
                                 Use a different clinic code
                             </button>
+                        </div>
+                    ) : null}
+
+                    {stage === "mfa" && clinicContext ? (
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                <p className="font-semibold">Multi-factor authentication required</p>
+                                <p className="mt-1">
+                                    Continue in the MFA setup flow for <span className="font-medium">{clinicContext.clinicName}</span>.
+                                </p>
+                            </div>
+                            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                                <p className="font-semibold text-slate-900">Available factors</p>
+                                {mfaFactors.length > 0 ? (
+                                    mfaFactors.map((factor) => (
+                                        <p key={factor.id}>{factor.friendly_name ?? "Authenticator"}</p>
+                                    ))
+                                ) : (
+                                    <p>Authenticator</p>
+                                )}
+                            </div>
+                            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                            <div className="flex items-center justify-between text-sm">
+                                <button className="text-blue-600" onClick={() => setStage("login")} type="button">
+                                    Back
+                                </button>
+                                <Link className="text-blue-600" href="/dashboard/settings/mfa">
+                                    Open MFA settings
+                                </Link>
+                            </div>
                         </div>
                     ) : null}
 
