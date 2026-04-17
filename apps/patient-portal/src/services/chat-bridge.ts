@@ -1,11 +1,12 @@
-import type { Language } from "@/types";
+import { DocumentType, type Language, type DocumentType as DocumentTypeValue } from "@/types";
 
 const CHAT_DOCUMENT_CONTEXT_PREFIX = "patient-portal.chat.document-context";
+const DOCUMENT_TYPES = new Set<DocumentTypeValue>(Object.values(DocumentType));
 
 export interface PendingChatDocumentContext {
     documentId: string;
     documentName: string;
-    documentType: string;
+    documentType: DocumentTypeValue;
     provider?: string;
     summary?: string;
     preferredLanguage: Language;
@@ -22,6 +23,10 @@ function getSessionStorage(): Storage | null {
 
 function buildStorageKey(documentId: string): string {
     return `${CHAT_DOCUMENT_CONTEXT_PREFIX}.${documentId}`;
+}
+
+function isDocumentType(value: unknown): value is DocumentTypeValue {
+    return typeof value === "string" && DOCUMENT_TYPES.has(value as DocumentTypeValue);
 }
 
 export function buildDocumentChatHref(documentId: string): string {
@@ -71,7 +76,7 @@ export function consumePendingChatDocumentContext(
         if (
             typeof parsed.documentId !== "string"
             || typeof parsed.documentName !== "string"
-            || typeof parsed.documentType !== "string"
+            || !isDocumentType(parsed.documentType)
             || typeof parsed.preferredLanguage !== "string"
             || typeof parsed.suggestedQuestion !== "string"
         ) {

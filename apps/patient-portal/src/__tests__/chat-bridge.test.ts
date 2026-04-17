@@ -49,4 +49,19 @@ describe("chat bridge helpers", () => {
             }),
         ).toContain("Ayúdame a entender");
     });
+
+    it("rejects invalid stored document types", () => {
+        window.sessionStorage.setItem(
+            "patient-portal.chat.document-context.doc-2",
+            JSON.stringify({
+                documentId: "doc-2",
+                documentName: "Broken.pdf",
+                documentType: "made_up_type",
+                preferredLanguage: Language.EN,
+                suggestedQuestion: "Help me.",
+            }),
+        );
+
+        expect(consumePendingChatDocumentContext("doc-2")).toBeNull();
+    });
 });
