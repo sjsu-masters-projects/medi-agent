@@ -2,14 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { HiOutlineBeaker, HiOutlineClipboardDocumentList, HiOutlineDocumentText, HiOutlineFolder } from "react-icons/hi2";
 import { DocumentCard, PdfViewer } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
 import { api } from "@/services/api";
+import {
+    buildDocumentChatHref,
+    buildSuggestedDocumentQuestion,
+    storePendingChatDocumentContext,
+} from "@/services/chat-bridge";
 import { uploadDocumentToStorage } from "@/services/storage";
 import type { RootState } from "@/store/store";
-import { DocumentType, type Document } from "@/types";
+import {
+    DocumentType,
+    Language,
+    type Document,
+} from "@/types";
 import { useSelector } from "react-redux";
 
 type PortalDocument = Document & { icon: ReactNode; provider: string };
@@ -18,7 +28,7 @@ interface DocumentApiRecord {
     id: string;
     patient_id: string;
     uploaded_by: string;
-    uploaded_by_role: "patient" | "clinician";
+    uploaded_by_role: Document["uploadedByRole"];
     document_type: DocumentType;
     file_name: string;
     file_url: string;
@@ -30,7 +40,7 @@ interface DocumentApiRecord {
     parse_error?: string | null;
     parse_attempts?: number;
     source_clinic?: string | null;
-    visibility: "all_providers" | "specific_provider";
+    visibility: Document["visibility"];
     created_at: string;
 }
 
@@ -106,9 +116,10 @@ function inferDocumentType(file: File): DocumentType {
 }
 
 export default function RecordsPage() {
+    const router = useRouter();
     const [documents, setDocuments] = useState<PortalDocument[]>([]);
     const [selectedDocument, setSelectedDocument] = useState<PortalDocument | null>(null);
-    const [explanationLang, setExplanationLang] = useState<"en" | "es">("en");
+    const [explanationLang, setExplanationLang] = useState<Language>(Language.EN);
     const [explanationText, setExplanationText] = useState<string | null>(null);
     const [explanationLoading, setExplanationLoading] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -249,8 +260,13 @@ export default function RecordsPage() {
         }
     }
 
-    async function handleLanguageChange(lang: "en" | "es") {
-        setExplanationLang(lang);
+    async function handleLanguageChange(language: Language) {
+        setExplanationLang(language);
+        if (language === Language.EN && selectedDocument?.parseStatus === "completed") {
+            setExplanationText(selectedDocument.aiSummary ?? null);
+            return;
+        }
+
         if (!selectedDocument) {
             return;
         }
@@ -259,16 +275,11 @@ export default function RecordsPage() {
             return;
         }
 
-        if (lang === "en") {
-            setExplanationText(selectedDocument.aiSummary ?? null);
-            return;
-        }
-
         setExplanationLoading(true);
         try {
             const result = await api.post<{ summary: string }>(
                 `/api/v1/documents/${selectedDocument.id}/explain`,
-                { language: lang },
+                { language },
                 { token: accessToken ?? undefined },
             );
             setExplanationText(result.summary);
@@ -277,6 +288,30 @@ export default function RecordsPage() {
         } finally {
             setExplanationLoading(false);
         }
+    }
+
+    function handleAskAboutDocument() {
+        if (!selectedDocument) {
+            return;
+        }
+
+        storePendingChatDocumentContext({
+            documentId: selectedDocument.id,
+            documentName: selectedDocument.fileName,
+            documentType: selectedDocument.documentType,
+            preferredLanguage: explanationLang,
+            provider: selectedDocument.provider,
+            suggestedQuestion: buildSuggestedDocumentQuestion({
+                documentName: selectedDocument.fileName,
+                documentType: selectedDocument.documentType,
+                preferredLanguage: explanationLang,
+                provider: selectedDocument.provider,
+            }),
+            summary: explanationText ?? selectedDocument.aiSummary,
+        });
+
+        setSelectedDocument(null);
+        router.push(buildDocumentChatHref(selectedDocument.id));
     }
 
     const processingCount = documents.filter(
@@ -365,7 +400,7 @@ export default function RecordsPage() {
                         name={document.fileName}
                         onClick={() => {
                             setSelectedDocument(document);
-                            setExplanationLang("en");
+                            setExplanationLang(Language.EN);
                             setExplanationLoading(false);
                             if (document.parseStatus === "failed") {
                                 setExplanationText(
@@ -407,11 +442,11 @@ export default function RecordsPage() {
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
                             <select
                                 className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700"
-                                onChange={(event) => handleLanguageChange(event.target.value as "en" | "es")}
+                                onChange={(event) => handleLanguageChange(event.target.value as Language)}
                                 value={explanationLang}
                             >
-                                <option value="en">English</option>
-                                <option value="es">Español</option>
+                                <option value={Language.EN}>English</option>
+                                <option value={Language.ES}>Español</option>
                             </select>
                         </div>
                         <p className="mt-2 text-sm text-gray-700">
@@ -420,13 +455,18 @@ export default function RecordsPage() {
                                 : explanationText ?? "AI summary will appear here after parsing completes."}
                         </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <Button fullWidth onClick={() => setSelectedDocument(null)} variant="secondary">
-                            Close
+                    <div className="space-y-3">
+                        <Button fullWidth onClick={handleAskAboutDocument}>
+                            Ask about this document
                         </Button>
-                        <Button fullWidth onClick={() => fileInputRef.current?.click()}>
-                            Upload another
-                        </Button>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button fullWidth onClick={() => setSelectedDocument(null)} variant="secondary">
+                                Close
+                            </Button>
+                            <Button fullWidth onClick={() => fileInputRef.current?.click()} variant="secondary">
+                                Upload another
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </Modal>
