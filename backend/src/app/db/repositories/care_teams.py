@@ -17,7 +17,9 @@ class CareTeamRepository:
     def _as_rows(data: Any) -> list[dict[str, Any]]:
         return [row for row in cast("list[dict[str, Any]]", data or []) if isinstance(row, dict)]
 
-    async def list_invites_for_clinician_ids(self, clinician_ids: list[str]) -> list[dict[str, Any]]:
+    async def list_invites_for_clinician_ids(
+        self, clinician_ids: list[str]
+    ) -> list[dict[str, Any]]:
         """List invite-code rows for a clinic-scoped set of clinicians."""
         result = await execute_async(
             self.owner,
@@ -53,8 +55,11 @@ class CareTeamRepository:
         data = cast("dict[str, Any]", result.data or {})
         return data or None
 
-    async def deactivate_invite(self, care_team_id: str, clinician_id: str | None = None) -> list[dict[str, Any]]:
+    async def deactivate_invite(
+        self, care_team_id: str, clinician_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Mark an invite row inactive, optionally scoped to creator."""
+
         def _build_query(db: Any) -> Any:
             query = db.table("care_teams").update({"status": "inactive"}).eq("id", care_team_id)
             if clinician_id is not None:
@@ -83,7 +88,9 @@ class CareTeamRepository:
         )
         return self._as_rows(result.data)
 
-    async def find_active_assignment(self, clinician_id: str, patient_id: str) -> list[dict[str, Any]]:
+    async def find_active_assignment(
+        self, clinician_id: str, patient_id: str
+    ) -> list[dict[str, Any]]:
         """Lookup active assignment rows for clinician-patient pairs."""
         result = await execute_async(
             self.owner,

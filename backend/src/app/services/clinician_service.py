@@ -244,23 +244,31 @@ class ClinicianService:
         clinic_name = str(context.get("clinic_name") or "")
 
         if clinic_id:
-            clinician_ids.update(await self.clinician_repo.list_ids_by_clinic_id_async(str(clinic_id)))
+            clinician_ids.update(
+                await self.clinician_repo.list_ids_by_clinic_id_async(str(clinic_id))
+            )
 
         if clinic_name:
-            clinician_ids.update(await self.clinician_repo.list_ids_by_clinic_name_async(clinic_name))
+            clinician_ids.update(
+                await self.clinician_repo.list_ids_by_clinic_name_async(clinic_name)
+            )
 
         return sorted(clinician_ids)
 
     async def revoke_invite_code(self, clinician_id: UUID, care_team_id: UUID) -> dict[str, Any]:
         """Revoke a pending invite code created by this clinician."""
-        invite = await self.care_team_repo.find_invite_for_creator(str(care_team_id), str(clinician_id))
+        invite = await self.care_team_repo.find_invite_for_creator(
+            str(care_team_id), str(clinician_id)
+        )
         if not invite:
             raise NotFoundError("Invite code", str(care_team_id))
 
         if invite.get("status") != "pending" or invite.get("patient_id"):
             raise ValidationError("Only pending unclaimed invite codes can be revoked")
 
-        updated_rows = await self.care_team_repo.deactivate_invite(str(care_team_id), str(clinician_id))
+        updated_rows = await self.care_team_repo.deactivate_invite(
+            str(care_team_id), str(clinician_id)
+        )
         if not updated_rows:
             raise ValidationError("Failed to revoke invite code")
 

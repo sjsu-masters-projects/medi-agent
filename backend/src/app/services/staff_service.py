@@ -7,7 +7,7 @@ can manage roles for other members in their clinic.
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from supabase import Client
@@ -188,20 +188,20 @@ class StaffService:
                 row_id = str(row.get("id") or "")
                 if row_id and row_id not in seen_ids:
                     seen_ids.add(row_id)
-                    staff_rows.append(cast("dict[str, Any]", row))
+                    staff_rows.append(row)
 
             # Add same-name peers as a safety net for clinic identity drift.
             for row in self.clinician_repo.list_staff_by_clinic_name(str(context["clinic_name"])):
                 row_id = str(row.get("id") or "")
                 if row_id and row_id not in seen_ids:
                     seen_ids.add(row_id)
-                    staff_rows.append(cast("dict[str, Any]", row))
+                    staff_rows.append(row)
         else:
             for row in self.clinician_repo.list_staff_by_clinic_name(str(context["clinic_name"])):
                 row_id = str(row.get("id") or "")
                 if row_id and row_id not in seen_ids:
                     seen_ids.add(row_id)
-                    staff_rows.append(cast("dict[str, Any]", row))
+                    staff_rows.append(row)
 
         return {
             "staff": staff_rows,
@@ -269,7 +269,7 @@ class StaffService:
         existing = self.clinician_repo.list_by_email(email)
 
         if existing:
-            target = cast("dict[str, Any]", existing[0])
+            target = existing[0]
             if self._is_same_clinic(
                 source_id=(str(context["clinic_id"]) if context["clinic_id"] else None),
                 source_name=str(context["clinic_name"]),

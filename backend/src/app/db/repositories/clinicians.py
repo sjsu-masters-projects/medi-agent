@@ -19,7 +19,9 @@ class ClinicianRepository:
     def _as_rows(data: Any) -> list[dict[str, Any]]:
         return [row for row in cast("list[dict[str, Any]]", data or []) if isinstance(row, dict)]
 
-    def get_context(self, clinician_id: str, *, include_role: bool = False) -> dict[str, Any] | None:
+    def get_context(
+        self, clinician_id: str, *, include_role: bool = False
+    ) -> dict[str, Any] | None:
         """Return clinician clinic context and optionally role."""
         fields = "clinic_id, clinic_name, role" if include_role else "clinic_id, clinic_name"
         result = execute_sync(
@@ -164,7 +166,9 @@ class ClinicianRepository:
 
     def update_role(self, clinician_id: str, new_role: str) -> None:
         """Persist a clinician role update."""
-        self.owner.db.table("clinicians").update({"role": new_role}).eq("id", clinician_id).execute()
+        self.owner.db.table("clinicians").update({"role": new_role}).eq(
+            "id", clinician_id
+        ).execute()
 
     def assign_to_clinic(
         self,

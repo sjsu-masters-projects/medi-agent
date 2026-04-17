@@ -16,7 +16,7 @@ Design decisions:
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from jose import JWTError, jwt
 from supabase import Client
@@ -318,7 +318,7 @@ class AuthService:
         if not clinics:
             raise ValidationError("Clinic code is invalid")
 
-        clinic = cast("dict[str, Any]", clinics[0])
+        clinic = clinics[0]
         if clinic.get("status") != "active":
             raise ValidationError("Clinic code is inactive")
 

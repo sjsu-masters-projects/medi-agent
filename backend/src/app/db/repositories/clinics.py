@@ -14,12 +14,10 @@ class ClinicRepository:
         self.owner = owner
 
     @staticmethod
-    def _filter_matching_code(rows: list[dict[str, Any]], normalized_code: str) -> list[dict[str, Any]]:
-        return [
-            row
-            for row in rows
-            if str(row.get("code", "")).strip().upper() == normalized_code
-        ]
+    def _filter_matching_code(
+        rows: list[dict[str, Any]], normalized_code: str
+    ) -> list[dict[str, Any]]:
+        return [row for row in rows if str(row.get("code", "")).strip().upper() == normalized_code]
 
     @staticmethod
     def _as_rows(data: Any) -> list[dict[str, Any]]:
@@ -104,10 +102,7 @@ class ClinicRepository:
         """List clinic code rows by display name."""
         result = execute_sync(
             self.owner,
-            lambda db: db.table("clinics")
-            .select("code")
-            .eq("display_name", display_name)
-            .limit(1),
+            lambda db: db.table("clinics").select("code").eq("display_name", display_name).limit(1),
             operation=f"clinic code lookup by display_name={display_name}",
             retry_transient=True,
         )
