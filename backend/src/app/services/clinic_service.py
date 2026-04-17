@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, cast
 
 from supabase import Client
 
 from app.core.exceptions import ValidationError
+from app.db.repositories import ClinicRepository
+from app.db.supabase_execute import execute_async
 
 
 class ClinicService:
@@ -15,17 +16,11 @@ class ClinicService:
 
     def __init__(self, db: Client) -> None:
         self.db = db
+        self.clinic_repo = ClinicRepository(self)
 
     async def resolve_clinic_code(self, clinic_code: str) -> dict[str, Any]:
         """Resolve a clinic code for clinician auth gating."""
-        normalized_code = clinic_code.strip().upper()
-
-        result = await self._execute(
-            self.db.table("clinics")
-            .select("id, code, display_name, status")
-            .eq("code", normalized_code)
-        )
-        rows = cast("list[dict[str, Any]]", result.data or [])
+        rows = await self.clinic_repo.find_matching_by_code_async(clinic_code)
         if not rows:
             raise ValidationError("Clinic code is invalid")
 
@@ -50,10 +45,7 @@ class ClinicService:
 
         canonical_name = clean_name.lower()
 
-        existing = await self._execute(
-            self.db.table("clinics").select("id").eq("canonical_name", canonical_name)
-        )
-        existing_rows = cast("list[dict[str, Any]]", existing.data or [])
+        existing_rows = await self.clinic_repo.find_existing_by_canonical_name(canonical_name)
         if existing_rows:
             raise ValidationError("Clinic already exists")
 
@@ -65,7 +57,7 @@ class ClinicService:
         }
 
         try:
-            created = await self._execute(self.db.table("clinics").insert(payload))
+            created = await self.clinic_repo.insert_clinic(payload)
         except Exception as exc:  # pragma: no cover - defensive branch
             detail = str(exc).lower()
             if "duplicate" in detail or "unique" in detail:
@@ -79,12 +71,7 @@ class ClinicService:
         rows = cast("list[dict[str, Any]]", created.data or [])
         if not rows:
             # Some Supabase client versions return no insert payload by default.
-            fetched = await self._execute(
-                self.db.table("clinics")
-                .select("id, code, display_name, canonical_name, type2_npi, status, created_at")
-                .eq("canonical_name", canonical_name)
-            )
-            rows = cast("list[dict[str, Any]]", fetched.data or [])
+            rows = await self.clinic_repo.find_provisioned_by_canonical_name(canonical_name)
 
         if not rows:
             raise ValidationError("Clinic provisioning failed")
@@ -93,4 +80,9 @@ class ClinicService:
 
     async def _execute(self, query: Any) -> Any:
         """Run blocking Supabase execute() off the event loop."""
-        return await asyncio.to_thread(query.execute)
+        return await execute_async(
+            self,
+            lambda _db: query,
+            operation="Supabase query",
+            retry_transient=False,
+        )

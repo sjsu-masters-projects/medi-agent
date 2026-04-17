@@ -37,17 +37,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Startup / shutdown hooks.
 
-    Startup:  Eagerly initialise the Supabase clients so the
-              first request doesn't pay the connection cost.
+    Startup:  Keep external client initialization lazy so request-scoped
+              access paths can create fresh clients when needed.
     Shutdown: Nothing to clean up — Supabase SDK handles it.
     """
-    # Import here to avoid circular imports at module level
-    from app.clients.supabase import get_admin_client, get_anon_client
-
-    logger.info("Initialising Supabase clients...")
-    get_anon_client()
-    get_admin_client()
-    logger.info("Supabase clients ready ✓")
+    logger.info("Starting MediAgent backend")
 
     yield  # app is running
 

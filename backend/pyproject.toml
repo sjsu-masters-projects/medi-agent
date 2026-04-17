@@ -41,7 +41,18 @@ warn_unused_configs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["supabase.*", "deepgram.*", "langgraph.*", "langchain_google_genai.*", "resend.*", "google.generativeai.*"]
+module = [
+    "supabase.*",
+    "deepgram.*",
+    "langgraph.*",
+    "langchain_google_genai.*",
+    "resend.*",
+    "google.generativeai.*",
+    "fitz",
+    "pytesseract",
+    "PIL",
+    "PIL.*",
+]
 ignore_missing_imports = true
 
 # ── Pytest ────────────────────────────────────────────

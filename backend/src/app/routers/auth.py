@@ -13,6 +13,7 @@ from supabase import Client
 from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.models.auth import (
+    AuthLoginResponse,
     AuthResponse,
     AuthTokens,
     ClinicAdminSignupRequest,
@@ -121,18 +122,24 @@ async def signup_clinician(
 
 @router.post(
     "/login",
-    response_model=AuthResponse,
+    response_model=AuthLoginResponse,
     summary="Login with email + password",
     description="Works for both patients and clinicians.",
 )
 async def login(
     body: LoginRequest,
     service: AuthService = Depends(_get_auth_service),
-) -> AuthResponse:
-    result = await service.login(email=body.email, password=body.password)
-    return AuthResponse(
+) -> AuthLoginResponse:
+    result = await service.login(
+        email=body.email,
+        password=body.password,
+        clinic_code=body.clinic_code,
+    )
+    return AuthLoginResponse(
         tokens=AuthTokens(**result["tokens"]),
         user=UserInfo(**result["user"]),
+        mfa_required=result.get("mfa_required", False),
+        mfa_factors=result.get("mfa_factors", []),
     )
 
 

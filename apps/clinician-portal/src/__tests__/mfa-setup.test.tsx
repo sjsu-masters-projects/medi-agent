@@ -1,7 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import MFASetupPage from "../app/(dashboard)/settings/mfa/page";
 import { api } from "@/services/api";
+
+const { dispatch, writeStoredSession } = vi.hoisted(() => ({
+    dispatch: vi.fn(),
+    writeStoredSession: vi.fn(),
+}));
 
 // Mock Next router
 vi.mock("next/navigation", () => ({
@@ -13,7 +18,20 @@ vi.mock("next/navigation", () => ({
 
 // Mock Redux hooks
 vi.mock("react-redux", () => ({
-    useSelector: vi.fn(() => "fake-jwt-token"), // Mock token from state.auth.token
+    useDispatch: () => dispatch,
+    useSelector: vi.fn((selector) =>
+        selector({
+            auth: {
+                accessToken: "fake-jwt-token",
+                refreshToken: "fake-refresh-token",
+                user: {
+                    email: "doctor@example.com",
+                    id: "clinician-1",
+                    role: "clinician",
+                },
+            },
+        }),
+    ),
 }));
 
 // Mock API client
@@ -22,6 +40,10 @@ vi.mock("@/services/api", () => ({
         get: vi.fn(),
         post: vi.fn(),
     },
+}));
+
+vi.mock("@/services/auth-session", () => ({
+    writeStoredSession,
 }));
 
 describe("MFA Setup Page", () => {
@@ -66,5 +88,100 @@ describe("MFA Setup Page", () => {
 
         const setupBtn = screen.getByRole("button", { name: "Begin setup" });
         expect(setupBtn).toBeInTheDocument();
+    });
+
+    it("stores upgraded tokens after successful verification", async () => {
+        vi.mocked(api.get).mockResolvedValue({ factors: [] });
+        vi.mocked(api.post)
+            .mockResolvedValueOnce({
+                factor_id: "factor-1",
+                friendly_name: "Authenticator",
+                totp: {
+                    qr_code: "data:image/png;base64,abc",
+                    secret: "secret",
+                    uri: "otpauth://totp/test",
+                },
+            })
+            .mockResolvedValueOnce({
+                access_token: "aal2-access",
+                expires_at: 2234567890,
+                refresh_token: "aal2-refresh",
+                token_type: "bearer",
+            });
+
+        render(<MFASetupPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("Set up authenticator")).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Begin setup" }));
+
+        await waitFor(() => {
+            expect(screen.getByText("Scan QR code")).toBeInTheDocument();
+        });
+
+        fireEvent.change(screen.getByLabelText(/6-digit code/i), {
+            target: { value: "123456" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /verify and enable/i }));
+
+        await waitFor(() => {
+            expect(writeStoredSession).toHaveBeenCalledWith({
+                accessToken: "aal2-access",
+                expiresAt: 2234567890,
+                refreshToken: "aal2-refresh",
+                user: {
+                    email: "doctor@example.com",
+                    id: "clinician-1",
+                    role: "clinician",
+                },
+            });
+        });
+        expect(dispatch).toHaveBeenCalled();
+    });
+
+    it("refreshes the stored session after unenrolling MFA", async () => {
+        vi.mocked(api.get).mockResolvedValue({
+            factors: [
+                { id: "factor-1", friendly_name: "My Phone", status: "verified", created_at: "2026-01-01" },
+            ],
+        });
+        vi.mocked(api.post)
+            .mockResolvedValueOnce({ status: "removed", factor_id: "factor-1" })
+            .mockResolvedValueOnce({
+                tokens: {
+                    access_token: "aal1-access",
+                    expires_at: 3234567890,
+                    refresh_token: "aal1-refresh",
+                },
+                user: {
+                    email: "doctor@example.com",
+                    id: "clinician-1",
+                    role: "clinician",
+                },
+            });
+
+        render(<MFASetupPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText("MFA is enabled")).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+        await waitFor(() => {
+            expect(writeStoredSession).toHaveBeenCalledWith({
+                accessToken: "aal1-access",
+                expiresAt: 3234567890,
+                refreshToken: "aal1-refresh",
+                user: {
+                    email: "doctor@example.com",
+                    id: "clinician-1",
+                    role: "clinician",
+                },
+            });
+        });
+        expect(dispatch).toHaveBeenCalled();
     });
 });

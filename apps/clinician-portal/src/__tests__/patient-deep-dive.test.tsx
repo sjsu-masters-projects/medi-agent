@@ -77,17 +77,19 @@ describe("SymptomTimeline", () => {
     const mockSymptoms = [
         {
             id: "s1",
+            patientId: "patient-1",
             symptom: "headache",
             severity: 3,
-            created_at: "2026-03-10T09:00:00Z",
-            flagged_for_adr: false,
+            createdAt: "2026-03-10T09:00:00Z",
+            flaggedForAdr: false,
         },
         {
             id: "s2",
+            patientId: "patient-1",
             symptom: "nausea",
             severity: 7,
-            created_at: "2026-03-15T14:00:00Z",
-            flagged_for_adr: true,
+            createdAt: "2026-03-15T14:00:00Z",
+            flaggedForAdr: true,
         },
     ];
 

@@ -16,12 +16,14 @@ Design decisions:
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
-from jose import jwt
+from jose import JWTError, jwt
 from supabase import Client
 
+from app.clients.supabase import create_anon_client
 from app.core.exceptions import AuthenticationError, ValidationError
+from app.db.repositories import ClinicianRepository, ClinicRepository
 from app.models.enums import ClinicianRole
 from app.services.clinic_service import ClinicService
 
@@ -36,8 +38,11 @@ class AuthService:
     so it can create profile rows during signup.
     """
 
-    def __init__(self, db: Client) -> None:
+    def __init__(self, db: Client, auth_client: Client | None = None) -> None:
         self.db = db
+        self.auth_client = auth_client or create_anon_client()
+        self.clinic_repo = ClinicRepository(self)
+        self.clinician_repo = ClinicianRepository(self)
 
     # ── Signup ──────────────────────────────────────────────
 
@@ -54,7 +59,6 @@ class AuthService:
 
         Returns the Supabase session (access_token, refresh_token, user).
         """
-        # 1. Create the auth user via Supabase Auth
         auth_response = self._create_auth_user(email=email, password=password)
 
         if not auth_response.user:
@@ -66,7 +70,6 @@ class AuthService:
 
         user_id = auth_response.user.id
 
-        # 2. Insert the patient profile row (admin client bypasses RLS)
         try:
             self.db.table("patients").insert(
                 {
@@ -80,7 +83,6 @@ class AuthService:
             ).execute()
         except Exception as e:
             logger.error("Failed to create patient profile for %s: %s", user_id, e)
-            # Clean up the orphaned auth user
             self._delete_auth_user(user_id)
             raise ValidationError(f"Profile creation failed: {e}") from e
 
@@ -122,7 +124,6 @@ class AuthService:
             raise ValidationError("Invalid clinician role")
 
         clinic = self._resolve_active_clinic(clinic_code)
-
         auth_response = self._create_auth_user(email=email, password=password)
 
         if not auth_response.user:
@@ -178,7 +179,10 @@ class AuthService:
     ) -> Any:
         """Create a new clinic and bootstrap its first admin account."""
         clinic_service = ClinicService(self.db)
-        clinic = await clinic_service.provision_clinic(clinic_name=clinic_name, type2_npi=type2_npi)
+        clinic = await clinic_service.provision_clinic(
+            clinic_name=clinic_name,
+            type2_npi=type2_npi,
+        )
 
         try:
             return await self.signup_clinician(
@@ -193,10 +197,9 @@ class AuthService:
                 allow_admin_role=True,
             )
         except Exception:
-            # Best-effort cleanup of orphan clinic if admin signup fails.
             try:
                 self.db.table("clinics").delete().eq("id", str(clinic["id"])).execute()
-            except Exception as cleanup_error:  # pragma: no cover - defensive branch
+            except Exception as cleanup_error:  # pragma: no cover
                 logger.warning(
                     "Failed to rollback clinic %s after admin signup failure: %s",
                     clinic.get("id"),
@@ -206,9 +209,33 @@ class AuthService:
 
     # ── Login ───────────────────────────────────────────────
 
-    async def login(self, email: str, password: str) -> Any:
+    async def login(
+        self,
+        email: str,
+        password: str,
+        clinic_code: str | None = None,
+    ) -> Any:
         """Authenticate with email + password. Works for both roles."""
-        return self._sign_in_and_format(email=email, password=password)
+        response = self._sign_in_and_format(email=email, password=password)
+
+        if response["user"]["role"] != "clinician":
+            return {
+                **response,
+                "mfa_required": False,
+                "mfa_factors": [],
+            }
+
+        self._assert_clinician_matches_clinic(response["user"]["id"], clinic_code)
+        factors = self._list_verified_mfa_factors(
+            response["tokens"]["access_token"],
+            response["tokens"]["refresh_token"],
+        )
+        return {
+            **response,
+            "mfa_required": bool(factors)
+            and self._extract_aal(response["tokens"]["access_token"]) != "aal2",
+            "mfa_factors": factors,
+        }
 
     # ── Token Refresh ───────────────────────────────────────
 
@@ -219,7 +246,7 @@ class AuthService:
     ) -> Any:
         """Exchange a refresh token for a new access token."""
         try:
-            response = self.db.auth.refresh_session(refresh_token)
+            response = self.auth_client.auth.refresh_session(refresh_token)
         except Exception as e:
             logger.warning("Token refresh failed: %s", e)
             raise AuthenticationError("Invalid or expired refresh token") from None
@@ -231,9 +258,8 @@ class AuthService:
     async def request_password_reset(self, email: str) -> None:
         """Send a password reset email via Supabase."""
         try:
-            self.db.auth.reset_password_email(email)
+            self.auth_client.auth.reset_password_email(email)
         except Exception as e:
-            # Don't reveal whether the email exists — always return success
             logger.info("Password reset requested for %s: %s", email, e)
 
     # ── Helpers ─────────────────────────────────────────────
@@ -247,7 +273,7 @@ class AuthService:
     ) -> Any:
         """Sign in with email/password and validate the returned role."""
         try:
-            response = self.db.auth.sign_in_with_password(
+            response = self.auth_client.auth.sign_in_with_password(
                 {
                     "email": email,
                     "password": password,
@@ -264,14 +290,19 @@ class AuthService:
         try:
             self.db.table(profile_table).delete().eq("id", user_id).execute()
         except Exception as e:
-            logger.warning("Failed to delete %s profile for %s: %s", profile_table, user_id, e)
+            logger.warning(
+                "Failed to delete %s profile for %s: %s",
+                profile_table,
+                user_id,
+                e,
+            )
 
         self._delete_auth_user(user_id)
 
     def _create_auth_user(self, *, email: str, password: str) -> Any:
         """Create Supabase auth user and map SDK failures to ValidationError."""
         try:
-            return self.db.auth.sign_up(
+            return self.auth_client.auth.sign_up(
                 {
                     "email": email,
                     "password": password,
@@ -283,24 +314,42 @@ class AuthService:
 
     def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
         """Resolve clinic identity by code and enforce active status."""
-        normalized_code = clinic_code.strip().upper()
-
-        response = (
-            self.db.table("clinics")
-            .select("id, code, display_name, status")
-            .eq("code", normalized_code)
-            .execute()
-        )
-
-        clinics = [row for row in (response.data or []) if isinstance(row, dict)]
+        clinics = self.clinic_repo.find_matching_by_code(clinic_code)
         if not clinics:
             raise ValidationError("Clinic code is invalid")
 
-        clinic = cast("dict[str, Any]", clinics[0])
+        clinic = clinics[0]
         if clinic.get("status") != "active":
             raise ValidationError("Clinic code is inactive")
 
         return clinic
+
+    def _assert_clinician_matches_clinic(
+        self,
+        clinician_id: str,
+        clinic_code: str | None,
+    ) -> None:
+        """Ensure clinician logins are bound to the verified clinic workspace."""
+        if not clinic_code:
+            raise AuthenticationError("Clinic code is required for clinician login")
+
+        clinic = self._resolve_active_clinic(clinic_code)
+        profile = self.clinician_repo.get_context(clinician_id)
+        if not profile:
+            raise AuthenticationError("Clinician account is not linked to a clinic")
+        clinic_id = profile.get("clinic_id")
+        clinic_name = profile.get("clinic_name")
+
+        if clinic_id and str(clinic_id) == str(clinic["id"]):
+            return
+
+        if (
+            clinic_name
+            and str(clinic_name).strip().lower() == str(clinic["display_name"]).strip().lower()
+        ):
+            return
+
+        raise AuthenticationError("Clinician account does not belong to the selected clinic")
 
     @staticmethod
     def _build_signup_validation_message(error: Any) -> str:
@@ -334,6 +383,41 @@ class AuthService:
             logger.warning("Failed to delete auth user %s during rollback: %s", user_id, e)
 
     @staticmethod
+    def _extract_aal(access_token: str) -> str:
+        """Read the current MFA assurance level from the JWT."""
+        try:
+            claims = jwt.get_unverified_claims(access_token)
+        except JWTError:
+            return "aal1"
+        return str(claims.get("aal", "aal1"))
+
+    @staticmethod
+    def _list_verified_mfa_factors(
+        access_token: str,
+        refresh_token: str,
+    ) -> list[dict[str, Any]]:
+        """Return verified MFA factors for the just-authenticated user."""
+        client = create_anon_client()
+        try:
+            client.auth.set_session(access_token, refresh_token)
+            response = client.auth.mfa.list_factors()
+        except Exception as e:
+            logger.warning("Failed to determine MFA status after login: %s", e)
+            raise AuthenticationError("Unable to determine MFA status") from None
+
+        return [
+            {
+                "id": str(factor.id),
+                "friendly_name": factor.friendly_name,
+                "factor_type": factor.factor_type,
+                "status": factor.status,
+                "created_at": str(factor.created_at) if factor.created_at else None,
+            }
+            for factor in (response.totp or [])
+            if factor.status == "verified"
+        ]
+
+    @staticmethod
     def _validate_role(role: str, expected_role: str | None = None) -> str:
         """Reject unknown roles and mismatched role expectations."""
         if role not in _SUPPORTED_ROLES:
@@ -352,7 +436,7 @@ class AuthService:
 
         try:
             claims = jwt.get_unverified_claims(access_token)
-        except Exception:  # pragma: no cover - malformed tokens are handled by role validation
+        except Exception:  # pragma: no cover
             return None
 
         role = claims.get("user_role")

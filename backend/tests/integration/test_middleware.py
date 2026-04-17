@@ -12,6 +12,7 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
+from app.routers.clinicians import _clinician_dep
 
 
 @pytest.fixture
@@ -161,6 +162,7 @@ class TestExceptionHandlers:
             return clinician_user
 
         app.dependency_overrides[get_current_user] = _get_clinician_override
+        app.dependency_overrides[_clinician_dep] = _get_clinician_override
 
         response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}")
 

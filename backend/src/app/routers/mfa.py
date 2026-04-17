@@ -7,7 +7,7 @@ and forwarded to the MFA service for Supabase session operations.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.security import require_role
@@ -44,6 +44,17 @@ def _extract_token(
     return credentials.credentials
 
 
+def _extract_refresh_token(
+    refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+) -> str:
+    """Extract refresh token used to build a full Supabase session."""
+    if not refresh_token:
+        from app.core.exceptions import AuthenticationError
+
+        raise AuthenticationError("Missing refresh token")
+    return refresh_token
+
+
 @router.post(
     "/enroll",
     response_model=MFAEnrollResponse,
@@ -53,11 +64,12 @@ def _extract_token(
 )
 async def mfa_enroll(
     body: MFAEnrollRequest,
-    _user: CurrentUser = Depends(require_role("clinician")),
+    _user: CurrentUser = Depends(require_role("clinician", allow_unverified_mfa=True)),
     token: str = Depends(_extract_token),
+    refresh_token: str = Depends(_extract_refresh_token),
     service: MFAService = Depends(_get_mfa_service),
 ) -> MFAEnrollResponse:
-    result = await service.enroll(token, body.friendly_name)
+    result = await service.enroll(token, refresh_token, body.friendly_name)
     return MFAEnrollResponse(**result)
 
 
@@ -69,11 +81,12 @@ async def mfa_enroll(
 )
 async def mfa_verify(
     body: MFAVerifyRequest,
-    _user: CurrentUser = Depends(require_role("clinician")),
+    _user: CurrentUser = Depends(require_role("clinician", allow_unverified_mfa=True)),
     token: str = Depends(_extract_token),
+    refresh_token: str = Depends(_extract_refresh_token),
     service: MFAService = Depends(_get_mfa_service),
 ) -> MFAVerifyResponse:
-    result = await service.verify(token, body.factor_id, body.code)
+    result = await service.verify(token, refresh_token, body.factor_id, body.code)
     return MFAVerifyResponse(**result)
 
 
@@ -83,11 +96,12 @@ async def mfa_verify(
     summary="List enrolled MFA factors",
 )
 async def mfa_list_factors(
-    _user: CurrentUser = Depends(require_role("clinician")),
+    _user: CurrentUser = Depends(require_role("clinician", allow_unverified_mfa=True)),
     token: str = Depends(_extract_token),
+    refresh_token: str = Depends(_extract_refresh_token),
     service: MFAService = Depends(_get_mfa_service),
 ) -> MFAFactorsResponse:
-    factors = await service.list_factors(token)
+    factors = await service.list_factors(token, refresh_token)
     return MFAFactorsResponse(factors=[MFAFactorInfo(**f) for f in factors])
 
 
@@ -100,7 +114,8 @@ async def mfa_unenroll(
     body: MFAUnenrollRequest,
     _user: CurrentUser = Depends(require_role("clinician")),
     token: str = Depends(_extract_token),
+    refresh_token: str = Depends(_extract_refresh_token),
     service: MFAService = Depends(_get_mfa_service),
 ) -> MFAUnenrollResponse:
-    result = await service.unenroll(token, body.factor_id)
+    result = await service.unenroll(token, refresh_token, body.factor_id)
     return MFAUnenrollResponse(**result)

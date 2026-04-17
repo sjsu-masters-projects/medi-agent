@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import threading
@@ -30,6 +31,7 @@ from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
+from app.clients.supabase import create_anon_client
 from app.config import settings
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.models.auth import CurrentUser
@@ -164,6 +166,7 @@ async def get_current_user(
     user_id = payload.get("sub")
     email = payload.get("email", "")
     role = payload.get("user_role", "unknown")
+    aal = payload.get("aal", "aal1")
 
     if not user_id:
         raise AuthenticationError("Token missing user identity")
@@ -172,10 +175,30 @@ async def get_current_user(
         id=UUID(user_id),
         email=email,
         role=role,
+        aal=str(aal),
     )
 
 
-def require_role(role: str) -> Callable[..., Any]:
+async def _has_verified_mfa_factor(access_token: str) -> bool:
+    """Check whether the current user already has a verified MFA factor."""
+
+    def _load_user_factors() -> list[Any]:
+        client = create_anon_client()
+        response = client.auth.get_user(access_token)
+        user = getattr(response, "user", None) if response else None
+        factors = getattr(user, "factors", None)
+        return list(factors or [])
+
+    try:
+        factors = await asyncio.to_thread(_load_user_factors)
+    except Exception as exc:
+        logger.warning("Unable to determine MFA factor state: %s", exc)
+        raise AuthenticationError("Unable to determine MFA status") from None
+
+    return any(getattr(factor, "status", None) == "verified" for factor in factors)
+
+
+def require_role(role: str, *, allow_unverified_mfa: bool = False) -> Callable[..., Any]:
     """Factory that creates a dependency requiring a specific user role.
 
     The returned dependency calls get_current_user first, then
@@ -184,11 +207,19 @@ def require_role(role: str) -> Callable[..., Any]:
 
     async def _check_role(
         user: CurrentUser = Depends(get_current_user),
+        credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     ) -> CurrentUser:
         if user.role != role:
             raise AuthorizationError(
                 f"This endpoint requires '{role}' role, but you are '{user.role}'"
             )
+        if role == "clinician" and not allow_unverified_mfa and user.aal != "aal2":
+            if credentials is None:
+                raise AuthenticationError("Missing authorization header")
+            if await _has_verified_mfa_factor(credentials.credentials):
+                raise AuthorizationError(
+                    "MFA verification required before accessing clinician resources"
+                )
         return user
 
     return _check_role

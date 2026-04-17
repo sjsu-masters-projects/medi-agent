@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from jose import jwt
 
 from app.core.exceptions import AuthenticationError, ValidationError
 from app.services.mfa_service import MFAService
@@ -34,7 +35,7 @@ async def test_enroll_success(service, mock_client):
     mock_client.auth.mfa.enroll.return_value = mock_response
 
     with patch.object(MFAService, "_user_client", return_value=mock_client):
-        result = await service.enroll("token-abc", "My App")
+        result = await service.enroll("token-abc", "refresh-abc", "My App")
 
     assert result["factor_id"] == "factor-123"
     assert result["totp"]["qr_code"] == "data:image/png;base64,abc"
@@ -49,7 +50,7 @@ async def test_enroll_failure(service, mock_client):
         patch.object(MFAService, "_user_client", return_value=mock_client),
         pytest.raises(ValidationError, match="enrollment failed"),
     ):
-        await service.enroll("token-abc")
+        await service.enroll("token-abc", "refresh-abc")
 
 
 # ── verify ──────────────────────────────────────────────────
@@ -64,12 +65,14 @@ async def test_verify_success(service, mock_client):
     mock_verify = Mock()
     mock_verify.access_token = "new-access"
     mock_verify.refresh_token = "new-refresh"
+    mock_verify.expires_at = 1234567890
     mock_client.auth.mfa.verify.return_value = mock_verify
 
     with patch.object(MFAService, "_user_client", return_value=mock_client):
-        result = await service.verify("token-abc", "factor-123", "123456")
+        result = await service.verify("token-abc", "refresh-abc", "factor-123", "123456")
 
     assert result["access_token"] == "new-access"
+    assert result["expires_at"] == 1234567890
     assert result["token_type"] == "bearer"
     mock_client.auth.mfa.challenge.assert_called_once_with({"factor_id": "factor-123"})
     mock_client.auth.mfa.verify.assert_called_once_with(
@@ -85,7 +88,7 @@ async def test_verify_invalid_code(service, mock_client):
         patch.object(MFAService, "_user_client", return_value=mock_client),
         pytest.raises(AuthenticationError, match="Invalid verification code"),
     ):
-        await service.verify("token-abc", "factor-123", "000000")
+        await service.verify("token-abc", "refresh-abc", "factor-123", "000000")
 
 
 # ── list_factors ────────────────────────────────────────────
@@ -105,7 +108,7 @@ async def test_list_factors_success(service, mock_client):
     mock_client.auth.mfa.list_factors.return_value = mock_response
 
     with patch.object(MFAService, "_user_client", return_value=mock_client):
-        result = await service.list_factors("token-abc")
+        result = await service.list_factors("token-abc", "refresh-abc")
 
     assert len(result) == 1
     assert result[0]["id"] == "factor-1"
@@ -119,7 +122,7 @@ async def test_list_factors_empty(service, mock_client):
     mock_client.auth.mfa.list_factors.return_value = mock_response
 
     with patch.object(MFAService, "_user_client", return_value=mock_client):
-        result = await service.list_factors("token-abc")
+        result = await service.list_factors("token-abc", "refresh-abc")
 
     assert result == []
 
@@ -132,7 +135,7 @@ async def test_list_factors_failure(service, mock_client):
         patch.object(MFAService, "_user_client", return_value=mock_client),
         pytest.raises(ValidationError, match="Could not list"),
     ):
-        await service.list_factors("token-abc")
+        await service.list_factors("token-abc", "refresh-abc")
 
 
 # ── unenroll ────────────────────────────────────────────────
@@ -143,7 +146,7 @@ async def test_unenroll_success(service, mock_client):
     mock_client.auth.mfa.unenroll.return_value = None
 
     with patch.object(MFAService, "_user_client", return_value=mock_client):
-        result = await service.unenroll("token-abc", "factor-123")
+        result = await service.unenroll("token-abc", "refresh-abc", "factor-123")
 
     assert result["status"] == "removed"
     assert result["factor_id"] == "factor-123"
@@ -157,4 +160,9 @@ async def test_unenroll_failure(service, mock_client):
         patch.object(MFAService, "_user_client", return_value=mock_client),
         pytest.raises(ValidationError, match="Could not remove"),
     ):
-        await service.unenroll("token-abc", "factor-999")
+        await service.unenroll("token-abc", "refresh-abc", "factor-999")
+
+
+def test_extract_expires_at_reads_jwt_claim():
+    token = jwt.encode({"exp": 2234567890}, "secret", algorithm="HS256")
+    assert MFAService._extract_expires_at(token) == 2234567890

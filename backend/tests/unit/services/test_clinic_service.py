@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import ExternalServiceError, ValidationError
 from app.services.clinic_service import ClinicService
 
 
@@ -21,7 +21,7 @@ def service(mock_db):
 def _chain(mock_db, *, data):
     chain = MagicMock()
     chain.execute.return_value = Mock(data=data)
-    for method in ("select", "eq", "insert"):
+    for method in ("select", "eq", "ilike", "insert"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
     return chain
@@ -53,10 +53,43 @@ async def test_resolve_clinic_code_success(service, mock_db):
 
 @pytest.mark.asyncio
 async def test_resolve_clinic_code_invalid(service, mock_db):
-    _chain(mock_db, data=[])
+    empty_chain = MagicMock()
+    empty_chain.execute.return_value = Mock(data=[])
+    for method in ("select", "eq", "ilike"):
+        getattr(empty_chain, method).return_value = empty_chain
+    mock_db.table.side_effect = [empty_chain, empty_chain]
 
     with pytest.raises(ValidationError, match="invalid"):
         await service.resolve_clinic_code("missing")
+
+
+@pytest.mark.asyncio
+async def test_resolve_clinic_code_matches_trimmed_stored_value(service, mock_db):
+    exact_chain = MagicMock()
+    exact_chain.execute.return_value = Mock(data=[])
+    for method in ("select", "eq", "ilike"):
+        getattr(exact_chain, method).return_value = exact_chain
+
+    fallback_chain = MagicMock()
+    fallback_chain.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "  ABC123  ",
+                "display_name": "City Health",
+                "status": "active",
+            }
+        ]
+    )
+    for method in ("select", "eq", "ilike"):
+        getattr(fallback_chain, method).return_value = fallback_chain
+
+    mock_db.table.side_effect = [exact_chain, fallback_chain]
+
+    result = await service.resolve_clinic_code("abc123")
+
+    assert result["clinic_id"] == "clinic-1"
+    assert result["clinic_name"] == "City Health"
 
 
 @pytest.mark.asyncio
@@ -75,6 +108,44 @@ async def test_resolve_clinic_code_inactive(service, mock_db):
 
     with pytest.raises(ValidationError, match="inactive"):
         await service.resolve_clinic_code("ABC123")
+
+
+@pytest.mark.asyncio
+async def test_resolve_clinic_code_retries_transient_lookup_failures(service, mock_db):
+    exact_chain = MagicMock()
+    exact_chain.execute.side_effect = [
+        Exception("Resource temporarily unavailable"),
+        Mock(
+            data=[
+                {
+                    "id": "clinic-1",
+                    "code": "ABC123",
+                    "display_name": "City Health",
+                    "status": "active",
+                }
+            ]
+        ),
+    ]
+    for method in ("select", "eq", "ilike"):
+        getattr(exact_chain, method).return_value = exact_chain
+    mock_db.table.return_value = exact_chain
+
+    result = await service.resolve_clinic_code("abc123")
+
+    assert result["clinic_id"] == "clinic-1"
+    assert exact_chain.execute.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_resolve_clinic_code_raises_external_service_error_after_retries(service, mock_db):
+    failing_chain = MagicMock()
+    failing_chain.execute.side_effect = Exception("Resource temporarily unavailable")
+    for method in ("select", "eq", "ilike"):
+        getattr(failing_chain, method).return_value = failing_chain
+    mock_db.table.return_value = failing_chain
+
+    with pytest.raises(ExternalServiceError, match="clinic lookup is temporarily unavailable"):
+        await service.resolve_clinic_code("abc123")
 
 
 @pytest.mark.asyncio

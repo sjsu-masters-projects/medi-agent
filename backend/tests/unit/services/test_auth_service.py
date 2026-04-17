@@ -1,10 +1,10 @@
 """Tests for Auth service."""
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.core.exceptions import AuthenticationError, ValidationError
+from app.core.exceptions import AuthenticationError, ExternalServiceError, ValidationError
 from app.services.auth_service import AuthService
 
 
@@ -19,22 +19,30 @@ def mock_supabase_client():
 
 
 @pytest.fixture
-def auth_service(mock_supabase_client):
+def mock_auth_client():
+    client = MagicMock()
+    client.auth = MagicMock()
+    return client
+
+
+@pytest.fixture
+def auth_service(mock_supabase_client, mock_auth_client):
     """Create AuthService instance with mocked client."""
-    return AuthService(db=mock_supabase_client)
+    with patch("app.services.auth_service.create_anon_client", return_value=mock_auth_client):
+        return AuthService(db=mock_supabase_client)
 
 
 # ── Patient Signup Tests ──────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_signup_patient_success(auth_service, mock_supabase_client):
+async def test_signup_patient_success(auth_service, mock_supabase_client, mock_auth_client):
     """Test successful patient signup."""
     signup_user = Mock()
     signup_user.id = "user-123"
     signup_response = Mock()
     signup_response.user = signup_user
-    mock_supabase_client.auth.sign_up.return_value = signup_response
+    mock_auth_client.auth.sign_up.return_value = signup_response
 
     login_user = Mock()
     login_user.id = "user-123"
@@ -51,7 +59,7 @@ async def test_signup_patient_success(auth_service, mock_supabase_client):
     login_response.user = login_user
     login_response.session = login_session
 
-    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
+    mock_auth_client.auth.sign_in_with_password.return_value = login_response
 
     # Mock table insert
     mock_insert = MagicMock()
@@ -69,7 +77,7 @@ async def test_signup_patient_success(auth_service, mock_supabase_client):
     )
 
     # Verify auth.sign_up was called
-    mock_supabase_client.auth.sign_up.assert_called_once_with(
+    mock_auth_client.auth.sign_up.assert_called_once_with(
         {"email": "patient@example.com", "password": "SecurePass123!"}
     )
 
@@ -77,7 +85,7 @@ async def test_signup_patient_success(auth_service, mock_supabase_client):
     mock_supabase_client.table.assert_called_once_with("patients")
     mock_supabase_client.table.return_value.insert.assert_called_once()
 
-    mock_supabase_client.auth.sign_in_with_password.assert_called_once_with(
+    mock_auth_client.auth.sign_in_with_password.assert_called_once_with(
         {"email": "patient@example.com", "password": "SecurePass123!"}
     )
 
@@ -89,13 +97,13 @@ async def test_signup_patient_success(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_signup_patient_auth_failure(auth_service, mock_supabase_client):
+async def test_signup_patient_auth_failure(auth_service, mock_auth_client):
     """Test patient signup when auth creation fails."""
     # Mock auth.sign_up returning no user
     mock_auth_response = Mock()
     mock_auth_response.user = None
 
-    mock_supabase_client.auth.sign_up.return_value = mock_auth_response
+    mock_auth_client.auth.sign_up.return_value = mock_auth_response
 
     # Should raise ValidationError
     with pytest.raises(ValidationError, match="Signup failed"):
@@ -109,9 +117,9 @@ async def test_signup_patient_auth_failure(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_signup_patient_auth_exception(auth_service, mock_supabase_client):
+async def test_signup_patient_auth_exception(auth_service, mock_auth_client):
     """Test patient signup when Supabase sign_up raises unexpectedly."""
-    mock_supabase_client.auth.sign_up.side_effect = Exception("User already registered")
+    mock_auth_client.auth.sign_up.side_effect = Exception("User already registered")
 
     with pytest.raises(ValidationError, match="already registered"):
         await auth_service.signup_patient(
@@ -124,9 +132,9 @@ async def test_signup_patient_auth_exception(auth_service, mock_supabase_client)
 
 
 @pytest.mark.asyncio
-async def test_signup_patient_auth_hook_exception(auth_service, mock_supabase_client):
+async def test_signup_patient_auth_hook_exception(auth_service, mock_auth_client):
     """Return a clear error when Supabase custom access-token hook fails."""
-    mock_supabase_client.auth.sign_up.side_effect = Exception(
+    mock_auth_client.auth.sign_up.side_effect = Exception(
         "Error running hook URI: pg-functions://postgres/public/custom_access_token_hook"
     )
 
@@ -141,7 +149,9 @@ async def test_signup_patient_auth_hook_exception(auth_service, mock_supabase_cl
 
 
 @pytest.mark.asyncio
-async def test_signup_patient_profile_creation_failure(auth_service, mock_supabase_client):
+async def test_signup_patient_profile_creation_failure(
+    auth_service, mock_supabase_client, mock_auth_client
+):
     """Test patient signup when profile creation fails."""
     # Mock successful auth.sign_up
     mock_user = Mock()
@@ -150,7 +160,7 @@ async def test_signup_patient_profile_creation_failure(auth_service, mock_supaba
     mock_auth_response = Mock()
     mock_auth_response.user = mock_user
 
-    mock_supabase_client.auth.sign_up.return_value = mock_auth_response
+    mock_auth_client.auth.sign_up.return_value = mock_auth_response
 
     # Mock table insert failure
     mock_insert = MagicMock()
@@ -175,13 +185,13 @@ async def test_signup_patient_profile_creation_failure(auth_service, mock_supaba
 
 
 @pytest.mark.asyncio
-async def test_signup_clinician_success(auth_service, mock_supabase_client):
+async def test_signup_clinician_success(auth_service, mock_supabase_client, mock_auth_client):
     """Test successful clinician signup."""
     signup_user = Mock()
     signup_user.id = "clinician-123"
     signup_response = Mock()
     signup_response.user = signup_user
-    mock_supabase_client.auth.sign_up.return_value = signup_response
+    mock_auth_client.auth.sign_up.return_value = signup_response
 
     login_user = Mock()
     login_user.id = "clinician-123"
@@ -198,7 +208,7 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
     login_response.user = login_user
     login_response.session = login_session
 
-    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
+    mock_auth_client.auth.sign_in_with_password.return_value = login_response
 
     clinic_query = MagicMock()
     clinic_query.select.return_value = clinic_query
@@ -233,7 +243,7 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
     )
 
     # Verify auth.sign_up was called
-    mock_supabase_client.auth.sign_up.assert_called_once_with(
+    mock_auth_client.auth.sign_up.assert_called_once_with(
         {"email": "doctor@example.com", "password": "SecurePass123!"}
     )
 
@@ -241,7 +251,7 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
     mock_supabase_client.table.assert_any_call("clinics")
     mock_supabase_client.table.assert_any_call("clinicians")
 
-    mock_supabase_client.auth.sign_in_with_password.assert_called_once_with(
+    mock_auth_client.auth.sign_in_with_password.assert_called_once_with(
         {"email": "doctor@example.com", "password": "SecurePass123!"}
     )
 
@@ -251,7 +261,9 @@ async def test_signup_clinician_success(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_signup_clinician_profile_creation_failure(auth_service, mock_supabase_client):
+async def test_signup_clinician_profile_creation_failure(
+    auth_service, mock_supabase_client, mock_auth_client
+):
     """Test clinician signup when profile creation fails."""
     # Mock successful auth.sign_up
     mock_user = Mock()
@@ -260,7 +272,7 @@ async def test_signup_clinician_profile_creation_failure(auth_service, mock_supa
     mock_auth_response = Mock()
     mock_auth_response.user = mock_user
 
-    mock_supabase_client.auth.sign_up.return_value = mock_auth_response
+    mock_auth_client.auth.sign_up.return_value = mock_auth_response
 
     clinic_query = MagicMock()
     clinic_query.select.return_value = clinic_query
@@ -338,12 +350,14 @@ async def test_signup_clinician_inactive_clinic_code(auth_service, mock_supabase
 
 
 @pytest.mark.asyncio
-async def test_signup_clinician_supports_nurse_role(auth_service, mock_supabase_client):
+async def test_signup_clinician_supports_nurse_role(
+    auth_service, mock_supabase_client, mock_auth_client
+):
     signup_user = Mock()
     signup_user.id = "clinician-nurse-123"
     signup_response = Mock()
     signup_response.user = signup_user
-    mock_supabase_client.auth.sign_up.return_value = signup_response
+    mock_auth_client.auth.sign_up.return_value = signup_response
 
     login_user = Mock()
     login_user.id = "clinician-nurse-123"
@@ -359,7 +373,7 @@ async def test_signup_clinician_supports_nurse_role(auth_service, mock_supabase_
     login_response = Mock()
     login_response.user = login_user
     login_response.session = login_session
-    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
+    mock_auth_client.auth.sign_in_with_password.return_value = login_response
 
     clinic_query = MagicMock()
     clinic_query.select.return_value = clinic_query
@@ -410,12 +424,12 @@ async def test_signup_clinician_rejects_admin_role_by_default(auth_service, mock
 
 
 @pytest.mark.asyncio
-async def test_signup_clinic_admin_success(auth_service, mock_supabase_client):
+async def test_signup_clinic_admin_success(auth_service, mock_supabase_client, mock_auth_client):
     signup_user = Mock()
     signup_user.id = "admin-123"
     signup_response = Mock()
     signup_response.user = signup_user
-    mock_supabase_client.auth.sign_up.return_value = signup_response
+    mock_auth_client.auth.sign_up.return_value = signup_response
 
     login_user = Mock()
     login_user.id = "admin-123"
@@ -431,7 +445,7 @@ async def test_signup_clinic_admin_success(auth_service, mock_supabase_client):
     login_response = Mock()
     login_response.user = login_user
     login_response.session = login_session
-    mock_supabase_client.auth.sign_in_with_password.return_value = login_response
+    mock_auth_client.auth.sign_in_with_password.return_value = login_response
 
     clinics_lookup = MagicMock()
     clinics_lookup.select.return_value = clinics_lookup
@@ -511,7 +525,7 @@ async def test_signup_clinic_admin_success(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_login_success(auth_service, mock_supabase_client):
+async def test_login_success(auth_service, mock_auth_client):
     """Test successful login."""
     # Mock sign_in_with_password response
     mock_user = Mock()
@@ -529,26 +543,142 @@ async def test_login_success(auth_service, mock_supabase_client):
     mock_auth_response.user = mock_user
     mock_auth_response.session = mock_session
 
-    mock_supabase_client.auth.sign_in_with_password.return_value = mock_auth_response
+    mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
+    auth_service._list_verified_mfa_factors = MagicMock(return_value=[])  # type: ignore[method-assign]
 
     # Call login
     result = await auth_service.login(email="user@example.com", password="password123")
 
     # Verify sign_in_with_password was called
-    mock_supabase_client.auth.sign_in_with_password.assert_called_once_with(
+    mock_auth_client.auth.sign_in_with_password.assert_called_once_with(
         {"email": "user@example.com", "password": "password123"}
     )
 
     # Verify response format
     assert result["tokens"]["access_token"] == "login-access-token"
     assert result["user"]["id"] == "user-123"
+    assert result["mfa_required"] is False
 
 
 @pytest.mark.asyncio
-async def test_login_invalid_credentials(auth_service, mock_supabase_client):
+async def test_login_requires_mfa_for_clinician_with_verified_factor(
+    auth_service, mock_auth_client
+):
+    mock_user = Mock()
+    mock_user.id = "clinician-123"
+    mock_user.email = "doctor@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = {"user_role": "clinician"}
+
+    mock_session = Mock()
+    mock_session.access_token = "login-access-token"
+    mock_session.refresh_token = "login-refresh-token"
+    mock_session.expires_at = 1234567890
+
+    mock_auth_response = Mock()
+    mock_auth_response.user = mock_user
+    mock_auth_response.session = mock_session
+
+    mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
+    auth_service._assert_clinician_matches_clinic = MagicMock(return_value=None)  # type: ignore[method-assign]
+    auth_service._extract_aal = MagicMock(return_value="aal1")  # type: ignore[method-assign]
+    auth_service._list_verified_mfa_factors = MagicMock(  # type: ignore[method-assign]
+        return_value=[
+            {
+                "id": "factor-1",
+                "friendly_name": "Authenticator",
+                "factor_type": "totp",
+                "status": "verified",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        ]
+    )
+
+    result = await auth_service.login(email="doctor@example.com", password="password123")
+
+    assert result["mfa_required"] is True
+    assert result["mfa_factors"][0]["id"] == "factor-1"
+
+
+@pytest.mark.asyncio
+async def test_login_requires_clinic_code_for_clinicians(auth_service, mock_auth_client):
+    mock_user = Mock()
+    mock_user.id = "clinician-123"
+    mock_user.email = "doctor@example.com"
+    mock_user.created_at = "2024-01-01T00:00:00Z"
+    mock_user.app_metadata = {"user_role": "clinician"}
+
+    mock_session = Mock()
+    mock_session.access_token = "login-access-token"
+    mock_session.refresh_token = "login-refresh-token"
+    mock_session.expires_at = 1234567890
+
+    mock_auth_response = Mock()
+    mock_auth_response.user = mock_user
+    mock_auth_response.session = mock_session
+
+    mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
+
+    with pytest.raises(AuthenticationError, match="Clinic code is required"):
+        await auth_service.login(email="doctor@example.com", password="password123")
+
+
+@pytest.mark.asyncio
+async def test_assert_clinician_matches_clinic_rejects_different_clinic(
+    auth_service, mock_supabase_client
+):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "ABC123",
+                "display_name": "Heart Health Clinic",
+                "status": "active",
+            }
+        ]
+    )
+
+    clinician_query = MagicMock()
+    clinician_query.select.return_value = clinician_query
+    clinician_query.eq.return_value = clinician_query
+    clinician_query.execute.return_value = Mock(
+        data=[
+            {
+                "clinic_id": "clinic-2",
+                "clinic_name": "Different Clinic",
+            }
+        ]
+    )
+
+    mock_supabase_client.table.side_effect = [clinic_query, clinician_query]
+
+    with pytest.raises(AuthenticationError, match="does not belong to the selected clinic"):
+        auth_service._assert_clinician_matches_clinic("clinician-123", "ABC123")
+
+
+@pytest.mark.asyncio
+async def test_assert_clinician_matches_clinic_raises_external_service_error_on_transient_lookup_failure(
+    auth_service, mock_supabase_client
+):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.side_effect = Exception("Resource temporarily unavailable")
+
+    mock_supabase_client.table.return_value = clinic_query
+
+    with pytest.raises(ExternalServiceError, match="clinic lookup is temporarily unavailable"):
+        auth_service._assert_clinician_matches_clinic("clinician-123", "ABC123")
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_credentials(auth_service, mock_auth_client):
     """Test login with invalid credentials."""
     # Mock sign_in_with_password raising exception
-    mock_supabase_client.auth.sign_in_with_password.side_effect = Exception(
+    mock_auth_client.auth.sign_in_with_password.side_effect = Exception(
         "Invalid login credentials"
     )
 
@@ -558,7 +688,7 @@ async def test_login_invalid_credentials(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_login_rejects_unknown_role(auth_service, mock_supabase_client):
+async def test_login_rejects_unknown_role(auth_service, mock_auth_client):
     """Reject sessions that do not include a supported user_role claim."""
     mock_user = Mock()
     mock_user.id = "user-123"
@@ -575,7 +705,7 @@ async def test_login_rejects_unknown_role(auth_service, mock_supabase_client):
     mock_auth_response.user = mock_user
     mock_auth_response.session = mock_session
 
-    mock_supabase_client.auth.sign_in_with_password.return_value = mock_auth_response
+    mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
 
     with pytest.raises(AuthenticationError, match="invalid user role"):
         await auth_service.login(email="user@example.com", password="password123")
@@ -585,7 +715,7 @@ async def test_login_rejects_unknown_role(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_success(auth_service, mock_supabase_client):
+async def test_refresh_token_success(auth_service, mock_auth_client):
     """Test successful token refresh."""
     # Mock refresh_session response
     mock_user = Mock()
@@ -603,7 +733,7 @@ async def test_refresh_token_success(auth_service, mock_supabase_client):
     mock_auth_response.user = mock_user
     mock_auth_response.session = mock_session
 
-    mock_supabase_client.auth.refresh_session.return_value = mock_auth_response
+    mock_auth_client.auth.refresh_session.return_value = mock_auth_response
 
     # Call refresh_token
     result = await auth_service.refresh_token(
@@ -612,7 +742,7 @@ async def test_refresh_token_success(auth_service, mock_supabase_client):
     )
 
     # Verify refresh_session was called
-    mock_supabase_client.auth.refresh_session.assert_called_once_with("old-refresh-token")
+    mock_auth_client.auth.refresh_session.assert_called_once_with("old-refresh-token")
 
     # Verify response format
     assert result["tokens"]["access_token"] == "new-access-token"
@@ -620,7 +750,7 @@ async def test_refresh_token_success(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_rejects_mismatched_role(auth_service, mock_supabase_client):
+async def test_refresh_token_rejects_mismatched_role(auth_service, mock_auth_client):
     """Reject refresh responses that do not match the expected role."""
     mock_user = Mock()
     mock_user.id = "user-123"
@@ -637,7 +767,7 @@ async def test_refresh_token_rejects_mismatched_role(auth_service, mock_supabase
     mock_auth_response.user = mock_user
     mock_auth_response.session = mock_session
 
-    mock_supabase_client.auth.refresh_session.return_value = mock_auth_response
+    mock_auth_client.auth.refresh_session.return_value = mock_auth_response
 
     with pytest.raises(AuthenticationError, match="expected 'patient' role"):
         await auth_service.refresh_token(
@@ -647,10 +777,10 @@ async def test_refresh_token_rejects_mismatched_role(auth_service, mock_supabase
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_invalid(auth_service, mock_supabase_client):
+async def test_refresh_token_invalid(auth_service, mock_auth_client):
     """Test token refresh with invalid token."""
     # Mock refresh_session raising exception
-    mock_supabase_client.auth.refresh_session.side_effect = Exception("Invalid refresh token")
+    mock_auth_client.auth.refresh_session.side_effect = Exception("Invalid refresh token")
 
     # Should raise AuthenticationError
     with pytest.raises(AuthenticationError, match="Invalid or expired refresh token"):
@@ -661,29 +791,29 @@ async def test_refresh_token_invalid(auth_service, mock_supabase_client):
 
 
 @pytest.mark.asyncio
-async def test_request_password_reset_success(auth_service, mock_supabase_client):
+async def test_request_password_reset_success(auth_service, mock_auth_client):
     """Test successful password reset request."""
     # Mock reset_password_email
-    mock_supabase_client.auth.reset_password_email.return_value = None
+    mock_auth_client.auth.reset_password_email.return_value = None
 
     # Call request_password_reset (should not raise)
     await auth_service.request_password_reset(email="user@example.com")
 
     # Verify reset_password_email was called
-    mock_supabase_client.auth.reset_password_email.assert_called_once_with("user@example.com")
+    mock_auth_client.auth.reset_password_email.assert_called_once_with("user@example.com")
 
 
 @pytest.mark.asyncio
-async def test_request_password_reset_email_not_found(auth_service, mock_supabase_client):
+async def test_request_password_reset_email_not_found(auth_service, mock_auth_client):
     """Test password reset request for non-existent email (should not reveal)."""
     # Mock reset_password_email raising exception
-    mock_supabase_client.auth.reset_password_email.side_effect = Exception("User not found")
+    mock_auth_client.auth.reset_password_email.side_effect = Exception("User not found")
 
     # Should NOT raise (security: don't reveal if email exists)
     await auth_service.request_password_reset(email="nonexistent@example.com")
 
     # Verify reset_password_email was called
-    mock_supabase_client.auth.reset_password_email.assert_called_once_with(
+    mock_auth_client.auth.reset_password_email.assert_called_once_with(
         "nonexistent@example.com"
     )
 

@@ -13,6 +13,7 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
+from app.routers.clinicians import _clinician_dep
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def mock_supabase_db():
     db.table.return_value = table
 
     # Make all query methods chainable
-    for method in ["select", "eq", "single", "insert", "order", "update", "limit"]:
+    for method in ["select", "eq", "single", "insert", "order", "update", "limit", "in_"]:
         getattr(table, method).return_value = table
 
     return db
@@ -49,6 +50,7 @@ def override_auth(mock_clinician_user):
         return mock_clinician_user
 
     app.dependency_overrides[get_current_user] = _get_current_user_override
+    app.dependency_overrides[_clinician_dep] = _get_current_user_override
     yield
     app.dependency_overrides.clear()
 
@@ -235,12 +237,6 @@ class TestGetPatientDetail:
         """Successfully retrieve patient detail."""
         patient_id = uuid4()
 
-        # Mock care team assignment check
-        mock_supabase_db.table().select().eq().eq().eq().execute.return_value = MagicMock(
-            data=[{"id": str(uuid4())}]
-        )
-
-        # Mock patient profile fetch
         patient_data = {
             "id": str(patient_id),
             "email": "patient@test.com",
@@ -254,9 +250,10 @@ class TestGetPatientDetail:
             "created_at": "2025-01-01T00:00:00Z",
             "updated_at": None,
         }
-        mock_supabase_db.table().select().eq().single().execute.return_value = MagicMock(
-            data=patient_data
-        )
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(data=[{"id": str(uuid4())}]),
+            MagicMock(data=patient_data),
+        ]
 
         response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}")
 
@@ -366,37 +363,59 @@ class TestListInviteCodes:
     """GET /api/v1/clinicians/me/invite-codes - Read invite lifecycle list."""
 
     def test_success(self, client, override_auth, override_db, mock_supabase_db):
-        mock_supabase_db.table().select().eq().order().limit().execute.return_value = MagicMock(
-            data=[
-                {
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(
+                data={
                     "id": str(uuid4()),
-                    "invite_code": "ACTIVE123",
-                    "status": "pending",
-                    "patient_id": None,
+                    "clinic_id": "clinic-1",
+                    "clinic_name": "City Health",
                     "role": "provider",
-                    "created_at": "2026-04-10T00:00:00Z",
-                    "invite_expires_at": "2099-01-01T00:00:00+00:00",
-                    "invite_claimed_at": None,
-                    "patients": None,
-                },
-                {
-                    "id": str(uuid4()),
-                    "invite_code": "USED1234",
-                    "status": "active",
-                    "patient_id": str(uuid4()),
-                    "role": "provider",
-                    "created_at": "2026-04-09T00:00:00Z",
-                    "invite_expires_at": "2099-01-01T00:00:00+00:00",
-                    "invite_claimed_at": "2026-04-09T09:00:00Z",
-                    "patients": {
+                }
+            ),
+            MagicMock(
+                data=[
+                    {
                         "id": str(uuid4()),
-                        "first_name": "Sam",
-                        "last_name": "Lee",
-                        "email": "sam@example.com",
+                        "invite_code": "ACTIVE123",
+                        "status": "pending",
+                        "patient_id": None,
+                        "role": "provider",
+                        "created_at": "2026-04-10T00:00:00Z",
+                        "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                        "invite_claimed_at": None,
+                        "patients": None,
+                        "clinicians": {
+                            "id": str(uuid4()),
+                            "first_name": "Taylor",
+                            "last_name": "Mills",
+                            "email": "taylor@example.com",
+                        },
                     },
-                },
-            ]
-        )
+                    {
+                        "id": str(uuid4()),
+                        "invite_code": "USED1234",
+                        "status": "active",
+                        "patient_id": str(uuid4()),
+                        "role": "provider",
+                        "created_at": "2026-04-09T00:00:00Z",
+                        "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                        "invite_claimed_at": "2026-04-09T09:00:00Z",
+                        "patients": {
+                            "id": str(uuid4()),
+                            "first_name": "Sam",
+                            "last_name": "Lee",
+                            "email": "sam@example.com",
+                        },
+                        "clinicians": {
+                            "id": str(uuid4()),
+                            "first_name": "Taylor",
+                            "last_name": "Mills",
+                            "email": "taylor@example.com",
+                        },
+                    },
+                ]
+            ),
+        ]
 
         response = client.get("/api/v1/clinicians/me/invite-codes")
 
@@ -406,6 +425,7 @@ class TestListInviteCodes:
         assert "counts" in data
         assert data["counts"]["active"] == 1
         assert data["counts"]["claimed"] == 1
+        assert data["invites"][0]["created_by"]["email"] == "taylor@example.com"
 
 
 class TestRevokeInviteCode:

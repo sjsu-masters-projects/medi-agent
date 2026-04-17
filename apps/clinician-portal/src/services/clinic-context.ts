@@ -29,9 +29,8 @@ export function readStoredClinicContext(): ClinicContext | null {
             return null;
         }
 
-        // Keep both storages aligned so existing sessions continue to work.
         window.localStorage.setItem(CLINIC_CONTEXT_STORAGE_KEY, JSON.stringify(parsed));
-        window.sessionStorage.setItem(CLINIC_CONTEXT_STORAGE_KEY, JSON.stringify(parsed));
+        window.sessionStorage.removeItem(CLINIC_CONTEXT_STORAGE_KEY);
         return parsed;
     } catch {
         return null;
@@ -44,7 +43,7 @@ export function writeStoredClinicContext(context: ClinicContext): void {
     }
 
     window.localStorage.setItem(CLINIC_CONTEXT_STORAGE_KEY, JSON.stringify(context));
-    window.sessionStorage.setItem(CLINIC_CONTEXT_STORAGE_KEY, JSON.stringify(context));
+    window.sessionStorage.removeItem(CLINIC_CONTEXT_STORAGE_KEY);
 }
 
 export function clearStoredClinicContext(): void {

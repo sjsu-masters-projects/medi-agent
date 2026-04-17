@@ -1,22 +1,17 @@
 var PDFiumModule = (() => {
-    var _scriptDir = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : undefined;
-    if (typeof __filename !== 'undefined')
-        _scriptDir = _scriptDir || __filename;
     return (function (PDFiumModule = {}) {
         var Module = typeof PDFiumModule != "undefined" ? PDFiumModule : {};
         var ENVIRONMENT_IS_WEB = typeof window == "object";
         var ENVIRONMENT_IS_WORKER = typeof WorkerGlobalScope != "undefined";
         var ENVIRONMENT_IS_NODE = typeof process == "object" && process.versions && process.versions.node && process.type != "renderer";
-        var arguments_ = [];
         var thisProgram = "./this.program";
-        var quit_ = (status, toThrow) => {
-            throw toThrow
-        };
         var _scriptName = typeof document != "undefined" ? document.currentScript && document.currentScript.src : undefined;
-        if (typeof __filename != "undefined") {
-            _scriptName = __filename
-        } else if (ENVIRONMENT_IS_WORKER) {
-            _scriptName = self.location.href
+        try {
+            _scriptName = __filename;
+        } catch {
+            if (ENVIRONMENT_IS_WORKER) {
+                _scriptName = self.location.href;
+            }
         }
         var scriptDirectory = "";
 
@@ -33,36 +28,31 @@ var PDFiumModule = (() => {
             readBinary = filename => {
                 filename = isFileURI(filename) ? new URL(filename) : filename;
                 var ret = fs.readFileSync(filename);
-                return ret
+                return ret;
             };
             readAsync = async (filename, binary = true) => {
                 filename = isFileURI(filename) ? new URL(filename) : filename;
                 var ret = fs.readFileSync(filename, binary ? undefined : "utf8");
-                return ret
+                return ret;
             };
             if (process.argv.length > 1) {
-                thisProgram = process.argv[1].replace(/\\/g, "/")
+                thisProgram = process.argv[1].replace(/\\/g, "/");
             }
-            arguments_ = process.argv.slice(2);
             if (typeof module != "undefined") {
-                module["exports"] = Module
-            }
-            quit_ = (status, toThrow) => {
-                process.exitCode = status;
-                throw toThrow
+                module["exports"] = Module;
             }
         } else if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
             try {
-                scriptDirectory = new URL(".", _scriptName).href
-            } catch {} {
+                scriptDirectory = new URL(".", _scriptName).href;
+            } catch {
                 if (ENVIRONMENT_IS_WORKER) {
                     readBinary = url => {
                         var xhr = new XMLHttpRequest;
                         xhr.open("GET", url, false);
                         xhr.responseType = "arraybuffer";
                         xhr.send(null);
-                        return new Uint8Array(xhr.response)
-                    }
+                        return new Uint8Array(xhr.response);
+                    };
                 }
                 readAsync = async url => {
                     if (isFileURI(url)) {
@@ -73,22 +63,22 @@ var PDFiumModule = (() => {
                             xhr.onload = () => {
                                 if (xhr.status == 200 || xhr.status == 0 && xhr.response) {
                                     resolve(xhr.response);
-                                    return
+                                    return;
                                 }
-                                reject(xhr.status)
+                                reject(xhr.status);
                             };
                             xhr.onerror = reject;
-                            xhr.send(null)
-                        })
+                            xhr.send(null);
+                        });
                     }
                     var response = await fetch(url, {
                         credentials: "same-origin"
                     });
                     if (response.ok) {
-                        return response.arrayBuffer()
+                        return response.arrayBuffer();
                     }
-                    throw new Error(response.status + " : " + response.url)
-                }
+                    throw new Error(response.status + " : " + response.url);
+                };
             }
         } else {}
         var out = console.log.bind(console);
@@ -112,7 +102,7 @@ var PDFiumModule = (() => {
             Module["HEAPF32"] = HEAPF32 = new Float32Array(b);
             Module["HEAPF64"] = HEAPF64 = new Float64Array(b);
             Module["HEAP64"] = HEAP64 = new BigInt64Array(b);
-            Module["HEAPU64"] = HEAPU64 = new BigUint64Array(b)
+            Module["HEAPU64"] = HEAPU64 = new BigUint64Array(b);
         }
 
         function preRun() {
@@ -272,15 +262,7 @@ var PDFiumModule = (() => {
             }
             wasmBinaryFile = findWasmBinary();
             var result = await instantiateAsync(wasmBinary, wasmBinaryFile, info);
-            var exports = receiveInstantiationResult(result);
-            return exports
-        }
-        class ExitStatus {
-            name = "ExitStatus";
-            constructor(status) {
-                this.message = `Program terminated with exit(${status})`;
-                this.status = status
-            }
+            return receiveInstantiationResult(result);
         }
         var callRuntimeCallbacks = callbacks => {
             while (callbacks.length > 0) {
@@ -291,8 +273,6 @@ var PDFiumModule = (() => {
         var addOnPostRun = cb => onPostRuns.push(cb);
         var onPreRuns = [];
         var addOnPreRun = cb => onPreRuns.push(cb);
-        var noExitRuntime = true;
-
         function setValue(ptr, value, type = "i8") {
             if (type.endsWith("*")) type = "*";
             switch (type) {
@@ -321,7 +301,7 @@ var PDFiumModule = (() => {
                     HEAPU32[ptr >>> 2 >>> 0] = value;
                     break;
                 default:
-                    abort(`invalid type for setValue: ${type}`)
+                    abort(`invalid type for setValue: ${type}`);
             }
         }
         var stackRestore = val => __emscripten_stack_restore(val);
@@ -850,20 +830,18 @@ var PDFiumModule = (() => {
                 rename(old_node, new_dir, new_name) {
                     var new_node;
                     try {
-                        new_node = FS.lookupNode(new_dir, new_name)
+                        new_node = FS.lookupNode(new_dir, new_name);
                     } catch (e) {}
                     if (new_node) {
-                        if (FS.isDir(old_node.mode)) {
-                            for (var i in new_node.contents) {
-                                throw new FS.ErrnoError(55)
-                            }
+                        if (FS.isDir(old_node.mode) && Object.keys(new_node.contents).length > 0) {
+                            throw new FS.ErrnoError(55);
                         }
-                        FS.hashRemoveNode(new_node)
+                        FS.hashRemoveNode(new_node);
                     }
                     delete old_node.parent.contents[old_node.name];
                     new_dir.contents[new_name] = old_node;
                     old_node.name = new_name;
-                    new_dir.ctime = new_dir.mtime = old_node.parent.ctime = old_node.parent.mtime = Date.now()
+                    new_dir.ctime = new_dir.mtime = old_node.parent.ctime = old_node.parent.mtime = Date.now();
                 },
                 unlink(parent, name) {
                     delete parent.contents[name];
@@ -871,11 +849,11 @@ var PDFiumModule = (() => {
                 },
                 rmdir(parent, name) {
                     var node = FS.lookupNode(parent, name);
-                    for (var i in node.contents) {
-                        throw new FS.ErrnoError(55)
+                    if (Object.keys(node.contents).length > 0) {
+                        throw new FS.ErrnoError(55);
                     }
                     delete parent.contents[name];
-                    parent.ctime = parent.mtime = Date.now()
+                    parent.ctime = parent.mtime = Date.now();
                 },
                 readdir(node) {
                     return [".", "..", ...Object.keys(node.contents)]
@@ -1325,7 +1303,7 @@ var PDFiumModule = (() => {
                     return 54
                 }
                 try {
-                    var node = FS.lookupNode(dir, name);
+                    FS.lookupNode(dir, name);
                     return 20
                 } catch (e) {}
                 return FS.nodePermissions(dir, "wx")
@@ -2163,7 +2141,7 @@ var PDFiumModule = (() => {
                 FS.createDevice("/dev", "random", randomByte);
                 FS.createDevice("/dev", "urandom", randomByte);
                 FS.mkdir("/dev/shm");
-                FS.mkdir("/dev/shm/tmp")
+                FS.mkdir("/dev/shm/tmp");
             },
             createSpecialDirectories() {
                 FS.mkdir("/proc");
@@ -2216,9 +2194,9 @@ var PDFiumModule = (() => {
                 } else {
                     FS.symlink("/dev/tty1", "/dev/stderr")
                 }
-                var stdin = FS.open("/dev/stdin", 0);
-                var stdout = FS.open("/dev/stdout", 1);
-                var stderr = FS.open("/dev/stderr", 1)
+                FS.open("/dev/stdin", 0);
+                FS.open("/dev/stdout", 1);
+                FS.open("/dev/stderr", 1);
             },
             staticInit() {
                 FS.nameTable = new Array(4096);
@@ -2455,11 +2433,11 @@ var PDFiumModule = (() => {
                             chunkSize = datalength = 1;
                             datalength = this.getter(0).length;
                             chunkSize = datalength;
-                            out("LazyFiles on gzip forces download of the whole file when length is accessed")
+                            out("LazyFiles on gzip forces download of the whole file when length is accessed");
                         }
                         this._length = datalength;
                         this._chunkSize = chunkSize;
-                        this.lengthKnown = true
+                        this.lengthKnown = true;
                     }
                     get length() {
                         if (!this.lengthKnown) {
@@ -2591,7 +2569,7 @@ var PDFiumModule = (() => {
                 HEAP64[buf + 72 >>> 3 >>> 0] = BigInt(Math.floor(ctime / 1e3));
                 HEAPU32[buf + 80 >>> 2 >>> 0] = ctime % 1e3 * 1e3 * 1e3;
                 HEAP64[buf + 88 >>> 3 >>> 0] = BigInt(stat.ino);
-                return 0
+                return 0;
             },
             writeStatFs(buf, stats) {
                 HEAP32[buf + 4 >>> 2 >>> 0] = stats.bsize;
@@ -2603,7 +2581,7 @@ var PDFiumModule = (() => {
                 HEAP32[buf + 24 >>> 2 >>> 0] = stats.ffree;
                 HEAP32[buf + 28 >>> 2 >>> 0] = stats.fsid;
                 HEAP32[buf + 44 >>> 2 >>> 0] = stats.flags;
-                HEAP32[buf + 36 >>> 2 >>> 0] = stats.namelen
+                HEAP32[buf + 36 >>> 2 >>> 0] = stats.namelen;
             },
             doMsync(addr, stream, len, flags, offset) {
                 if (!FS.isFile(stream.node.mode)) {
@@ -2865,7 +2843,6 @@ var PDFiumModule = (() => {
                 path = SYSCALLS.getStr(path);
                 var nofollow = flags & 256;
                 var allowEmpty = flags & 4096;
-                flags = flags & ~6400;
                 path = SYSCALLS.calculateAt(dirfd, path, allowEmpty);
                 return SYSCALLS.writeStat(buf, nofollow ? FS.lstat(path) : FS.stat(path))
             } catch (e) {
@@ -2949,7 +2926,7 @@ var PDFiumModule = (() => {
             HEAP32[tmPtr + 24 >>> 2 >>> 0] = date.getUTCDay();
             var start = Date.UTC(date.getUTCFullYear(), 0, 1, 0, 0, 0, 0);
             var yday = (date.getTime() - start) / (1e3 * 60 * 60 * 24) | 0;
-            HEAP32[tmPtr + 28 >>> 2 >>> 0] = yday
+            HEAP32[tmPtr + 28 >>> 2 >>> 0] = yday;
         }
         var isLeapYear = year => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
         var MONTH_DAYS_LEAP_CUMULATIVE = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
@@ -2979,7 +2956,7 @@ var PDFiumModule = (() => {
             var summerOffset = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
             var winterOffset = start.getTimezoneOffset();
             var dst = (summerOffset != winterOffset && date.getTimezoneOffset() == Math.min(winterOffset, summerOffset)) | 0;
-            HEAP32[tmPtr + 32 >>> 2 >>> 0] = dst
+            HEAP32[tmPtr + 32 >>> 2 >>> 0] = dst;
         }
         var __tzset_js = function (timezone, daylight, std_name, dst_name) {
             timezone >>>= 0;
@@ -3406,13 +3383,11 @@ var PDFiumModule = (() => {
         Module["FS"] = FS;
         MEMFS.doesNotExistError = new FS.ErrnoError(44);
         MEMFS.doesNotExistError.stack = "<generic error, no stack>"; {
-            if (Module["noExitRuntime"]) noExitRuntime = Module["noExitRuntime"];
             if (Module["preloadPlugins"]) preloadPlugins = Module["preloadPlugins"];
             if (Module["print"]) out = Module["print"];
             if (Module["printErr"]) err = Module["printErr"];
             if (Module["wasmBinary"]) wasmBinary = Module["wasmBinary"];
-            if (Module["arguments"]) arguments_ = Module["arguments"];
-            if (Module["thisProgram"]) thisProgram = Module["thisProgram"]
+            if (Module["thisProgram"]) thisProgram = Module["thisProgram"];
         }
         Module["ccall"] = ccall;
         Module["cwrap"] = cwrap;
@@ -3881,7 +3856,7 @@ var PDFiumModule = (() => {
             _setThrew = wasmExports["setThrew"];
             __emscripten_stack_restore = wasmExports["_emscripten_stack_restore"];
             __emscripten_stack_alloc = wasmExports["_emscripten_stack_alloc"];
-            _emscripten_stack_get_current = wasmExports["emscripten_stack_get_current"]
+            _emscripten_stack_get_current = wasmExports["emscripten_stack_get_current"];
         }
         var wasmImports = {
             __syscall_fcntl64: ___syscall_fcntl64,
@@ -4008,7 +3983,7 @@ var PDFiumModule = (() => {
             wasmExports["realloc"] = makeWrapper_ppp(wasmExports["realloc"]);
             wasmExports["_emscripten_stack_alloc"] = makeWrapper_pp(wasmExports["_emscripten_stack_alloc"]);
             wasmExports["emscripten_stack_get_current"] = makeWrapper_p(wasmExports["emscripten_stack_get_current"]);
-            return wasmExports
+            return wasmExports;
         }
 
         function run() {
@@ -4052,7 +4027,7 @@ var PDFiumModule = (() => {
         }
         preInit();
         run();
-        return PDFiumModule.ready
+        return PDFiumModule.ready;
     });
 })();
 if (typeof exports === 'object' && typeof module === 'object')

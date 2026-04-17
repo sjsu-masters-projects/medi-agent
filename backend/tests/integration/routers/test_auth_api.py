@@ -10,6 +10,8 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
+from app.routers.auth import _get_auth_service
+from app.services.auth_service import AuthService
 
 
 @pytest.fixture
@@ -37,6 +39,18 @@ def override_db(mock_supabase_db):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture
+def override_auth_service(mock_supabase_db):
+    """Override AuthService so auth SDK calls use the mocked client."""
+
+    def _get_auth_service_override():
+        return AuthService(db=mock_supabase_db, auth_client=mock_supabase_db)
+
+    app.dependency_overrides[_get_auth_service] = _get_auth_service_override
+    yield
+    app.dependency_overrides.clear()
+
+
 def _make_auth_response(*, user_id: str, email: str, role: str) -> Mock:
     user = Mock()
     user.id = user_id
@@ -56,7 +70,7 @@ def _make_auth_response(*, user_id: str, email: str, role: str) -> Mock:
 
 
 class TestPatientSignup:
-    def test_success(self, client, override_db, mock_supabase_db):
+    def test_success(self, client, override_db, override_auth_service, mock_supabase_db):
         user_id = str(uuid4())
         signup_response = Mock()
         signup_response.user = Mock(id=user_id)
@@ -85,7 +99,7 @@ class TestPatientSignup:
         assert data["user"]["role"] == "patient"
         assert data["tokens"]["refresh_token"] == "patient-refresh-token"
 
-    def test_duplicate_email(self, client, override_db, mock_supabase_db):
+    def test_duplicate_email(self, client, override_db, override_auth_service, mock_supabase_db):
         signup_response = Mock()
         signup_response.user = None
         mock_supabase_db.auth.sign_up.return_value = signup_response
@@ -128,7 +142,7 @@ class TestPatientSignup:
 
 
 class TestClinicianSignup:
-    def test_success(self, client, override_db, mock_supabase_db):
+    def test_success(self, client, override_db, override_auth_service, mock_supabase_db):
         user_id = str(uuid4())
         table = mock_supabase_db.table.return_value
         table.execute.side_effect = [
@@ -170,7 +184,9 @@ class TestClinicianSignup:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.json()["user"]["role"] == "clinician"
 
-    def test_signup_exception_returns_validation_error(self, client, override_db, mock_supabase_db):
+    def test_signup_exception_returns_validation_error(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
         table = mock_supabase_db.table.return_value
         table.execute.return_value = Mock(
             data=[
@@ -202,7 +218,9 @@ class TestClinicianSignup:
         assert "error" in payload
         assert payload["error"]["code"] == "VALIDATION_ERROR"
 
-    def test_signup_rejects_invalid_clinic_code(self, client, override_db, mock_supabase_db):
+    def test_signup_rejects_invalid_clinic_code(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
         table = mock_supabase_db.table.return_value
         table.execute.return_value = Mock(data=[])
 
@@ -220,7 +238,9 @@ class TestClinicianSignup:
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    def test_signup_supports_nurse_role(self, client, override_db, mock_supabase_db):
+    def test_signup_supports_nurse_role(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
         user_id = str(uuid4())
         table = mock_supabase_db.table.return_value
         table.execute.side_effect = [
@@ -263,7 +283,7 @@ class TestClinicianSignup:
         assert response.json()["user"]["role"] == "clinician"
 
     def test_signup_rejects_admin_role_in_public_clinician_signup(
-        self, client, override_db, mock_supabase_db
+        self, client, override_db, override_auth_service, mock_supabase_db
     ):
         response = client.post(
             "/api/v1/auth/signup/clinician",
@@ -282,7 +302,7 @@ class TestClinicianSignup:
 
 
 class TestClinicAdminSignup:
-    def test_success(self, client, override_db, mock_supabase_db):
+    def test_success(self, client, override_db, override_auth_service, mock_supabase_db):
         user_id = str(uuid4())
         table = mock_supabase_db.table.return_value
         table.execute.side_effect = [
@@ -336,9 +356,29 @@ class TestClinicAdminSignup:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.json()["user"]["role"] == "clinician"
 
+    def test_signup_exception_returns_validation_error(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
+        mock_supabase_db.auth.sign_up.side_effect = Exception("User already registered")
+
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "doctor@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Amir",
+                "last_name": "Khan",
+                "clinic_name": "City Health",
+                "specialty": "Primary Care",
+                "npi_number": "1234567890",
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
 
 class TestLogin:
-    def test_success_for_both_roles(self, client, override_db, mock_supabase_db):
+    def test_success_for_both_roles(self, client, override_db, override_auth_service, mock_supabase_db):
         mock_supabase_db.auth.sign_in_with_password.side_effect = [
             _make_auth_response(
                 user_id=str(uuid4()),
@@ -352,21 +392,94 @@ class TestLogin:
             ),
         ]
 
-        patient_response = client.post(
-            "/api/v1/auth/login",
-            json={"email": "patient@example.com", "password": "SecurePass123!"},
+        original = AuthService._list_verified_mfa_factors
+        original_clinic_check = AuthService._assert_clinician_matches_clinic
+        AuthService._list_verified_mfa_factors = staticmethod(lambda _access, _refresh: [])
+        AuthService._assert_clinician_matches_clinic = lambda self, _id, _code: None
+        try:
+            patient_response = client.post(
+                "/api/v1/auth/login",
+                json={"email": "patient@example.com", "password": "SecurePass123!"},
+            )
+            clinician_response = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "clinic_code": "ABC123",
+                    "email": "doctor@example.com",
+                    "password": "SecurePass123!",
+                },
+            )
+        finally:
+            AuthService._list_verified_mfa_factors = original
+            AuthService._assert_clinician_matches_clinic = original_clinic_check
+
+        assert patient_response.status_code == status.HTTP_200_OK
+        assert patient_response.json()["user"]["role"] == "patient"
+        assert patient_response.json()["mfa_required"] is False
+        assert clinician_response.status_code == status.HTTP_200_OK
+        assert clinician_response.json()["user"]["role"] == "clinician"
+        assert clinician_response.json()["mfa_required"] is False
+
+    def test_clinician_login_can_require_mfa(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
+        response = _make_auth_response(
+            user_id=str(uuid4()),
+            email="doctor@example.com",
+            role="clinician",
         )
-        clinician_response = client.post(
+        mock_supabase_db.auth.sign_in_with_password.return_value = response
+
+        original = AuthService._list_verified_mfa_factors
+        original_clinic_check = AuthService._assert_clinician_matches_clinic
+        AuthService._list_verified_mfa_factors = staticmethod(
+            lambda _access, _refresh: [
+                {
+                    "id": "factor-1",
+                    "friendly_name": "Authenticator",
+                    "factor_type": "totp",
+                    "status": "verified",
+                    "created_at": "2026-01-01T00:00:00Z",
+                }
+            ]
+        )
+        AuthService._assert_clinician_matches_clinic = lambda self, _id, _code: None
+        try:
+            result = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "clinic_code": "ABC123",
+                    "email": "doctor@example.com",
+                    "password": "SecurePass123!",
+                },
+            )
+        finally:
+            AuthService._list_verified_mfa_factors = original
+            AuthService._assert_clinician_matches_clinic = original_clinic_check
+
+        assert result.status_code == status.HTTP_200_OK
+        assert result.json()["mfa_required"] is True
+        assert result.json()["mfa_factors"][0]["id"] == "factor-1"
+
+    def test_clinician_login_requires_clinic_code(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
+        response = _make_auth_response(
+            user_id=str(uuid4()),
+            email="doctor@example.com",
+            role="clinician",
+        )
+        mock_supabase_db.auth.sign_in_with_password.return_value = response
+
+        result = client.post(
             "/api/v1/auth/login",
             json={"email": "doctor@example.com", "password": "SecurePass123!"},
         )
 
-        assert patient_response.status_code == status.HTTP_200_OK
-        assert patient_response.json()["user"]["role"] == "patient"
-        assert clinician_response.status_code == status.HTTP_200_OK
-        assert clinician_response.json()["user"]["role"] == "clinician"
+        assert result.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Clinic code is required" in result.json()["error"]["message"]
 
-    def test_invalid_credentials(self, client, override_db, mock_supabase_db):
+    def test_invalid_credentials(self, client, override_db, override_auth_service, mock_supabase_db):
         mock_supabase_db.auth.sign_in_with_password.side_effect = Exception("Invalid login")
 
         response = client.post(
@@ -378,7 +491,7 @@ class TestLogin:
 
 
 class TestRefresh:
-    def test_success(self, client, override_db, mock_supabase_db):
+    def test_success(self, client, override_db, override_auth_service, mock_supabase_db):
         mock_supabase_db.auth.refresh_session.return_value = _make_auth_response(
             user_id=str(uuid4()),
             email="patient@example.com",
@@ -393,7 +506,9 @@ class TestRefresh:
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["tokens"]["access_token"] == "patient-access-token"
 
-    def test_rejects_mismatched_expected_role(self, client, override_db, mock_supabase_db):
+    def test_rejects_mismatched_expected_role(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
         mock_supabase_db.auth.refresh_session.return_value = _make_auth_response(
             user_id=str(uuid4()),
             email="doctor@example.com",
@@ -407,7 +522,7 @@ class TestRefresh:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_invalid_token(self, client, override_db, mock_supabase_db):
+    def test_invalid_token(self, client, override_db, override_auth_service, mock_supabase_db):
         mock_supabase_db.auth.refresh_session.side_effect = Exception("Invalid refresh")
 
         response = client.post(
@@ -419,7 +534,7 @@ class TestRefresh:
 
 
 class TestPasswordReset:
-    def test_success(self, client, override_db, mock_supabase_db):
+    def test_success(self, client, override_db, override_auth_service, mock_supabase_db):
         response = client.post(
             "/api/v1/auth/password-reset",
             json={"email": "patient@example.com"},
