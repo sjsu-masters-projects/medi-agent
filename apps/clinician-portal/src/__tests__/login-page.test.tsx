@@ -177,13 +177,86 @@ describe("Clinician login page", () => {
             password: "SecurePass123!",
         });
         expect(await screen.findByText(/verify mfa/i)).toBeInTheDocument();
-        expect(screen.getByText(/clinic authenticator/i)).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /open mfa settings/i })).toHaveAttribute(
-            "href",
-            "/settings/mfa",
-        );
+        expect(screen.getAllByText(/clinic authenticator/i).length).toBeGreaterThan(0);
+        expect(screen.getByLabelText(/6-digit code/i)).toBeInTheDocument();
         expect(writeStoredSession).not.toHaveBeenCalled();
         expect(replace).not.toHaveBeenCalled();
+    });
+
+    it("verifies MFA code and completes login", async () => {
+        post.mockResolvedValueOnce({
+            clinic_code: "ABC123",
+            clinic_id: "clinic-1",
+            clinic_name: "City Health",
+            status: "active",
+        });
+        post.mockResolvedValueOnce({
+            tokens: {
+                access_token: "aal1-access-token",
+                expires_at: 1234567890,
+                refresh_token: "aal1-refresh-token",
+            },
+            mfa_factors: [{ id: "factor-1", friendly_name: "Clinic Authenticator" }],
+            mfa_required: true,
+            user: {
+                email: "doctor@example.com",
+                id: "clinician-1",
+                role: "clinician",
+            },
+        });
+        post.mockResolvedValueOnce({
+            access_token: "aal2-access-token",
+            expires_at: 2234567890,
+            refresh_token: "aal2-refresh-token",
+            token_type: "bearer",
+        });
+
+        render(<ClinicianLoginPage />);
+
+        fireEvent.change(await screen.findByLabelText(/clinic code/i), {
+            target: { value: "abc123" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /verify clinic code/i }));
+        fireEvent.click(await screen.findByRole("button", { name: /already have an account/i }));
+
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: "doctor@example.com" },
+        });
+        fireEvent.change(screen.getByLabelText(/^password$/i), {
+            target: { value: "SecurePass123!" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+        await screen.findByText(/verify mfa/i);
+
+        fireEvent.change(screen.getByLabelText(/6-digit code/i), {
+            target: { value: "123456" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /verify and continue/i }));
+
+        expect(post).toHaveBeenNthCalledWith(
+            3,
+            "/api/v1/auth/mfa/verify",
+            { code: "123456", factor_id: "factor-1" },
+            {
+                headers: { "X-Refresh-Token": "aal1-refresh-token" },
+                token: "aal1-access-token",
+            },
+        );
+
+        await waitFor(() => {
+            expect(writeStoredSession).toHaveBeenCalledWith({
+                accessToken: "aal2-access-token",
+                expiresAt: 2234567890,
+                refreshToken: "aal2-refresh-token",
+                user: {
+                    email: "doctor@example.com",
+                    id: "clinician-1",
+                    role: "clinician",
+                },
+            });
+            expect(replace).toHaveBeenCalledWith("/dashboard");
+        });
     });
 
     it("revalidates saved clinic context before trusting it", async () => {

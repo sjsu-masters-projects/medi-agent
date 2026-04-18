@@ -37,6 +37,18 @@ interface MFAFactorSummary {
     id: string;
 }
 
+interface MFAVerifyResponse {
+    access_token: string;
+    expires_at: number;
+    refresh_token: string;
+}
+
+interface PendingMFAChallenge {
+    factorId: string;
+    friendlyName: string;
+    session: ClinicianAuthSession;
+}
+
 interface ClinicResolveResponse {
     clinic_code: string;
     clinic_id: string;
@@ -66,6 +78,9 @@ export default function ClinicianLoginPage() {
     const [error, setError] = useState("");
     const [clinicCodeError, setClinicCodeError] = useState("");
     const [mfaFactors, setMfaFactors] = useState<MFAFactorSummary[]>([]);
+    const [mfaCode, setMfaCode] = useState("");
+    const [pendingMFAChallenge, setPendingMFAChallenge] =
+        useState<PendingMFAChallenge | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -152,6 +167,8 @@ export default function ClinicianLoginPage() {
         setSubmitting(true);
         setError("");
         setMfaFactors([]);
+        setMfaCode("");
+        setPendingMFAChallenge(null);
 
         if (!clinicContext) {
             setError("Enter and verify your clinic code first.");
@@ -170,7 +187,29 @@ export default function ClinicianLoginPage() {
             }
 
             if (response.mfa_required) {
-                setMfaFactors(response.mfa_factors ?? []);
+                const factors = response.mfa_factors ?? [];
+                const primaryFactor = factors[0];
+                if (!primaryFactor) {
+                    throw new Error("MFA is required but no verified factor is available.");
+                }
+
+                const pendingSession: ClinicianAuthSession = {
+                    accessToken: response.tokens.access_token,
+                    expiresAt: response.tokens.expires_at,
+                    refreshToken: response.tokens.refresh_token,
+                    user: {
+                        email: response.user.email,
+                        id: response.user.id,
+                        role: PortalUserRole.CLINICIAN,
+                    },
+                };
+
+                setMfaFactors(factors);
+                setPendingMFAChallenge({
+                    factorId: primaryFactor.id,
+                    friendlyName: primaryFactor.friendly_name ?? "Authenticator",
+                    session: pendingSession,
+                });
                 setStage("mfa");
                 return;
             }
@@ -196,6 +235,49 @@ export default function ClinicianLoginPage() {
                 return;
             }
             setError(message);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function handleMFAVerify(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!pendingMFAChallenge) {
+            return;
+        }
+
+        const code = mfaCode.trim();
+        if (!/^\d{6}$/.test(code)) {
+            setError("Enter the 6-digit code from your authenticator app.");
+            return;
+        }
+
+        setSubmitting(true);
+        setError("");
+
+        try {
+            const response = await api.post<MFAVerifyResponse>(
+                "/api/v1/auth/mfa/verify",
+                { factor_id: pendingMFAChallenge.factorId, code },
+                {
+                    headers: {
+                        "X-Refresh-Token": pendingMFAChallenge.session.refreshToken,
+                    },
+                    token: pendingMFAChallenge.session.accessToken,
+                },
+            );
+
+            const session: ClinicianAuthSession = {
+                accessToken: response.access_token,
+                expiresAt: response.expires_at,
+                refreshToken: response.refresh_token,
+                user: pendingMFAChallenge.session.user,
+            };
+            writeStoredSession(session);
+            dispatch(hydrateSession(session));
+            router.replace("/dashboard");
+        } catch (submissionError) {
+            setError((submissionError as Error).message);
         } finally {
             setSubmitting(false);
         }
@@ -312,9 +394,32 @@ export default function ClinicianLoginPage() {
                                     <p>Authenticator</p>
                                 )}
                             </div>
-                            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                            <form className="space-y-4" onSubmit={handleMFAVerify}>
+                                <Input
+                                    autoComplete="one-time-code"
+                                    inputMode="numeric"
+                                    label={`6-digit code (${pendingMFAChallenge?.friendlyName ?? "Authenticator"})`}
+                                    maxLength={6}
+                                    onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))}
+                                    placeholder="000000"
+                                    value={mfaCode}
+                                />
+                                {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                                <Button disabled={submitting || mfaCode.trim().length !== 6} fullWidth type="submit">
+                                    {submitting ? "Verifying..." : "Verify and continue"}
+                                </Button>
+                            </form>
                             <div className="flex items-center justify-between text-sm">
-                                <button className="text-blue-600" onClick={() => setStage("login")} type="button">
+                                <button
+                                    className="text-blue-600"
+                                    onClick={() => {
+                                        setStage("login");
+                                        setMfaCode("");
+                                        setPendingMFAChallenge(null);
+                                        setError("");
+                                    }}
+                                    type="button"
+                                >
                                     Back
                                 </button>
                                 <Link className="text-blue-600" href="/settings/mfa">
