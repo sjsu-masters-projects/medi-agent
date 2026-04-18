@@ -178,6 +178,10 @@ describe("Clinician login page", () => {
         });
         expect(await screen.findByText(/verify mfa/i)).toBeInTheDocument();
         expect(screen.getByText(/clinic authenticator/i)).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /open mfa settings/i })).toHaveAttribute(
+            "href",
+            "/settings/mfa",
+        );
         expect(writeStoredSession).not.toHaveBeenCalled();
         expect(replace).not.toHaveBeenCalled();
     });
