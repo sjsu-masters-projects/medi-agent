@@ -381,7 +381,8 @@ export default function ClinicianLoginPage() {
                             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                                 <p className="font-semibold">Multi-factor authentication required</p>
                                 <p className="mt-1">
-                                    Continue in the MFA setup flow for <span className="font-medium">{clinicContext.clinicName}</span>.
+                                    Enter the 6-digit code from your authenticator app to continue signing in to{" "}
+                                    <span className="font-medium">{clinicContext.clinicName}</span>.
                                 </p>
                             </div>
                             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
@@ -409,7 +410,7 @@ export default function ClinicianLoginPage() {
                                     {submitting ? "Verifying..." : "Verify and continue"}
                                 </Button>
                             </form>
-                            <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center justify-start text-sm">
                                 <button
                                     className="text-blue-600"
                                     onClick={() => {
@@ -422,9 +423,6 @@ export default function ClinicianLoginPage() {
                                 >
                                     Back
                                 </button>
-                                <Link className="text-blue-600" href="/settings/mfa">
-                                    Open MFA settings
-                                </Link>
                             </div>
                         </div>
                     ) : null}
