@@ -317,7 +317,7 @@ export default function ClinicianLoginPage() {
                                 <button className="text-blue-600" onClick={() => setStage("login")} type="button">
                                     Back
                                 </button>
-                                <Link className="text-blue-600" href="/dashboard/settings/mfa">
+                                <Link className="text-blue-600" href="/settings/mfa">
                                     Open MFA settings
                                 </Link>
                             </div>
