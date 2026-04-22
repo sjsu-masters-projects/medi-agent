@@ -29,7 +29,15 @@ export type {
 } from "../../../../packages/shared/src/types";
 
 export {
+    Locale,
+    DEFAULT_LOCALE,
     Language,
+    isLocale,
+    isSpanishLocale,
+    normalizeLocale,
+    isLanguage,
+    isSpanishLanguage,
+    normalizeLanguage,
     ClinicianRole,
     PortalUserRole,
     ChatRole,

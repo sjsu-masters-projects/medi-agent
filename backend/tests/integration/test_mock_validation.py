@@ -249,7 +249,7 @@ class TestDeepgramMockValidation:
 
         # Verify defaults
         assert sig.parameters["model"].default == "nova-3"
-        assert sig.parameters["language"].default == "en"
+        assert sig.parameters["language"].default == "en-US"
         assert sig.parameters["smart_format"].default is True
 
 

@@ -16,6 +16,7 @@ from app.agents.triage.prompts import (
     build_triage_response_prompt,
 )
 from app.clients.model_router import ModelRouter, TaskType
+from app.models.enums import Language, coerce_locale
 
 logger = logging.getLogger(__name__)
 
@@ -340,13 +341,13 @@ def _fallback_response(*, language: str, intent: str, urgency: str) -> str:
 
 
 def _is_spanish(language: str) -> bool:
-    return language.lower().strip() == "es"
+    return coerce_locale(language).is_spanish
 
 
 def _build_context(state: TriageState) -> _MessageContext:
     return _MessageContext(
         message=str(state.get("message", "")).strip(),
-        language=str(state.get("language", "en")),
+        language=coerce_locale(state.get("language", Language.EN.value)).value,
         history=state.get("history", []),
         patient_context=state.get("patient_context", {}),
         document_context=state.get("document_context"),

@@ -1,29 +1,29 @@
 import { HiMiniSpeakerWave } from "react-icons/hi2";
-import { ChatRole, Language } from "@/types";
+import { ChatRole, isSpanishLocale, type Locale } from "@/types";
 
 interface ChatBubbleProps {
     role: typeof ChatRole.USER | typeof ChatRole.ASSISTANT;
     content: string;
     timestamp: Date | string;
-    language?: Language;
+    language?: Locale;
     isStreaming?: boolean;
     onPlayAudio?: () => void;
 }
 
 function formatTimestamp(timestamp: Date | string) {
     const value = timestamp instanceof Date ? timestamp : new Date(timestamp);
-    return value.toLocaleTimeString("en-US", {
+    return value.toLocaleTimeString(undefined, {
         hour: "numeric",
         minute: "2-digit",
     });
 }
 
-function formatLanguage(language?: Language): string | null {
+function formatLanguage(language?: Locale): string | null {
     if (!language) {
         return null;
     }
 
-    return language === Language.ES ? "ES" : "EN";
+    return isSpanishLocale(language) ? "ES-MX" : "EN-US";
 }
 
 export function ChatBubble({

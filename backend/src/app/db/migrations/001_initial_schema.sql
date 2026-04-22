@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ENUM TYPES (mirrors backend/src/app/models/enums.py)
 -- ════════════════════════════════════════════════════
 
-CREATE TYPE language_enum AS ENUM ('en', 'es');
+CREATE TYPE language_enum AS ENUM ('en-US', 'es-MX');
 CREATE TYPE gender_enum AS ENUM ('male', 'female', 'other', 'prefer_not_to_say');
 CREATE TYPE clinician_role_enum AS ENUM ('provider', 'admin', 'nurse');
 CREATE TYPE care_team_status_enum AS ENUM ('active', 'inactive', 'transferred');
@@ -61,7 +61,7 @@ CREATE TABLE patients (
   last_name   text NOT NULL CHECK (char_length(last_name) BETWEEN 1 AND 100),
   date_of_birth date NOT NULL,
   gender      gender_enum,
-  preferred_language language_enum NOT NULL DEFAULT 'en',
+  preferred_language language_enum NOT NULL DEFAULT 'en-US',
   phone       text CHECK (char_length(phone) <= 20),
   avatar_url  text,
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -312,7 +312,7 @@ CREATE TABLE chat_messages (
   content    text NOT NULL,
   role       chat_role_enum NOT NULL,
   intent     text,  -- classified by Triage Agent
-  language   language_enum NOT NULL DEFAULT 'en',
+  language   language_enum NOT NULL DEFAULT 'en-US',
   audio_url  text,  -- voice message storage path
   created_at timestamptz NOT NULL DEFAULT now()
 );

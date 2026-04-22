@@ -37,7 +37,7 @@ export default function VisitsPage() {
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">Next visit</p>
                         <h2 className="mt-2 text-xl font-semibold text-white">Care team follow-up</h2>
                         <p className="mt-2 text-sm text-sky-100">
-                            {new Date(appointments[0].scheduledAt).toLocaleString("en-US", {
+                            {new Date(appointments[0].scheduledAt).toLocaleString(undefined, {
                                 dateStyle: "medium",
                                 timeStyle: "short",
                             })}
@@ -64,7 +64,7 @@ export default function VisitsPage() {
                                 <Badge variant="info">Scheduled</Badge>
                             </div>
                             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                                <p>{new Date(appointment.scheduledAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</p>
+                                <p>{new Date(appointment.scheduledAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>
                                 <p className="mt-1">{appointment.location}</p>
                             </div>
                         </Card>
@@ -77,7 +77,7 @@ export default function VisitsPage() {
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Scheduled</p>
                         <p className="mt-1 text-sm text-slate-700">
                         {selected
-                            ? new Date(selected.scheduledAt).toLocaleString("en-US", {
+                            ? new Date(selected.scheduledAt).toLocaleString(undefined, {
                                   dateStyle: "full",
                                   timeStyle: "short",
                               })

@@ -6,8 +6,38 @@ from enum import StrEnum
 
 
 class Language(StrEnum):
-    EN = "en"
-    ES = "es"
+    EN = "en-US"
+    ES = "es-MX"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "Language | None":
+        if not isinstance(value, str):
+            return None
+
+        normalized = value.strip().lower().replace("_", "-")
+        aliases = {
+            "en": cls.EN,
+            "en-us": cls.EN,
+            "es": cls.ES,
+            "es-mx": cls.ES,
+        }
+        return aliases.get(normalized)
+
+    @property
+    def is_spanish(self) -> bool:
+        return self is Language.ES
+
+
+def coerce_language(value: object, fallback: Language = Language.EN) -> Language:
+    try:
+        return value if isinstance(value, Language) else Language(value)
+    except ValueError:
+        return fallback
+
+
+# Locale-first aliases for future expansion.
+Locale = Language
+coerce_locale = coerce_language
 
 
 class Gender(StrEnum):

@@ -36,7 +36,7 @@ function formatTimeLabel(scheduledTime?: string, status?: FeedTask["status"]) {
     const [hours = "0", minutes = "0"] = scheduledTime.split(":");
     const value = new Date();
     value.setHours(Number(hours), Number(minutes), 0, 0);
-    const label = value.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const label = value.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     return status === FeedTaskStatus.PENDING ? `${label} • Now` : label;
 }
 
@@ -62,7 +62,7 @@ export default function TodayPage() {
                     <div>
                         <h1 className="text-[30px] font-bold leading-tight">Hi, Sarah</h1>
                         <p className="mt-1 text-sm text-sky-100">
-                            {new Date().toLocaleDateString("en-US", {
+                            {new Date().toLocaleDateString(undefined, {
                                 day: "numeric",
                                 month: "long",
                                 weekday: "long",

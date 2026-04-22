@@ -13,13 +13,17 @@ from app.agents.ingestion.prompts import (
     TRANSLATE_SUMMARY_USER,
 )
 from app.clients.model_router import TaskType, get_router
+from app.models.enums import Language, coerce_locale
 
 logger = logging.getLogger(__name__)
 
 FALLBACK_MESSAGE = (
     "A summary is not available at this time. Please ask your care team for an explanation."
 )
-LANGUAGE_NAMES = {"en": "English", "es": "Spanish"}
+LANGUAGE_NAMES = {
+    Language.EN.value: "English (US)",
+    Language.ES.value: "Spanish (Mexico)",
+}
 
 
 class ExplanationService:
@@ -28,18 +32,18 @@ class ExplanationService:
     async def explain(
         self,
         document_data: dict[str, Any],
-        language: str = "en",
+        language: str = Language.EN.value,
     ) -> str:
         """Generate a patient-friendly explanation."""
-        target_language = language if language in LANGUAGE_NAMES else "en"
+        target_language = coerce_locale(language).value
         cached_summary = str(document_data.get("ai_summary") or "").strip()
 
         try:
-            if target_language == "en" and cached_summary:
+            if target_language == Language.EN.value and cached_summary:
                 return cached_summary
 
             english_summary = cached_summary or await self._generate_summary(document_data)
-            if target_language == "en":
+            if target_language == Language.EN.value:
                 return english_summary
 
             return await self._translate_summary(english_summary, target_language)
@@ -79,7 +83,7 @@ class ExplanationService:
 
     async def _translate_summary(self, summary: str, target_language: str) -> str:
         """Translate an English summary to the target language using Flash Lite."""
-        if target_language == "en":
+        if target_language == Language.EN.value:
             return summary
 
         router = get_router()

@@ -22,7 +22,7 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
 from app.models.document import DocumentRead
-from app.models.enums import DocumentType
+from app.models.enums import DocumentType, Language, coerce_locale
 from app.services.document_service import DocumentService
 from app.services.explanation_service import ExplanationService
 from app.services.ingestion_service import IngestionService
@@ -56,7 +56,7 @@ class DocumentCreateRequest(BaseModel):
 class ExplainRequest(BaseModel):
     """Language selection for AI explanation responses."""
 
-    language: str = "en"
+    language: Language = Language.EN
 
 
 async def _run_ingestion_safe(
@@ -153,16 +153,16 @@ async def explain_document(
     user: CurrentUser = Depends(get_current_user),
     service: DocumentService = Depends(_get_service),
 ) -> Any:
-    language = body.language if body else "en"
+    language = body.language if body else Language.EN
     document = await service.get_document(document_id, user.id)
 
-    if language == "en" and document.get("ai_summary"):
-        return {"summary": document["ai_summary"], "language": "en", "cached": True}
+    if language == Language.EN and document.get("ai_summary"):
+        return {"summary": document["ai_summary"], "language": language.value, "cached": True}
 
     explanation_service = ExplanationService()
-    summary = await explanation_service.explain(document_data=document, language=language)
+    summary = await explanation_service.explain(document_data=document, language=language.value)
 
-    if language == "en":
+    if coerce_locale(language) == Language.EN:
         await service.update_summary(document_id, user.id, summary)
 
-    return {"summary": summary, "language": language, "cached": False}
+    return {"summary": summary, "language": coerce_locale(language).value, "cached": False}

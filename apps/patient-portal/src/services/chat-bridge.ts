@@ -1,4 +1,10 @@
-import { DocumentType, type Language, type DocumentType as DocumentTypeValue } from "@/types";
+import {
+    DocumentType,
+    isSpanishLocale,
+    normalizeLocale,
+    type Locale,
+    type DocumentType as DocumentTypeValue,
+} from "@/types";
 
 const CHAT_DOCUMENT_CONTEXT_PREFIX = "patient-portal.chat.document-context";
 const DOCUMENT_TYPES = new Set<DocumentTypeValue>(Object.values(DocumentType));
@@ -9,7 +15,7 @@ export interface PendingChatDocumentContext {
     documentType: DocumentTypeValue;
     provider?: string;
     summary?: string;
-    preferredLanguage: Language;
+    preferredLanguage: Locale;
     suggestedQuestion: string;
 }
 
@@ -43,7 +49,7 @@ export function buildSuggestedDocumentQuestion(
         ? `${context.documentType.replaceAll("_", " ")} from ${context.provider}`
         : context.documentType.replaceAll("_", " ");
 
-    if (context.preferredLanguage === "es") {
+    if (isSpanishLocale(context.preferredLanguage)) {
         return `Ayúdame a entender mi ${descriptor} llamado "${context.documentName}" y dime qué debo preguntar a mi médico.`;
     }
 
@@ -82,7 +88,10 @@ export function consumePendingChatDocumentContext(
         ) {
             return null;
         }
-        return parsed;
+        return {
+            ...parsed,
+            preferredLanguage: normalizeLocale(parsed.preferredLanguage),
+        };
     } catch {
         return null;
     }

@@ -5,6 +5,7 @@ from typing import BinaryIO
 from deepgram import AsyncDeepgramClient, DeepgramClient
 
 from app.config import settings
+from app.models.enums import Language, coerce_locale
 
 
 def get_deepgram_client() -> DeepgramClient:
@@ -27,7 +28,7 @@ def get_async_deepgram_client() -> AsyncDeepgramClient:
 def transcribe_audio_file(
     audio_file: BinaryIO,
     model: str = "nova-3",
-    language: str = "en",
+    language: str = Language.EN.value,
     smart_format: bool = True,
 ) -> str:
     """Transcribe audio file to text. Returns the transcript string."""
@@ -37,7 +38,7 @@ def transcribe_audio_file(
     response = client.listen.v1.media.transcribe_file(
         request=audio_data,
         model=model,
-        language=language,
+        language=coerce_locale(language).value,
         smart_format=smart_format,
     )
 
@@ -64,7 +65,7 @@ def generate_speech(
 async def transcribe_audio_file_async(
     audio_file: BinaryIO,
     model: str = "nova-3",
-    language: str = "en",
+    language: str = Language.EN.value,
     smart_format: bool = True,
 ) -> str:
     """Async transcribe audio file to text. Returns the transcript string."""
@@ -74,7 +75,7 @@ async def transcribe_audio_file_async(
     response = await client.listen.v1.media.transcribe_file(
         request=audio_data,
         model=model,
-        language=language,
+        language=coerce_locale(language).value,
         smart_format=smart_format,
     )
 

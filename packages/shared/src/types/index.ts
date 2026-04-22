@@ -7,8 +7,49 @@
 
 // ── Enums (match backend StrEnum values) ──────────
 
-export const Language = { EN: "en", ES: "es" } as const;
-export type Language = (typeof Language)[keyof typeof Language];
+export const Locale = { EN_US: "en-US", ES_MX: "es-MX" } as const;
+export type Locale = (typeof Locale)[keyof typeof Locale];
+
+export const DEFAULT_LOCALE: Locale = Locale.EN_US;
+
+const LOCALE_VALUES = new Set<Locale>(Object.values(Locale));
+const LOCALE_ALIASES: Record<string, Locale> = {
+    en: Locale.EN_US,
+    "en-us": Locale.EN_US,
+    es: Locale.ES_MX,
+    "es-mx": Locale.ES_MX,
+};
+
+export function isLocale(value: unknown): value is Locale {
+    return typeof value === "string" && LOCALE_VALUES.has(value as Locale);
+}
+
+export function normalizeLocale(
+    value: unknown,
+    fallback: Locale = DEFAULT_LOCALE,
+): Locale {
+    if (isLocale(value)) {
+        return value;
+    }
+
+    if (typeof value !== "string") {
+        return fallback;
+    }
+
+    const normalized = value.trim().toLowerCase().replaceAll("_", "-");
+    return LOCALE_ALIASES[normalized] ?? fallback;
+}
+
+export function isSpanishLocale(value: unknown): boolean {
+    return normalizeLocale(value) === Locale.ES_MX;
+}
+
+// Backward-compatible aliases while the codebase transitions from language to locale naming.
+export const Language = { EN: Locale.EN_US, ES: Locale.ES_MX } as const;
+export type Language = Locale;
+export const isLanguage = isLocale;
+export const normalizeLanguage = normalizeLocale;
+export const isSpanishLanguage = isSpanishLocale;
 
 export const Gender = { MALE: "male", FEMALE: "female", OTHER: "other", PREFER_NOT_TO_SAY: "prefer_not_to_say" } as const;
 export type Gender = (typeof Gender)[keyof typeof Gender];

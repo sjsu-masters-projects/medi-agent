@@ -15,7 +15,7 @@ interface ChatTranscriptProps {
 
 function formatTime(isoString: string): string {
     const date = new Date(isoString);
-    return date.toLocaleString("en-US", {
+    return date.toLocaleString(undefined, {
         month: "short",
         day: "numeric",
         hour: "numeric",

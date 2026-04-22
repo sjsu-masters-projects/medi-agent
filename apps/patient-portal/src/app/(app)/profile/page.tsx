@@ -10,7 +10,7 @@ import { clearStoredSession } from "@/services/auth-session";
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Skeleton } from "@/components/ui";
 import { logout } from "@/store/slices/auth-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import { Language } from "@/types";
+import { isSpanishLocale, normalizeLocale, type Locale } from "@/types";
 import type { CareTeamMember, Patient } from "@/types";
 
 interface PatientProfileResponse {
@@ -20,7 +20,7 @@ interface PatientProfileResponse {
     last_name: string;
     date_of_birth: string;
     gender?: Patient["gender"];
-    preferred_language: Language;
+    preferred_language: Locale;
     created_at: string;
 }
 
@@ -46,7 +46,7 @@ function mapPatient(profile: PatientProfileResponse): Patient {
         gender: profile.gender,
         id: profile.id,
         lastName: profile.last_name,
-        preferredLanguage: profile.preferred_language,
+        preferredLanguage: normalizeLocale(profile.preferred_language),
     };
 }
 
@@ -65,8 +65,8 @@ function mapCareTeamMember(member: CareTeamResponse): CareTeamMember {
     };
 }
 
-function formatLanguage(language: Language) {
-    return language === Language.ES ? "Spanish" : "English";
+function formatLanguage(locale: Locale) {
+    return isSpanishLocale(locale) ? "Español (México)" : "English (US)";
 }
 
 export default function ProfilePage() {

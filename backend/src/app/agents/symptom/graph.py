@@ -15,6 +15,7 @@ from app.agents.symptom.prompts import (
     build_symptom_response_prompt,
 )
 from app.clients.model_router import ModelRouter, TaskType
+from app.models.enums import Language, coerce_locale
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class SymptomState(TypedDict, total=False):
 
 async def extract_symptom(state: SymptomState, router: ModelRouter) -> SymptomState:
     message = str(state.get("message", "")).strip()
-    language = str(state.get("language", "en"))
+    language = coerce_locale(state.get("language", Language.EN.value)).value
     history = state.get("history", [])
     patient_context = state.get("patient_context", {})
 
@@ -89,7 +90,7 @@ async def generate_response(state: SymptomState, router: ModelRouter) -> Symptom
     if state.get("error"):
         return state
 
-    language = str(state.get("language", "en"))
+    language = coerce_locale(state.get("language", Language.EN.value)).value
     report = state.get("symptom_report", {})
     symptom = str(report.get("symptom", "symptom")).strip() or "symptom"
     severity = int(report.get("severity") or 5)
@@ -193,7 +194,7 @@ def _fallback_response(*, language: str, report: dict[str, Any]) -> str:
     severity = int(report.get("severity") or 5)
     question = str(report.get("follow_up_question") or "").strip()
 
-    if language.lower().strip() == "es":
+    if coerce_locale(language).is_spanish:
         base = (
             f"Gracias por compartir lo de {symptom}. Lo registre para seguimiento "
             f"(severidad aproximada {severity}/10)."

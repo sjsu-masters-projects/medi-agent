@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS chat_conversation_states (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id       uuid NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   session_id       text NOT NULL DEFAULT 'default',
-  language         language_enum NOT NULL DEFAULT 'en',
+  language         language_enum NOT NULL DEFAULT 'en-US',
   status           text NOT NULL DEFAULT 'active'
                    CHECK (status IN ('active', 'closed', 'archived')),
   turn_count       integer NOT NULL DEFAULT 0 CHECK (turn_count >= 0),

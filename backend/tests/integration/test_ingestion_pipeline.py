@@ -159,7 +159,7 @@ async def test_explain_cached_summary():
     document = {"id": str(DOCUMENT_ID), "ai_summary": "Already cached"}
 
     with patch("app.services.explanation_service.get_router") as mock_get_router:
-        summary = await service.explain(document_data=document, language="en")
+        summary = await service.explain(document_data=document, language="en-US")
 
     assert summary == "Already cached"
     mock_get_router.assert_not_called()
@@ -179,7 +179,7 @@ async def test_explain_spanish_translation():
     ):
         summary = await service.explain(
             document_data={"id": str(DOCUMENT_ID), "ai_summary": "English summary"},
-            language="es",
+            language="es-MX",
         )
 
     assert summary == "Resumen en español"
