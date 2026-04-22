@@ -22,6 +22,7 @@ FALLBACK_MESSAGE = (
     "A summary is not available at this time. Please ask your care team for an explanation."
 )
 
+
 class ExplanationService:
     """Generates AI explanations for documents."""
 
