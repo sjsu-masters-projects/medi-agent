@@ -15,7 +15,7 @@ import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
 import { ChatRole, Language, type Language as ChatLanguage } from "@/types";
 
 function getLanguageLabel(language: ChatLanguage): string {
-    return language === Language.ES ? "Espanol" : "English";
+    return language === Language.ES ? "Español" : "English";
 }
 
 function getConnectionLabel(
@@ -37,8 +37,8 @@ function buildQuickPrompts(language: ChatLanguage): string[] {
     if (language === Language.ES) {
         return [
             "Explica mis resultados recientes",
-            "Debo preocuparme por este sintoma?",
-            "Ayudame a preparar preguntas para mi medico",
+            "¿Debo preocuparme por este síntoma?",
+            "Ayúdame a preparar preguntas para mi médico",
         ];
     }
 
@@ -207,7 +207,7 @@ export default function ChatPage() {
                             <div className="space-y-3">
                                 <div className="rounded-[22px] border border-[#E3EBF7] bg-white px-4 py-3 text-sm text-[#41536F] shadow-[0_16px_32px_rgba(70,96,140,0.08)]">
                                     {selectedLanguage === Language.ES
-                                        ? "Puedo ayudarte con sintomas, resultados y proximos pasos. Prueba una de estas preguntas:"
+                                        ? "Puedo ayudarte con síntomas, resultados y próximos pasos. Prueba una de estas preguntas:"
                                         : "I can help with symptoms, results, and next steps. Try one of these prompts:"}
                                 </div>
                                 <div className="flex flex-col gap-2">

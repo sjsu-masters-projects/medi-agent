@@ -1,6 +1,6 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { api } from "@/services/api";
-import type { FeedSummary, FeedTask, TodayFeedResponse } from "@/types";
+import { FeedTaskStatus, type FeedSummary, type FeedTask, type TodayFeedResponse } from "@/types";
 
 interface FeedState {
     tasks: FeedTask[];
@@ -63,24 +63,24 @@ export const feedSlice = createSlice({
                     ? {
                           ...task,
                           completedAt: action.payload.completedAt,
-                          status: "completed",
+                          status: FeedTaskStatus.COMPLETED,
                       }
                     : task,
             );
 
-            state.summary.completed = state.tasks.filter((task) => task.status === "completed").length;
-            state.summary.missed = state.tasks.filter((task) => task.status === "missed").length;
-            state.summary.pending = state.tasks.filter((task) => task.status === "pending").length;
+            state.summary.completed = state.tasks.filter((task) => task.status === FeedTaskStatus.COMPLETED).length;
+            state.summary.missed = state.tasks.filter((task) => task.status === FeedTaskStatus.MISSED).length;
+            state.summary.pending = state.tasks.filter((task) => task.status === FeedTaskStatus.PENDING).length;
         },
         setMissedTasks: (state, action: PayloadAction<string[]>) => {
             const missedIds = new Set(action.payload);
             state.tasks = state.tasks.map((task) =>
-                missedIds.has(task.id) && task.status === "pending"
-                    ? { ...task, status: "missed" }
+                missedIds.has(task.id) && task.status === FeedTaskStatus.PENDING
+                    ? { ...task, status: FeedTaskStatus.MISSED }
                     : task,
             );
-            state.summary.missed = state.tasks.filter((task) => task.status === "missed").length;
-            state.summary.pending = state.tasks.filter((task) => task.status === "pending").length;
+            state.summary.missed = state.tasks.filter((task) => task.status === FeedTaskStatus.MISSED).length;
+            state.summary.pending = state.tasks.filter((task) => task.status === FeedTaskStatus.PENDING).length;
         },
     },
     extraReducers: (builder) => {

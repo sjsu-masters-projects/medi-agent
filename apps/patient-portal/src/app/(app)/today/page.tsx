@@ -6,7 +6,7 @@ import { CircularProgress, MedicationCard, ObligationCard } from "@/components/f
 import type { TaskCardStatus } from "@/components/features/task-card.types";
 import { Badge, Card, EmptyState, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
-import type { FeedTask } from "@/types";
+import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
 function splitMedicationName(name: string) {
     const match = name.match(/^(.*?)(\s+\d.*)$/);
@@ -17,11 +17,11 @@ function splitMedicationName(name: string) {
 }
 
 function mapTaskStatus(status: FeedTask["status"]): TaskCardStatus {
-    if (status === "pending") {
+    if (status === FeedTaskStatus.PENDING) {
         return "active";
     }
 
-    if (status === "skipped") {
+    if (status === FeedTaskStatus.SKIPPED) {
         return "upcoming";
     }
 
@@ -37,7 +37,7 @@ function formatTimeLabel(scheduledTime?: string, status?: FeedTask["status"]) {
     const value = new Date();
     value.setHours(Number(hours), Number(minutes), 0, 0);
     const label = value.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    return status === "pending" ? `${label} • Now` : label;
+    return status === FeedTaskStatus.PENDING ? `${label} • Now` : label;
 }
 
 export default function TodayPage() {
@@ -116,7 +116,7 @@ export default function TodayPage() {
                                 ? "bg-red-500"
                                 : "bg-slate-200";
 
-                    if (task.type === "medication") {
+                    if (task.type === FeedTaskType.MEDICATION) {
                         const medication = splitMedicationName(task.name);
                         return (
                             <div className="relative pb-6 last:pb-0" key={task.id}>

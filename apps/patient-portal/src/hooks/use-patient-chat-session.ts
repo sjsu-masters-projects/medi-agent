@@ -59,7 +59,7 @@ function buildWelcomeMessage(patientId: string, language: ChatLanguage): ChatMes
     return {
         content:
             language === Language.ES
-                ? "Hola. Puedo ayudarte a entender resultados, seguir sintomas y preparar preguntas para tu medico."
+                ? "Hola. Puedo ayudarte a entender resultados, seguir síntomas y preparar preguntas para tu médico."
                 : "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
         createdAt: new Date().toISOString(),
         id: "welcome-message",

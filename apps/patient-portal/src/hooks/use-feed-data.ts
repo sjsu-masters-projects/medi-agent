@@ -10,7 +10,7 @@ import {
     setMissedTasks,
 } from "@/store/slices/feed-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import type { AdherenceStats, FeedSummary, FeedTask } from "@/types";
+import { FeedTaskStatus, FeedTaskType, type AdherenceStats, type FeedSummary, type FeedTask } from "@/types";
 
 const mockFeedTasks: FeedTask[] = [
     {
@@ -26,9 +26,9 @@ const mockFeedTasks: FeedTask[] = [
             specialty: "Primary Care",
         },
         scheduledTime: "08:00:00",
-        status: "completed",
+        status: FeedTaskStatus.COMPLETED,
         targetId: "target-1",
-        type: "medication",
+        type: FeedTaskType.MEDICATION,
     },
     {
         description: "30 minutes of low-impact walking.",
@@ -42,9 +42,9 @@ const mockFeedTasks: FeedTask[] = [
             specialty: "Cardiology",
         },
         scheduledTime: "12:00:00",
-        status: "pending",
+        status: FeedTaskStatus.PENDING,
         targetId: "target-2",
-        type: "obligation",
+        type: FeedTaskType.OBLIGATION,
     },
     {
         description: "Take with dinner.",
@@ -58,9 +58,9 @@ const mockFeedTasks: FeedTask[] = [
             specialty: "Cardiology",
         },
         scheduledTime: "18:00:00",
-        status: "pending",
+        status: FeedTaskStatus.PENDING,
         targetId: "target-3",
-        type: "medication",
+        type: FeedTaskType.MEDICATION,
     },
 ];
 
@@ -88,7 +88,7 @@ function getMissedTaskIds(tasks: FeedTask[]) {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     return tasks
-        .filter((task) => task.status === "pending" && task.scheduledTime)
+        .filter((task) => task.status === FeedTaskStatus.PENDING && task.scheduledTime)
         .filter((task) => {
             const [hours, minutes] = task.scheduledTime?.split(":").map((value) => Number.parseInt(value, 10)) ?? [];
             return Number.isFinite(hours) && Number.isFinite(minutes) && hours * 60 + minutes < currentMinutes;
@@ -135,7 +135,7 @@ export function useFeedData() {
             await api.post(
                 "/api/v1/adherence",
                 {
-                    status: task.type === "medication" ? "taken" : "completed",
+                    status: task.type === FeedTaskType.MEDICATION ? "taken" : "completed",
                     target_id: task.targetId,
                     target_type: task.type,
                 },

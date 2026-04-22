@@ -1,6 +1,8 @@
 /**
- * Shared TypeScript types — single source of truth for both portals.
- * Mirrors backend Pydantic schemas in `backend/src/app/models/`.
+ * Shared TypeScript types used by both portals.
+ * Intended to mirror backend Pydantic schemas in `backend/src/app/models/`.
+ * Sync is maintained via project process/tooling outside this file; keep both
+ * sides aligned when changing models or API contracts.
  */
 
 // ── Enums (match backend StrEnum values) ──────────
@@ -16,6 +18,15 @@ export type ClinicianRole = (typeof ClinicianRole)[keyof typeof ClinicianRole];
 
 export const CareTeamStatus = { ACTIVE: "active", INACTIVE: "inactive", TRANSFERRED: "transferred" } as const;
 export type CareTeamStatus = (typeof CareTeamStatus)[keyof typeof CareTeamStatus];
+
+export const DocumentParseStatus = {
+    NONE: "none",
+    PENDING: "pending",
+    PROCESSING: "processing",
+    COMPLETED: "completed",
+    FAILED: "failed",
+} as const;
+export type DocumentParseStatus = (typeof DocumentParseStatus)[keyof typeof DocumentParseStatus];
 
 export const DocumentType = {
     LAB_REPORT: "lab_report", DISCHARGE_SUMMARY: "discharge_summary", PRESCRIPTION: "prescription",
@@ -46,6 +57,17 @@ export type AdherenceTargetType = (typeof AdherenceTargetType)[keyof typeof Adhe
 
 export const AdherenceStatus = { TAKEN: "taken", COMPLETED: "completed", SKIPPED: "skipped", MISSED: "missed" } as const;
 export type AdherenceStatus = (typeof AdherenceStatus)[keyof typeof AdherenceStatus];
+
+export const FeedTaskType = { MEDICATION: "medication", OBLIGATION: "obligation" } as const;
+export type FeedTaskType = (typeof FeedTaskType)[keyof typeof FeedTaskType];
+
+export const FeedTaskStatus = {
+    PENDING: "pending",
+    COMPLETED: "completed",
+    SKIPPED: "skipped",
+    MISSED: "missed",
+} as const;
+export type FeedTaskStatus = (typeof FeedTaskStatus)[keyof typeof FeedTaskStatus];
 
 export const NaranjoCausality = { DEFINITE: "Definite", PROBABLE: "Probable", POSSIBLE: "Possible", DOUBTFUL: "Doubtful" } as const;
 export type NaranjoCausality = (typeof NaranjoCausality)[keyof typeof NaranjoCausality];
@@ -181,7 +203,7 @@ export interface Document {
     fileSizeBytes: number;
     parsed: boolean;
     aiSummary?: string;
-    parseStatus: "none" | "pending" | "processing" | "completed" | "failed";
+    parseStatus: DocumentParseStatus;
     parseError?: string;
     parseAttempts: number;
     sourceClinic?: string;
@@ -220,13 +242,13 @@ export interface FeedProvider {
 
 export interface FeedTask {
     id: string;
-    type: "medication" | "obligation";
+    type: FeedTaskType;
     targetId: string;
     name: string;
     description?: string;
     frequency: string;
     scheduledTime?: string;
-    status: "pending" | "completed" | "skipped" | "missed";
+    status: FeedTaskStatus;
     completedAt?: string;
     provider?: FeedProvider;
 }

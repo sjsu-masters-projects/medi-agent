@@ -5,11 +5,13 @@ var PDFiumModule = (() => {
         var ENVIRONMENT_IS_WORKER = typeof WorkerGlobalScope != "undefined";
         var ENVIRONMENT_IS_NODE = typeof process == "object" && process.versions && process.versions.node && process.type != "renderer";
         var thisProgram = "./this.program";
-        var _scriptName = typeof document != "undefined" ? document.currentScript && document.currentScript.src : undefined;
+        var _scriptName;
         try {
             _scriptName = __filename;
         } catch {
-            if (ENVIRONMENT_IS_WORKER) {
+            if (typeof document != "undefined" && document.currentScript) {
+                _scriptName = document.currentScript.src;
+            } else if (ENVIRONMENT_IS_WORKER) {
                 _scriptName = self.location.href;
             }
         }
