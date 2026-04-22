@@ -29,8 +29,13 @@ class Language(StrEnum):
 
 
 def coerce_language(value: object, fallback: Language = Language.EN) -> Language:
+    if isinstance(value, Language):
+        return value
+    if not isinstance(value, str):
+        return fallback
+
     try:
-        return value if isinstance(value, Language) else Language(value)
+        return Language(value)
     except ValueError:
         return fallback
 
