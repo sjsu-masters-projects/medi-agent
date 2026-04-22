@@ -8,7 +8,7 @@ from typing import Any
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError
-from app.models.enums import ChatRole, Language, coerce_locale
+from app.models.enums import ChatRole, coerce_locale
 
 DEFAULT_CHAT_SESSION_ID = "default"
 
