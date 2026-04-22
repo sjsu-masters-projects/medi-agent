@@ -52,4 +52,4 @@ async def test_triage_agent_fallback_returns_spanish_urgent_guidance():
     assert output.urgency == "urgent"
     assert output.escalation_required is True
     assert output.response_text is not None
-    assert "equipo clinico" in output.response_text.lower()
+    assert "equipo clínico" in output.response_text.lower()
