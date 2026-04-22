@@ -2,7 +2,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClinicianLoginPage from "@/app/(auth)/login/page";
 
-const { dispatch, post, replace, writeStoredSession, isRetryableApiError } = vi.hoisted(() => ({
+const { ApiClientError, dispatch, post, replace, writeStoredSession, isRetryableApiError } = vi.hoisted(() => ({
+    ApiClientError: class ApiClientError extends Error {
+        readonly details: unknown;
+        readonly status: number;
+
+        constructor(message: string, status: number, details: unknown) {
+            super(message);
+            this.details = details;
+            this.status = status;
+        }
+    },
     dispatch: vi.fn(),
     post: vi.fn(),
     replace: vi.fn(),
@@ -27,6 +37,7 @@ vi.mock("react-redux", () => ({
 }));
 
 vi.mock("@/services/api", () => ({
+    ApiClientError,
     api: { post },
     isRetryableApiError,
 }));
@@ -97,7 +108,7 @@ describe("Clinician login page", () => {
             email: "patient@example.com",
             password: "SecurePass123!",
         });
-        expect(await screen.findByText(/patient account/i)).toBeInTheDocument();
+        expect(await screen.findByText(/registered as a patient/i)).toBeInTheDocument();
         expect(writeStoredClinicContext).toHaveBeenCalledWith(
             expect.objectContaining({ clinicCode: "ABC123", clinicName: "City Health" }),
         );
@@ -294,7 +305,11 @@ describe("Clinician login page", () => {
             clinicName: "City Health",
             status: "active",
         });
-        post.mockRejectedValueOnce(new Error("Clinic code is invalid"));
+        post.mockRejectedValueOnce(
+            new ApiClientError("Clinic code is invalid", 401, {
+                error: { code: "CLINIC_CODE_INVALID" },
+            }),
+        );
 
         render(<ClinicianLoginPage />);
 
@@ -310,7 +325,11 @@ describe("Clinician login page", () => {
             clinic_name: "City Health",
             status: "active",
         });
-        post.mockRejectedValueOnce(new Error("Clinic code is invalid"));
+        post.mockRejectedValueOnce(
+            new ApiClientError("Clinic code is invalid", 403, {
+                error: { code: "CLINIC_CONTEXT_INVALID" },
+            }),
+        );
 
         render(<ClinicianLoginPage />);
 

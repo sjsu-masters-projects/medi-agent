@@ -7,6 +7,8 @@
  */
 
 export type {
+    LocaleMetadata,
+    LocaleResourceMap,
     Patient,
     Medication,
     Obligation,
@@ -30,11 +32,30 @@ export type {
 } from "../../../../packages/shared/src/types";
 
 export {
+    Locale,
+    DEFAULT_LOCALE,
+    SUPPORTED_LOCALES,
     Language,
+    LOCALE_METADATA,
+    getLocaleMetadata,
+    getLocaleLabel,
+    getLocaleSelectorLabel,
+    getLocaleBadgeLabel,
+    getDocumentTypeLabel,
+    resolveLocaleResource,
+    isLocale,
+    isSpanishLocale,
+    normalizeLocale,
+    isLanguage,
+    isSpanishLanguage,
+    normalizeLanguage,
     Gender,
     ChatRole,
+    DocumentParseStatus,
     DocumentType,
     PortalUserRole,
+    FeedTaskStatus,
+    FeedTaskType,
     MedicationRoute,
     ObligationType,
     AdherenceStatus,

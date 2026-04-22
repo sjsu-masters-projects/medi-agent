@@ -24,7 +24,7 @@ from supabase import Client
 from app.clients.supabase import create_anon_client
 from app.core.exceptions import AuthenticationError, ValidationError
 from app.db.repositories import ClinicianRepository, ClinicRepository
-from app.models.enums import ClinicianRole
+from app.models.enums import ClinicianRole, coerce_locale
 from app.services.clinic_service import ClinicService
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class AuthService:
         first_name: str,
         last_name: str,
         date_of_birth: str,
-        preferred_language: str = "en",
+        preferred_language: str = "en-US",
     ) -> Any:
         """Create a patient account: auth user + profile row.
 
@@ -78,7 +78,7 @@ class AuthService:
                     "first_name": first_name,
                     "last_name": last_name,
                     "date_of_birth": date_of_birth,
-                    "preferred_language": preferred_language,
+                    "preferred_language": coerce_locale(preferred_language).value,
                 }
             ).execute()
         except Exception as e:

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
-import { api, isRetryableApiError } from "@/services/api";
+import { ApiClientError, api, isRetryableApiError } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import {
     clearStoredClinicContext,
@@ -58,6 +58,12 @@ interface ClinicResolveResponse {
 
 type LoginStage = "verify" | "choose" | "login" | "mfa";
 
+type ApiErrorWithEnvelope = {
+    error?: {
+        code?: string;
+    };
+};
+
 function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
     return {
         clinicCode: response.clinic_code,
@@ -65,6 +71,32 @@ function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
         clinicName: response.clinic_name,
         status: response.status,
     };
+}
+
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
+    if (error instanceof Error && error.message) {
+        return error.message;
+    }
+
+    if (typeof error === "string" && error) {
+        return error;
+    }
+
+    return fallbackMessage;
+}
+
+function isClinicContextInvalidError(error: unknown): boolean {
+    if (!(error instanceof ApiClientError)) {
+        return false;
+    }
+
+    const code = (error.details as ApiErrorWithEnvelope | null)?.error?.code;
+    return (
+        error.status === 401
+        || error.status === 403
+        || code === "CLINIC_CONTEXT_INVALID"
+        || code === "CLINIC_CODE_INVALID"
+    );
 }
 
 export default function ClinicianLoginPage() {
@@ -146,7 +178,12 @@ export default function ClinicianLoginPage() {
             setClinicContext(context);
             setStage("choose");
         } catch (submissionError) {
-            setClinicCodeError((submissionError as Error).message);
+            setClinicCodeError(
+                getErrorMessage(
+                    submissionError,
+                    "Unable to verify clinic code. Please try again.",
+                ),
+            );
         } finally {
             setSubmitting(false);
         }
@@ -183,14 +220,18 @@ export default function ClinicianLoginPage() {
                 password,
             });
             if (response.user.role !== PortalUserRole.CLINICIAN) {
-                throw new Error("This login belongs to a patient account.");
+                throw new Error(
+                    "This account is registered as a patient. Please use the patient portal to sign in.",
+                );
             }
 
             if (response.mfa_required) {
                 const factors = response.mfa_factors ?? [];
                 const primaryFactor = factors[0];
                 if (!primaryFactor) {
-                    throw new Error("MFA is required but no verified factor is available.");
+                    throw new Error(
+                        "Multi-factor authentication is required, but no verification method is set up for your account. Please contact your clinic administrator to set up MFA, then try signing in again.",
+                    );
                 }
 
                 const pendingSession: ClinicianAuthSession = {
@@ -229,12 +270,19 @@ export default function ClinicianLoginPage() {
             dispatch(hydrateSession(session));
             router.replace("/dashboard");
         } catch (submissionError) {
-            const message = (submissionError as Error).message;
-            if (!isRetryableApiError(submissionError) && message.toLowerCase().includes("clinic code")) {
+            if (
+                !isRetryableApiError(submissionError)
+                && isClinicContextInvalidError(submissionError)
+            ) {
                 expireClinicContext("Saved clinic access expired. Please verify your clinic code again.");
                 return;
             }
-            setError(message);
+            setError(
+                getErrorMessage(
+                    submissionError,
+                    "Unable to sign in right now. Please try again.",
+                ),
+            );
         } finally {
             setSubmitting(false);
         }
@@ -277,7 +325,12 @@ export default function ClinicianLoginPage() {
             dispatch(hydrateSession(session));
             router.replace("/dashboard");
         } catch (submissionError) {
-            setError((submissionError as Error).message);
+            setError(
+                getErrorMessage(
+                    submissionError,
+                    "Unable to verify your MFA code. Please try again.",
+                ),
+            );
         } finally {
             setSubmitting(false);
         }
@@ -440,11 +493,10 @@ export default function ClinicianLoginPage() {
                                     {submitting ? "Signing in..." : "Sign in"}
                                 </Button>
                             </form>
-                            <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center justify-start text-sm">
                                 <button className="text-blue-600" onClick={() => setStage("choose")} type="button">
                                     Back
                                 </button>
-                                <span className="text-gray-400">Forgot password?</span>
                             </div>
                         </>
                     ) : null}

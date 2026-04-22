@@ -1,12 +1,117 @@
 /**
- * Shared TypeScript types — single source of truth for both portals.
- * Mirrors backend Pydantic schemas in `backend/src/app/models/`.
+ * Shared TypeScript types used by both portals.
+ * Intended to mirror backend Pydantic schemas in `backend/src/app/models/`.
+ * Sync is maintained via project process/tooling outside this file; keep both
+ * sides aligned when changing models or API contracts.
  */
 
 // ── Enums (match backend StrEnum values) ──────────
 
-export const Language = { EN: "en", ES: "es" } as const;
-export type Language = (typeof Language)[keyof typeof Language];
+export const Locale = { EN_US: "en-US", ES_MX: "es-MX" } as const;
+export type Locale = (typeof Locale)[keyof typeof Locale];
+
+export const DEFAULT_LOCALE: Locale = Locale.EN_US;
+export const SUPPORTED_LOCALES = [Locale.EN_US, Locale.ES_MX] as const satisfies readonly Locale[];
+
+const LOCALE_VALUES = new Set<Locale>(Object.values(Locale));
+const LOCALE_ALIASES: Record<string, Locale> = {
+    en: Locale.EN_US,
+    "en-us": Locale.EN_US,
+    es: Locale.ES_MX,
+    "es-mx": Locale.ES_MX,
+};
+
+export function isLocale(value: unknown): value is Locale {
+    return typeof value === "string" && LOCALE_VALUES.has(value as Locale);
+}
+
+export function normalizeLocale(
+    value: unknown,
+    fallback: Locale = DEFAULT_LOCALE,
+): Locale {
+    if (isLocale(value)) {
+        return value;
+    }
+
+    if (typeof value !== "string") {
+        return fallback;
+    }
+
+    const normalized = value.trim().toLowerCase().replaceAll("_", "-");
+    return LOCALE_ALIASES[normalized] ?? fallback;
+}
+
+export interface LocaleMetadata {
+    badgeLabel: string;
+    displayName: string;
+    selectorLabel: string;
+    tag: Locale;
+}
+
+export const LOCALE_METADATA: Record<Locale, LocaleMetadata> = {
+    [Locale.EN_US]: {
+        badgeLabel: "EN-US",
+        displayName: "English (US)",
+        selectorLabel: "EN",
+        tag: Locale.EN_US,
+    },
+    [Locale.ES_MX]: {
+        badgeLabel: "ES-MX",
+        displayName: "Español (México)",
+        selectorLabel: "ES",
+        tag: Locale.ES_MX,
+    },
+};
+
+export function getLocaleMetadata(value: unknown): LocaleMetadata {
+    return LOCALE_METADATA[normalizeLocale(value)];
+}
+
+export function getLocaleLabel(value: unknown): string {
+    return getLocaleMetadata(value).displayName;
+}
+
+export function getLocaleSelectorLabel(value: unknown): string {
+    return getLocaleMetadata(value).selectorLabel;
+}
+
+export function getLocaleBadgeLabel(value: unknown): string {
+    return getLocaleMetadata(value).badgeLabel;
+}
+
+export interface LocaleResourceMap<T> {
+    default: T;
+    [locale: string]: T | undefined;
+}
+
+export function resolveLocaleResource<T>(
+    value: unknown,
+    resources: LocaleResourceMap<T>,
+): T {
+    const locale = normalizeLocale(value);
+    const baseLanguage = locale.split("-")[0];
+    const candidates = [locale, baseLanguage, DEFAULT_LOCALE];
+
+    for (const candidate of candidates) {
+        const match = resources[candidate];
+        if (typeof match !== "undefined") {
+            return match;
+        }
+    }
+
+    return resources.default;
+}
+
+export function isSpanishLocale(value: unknown): boolean {
+    return normalizeLocale(value) === Locale.ES_MX;
+}
+
+// Backward-compatible aliases while the codebase transitions from language to locale naming.
+export const Language = { EN: Locale.EN_US, ES: Locale.ES_MX } as const;
+export type Language = Locale;
+export const isLanguage = isLocale;
+export const normalizeLanguage = normalizeLocale;
+export const isSpanishLanguage = isSpanishLocale;
 
 export const Gender = { MALE: "male", FEMALE: "female", OTHER: "other", PREFER_NOT_TO_SAY: "prefer_not_to_say" } as const;
 export type Gender = (typeof Gender)[keyof typeof Gender];
@@ -17,11 +122,65 @@ export type ClinicianRole = (typeof ClinicianRole)[keyof typeof ClinicianRole];
 export const CareTeamStatus = { ACTIVE: "active", INACTIVE: "inactive", TRANSFERRED: "transferred" } as const;
 export type CareTeamStatus = (typeof CareTeamStatus)[keyof typeof CareTeamStatus];
 
+export const DocumentParseStatus = {
+    NONE: "none",
+    PENDING: "pending",
+    PROCESSING: "processing",
+    COMPLETED: "completed",
+    FAILED: "failed",
+} as const;
+export type DocumentParseStatus = (typeof DocumentParseStatus)[keyof typeof DocumentParseStatus];
+
 export const DocumentType = {
     LAB_REPORT: "lab_report", DISCHARGE_SUMMARY: "discharge_summary", PRESCRIPTION: "prescription",
     DIAGNOSTIC_REPORT: "diagnostic_report", INSURANCE: "insurance", REFERRAL: "referral", OTHER: "other",
 } as const;
 export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType];
+
+const DOCUMENT_TYPE_LABELS: Record<DocumentType, LocaleResourceMap<string>> = {
+    [DocumentType.LAB_REPORT]: {
+        default: "lab report",
+        "en-US": "lab report",
+        "es-MX": "reporte de laboratorio",
+    },
+    [DocumentType.DISCHARGE_SUMMARY]: {
+        default: "discharge summary",
+        "en-US": "discharge summary",
+        "es-MX": "resumen de alta",
+    },
+    [DocumentType.PRESCRIPTION]: {
+        default: "prescription",
+        "en-US": "prescription",
+        "es-MX": "receta médica",
+    },
+    [DocumentType.DIAGNOSTIC_REPORT]: {
+        default: "diagnostic report",
+        "en-US": "diagnostic report",
+        "es-MX": "reporte diagnóstico",
+    },
+    [DocumentType.INSURANCE]: {
+        default: "insurance document",
+        "en-US": "insurance document",
+        "es-MX": "documento de seguro",
+    },
+    [DocumentType.REFERRAL]: {
+        default: "referral",
+        "en-US": "referral",
+        "es-MX": "referencia",
+    },
+    [DocumentType.OTHER]: {
+        default: "medical record",
+        "en-US": "medical record",
+        "es-MX": "documento médico",
+    },
+};
+
+export function getDocumentTypeLabel(
+    documentType: DocumentType,
+    locale: unknown = DEFAULT_LOCALE,
+): string {
+    return resolveLocaleResource(locale, DOCUMENT_TYPE_LABELS[documentType]);
+}
 
 export const DocumentVisibility = { ALL_PROVIDERS: "all_providers", SPECIFIC_PROVIDER: "specific_provider" } as const;
 export type DocumentVisibility = (typeof DocumentVisibility)[keyof typeof DocumentVisibility];
@@ -46,6 +205,17 @@ export type AdherenceTargetType = (typeof AdherenceTargetType)[keyof typeof Adhe
 
 export const AdherenceStatus = { TAKEN: "taken", COMPLETED: "completed", SKIPPED: "skipped", MISSED: "missed" } as const;
 export type AdherenceStatus = (typeof AdherenceStatus)[keyof typeof AdherenceStatus];
+
+export const FeedTaskType = { MEDICATION: "medication", OBLIGATION: "obligation" } as const;
+export type FeedTaskType = (typeof FeedTaskType)[keyof typeof FeedTaskType];
+
+export const FeedTaskStatus = {
+    PENDING: "pending",
+    COMPLETED: "completed",
+    SKIPPED: "skipped",
+    MISSED: "missed",
+} as const;
+export type FeedTaskStatus = (typeof FeedTaskStatus)[keyof typeof FeedTaskStatus];
 
 export const NaranjoCausality = { DEFINITE: "Definite", PROBABLE: "Probable", POSSIBLE: "Possible", DOUBTFUL: "Doubtful" } as const;
 export type NaranjoCausality = (typeof NaranjoCausality)[keyof typeof NaranjoCausality];
@@ -181,7 +351,7 @@ export interface Document {
     fileSizeBytes: number;
     parsed: boolean;
     aiSummary?: string;
-    parseStatus: "none" | "pending" | "processing" | "completed" | "failed";
+    parseStatus: DocumentParseStatus;
     parseError?: string;
     parseAttempts: number;
     sourceClinic?: string;
@@ -220,13 +390,13 @@ export interface FeedProvider {
 
 export interface FeedTask {
     id: string;
-    type: "medication" | "obligation";
+    type: FeedTaskType;
     targetId: string;
     name: string;
     description?: string;
     frequency: string;
     scheduledTime?: string;
-    status: "pending" | "completed" | "skipped" | "missed";
+    status: FeedTaskStatus;
     completedAt?: string;
     provider?: FeedProvider;
 }

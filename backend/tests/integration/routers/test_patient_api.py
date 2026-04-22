@@ -157,7 +157,7 @@ class TestUpdateMyProfile:
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["preferred_language"] == "es"
+        assert data["preferred_language"] == "es-MX"
 
     def test_invalid_gender(self, client, override_auth, override_db):
         """Reject invalid gender value."""

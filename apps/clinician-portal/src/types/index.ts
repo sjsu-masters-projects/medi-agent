@@ -5,6 +5,8 @@
  */
 
 export type {
+    LocaleMetadata,
+    LocaleResourceMap,
     Clinician,
     Patient,
     PatientSummary,
@@ -29,15 +31,34 @@ export type {
 } from "../../../../packages/shared/src/types";
 
 export {
+    Locale,
+    DEFAULT_LOCALE,
+    SUPPORTED_LOCALES,
     Language,
+    LOCALE_METADATA,
+    getLocaleMetadata,
+    getLocaleLabel,
+    getLocaleSelectorLabel,
+    getLocaleBadgeLabel,
+    getDocumentTypeLabel,
+    resolveLocaleResource,
+    isLocale,
+    isSpanishLocale,
+    normalizeLocale,
+    isLanguage,
+    isSpanishLanguage,
+    normalizeLanguage,
     ClinicianRole,
     PortalUserRole,
     ChatRole,
+    DocumentParseStatus,
     UploaderRole,
     NaranjoCausality,
     ADRStatus,
     MedWatchStatus,
     AppointmentStatus,
+    FeedTaskStatus,
+    FeedTaskType,
     NotificationType,
     MessageChannel,
     DocumentType,

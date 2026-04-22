@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { getPatientChatCopy } from "@/content/chat-copy";
 import {
     HiArrowUp,
     HiChevronDown,
@@ -12,11 +13,13 @@ import {
 import { ChatBubble } from "@/components/features";
 import { Button, Input } from "@/components/ui";
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
-import { ChatRole, Language, type Language as ChatLanguage } from "@/types";
-
-function getLanguageLabel(language: ChatLanguage): string {
-    return language === Language.ES ? "Espanol" : "English";
-}
+import {
+    ChatRole,
+    SUPPORTED_LOCALES,
+    getLocaleLabel,
+    getLocaleSelectorLabel,
+    type Locale as ChatLocale,
+} from "@/types";
 
 function getConnectionLabel(
     connectionStatus: "idle" | "connected" | "connecting" | "disconnected" | "error",
@@ -33,32 +36,15 @@ function getConnectionLabel(
     return "Offline";
 }
 
-function buildQuickPrompts(language: ChatLanguage): string[] {
-    if (language === Language.ES) {
-        return [
-            "Explica mis resultados recientes",
-            "Debo preocuparme por este sintoma?",
-            "Ayudame a preparar preguntas para mi medico",
-        ];
-    }
-
-    return [
-        "Explain my recent results",
-        "Should I worry about this symptom?",
-        "Help me prepare questions for my doctor",
-    ];
-}
-
-function formatSessionTimeLabel(): string {
-    return `Today, ${new Date().toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-    })}`;
+function formatSessionTimeLabel(locale: ChatLocale): string {
+    return new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(new Date());
 }
 
 export default function ChatPage() {
     const bottomRef = useRef<HTMLDivElement | null>(null);
-    const [sessionTimeLabel] = useState(() => formatSessionTimeLabel());
     const {
         assistantDraft,
         assistantDraftStartedAt,
@@ -83,8 +69,10 @@ export default function ChatPage() {
         voiceModeEnabled,
         voiceStatus,
     } = usePatientChatSession();
+    const sessionTimeLabel = formatSessionTimeLabel(selectedLanguage);
 
-    const quickPrompts = buildQuickPrompts(selectedLanguage);
+    const chatCopy = getPatientChatCopy(selectedLanguage);
+    const quickPrompts = chatCopy.quickPrompts;
     const showQuickPrompts =
         !loading
         && !documentContext
@@ -126,8 +114,8 @@ export default function ChatPage() {
                             className="inline-flex rounded-full border border-[#D9E4F2] bg-[#FBFCFF] p-1 shadow-[0_10px_24px_rgba(70,96,140,0.08)]"
                             role="group"
                         >
-                            {[Language.EN, Language.ES].map((language) => {
-                                const isActive = selectedLanguage === language;
+                            {SUPPORTED_LOCALES.map((locale) => {
+                                const isActive = selectedLanguage === locale;
                                 return (
                                     <button
                                         aria-pressed={isActive}
@@ -136,11 +124,11 @@ export default function ChatPage() {
                                                 ? "bg-[#EADFFF] text-[#5F4A90]"
                                                 : "text-[#5E6F8D] hover:bg-[#F4F8FD]"
                                         }`}
-                                        key={language}
-                                        onClick={() => handleLanguageSelection(language)}
+                                        key={locale}
+                                        onClick={() => handleLanguageSelection(locale)}
                                         type="button"
                                     >
-                                        {language === Language.EN ? "EN" : "ES"}
+                                        {getLocaleSelectorLabel(locale)}
                                     </button>
                                 );
                             })}
@@ -172,11 +160,11 @@ export default function ChatPage() {
                                                 {documentContext.documentName}
                                             </p>
                                             <p className="text-sm text-[#6E829F]">
-                                                Asking in {getLanguageLabel(documentContext.preferredLanguage)}
+                                                {chatCopy.documentContextIntro} {getLocaleLabel(documentContext.preferredLanguage)}
                                                 {documentContext.provider
                                                     ? ` about ${documentContext.provider}`
                                                     : ""}
-                                                .
+                                                {chatCopy.documentContextSuffix}
                                             </p>
                                         </div>
                                     </div>
@@ -206,9 +194,7 @@ export default function ChatPage() {
                         {showQuickPrompts ? (
                             <div className="space-y-3">
                                 <div className="rounded-[22px] border border-[#E3EBF7] bg-white px-4 py-3 text-sm text-[#41536F] shadow-[0_16px_32px_rgba(70,96,140,0.08)]">
-                                    {selectedLanguage === Language.ES
-                                        ? "Puedo ayudarte con sintomas, resultados y proximos pasos. Prueba una de estas preguntas:"
-                                        : "I can help with symptoms, results, and next steps. Try one of these prompts:"}
+                                    {chatCopy.emptyStateIntro}
                                 </div>
                                 <div className="flex flex-col gap-2">
                                     {quickPrompts.map((prompt) => (
@@ -315,11 +301,7 @@ export default function ChatPage() {
                                 <Input
                                     className="border-0 bg-transparent px-3 py-3 text-[#23324A] shadow-none placeholder:text-[#8DA0BA] focus:border-0 focus:ring-0"
                                     onChange={(event) => setInput(event.target.value)}
-                                    placeholder={
-                                        selectedLanguage === Language.ES
-                                            ? "Escribe o habla un mensaje..."
-                                            : "Type or speak a message..."
-                                    }
+                                    placeholder={chatCopy.inputPlaceholder}
                                     value={input}
                                 />
                             </div>

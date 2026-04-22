@@ -2,10 +2,12 @@
  * Shared utility functions.
  */
 
+import { DEFAULT_LOCALE } from "../types";
+
 /**
  * Format a date string or Date object into a human-readable format.
  */
-export function formatDate(date: string | Date, locale: string = "en-US"): string {
+export function formatDate(date: string | Date, locale: string = DEFAULT_LOCALE): string {
     const d = typeof date === "string" ? new Date(date) : date;
     return d.toLocaleDateString(locale, {
         year: "numeric",

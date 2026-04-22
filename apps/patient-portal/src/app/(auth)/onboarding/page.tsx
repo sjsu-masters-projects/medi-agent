@@ -7,6 +7,7 @@ import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
 import { clearOnboardingProfile } from "@/store/slices/onboarding-slice";
 import type { AppDispatch, RootState } from "@/store/store";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, getLocaleLabel, normalizeLocale } from "@/types";
 
 const allowedGenders = ["male", "female", "other", "prefer_not_to_say"] as const;
 
@@ -25,7 +26,7 @@ export default function OnboardingPage() {
         firstName: profileDraft?.firstName ?? "",
         gender: "",
         inviteCode: "",
-        language: "en",
+        language: DEFAULT_LOCALE,
         lastName: profileDraft?.lastName ?? "",
     }));
 
@@ -66,7 +67,7 @@ export default function OnboardingPage() {
                     first_name: formData.firstName.trim(),
                     gender: normalizedGender || undefined,
                     last_name: formData.lastName.trim(),
-                    preferred_language: formData.language,
+                    preferred_language: normalizeLocale(formData.language),
                 },
                 { token: accessToken },
             );
@@ -132,11 +133,14 @@ export default function OnboardingPage() {
                             Preferred language
                             <select
                                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                onChange={(event) => updateField("language", event.target.value)}
+                                onChange={(event) => updateField("language", normalizeLocale(event.target.value))}
                                 value={formData.language}
                             >
-                                <option value="en">English</option>
-                                <option value="es">Spanish</option>
+                                {SUPPORTED_LOCALES.map((locale) => (
+                                    <option key={locale} value={locale}>
+                                        {getLocaleLabel(locale)}
+                                    </option>
+                                ))}
                             </select>
                         </label>
                         <label className="block text-sm font-medium text-gray-700">

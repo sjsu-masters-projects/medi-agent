@@ -14,8 +14,8 @@ permissions:
 
 jobs:
   # ── Backend Pipeline ──────────────────────────────────────
-  backend-lint:
-    name: Backend Lint (Ruff & Mypy)
+  backend-ruff-lint:
+    name: Backend Lint (Ruff)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -33,14 +33,53 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Lint (Ruff)
         run: ruff check src/
+
+  backend-ruff-format:
+    name: Backend Format Check (Ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Format check (Ruff)
         run: ruff format --check src/
+
+  backend-mypy:
+    name: Backend Type Check (mypy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Type check (mypy)
         run: mypy src/ --ignore-missing-imports
 
   backend-test:
     name: Backend Test (pytest)
-    needs: backend-lint
+    needs:
+      - backend-ruff-lint
+      - backend-ruff-format
+      - backend-mypy
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -139,34 +178,3 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-
-  # ── Pipeline Completion ──────────────────────────────────
-  ci-success:
-    name: CI Pipeline Passed 🎉
-    if: ${{ always() }}
-    needs:
-      - backend-lint
-      - backend-test
-      - patient-lint
-      - patient-build
-      - clinician-lint
-      - clinician-build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Report dependency results
-        run: |
-          echo "backend-lint=${{ needs.backend-lint.result }}"
-          echo "backend-test=${{ needs.backend-test.result }}"
-          echo "patient-lint=${{ needs.patient-lint.result }}"
-          echo "patient-build=${{ needs.patient-build.result }}"
-          echo "clinician-lint=${{ needs.clinician-lint.result }}"
-          echo "clinician-build=${{ needs.clinician-build.result }}"
-
-      - name: Fail if any dependency did not succeed
-        run: |
-          [[ "${{ needs.backend-lint.result }}" == "success" ]] || exit 1
-          [[ "${{ needs.backend-test.result }}" == "success" ]] || exit 1
-          [[ "${{ needs.patient-lint.result }}" == "success" ]] || exit 1
-          [[ "${{ needs.patient-build.result }}" == "success" ]] || exit 1
-          [[ "${{ needs.clinician-lint.result }}" == "success" ]] || exit 1
-          [[ "${{ needs.clinician-build.result }}" == "success" ]] || exit 1

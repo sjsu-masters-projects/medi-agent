@@ -8,7 +8,7 @@ from typing import Any
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError
-from app.models.enums import ChatRole, Language
+from app.models.enums import ChatRole, coerce_locale
 
 DEFAULT_CHAT_SESSION_ID = "default"
 
@@ -317,7 +317,4 @@ class ChatService:
 
     @staticmethod
     def _coerce_language(value: Any) -> str:
-        if isinstance(value, Language):
-            return value.value
-        raw = str(value or Language.EN.value)
-        return raw if raw in {member.value for member in Language} else Language.EN.value
+        return coerce_locale(value).value

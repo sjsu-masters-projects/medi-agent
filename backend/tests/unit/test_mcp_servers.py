@@ -199,7 +199,7 @@ class TestDeepgramMCPServer:
             assert "transcript" in stt_result
             assert stt_result["transcript"] == "Hello world"
             assert stt_result["model"] == "nova-3"
-            assert stt_result["language"] == "en"
+            assert stt_result["language"] == "en-US"
 
             # Verify the mock was called
             mock_transcribe.assert_called_once()

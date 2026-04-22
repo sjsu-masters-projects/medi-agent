@@ -1,5 +1,5 @@
 import { api } from "@/services/api";
-import type { ChatMessage, ChatRole, Language } from "@/types";
+import { normalizeLocale, type ChatMessage, type ChatRole, type Locale } from "@/types";
 
 export interface ChatMessageApi {
     id: string;
@@ -7,7 +7,7 @@ export interface ChatMessageApi {
     content: string;
     role: ChatRole;
     intent?: string | null;
-    language: Language;
+    language: Locale;
     audio_url?: string | null;
     created_at: string;
 }
@@ -69,7 +69,7 @@ export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
         createdAt: message.created_at,
         id: message.id,
         intent: message.intent ?? undefined,
-        language: message.language,
+        language: normalizeLocale(message.language),
         patientId: message.patient_id,
         role: message.role,
     };

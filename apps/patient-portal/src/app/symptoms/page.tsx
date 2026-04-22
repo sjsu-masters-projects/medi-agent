@@ -46,7 +46,7 @@ export default function SymptomsPage() {
                                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reported symptom</p>
                                 <h2 className="mt-1 text-base font-semibold text-slate-900">{report.symptom}</h2>
                                 <p className="mt-1 text-sm text-slate-500">
-                                    {new Date(report.createdAt).toLocaleString("en-US", {
+                                    {new Date(report.createdAt).toLocaleString(undefined, {
                                         dateStyle: "medium",
                                         timeStyle: "short",
                                     })}

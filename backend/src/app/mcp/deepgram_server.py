@@ -16,6 +16,7 @@ from app.clients.deepgram_client import (
     transcribe_audio_file_async,
 )
 from app.mcp.base import MCPServer
+from app.models.enums import Language, coerce_locale
 
 logger = structlog.get_logger(__name__)
 
@@ -57,7 +58,7 @@ class DeepgramServer(MCPServer):
                         "language": {
                             "type": "string",
                             "description": "Language code",
-                            "default": "en",
+                            "default": Language.EN.value,
                         },
                         "smart_format": {
                             "type": "boolean",
@@ -112,7 +113,7 @@ class DeepgramServer(MCPServer):
                 return await self._transcribe_audio(
                     audio_base64=arguments["audio_base64"],
                     model=arguments.get("model", "nova-3"),
-                    language=arguments.get("language", "en"),
+                    language=arguments.get("language", Language.EN.value),
                     smart_format=arguments.get("smart_format", True),
                 )
             case "generate_speech":
@@ -125,7 +126,7 @@ class DeepgramServer(MCPServer):
                 return await self._transcribe_audio(
                     audio_base64=arguments["audio_base64"],
                     model="nova-3",
-                    language="en",
+                    language=Language.EN.value,
                     smart_format=True,
                     patient_id=arguments["patient_id"],
                 )
@@ -137,7 +138,7 @@ class DeepgramServer(MCPServer):
         self,
         audio_base64: str,
         model: str = "nova-3",
-        language: str = "en",
+        language: str = Language.EN.value,
         smart_format: bool = True,
         patient_id: str | None = None,
     ) -> dict[str, Any]:
@@ -152,7 +153,7 @@ class DeepgramServer(MCPServer):
             result: dict[str, Any] = {
                 "transcript": transcript,
                 "model": model,
-                "language": language,
+                "language": coerce_locale(language).value,
                 "success": True,
             }
             if patient_id:

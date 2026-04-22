@@ -1,7 +1,20 @@
-import { DocumentType, type Language, type DocumentType as DocumentTypeValue } from "@/types";
+import {
+    DocumentType,
+    getDocumentTypeLabel,
+    normalizeLocale,
+    resolveLocaleResource,
+    type Locale,
+    type LocaleResourceMap,
+    type DocumentType as DocumentTypeValue,
+} from "@/types";
 
 const CHAT_DOCUMENT_CONTEXT_PREFIX = "patient-portal.chat.document-context";
 const DOCUMENT_TYPES = new Set<DocumentTypeValue>(Object.values(DocumentType));
+const DOCUMENT_QUESTION_TEMPLATES: LocaleResourceMap<string> = {
+    default: 'Help me understand my {descriptor} called "{documentName}" and what questions I should ask my doctor.',
+    "en-US": 'Help me understand my {descriptor} called "{documentName}" and what questions I should ask my doctor.',
+    "es-MX": 'Ayúdame a entender mi {descriptor} llamado "{documentName}" y dime qué debo preguntar a mi médico.',
+};
 
 export interface PendingChatDocumentContext {
     documentId: string;
@@ -9,7 +22,7 @@ export interface PendingChatDocumentContext {
     documentType: DocumentTypeValue;
     provider?: string;
     summary?: string;
-    preferredLanguage: Language;
+    preferredLanguage: Locale;
     suggestedQuestion: string;
 }
 
@@ -40,14 +53,15 @@ export function buildSuggestedDocumentQuestion(
     >,
 ): string {
     const descriptor = context.provider
-        ? `${context.documentType.replaceAll("_", " ")} from ${context.provider}`
-        : context.documentType.replaceAll("_", " ");
-
-    if (context.preferredLanguage === "es") {
-        return `Ayúdame a entender mi ${descriptor} llamado "${context.documentName}" y dime qué debo preguntar a mi médico.`;
-    }
-
-    return `Help me understand my ${descriptor} called "${context.documentName}" and what questions I should ask my doctor.`;
+        ? `${getDocumentTypeLabel(context.documentType, context.preferredLanguage)} from ${context.provider}`
+        : getDocumentTypeLabel(context.documentType, context.preferredLanguage);
+    const template = resolveLocaleResource(
+        context.preferredLanguage,
+        DOCUMENT_QUESTION_TEMPLATES,
+    );
+    return template
+        .replace("{descriptor}", descriptor)
+        .replace("{documentName}", context.documentName);
 }
 
 export function storePendingChatDocumentContext(
@@ -82,7 +96,10 @@ export function consumePendingChatDocumentContext(
         ) {
             return null;
         }
-        return parsed;
+        return {
+            ...parsed,
+            preferredLanguage: normalizeLocale(parsed.preferredLanguage),
+        };
     } catch {
         return null;
     }

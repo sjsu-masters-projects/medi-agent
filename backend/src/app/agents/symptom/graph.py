@@ -15,8 +15,31 @@ from app.agents.symptom.prompts import (
     build_symptom_response_prompt,
 )
 from app.clients.model_router import ModelRouter, TaskType
+from app.models.enums import Language, coerce_locale
+from app.utils.localization import resolve_locale_resource
 
 logger = logging.getLogger(__name__)
+
+SYMPTOM_COPY = {
+    "default": {
+        "fallback_prefix": "Thanks for sharing this about {symptom}. I logged it for follow-up (estimated severity {severity}/10).",
+        "fallback_question_start": "When did this symptom start?",
+        "fallback_severe_suffix": " Please contact your care team today for urgent guidance.",
+        "rule_assessment": "Patient reported symptom captured for clinician review.",
+    },
+    Language.EN.value: {
+        "fallback_prefix": "Thanks for sharing this about {symptom}. I logged it for follow-up (estimated severity {severity}/10).",
+        "fallback_question_start": "When did this symptom start?",
+        "fallback_severe_suffix": " Please contact your care team today for urgent guidance.",
+        "rule_assessment": "Patient reported symptom captured for clinician review.",
+    },
+    Language.ES.value: {
+        "fallback_prefix": "Gracias por compartir lo de {symptom}. Lo registré para seguimiento (severidad aproximada {severity}/10).",
+        "fallback_question_start": "¿Cuándo empezó este síntoma?",
+        "fallback_severe_suffix": " Es importante contactar a tu equipo clínico hoy mismo.",
+        "rule_assessment": "Síntoma reportado por el paciente y registrado para revisión clínica.",
+    },
+}
 
 
 class SymptomExtractionResult(BaseModel):
@@ -47,7 +70,7 @@ class SymptomState(TypedDict, total=False):
 
 async def extract_symptom(state: SymptomState, router: ModelRouter) -> SymptomState:
     message = str(state.get("message", "")).strip()
-    language = str(state.get("language", "en"))
+    language = coerce_locale(state.get("language", Language.EN.value)).value
     history = state.get("history", [])
     patient_context = state.get("patient_context", {})
 
@@ -74,7 +97,7 @@ async def extract_symptom(state: SymptomState, router: ModelRouter) -> SymptomSt
         )
     except Exception as exc:
         logger.warning("Symptom extraction LLM call failed; using fallback: %s", exc)
-        extraction = _extract_with_rules(message)
+        extraction = _extract_with_rules(message, language)
 
     return {
         **state,
@@ -89,7 +112,7 @@ async def generate_response(state: SymptomState, router: ModelRouter) -> Symptom
     if state.get("error"):
         return state
 
-    language = str(state.get("language", "en"))
+    language = coerce_locale(state.get("language", Language.EN.value)).value
     report = state.get("symptom_report", {})
     symptom = str(report.get("symptom", "symptom")).strip() or "symptom"
     severity = int(report.get("severity") or 5)
@@ -142,18 +165,19 @@ def build_symptom_graph(router: ModelRouter) -> Any:
     return workflow.compile()
 
 
-def _extract_with_rules(message: str) -> SymptomExtractionResult:
+def _extract_with_rules(message: str, language: str) -> SymptomExtractionResult:
     normalized = message.lower()
     symptom = _guess_symptom(normalized)
     severity = _guess_severity(normalized)
+    copy = resolve_locale_resource(language, SYMPTOM_COPY)
     flagged_for_adr = "after" in normalized and (
         "med" in normalized or "medicine" in normalized or "medication" in normalized
     )
     follow_up_question = None
     if "since" not in normalized and "for " not in normalized:
-        follow_up_question = "When did this symptom start?"
+        follow_up_question = copy["fallback_question_start"]
 
-    assessment = "Patient reported symptom captured for clinician review."
+    assessment = copy["rule_assessment"]
     return SymptomExtractionResult(
         symptom=symptom,
         severity=severity,
@@ -192,24 +216,10 @@ def _fallback_response(*, language: str, report: dict[str, Any]) -> str:
     symptom = str(report.get("symptom") or "your symptom")
     severity = int(report.get("severity") or 5)
     question = str(report.get("follow_up_question") or "").strip()
-
-    if language.lower().strip() == "es":
-        base = (
-            f"Gracias por compartir lo de {symptom}. Lo registre para seguimiento "
-            f"(severidad aproximada {severity}/10)."
-        )
-        if severity >= 8:
-            base += " Es importante contactar a tu equipo clinico hoy mismo."
-        if question:
-            base += f" {question}"
-        return base
-
-    base = (
-        f"Thanks for sharing this about {symptom}. I logged it for follow-up "
-        f"(estimated severity {severity}/10)."
-    )
+    localized_copy = resolve_locale_resource(language, SYMPTOM_COPY)
+    base = localized_copy["fallback_prefix"].format(symptom=symptom, severity=severity)
     if severity >= 8:
-        base += " Please contact your care team today for urgent guidance."
+        base += localized_copy["fallback_severe_suffix"]
     if question:
         base += f" {question}"
     return base

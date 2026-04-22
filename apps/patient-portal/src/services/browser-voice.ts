@@ -1,4 +1,4 @@
-import type { Language } from "@/types";
+import { normalizeLocale, type Locale } from "@/types";
 
 export interface VoiceCapabilities {
     recognition: boolean;
@@ -65,8 +65,8 @@ function getSpeechRecognitionConstructor():
     return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
 }
 
-function getSpeechLocale(language: Language): string {
-    return language === "es" ? "es-US" : "en-US";
+function getSpeechLocale(locale: Locale): string {
+    return normalizeLocale(locale);
 }
 
 export function getVoiceCapabilities(): VoiceCapabilities {
@@ -79,7 +79,7 @@ export function getVoiceCapabilities(): VoiceCapabilities {
 }
 
 export function createSpeechRecognitionController(
-    language: Language,
+    language: Locale,
     handlers: {
         onEnd: (finalTranscript: string) => void;
         onError: (message: string) => void;
@@ -152,7 +152,7 @@ export function playAssistantVoiceResponse({
     text,
 }: {
     audioUrl?: string;
-    language: Language;
+    language: Locale;
     onEnd?: () => void;
     onStart?: () => void;
     text: string;

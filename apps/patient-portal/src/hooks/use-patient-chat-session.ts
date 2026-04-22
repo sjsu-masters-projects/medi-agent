@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
+import { getPatientChatCopy } from "@/content/chat-copy";
 import {
     createSpeechRecognitionController,
     getVoiceCapabilities,
@@ -33,34 +34,30 @@ import {
 import type { AppDispatch, RootState } from "@/store/store";
 import {
     ChatRole,
-    Language,
+    DEFAULT_LOCALE,
+    normalizeLocale,
     type ChatMessage,
-    type Language as ChatLanguage,
+    type Locale as ChatLocale,
 } from "@/types";
 
 const CHAT_LANGUAGE_STORAGE_KEY = "patient-portal.chat.language";
 
-function resolveInitialLanguage(): ChatLanguage {
+function resolveInitialLanguage(): ChatLocale {
     if (typeof window === "undefined") {
-        return Language.EN;
+        return DEFAULT_LOCALE;
     }
 
     const stored = window.localStorage.getItem(CHAT_LANGUAGE_STORAGE_KEY);
-    if (stored === Language.ES || stored === Language.EN) {
-        return stored;
+    if (stored) {
+        return normalizeLocale(stored);
     }
 
-    return window.navigator.language.toLowerCase().startsWith("es")
-        ? Language.ES
-        : Language.EN;
+    return normalizeLocale(window.navigator.language);
 }
 
-function buildWelcomeMessage(patientId: string, language: ChatLanguage): ChatMessage {
+function buildWelcomeMessage(patientId: string, language: ChatLocale): ChatMessage {
     return {
-        content:
-            language === Language.ES
-                ? "Hola. Puedo ayudarte a entender resultados, seguir sintomas y preparar preguntas para tu medico."
-                : "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
+        content: getPatientChatCopy(language).welcomeMessage,
         createdAt: new Date().toISOString(),
         id: "welcome-message",
         language,
@@ -89,7 +86,7 @@ interface PatientChatSessionState {
     isTyping: boolean;
     loading: boolean;
     messages: ChatMessage[];
-    selectedLanguage: ChatLanguage;
+    selectedLanguage: ChatLocale;
     voiceError: string | null;
     voiceInterimTranscript: string;
     voiceModeEnabled: boolean;
@@ -98,7 +95,7 @@ interface PatientChatSessionState {
 
 interface PatientChatSessionActions {
     dismissDocumentContext: () => void;
-    handleLanguageSelection: (language: ChatLanguage) => void;
+    handleLanguageSelection: (language: ChatLocale) => void;
     handleMicClick: () => void;
     handlePlayAssistantMessage: (message: ChatMessage) => void;
     handleSend: (event: FormEvent<HTMLFormElement>) => void;
@@ -118,14 +115,14 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [initialDocumentContext] = useState<PendingChatDocumentContext | null>(
         resolveInitialDocumentContext,
     );
-    const [initialLanguage] = useState<ChatLanguage>(
+    const [initialLanguage] = useState<ChatLocale>(
         () => initialDocumentContext?.preferredLanguage ?? resolveInitialLanguage(),
     );
     const [voiceCapabilities] = useState(getVoiceCapabilities);
     const [input, setInput] = useState(
         () => initialDocumentContext?.suggestedQuestion ?? "",
     );
-    const [selectedLanguage, setSelectedLanguage] = useState<ChatLanguage>(initialLanguage);
+    const [selectedLanguage, setSelectedLanguage] = useState<ChatLocale>(initialLanguage);
     const [assistantDraft, setAssistantDraft] = useState("");
     const [assistantDraftStartedAt, setAssistantDraftStartedAt] = useState<string | null>(null);
     const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
@@ -140,7 +137,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
     const recognitionRef = useRef<SpeechRecognitionController | null>(null);
     const playbackStopRef = useRef<(() => void) | null>(null);
-    const selectedLanguageRef = useRef<ChatLanguage>(initialLanguage);
+    const selectedLanguageRef = useRef<ChatLocale>(initialLanguage);
     const socketRef = useRef<WebSocket | null>(null);
     const voiceModeRef = useRef(false);
 
@@ -391,9 +388,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         setDocumentContext(null);
     }
 
-    function handleLanguageSelection(language: ChatLanguage): void {
-        selectedLanguageRef.current = language;
-        setSelectedLanguage(language);
+    function handleLanguageSelection(language: ChatLocale): void {
+        const nextLocale = normalizeLocale(language);
+        selectedLanguageRef.current = nextLocale;
+        setSelectedLanguage(nextLocale);
         setVoiceError(null);
     }
 

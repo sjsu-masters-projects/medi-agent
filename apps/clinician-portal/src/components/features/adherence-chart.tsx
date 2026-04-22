@@ -18,7 +18,7 @@ interface AdherenceChartProps {
 /** Format axis tick: "Mar 15" */
 function formatDate(dateStr: string): string {
     const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /** Custom tooltip content */

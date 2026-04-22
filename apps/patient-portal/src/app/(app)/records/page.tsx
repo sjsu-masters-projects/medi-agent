@@ -16,8 +16,13 @@ import {
 import { uploadDocumentToStorage } from "@/services/storage";
 import type { RootState } from "@/store/store";
 import {
+    DEFAULT_LOCALE,
+    DocumentParseStatus,
     DocumentType,
-    Language,
+    Locale,
+    SUPPORTED_LOCALES,
+    getLocaleLabel,
+    normalizeLocale,
     type Document,
 } from "@/types";
 import { useSelector } from "react-redux";
@@ -36,7 +41,7 @@ interface DocumentApiRecord {
     file_size_bytes: number;
     parsed: boolean;
     ai_summary?: string | null;
-    parse_status?: "none" | "pending" | "processing" | "completed" | "failed";
+    parse_status?: Document["parseStatus"];
     parse_error?: string | null;
     parse_attempts?: number;
     source_clinic?: string | null;
@@ -92,7 +97,9 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
         mimeType: record.mime_type,
         parseAttempts: record.parse_attempts ?? 0,
         parseError: record.parse_error ?? undefined,
-        parseStatus: record.parse_status ?? (record.parsed ? "completed" : "none"),
+        parseStatus:
+            record.parse_status
+            ?? (record.parsed ? DocumentParseStatus.COMPLETED : DocumentParseStatus.NONE),
         parsed: record.parsed,
         patientId: record.patient_id,
         provider: record.source_clinic ?? "Care team",
@@ -139,7 +146,7 @@ export default function RecordsPage() {
     const router = useRouter();
     const [documents, setDocuments] = useState<PortalDocument[]>([]);
     const [selectedDocument, setSelectedDocument] = useState<PortalDocument | null>(null);
-    const [explanationLang, setExplanationLang] = useState<Language>(Language.EN);
+    const [explanationLang, setExplanationLang] = useState<Locale>(DEFAULT_LOCALE);
     const [explanationText, setExplanationText] = useState<string | null>(null);
     const [explanationLoading, setExplanationLoading] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -172,7 +179,7 @@ export default function RecordsPage() {
 
     const openDocument = useCallback((document: PortalDocument) => {
         setSelectedDocument(document);
-        setExplanationLang(Language.EN);
+        setExplanationLang(DEFAULT_LOCALE);
         setExplanationLoading(false);
 
         if (document.parseStatus === "failed") {
@@ -290,9 +297,13 @@ export default function RecordsPage() {
         }
     }
 
-    async function handleLanguageChange(language: Language) {
-        setExplanationLang(language);
-        if (language === Language.EN && selectedDocument?.parseStatus === "completed") {
+    async function handleLanguageChange(language: Locale) {
+        const nextLocale = normalizeLocale(language);
+        setExplanationLang(nextLocale);
+        if (
+            nextLocale === DEFAULT_LOCALE
+            && selectedDocument?.parseStatus === DocumentParseStatus.COMPLETED
+        ) {
             setExplanationText(selectedDocument.aiSummary ?? null);
             return;
         }
@@ -300,7 +311,7 @@ export default function RecordsPage() {
             return;
         }
 
-        if (selectedDocument.parseStatus !== "completed") {
+        if (selectedDocument.parseStatus !== DocumentParseStatus.COMPLETED) {
             return;
         }
 
@@ -308,7 +319,7 @@ export default function RecordsPage() {
         try {
             const result = await api.post<{ summary: string }>(
                 `/api/v1/documents/${selectedDocument.id}/explain`,
-                { language },
+                { language: nextLocale },
                 { token: accessToken ?? undefined },
             );
             setExplanationText(result.summary);
@@ -421,7 +432,7 @@ export default function RecordsPage() {
 
                     return (
                     <DocumentCard
-                        date={new Date(document.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        date={new Date(document.createdAt).toLocaleDateString(explanationLang, { month: "short", day: "numeric", year: "numeric" })}
                         hasAiSummary={document.parsed && Boolean(document.aiSummary)}
                         icon={document.icon}
                         id={document.id}
@@ -450,11 +461,14 @@ export default function RecordsPage() {
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
                             <select
                                 className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700"
-                                onChange={(event) => handleLanguageChange(event.target.value as Language)}
+                                onChange={(event) => handleLanguageChange(event.target.value as Locale)}
                                 value={explanationLang}
                             >
-                                <option value={Language.EN}>English</option>
-                                <option value={Language.ES}>Español</option>
+                                {SUPPORTED_LOCALES.map((locale) => (
+                                    <option key={locale} value={locale}>
+                                        {getLocaleLabel(locale)}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                         <p className="mt-2 text-sm text-gray-700">

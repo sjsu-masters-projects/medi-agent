@@ -1,4 +1,5 @@
 import { buildChatWebSocketUrl, mapChatMessageFromApi } from "@/services/chat-api";
+import { Locale } from "@/types";
 import { describe, expect, it, vi } from "vitest";
 
 describe("chat API helpers", () => {
@@ -9,7 +10,7 @@ describe("chat API helpers", () => {
             created_at: "2026-04-17T10:00:00Z",
             id: "msg-1",
             intent: "general",
-            language: "en",
+            language: Locale.EN_US,
             patient_id: "patient-1",
             role: "assistant",
         });
@@ -20,7 +21,7 @@ describe("chat API helpers", () => {
             createdAt: "2026-04-17T10:00:00Z",
             id: "msg-1",
             intent: "general",
-            language: "en",
+            language: Locale.EN_US,
             patientId: "patient-1",
             role: "assistant",
         });
