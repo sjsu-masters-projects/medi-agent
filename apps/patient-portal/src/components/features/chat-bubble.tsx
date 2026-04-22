@@ -1,5 +1,5 @@
 import { HiMiniSpeakerWave } from "react-icons/hi2";
-import { ChatRole, isSpanishLocale, type Locale } from "@/types";
+import { ChatRole, getLocaleBadgeLabel, type Locale } from "@/types";
 
 interface ChatBubbleProps {
     role: typeof ChatRole.USER | typeof ChatRole.ASSISTANT;
@@ -23,7 +23,7 @@ function formatLanguage(language?: Locale): string | null {
         return null;
     }
 
-    return isSpanishLocale(language) ? "ES-MX" : "EN-US";
+    return getLocaleBadgeLabel(language);
 }
 
 export function ChatBubble({

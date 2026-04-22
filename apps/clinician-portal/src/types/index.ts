@@ -5,6 +5,8 @@
  */
 
 export type {
+    LocaleMetadata,
+    LocaleResourceMap,
     Clinician,
     Patient,
     PatientSummary,
@@ -31,7 +33,15 @@ export type {
 export {
     Locale,
     DEFAULT_LOCALE,
+    SUPPORTED_LOCALES,
     Language,
+    LOCALE_METADATA,
+    getLocaleMetadata,
+    getLocaleLabel,
+    getLocaleSelectorLabel,
+    getLocaleBadgeLabel,
+    getDocumentTypeLabel,
+    resolveLocaleResource,
     isLocale,
     isSpanishLocale,
     normalizeLocale,

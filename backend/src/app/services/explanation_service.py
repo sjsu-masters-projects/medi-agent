@@ -14,17 +14,13 @@ from app.agents.ingestion.prompts import (
 )
 from app.clients.model_router import TaskType, get_router
 from app.models.enums import Language, coerce_locale
+from app.utils.localization import get_locale_display_name
 
 logger = logging.getLogger(__name__)
 
 FALLBACK_MESSAGE = (
     "A summary is not available at this time. Please ask your care team for an explanation."
 )
-LANGUAGE_NAMES = {
-    Language.EN.value: "English (US)",
-    Language.ES.value: "Spanish (Mexico)",
-}
-
 
 class ExplanationService:
     """Generates AI explanations for documents."""
@@ -88,7 +84,7 @@ class ExplanationService:
 
         router = get_router()
         client = router.get_client_with_fallback(TaskType.PATIENT_EXPLANATION)
-        language_name = LANGUAGE_NAMES.get(target_language, target_language)
+        language_name = get_locale_display_name(target_language)
         response = await client.generate(
             prompt=TRANSLATE_SUMMARY_USER.format(
                 summary=summary,

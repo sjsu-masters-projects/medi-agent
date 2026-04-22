@@ -17,6 +17,7 @@ from app.agents.triage.prompts import (
 )
 from app.clients.model_router import ModelRouter, TaskType
 from app.models.enums import Language, coerce_locale
+from app.utils.localization import resolve_locale_resource
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,60 @@ ADVERSE_EFFECT_KEYWORDS = frozenset(
 
 IntentType = Literal["symptom", "medication_question", "schedule", "mental_health", "general"]
 UrgencyType = Literal["routine", "urgent", "emergency"]
+
+TRIAGE_COPY = {
+    "default": {
+        "emergency_response": (
+            "This may be an emergency. Please call 911 now or go to the nearest emergency "
+            "department immediately. If possible, notify your care team as well."
+        ),
+        "fallback_general": (
+            "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
+        ),
+        "fallback_medication_question": (
+            "I can help track your medication-related concerns. If symptoms worsen, please "
+            "contact your care team right away."
+        ),
+        "fallback_urgent": (
+            "Thank you for sharing this. Please contact your care team today for timely "
+            "clinical guidance."
+        ),
+    },
+    Language.EN.value: {
+        "emergency_response": (
+            "This may be an emergency. Please call 911 now or go to the nearest emergency "
+            "department immediately. If possible, notify your care team as well."
+        ),
+        "fallback_general": (
+            "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
+        ),
+        "fallback_medication_question": (
+            "I can help track your medication-related concerns. If symptoms worsen, please "
+            "contact your care team right away."
+        ),
+        "fallback_urgent": (
+            "Thank you for sharing this. Please contact your care team today for timely "
+            "clinical guidance."
+        ),
+    },
+    Language.ES.value: {
+        "emergency_response": (
+            "Esto podría ser una emergencia. Llama al 911 ahora o acude al servicio de "
+            "urgencias más cercano de inmediato. Si puedes, avisa también a tu equipo clínico."
+        ),
+        "fallback_general": (
+            "Gracias por el mensaje. Estoy aquí para ayudarte y puedo seguir dando seguimiento a tus síntomas."
+        ),
+        "fallback_medication_question": (
+            "Puedo ayudarte a revisar tus síntomas relacionados con medicamentos. Si notas "
+            "empeoramiento, contacta a tu equipo clínico de inmediato."
+        ),
+        "fallback_urgent": (
+            "Gracias por compartir esto. Es importante que hables con tu equipo clínico hoy "
+            "mismo para una evaluación oportuna."
+        ),
+    },
+}
 
 
 class TriageClassificationResult(BaseModel):
@@ -301,47 +356,16 @@ def _contains_adverse_effect_signal(text: str) -> bool:
 
 
 def _emergency_response(language: str) -> str:
-    if _is_spanish(language):
-        return (
-            "Esto podria ser una emergencia. Llama al 911 ahora o acude al servicio de "
-            "urgencias mas cercano de inmediato. Si puedes, avisa tambien a tu equipo clinico."
-        )
-
-    return (
-        "This may be an emergency. Please call 911 now or go to the nearest emergency "
-        "department immediately. If possible, notify your care team as well."
-    )
+    return resolve_locale_resource(language, TRIAGE_COPY)["emergency_response"]
 
 
 def _fallback_response(*, language: str, intent: str, urgency: str) -> str:
-    if _is_spanish(language):
-        if urgency == "urgent":
-            return (
-                "Gracias por compartir esto. Es importante que hables con tu equipo clinico hoy "
-                "mismo para una evaluacion oportuna."
-            )
-        if intent == "medication_question":
-            return (
-                "Puedo ayudarte a revisar tus sintomas relacionados con medicamentos. Si notas "
-                "empeoramiento, contacta a tu equipo clinico de inmediato."
-            )
-        return "Gracias por el mensaje. Estoy aqui para ayudarte y puedo hacer seguimiento de tus sintomas."
-
+    localized_copy = resolve_locale_resource(language, TRIAGE_COPY)
     if urgency == "urgent":
-        return (
-            "Thank you for sharing this. Please contact your care team today for timely "
-            "clinical guidance."
-        )
+        return localized_copy["fallback_urgent"]
     if intent == "medication_question":
-        return (
-            "I can help track your medication-related concerns. If symptoms worsen, please "
-            "contact your care team right away."
-        )
-    return "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
-
-
-def _is_spanish(language: str) -> bool:
-    return coerce_locale(language).is_spanish
+        return localized_copy["fallback_medication_question"]
+    return localized_copy["fallback_general"]
 
 
 def _build_context(state: TriageState) -> _MessageContext:

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
+import { getPatientChatCopy } from "@/content/chat-copy";
 import {
     createSpeechRecognitionController,
     getVoiceCapabilities,
@@ -34,7 +35,6 @@ import type { AppDispatch, RootState } from "@/store/store";
 import {
     ChatRole,
     DEFAULT_LOCALE,
-    isSpanishLocale,
     normalizeLocale,
     type ChatMessage,
     type Locale as ChatLocale,
@@ -57,10 +57,7 @@ function resolveInitialLanguage(): ChatLocale {
 
 function buildWelcomeMessage(patientId: string, language: ChatLocale): ChatMessage {
     return {
-        content:
-            isSpanishLocale(language)
-                ? "Hola. Puedo ayudarte a entender resultados, seguir síntomas y preparar preguntas para tu médico."
-                : "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
+        content: getPatientChatCopy(language).welcomeMessage,
         createdAt: new Date().toISOString(),
         id: "welcome-message",
         language,

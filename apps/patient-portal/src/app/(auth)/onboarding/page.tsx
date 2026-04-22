@@ -7,7 +7,7 @@ import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
 import { clearOnboardingProfile } from "@/store/slices/onboarding-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import { DEFAULT_LOCALE, Locale, normalizeLocale } from "@/types";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, getLocaleLabel, normalizeLocale } from "@/types";
 
 const allowedGenders = ["male", "female", "other", "prefer_not_to_say"] as const;
 
@@ -136,8 +136,11 @@ export default function OnboardingPage() {
                                 onChange={(event) => updateField("language", normalizeLocale(event.target.value))}
                                 value={formData.language}
                             >
-                                <option value={Locale.EN_US}>English (US)</option>
-                                <option value={Locale.ES_MX}>Español (México)</option>
+                                {SUPPORTED_LOCALES.map((locale) => (
+                                    <option key={locale} value={locale}>
+                                        {getLocaleLabel(locale)}
+                                    </option>
+                                ))}
                             </select>
                         </label>
                         <label className="block text-sm font-medium text-gray-700">

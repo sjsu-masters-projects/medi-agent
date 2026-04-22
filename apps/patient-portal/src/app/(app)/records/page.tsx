@@ -20,6 +20,8 @@ import {
     DocumentParseStatus,
     DocumentType,
     Locale,
+    SUPPORTED_LOCALES,
+    getLocaleLabel,
     normalizeLocale,
     type Document,
 } from "@/types";
@@ -462,8 +464,11 @@ export default function RecordsPage() {
                                 onChange={(event) => handleLanguageChange(event.target.value as Locale)}
                                 value={explanationLang}
                             >
-                                <option value={Locale.EN_US}>English (US)</option>
-                                <option value={Locale.ES_MX}>Español (México)</option>
+                                {SUPPORTED_LOCALES.map((locale) => (
+                                    <option key={locale} value={locale}>
+                                        {getLocaleLabel(locale)}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                         <p className="mt-2 text-sm text-gray-700">

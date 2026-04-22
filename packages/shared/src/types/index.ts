@@ -11,6 +11,7 @@ export const Locale = { EN_US: "en-US", ES_MX: "es-MX" } as const;
 export type Locale = (typeof Locale)[keyof typeof Locale];
 
 export const DEFAULT_LOCALE: Locale = Locale.EN_US;
+export const SUPPORTED_LOCALES = [Locale.EN_US, Locale.ES_MX] as const satisfies readonly Locale[];
 
 const LOCALE_VALUES = new Set<Locale>(Object.values(Locale));
 const LOCALE_ALIASES: Record<string, Locale> = {
@@ -38,6 +39,67 @@ export function normalizeLocale(
 
     const normalized = value.trim().toLowerCase().replaceAll("_", "-");
     return LOCALE_ALIASES[normalized] ?? fallback;
+}
+
+export interface LocaleMetadata {
+    badgeLabel: string;
+    displayName: string;
+    selectorLabel: string;
+    tag: Locale;
+}
+
+export const LOCALE_METADATA: Record<Locale, LocaleMetadata> = {
+    [Locale.EN_US]: {
+        badgeLabel: "EN-US",
+        displayName: "English (US)",
+        selectorLabel: "EN",
+        tag: Locale.EN_US,
+    },
+    [Locale.ES_MX]: {
+        badgeLabel: "ES-MX",
+        displayName: "Español (México)",
+        selectorLabel: "ES",
+        tag: Locale.ES_MX,
+    },
+};
+
+export function getLocaleMetadata(value: unknown): LocaleMetadata {
+    return LOCALE_METADATA[normalizeLocale(value)];
+}
+
+export function getLocaleLabel(value: unknown): string {
+    return getLocaleMetadata(value).displayName;
+}
+
+export function getLocaleSelectorLabel(value: unknown): string {
+    return getLocaleMetadata(value).selectorLabel;
+}
+
+export function getLocaleBadgeLabel(value: unknown): string {
+    return getLocaleMetadata(value).badgeLabel;
+}
+
+export interface LocaleResourceMap<T> {
+    default: T;
+    [locale: string]: T | undefined;
+}
+
+export function resolveLocaleResource<T>(
+    value: unknown,
+    resources: LocaleResourceMap<T>,
+): T {
+    const locale = normalizeLocale(value);
+    const baseLanguage = locale.split("-")[0];
+    const candidates = [locale, baseLanguage, DEFAULT_LOCALE];
+
+    for (const candidate of candidates) {
+        const match = resources[candidate];
+        if (typeof match !== "undefined") {
+            return match;
+        }
+    }
+
+    return resources.default;
 }
 
 export function isSpanishLocale(value: unknown): boolean {
@@ -74,6 +136,51 @@ export const DocumentType = {
     DIAGNOSTIC_REPORT: "diagnostic_report", INSURANCE: "insurance", REFERRAL: "referral", OTHER: "other",
 } as const;
 export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType];
+
+const DOCUMENT_TYPE_LABELS: Record<DocumentType, LocaleResourceMap<string>> = {
+    [DocumentType.LAB_REPORT]: {
+        default: "lab report",
+        "en-US": "lab report",
+        "es-MX": "reporte de laboratorio",
+    },
+    [DocumentType.DISCHARGE_SUMMARY]: {
+        default: "discharge summary",
+        "en-US": "discharge summary",
+        "es-MX": "resumen de alta",
+    },
+    [DocumentType.PRESCRIPTION]: {
+        default: "prescription",
+        "en-US": "prescription",
+        "es-MX": "receta médica",
+    },
+    [DocumentType.DIAGNOSTIC_REPORT]: {
+        default: "diagnostic report",
+        "en-US": "diagnostic report",
+        "es-MX": "reporte diagnóstico",
+    },
+    [DocumentType.INSURANCE]: {
+        default: "insurance document",
+        "en-US": "insurance document",
+        "es-MX": "documento de seguro",
+    },
+    [DocumentType.REFERRAL]: {
+        default: "referral",
+        "en-US": "referral",
+        "es-MX": "referencia",
+    },
+    [DocumentType.OTHER]: {
+        default: "medical record",
+        "en-US": "medical record",
+        "es-MX": "documento médico",
+    },
+};
+
+export function getDocumentTypeLabel(
+    documentType: DocumentType,
+    locale: unknown = DEFAULT_LOCALE,
+): string {
+    return resolveLocaleResource(locale, DOCUMENT_TYPE_LABELS[documentType]);
+}
 
 export const DocumentVisibility = { ALL_PROVIDERS: "all_providers", SPECIFIC_PROVIDER: "specific_provider" } as const;
 export type DocumentVisibility = (typeof DocumentVisibility)[keyof typeof DocumentVisibility];
