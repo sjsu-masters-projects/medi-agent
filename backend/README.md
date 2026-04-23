@@ -29,8 +29,8 @@ PYTHONPATH=src pytest tests/ -v        # test
 ### Testing & Coverage
 
 ```bash
-# Run all tests with coverage report
-python -m pytest tests/ --cov=app --cov-report=term-missing --cov-report=html
+# Run all tests with terminal coverage summary (default in pyproject)
+python -m pytest tests/ --cov=app --cov-report=term-missing
 
 # Run specific test file
 python -m pytest tests/unit/services/test_dailymed_service.py -v
@@ -38,8 +38,11 @@ python -m pytest tests/unit/services/test_dailymed_service.py -v
 # Run tests without coverage (faster for development)
 python -m pytest tests/ --no-cov
 
+# Generate HTML coverage report in a single fixed folder (backend/htmlcov)
+./scripts/generate_html_coverage.sh
+
 # View coverage report
-open htmlcov/index.html
+open backend/htmlcov/index.html
 ```
 
 **Coverage Requirements:**

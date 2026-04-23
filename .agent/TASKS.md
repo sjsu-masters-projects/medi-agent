@@ -416,13 +416,13 @@
 - [x] Clinician annotations: clinician adds notes that patient sees alongside AI summary
 
 ### 6.6 Phase 6 — Known Remaining Work & Tech Debt
-- [ ] Wire Supabase Realtime subscription on dashboard (hook → `patchPatient` dispatch)
+- [x] Wire Supabase Realtime subscription on dashboard (hook → `patchPatient` dispatch)
 - [ ] Build patient upload review queue (filter by `uploaded_by_role === 'patient'`, approve/reject UI)
 - [ ] Add integration tests for `get_dashboard_data` and `get_patient_deep_dive` async service methods
 - [ ] Add graph node unit tests for `gather_patient_data`, `generate_soap_note`, `store_soap_note`
 - [ ] Add realistic Recharts rendering tests (current tests mock all chart components to bare divs)
-- [ ] Enable Supabase Realtime publication for `adherence_logs` (commented out in migration 008)
-- [ ] Add rate limiting on SOAP note generation endpoint (expensive LLM call, 15-30s per request)
+- [x] Enable Supabase Realtime publication for dashboard tables (`adherence_logs`, `symptom_reports`, `adr_assessments`)
+- [x] Add rate limiting on SOAP note generation endpoint (expensive LLM call, 15-30s per request)
 
 ---
 

@@ -82,6 +82,48 @@ async def test_get_dashboard_data_filters_sorts_and_paginates(service):
 
 
 @pytest.mark.asyncio
+async def test_get_patient_risk_snapshot_returns_latest_patient_card(service):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"id": str(uuid4())}]
+    )
+
+    risk_payload = PatientRiskData(
+        patient_id=patient_id,
+        first_name="Mina",
+        last_name="Patel",
+        risk_level="medium",
+        adherence_score=0.7,
+        open_adr_count=1,
+        active_med_count=4,
+        recent_symptom_severity=6,
+        last_activity="Reported 'nausea' 1h ago",
+    )
+
+    with patch(
+        "app.services.risk_score_service.RiskScoreService.get_patient_risk",
+        new=AsyncMock(return_value=risk_payload),
+    ) as get_patient_risk:
+        result = await service.get_patient_risk_snapshot(clinician_id, patient_id)
+
+    assert result["patient_id"] == patient_id
+    assert result["first_name"] == "Mina"
+    assert result["risk_level"] == "medium"
+    get_patient_risk.assert_awaited_once_with(patient_id)
+
+
+@pytest.mark.asyncio
+async def test_get_patient_risk_snapshot_requires_assignment(service):
+    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
+        return_value=[]
+    )
+
+    with pytest.raises(AuthorizationError, match="not assigned"):
+        await service.get_patient_risk_snapshot(uuid4(), uuid4())
+
+
+@pytest.mark.asyncio
 async def test_set_patient_obligation_inserts_care_team_scoped_row(service, mock_db):
     clinician_id = uuid4()
     patient_id = uuid4()

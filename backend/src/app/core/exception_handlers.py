@@ -14,7 +14,7 @@ Every error response follows a consistent shape:
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from http import HTTPStatus
 from typing import Any
 
@@ -39,11 +39,17 @@ logger = logging.getLogger(__name__)
 # ── Helpers ─────────────────────────────────────────────────
 
 
-def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
+def _error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    headers: Mapping[str, str] | None = None,
+) -> JSONResponse:
     """Build a uniform error response."""
     return JSONResponse(
         status_code=status_code,
         content={"error": {"code": code, "message": message}},
+        headers=headers,
     )
 
 
@@ -118,13 +124,20 @@ def _http_status_to_error_code(status_code: int) -> str:
         return "NOT_FOUND"
     if status_code == 422:
         return "VALIDATION_ERROR"
+    if status_code == 429:
+        return "RATE_LIMITED"
     return "HTTP_ERROR"
 
 
 async def _http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
     """Normalize explicit HTTPException raises and framework HTTP errors."""
     message = str(exc.detail) if exc.detail else HTTPStatus(exc.status_code).phrase
-    return _error_response(exc.status_code, _http_status_to_error_code(exc.status_code), message)
+    return _error_response(
+        exc.status_code,
+        _http_status_to_error_code(exc.status_code),
+        message,
+        headers=exc.headers,
+    )
 
 
 async def _catch_all_handler(_: Request, exc: MediAgentError) -> JSONResponse:
