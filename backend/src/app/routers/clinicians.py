@@ -4,6 +4,7 @@ All endpoints require authentication as a clinician.
 
 New in Phase 6:
     GET  /me/dashboard                                   — Risk Radar
+    GET  /me/patients/{id}/risk                          — Single-patient Risk Radar card
     GET  /me/patients/{id}/deep-dive                     — Patient Deep Dive
     POST /me/patients/{id}/soap-note                     — Generate SOAP note
     POST /me/patients/{id}/obligations                   — Set patient obligation
@@ -15,11 +16,12 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from supabase import Client
 
 from app.core.security import require_role
 from app.db.connection import get_db
+from app.middleware.rate_limit import soap_note_rate_limiter
 from app.models.auth import CurrentUser
 from app.models.clinician import ClinicianRead, ClinicianUpdate
 from app.models.dashboard import (
@@ -31,6 +33,7 @@ from app.models.dashboard import (
     DashboardSortOrder,
     ObligationSetRequest,
     PatientDeepDive,
+    PatientRiskData,
     RiskLevel,
     SoapNoteGenerationResponse,
     SoapNoteRequest,
@@ -200,6 +203,21 @@ async def get_dashboard(
 
 
 @router.get(
+    "/me/patients/{patient_id}/risk",
+    response_model=PatientRiskData,
+    summary="Patient Risk Radar snapshot",
+    description="Returns the latest risk card payload for one assigned patient.",
+)
+async def get_patient_risk_snapshot(
+    patient_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    """GET /api/v1/clinicians/me/patients/{patient_id}/risk"""
+    return await service.get_patient_risk_snapshot(user.id, patient_id)
+
+
+@router.get(
     "/me/patients/{patient_id}/deep-dive",
     response_model=PatientDeepDive,
     summary="Patient Deep Dive — full aggregated view",
@@ -268,6 +286,18 @@ async def generate_soap_note(
     # Verify care team assignment before running the expensive agent
     service = ClinicianService(db)
     await service.get_patient_detail(user.id, patient_id)
+
+    rate_limit_result = await soap_note_rate_limiter.check(f"soap-note:{user.id}")
+    if not rate_limit_result.allowed:
+        retry_after = rate_limit_result.retry_after_seconds
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "SOAP note generation is temporarily rate limited. "
+                f"Retry after {retry_after} seconds."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
 
     agent = SummarizationAgent(db=db)
     output = await agent(

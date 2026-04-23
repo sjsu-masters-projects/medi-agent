@@ -268,6 +268,11 @@ export async function fetchDashboard(params?: DashboardQueryParams): Promise<Das
     return apiFetch<DashboardResponse>(`/api/v1/clinicians/me/dashboard${qs ? `?${qs}` : ""}`);
 }
 
+/** Fetch one patient's latest risk radar snapshot. */
+export async function fetchPatientRiskSnapshot(patientId: string): Promise<PatientRiskData> {
+    return apiFetch<PatientRiskData>(`/api/v1/clinicians/me/patients/${patientId}/risk`);
+}
+
 /** Fetch full patient deep dive data (all sub-resources). */
 export async function fetchPatientDeepDive(patientId: string): Promise<PatientDeepDive> {
     const data = await apiFetch<PatientDeepDiveResponse>(

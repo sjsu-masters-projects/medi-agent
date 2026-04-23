@@ -404,6 +404,21 @@ class ClinicianService:
             "medwatch_pending": medwatch_count,
         }
 
+    async def get_patient_risk_snapshot(self, clinician_id: UUID, patient_id: UUID) -> Any:
+        """Return the latest risk card payload for one assigned patient."""
+        assignment_rows = await self.care_team_repo.find_active_assignment(
+            str(clinician_id),
+            str(patient_id),
+        )
+        if not assignment_rows:
+            raise AuthorizationError("You are not assigned to this patient")
+
+        from app.services.risk_score_service import RiskScoreService
+
+        risk_service = RiskScoreService(self.db)
+        risk = await risk_service.get_patient_risk(patient_id)
+        return risk.model_dump()
+
     async def get_patient_deep_dive(self, clinician_id: UUID, patient_id: UUID) -> Any:
         """Aggregate all patient data for the Patient Deep Dive view.
 

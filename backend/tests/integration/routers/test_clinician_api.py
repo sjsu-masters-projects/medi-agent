@@ -9,9 +9,11 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 
+from app.core.exceptions import AuthorizationError
 from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
+from app.middleware.rate_limit import RateLimitResult
 from app.models.auth import CurrentUser
 from app.routers.clinicians import _clinician_dep
 
@@ -290,6 +292,94 @@ class TestGetPatientDetail:
         # Service raises AuthorizationError first (403), not NotFoundError
         # because the check happens in sequence
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestGetPatientRiskSnapshot:
+    """GET /api/v1/clinicians/me/patients/{patient_id}/risk - Risk card snapshot."""
+
+    def test_success(self, client, override_auth, override_db, monkeypatch):
+        patient_id = uuid4()
+
+        async def _mock_get_risk_snapshot(self, clinician_id, incoming_patient_id):
+            assert incoming_patient_id == patient_id
+            return {
+                "patient_id": patient_id,
+                "first_name": "Taylor",
+                "last_name": "Mills",
+                "risk_level": "high",
+                "adherence_score": 0.52,
+                "open_adr_count": 1,
+                "active_med_count": 3,
+                "recent_symptom_severity": 8,
+                "last_activity": "Reported 'dizziness' 35m ago",
+            }
+
+        monkeypatch.setattr(
+            "app.services.clinician_service.ClinicianService.get_patient_risk_snapshot",
+            _mock_get_risk_snapshot,
+        )
+
+        response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/risk")
+
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.json()
+        assert payload["patient_id"] == str(patient_id)
+        assert payload["risk_level"] == "high"
+        assert payload["adherence_score"] == 0.52
+
+    def test_not_assigned(self, client, override_auth, override_db, monkeypatch):
+        patient_id = uuid4()
+
+        async def _mock_get_risk_snapshot(self, _clinician_id, _incoming_patient_id):
+            raise AuthorizationError("You are not assigned to this patient")
+
+        monkeypatch.setattr(
+            "app.services.clinician_service.ClinicianService.get_patient_risk_snapshot",
+            _mock_get_risk_snapshot,
+        )
+
+        response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/risk")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestGenerateSoapNoteRateLimit:
+    """POST /api/v1/clinicians/me/patients/{patient_id}/soap-note rate limiting."""
+
+    def test_returns_429_with_retry_hint_when_limited(
+        self,
+        client,
+        override_auth,
+        override_db,
+        monkeypatch,
+    ):
+        patient_id = uuid4()
+
+        async def _mock_patient_access(self, _clinician_id, _patient_id):
+            return {"id": str(patient_id)}
+
+        async def _deny_request(_key):
+            return RateLimitResult(allowed=False, retry_after_seconds=42, remaining=0)
+
+        monkeypatch.setattr(
+            "app.services.clinician_service.ClinicianService.get_patient_detail",
+            _mock_patient_access,
+        )
+        monkeypatch.setattr(
+            "app.routers.clinicians.soap_note_rate_limiter.check",
+            _deny_request,
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/patients/{patient_id}/soap-note",
+            json={"lookback_days": 30},
+        )
+
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert response.headers["Retry-After"] == "42"
+        payload = response.json()
+        assert payload["error"]["code"] == "RATE_LIMITED"
+        assert "Retry after 42 seconds" in payload["error"]["message"]
 
 
 class TestGenerateInviteCode:

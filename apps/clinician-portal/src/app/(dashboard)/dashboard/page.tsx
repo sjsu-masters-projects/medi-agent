@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
     HiOutlineClipboardDocumentList,
@@ -12,7 +12,9 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { Card } from "@/components/ui";
 import { RiskBadge } from "@/components/features/risk-badge";
-import { loadDashboard } from "@/store/slices/dashboard-slice";
+import { fetchPatientRiskSnapshot } from "@/services/clinicians";
+import { subscribeDashboardRealtime } from "@/services/dashboard-realtime";
+import { loadDashboard, patchPatient } from "@/store/slices/dashboard-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import type {
     DashboardSortBy,
@@ -54,6 +56,54 @@ const riskConfig = {
     actionClass: string;
 }>;
 
+const riskRank: Record<PatientRiskData["risk_level"], number> = {
+    high: 3,
+    medium: 2,
+    low: 1,
+    unknown: 0,
+};
+
+function getLastActivityMinutes(lastActivity: string): number {
+    const match = lastActivity.match(/(\d+)([mhd]) ago$/i);
+    if (!match) {
+        return Number.POSITIVE_INFINITY;
+    }
+
+    const value = Number(match[1]);
+    const unit = match[2]?.toLowerCase();
+    if (unit === "m") {
+        return value;
+    }
+    if (unit === "h") {
+        return value * 60;
+    }
+    if (unit === "d") {
+        return value * 24 * 60;
+    }
+    return Number.POSITIVE_INFINITY;
+}
+
+function comparePatients(
+    left: PatientRiskData,
+    right: PatientRiskData,
+    sortBy: DashboardSortBy,
+    sortOrder: DashboardSortOrder,
+): number {
+    const direction = sortOrder === "asc" ? 1 : -1;
+
+    switch (sortBy) {
+        case "adherence":
+            return (left.adherence_score - right.adherence_score) * direction;
+        case "last_activity":
+            return (getLastActivityMinutes(left.last_activity) - getLastActivityMinutes(right.last_activity)) * direction;
+        case "med_count":
+            return (left.active_med_count - right.active_med_count) * direction;
+        case "risk":
+        default:
+            return (riskRank[left.risk_level] - riskRank[right.risk_level]) * direction;
+    }
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -85,10 +135,81 @@ export default function DashboardPage() {
         reloadDashboard();
     }, [reloadDashboard]);
 
-    const visiblePatients = patients
-        .filter((p) =>
-            `${p.first_name} ${p.last_name}`.toLowerCase().includes(query.toLowerCase()),
-        );
+    useEffect(() => {
+        const pendingPatientIds = new Set<string>();
+        let flushTimer: ReturnType<typeof setTimeout> | null = null;
+        let cancelled = false;
+
+        const flushQueue = () => {
+            flushTimer = null;
+            const patientIds = Array.from(pendingPatientIds);
+            pendingPatientIds.clear();
+
+            for (const patientId of patientIds) {
+                void fetchPatientRiskSnapshot(patientId)
+                    .then((patient) => {
+                        if (cancelled) {
+                            return;
+                        }
+                        dispatch(patchPatient(patient));
+                    })
+                    .catch(() => {
+                        // Best-effort sync only; hard failures are recovered by manual refresh.
+                    });
+            }
+        };
+
+        const queuePatientRefresh = (patientId: string) => {
+            pendingPatientIds.add(patientId);
+
+            if (flushTimer) {
+                return;
+            }
+
+            flushTimer = setTimeout(flushQueue, 350);
+        };
+
+        const unsubscribe = subscribeDashboardRealtime({
+            onPatientChanged: (patientId) => {
+                queuePatientRefresh(patientId);
+            },
+        });
+
+        return () => {
+            cancelled = true;
+            if (flushTimer) {
+                clearTimeout(flushTimer);
+            }
+            unsubscribe();
+        };
+    }, [dispatch]);
+
+    const visiblePatients = useMemo(() => {
+        const loweredQuery = query.trim().toLowerCase();
+
+        return [...patients]
+            .filter((patient) => {
+                if (
+                    riskFilter !== "all"
+                    && patient.risk_level !== riskFilter
+                ) {
+                    return false;
+                }
+
+                if (patient.active_med_count < (Number(minMedCount) || 0)) {
+                    return false;
+                }
+
+                if (!loweredQuery) {
+                    return true;
+                }
+
+                return `${patient.first_name} ${patient.last_name}`
+                    .toLowerCase()
+                    .includes(loweredQuery);
+            })
+            .sort((left, right) => comparePatients(left, right, sortBy, sortOrder));
+    }, [minMedCount, patients, query, riskFilter, sortBy, sortOrder]);
 
     return (
         <div className="mx-auto max-w-7xl space-y-8">

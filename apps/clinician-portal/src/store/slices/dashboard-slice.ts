@@ -36,6 +36,29 @@ const initialState: DashboardState = {
     error: null,
 };
 
+function buildStats(summary: Omit<DashboardResponse, "patients">): DashboardStat[] {
+    return [
+        {
+            label: "Monitored Patients",
+            value: String(summary.total),
+            trend: "neutral",
+            change: "",
+        },
+        {
+            label: "Critical Risk (< 60% or ADR)",
+            value: String(summary.high_risk),
+            trend: summary.high_risk > 0 ? "up" : "neutral",
+            change: "",
+        },
+        {
+            label: "FDA MedWatch Drafts",
+            value: `${summary.medwatch_pending} Pending`,
+            trend: "neutral",
+            change: "",
+        },
+    ];
+}
+
 // ── Async thunk ──────────────────────────────────────────────────────────────
 
 export const loadDashboard = createAsyncThunk(
@@ -73,6 +96,13 @@ export const dashboardSlice = createSlice({
             );
             if (index !== -1) {
                 state.patients[index] = { ...state.patients[index], ...action.payload };
+
+                if (state.summary) {
+                    state.summary.high_risk = state.patients.filter((p) => p.risk_level === "high").length;
+                    state.summary.medium_risk = state.patients.filter((p) => p.risk_level === "medium").length;
+                    state.summary.low_risk = state.patients.filter((p) => p.risk_level === "low").length;
+                    state.stats = buildStats(state.summary);
+                }
             }
         },
     },
@@ -88,27 +118,7 @@ export const dashboardSlice = createSlice({
                 state.summary = summary;
                 state.loading = false;
                 state.error = null;
-                // Build stats cards from summary
-                state.stats = [
-                    {
-                        label: "Monitored Patients",
-                        value: String(summary.total),
-                        trend: "neutral",
-                        change: "",
-                    },
-                    {
-                        label: "Critical Risk (< 60% or ADR)",
-                        value: String(summary.high_risk),
-                        trend: summary.high_risk > 0 ? "up" : "neutral",
-                        change: "",
-                    },
-                    {
-                        label: "FDA MedWatch Drafts",
-                        value: `${summary.medwatch_pending} Pending`,
-                        trend: "neutral",
-                        change: "",
-                    },
-                ];
+                state.stats = buildStats(summary);
             })
             .addCase(loadDashboard.rejected, (state, action) => {
                 state.loading = false;
