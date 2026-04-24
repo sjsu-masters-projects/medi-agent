@@ -1,4 +1,9 @@
-import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
+import {
+    createClient,
+    type RealtimeChannel,
+    type RealtimePostgresChangesPayload,
+    type SupabaseClient,
+} from "@supabase/supabase-js";
 import { readStoredSession } from "@/services/auth-session";
 
 const DASHBOARD_REALTIME_TABLES = ["adherence_logs", "symptom_reports", "adr_assessments"] as const;
@@ -77,7 +82,7 @@ export function subscribeDashboardRealtime({
                 schema: "public",
                 table,
             },
-            (payload) => {
+            (payload: RealtimePostgresChangesPayload<{ patient_id?: string }>) => {
                 const patientId = patientIdFromPayload(payload as PostgresChangePayload);
                 if (!patientId) {
                     return;
