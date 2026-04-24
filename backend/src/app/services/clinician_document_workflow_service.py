@@ -48,9 +48,13 @@ class ClinicianDocumentWorkflowService:
             cast(list[dict[str, Any]], docs.data or [])
         )
 
-    async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
+    async def list_document_review_queue(
+        self, clinician_id: UUID
+    ) -> list[dict[str, Any]]:
         """List pending patient-uploaded documents for assigned patients."""
-        patient_rows = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
+        patient_rows = await self.care_team_repo.list_assigned_patient_ids(
+            str(clinician_id)
+        )
         patient_id_values = [
             str(row["patient_id"]) for row in patient_rows if row.get("patient_id")
         ]
@@ -150,7 +154,9 @@ class ClinicianDocumentWorkflowService:
 
         return {"status": "saved", "document_id": str(document_id)}
 
-    async def _assert_patient_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
+    async def _assert_patient_assignment(
+        self, clinician_id: UUID, patient_id: UUID
+    ) -> None:
         """Require an active care-team assignment before clinician document access."""
         assignment_rows = await self.care_team_repo.find_active_assignment(
             str(clinician_id),
