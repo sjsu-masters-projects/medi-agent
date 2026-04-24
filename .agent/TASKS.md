@@ -85,7 +85,7 @@
 ### 1.5 External Service Setup
 - [x] Get Gemini API key (Google AI Studio / Vertex AI)
 - [x] Get Deepgram API key and configure SDK
-- [ ] Set up Resend for email — external/manual credential dependency
+- [x] Set up Resend for email
 - [x] Test DailyMed API access  
 - [x] Test RxNorm API access
 - [ ] Obtain Syncfusion Community License key — external/manual license dependency
@@ -582,7 +582,7 @@
 
 ### 11.4 Deployment Hardening
 - [ ] Production environment variables verified
-- [ ] DNS and custom domains configured
+- [/] DNS and custom domains configured — Vercel app domains, Resend sending domain, and Supabase auth URLs are configured; Cloud Run custom-domain cutover is still pending
 - [ ] SSL certificates confirmed
 - [ ] Cloud Run auto-scaling tested
 - [ ] Monitoring alerts configured
