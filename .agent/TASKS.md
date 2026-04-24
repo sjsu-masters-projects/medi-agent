@@ -64,7 +64,7 @@
 - [x] Configure Row-Level Security (RLS) policies for all tables
 - [x] Set up Supabase Auth (magic link + email/password + MFA + JWT claims hook)
 - [x] Set up Supabase Storage buckets (documents, avatars, voice-messages)
-- [ ] Test RLS policies with different user roles — needs real auth users
+- [ ] Test RLS policies with different user roles — external/manual validation with real auth users
 
 ### 1.3 CI/CD
 - [x] Set up GitHub Actions: lint on PR (Ruff + ESLint)
@@ -77,19 +77,19 @@
 ### 1.4 Cloud Infrastructure
 - [x] Set up Google Cloud project / guide
 - [x] Configure Cloud Run strategy for backend
-- [x] Configure Cloud Scheduler strategy for cron jobs
+- [ ] Configure Cloud Scheduler strategy for cron jobs — external/manual infrastructure dependency
 - [x] Set up Vercel strategy (patient-portal, clinician-portal)
 - [x] Configure environment variables strategy
-- [x] Set up Sentry strategy for error monitoring
+- [ ] Set up Sentry strategy for error monitoring — external/manual infrastructure dependency
 
 ### 1.5 External Service Setup
-- [ ] Get Gemini API key (Google AI Studio / Vertex AI)
+- [x] Get Gemini API key (Google AI Studio / Vertex AI)
 - [x] Get Deepgram API key and configure SDK
-- [ ] Set up Resend for email
+- [ ] Set up Resend for email — external/manual credential dependency
 - [x] Test DailyMed API access  
 - [x] Test RxNorm API access
-- [ ] Obtain Syncfusion Community License key
-- [ ] Download and test MedGemma model access (Hugging Face / Vertex AI)
+- [ ] Obtain Syncfusion Community License key — external/manual license dependency
+- [ ] Download and test MedGemma model access (Hugging Face / Vertex AI) — external/manual model-access dependency
 
 ### 1.6 Service Layer & MCP Servers (for AI Agents)
 - [x] DailyMed service — drug labels, ADR profiles (`app/services/dailymed_service.py`)
@@ -102,7 +102,7 @@
 ### 1.7 A2A Protocol Setup
 - [ ] Create Agent Card JSON schema for each agent
 - [ ] Expose `/.well-known/agent.json` endpoint on backend
-- [ ] Implement A2A task management (submit, status, artifacts)
+- [/] Implement A2A task management (submit, status, artifacts) — internal lifecycle persistence, retry/backoff, dead-letter, and clinician timeline landed in Phase 5; public A2A protocol exposure is still open
 - [ ] Create mock "Hospital EHR Agent" for demo
 
 ---
@@ -384,7 +384,7 @@
 - [x] `GET /api/v1/clinicians/me/dashboard` — aggregated risk data with sort/filter/pagination params
 - [x] Risk Radar UI: patient cards with 🟢🟡🔴 badges (includes `unknown` for new patients)
 - [x] Sortable/filterable (by risk, last activity, med count) — backend + frontend wired
-- [ ] Real-time updates via Supabase Realtime (subscription hook in dashboard page) — `patchPatient` reducer exists but **no Supabase channel subscription wired**
+- [x] Real-time updates via Supabase Realtime (subscription hook in dashboard page wired to `patchPatient`) — PR #36
 - [x] Click-through to patient deep dive
 
 ### 6.2 Patient Deep Dive
@@ -420,7 +420,7 @@
 ### 6.6 Phase 6 — Known Remaining Work & Tech Debt
 - [x] Wire Supabase Realtime subscription on dashboard (hook → `patchPatient` dispatch)
 - [x] Build patient upload review queue (filter by `uploaded_by_role === 'patient'`, approve/reject UI)
-- [x] Split clinician document review/deep-dive document workflow into focused service + UI components (`ClinicianDocumentWorkflowService`, `PatientDocumentsPanel`) — PR #37
+- [x] Split clinician document review/deep-dive document workflow into focused service + UI components (`ClinicianDocumentWorkflowService`, `PatientDocumentsPanel`)
 - [x] Add integration tests for `get_dashboard_data` and `get_patient_deep_dive` async service methods
 - [x] Add graph node unit tests for `gather_patient_data`, `generate_soap_note`, `store_soap_note`
 - [x] Add realistic Recharts rendering tests (current tests mock all chart components to bare divs)
