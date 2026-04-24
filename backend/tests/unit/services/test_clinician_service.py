@@ -542,7 +542,9 @@ async def test_get_patient_deep_dive_includes_review_metadata(service):
 async def test_list_document_review_queue_scopes_to_assigned_patients(service):
     clinician_id = uuid4()
     assigned_patient_id = uuid4()
-    service._get_assigned_patient_ids = AsyncMock(return_value=[assigned_patient_id])  # type: ignore[method-assign]
+    service.care_team_repo.list_assigned_patient_ids = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"patient_id": str(assigned_patient_id)}]
+    )
     service._execute = AsyncMock(  # type: ignore[method-assign]
         side_effect=[
             _response(
