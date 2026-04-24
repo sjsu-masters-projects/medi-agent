@@ -165,7 +165,8 @@ class DocumentService:
             response = self.db.storage.from_("documents").create_signed_url(
                 file_path, SIGNED_URL_EXPIRY_SECONDS
             )
-            return response.get("signedURL", "")
+            signed_url = response.get("signedURL")
+            return signed_url or ""
         except Exception as e:
             logger.warning("Failed to sign URL for %s: %s", file_path, e)
             return ""
