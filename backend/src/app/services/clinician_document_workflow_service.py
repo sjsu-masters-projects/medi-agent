@@ -6,8 +6,9 @@ from the broader ClinicianService orchestration layer.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, cast
 from uuid import UUID
 
 from supabase import Client
@@ -43,9 +44,7 @@ class ClinicianDocumentWorkflowService:
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
         )
-        return await self._attach_document_reviewers(
-            cast(list[dict[str, Any]], docs.data or [])
-        )
+        return await self._attach_document_reviewers(cast(list[dict[str, Any]], docs.data or []))
 
     async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
         """List pending patient-uploaded documents for assigned patients."""
