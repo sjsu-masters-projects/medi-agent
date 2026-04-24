@@ -48,7 +48,7 @@ class ClinicianService:
         self.document_workflows = ClinicianDocumentWorkflowService(
             db=db,
             care_team_repo=self.care_team_repo,
-            execute=lambda *args, **kwargs: self._execute(*args, **kwargs),
+            execute=self._execute,
         )
 
     # ── Profile ─────────────────────────────────────
