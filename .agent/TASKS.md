@@ -418,6 +418,7 @@
 ### 6.6 Phase 6 — Known Remaining Work & Tech Debt
 - [x] Wire Supabase Realtime subscription on dashboard (hook → `patchPatient` dispatch)
 - [x] Build patient upload review queue (filter by `uploaded_by_role === 'patient'`, approve/reject UI)
+- [x] Split clinician document review/deep-dive document workflow into focused service + UI components (`ClinicianDocumentWorkflowService`, `PatientDocumentsPanel`) — PR #37
 - [x] Add integration tests for `get_dashboard_data` and `get_patient_deep_dive` async service methods
 - [x] Add graph node unit tests for `gather_patient_data`, `generate_soap_note`, `store_soap_note`
 - [x] Add realistic Recharts rendering tests (current tests mock all chart components to bare divs)
