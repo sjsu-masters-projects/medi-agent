@@ -44,12 +44,16 @@ class ClinicianDocumentWorkflowService:
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
         )
-        return await self._attach_document_reviewers(cast(list[dict[str, Any]], docs.data or []))
+        return await self._attach_document_reviewers(
+            cast(list[dict[str, Any]], docs.data or [])
+        )
 
     async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
         """List pending patient-uploaded documents for assigned patients."""
         patient_rows = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
-        patient_id_values = [str(row["patient_id"]) for row in patient_rows if row.get("patient_id")]
+        patient_id_values = [
+            str(row["patient_id"]) for row in patient_rows if row.get("patient_id")
+        ]
         if not patient_id_values:
             return []
 
