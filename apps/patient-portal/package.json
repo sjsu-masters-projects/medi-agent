@@ -12,6 +12,7 @@
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",
     "@reduxjs/toolkit": "^2.11.2",
+    "@sentry/nextjs": "^10.50.0",
     "@supabase/supabase-js": "^2.102.1",
     "@syncfusion/ej2-base": "^33.1.45",
     "@syncfusion/ej2-react-pdfviewer": "^33.1.47",

@@ -28,7 +28,14 @@ function mapTaskStatus(status: FeedTask["status"]): TaskCardStatus {
     return status;
 }
 
-function formatTimeLabel(scheduledTime?: string, status?: FeedTask["status"]) {
+function formatTimeLabel(
+    scheduledTime?: string,
+    status?: FeedTask["status"],
+    requiresScheduleConfiguration?: boolean,
+) {
+    if (!scheduledTime && requiresScheduleConfiguration) {
+        return "Set reminder time";
+    }
     if (!scheduledTime) {
         return "Any time";
     }
@@ -44,6 +51,7 @@ export default function TodayPage() {
     const { adherenceStats, loading, markComplete, summary, tasks, usingMockData } = useFeedData();
     const completionPercent = Math.round(adherenceStats.overallScore * 100);
     const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
+    const hasScheduleGaps = tasks.some((task) => task.requiresScheduleConfiguration);
 
     if (loading && tasks.length === 0) {
         return (
@@ -93,6 +101,16 @@ export default function TodayPage() {
             </div>
 
             <div className="space-y-5 px-5 pt-6">
+                {hasScheduleGaps ? (
+                    <Link href="/reminders">
+                        <Card className="border-amber-200 bg-amber-50">
+                            <p className="text-sm font-semibold text-amber-900">Set reminder times</p>
+                            <p className="mt-1 text-sm text-amber-700">
+                                Some care-plan items still need your preferred days and times.
+                            </p>
+                        </Card>
+                    </Link>
+                ) : null}
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-slate-800">Today&apos;s Schedule</h2>
                     <p className="text-sm text-slate-500">{tasks.length} tasks</p>
@@ -124,7 +142,11 @@ export default function TodayPage() {
                                     {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
                                 </span>
                                 <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
-                                    {formatTimeLabel(task.scheduledTime, task.status)}
+                                    {formatTimeLabel(
+                                        task.scheduledTime,
+                                        task.status,
+                                        task.requiresScheduleConfiguration,
+                                    )}
                                 </p>
                                 <MedicationCard
                                     dosage={medication.dosage}
@@ -134,7 +156,7 @@ export default function TodayPage() {
                                     onMarkComplete={() => markComplete(task)}
                                     prescriber={task.provider?.name}
                                     status={status}
-                                    time=""
+                                    time={task.scheduledTime ?? ""}
                                 />
                             </div>
                         );
@@ -146,14 +168,18 @@ export default function TodayPage() {
                                 {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
                             </span>
                             <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
-                                {formatTimeLabel(task.scheduledTime, task.status)}
+                                {formatTimeLabel(
+                                    task.scheduledTime,
+                                    task.status,
+                                    task.requiresScheduleConfiguration,
+                                )}
                             </p>
                             <ObligationCard
                                 description={task.name}
                                 id={task.id}
                                 onMarkComplete={() => markComplete(task)}
                                 status={status}
-                                time=""
+                                time={task.scheduledTime ?? ""}
                                 type={task.frequency.includes("walk") ? "exercise" : "custom"}
                             />
                         </div>

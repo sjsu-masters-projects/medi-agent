@@ -283,6 +283,7 @@ export interface Patient {
     dateOfBirth: string;
     gender?: Gender;
     preferredLanguage: Language;
+    timezone?: string;
     phone?: string;
     avatarUrl?: string;
     createdAt: string;
@@ -316,6 +317,46 @@ export interface CareTeamMember {
     createdAt: string;
 }
 
+export type ReminderDayOfWeek =
+    | "monday"
+    | "tuesday"
+    | "wednesday"
+    | "thursday"
+    | "friday"
+    | "saturday"
+    | "sunday";
+
+export interface ReminderSchedule {
+    id: string;
+    patientId: string;
+    targetType: AdherenceTargetType;
+    targetId: string;
+    timezone: string;
+    timesOfDay: string[];
+    daysOfWeek: ReminderDayOfWeek[];
+    isEnabled: boolean;
+    createdAt: string;
+    updatedAt?: string;
+}
+
+export interface ReminderGuidance {
+    supportsAutomaticReminders: boolean;
+    recommendedTimesPerDay?: number | null;
+    recommendedDaysPerWeek?: number | null;
+    guidanceText?: string | null;
+}
+
+export interface ReminderTarget {
+    targetType: AdherenceTargetType;
+    targetId: string;
+    name: string;
+    description?: string;
+    frequency: string;
+    providerName?: string;
+    reminderSchedule?: ReminderSchedule | null;
+    guidance: ReminderGuidance;
+}
+
 export interface Medication {
     id: string;
     patientId: string;
@@ -332,6 +373,7 @@ export interface Medication {
     instructions?: string;
     sourceDocumentId?: string;
     isActive: boolean;
+    reminderSchedule?: ReminderSchedule | null;
     createdAt: string;
 }
 
@@ -341,8 +383,10 @@ export interface Obligation {
     obligationType: ObligationType;
     description: string;
     frequency: string;
+    notes?: string;
     setByCareTeamId?: string;
     isActive: boolean;
+    reminderSchedule?: ReminderSchedule | null;
     createdAt: string;
 }
 
@@ -444,8 +488,10 @@ export interface FeedTask {
     description?: string;
     frequency: string;
     scheduledTime?: string;
+    scheduledAt?: string;
     status: FeedTaskStatus;
     completedAt?: string;
+    requiresScheduleConfiguration?: boolean;
     provider?: FeedProvider;
 }
 

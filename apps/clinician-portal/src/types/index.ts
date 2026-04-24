@@ -26,6 +26,7 @@ export type {
     FeedTask,
     FeedSummary,
     TodayFeedResponse,
+    ReminderSchedule,
     ClinicianMessage,
     Condition,
     Allergy,

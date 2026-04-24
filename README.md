@@ -100,13 +100,15 @@ medi-agent/
 ```bash
 git clone <repo-url> && cd medi-agent
 cp .env.example .env
+cp apps/patient-portal/.env.example apps/patient-portal/.env.local
+cp apps/clinician-portal/.env.example apps/clinician-portal/.env.local
 # Fill in API keys — see .env.example for where to get each one
 ```
 
 Verify your setup:
 ```bash
 ./scripts/preflight.sh       # checks tools, .env, deps
-./scripts/check-env.sh       # validates .env against .env.example
+./scripts/check-env.sh       # validates backend + both portal env files
 ```
 
 ### 2. Backend
@@ -220,8 +222,10 @@ All endpoints live under `/api/v1/`. Full interactive docs at `/docs` (Swagger) 
 | Resource | Prefix | Key Endpoints |
 |----------|--------|---------------|
 | Auth | `/auth` | signup, clinic-admin signup, login, refresh, password reset |
-| Clinics | `/clinics` | resolve clinic code, internal clinic provisioning |
+| Clinics | `/clinics` | resolve clinic code |
+| Cron | `/cron` | internal scheduler jobs for reminders and ADR scans |
 | Patients | `/patients` | profile, care team, join clinic |
+| Reminders | `/reminders` | patient-owned reminder schedule targets and upserts |
 | Clinicians | `/clinicians` | profile, patient list, invite code generate/list/revoke |
 | Documents | `/documents` | upload, list, explain (AI) |
 | Medications | `/medications` | CRUD, active/inactive |

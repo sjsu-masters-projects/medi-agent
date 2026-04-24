@@ -18,15 +18,17 @@ class TaskProvider(BaseModel):
 class FeedTask(BaseModel):
     """Single task in the feed."""
 
-    id: UUID
+    id: str
     type: Literal["medication", "obligation"]
     target_id: UUID
     name: str
     description: str | None = None
     frequency: str
     scheduled_time: str | None = None
+    scheduled_at: str | None = None
     status: Literal["pending", "completed", "skipped", "missed"]
     completed_at: str | None = None
+    requires_schedule_configuration: bool = False
     provider: TaskProvider | None = None
 
 

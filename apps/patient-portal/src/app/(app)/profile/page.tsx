@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiOutlineBuildingOffice2 } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
@@ -21,6 +22,7 @@ interface PatientProfileResponse {
     date_of_birth: string;
     gender?: Patient["gender"];
     preferred_language: Locale;
+    timezone?: string;
     created_at: string;
 }
 
@@ -47,6 +49,7 @@ function mapPatient(profile: PatientProfileResponse): Patient {
         id: profile.id,
         lastName: profile.last_name,
         preferredLanguage: normalizeLocale(profile.preferred_language),
+        timezone: profile.timezone ?? "UTC",
     };
 }
 
@@ -235,7 +238,27 @@ export default function ProfilePage() {
                                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Preferred language</p>
                                     <p className="mt-1 font-medium text-slate-800">{formatLanguage(patientProfile.preferredLanguage)}</p>
                                 </div>
+                                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Timezone</p>
+                                    <p className="mt-1 font-medium text-slate-800">{patientProfile.timezone ?? "UTC"}</p>
+                                </div>
                             </div>
+                        </Card>
+
+                        <Card className="space-y-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reminders</p>
+                                    <h3 className="mt-1 text-lg font-semibold text-slate-900">Medication and task reminder times</h3>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        Choose the exact times and days you want reminders sent.
+                                    </p>
+                                </div>
+                                <Badge variant="info">Patient controlled</Badge>
+                            </div>
+                            <Link href="/reminders">
+                                <Button fullWidth>Manage reminders</Button>
+                            </Link>
                         </Card>
 
                         <Card className="space-y-4">

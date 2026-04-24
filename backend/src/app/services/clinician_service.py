@@ -33,6 +33,7 @@ from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicR
 from app.db.supabase_execute import execute_async
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
+from app.services.reminder_schedule_service import ReminderScheduleService
 
 logger = logging.getLogger(__name__)
 
@@ -467,6 +468,10 @@ class ClinicianService:
             if team_id and str(team_id) in provider_by_team:
                 med["prescribed_by_name"] = provider_by_team[str(team_id)]
 
+        reminder_map = await ReminderScheduleService(self.db).get_schedule_map_for_patient(pid)
+        for med in medications:
+            med["reminder_schedule"] = reminder_map.get(("medication", str(med["id"])))
+
         adherence_series = await self._build_adherence_series(patient_id)
 
         symptoms = await self._execute(
@@ -515,6 +520,10 @@ class ClinicianService:
             .order("created_at", desc=True)
         )
         obligations = cast(list[dict[str, Any]], obligations_res.data or [])
+        for obligation in obligations:
+            obligation["reminder_schedule"] = reminder_map.get(
+                ("obligation", str(obligation["id"]))
+            )
 
         obligation_completion_rate = await self._compute_obligation_completion_rate(patient_id)
 
@@ -540,6 +549,7 @@ class ClinicianService:
             "email": patient.get("email", ""),
             "date_of_birth": patient.get("date_of_birth"),
             "avatar_url": patient.get("avatar_url"),
+            "timezone": patient.get("timezone", "UTC"),
             "risk_level": risk_level,
             "adherence_score": adherence_score,
             "medications": medications,

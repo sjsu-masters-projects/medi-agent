@@ -77,10 +77,10 @@
 ### 1.4 Cloud Infrastructure
 - [x] Set up Google Cloud project / guide
 - [x] Configure Cloud Run strategy for backend
-- [ ] Configure Cloud Scheduler strategy for cron jobs
+- [x] Configure Cloud Scheduler strategy for cron jobs
 - [x] Set up Vercel strategy (patient-portal, clinician-portal)
 - [x] Configure environment variables strategy
-- [ ] Set up Sentry strategy for error monitoring
+- [x] Set up Sentry strategy for error monitoring
 
 ### 1.5 External Service Setup
 - [ ] Get Gemini API key (Google AI Studio / Vertex AI)
@@ -148,7 +148,6 @@
 - [x] `GET /api/v1/clinicians/me/invite-codes` — list invite lifecycle history
 - [x] `POST /api/v1/clinicians/me/invite-codes/{care_team_id}/revoke` — revoke pending invite code
 - [x] `POST /api/v1/clinics/resolve-code` — resolve clinic code pre-auth
-- [x] `POST /api/v1/clinics/internal/provision` — internal clinic provisioning endpoint
 - [x] Write clinician API tests
 
 ### 2.5 Document API
@@ -165,6 +164,8 @@
 - [x] `PUT /api/v1/medications/{id}` — update medication
 - [x] `GET /api/v1/obligations` — list patient's obligations
 - [x] `POST /api/v1/obligations` — create obligation
+- [x] `GET /api/v1/reminders/targets` — list reminder-eligible medications and obligations
+- [x] `PUT /api/v1/reminders/{target_type}/{target_id}` — upsert patient-owned reminder schedule
 - [x] `POST /api/v1/adherence` — log medication taken / obligation completed
 - [x] `GET /api/v1/adherence/stats` — adherence score + streak calculation
 - [x] Write medication and adherence tests
@@ -173,6 +174,7 @@
 - [x] `GET /api/v1/feed/today` — aggregated daily tasks (meds + obligations from all providers)
 - [x] Include source provider info for each task
 - [x] Calculate which tasks are pending/completed/missed
+- [x] Generate per-occurrence tasks from patient reminder schedules when configured
 - [x] Write feed tests
 
 ---

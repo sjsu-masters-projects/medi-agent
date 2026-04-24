@@ -18,6 +18,7 @@ from collections.abc import Mapping, Sequence
 from http import HTTPStatus
 from typing import Any
 
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -53,6 +54,26 @@ def _error_response(
     )
 
 
+def _report_to_sentry(
+    exc: Exception,
+    *,
+    request: Request | None = None,
+    handled: bool,
+    error_category: str,
+) -> None:
+    """Report high-signal failures to Sentry without changing client responses."""
+    if not sentry_sdk.is_initialized():
+        return
+
+    with sentry_sdk.push_scope() as scope:
+        scope.set_tag("handled", handled)
+        scope.set_tag("error_category", error_category)
+        if request is not None:
+            scope.set_tag("request_method", request.method)
+            scope.set_tag("request_path", request.url.path)
+        sentry_sdk.capture_exception(exc)
+
+
 # ── Handlers ────────────────────────────────────────────────
 
 
@@ -72,7 +93,13 @@ async def _validation_handler(_: Request, exc: ValidationError) -> JSONResponse:
     return _error_response(422, exc.code, exc.message)
 
 
-async def _external_service_handler(_: Request, exc: ExternalServiceError) -> JSONResponse:
+async def _external_service_handler(request: Request, exc: ExternalServiceError) -> JSONResponse:
+    _report_to_sentry(
+        exc,
+        request=request,
+        handled=True,
+        error_category="external_service",
+    )
     logger.error("External service failure: %s", exc.message)
     return _error_response(502, exc.code, exc.message)
 
@@ -140,14 +167,26 @@ async def _http_exception_handler(_: Request, exc: StarletteHTTPException) -> JS
     )
 
 
-async def _catch_all_handler(_: Request, exc: MediAgentError) -> JSONResponse:
+async def _catch_all_handler(request: Request, exc: MediAgentError) -> JSONResponse:
     """Fallback for any MediAgentError subclass we haven't explicitly handled."""
+    _report_to_sentry(
+        exc,
+        request=request,
+        handled=True,
+        error_category="application",
+    )
     logger.error("Unhandled app error: [%s] %s", exc.code, exc.message)
     return _error_response(500, exc.code, exc.message)
 
 
 async def _unexpected_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch unhandled exceptions so logs include a traceback and request context."""
+    _report_to_sentry(
+        exc,
+        request=request,
+        handled=False,
+        error_category="unexpected",
+    )
     logger.exception(
         "Unhandled exception at %s %s",
         request.method,

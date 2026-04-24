@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
+import { getBrowserTimezone, getSupportedTimezones } from "@/services/timezones";
 import { clearOnboardingProfile } from "@/store/slices/onboarding-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, getLocaleLabel, normalizeLocale } from "@/types";
@@ -28,7 +29,9 @@ export default function OnboardingPage() {
         inviteCode: "",
         language: DEFAULT_LOCALE,
         lastName: profileDraft?.lastName ?? "",
+        timezone: getBrowserTimezone(),
     }));
+    const [timezones] = useState<string[]>(() => getSupportedTimezones());
 
     async function handleFinish() {
         if (!accessToken) {
@@ -68,6 +71,7 @@ export default function OnboardingPage() {
                     gender: normalizedGender || undefined,
                     last_name: formData.lastName.trim(),
                     preferred_language: normalizeLocale(formData.language),
+                    timezone: formData.timezone,
                 },
                 { token: accessToken },
             );
@@ -139,6 +143,20 @@ export default function OnboardingPage() {
                                 {SUPPORTED_LOCALES.map((locale) => (
                                     <option key={locale} value={locale}>
                                         {getLocaleLabel(locale)}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="block text-sm font-medium text-gray-700">
+                            Timezone
+                            <select
+                                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                onChange={(event) => updateField("timezone", event.target.value)}
+                                value={formData.timezone}
+                            >
+                                {timezones.map((timezone) => (
+                                    <option key={timezone} value={timezone}>
+                                        {timezone}
                                     </option>
                                 ))}
                             </select>

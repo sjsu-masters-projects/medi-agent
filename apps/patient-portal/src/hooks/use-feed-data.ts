@@ -135,6 +135,7 @@ export function useFeedData() {
             await api.post(
                 "/api/v1/adherence",
                 {
+                    scheduled_time: task.scheduledAt,
                     status: task.type === FeedTaskType.MEDICATION ? "taken" : "completed",
                     target_id: task.targetId,
                     target_type: task.type,

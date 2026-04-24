@@ -29,7 +29,10 @@ def _get_service(db: Client = Depends(get_db)) -> FeedService:
 )
 async def get_today_feed(
     date: str | None = Query(None, description="Target date (YYYY-MM-DD), defaults to today"),
-    timezone: str = Query("UTC", description="IANA timezone"),
+    timezone: str | None = Query(
+        None,
+        description="Optional IANA timezone override. Defaults to the patient's saved timezone.",
+    ),
     user: CurrentUser = Depends(get_current_user),
     service: FeedService = Depends(_get_service),
 ) -> Any:

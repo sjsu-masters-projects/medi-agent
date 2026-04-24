@@ -37,6 +37,7 @@ httpx
 
 # -- Logging --
 structlog
+sentry-sdk
 
 # -- Document Processing --
 PyMuPDF

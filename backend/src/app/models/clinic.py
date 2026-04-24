@@ -1,4 +1,4 @@
-"""Clinic schemas for clinic-code resolution and internal provisioning."""
+"""Clinic schemas for clinic-code resolution and clinic entities."""
 
 from __future__ import annotations
 
@@ -23,13 +23,6 @@ class ClinicCodeResolveResponse(BaseModel):
     clinic_code: str
     clinic_name: str
     status: ClinicStatus
-
-
-class InternalClinicProvisionRequest(BaseModel):
-    """Internal-only clinic provisioning payload."""
-
-    clinic_name: str = Field(..., min_length=1, max_length=200)
-    type2_npi: str | None = Field(default=None, pattern=r"^\d{10}$")
 
 
 class ClinicRead(BaseModel):

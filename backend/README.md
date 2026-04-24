@@ -89,6 +89,11 @@ Migrations are plain SQL files in `src/app/db/migrations/`:
 | `008_soap_notes.sql` | Adds clinician SOAP note generation storage |
 | `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT `user_role` hook parsing and grants |
 | `010_chat_state_and_a2a_tasks.sql` | Adds persistent chat state and A2A task lifecycle storage |
+| `011_locale_contract_upgrade.sql` | Hardens locale defaults and validation contracts |
+| `011_enable_dashboard_realtime_publication.sql` | Publishes dashboard tables to Supabase realtime |
+| `012_document_review_queue.sql` | Adds document review queue storage |
+| `013_cron_scheduler_foundation.sql` | Adds cron run tracking and notification dedupe metadata |
+| `014_patient_timezones_and_reminder_schedules.sql` | Adds patient timezone preferences, obligation notes, and structured reminder schedules |
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 

@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.models.enums import MedicationRoute
+from app.models.reminder import ReminderScheduleRead
 
 
 class MedicationCreate(BaseModel):
@@ -48,4 +49,5 @@ class MedicationRead(BaseModel):
     instructions: str | None = None
     source_document_id: UUID | None = None
     is_active: bool = True
+    reminder_schedule: ReminderScheduleRead | None = None
     created_at: str

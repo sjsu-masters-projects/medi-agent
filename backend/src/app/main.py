@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,6 +22,7 @@ from app.routers import (
     chat,
     clinicians,
     clinics,
+    cron,
     documents,
     feed,
     medications,
@@ -28,11 +30,27 @@ from app.routers import (
     notifications,
     obligations,
     patients,
+    reminders,
     staff,
 )
 from app.services.a2a_retry_worker import A2ARetryWorker
 
 logger = logging.getLogger(__name__)
+
+
+def init_sentry() -> None:
+    """Initialize Sentry before the FastAPI app is created."""
+    if not settings.backend_sentry_dsn:
+        return
+
+    sentry_sdk.init(
+        dsn=settings.backend_sentry_dsn,
+        environment=settings.sentry_environment,
+        release=settings.sentry_release or None,
+        debug=settings.sentry_debug,
+        send_default_pii=False,
+        traces_sample_rate=1.0 if settings.environment == "development" else 0.0,
+    )
 
 
 @asynccontextmanager
@@ -107,12 +125,14 @@ def create_app() -> FastAPI:
     application.include_router(chat.router, prefix=f"{api}/chat", tags=["Chat"])
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(adr.router, prefix=f"{api}/adr", tags=["ADR"])
+    application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])
     application.include_router(
         appointments.router, prefix=f"{api}/appointments", tags=["Appointments"]
     )
     application.include_router(
         notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
     )
+    application.include_router(reminders.router, prefix=f"{api}/reminders", tags=["Reminders"])
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
     application.add_api_websocket_route("/ws/chat/{patient_id}", chat.chat_websocket_endpoint)
 
@@ -133,4 +153,5 @@ def create_app() -> FastAPI:
     return application
 
 
+init_sentry()
 app = create_app()

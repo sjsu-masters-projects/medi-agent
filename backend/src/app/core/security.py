@@ -228,13 +228,13 @@ def require_role(role: str, *, allow_unverified_mfa: bool = False) -> Callable[.
     return _check_role
 
 
-async def require_internal_admin_token(
-    token: str | None = Header(default=None, alias="X-Internal-Admin-Token"),
+async def require_cron_auth_token(
+    token: str | None = Header(default=None, alias="X-Cron-Auth"),
 ) -> None:
-    """Require a shared internal token for private operational endpoints."""
-    configured_token = settings.internal_admin_token.strip()
+    """Require a shared token for internal cron endpoints."""
+    configured_token = settings.cron_auth_token.strip()
     if not configured_token:
-        raise AuthorizationError("Internal provisioning endpoint is disabled")
+        raise AuthorizationError("Cron endpoints are disabled")
 
     if token is None or not hmac.compare_digest(token, configured_token):
-        raise AuthorizationError("Invalid internal admin token")
+        raise AuthorizationError("Invalid cron auth token")
