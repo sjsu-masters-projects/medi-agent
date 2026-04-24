@@ -405,11 +405,8 @@ async def test_revoke_invite_code_raises_not_found_for_unknown_invite(service):
 
 @pytest.mark.asyncio
 async def test_save_document_annotation_rejects_document_outside_patient_scope(service):
-    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
-        return_value=[{"id": str(uuid4())}]
-    )
-    service._execute = AsyncMock(  # type: ignore[method-assign]
-        return_value=_response(data=[])
+    service.document_workflows.save_document_annotation = AsyncMock(  # type: ignore[method-assign]
+        side_effect=NotFoundError("Document", str(uuid4()))
     )
 
     with pytest.raises(NotFoundError, match="Document"):
@@ -421,18 +418,8 @@ async def test_save_document_annotation_updates_document_for_assigned_patient(se
     clinician_id = uuid4()
     patient_id = uuid4()
     document_id = uuid4()
-    chain = MagicMock()
-    for method in ("select", "eq", "update"):
-        getattr(chain, method).return_value = chain
-    mock_db.table.return_value = chain
-    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
-        return_value=[{"id": str(uuid4())}]
-    )
-    service._execute = AsyncMock(  # type: ignore[method-assign]
-        side_effect=[
-            _response(data=[{"id": str(document_id)}]),
-            _response(data=[{"id": str(document_id)}]),
-        ]
+    service.document_workflows.save_document_annotation = AsyncMock(  # type: ignore[method-assign]
+        return_value={"status": "saved", "document_id": str(document_id)}
     )
 
     result = await service.save_document_annotation(
@@ -443,11 +430,11 @@ async def test_save_document_annotation_updates_document_for_assigned_patient(se
     )
 
     assert result == {"status": "saved", "document_id": str(document_id)}
-    chain.update.assert_called_once_with(
-        {
-            "clinician_annotation": "Medication adherence improving",
-            "annotation_by": str(clinician_id),
-        }
+    service.document_workflows.save_document_annotation.assert_awaited_once_with(
+        clinician_id,
+        patient_id,
+        document_id,
+        "Medication adherence improving",
     )
 
 
@@ -481,35 +468,31 @@ async def test_get_patient_deep_dive_includes_review_metadata(service):
             _response(data=[]),
             _response(data=[]),
             _response(data=[]),
-            _response(
-                data=[
-                    {
-                        "id": str(uuid4()),
-                        "file_name": "lab.pdf",
-                        "document_type": "lab_report",
-                        "parse_status": "completed",
-                        "ai_summary": "Summary",
-                        "created_at": "2026-04-20T10:00:00Z",
-                        "uploaded_by_role": "patient",
-                        "clinician_annotation": "Review soon",
-                        "review_status": "approved",
-                        "reviewed_by": str(reviewer_id),
-                        "reviewed_at": "2026-04-21T09:00:00Z",
-                        "review_note": "Looks valid",
-                    }
-                ]
-            ),
-            _response(
-                data=[
-                    {
-                        "id": str(reviewer_id),
-                        "first_name": "Mina",
-                        "last_name": "Shah",
-                    }
-                ]
-            ),
             _response(data=[]),
             _response(data=[]),
+        ]
+    )
+    service.document_workflows.fetch_patient_documents = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            {
+                "id": str(uuid4()),
+                "file_name": "lab.pdf",
+                "document_type": "lab_report",
+                "parse_status": "completed",
+                "ai_summary": "Summary",
+                "created_at": "2026-04-20T10:00:00Z",
+                "uploaded_by_role": "patient",
+                "clinician_annotation": "Review soon",
+                "review_status": "approved",
+                "reviewed_by": str(reviewer_id),
+                "reviewed_at": "2026-04-21T09:00:00Z",
+                "review_note": "Looks valid",
+                "reviewer": {
+                    "id": str(reviewer_id),
+                    "first_name": "Mina",
+                    "last_name": "Shah",
+                },
+            }
         ]
     )
 
@@ -542,36 +525,22 @@ async def test_get_patient_deep_dive_includes_review_metadata(service):
 async def test_list_document_review_queue_scopes_to_assigned_patients(service):
     clinician_id = uuid4()
     assigned_patient_id = uuid4()
-    service.care_team_repo.list_assigned_patient_ids = AsyncMock(  # type: ignore[method-assign]
-        return_value=[{"patient_id": str(assigned_patient_id)}]
-    )
-    service._execute = AsyncMock(  # type: ignore[method-assign]
-        side_effect=[
-            _response(
-                data=[
-                    {
-                        "id": str(assigned_patient_id),
-                        "first_name": "Mia",
-                        "last_name": "Chen",
-                    }
-                ]
-            ),
-            _response(
-                data=[
-                    {
-                        "id": str(uuid4()),
-                        "patient_id": str(assigned_patient_id),
-                        "file_name": "symptoms.pdf",
-                        "document_type": "lab_report",
-                        "parse_status": "pending",
-                        "ai_summary": "summary",
-                        "source_clinic": "North Clinic",
-                        "created_at": "2026-04-20T10:00:00Z",
-                        "uploaded_by_role": "patient",
-                        "review_status": "pending",
-                    }
-                ]
-            ),
+    service.document_workflows.list_document_review_queue = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            {
+                "id": str(uuid4()),
+                "patient_id": str(assigned_patient_id),
+                "file_name": "symptoms.pdf",
+                "document_type": "lab_report",
+                "parse_status": "pending",
+                "ai_summary": "summary",
+                "source_clinic": "North Clinic",
+                "created_at": "2026-04-20T10:00:00Z",
+                "uploaded_by_role": "patient",
+                "review_status": "pending",
+                "patient_first_name": "Mia",
+                "patient_last_name": "Chen",
+            }
         ]
     )
 
@@ -587,61 +556,32 @@ async def test_approve_document_review_updates_pending_patient_upload(service, m
     clinician_id = uuid4()
     patient_id = uuid4()
     document_id = uuid4()
-    chain = MagicMock()
-    for method in ("update", "eq", "select", "single"):
-        getattr(chain, method).return_value = chain
-    mock_db.table.return_value = chain
-    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
-        return_value=[{"id": str(uuid4())}]
-    )
-    service._execute = AsyncMock(  # type: ignore[method-assign]
-        side_effect=[
-            _response(
-                data={
-                    "id": str(document_id),
-                    "patient_id": str(patient_id),
-                    "uploaded_by_role": "patient",
-                    "review_status": "pending",
-                    "reviewed_by": None,
-                    "reviewed_at": None,
-                    "review_note": None,
-                }
-            ),
-            _response(
-                data=[
-                    {
-                        "id": str(document_id),
-                        "patient_id": str(patient_id),
-                        "review_status": "approved",
-                        "reviewed_by": str(clinician_id),
-                        "reviewed_at": "2026-04-22T18:00:00Z",
-                        "review_note": None,
-                    }
-                ]
-            ),
-        ]
+    service.document_workflows.approve_document_review = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "status": "reviewed",
+            "document_id": str(document_id),
+            "patient_id": str(patient_id),
+            "review_status": "approved",
+            "reviewed_by": str(clinician_id),
+            "reviewed_at": "2026-04-22T18:00:00Z",
+            "review_note": None,
+        }
     )
 
     result = await service.approve_document_review(clinician_id, patient_id, document_id)
 
     assert result["review_status"] == DocumentReviewStatus.APPROVED.value
-    chain.update.assert_called_once()
+    service.document_workflows.approve_document_review.assert_awaited_once_with(
+        clinician_id,
+        patient_id,
+        document_id,
+    )
 
 
 @pytest.mark.asyncio
 async def test_reject_document_review_rejects_already_reviewed_document(service):
-    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
-        return_value=[{"id": str(uuid4())}]
-    )
-    service._execute = AsyncMock(  # type: ignore[method-assign]
-        return_value=_response(
-            data={
-                "id": str(uuid4()),
-                "patient_id": str(uuid4()),
-                "uploaded_by_role": "patient",
-                "review_status": "approved",
-            }
-        )
+    service.document_workflows.reject_document_review = AsyncMock(  # type: ignore[method-assign]
+        side_effect=ValidationError("Document review has already been completed")
     )
 
     with pytest.raises(ValidationError, match="already been completed"):

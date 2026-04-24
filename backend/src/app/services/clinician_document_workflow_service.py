@@ -44,9 +44,7 @@ class ClinicianDocumentWorkflowService:
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
         )
-        return await self._attach_document_reviewers(
-            cast(list[dict[str, Any]], docs.data or [])
-        )
+        return await self._attach_document_reviewers(cast(list[dict[str, Any]], docs.data or []))
 
     async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
         """List pending patient-uploaded documents for assigned patients."""
@@ -165,8 +163,7 @@ class ClinicianDocumentWorkflowService:
         document_id: UUID,
         *,
         fields: str = (
-            "id, patient_id, uploaded_by_role, review_status, reviewed_by, "
-            "reviewed_at, review_note"
+            "id, patient_id, uploaded_by_role, review_status, reviewed_by, reviewed_at, review_note"
         ),
     ) -> dict[str, Any]:
         """Fetch a patient-owned document row or raise NotFound."""
@@ -234,19 +231,13 @@ class ClinicianDocumentWorkflowService:
     ) -> list[dict[str, Any]]:
         """Hydrate reviewer metadata onto document rows for clinician views."""
         reviewer_ids = sorted(
-            {
-                str(document["reviewed_by"])
-                for document in documents
-                if document.get("reviewed_by")
-            }
+            {str(document["reviewed_by"]) for document in documents if document.get("reviewed_by")}
         )
         if not reviewer_ids:
             return documents
 
         reviewers_result = await self._execute(
-            self.db.table("clinicians")
-            .select("id, first_name, last_name")
-            .in_("id", reviewer_ids)
+            self.db.table("clinicians").select("id, first_name, last_name").in_("id", reviewer_ids)
         )
         reviewers_by_id = {
             str(row["id"]): row
@@ -256,8 +247,6 @@ class ClinicianDocumentWorkflowService:
 
         for document in documents:
             reviewer_id = document.get("reviewed_by")
-            document["reviewer"] = (
-                reviewers_by_id.get(str(reviewer_id)) if reviewer_id else None
-            )
+            document["reviewer"] = reviewers_by_id.get(str(reviewer_id)) if reviewer_id else None
 
         return documents
