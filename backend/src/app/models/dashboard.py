@@ -10,6 +10,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.models.enums import DocumentReviewStatus, DocumentType, UploaderRole
+
 # ── Risk level type alias ────────────────────────────────────────────────────
 
 RiskLevel = Literal["low", "medium", "high", "unknown"]
@@ -111,6 +113,67 @@ class AdherenceDataPoint(BaseModel):
     expected: int
 
 
+class DocumentReviewerRead(BaseModel):
+    """Reviewer metadata shown for patient-uploaded document decisions."""
+
+    id: UUID
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class PatientDocumentRead(BaseModel):
+    """Document record shown in clinician-facing patient deep dives."""
+
+    id: UUID
+    file_name: str
+    document_type: DocumentType
+    parse_status: str
+    ai_summary: str | None = None
+    created_at: str
+    uploaded_by_role: UploaderRole
+    clinician_annotation: str | None = None
+    review_status: DocumentReviewStatus | None = None
+    reviewed_by: UUID | None = None
+    reviewed_at: str | None = None
+    review_note: str | None = None
+    reviewer: DocumentReviewerRead | None = None
+
+
+class DocumentReviewQueueItem(BaseModel):
+    """Pending patient-uploaded document awaiting clinician review."""
+
+    id: UUID
+    patient_id: UUID
+    patient_first_name: str
+    patient_last_name: str
+    file_name: str
+    document_type: DocumentType
+    parse_status: str
+    ai_summary: str | None = None
+    source_clinic: str | None = None
+    created_at: str
+    uploaded_by_role: UploaderRole
+    review_status: DocumentReviewStatus
+
+
+class DocumentReviewActionRequest(BaseModel):
+    """Optional note when rejecting a reviewed patient-uploaded document."""
+
+    review_note: str | None = Field(default=None, max_length=2000)
+
+
+class DocumentReviewActionResponse(BaseModel):
+    """Updated review metadata returned after approve/reject actions."""
+
+    status: str
+    document_id: UUID
+    patient_id: UUID
+    review_status: DocumentReviewStatus
+    reviewed_by: UUID
+    reviewed_at: str
+    review_note: str | None = None
+
+
 class PatientDeepDive(BaseModel):
     """Aggregated patient data for the Patient Deep Dive view."""
 
@@ -133,7 +196,7 @@ class PatientDeepDive(BaseModel):
     chat_messages: list[dict[str, Any]] = Field(default_factory=list)
     conditions: list[dict[str, Any]] = Field(default_factory=list)
     allergies: list[dict[str, Any]] = Field(default_factory=list)
-    documents: list[dict[str, Any]] = Field(default_factory=list)
+    documents: list[PatientDocumentRead] = Field(default_factory=list)
     latest_soap_note: SoapNoteRead | None = None
     obligations: list[dict[str, Any]] = Field(default_factory=list)
     obligation_completion_rate: float = Field(default=0.0, ge=0.0, le=1.0)

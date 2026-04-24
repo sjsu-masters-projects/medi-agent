@@ -406,7 +406,7 @@
 - [x] Clinician document upload UI (drag-and-drop, multi-file — DocumentUploadZone, document type selector)
 - [x] Set obligations form (type: diet/exercise/custom, description, frequency) — reusable after success
 - [x] Bidirectional sync: clinician upload → patient sees in My Records
-- [ ] Patient upload → clinician review queue — documents visible in deep dive Documents tab but **no dedicated review queue with approve/reject workflow**
+- [x] Patient upload → clinician review queue — dedicated clinician review queue with approve/reject workflow and deep dive review badges/actions
 - [x] Trigger AI parsing on clinician uploads (backend background task)
 
 ### 6.5 Structured Document Summary UI
@@ -417,10 +417,10 @@
 
 ### 6.6 Phase 6 — Known Remaining Work & Tech Debt
 - [x] Wire Supabase Realtime subscription on dashboard (hook → `patchPatient` dispatch)
-- [ ] Build patient upload review queue (filter by `uploaded_by_role === 'patient'`, approve/reject UI)
-- [ ] Add integration tests for `get_dashboard_data` and `get_patient_deep_dive` async service methods
-- [ ] Add graph node unit tests for `gather_patient_data`, `generate_soap_note`, `store_soap_note`
-- [ ] Add realistic Recharts rendering tests (current tests mock all chart components to bare divs)
+- [x] Build patient upload review queue (filter by `uploaded_by_role === 'patient'`, approve/reject UI)
+- [x] Add integration tests for `get_dashboard_data` and `get_patient_deep_dive` async service methods
+- [x] Add graph node unit tests for `gather_patient_data`, `generate_soap_note`, `store_soap_note`
+- [x] Add realistic Recharts rendering tests (current tests mock all chart components to bare divs)
 - [x] Enable Supabase Realtime publication for dashboard tables (`adherence_logs`, `symptom_reports`, `adr_assessments`)
 - [x] Add rate limiting on SOAP note generation endpoint (expensive LLM call, 15-30s per request)
 

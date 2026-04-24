@@ -9,6 +9,7 @@ import pytest
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.models.dashboard import PatientRiskData
+from app.models.enums import DocumentReviewStatus
 from app.services.clinician_service import ClinicianService
 
 
@@ -448,6 +449,221 @@ async def test_save_document_annotation_updates_document_for_assigned_patient(se
             "annotation_by": str(clinician_id),
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_get_patient_deep_dive_includes_review_metadata(service):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+    reviewer_id = uuid4()
+    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"id": str(uuid4())}]
+    )
+    service._build_adherence_series = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    service._compute_obligation_completion_rate = AsyncMock(  # type: ignore[method-assign]
+        return_value=0.5
+    )
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _response(
+                data={
+                    "id": str(patient_id),
+                    "first_name": "Asha",
+                    "last_name": "Lane",
+                    "email": "asha@example.com",
+                    "date_of_birth": "1995-01-01",
+                    "avatar_url": None,
+                }
+            ),
+            _response(data=[]),
+            _response(data=[]),
+            _response(data=[]),
+            _response(data=[]),
+            _response(data=[]),
+            _response(data=[]),
+            _response(
+                data=[
+                    {
+                        "id": str(uuid4()),
+                        "file_name": "lab.pdf",
+                        "document_type": "lab_report",
+                        "parse_status": "completed",
+                        "ai_summary": "Summary",
+                        "created_at": "2026-04-20T10:00:00Z",
+                        "uploaded_by_role": "patient",
+                        "clinician_annotation": "Review soon",
+                        "review_status": "approved",
+                        "reviewed_by": str(reviewer_id),
+                        "reviewed_at": "2026-04-21T09:00:00Z",
+                        "review_note": "Looks valid",
+                    }
+                ]
+            ),
+            _response(
+                data=[
+                    {
+                        "id": str(reviewer_id),
+                        "first_name": "Mina",
+                        "last_name": "Shah",
+                    }
+                ]
+            ),
+            _response(data=[]),
+            _response(data=[]),
+        ]
+    )
+
+    with patch(
+        "app.services.risk_score_service.RiskScoreService.get_patient_risk",
+        new=AsyncMock(
+            return_value=PatientRiskData(
+                patient_id=patient_id,
+                first_name="Asha",
+                last_name="Lane",
+                risk_level="medium",
+                adherence_score=0.82,
+                open_adr_count=0,
+                active_med_count=2,
+                recent_symptom_severity=2,
+                last_activity="Logged medication 2h ago",
+            )
+        ),
+    ):
+        result = await service.get_patient_deep_dive(clinician_id, patient_id)
+
+    document = result["documents"][0]
+    assert document["review_status"] == "approved"
+    assert document["review_note"] == "Looks valid"
+    assert document["reviewer"]["first_name"] == "Mina"
+    assert result["obligation_completion_rate"] == 0.5
+
+
+@pytest.mark.asyncio
+async def test_list_document_review_queue_scopes_to_assigned_patients(service):
+    clinician_id = uuid4()
+    assigned_patient_id = uuid4()
+    service._get_assigned_patient_ids = AsyncMock(return_value=[assigned_patient_id])  # type: ignore[method-assign]
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _response(
+                data=[
+                    {
+                        "id": str(assigned_patient_id),
+                        "first_name": "Mia",
+                        "last_name": "Chen",
+                    }
+                ]
+            ),
+            _response(
+                data=[
+                    {
+                        "id": str(uuid4()),
+                        "patient_id": str(assigned_patient_id),
+                        "file_name": "symptoms.pdf",
+                        "document_type": "lab_report",
+                        "parse_status": "pending",
+                        "ai_summary": "summary",
+                        "source_clinic": "North Clinic",
+                        "created_at": "2026-04-20T10:00:00Z",
+                        "uploaded_by_role": "patient",
+                        "review_status": "pending",
+                    }
+                ]
+            ),
+        ]
+    )
+
+    result = await service.list_document_review_queue(clinician_id)
+
+    assert len(result) == 1
+    assert result[0]["patient_first_name"] == "Mia"
+    assert result[0]["review_status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_approve_document_review_updates_pending_patient_upload(service, mock_db):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+    document_id = uuid4()
+    chain = MagicMock()
+    for method in ("update", "eq", "select", "single"):
+        getattr(chain, method).return_value = chain
+    mock_db.table.return_value = chain
+    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"id": str(uuid4())}]
+    )
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _response(
+                data={
+                    "id": str(document_id),
+                    "patient_id": str(patient_id),
+                    "uploaded_by_role": "patient",
+                    "review_status": "pending",
+                    "reviewed_by": None,
+                    "reviewed_at": None,
+                    "review_note": None,
+                }
+            ),
+            _response(
+                data=[
+                    {
+                        "id": str(document_id),
+                        "patient_id": str(patient_id),
+                        "review_status": "approved",
+                        "reviewed_by": str(clinician_id),
+                        "reviewed_at": "2026-04-22T18:00:00Z",
+                        "review_note": None,
+                    }
+                ]
+            ),
+        ]
+    )
+
+    result = await service.approve_document_review(clinician_id, patient_id, document_id)
+
+    assert result["review_status"] == DocumentReviewStatus.APPROVED.value
+    chain.update.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_reject_document_review_rejects_already_reviewed_document(service):
+    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"id": str(uuid4())}]
+    )
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        return_value=_response(
+            data={
+                "id": str(uuid4()),
+                "patient_id": str(uuid4()),
+                "uploaded_by_role": "patient",
+                "review_status": "approved",
+            }
+        )
+    )
+
+    with pytest.raises(ValidationError, match="already been completed"):
+        await service.reject_document_review(uuid4(), uuid4(), uuid4(), "Bad upload")
+
+
+@pytest.mark.asyncio
+async def test_reject_document_review_rejects_clinician_uploaded_document(service):
+    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"id": str(uuid4())}]
+    )
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        return_value=_response(
+            data={
+                "id": str(uuid4()),
+                "patient_id": str(uuid4()),
+                "uploaded_by_role": "clinician",
+                "review_status": "pending",
+            }
+        )
+    )
+
+    with pytest.raises(ValidationError, match="patient-uploaded"):
+        await service.reject_document_review(uuid4(), uuid4(), uuid4(), "Bad upload")
 
 
 @pytest.mark.asyncio

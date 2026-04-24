@@ -5,6 +5,7 @@
  * Uses @testing-library/react with vitest.
  */
 
+import type { ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AdherenceChart } from "@/components/features/adherence-chart";
@@ -15,30 +16,18 @@ import { AccordionItem } from "@/components/ui/accordion";
 import { ChatRole } from "@/types";
 import type { SymptomReport } from "@/types";
 
-// ── Mock recharts ─────────────────────────────────────────────────────────────
-// Recharts uses ResizeObserver which is not available in jsdom
+// ── Minimal recharts mock ────────────────────────────────────────────────────
+// Keep actual chart composition intact; only bypass container measurement.
 
-vi.mock("recharts", () => ({
-    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-        <div data-testid="responsive-container">{children}</div>
-    ),
-    LineChart: ({ children }: { children: React.ReactNode }) => (
-        <svg data-testid="line-chart" viewBox="0 0 100 100">
-            {children}
-        </svg>
-    ),
-    AreaChart: ({ children }: { children: React.ReactNode }) => (
-        <svg data-testid="area-chart" viewBox="0 0 100 100">
-            {children}
-        </svg>
-    ),
-    Line: () => <div data-testid="recharts-line" />,
-    Area: () => <div data-testid="recharts-area" />,
-    XAxis: () => null,
-    YAxis: () => null,
-    CartesianGrid: () => null,
-    Tooltip: () => null,
-}));
+vi.mock("recharts", async () => {
+    const actual = await vi.importActual<typeof import("recharts")>("recharts");
+    return {
+        ...actual,
+        ResponsiveContainer: ({ children }: { children: ReactNode }) => (
+            <div style={{ height: 240, width: 640 }}>{children}</div>
+        ),
+    };
+});
 
 // ── Mock annotateDocument service ─────────────────────────────────────────────
 
@@ -56,24 +45,19 @@ describe("AdherenceChart", () => {
         expected: 7,
     }));
 
-    it("renders the responsive container", () => {
+    it("renders an accessible chart container", () => {
         render(<AdherenceChart data={mockData} />);
-        expect(screen.getByTestId("responsive-container")).toBeDefined();
+        expect(screen.getByLabelText("30-day adherence chart")).toBeInTheDocument();
     });
 
-    it("renders a line chart inside", () => {
+    it("renders chart content instead of the empty state", () => {
         render(<AdherenceChart data={mockData} />);
-        expect(screen.getByTestId("line-chart")).toBeDefined();
-    });
-
-    it("renders with aria label for accessibility", () => {
-        const { container } = render(<AdherenceChart data={mockData} />);
-        const labelledEl = container.querySelector("[aria-label]");
-        expect(labelledEl?.getAttribute("aria-label")).toBe("30-day adherence chart");
+        expect(screen.queryByText(/No adherence data available/i)).not.toBeInTheDocument();
     });
 
     it("handles empty data gracefully", () => {
-        expect(() => render(<AdherenceChart data={[]} />)).not.toThrow();
+        render(<AdherenceChart data={[]} />);
+        expect(screen.getByText(/No adherence data available/i)).toBeInTheDocument();
     });
 });
 
@@ -99,21 +83,17 @@ describe("SymptomTimeline", () => {
         },
     ];
 
-    it("renders an area chart with data", () => {
+    it("renders an accessible symptom timeline with legend", () => {
         render(<SymptomTimeline data={mockSymptoms} />);
-        expect(screen.getByTestId("area-chart")).toBeDefined();
+        expect(screen.getByLabelText(/Symptom severity timeline/i)).toBeInTheDocument();
+        expect(screen.getByText(/Mild/i)).toBeInTheDocument();
+        expect(screen.getByText(/Moderate/i)).toBeInTheDocument();
+        expect(screen.getByText(/Severe/i)).toBeInTheDocument();
     });
 
     it("shows empty state when no symptoms", () => {
         render(<SymptomTimeline data={[]} />);
         expect(screen.getByText(/No symptom reports recorded/i)).toBeDefined();
-    });
-
-    it("renders legend labels", () => {
-        render(<SymptomTimeline data={mockSymptoms} />);
-        expect(screen.getByText(/Mild/i)).toBeDefined();
-        expect(screen.getByText(/Moderate/i)).toBeDefined();
-        expect(screen.getByText(/Severe/i)).toBeDefined();
     });
 });
 

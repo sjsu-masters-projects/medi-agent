@@ -131,6 +131,13 @@ export const DocumentParseStatus = {
 } as const;
 export type DocumentParseStatus = (typeof DocumentParseStatus)[keyof typeof DocumentParseStatus];
 
+export const DocumentReviewStatus = {
+    PENDING: "pending",
+    APPROVED: "approved",
+    REJECTED: "rejected",
+} as const;
+export type DocumentReviewStatus = (typeof DocumentReviewStatus)[keyof typeof DocumentReviewStatus];
+
 export const DocumentType = {
     LAB_REPORT: "lab_report", DISCHARGE_SUMMARY: "discharge_summary", PRESCRIPTION: "prescription",
     DIAGNOSTIC_REPORT: "diagnostic_report", INSURANCE: "insurance", REFERRAL: "referral", OTHER: "other",
@@ -356,7 +363,48 @@ export interface Document {
     parseAttempts: number;
     sourceClinic?: string;
     visibility: DocumentVisibility;
+    reviewStatus?: DocumentReviewStatus;
+    reviewedBy?: string;
+    reviewedAt?: string;
+    reviewNote?: string;
     createdAt: string;
+}
+
+export interface DocumentReviewer {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+}
+
+export interface ClinicianPatientDocument {
+    id: string;
+    fileName: string;
+    documentType: DocumentType;
+    parseStatus: DocumentParseStatus | string;
+    aiSummary?: string;
+    createdAt: string;
+    uploadedByRole: UploaderRole;
+    clinicianAnnotation?: string;
+    reviewStatus?: DocumentReviewStatus;
+    reviewedBy?: string;
+    reviewedAt?: string;
+    reviewNote?: string;
+    reviewer?: DocumentReviewer | null;
+}
+
+export interface DocumentReviewQueueItem {
+    id: string;
+    patientId: string;
+    patientFirstName: string;
+    patientLastName: string;
+    fileName: string;
+    documentType: DocumentType;
+    parseStatus: DocumentParseStatus | string;
+    aiSummary?: string;
+    sourceClinic?: string;
+    createdAt: string;
+    uploadedByRole: UploaderRole;
+    reviewStatus: DocumentReviewStatus;
 }
 
 export interface AdherenceLog {

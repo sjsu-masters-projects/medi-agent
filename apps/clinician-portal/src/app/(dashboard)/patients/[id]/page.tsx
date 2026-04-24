@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import {
     HiOutlineArrowLeft,
@@ -13,18 +13,31 @@ import {
     HiOutlineIdentification,
     HiOutlineSparkles,
 } from "react-icons/hi2";
-import { Card, Skeleton } from "@/components/ui";
+import { Card, Modal, Skeleton } from "@/components/ui";
 import { RiskBadge } from "@/components/features/risk-badge";
 import { AdherenceChart } from "@/components/features/adherence-chart";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { DocumentSummary } from "@/components/features/document-summary";
 import {
+    ParseStatusBadge,
+    ReviewStatusBadge,
+} from "@/components/features/document-review-badges";
+import {
+    approveDocumentReview,
+    rejectDocumentReview,
+} from "@/services/clinicians";
+import {
     loadPatientDeepDive,
     triggerSoapNote,
     clearPatientDetail,
 } from "@/store/slices/patient-detail-slice";
 import type { AppDispatch, RootState } from "@/store/store";
+import {
+    DocumentReviewStatus,
+    UploaderRole,
+    getDocumentTypeLabel,
+} from "@/types";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
@@ -39,14 +52,33 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentificati
     { id: "documents", label: "Documents", icon: HiOutlineDocumentText },
 ];
 
+function formatReviewerName(
+    reviewer?: { firstName?: string; lastName?: string } | null,
+): string | null {
+    if (!reviewer) {
+        return null;
+    }
+
+    const fullName = [reviewer.firstName, reviewer.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+    return fullName || null;
+}
+
 // ── Patient Deep Dive Page ─────────────────────────────────────────────────────
 
 export default function PatientDeepDivePage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
     const patientId = params["id"] as string;
     const [activeTab, setActiveTab] = useState<TabId>("profile");
+    const [reviewError, setReviewError] = useState<string | null>(null);
+    const [reviewingDocumentId, setReviewingDocumentId] = useState<string | null>(null);
+    const [rejectingDocumentId, setRejectingDocumentId] = useState<string | null>(null);
+    const [rejectNote, setRejectNote] = useState("");
 
     const { data: patient, loadingProfile, generatingSoap, error } = useSelector(
         (state: RootState) => state.patientDetail,
@@ -61,8 +93,51 @@ export default function PatientDeepDivePage() {
         };
     }, [dispatch, patientId]);
 
+    useEffect(() => {
+        const tab = searchParams.get("tab");
+        if (tab && TABS.some((entry) => entry.id === tab)) {
+            setActiveTab(tab as TabId);
+        }
+    }, [searchParams]);
+
     function handleGenerateSoap() {
         void dispatch(triggerSoapNote({ patientId, lookbackDays: 30 }));
+    }
+
+    async function handleApproveDocument(documentId: string) {
+        setReviewError(null);
+        setReviewingDocumentId(documentId);
+        try {
+            await approveDocumentReview(patientId, documentId);
+            void dispatch(loadPatientDeepDive(patientId));
+        } catch (error) {
+            setReviewError(
+                error instanceof Error ? error.message : "Unable to approve document review.",
+            );
+        } finally {
+            setReviewingDocumentId(null);
+        }
+    }
+
+    async function handleRejectDocument() {
+        if (!rejectingDocumentId) {
+            return;
+        }
+
+        setReviewError(null);
+        setReviewingDocumentId(rejectingDocumentId);
+        try {
+            await rejectDocumentReview(patientId, rejectingDocumentId, rejectNote);
+            void dispatch(loadPatientDeepDive(patientId));
+            setRejectingDocumentId(null);
+            setRejectNote("");
+        } catch (error) {
+            setReviewError(
+                error instanceof Error ? error.message : "Unable to reject document review.",
+            );
+        } finally {
+            setReviewingDocumentId(null);
+        }
     }
 
     if (loadingProfile) {
@@ -554,6 +629,15 @@ export default function PatientDeepDivePage() {
                             </a>
                         </div>
 
+                        {reviewError && (
+                            <div
+                                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                                role="alert"
+                            >
+                                {reviewError}
+                            </div>
+                        )}
+
                         {patient.documents.length === 0 ? (
                             <div className="flex h-40 items-center justify-center text-sm text-gray-400">
                                 No documents on file
@@ -573,35 +657,93 @@ export default function PatientDeepDivePage() {
                                                 />
                                                 <div>
                                                     <p className="text-sm font-semibold text-gray-900">
-                                                        {doc.file_name}
+                                                        {doc.fileName}
                                                     </p>
-                                                    <p className="text-xs text-gray-400">
-                                                        {doc.document_type} ·{" "}
-                                                        {new Date(doc.created_at).toLocaleDateString()} ·
-                                                        uploaded by {doc.uploaded_by_role}
-                                                    </p>
+                                                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                                                        <span>
+                                                            {getDocumentTypeLabel(doc.documentType)} ·{" "}
+                                                            {new Date(
+                                                                doc.createdAt,
+                                                            ).toLocaleDateString()} · uploaded by{" "}
+                                                            {doc.uploadedByRole}
+                                                        </span>
+                                                        {doc.uploadedByRole === UploaderRole.PATIENT &&
+                                                            doc.reviewStatus && (
+                                                                <ReviewStatusBadge
+                                                                    reviewStatus={doc.reviewStatus}
+                                                                />
+                                                            )}
+                                                    </div>
+                                                    {doc.uploadedByRole === UploaderRole.PATIENT &&
+                                                        doc.reviewStatus &&
+                                                        doc.reviewStatus !==
+                                                            DocumentReviewStatus.PENDING && (
+                                                            <p className="mt-1 text-xs text-gray-500">
+                                                                {doc.reviewStatus ===
+                                                                DocumentReviewStatus.APPROVED
+                                                                    ? "Approved"
+                                                                    : "Rejected"}
+                                                                {doc.reviewedAt
+                                                                    ? ` on ${new Date(doc.reviewedAt).toLocaleString()}`
+                                                                    : ""}
+                                                                {formatReviewerName(doc.reviewer)
+                                                                    ? ` by ${formatReviewerName(doc.reviewer)}`
+                                                                    : ""}
+                                                            </p>
+                                                        )}
+                                                    {doc.reviewStatus ===
+                                                        DocumentReviewStatus.REJECTED &&
+                                                        doc.reviewNote && (
+                                                            <p className="mt-1 text-xs text-rose-600">
+                                                                Review note: {doc.reviewNote}
+                                                            </p>
+                                                        )}
                                                 </div>
                                             </div>
-                                            <span
-                                                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                                    doc.parse_status === "done"
-                                                        ? "bg-green-100 text-green-700"
-                                                        : doc.parse_status === "error"
-                                                          ? "bg-red-100 text-red-700"
-                                                          : "bg-amber-100 text-amber-700"
-                                                }`}
-                                            >
-                                                {doc.parse_status}
-                                            </span>
+                                            <ParseStatusBadge parseStatus={doc.parseStatus} />
                                         </div>
 
-                                        {doc.ai_summary && (
+                                        {doc.uploadedByRole === UploaderRole.PATIENT &&
+                                            doc.reviewStatus === DocumentReviewStatus.PENDING && (
+                                                <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-5 py-4">
+                                                    <button
+                                                        className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                        disabled={
+                                                            reviewingDocumentId === doc.id
+                                                        }
+                                                        onClick={() =>
+                                                            void handleApproveDocument(doc.id)
+                                                        }
+                                                        type="button"
+                                                    >
+                                                        {reviewingDocumentId === doc.id
+                                                            ? "Saving..."
+                                                            : "Approve"}
+                                                    </button>
+                                                    <button
+                                                        className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                        disabled={
+                                                            reviewingDocumentId === doc.id
+                                                        }
+                                                        onClick={() => {
+                                                            setReviewError(null);
+                                                            setRejectingDocumentId(doc.id);
+                                                            setRejectNote(doc.reviewNote ?? "");
+                                                        }}
+                                                        type="button"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                        {doc.aiSummary && (
                                             <div className="px-5 py-4">
                                                 <DocumentSummary
                                                     documentId={doc.id}
-                                                    existingAnnotation={doc.clinician_annotation}
+                                                    existingAnnotation={doc.clinicianAnnotation}
                                                     patientId={patientId}
-                                                    summaryText={doc.ai_summary}
+                                                    summaryText={doc.aiSummary}
                                                 />
                                             </div>
                                         )}
@@ -609,6 +751,54 @@ export default function PatientDeepDivePage() {
                                 ))}
                             </div>
                         )}
+
+                        <Modal
+                            onClose={() => {
+                                if (reviewingDocumentId) {
+                                    return;
+                                }
+                                setRejectingDocumentId(null);
+                                setRejectNote("");
+                            }}
+                            open={Boolean(rejectingDocumentId)}
+                            title="Reject patient upload"
+                        >
+                            <div className="space-y-4">
+                                <p className="text-sm text-gray-600">
+                                    Add an optional note to explain why this patient-uploaded
+                                    document needs follow-up or correction.
+                                </p>
+                                <label className="block text-sm font-medium text-gray-700">
+                                    Review note
+                                    <textarea
+                                        className="mt-2 min-h-28 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        onChange={(event) => setRejectNote(event.target.value)}
+                                        placeholder="Optional note for the care team."
+                                        value={rejectNote}
+                                    />
+                                </label>
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                                        onClick={() => {
+                                            setRejectingDocumentId(null);
+                                            setRejectNote("");
+                                        }}
+                                        type="button"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                        disabled={!rejectingDocumentId || reviewingDocumentId !== null}
+                                        onClick={() => void handleRejectDocument()}
+                                        type="button"
+                                    >
+                                        {reviewingDocumentId ? "Saving..." : "Confirm rejection"}
+                                    </button>
+                                </div>
+                            </div>
+                        </Modal>
                     </div>
                 )}
             </Card>

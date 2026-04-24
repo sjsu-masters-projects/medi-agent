@@ -16,9 +16,13 @@ import pytest
 from app.agents.summarization.agent import SummarizationAgent, SummarizationInput
 from app.agents.summarization.graph import (
     _calculate_adherence_stats,
+    gather_patient_data,
+    generate_soap_note,
     prepare_context,
+    store_soap_note,
 )
 from app.agents.summarization.prompts import build_soap_prompt
+from app.models.dashboard import SoapNote
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -200,6 +204,126 @@ class TestPrepareContext:
         ctx = result["patient_context"]
         assert ctx["medications"] == []
         assert ctx["symptom_reports"] == []
+
+
+class TestGraphNodes:
+    """Direct coverage for summarization graph nodes."""
+
+    @pytest.mark.asyncio
+    async def test_gather_patient_data_fetches_structured_state(self, mock_db, patient_id):
+        result = await gather_patient_data(
+            {"patient_id": str(patient_id), "clinician_id": str(uuid4()), "lookback_days": 30},
+            mock_db,
+        )
+
+        assert result["patient_info"]["first_name"] == "Jane"
+        assert result["medications"][0]["name"] == "Metformin"
+        assert result["chat_messages"][0]["content"] == "Feeling better today"
+
+    @pytest.mark.asyncio
+    async def test_generate_soap_note_returns_structured_payload(self):
+        state = {
+            "patient_context": {
+                "patient_info": {"first_name": "Jane", "last_name": "Smith"},
+                "medications": [],
+                "adherence_stats": {},
+                "symptom_reports": [],
+                "chat_messages": [],
+                "conditions": [],
+                "allergies": [],
+                "adr_assessments": [],
+                "lookback_days": 30,
+            }
+        }
+
+        with patch(
+            "app.agents.summarization.graph.GeminiClient.generate_structured",
+            new=AsyncMock(
+                return_value=SoapNote(
+                    subjective="Subjective",
+                    objective="Objective",
+                    assessment="Assessment",
+                    plan="Plan",
+                )
+            ),
+        ):
+            result = await generate_soap_note(state)
+
+        assert result["error"] is None
+        assert result["soap_note"]["plan"] == "Plan"
+
+    @pytest.mark.asyncio
+    async def test_generate_soap_note_handles_llm_failure(self):
+        state = {
+            "patient_context": {
+                "patient_info": {"first_name": "Jane", "last_name": "Smith"},
+                "medications": [],
+                "adherence_stats": {},
+                "symptom_reports": [],
+                "chat_messages": [],
+                "conditions": [],
+                "allergies": [],
+                "adr_assessments": [],
+                "lookback_days": 30,
+            }
+        }
+
+        with patch(
+            "app.agents.summarization.graph.GeminiClient.generate_structured",
+            new=AsyncMock(side_effect=RuntimeError("LLM unavailable")),
+        ):
+            result = await generate_soap_note(state)
+
+        assert result["soap_note"] == {}
+        assert "LLM generation failed" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_store_soap_note_inserts_when_generation_succeeds(self):
+        db = MagicMock()
+        query = MagicMock()
+        query.insert.return_value = query
+        query.execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": str(uuid4()),
+                    "subjective": "Subjective",
+                    "objective": "Objective",
+                    "assessment": "Assessment",
+                    "plan": "Plan",
+                }
+            ]
+        )
+        db.table.return_value = query
+
+        result = await store_soap_note(
+            {
+                "patient_id": str(uuid4()),
+                "clinician_id": str(uuid4()),
+                "soap_note": {
+                    "subjective": "Subjective",
+                    "objective": "Objective",
+                    "assessment": "Assessment",
+                    "plan": "Plan",
+                },
+            },
+            db,
+        )
+
+        assert result["stored_note_id"]
+        assert result["soap_note"]["subjective"] == "Subjective"
+
+    @pytest.mark.asyncio
+    async def test_store_soap_note_noops_when_error_exists(self, mock_db):
+        state = {
+            "patient_id": str(uuid4()),
+            "clinician_id": str(uuid4()),
+            "soap_note": {},
+            "error": "LLM generation failed",
+        }
+
+        result = await store_soap_note(state, mock_db)
+
+        assert result == state
 
 
 # ── build_soap_prompt tests ───────────────────────────────────────────────────
