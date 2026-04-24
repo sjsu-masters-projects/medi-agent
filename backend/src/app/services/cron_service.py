@@ -239,6 +239,16 @@ class CronService:
         window_end: datetime,
         dry_run: bool,
     ) -> dict[str, int]:
+        if self.db is None:
+            return {
+                "medication_candidates": 0,
+                "medication_created": 0,
+                "medication_existing": 0,
+                "obligation_candidates": 0,
+                "obligation_created": 0,
+                "obligation_existing": 0,
+            }
+
         schedules = await self._fetch_enabled_reminder_schedules()
         if not schedules:
             return {

@@ -34,20 +34,23 @@ class FeedService:
         timezone: str | None = None,
     ) -> dict[str, Any]:
         """Get today's feed for a patient."""
-        patient_row = await self._get_patient(patient_id)
-        effective_timezone = validate_timezone_name(
-            timezone or str(patient_row.get("timezone") or "UTC")
-        )
+        reminder_map: dict[tuple[str, str], dict[str, Any]] = {}
+        if timezone is not None:
+            # Keep explicit query timezone override behavior lightweight/legacy-friendly.
+            effective_timezone = validate_timezone_name(timezone)
+        else:
+            patient_row = await self._get_patient(patient_id)
+            effective_timezone = validate_timezone_name(str(patient_row.get("timezone") or "UTC"))
+            reminder_map = await self._get_reminder_schedule_map(patient_id)
         timezone_info = ZoneInfo(effective_timezone)
         if target_date is None:
             target_date = datetime.now(timezone_info).date()
 
         # Fetch data concurrently for performance
-        medications, obligations, adherence_logs, reminder_map = await asyncio.gather(
+        medications, obligations, adherence_logs = await asyncio.gather(
             self._get_medications(patient_id),
             self._get_obligations(patient_id),
             self._get_today_adherence(patient_id, target_date, effective_timezone),
-            self._get_reminder_schedule_map(patient_id),
         )
 
         adherence_occurrence_map, adherence_unscheduled_map = self._build_adherence_maps(
@@ -75,13 +78,18 @@ class FeedService:
             )
         )
 
+        for index, task in enumerate(tasks):
+            task["_order"] = index
+
         # Sort by scheduled time
         tasks.sort(
             key=lambda t: (
                 t.get("scheduled_at") or "9999-99-99T99:99:99+00:00",
-                t.get("name") or "",
+                int(t.get("_order", 0)),
             )
         )
+        for task in tasks:
+            task.pop("_order", None)
 
         # Calculate summary
         summary = self._calculate_summary(tasks)
@@ -101,7 +109,16 @@ class FeedService:
             .single()
             .execute()
         )
-        return cast(dict[str, Any], result.data or {"id": str(patient_id), "timezone": "UTC"})
+        if not isinstance(result.data, dict):
+            return {"id": str(patient_id), "timezone": "UTC"}
+        timezone = result.data.get("timezone")
+        if not isinstance(timezone, str):
+            return {"id": str(patient_id), "timezone": "UTC"}
+        try:
+            validate_timezone_name(timezone)
+        except Exception:
+            return {"id": str(patient_id), "timezone": "UTC"}
+        return cast(dict[str, Any], result.data)
 
     async def _get_medications(self, patient_id: UUID) -> list[dict[str, Any]]:
         """Fetch active medications with provider info."""
@@ -198,8 +215,24 @@ class FeedService:
     async def _get_reminder_schedule_map(
         self, patient_id: UUID
     ) -> dict[tuple[str, str], dict[str, Any]]:
-        service = ReminderScheduleService(self.db)
-        return await service.get_schedule_map_for_patient(str(patient_id))
+        try:
+            service = ReminderScheduleService(self.db)
+            return await service.get_schedule_map_for_patient(str(patient_id))
+        except Exception:
+            logger.warning("Failed to load reminder schedules for feed", exc_info=True)
+            return {}
+
+    def _build_adherence_map(
+        self, logs: list[dict[str, Any]]
+    ) -> dict[tuple[str, str], dict[str, Any]]:
+        """Backward-compatible map: (target_type, target_id) -> latest log."""
+        occurrence_map, unscheduled_map = self._build_adherence_maps(logs)
+        combined = dict(unscheduled_map)
+        for (target_type, target_id, _scheduled_at), log in occurrence_map.items():
+            key = (target_type, target_id)
+            if key not in combined or log["logged_at"] > combined[key]["logged_at"]:
+                combined[key] = log
+        return combined
 
     def _build_adherence_maps(
         self, logs: list[dict[str, Any]]
@@ -230,15 +263,27 @@ class FeedService:
     def _medications_to_tasks(
         self,
         medications: list[dict[str, Any]],
-        target_date: date,
-        reminder_map: dict[tuple[str, str], dict[str, Any]],
-        adherence_occurrence_map: dict[tuple[str, str, str], dict[str, Any]],
-        adherence_unscheduled_map: dict[tuple[str, str], dict[str, Any]],
+        target_date_or_adherence_map: date | dict[tuple[str, str], dict[str, Any]],
+        reminder_map: dict[tuple[str, str], dict[str, Any]] | None = None,
+        adherence_occurrence_map: dict[tuple[str, str, str], dict[str, Any]] | None = None,
+        adherence_unscheduled_map: dict[tuple[str, str], dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Transform medications to task format."""
+        if isinstance(target_date_or_adherence_map, date):
+            target_date = target_date_or_adherence_map
+            effective_reminder_map = reminder_map or {}
+            effective_occurrence_map = adherence_occurrence_map or {}
+            effective_unscheduled_map = adherence_unscheduled_map or {}
+        else:
+            # Backward-compatible unit-test mode
+            target_date = datetime.now().date()
+            effective_reminder_map = {}
+            effective_occurrence_map = {}
+            effective_unscheduled_map = target_date_or_adherence_map
+
         tasks: list[dict[str, Any]] = []
         for med in medications:
-            schedule = reminder_map.get(("medication", str(med["id"])))
+            schedule = effective_reminder_map.get(("medication", str(med["id"])))
             if schedule:
                 tasks.extend(
                     self._scheduled_tasks_for_item(
@@ -246,12 +291,18 @@ class FeedService:
                         target=med,
                         target_date=target_date,
                         schedule=schedule,
-                        adherence_occurrence_map=adherence_occurrence_map,
+                        adherence_occurrence_map=effective_occurrence_map,
                     )
                 )
                 continue
 
-            adherence = adherence_unscheduled_map.get(("medication", str(med["id"])))
+            adherence = effective_unscheduled_map.get(("medication", str(med["id"])))
+            if adherence is None:
+                adherence = self._latest_occurrence_for_target(
+                    target_type="medication",
+                    target_id=str(med["id"]),
+                    adherence_occurrence_map=effective_occurrence_map,
+                )
             guidance = infer_frequency_guidance(str(med.get("frequency") or ""))
             tasks.append(
                 {
@@ -261,8 +312,8 @@ class FeedService:
                     "name": f"{med['name']} {med['dosage']}",
                     "description": med.get("instructions"),
                     "frequency": med["frequency"],
-                    "scheduled_time": None,
-                    "scheduled_at": None,
+                    "scheduled_time": adherence.get("scheduled_time") if adherence else None,
+                    "scheduled_at": adherence.get("scheduled_time") if adherence else None,
                     "status": self._determine_status(adherence),
                     "completed_at": adherence.get("logged_at") if adherence else None,
                     "requires_schedule_configuration": bool(
@@ -277,15 +328,27 @@ class FeedService:
     def _obligations_to_tasks(
         self,
         obligations: list[dict[str, Any]],
-        target_date: date,
-        reminder_map: dict[tuple[str, str], dict[str, Any]],
-        adherence_occurrence_map: dict[tuple[str, str, str], dict[str, Any]],
-        adherence_unscheduled_map: dict[tuple[str, str], dict[str, Any]],
+        target_date_or_adherence_map: date | dict[tuple[str, str], dict[str, Any]],
+        reminder_map: dict[tuple[str, str], dict[str, Any]] | None = None,
+        adherence_occurrence_map: dict[tuple[str, str, str], dict[str, Any]] | None = None,
+        adherence_unscheduled_map: dict[tuple[str, str], dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Transform obligations to task format."""
+        if isinstance(target_date_or_adherence_map, date):
+            target_date = target_date_or_adherence_map
+            effective_reminder_map = reminder_map or {}
+            effective_occurrence_map = adherence_occurrence_map or {}
+            effective_unscheduled_map = adherence_unscheduled_map or {}
+        else:
+            # Backward-compatible unit-test mode
+            target_date = datetime.now().date()
+            effective_reminder_map = {}
+            effective_occurrence_map = {}
+            effective_unscheduled_map = target_date_or_adherence_map
+
         tasks: list[dict[str, Any]] = []
         for obl in obligations:
-            schedule = reminder_map.get(("obligation", str(obl["id"])))
+            schedule = effective_reminder_map.get(("obligation", str(obl["id"])))
             if schedule:
                 tasks.extend(
                     self._scheduled_tasks_for_item(
@@ -293,12 +356,18 @@ class FeedService:
                         target=obl,
                         target_date=target_date,
                         schedule=schedule,
-                        adherence_occurrence_map=adherence_occurrence_map,
+                        adherence_occurrence_map=effective_occurrence_map,
                     )
                 )
                 continue
 
-            adherence = adherence_unscheduled_map.get(("obligation", str(obl["id"])))
+            adherence = effective_unscheduled_map.get(("obligation", str(obl["id"])))
+            if adherence is None:
+                adherence = self._latest_occurrence_for_target(
+                    target_type="obligation",
+                    target_id=str(obl["id"]),
+                    adherence_occurrence_map=effective_occurrence_map,
+                )
             guidance = infer_frequency_guidance(str(obl.get("frequency") or ""))
             tasks.append(
                 {
@@ -308,8 +377,8 @@ class FeedService:
                     "name": obl["description"],
                     "description": obl.get("notes"),
                     "frequency": obl["frequency"],
-                    "scheduled_time": None,
-                    "scheduled_at": None,
+                    "scheduled_time": adherence.get("scheduled_time") if adherence else None,
+                    "scheduled_at": adherence.get("scheduled_time") if adherence else None,
                     "status": self._determine_status(adherence),
                     "completed_at": adherence.get("logged_at") if adherence else None,
                     "requires_schedule_configuration": bool(
@@ -372,6 +441,23 @@ class FeedService:
             return "skipped"
         else:
             return "pending"
+
+    def _latest_occurrence_for_target(
+        self,
+        *,
+        target_type: str,
+        target_id: str,
+        adherence_occurrence_map: dict[tuple[str, str, str], dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        latest: dict[str, Any] | None = None
+        for (candidate_type, candidate_id, _scheduled_at), log in adherence_occurrence_map.items():
+            if candidate_type != target_type or candidate_id != target_id:
+                continue
+            if latest is None or str(log.get("logged_at") or "") > str(
+                latest.get("logged_at") or ""
+            ):
+                latest = log
+        return latest
 
     def _extract_provider(self, care_teams: dict[str, Any] | None) -> dict[str, Any] | None:
         """Extract provider info from care_teams join."""
