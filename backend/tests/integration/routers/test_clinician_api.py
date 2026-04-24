@@ -3,7 +3,7 @@
 Uses FastAPI dependency overrides for proper authentication mocking.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -15,7 +15,7 @@ from app.db.connection import get_db
 from app.main import app
 from app.middleware.rate_limit import RateLimitResult
 from app.models.auth import CurrentUser
-from app.routers.clinicians import _clinician_dep
+from app.routers.clinicians import _clinician_dep, _get_service
 
 
 @pytest.fixture
@@ -66,6 +66,18 @@ def override_db(mock_supabase_db):
 
     app.dependency_overrides[get_db] = _get_db_override
     yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def override_service():
+    service = MagicMock()
+
+    def _get_service_override():
+        return service
+
+    app.dependency_overrides[_get_service] = _get_service_override
+    yield service
     app.dependency_overrides.clear()
 
 
@@ -560,6 +572,188 @@ class TestRevokeInviteCode:
         response = client.post(f"/api/v1/clinicians/me/invite-codes/{care_team_id}/revoke")
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+class TestDashboardRoutes:
+    """GET /api/v1/clinicians/me/dashboard"""
+
+    def test_success(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        override_service.get_dashboard_data = AsyncMock(
+            return_value={
+                "patients": [
+                    {
+                        "patient_id": str(patient_id),
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "risk_level": "high",
+                        "adherence_score": 0.4,
+                        "open_adr_count": 1,
+                        "active_med_count": 5,
+                        "recent_symptom_severity": 8,
+                        "last_activity": "Reported symptom 2h ago",
+                    }
+                ],
+                "total": 1,
+                "high_risk": 1,
+                "medium_risk": 0,
+                "low_risk": 0,
+                "medwatch_pending": 2,
+            }
+        )
+
+        response = client.get("/api/v1/clinicians/me/dashboard", params={"page": 1, "page_size": 25})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["total"] == 1
+        assert data["patients"][0]["risk_level"] == "high"
+
+
+class TestPatientDeepDiveRoutes:
+    """GET /api/v1/clinicians/me/patients/{patient_id}/deep-dive"""
+
+    def test_success_includes_review_metadata(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        document_id = uuid4()
+        reviewer_id = uuid4()
+        override_service.get_patient_deep_dive = AsyncMock(
+            return_value={
+                "patient_id": str(patient_id),
+                "first_name": "John",
+                "last_name": "Doe",
+                "email": "john@example.com",
+                "risk_level": "medium",
+                "adherence_score": 0.78,
+                "medications": [],
+                "adherence_series": [],
+                "symptom_reports": [],
+                "chat_messages": [],
+                "conditions": [],
+                "allergies": [],
+                "documents": [
+                    {
+                        "id": str(document_id),
+                        "file_name": "lab.pdf",
+                        "document_type": "lab_report",
+                        "parse_status": "completed",
+                        "ai_summary": "Summary",
+                        "created_at": "2026-04-21T10:00:00Z",
+                        "uploaded_by_role": "patient",
+                        "clinician_annotation": "Looks good",
+                        "review_status": "approved",
+                        "reviewed_by": str(reviewer_id),
+                        "reviewed_at": "2026-04-22T08:00:00Z",
+                        "review_note": "Clinically consistent",
+                        "reviewer": {
+                            "id": str(reviewer_id),
+                            "first_name": "Priya",
+                            "last_name": "Shah",
+                        },
+                    }
+                ],
+                "latest_soap_note": None,
+                "obligations": [
+                    {
+                        "id": str(uuid4()),
+                        "obligation_type": "exercise",
+                        "description": "Walk daily",
+                        "frequency": "daily",
+                        "is_active": True,
+                        "created_at": "2026-04-20T08:00:00Z",
+                    }
+                ],
+                "obligation_completion_rate": 0.5,
+            }
+        )
+
+        response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/deep-dive")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["documents"][0]["review_status"] == "approved"
+        assert data["documents"][0]["reviewer"]["first_name"] == "Priya"
+        assert data["obligations"][0]["description"] == "Walk daily"
+
+
+class TestDocumentReviewQueueRoutes:
+    """Review queue route coverage."""
+
+    def test_list_review_queue(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        document_id = uuid4()
+        override_service.list_document_review_queue = AsyncMock(
+            return_value=[
+                {
+                    "id": str(document_id),
+                    "patient_id": str(patient_id),
+                    "patient_first_name": "Nina",
+                    "patient_last_name": "West",
+                    "file_name": "upload.pdf",
+                    "document_type": "lab_report",
+                    "parse_status": "pending",
+                    "ai_summary": "Summary",
+                    "source_clinic": "North Clinic",
+                    "created_at": "2026-04-20T10:00:00Z",
+                    "uploaded_by_role": "patient",
+                    "review_status": "pending",
+                }
+            ]
+        )
+
+        response = client.get("/api/v1/clinicians/me/document-review-queue")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["patient_first_name"] == "Nina"
+
+    def test_approve_document_review(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        document_id = uuid4()
+        clinician_id = uuid4()
+        override_service.approve_document_review = AsyncMock(
+            return_value={
+                "status": "reviewed",
+                "document_id": str(document_id),
+                "patient_id": str(patient_id),
+                "review_status": "approved",
+                "reviewed_by": str(clinician_id),
+                "reviewed_at": "2026-04-22T10:00:00Z",
+                "review_note": None,
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/patients/{patient_id}/documents/{document_id}/approve"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["review_status"] == "approved"
+
+    def test_reject_document_review(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        document_id = uuid4()
+        clinician_id = uuid4()
+        override_service.reject_document_review = AsyncMock(
+            return_value={
+                "status": "reviewed",
+                "document_id": str(document_id),
+                "patient_id": str(patient_id),
+                "review_status": "rejected",
+                "reviewed_by": str(clinician_id),
+                "reviewed_at": "2026-04-22T10:00:00Z",
+                "review_note": "Unreadable upload",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/patients/{patient_id}/documents/{document_id}/reject",
+            json={"review_note": "Unreadable upload"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["review_status"] == "rejected"
 
 
 class TestPatientA2ATimeline:

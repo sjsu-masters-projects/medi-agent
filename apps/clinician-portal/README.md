@@ -61,10 +61,19 @@ Invite history is intentionally role-sensitive:
 
 - login flow: `src/app/(auth)/login/page.tsx`
 - admin bootstrap: `src/app/(auth)/signup/admin/page.tsx`
+- dashboard review queue: `src/app/(dashboard)/review-queue/page.tsx`
+- patient deep dive: `src/app/(dashboard)/patients/[id]/page.tsx`
+- patient deep dive documents panel: `src/components/features/patient-documents-panel.tsx`
 - settings / invite history: `src/app/(dashboard)/settings/page.tsx`
 - MFA setup: `src/app/(dashboard)/settings/mfa/page.tsx`
-- API client: `src/services/api.ts`
+- clinician API client: `src/services/clinicians.ts`
 - stored clinic context: `src/services/clinic-context.ts`
+
+## Phase 6 Review Workflow
+
+- Patient-uploaded documents enter a shared clinician review queue.
+- Review actions are surfaced in both the dedicated review queue and the patient deep dive documents tab.
+- The deep-dive documents experience is intentionally factored into `PatientDocumentsPanel` so document review state, modal flows, and refresh behavior stay isolated from the rest of the deep-dive page.
 
 ## Notes
 

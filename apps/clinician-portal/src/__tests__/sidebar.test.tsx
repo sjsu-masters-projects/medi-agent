@@ -61,6 +61,7 @@ describe("Sidebar", () => {
 
         expect(screen.getByText("Risk Radar")).toBeInTheDocument();
         expect(screen.getByText("Patient Roster")).toBeInTheDocument();
+        expect(screen.getByText("Review Queue")).toBeInTheDocument();
         expect(screen.getByText("MedWatch Queue")).toBeInTheDocument();
         expect(screen.getByText("Messages")).toBeInTheDocument();
         expect(screen.getByText("Clinic Settings")).toBeInTheDocument();

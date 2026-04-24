@@ -32,6 +32,7 @@ from app.core.exceptions import (
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
+from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,11 @@ class ClinicianService:
         self.clinic_repo = ClinicRepository(self)
         self.clinician_repo = ClinicianRepository(self)
         self.care_team_repo = CareTeamRepository(self)
+        self.document_workflows = ClinicianDocumentWorkflowService(
+            db=db,
+            care_team_repo=self.care_team_repo,
+            execute=self._execute,
+        )
 
     # ── Profile ─────────────────────────────────────
 
@@ -424,12 +430,7 @@ class ClinicianService:
 
         Security: verifies care_team assignment before fetching.
         """
-        assignment_rows = await self.care_team_repo.find_active_assignment(
-            str(clinician_id),
-            str(patient_id),
-        )
-        if not assignment_rows:
-            raise AuthorizationError("You are not assigned to this patient")
+        await self._assert_patient_assignment(clinician_id, patient_id)
 
         pid = str(patient_id)
 
@@ -494,16 +495,7 @@ class ClinicianService:
         )
         allergies = cast(list[dict[str, Any]], allergies_res.data or [])
 
-        docs = await self._execute(
-            self.db.table("documents")
-            .select(
-                "id, file_name, document_type, parse_status, ai_summary, "
-                "created_at, uploaded_by_role, clinician_annotation"
-            )
-            .eq("patient_id", pid)
-            .order("created_at", desc=True)
-        )
-        documents = cast(list[dict[str, Any]], docs.data or [])
+        documents = await self.document_workflows.fetch_patient_documents(patient_id)
 
         soap_res = await self._execute(
             self.db.table("soap_notes")
@@ -562,6 +554,38 @@ class ClinicianService:
             "obligation_completion_rate": obligation_completion_rate,
         }
 
+    async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
+        """List pending patient-uploaded documents for assigned patients."""
+        return await self.document_workflows.list_document_review_queue(clinician_id)
+
+    async def approve_document_review(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        document_id: UUID,
+    ) -> dict[str, Any]:
+        """Approve a pending patient-uploaded document review."""
+        return await self.document_workflows.approve_document_review(
+            clinician_id,
+            patient_id,
+            document_id,
+        )
+
+    async def reject_document_review(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        document_id: UUID,
+        review_note: str | None = None,
+    ) -> dict[str, Any]:
+        """Reject a pending patient-uploaded document review with optional note."""
+        return await self.document_workflows.reject_document_review(
+            clinician_id,
+            patient_id,
+            document_id,
+            review_note,
+        )
+
     async def set_patient_obligation(
         self, clinician_id: UUID, patient_id: UUID, obligation_data: dict[str, Any]
     ) -> Any:
@@ -598,34 +622,12 @@ class ClinicianService:
 
         Security: verifies both care_team assignment AND document belongs to patient.
         """
-        assignment_rows = await self.care_team_repo.find_active_assignment(
-            str(clinician_id),
-            str(patient_id),
+        return await self.document_workflows.save_document_annotation(
+            clinician_id,
+            patient_id,
+            document_id,
+            annotation_text,
         )
-        if not assignment_rows:
-            raise AuthorizationError("You are not assigned to this patient")
-
-        doc_check = await self._execute(
-            self.db.table("documents")
-            .select("id")
-            .eq("id", str(document_id))
-            .eq("patient_id", str(patient_id))
-        )
-        if not doc_check.data:
-            raise NotFoundError("Document", str(document_id))
-
-        await self._execute(
-            self.db.table("documents")
-            .update(
-                {
-                    "clinician_annotation": annotation_text,
-                    "annotation_by": str(clinician_id),
-                }
-            )
-            .eq("id", str(document_id))
-        )
-
-        return {"status": "saved", "document_id": str(document_id)}
 
     async def get_patient_a2a_timeline(
         self,
@@ -667,6 +669,15 @@ class ClinicianService:
         """Return list of patient UUIDs assigned to this clinician."""
         rows = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
         return [UUID(row["patient_id"]) for row in rows if row.get("patient_id")]
+
+    async def _assert_patient_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
+        """Require an active care-team assignment before clinician access."""
+        assignment_rows = await self.care_team_repo.find_active_assignment(
+            str(clinician_id),
+            str(patient_id),
+        )
+        if not assignment_rows:
+            raise AuthorizationError("You are not assigned to this patient")
 
     async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:
         """Count draft/open MedWatch assessments across all assigned patients."""

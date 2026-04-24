@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import {
     HiOutlineArrowLeft,
@@ -18,7 +18,7 @@ import { RiskBadge } from "@/components/features/risk-badge";
 import { AdherenceChart } from "@/components/features/adherence-chart";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
-import { DocumentSummary } from "@/components/features/document-summary";
+import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
 import {
     loadPatientDeepDive,
     triggerSoapNote,
@@ -39,14 +39,22 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentificati
     { id: "documents", label: "Documents", icon: HiOutlineDocumentText },
 ];
 
+function isTabId(value: string | null): value is TabId {
+    return value !== null && TABS.some((entry) => entry.id === value);
+}
+
 // ── Patient Deep Dive Page ─────────────────────────────────────────────────────
 
 export default function PatientDeepDivePage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
     const patientId = params["id"] as string;
-    const [activeTab, setActiveTab] = useState<TabId>("profile");
+    const [activeTab, setActiveTab] = useState<TabId>(() => {
+        const requestedTab = searchParams.get("tab");
+        return isTabId(requestedTab) ? requestedTab : "profile";
+    });
 
     const { data: patient, loadingProfile, generatingSoap, error } = useSelector(
         (state: RootState) => state.patientDetail,
@@ -538,78 +546,11 @@ export default function PatientDeepDivePage() {
 
                 {/* ── Documents ── */}
                 {activeTab === "documents" && (
-                    <div
-                        aria-labelledby="tab-btn-documents"
-                        id="tab-panel-documents"
-                        role="tabpanel"
-                    >
-                        <div className="mb-6 flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
-                            <a
-                                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                                href={`/patients/${patientId}/upload`}
-                                id="clinician-upload-link"
-                            >
-                                + Upload Document
-                            </a>
-                        </div>
-
-                        {patient.documents.length === 0 ? (
-                            <div className="flex h-40 items-center justify-center text-sm text-gray-400">
-                                No documents on file
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                {patient.documents.map((doc) => (
-                                    <div
-                                        className="rounded-xl border border-gray-200 bg-white"
-                                        key={doc.id}
-                                    >
-                                        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <HiOutlineDocumentText
-                                                    aria-hidden="true"
-                                                    className="h-5 w-5 text-blue-500"
-                                                />
-                                                <div>
-                                                    <p className="text-sm font-semibold text-gray-900">
-                                                        {doc.file_name}
-                                                    </p>
-                                                    <p className="text-xs text-gray-400">
-                                                        {doc.document_type} ·{" "}
-                                                        {new Date(doc.created_at).toLocaleDateString()} ·
-                                                        uploaded by {doc.uploaded_by_role}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <span
-                                                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                                    doc.parse_status === "done"
-                                                        ? "bg-green-100 text-green-700"
-                                                        : doc.parse_status === "error"
-                                                          ? "bg-red-100 text-red-700"
-                                                          : "bg-amber-100 text-amber-700"
-                                                }`}
-                                            >
-                                                {doc.parse_status}
-                                            </span>
-                                        </div>
-
-                                        {doc.ai_summary && (
-                                            <div className="px-5 py-4">
-                                                <DocumentSummary
-                                                    documentId={doc.id}
-                                                    existingAnnotation={doc.clinician_annotation}
-                                                    patientId={patientId}
-                                                    summaryText={doc.ai_summary}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    <PatientDocumentsPanel
+                        documents={patient.documents}
+                        onRefresh={() => void dispatch(loadPatientDeepDive(patientId))}
+                        patientId={patientId}
+                    />
                 )}
             </Card>
         </div>

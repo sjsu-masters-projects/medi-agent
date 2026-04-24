@@ -95,6 +95,12 @@ class UploaderRole(StrEnum):
     CLINICIAN = "clinician"
 
 
+class DocumentReviewStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 # ── Medications ────────────────────────────────────
 
 

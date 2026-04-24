@@ -14,6 +14,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
+from app.models.enums import DocumentReviewStatus, UploaderRole
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,14 @@ class DocumentService:
             "parse_status": "pending",
             "parse_error": None,
             "parse_attempts": 0,
+            "review_status": (
+                DocumentReviewStatus.PENDING.value
+                if uploaded_by_role == UploaderRole.PATIENT.value
+                else None
+            ),
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "review_note": None,
         }
 
         result = self.db.table("documents").insert(row).execute()

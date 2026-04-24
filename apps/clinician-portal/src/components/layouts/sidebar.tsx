@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { HiOutlineArrowRightOnRectangle, HiOutlineChartBarSquare, HiOutlineChatBubbleLeftRight, HiOutlineCog6Tooth, HiOutlineExclamationTriangle, HiOutlineUsers } from "react-icons/hi2";
+import { HiOutlineArrowRightOnRectangle, HiOutlineChartBarSquare, HiOutlineChatBubbleLeftRight, HiOutlineClipboardDocumentList, HiOutlineCog6Tooth, HiOutlineExclamationTriangle, HiOutlineUsers } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { clearStoredSession } from "@/services/auth-session";
 import { api } from "@/services/api";
@@ -14,6 +14,7 @@ import { ClinicianRole, PortalUserRole } from "@/types";
 const primaryNavigation = [
     { href: "/dashboard", icon: HiOutlineChartBarSquare, label: "Risk Radar" },
     { href: "/patients", icon: HiOutlineUsers, label: "Patient Roster" },
+    { href: "/review-queue", icon: HiOutlineClipboardDocumentList, label: "Review Queue" },
     { href: "/medwatch", icon: HiOutlineExclamationTriangle, label: "MedWatch Queue" },
     { href: "/messages", icon: HiOutlineChatBubbleLeftRight, label: "Messages" },
 ];

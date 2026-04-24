@@ -31,6 +31,9 @@ from app.models.dashboard import (
     DashboardResponse,
     DashboardSortBy,
     DashboardSortOrder,
+    DocumentReviewActionRequest,
+    DocumentReviewActionResponse,
+    DocumentReviewQueueItem,
     ObligationSetRequest,
     PatientDeepDive,
     PatientRiskData,
@@ -164,6 +167,56 @@ async def revoke_invite_code(
 
 
 # ── Phase 6 endpoints ────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/me/document-review-queue",
+    response_model=list[DocumentReviewQueueItem],
+    summary="List pending patient-uploaded documents for review",
+    description=(
+        "Returns pending patient-uploaded documents for patients currently assigned "
+        "to the authenticated clinician."
+    ),
+)
+async def get_document_review_queue(
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.list_document_review_queue(user.id)
+
+
+@router.post(
+    "/me/patients/{patient_id}/documents/{document_id}/approve",
+    response_model=DocumentReviewActionResponse,
+    summary="Approve a pending patient-uploaded document",
+)
+async def approve_document_review(
+    patient_id: UUID,
+    document_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.approve_document_review(user.id, patient_id, document_id)
+
+
+@router.post(
+    "/me/patients/{patient_id}/documents/{document_id}/reject",
+    response_model=DocumentReviewActionResponse,
+    summary="Reject a pending patient-uploaded document",
+)
+async def reject_document_review(
+    patient_id: UUID,
+    document_id: UUID,
+    request: DocumentReviewActionRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.reject_document_review(
+        user.id,
+        patient_id,
+        document_id,
+        request.review_note,
+    )
 
 
 @router.get(

@@ -5,8 +5,17 @@
  * Functions return typed data or throw on HTTP errors.
  */
 
-import { ChatRole } from "@/types";
-import type { Medication, SymptomReport } from "@/types";
+import {
+    ChatRole,
+    type ClinicianPatientDocument,
+    type DocumentReviewQueueItem,
+    type DocumentReviewStatus,
+    type DocumentReviewer,
+    type DocumentType,
+    type Medication,
+    type SymptomReport,
+    type UploaderRole,
+} from "@/types";
 import { readStoredSession } from "@/services/auth-session";
 
 // ── Base config ──────────────────────────────────────────────────────────────
@@ -125,16 +134,7 @@ export interface PatientDeepDive {
     }>;
     conditions: Array<{ name?: string; icd10_code?: string; created_at?: string }>;
     allergies: Array<{ allergen: string; severity?: string }>;
-    documents: Array<{
-        id: string;
-        file_name: string;
-        document_type: string;
-        parse_status: string;
-        ai_summary?: string;
-        created_at: string;
-        uploaded_by_role: string;
-        clinician_annotation?: string;
-    }>;
+    documents: ClinicianPatientDocument[];
     latest_soap_note?: SoapNoteResponse;
     obligations?: Array<{
         id: string;
@@ -147,6 +147,16 @@ export interface PatientDeepDive {
     obligation_completion_rate?: number;
 }
 
+export interface DocumentReviewActionResponse {
+    status: string;
+    document_id: string;
+    patient_id: string;
+    review_status: DocumentReviewStatus;
+    reviewed_by: string;
+    reviewed_at: string;
+    review_note?: string;
+}
+
 type ApiMedicationRecord = Partial<Medication> & Record<string, unknown>;
 type ApiSymptomReportRecord = Partial<SymptomReport> & Record<string, unknown>;
 interface ApiChatMessageRecord {
@@ -156,10 +166,45 @@ interface ApiChatMessageRecord {
     audio_url?: string;
 }
 
-interface PatientDeepDiveResponse extends Omit<PatientDeepDive, "medications" | "symptom_reports" | "chat_messages"> {
+interface PatientDeepDiveResponse
+    extends Omit<PatientDeepDive, "medications" | "symptom_reports" | "chat_messages" | "documents"> {
     medications: ApiMedicationRecord[];
     symptom_reports: ApiSymptomReportRecord[];
     chat_messages: ApiChatMessageRecord[];
+    documents: Array<{
+        id: string;
+        file_name: string;
+        document_type: DocumentType;
+        parse_status: string;
+        ai_summary?: string;
+        created_at: string;
+        uploaded_by_role: UploaderRole;
+        clinician_annotation?: string;
+        review_status?: DocumentReviewStatus;
+        reviewed_by?: string;
+        reviewed_at?: string;
+        review_note?: string;
+        reviewer?: {
+            id: string;
+            first_name?: string;
+            last_name?: string;
+        } | null;
+    }>;
+}
+
+interface DocumentReviewQueueItemResponse {
+    id: string;
+    patient_id: string;
+    patient_first_name: string;
+    patient_last_name: string;
+    file_name: string;
+    document_type: DocumentType;
+    parse_status: string;
+    ai_summary?: string;
+    source_clinic?: string;
+    created_at: string;
+    uploaded_by_role: UploaderRole;
+    review_status: DocumentReviewStatus;
 }
 
 export interface ObligationSetPayload {
@@ -249,6 +294,59 @@ function normalizeChatRole(role: string): typeof ChatRole[keyof typeof ChatRole]
     }
 }
 
+function normalizeReviewer(
+    reviewer: PatientDeepDiveResponse["documents"][number]["reviewer"],
+): DocumentReviewer | null {
+    if (!reviewer) {
+        return null;
+    }
+
+    return {
+        id: reviewer.id,
+        firstName: reviewer.first_name,
+        lastName: reviewer.last_name,
+    };
+}
+
+function normalizePatientDocument(
+    document: PatientDeepDiveResponse["documents"][number],
+): ClinicianPatientDocument {
+    return {
+        id: document.id,
+        fileName: document.file_name,
+        documentType: document.document_type,
+        parseStatus: document.parse_status,
+        aiSummary: document.ai_summary,
+        createdAt: document.created_at,
+        uploadedByRole: document.uploaded_by_role,
+        clinicianAnnotation: document.clinician_annotation,
+        reviewStatus: document.review_status,
+        reviewedBy: document.reviewed_by,
+        reviewedAt: document.reviewed_at,
+        reviewNote: document.review_note,
+        reviewer: normalizeReviewer(document.reviewer),
+    };
+}
+
+function normalizeDocumentReviewQueueItem(
+    item: DocumentReviewQueueItemResponse,
+): DocumentReviewQueueItem {
+    return {
+        id: item.id,
+        patientId: item.patient_id,
+        patientFirstName: item.patient_first_name,
+        patientLastName: item.patient_last_name,
+        fileName: item.file_name,
+        documentType: item.document_type,
+        parseStatus: item.parse_status,
+        aiSummary: item.ai_summary,
+        sourceClinic: item.source_clinic,
+        createdAt: item.created_at,
+        uploadedByRole: item.uploaded_by_role,
+        reviewStatus: item.review_status,
+    };
+}
+
 // ── API functions ─────────────────────────────────────────────────────────────
 
 /** Fetch aggregated risk dashboard for all assigned patients. */
@@ -289,7 +387,39 @@ export async function fetchPatientDeepDive(patientId: string): Promise<PatientDe
             ...message,
             role: normalizeChatRole(message.role),
         })),
+        documents: (data.documents ?? []).map((document) => normalizePatientDocument(document)),
     };
+}
+
+export async function fetchDocumentReviewQueue(): Promise<DocumentReviewQueueItem[]> {
+    const data = await apiFetch<DocumentReviewQueueItemResponse[]>(
+        "/api/v1/clinicians/me/document-review-queue",
+    );
+    return data.map((item) => normalizeDocumentReviewQueueItem(item));
+}
+
+export async function approveDocumentReview(
+    patientId: string,
+    documentId: string,
+): Promise<DocumentReviewActionResponse> {
+    return apiFetch(
+        `/api/v1/clinicians/me/patients/${patientId}/documents/${documentId}/approve`,
+        { method: "POST" },
+    );
+}
+
+export async function rejectDocumentReview(
+    patientId: string,
+    documentId: string,
+    reviewNote?: string,
+): Promise<DocumentReviewActionResponse> {
+    return apiFetch(
+        `/api/v1/clinicians/me/patients/${patientId}/documents/${documentId}/reject`,
+        {
+            method: "POST",
+            body: JSON.stringify({ review_note: reviewNote ?? null }),
+        },
+    );
 }
 
 /** Trigger Summarization Agent to generate a SOAP note. */

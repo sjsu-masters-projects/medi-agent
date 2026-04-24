@@ -4,7 +4,12 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.models.enums import DocumentType, DocumentVisibility, UploaderRole
+from app.models.enums import (
+    DocumentReviewStatus,
+    DocumentType,
+    DocumentVisibility,
+    UploaderRole,
+)
 
 
 class DocumentUpload(BaseModel):
@@ -32,4 +37,8 @@ class DocumentRead(BaseModel):
     parse_attempts: int = 0
     source_clinic: str | None = None
     visibility: DocumentVisibility = DocumentVisibility.ALL_PROVIDERS
+    review_status: DocumentReviewStatus | None = None
+    reviewed_by: UUID | None = None
+    reviewed_at: str | None = None
+    review_note: str | None = None
     created_at: str
