@@ -130,7 +130,7 @@ export default function ClinicianUploadPage() {
                             Set Patient Obligation (Optional)
                         </h2>
                         <p className="text-sm text-gray-500">
-                            Assign a diet, exercise, or monitoring obligation for this patient
+                            Assign the care-plan expectation here. The patient chooses the exact reminder days and times in their portal.
                         </p>
                     </div>
                     <button

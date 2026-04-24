@@ -23,6 +23,7 @@ class PatientUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     gender: Gender | None = None
     preferred_language: Language | None = None
+    timezone: str | None = Field(default=None, max_length=64)
     avatar_url: str | None = None
 
 
@@ -34,6 +35,7 @@ class PatientRead(BaseModel):
     date_of_birth: date
     gender: Gender | None = None
     preferred_language: Language = Language.EN
+    timezone: str = "UTC"
     phone: str | None = None
     avatar_url: str | None = None
     created_at: str

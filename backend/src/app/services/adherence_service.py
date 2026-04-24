@@ -12,13 +12,20 @@ each active item = 1 expected event per day.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError, ValidationError
+from app.services.reminder_schedule_service import (
+    ReminderScheduleService,
+    count_occurrences_in_period,
+    occurrence_datetimes_for_day,
+    validate_timezone_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +78,15 @@ class AdherenceService:
         Returns overall, medication-specific, and obligation-specific scores
         plus the current streak.
         """
-        cutoff = (datetime.now(UTC) - timedelta(days=period_days)).isoformat()
+        timezone_name = await self._get_patient_timezone(patient_id)
+        timezone_info = ZoneInfo(timezone_name)
+        today_local = datetime.now(timezone_info).date()
+        start_date = today_local - timedelta(days=period_days - 1)
+        cutoff = (
+            datetime.combine(start_date, datetime.min.time(), tzinfo=timezone_info)
+            .astimezone(UTC)
+            .isoformat()
+        )
 
         # Fetch all logs in the window
         logs = (
@@ -83,8 +98,8 @@ class AdherenceService:
         )
         log_data = cast(list[dict[str, Any]], logs.data or [])
 
-        # Count active items to estimate expected events
-        med_count = len(
+        active_medications = cast(
+            list[dict[str, Any]],
             (
                 self.db.table("medications")
                 .select("id")
@@ -92,9 +107,10 @@ class AdherenceService:
                 .eq("is_active", True)
                 .execute()
             ).data
-            or []
+            or [],
         )
-        obl_count = len(
+        active_obligations = cast(
+            list[dict[str, Any]],
             (
                 self.db.table("obligations")
                 .select("id")
@@ -102,36 +118,60 @@ class AdherenceService:
                 .eq("is_active", True)
                 .execute()
             ).data
-            or []
+            or [],
+        )
+        schedule_map = await ReminderScheduleService(self.db).get_schedule_map_for_patient(
+            str(patient_id)
         )
 
-        # Simplified: 1 expected event per active item per day
-        total_expected = (med_count + obl_count) * period_days
+        med_expected = sum(
+            self._expected_events_for_target(
+                schedule_map.get(("medication", str(item["id"]))),
+                start_date,
+                today_local,
+                period_days,
+            )
+            for item in active_medications
+        )
+        obl_expected = sum(
+            self._expected_events_for_target(
+                schedule_map.get(("obligation", str(item["id"]))),
+                start_date,
+                today_local,
+                period_days,
+            )
+            for item in active_obligations
+        )
+        total_expected = med_expected + obl_expected
         if total_expected == 0:
             return self._empty_stats(patient_id, period_days)
 
-        # Count completed events
-        med_completed = sum(
-            1
-            for log in log_data
-            if log["target_type"] == "medication" and log["status"] == "completed"
+        med_completed = self._count_completed_events(
+            log_data,
+            target_type="medication",
+            timezone_info=timezone_info,
         )
-        obl_completed = sum(
-            1
-            for log in log_data
-            if log["target_type"] == "obligation" and log["status"] == "completed"
+        obl_completed = self._count_completed_events(
+            log_data,
+            target_type="obligation",
+            timezone_info=timezone_info,
         )
         total_completed = med_completed + obl_completed
-
-        med_expected = med_count * period_days
-        obl_expected = obl_count * period_days
 
         return {
             "patient_id": str(patient_id),
             "overall_score": min(total_completed / total_expected, 1.0),
             "medication_score": min(med_completed / med_expected, 1.0) if med_expected else 0.0,
             "obligation_score": min(obl_completed / obl_expected, 1.0) if obl_expected else 0.0,
-            "current_streak_days": self._calculate_streak(log_data, med_count + obl_count),
+            "current_streak_days": self._calculate_streak(
+                log_data,
+                active_medications,
+                active_obligations,
+                schedule_map,
+                start_date,
+                today_local,
+                timezone_info,
+            ),
             "period_days": period_days,
             "total_expected": total_expected,
             "total_completed": total_completed,
@@ -140,28 +180,110 @@ class AdherenceService:
     # ── Helpers ─────────────────────────────────────────
 
     @staticmethod
-    def _calculate_streak(logs: list[dict[str, Any]], daily_expected: int) -> int:
+    def _count_completed_events(
+        logs: list[dict[str, Any]],
+        *,
+        target_type: str,
+        timezone_info: ZoneInfo,
+    ) -> int:
+        completed_keys: set[tuple[str, str]] = set()
+        for log in logs:
+            if log["target_type"] != target_type or log["status"] not in {"completed", "taken"}:
+                continue
+            scheduled_time = log.get("scheduled_time")
+            if scheduled_time:
+                completed_keys.add((str(log["target_id"]), str(scheduled_time)))
+                continue
+            local_day = (
+                datetime.fromisoformat(str(log["logged_at"]).replace("Z", "+00:00"))
+                .astimezone(timezone_info)
+                .date()
+            )
+            completed_keys.add((str(log["target_id"]), local_day.isoformat()))
+        return len(completed_keys)
+
+    def _calculate_streak(
+        self,
+        logs: list[dict[str, Any]],
+        active_medications: list[dict[str, Any]],
+        active_obligations: list[dict[str, Any]],
+        schedule_map: dict[tuple[str, str], dict[str, Any]],
+        start_date: date,
+        today_local: date,
+        timezone_info: ZoneInfo,
+    ) -> int:
         """Count consecutive days (backwards from today) with full completion."""
-        if not logs or daily_expected == 0:
+        if not logs:
             return 0
 
-        # Group completed logs by date
         completed_by_date: dict[str, int] = {}
         for log in logs:
-            if log["status"] == "completed":
-                day = log["logged_at"][:10]  # "2025-01-15"
-                completed_by_date[day] = completed_by_date.get(day, 0) + 1
+            if log["status"] not in {"completed", "taken"}:
+                continue
+            day = (
+                (
+                    datetime.fromisoformat(str(log["scheduled_time"]).replace("Z", "+00:00"))
+                    if log.get("scheduled_time")
+                    else datetime.fromisoformat(str(log["logged_at"]).replace("Z", "+00:00"))
+                )
+                .astimezone(timezone_info)
+                .date()
+            )
+            day_str = day.isoformat()
+            completed_by_date[day_str] = completed_by_date.get(day_str, 0) + 1
 
-        # Walk backwards from today
         streak = 0
-        today = datetime.now(UTC).date()
-        for i in range(len(completed_by_date) + 1):
-            day_str = (today - timedelta(days=i)).isoformat()
-            if completed_by_date.get(day_str, 0) >= daily_expected:
+        current = today_local
+        while current >= start_date:
+            expected = 0
+            for item in active_medications:
+                expected += len(
+                    occurrence_datetimes_for_day(
+                        schedule_map.get(("medication", str(item["id"])))
+                        or {"times_of_day": [], "days_of_week": [], "is_enabled": False},
+                        current,
+                    )
+                ) or (1 if ("medication", str(item["id"])) not in schedule_map else 0)
+            for item in active_obligations:
+                expected += len(
+                    occurrence_datetimes_for_day(
+                        schedule_map.get(("obligation", str(item["id"])))
+                        or {"times_of_day": [], "days_of_week": [], "is_enabled": False},
+                        current,
+                    )
+                ) or (1 if ("obligation", str(item["id"])) not in schedule_map else 0)
+            if expected == 0:
+                current -= timedelta(days=1)
+                continue
+            if completed_by_date.get(current.isoformat(), 0) >= expected:
                 streak += 1
             else:
                 break
+            current -= timedelta(days=1)
         return streak
+
+    @staticmethod
+    def _expected_events_for_target(
+        schedule: dict[str, Any] | None,
+        start_date: date,
+        end_date: date,
+        fallback_period_days: int,
+    ) -> int:
+        if schedule:
+            return count_occurrences_in_period(schedule, start_date, end_date)
+        return fallback_period_days
+
+    async def _get_patient_timezone(self, patient_id: UUID) -> str:
+        result = (
+            self.db.table("patients")
+            .select("timezone")
+            .eq("id", str(patient_id))
+            .single()
+            .execute()
+        )
+        patient_row = cast(dict[str, Any], result.data or {})
+        timezone = str(patient_row.get("timezone") or "UTC")
+        return validate_timezone_name(timezone)
 
     @staticmethod
     def _empty_stats(patient_id: UUID, period_days: int) -> Any:

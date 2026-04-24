@@ -13,6 +13,7 @@ import {
     type DocumentReviewer,
     type DocumentType,
     type Medication,
+    type ReminderSchedule,
     type SymptomReport,
     type UploaderRole,
 } from "@/types";
@@ -121,6 +122,7 @@ export interface PatientDeepDive {
     email: string;
     date_of_birth?: string;
     avatar_url?: string;
+    timezone?: string;
     risk_level: RiskLevel;
     adherence_score: number;
     medications: Medication[];
@@ -141,6 +143,8 @@ export interface PatientDeepDive {
         obligation_type: string;
         description: string;
         frequency: string;
+        notes?: string;
+        reminder_schedule?: ReminderSchedule | null;
         is_active: boolean;
         created_at?: string;
     }>;
@@ -214,6 +218,39 @@ export interface ObligationSetPayload {
     notes?: string;
 }
 
+function normalizeReminderSchedule(raw: unknown): ReminderSchedule | null {
+    if (!raw || typeof raw !== "object") {
+        return null;
+    }
+
+    const schedule = raw as Record<string, unknown>;
+    return {
+        id: String(schedule.id ?? ""),
+        patientId: String(schedule.patientId ?? schedule.patient_id ?? ""),
+        targetType: String(schedule.targetType ?? schedule.target_type ?? "") as ReminderSchedule["targetType"],
+        targetId: String(schedule.targetId ?? schedule.target_id ?? ""),
+        timezone: String(schedule.timezone ?? "UTC"),
+        timesOfDay: Array.isArray(schedule.timesOfDay)
+            ? schedule.timesOfDay.map((value) => String(value))
+            : Array.isArray(schedule.times_of_day)
+              ? schedule.times_of_day.map((value) => String(value))
+              : [],
+        daysOfWeek: Array.isArray(schedule.daysOfWeek)
+            ? schedule.daysOfWeek.map((value) => String(value) as ReminderSchedule["daysOfWeek"][number])
+            : Array.isArray(schedule.days_of_week)
+              ? schedule.days_of_week.map((value) => String(value) as ReminderSchedule["daysOfWeek"][number])
+              : [],
+        isEnabled: Boolean(schedule.isEnabled ?? schedule.is_enabled ?? true),
+        createdAt: String(schedule.createdAt ?? schedule.created_at ?? ""),
+        updatedAt:
+            typeof schedule.updatedAt === "string"
+                ? schedule.updatedAt
+                : typeof schedule.updated_at === "string"
+                  ? schedule.updated_at
+                  : undefined,
+    };
+}
+
 function normalizeMedication(raw: Record<string, unknown>): Medication {
     return {
         id: String(raw.id ?? ""),
@@ -241,6 +278,7 @@ function normalizeMedication(raw: Record<string, unknown>): Medication {
                   ? raw.prescribed_by_name
                   : undefined,
         isActive: Boolean(raw.isActive ?? raw.is_active ?? true),
+        reminderSchedule: normalizeReminderSchedule(raw.reminderSchedule ?? raw.reminder_schedule),
         createdAt: String(raw.createdAt ?? raw.created_at ?? ""),
     };
 }
@@ -379,7 +417,16 @@ export async function fetchPatientDeepDive(patientId: string): Promise<PatientDe
 
     return {
         ...data,
+        timezone: data.timezone,
         medications: (data.medications ?? []).map((medication) => normalizeMedication(medication)),
+        obligations: (data.obligations ?? []).map((obligation) => ({
+            ...obligation,
+            notes:
+                typeof obligation.notes === "string"
+                    ? obligation.notes
+                    : undefined,
+            reminder_schedule: normalizeReminderSchedule(obligation.reminder_schedule),
+        })),
         symptom_reports: (data.symptom_reports ?? []).map((report) =>
             normalizeSymptomReport(report),
         ),

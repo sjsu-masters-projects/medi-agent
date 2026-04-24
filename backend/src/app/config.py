@@ -55,11 +55,20 @@ class Settings(BaseSettings):
     # Syncfusion
     syncfusion_license_key: str = ""
 
+    # Sentry
+    sentry_environment: str = "development"
+    sentry_release: str = ""
+    sentry_debug: bool = False
+    backend_sentry_dsn: str = ""
+
     # App URLs
     backend_url: str = "http://localhost:8000"
     patient_portal_url: str = "http://localhost:3000"
     clinician_portal_url: str = "http://localhost:3001"
-    internal_admin_token: str = ""
+
+    # Internal cron auth
+    cron_auth_token: str = ""
+
     environment: str = "development"
     log_level: str = "DEBUG"
 

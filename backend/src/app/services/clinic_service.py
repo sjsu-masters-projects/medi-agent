@@ -1,4 +1,4 @@
-"""Clinic service — resolve clinic codes and internal clinic provisioning."""
+"""Clinic service — resolve clinic codes and provision clinics for auth flows."""
 
 from __future__ import annotations
 

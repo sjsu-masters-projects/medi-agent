@@ -16,6 +16,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
+from app.services.reminder_schedule_service import validate_timezone_name
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,9 @@ class PatientService:
         clean = {k: v for k, v in updates.items() if v is not None}
         if not clean:
             return await self.get_profile(patient_id)
+
+        if "timezone" in clean:
+            clean["timezone"] = validate_timezone_name(str(clean["timezone"]))
 
         result = self.db.table("patients").update(clean).eq("id", str(patient_id)).execute()
         if not result.data:

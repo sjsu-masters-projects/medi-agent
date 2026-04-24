@@ -70,23 +70,48 @@ Vercel is unbeatable for Next.js, but team plans are expensive. We will bypass t
 - **Teammate workflow:** Teammates do NOT need Vercel accounts. When they push a commit or open a Pull Request on GitHub, Vercel's GitHub Bot will automatically build it and post a preview link directly in the PR comments!
 
 ### 5. Cron Jobs (Cloud Scheduler)
-We need cron jobs to trigger the backend to calculate adherence scores and send daily reminders.
-- **Step 1:** In GCP, search for Cloud Scheduler.
-- **Step 2:** Create a job that runs periodically (e.g., `0 8 * * *` for 8:00 AM daily).
-- **Step 3:** Set the target to `HTTP`, Method to `POST`, and point it to the Cloud Run backend URL (e.g., `https://backend-url.run.app/api/v1/cron/daily-update`).
-- **Cost Saving:** Keep it under 3 total jobs to stay 100% free. If we have more than 3 background tasks, we will trigger them all from a single API endpoint.
+We use **one global scheduler strategy** for the whole app. Cloud Scheduler triggers a small set of backend cron endpoints, and the backend fans out to the correct patients / clinics by querying Supabase at runtime.
+
+- **Endpoint 1:** `POST /api/v1/cron/reminders/dispatch`
+  - Run every 15 minutes
+  - Dispatches due appointment reminders
+  - Dispatches due medication / obligation reminders from structured patient schedules
+- **Endpoint 2:** `POST /api/v1/cron/adr/nightly-scan`
+  - Run once nightly
+  - Scans new symptom reports since the last successful run
+  - Flags ADR candidates for the pharmacovigilance pipeline
+- **Security:** Protect cron endpoints with `X-Cron-Auth` header carrying `CRON_AUTH_TOKEN`
+- **Cost Saving:** Keep it to 2-3 jobs total to stay inside the free tier
+
+**Manual GCP setup**
+- **Step 1:** Create a strong random `CRON_AUTH_TOKEN` secret in GCP Secret Manager
+- **Step 2:** Add `CRON_AUTH_TOKEN` to the Cloud Run backend service as a secret-backed env var
+- **Step 3:** In Cloud Scheduler, create an HTTP job for each endpoint above
+- **Step 4:** Set method to `POST` and target URL to the Cloud Run backend URL plus the cron path
+- **Step 5:** Add custom header `X-Cron-Auth: <same token>`
+- **Step 6:** Keep the reminder dispatcher in UTC and let the backend decide which records are due based on DB state
 
 ### 6. Managing Secrets (Environment Variables)
 Since we have multiple cloud platforms, keeping `.env` files synced is critical.
-- **Local Dev:** We will maintain an up-to-date `.env.example` in the repo. Teammates must duplicate it to `.env` locally.
+- **Local Dev:** We maintain separate templates for backend and both portals. Teammates should duplicate:
+  - `/.env.example` → `/.env`
+  - `apps/patient-portal/.env.example` → `apps/patient-portal/.env.local`
+  - `apps/clinician-portal/.env.example` → `apps/clinician-portal/.env.local`
 - **Backend (GCP):** Store secrets (Supabase keys, Gemini keys) in GCP Secret Manager. We will grant the Cloud Run service account access to read them at runtime.
 - **Frontend (Vercel):** Add them through the Vercel Project Settings -> Environment Variables.
 
 ### 7. Sentry Setup (Error Monitoring)
 - **Step 1:** Go to Sentry.io and create a free Developer plan.
-- **Step 2:** Create a Python/FastAPI project and two React/Next.js projects.
+- **Step 2:** Create three projects:
+  - `mediagent-backend`
+  - `mediagent-patient-portal`
+  - `mediagent-clinician-portal`
 - **Step 3:** Invite teammates to the Sentry org.
-- **Step 4:** Add the DSN keys to local `.env`, GCP, and Vercel. Sentry will now catch all 500 errors and unhandled exceptions, alerting us in Slack/Discord before demo day.
+- **Step 4:** Add DSNs to the correct runtime env files and hosting platforms:
+  - backend → `BACKEND_SENTRY_DSN` in local `/.env` and Cloud Run secrets/env
+  - patient portal → `PATIENT_PORTAL_SENTRY_DSN` and `NEXT_PUBLIC_PATIENT_PORTAL_SENTRY_DSN` in local `apps/patient-portal/.env.local` and Vercel
+  - clinician portal → `CLINICIAN_PORTAL_SENTRY_DSN` and `NEXT_PUBLIC_CLINICIAN_PORTAL_SENTRY_DSN` in local `apps/clinician-portal/.env.local` and Vercel
+- **Step 5:** Keep `sendDefaultPii` disabled and use selective error reporting so Sentry captures operational failures without leaking patient data or flooding the dashboard with expected 4xx errors.
 
 ---
 

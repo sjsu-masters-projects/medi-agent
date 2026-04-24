@@ -35,6 +35,8 @@ def test_all_expected_routes_registered():
         "/api/v1/patients/me",
         "/api/v1/patients/me/care-team",
         "/api/v1/patients/me/care-team/join",
+        "/api/v1/reminders/targets",
+        "/api/v1/reminders/{target_type}/{target_id}",
     }
     expected_clinician = {
         "/api/v1/clinicians/me",
@@ -57,9 +59,18 @@ def test_all_expected_routes_registered():
         "/api/v1/adherence/",
         "/api/v1/adherence/stats",
     }
+    expected_cron = {
+        "/api/v1/cron/reminders/dispatch",
+        "/api/v1/cron/adr/nightly-scan",
+    }
 
     all_expected = (
-        expected_auth | expected_patient | expected_clinician | expected_document | expected_meds
+        expected_auth
+        | expected_patient
+        | expected_clinician
+        | expected_document
+        | expected_meds
+        | expected_cron
     )
     missing = all_expected - paths
     assert not missing, f"Missing routes: {missing}"

@@ -57,6 +57,21 @@ psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sq
 
 # 10. Persistent chat state + A2A task lifecycle tables
 psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
+
+# 11. Locale contract hardening
+psql "$DB_URL" -f backend/src/app/db/migrations/011_locale_contract_upgrade.sql
+
+# 12. Realtime publication enablement for dashboards
+psql "$DB_URL" -f backend/src/app/db/migrations/011_enable_dashboard_realtime_publication.sql
+
+# 13. Document review queue storage
+psql "$DB_URL" -f backend/src/app/db/migrations/012_document_review_queue.sql
+
+# 14. Cron scheduler foundation
+psql "$DB_URL" -f backend/src/app/db/migrations/013_cron_scheduler_foundation.sql
+
+# 15. Patient timezones and structured reminder schedules
+psql "$DB_URL" -f backend/src/app/db/migrations/014_patient_timezones_and_reminder_schedules.sql
 ```
 
 > [!IMPORTANT]
@@ -76,6 +91,11 @@ psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
 | `008_soap_notes.sql` | Adds SOAP note persistence table for clinician workflows |
 | `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT role-hook parsing and grant posture |
 | `010_chat_state_and_a2a_tasks.sql` | Adds persistent conversation state + A2A lifecycle persistence |
+| `011_locale_contract_upgrade.sql` | Hardens locale defaults and request validation contracts |
+| `011_enable_dashboard_realtime_publication.sql` | Publishes dashboard tables to Supabase realtime |
+| `012_document_review_queue.sql` | Adds clinician document review queue storage |
+| `013_cron_scheduler_foundation.sql` | Adds cron run tracking and notification dedupe metadata |
+| `014_patient_timezones_and_reminder_schedules.sql` | Adds patient timezone preferences, obligation notes, and structured reminder schedules |
 
 ### Adding New Migrations
 

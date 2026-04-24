@@ -43,9 +43,20 @@ npm run dev
 
 ### Environment Variables
 
-Copy `.env.example` → `.env` and fill in your keys. Never commit `.env`.
+Copy the env templates and fill in your keys. Never commit real env files.
 
-See `.env.example` for where to get each key (URLs are in the comments).
+```bash
+cp .env.example .env
+cp apps/patient-portal/.env.example apps/patient-portal/.env.local
+cp apps/clinician-portal/.env.example apps/clinician-portal/.env.local
+```
+
+Use:
+- `/.env.example` for backend/root env vars
+- `apps/patient-portal/.env.example` for patient portal vars
+- `apps/clinician-portal/.env.example` for clinician portal vars
+
+See each `.env.example` file for where to get its keys (URLs are in the comments).
 
 For team credentials, check the team's 1Password vault or ask the team lead.
 
@@ -78,6 +89,12 @@ psql "$DB_URL" -f backend/src/app/db/migrations/006_care_team_invite_compat.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/007_clinic_identity_foundation.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/011_locale_contract_upgrade.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/011_enable_dashboard_realtime_publication.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/012_document_review_queue.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/013_cron_scheduler_foundation.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/014_patient_timezones_and_reminder_schedules.sql
 ```
 
 After running migrations, wire up the JWT claims hook in the Supabase Dashboard → Auth → Hooks. See the setup guide for details.
@@ -94,14 +111,14 @@ Run this after cloning or pulling new changes — catches setup issues before yo
 
 This checks: required tools, `.env` completeness, backend venv, frontend `node_modules`, and Supabase connection.
 
-To quickly validate just your `.env` file:
+To quickly validate backend and frontend env files:
 
 ```bash
 ./scripts/check-env.sh
 ```
 
 > [!TIP]
-> When you add a new env var, always add it to `.env.example` first with a comment. The `check-env.sh` script will then catch it for any dev whose `.env` is out of date.
+> When you add a new env var, always add it to the matching `.env.example` file first with a comment. The `check-env.sh` script will then catch it when backend or portal env files are out of date.
 
 ---
 

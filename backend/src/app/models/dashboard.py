@@ -184,6 +184,7 @@ class PatientDeepDive(BaseModel):
     email: str
     date_of_birth: str | None = None
     avatar_url: str | None = None
+    timezone: str = "UTC"
 
     # Risk
     risk_level: RiskLevel

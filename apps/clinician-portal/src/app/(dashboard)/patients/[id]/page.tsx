@@ -43,6 +43,31 @@ function isTabId(value: string | null): value is TabId {
     return value !== null && TABS.some((entry) => entry.id === value);
 }
 
+function formatReminderSchedule(
+    schedule:
+        | {
+              timesOfDay?: string[];
+              daysOfWeek?: string[];
+          }
+        | null
+        | undefined,
+) {
+    if (!schedule?.timesOfDay?.length) {
+        return "Not configured";
+    }
+
+    const timeLabel = schedule.timesOfDay
+        .map((value) => value.slice(0, 5))
+        .join(", ");
+    if (!schedule.daysOfWeek?.length || schedule.daysOfWeek.length === 7) {
+        return timeLabel;
+    }
+    const dayLabel = schedule.daysOfWeek
+        .map((value) => value.slice(0, 3))
+        .join(", ");
+    return `${dayLabel} · ${timeLabel}`;
+}
+
 // ── Patient Deep Dive Page ─────────────────────────────────────────────────────
 
 export default function PatientDeepDivePage() {
@@ -272,6 +297,9 @@ export default function PatientDeepDivePage() {
                                 <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
                                     Active Medications
                                 </h3>
+                                <p className="mb-3 text-sm text-gray-500">
+                                    Patient timezone: {patient.timezone ?? "UTC"}
+                                </p>
                                 {patient.medications.length === 0 ? (
                                     <p className="text-sm text-gray-400 italic">No active medications</p>
                                 ) : (
@@ -284,6 +312,7 @@ export default function PatientDeepDivePage() {
                                                     <th className="py-2 pr-4 text-left">Frequency</th>
                                                     <th className="py-2 text-left">Route</th>
                                                     <th className="py-2 text-left">Source Provider</th>
+                                                    <th className="py-2 text-left">Reminders</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -312,11 +341,51 @@ export default function PatientDeepDivePage() {
                                                         <td className="py-2.5 text-gray-600">
                                                             {med.prescribedByName ?? "Unknown"}
                                                         </td>
+                                                        <td className="py-2.5 text-gray-600">
+                                                            {formatReminderSchedule(med.reminderSchedule)}
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
+                                )}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
+                                    Active Obligations
+                                </h3>
+                                {patient.obligations?.length ? (
+                                    <div className="space-y-2">
+                                        {patient.obligations.map((obligation) => (
+                                            <div
+                                                className="rounded-xl border border-gray-200 px-4 py-3"
+                                                key={obligation.id}
+                                            >
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">
+                                                            {obligation.description}
+                                                        </p>
+                                                        <p className="mt-1 text-sm text-gray-500">
+                                                            {obligation.frequency}
+                                                            {obligation.notes
+                                                                ? ` · ${obligation.notes}`
+                                                                : ""}
+                                                        </p>
+                                                    </div>
+                                                    <p className="text-sm text-gray-500">
+                                                        {formatReminderSchedule(
+                                                            obligation.reminder_schedule,
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-400 italic">No active obligations</p>
                                 )}
                             </div>
                         </div>
