@@ -581,9 +581,9 @@
 - [ ] Future roadmap slide (EHR integration, telehealth, FDA API submission)
 
 ### 11.4 Deployment Hardening
-- [ ] Production environment variables verified
-- [/] DNS and custom domains configured — Vercel app domains, Resend sending domain, and Supabase auth URLs are configured; Cloud Run custom-domain cutover is still pending
-- [ ] SSL certificates confirmed
+- [x] Production environment variables verified
+- [x] DNS and custom domains configured (Vercel apps, Resend sending domain, Supabase auth URLs, Cloud Run custom domain)
+- [x] SSL certificates confirmed (`api.mediagent.live`, `app.mediagent.live`, `clinician.mediagent.live`, `mail.mediagent.live`)
 - [ ] Cloud Run auto-scaling tested
 - [ ] Monitoring alerts configured
 - [ ] Fallback responses for LLM rate limits
