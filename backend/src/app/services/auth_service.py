@@ -316,11 +316,11 @@ class AuthService:
         """Resolve clinic identity by code and enforce active status."""
         clinics = self.clinic_repo.find_matching_by_code(clinic_code)
         if not clinics:
-            raise ValidationError("Clinic code is invalid")
+            raise ValidationError("Clinic code is invalid", code="CLINIC_CODE_INVALID")
 
         clinic = clinics[0]
         if clinic.get("status") != "active":
-            raise ValidationError("Clinic code is inactive")
+            raise ValidationError("Clinic code is inactive", code="CLINIC_CODE_INACTIVE")
 
         return clinic
 
@@ -331,12 +331,18 @@ class AuthService:
     ) -> None:
         """Ensure clinician logins are bound to the verified clinic workspace."""
         if not clinic_code:
-            raise AuthenticationError("Clinic code is required for clinician login")
+            raise AuthenticationError(
+                "Clinic code is required for clinician login",
+                code="CLINIC_CONTEXT_INVALID",
+            )
 
         clinic = self._resolve_active_clinic(clinic_code)
         profile = self.clinician_repo.get_context(clinician_id)
         if not profile:
-            raise AuthenticationError("Clinician account is not linked to a clinic")
+            raise AuthenticationError(
+                "Clinician account is not linked to a clinic",
+                code="CLINIC_CONTEXT_INVALID",
+            )
         clinic_id = profile.get("clinic_id")
         clinic_name = profile.get("clinic_name")
 
@@ -349,7 +355,10 @@ class AuthService:
         ):
             return
 
-        raise AuthenticationError("Clinician account does not belong to the selected clinic")
+        raise AuthenticationError(
+            "Clinician account does not belong to the selected clinic",
+            code="CLINIC_CONTEXT_INVALID",
+        )
 
     @staticmethod
     def _build_signup_validation_message(error: Any) -> str:

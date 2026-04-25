@@ -65,6 +65,12 @@ type ApiErrorWithEnvelope = {
     };
 };
 
+const CLINIC_CONTEXT_ERROR_CODES = new Set([
+    "CLINIC_CONTEXT_INVALID",
+    "CLINIC_CODE_INVALID",
+    "CLINIC_CODE_INACTIVE",
+]);
+
 function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
     return {
         clinicCode: response.clinic_code,
@@ -92,9 +98,7 @@ function isClinicContextInvalidError(error: unknown): boolean {
     }
 
     const code = (error.details as ApiErrorWithEnvelope | null)?.error?.code;
-    const message = error.message.toLowerCase();
-
-    return code === "CLINIC_CONTEXT_INVALID" || code === "CLINIC_CODE_INVALID" || message === "clinic code is invalid" || message === "clinic code is inactive";
+    return typeof code === "string" && CLINIC_CONTEXT_ERROR_CODES.has(code);
 }
 
 export default function ClinicianLoginPage() {

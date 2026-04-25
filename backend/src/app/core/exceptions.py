@@ -19,8 +19,13 @@ class NotFoundError(MediAgentError):
 
 
 class AuthenticationError(MediAgentError):
-    def __init__(self, message: str = "Authentication failed"):
-        super().__init__(message=message, code="AUTHENTICATION_ERROR")
+    def __init__(
+        self,
+        message: str = "Authentication failed",
+        *,
+        code: str = "AUTHENTICATION_ERROR",
+    ):
+        super().__init__(message=message, code=code)
 
 
 class AuthorizationError(MediAgentError):
@@ -31,8 +36,8 @@ class AuthorizationError(MediAgentError):
 class ValidationError(MediAgentError):
     """Business rule violation — not Pydantic schema validation."""
 
-    def __init__(self, message: str):
-        super().__init__(message=message, code="VALIDATION_ERROR")
+    def __init__(self, message: str, *, code: str = "VALIDATION_ERROR"):
+        super().__init__(message=message, code=code)
 
 
 class ExternalServiceError(MediAgentError):

@@ -129,4 +129,21 @@ describe("Patient login page", () => {
         expect(await screen.findByText(/clinician account/i)).toBeInTheDocument();
         expect(replace).not.toHaveBeenCalled();
     });
+
+    it("toggles password visibility while typing", async () => {
+        render(<LoginPage />);
+
+        const passwordInput = screen.getByLabelText(/^password$/i);
+        fireEvent.change(passwordInput, {
+            target: { value: "SecurePass123!" },
+        });
+
+        expect(passwordInput).toHaveAttribute("type", "password");
+
+        fireEvent.click(screen.getByRole("button", { name: /show password/i }));
+        expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("type", "text");
+
+        fireEvent.click(screen.getByRole("button", { name: /hide password/i }));
+        expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("type", "password");
+    });
 });
