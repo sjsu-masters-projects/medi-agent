@@ -57,7 +57,13 @@ class A2ARetryWorker:
                         summary["failed"],
                     )
             except Exception as exc:
-                logger.exception("A2A retry worker cycle failed: %s", exc)
+                if self._service.is_transient_supabase_error(exc):
+                    logger.warning(
+                        "A2A retry worker transient Supabase error; will retry next cycle: %s",
+                        exc,
+                    )
+                else:
+                    logger.exception("A2A retry worker cycle failed: %s", exc)
 
             try:
                 await asyncio.wait_for(
