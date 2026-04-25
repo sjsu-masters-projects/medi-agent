@@ -707,7 +707,7 @@ async def test_resolve_active_clinic_uses_explicit_inactive_code(auth_service, m
 
 
 @pytest.mark.asyncio
-async def test_assert_clinician_matches_clinic_raises_external_service_error_on_transient_lookup_failure(
+async def test_assert_clinician_matches_clinic_transient_failure(
     auth_service, mock_supabase_client
 ):
     clinic_query = MagicMock()

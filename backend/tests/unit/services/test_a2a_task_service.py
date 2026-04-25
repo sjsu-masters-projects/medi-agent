@@ -254,3 +254,30 @@ async def test_process_due_retries_dead_letters_unsupported_task_type(mock_db):
         "dead_lettered": 1,
         "failed": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_execute_retries_transient_connection_errors(mock_db):
+    query = MagicMock()
+    query.execute.side_effect = [
+        RuntimeError("[Errno 54] Connection reset by peer"),
+        _response([{"id": "task-1"}]),
+    ]
+    service = A2ATaskService(mock_db)
+
+    result = await service._execute(query)
+
+    assert result.data == [{"id": "task-1"}]
+    assert query.execute.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_does_not_retry_non_transient_errors(mock_db):
+    query = MagicMock()
+    query.execute.side_effect = RuntimeError("invalid select clause")
+    service = A2ATaskService(mock_db)
+
+    with pytest.raises(RuntimeError, match="invalid select clause"):
+        await service._execute(query)
+
+    assert query.execute.call_count == 1

@@ -22,7 +22,7 @@ from jose import JWTError, jwt
 from supabase import Client
 
 from app.clients.supabase import create_anon_client
-from app.core.exceptions import AuthenticationError, ValidationError
+from app.core.exceptions import AuthenticationError, ExternalServiceError, ValidationError
 from app.db.repositories import ClinicianRepository, ClinicRepository
 from app.models.enums import ClinicianRole, coerce_locale
 from app.services.clinic_service import ClinicService
@@ -336,8 +336,19 @@ class AuthService:
                 code="CLINIC_CONTEXT_INVALID",
             )
 
-        clinic = self._resolve_active_clinic(clinic_code)
-        profile = self.clinician_repo.get_context(clinician_id)
+        try:
+            clinic = self._resolve_active_clinic(clinic_code)
+            profile = self.clinician_repo.get_context(clinician_id)
+        except (ValidationError, AuthenticationError):
+            raise
+        except Exception as e:
+            logger.warning(
+                "Failed to verify clinician clinic context for clinician_id=%s clinic_code=%s: %s",
+                clinician_id,
+                clinic_code,
+                e,
+            )
+            raise ExternalServiceError("clinic lookup is temporarily unavailable") from None
         if not profile:
             raise AuthenticationError(
                 "Clinician account is not linked to a clinic",

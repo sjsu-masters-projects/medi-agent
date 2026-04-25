@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError, ValidationError
@@ -18,6 +19,7 @@ class A2ATaskService:
 
     DEFAULT_MAX_RETRIES = 3
     MAX_JSON_PAYLOAD_BYTES = 256_000
+    EXECUTE_MAX_ATTEMPTS = 3
 
     def __init__(self, db: Client) -> None:
         self.db = db
@@ -301,7 +303,14 @@ class A2ATaskService:
         return rows[0] if rows else None
 
     async def _execute(self, query: Any) -> Any:
-        return await asyncio.to_thread(query.execute)
+        for attempt in range(1, self.EXECUTE_MAX_ATTEMPTS + 1):
+            try:
+                return await asyncio.to_thread(query.execute)
+            except Exception as exc:
+                is_last_attempt = attempt >= self.EXECUTE_MAX_ATTEMPTS
+                if is_last_attempt or not self.is_transient_supabase_error(exc):
+                    raise
+                await asyncio.sleep(self._calculate_execute_retry_delay_seconds(attempt))
 
     @staticmethod
     def _is_unique_violation(exc: Exception) -> bool:
@@ -313,9 +322,45 @@ class A2ATaskService:
         return "duplicate key" in text or "23505" in text
 
     @staticmethod
+    def is_transient_supabase_error(exc: Exception) -> bool:
+        if isinstance(
+            exc,
+            httpx.ConnectError
+            | httpx.ConnectTimeout
+            | httpx.ReadError
+            | httpx.ReadTimeout
+            | httpx.WriteError
+            | httpx.WriteTimeout
+            | httpx.PoolTimeout
+            | httpx.RemoteProtocolError,
+        ):
+            return True
+
+        text = str(exc).lower()
+        transient_patterns = (
+            "connection reset by peer",
+            "operation timed out",
+            "timed out",
+            "temporarily unavailable",
+            "connection refused",
+            "connection aborted",
+            "server disconnected",
+            "network is unreachable",
+            "name or service not known",
+            "service unavailable",
+            "gateway timeout",
+        )
+        return any(pattern in text for pattern in transient_patterns)
+
+    @staticmethod
     def _calculate_retry_delay_seconds(attempt: int) -> int:
         # Exponential backoff with a cap to avoid runaway delays.
         return int(min(2 ** max(attempt, 1), 300))
+
+    @staticmethod
+    def _calculate_execute_retry_delay_seconds(attempt: int) -> float:
+        # Keep transport retries short to avoid blocking worker cycles.
+        return float(min(0.25 * (2 ** max(attempt - 1, 0)), 2.0))
 
     @staticmethod
     def _coerce_symptom_event_id(raw_value: Any) -> str | None:
