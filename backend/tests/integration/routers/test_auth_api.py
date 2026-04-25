@@ -117,7 +117,7 @@ class TestPatientSignup:
             },
         )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         payload = response.json()
         assert "error" in payload
         assert payload["error"]["code"] == "VALIDATION_ERROR"
@@ -135,7 +135,7 @@ class TestPatientSignup:
             },
         )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         payload = response.json()
         assert "error" in payload
         assert payload["error"]["code"] == "VALIDATION_ERROR"
@@ -214,7 +214,7 @@ class TestClinicianSignup:
             },
         )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         payload = response.json()
         assert "error" in payload
         assert payload["error"]["code"] == "VALIDATION_ERROR"
@@ -237,7 +237,7 @@ class TestClinicianSignup:
             },
         )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     def test_signup_supports_nurse_role(
         self, client, override_db, override_auth_service, mock_supabase_db
@@ -299,7 +299,7 @@ class TestClinicianSignup:
             },
         )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestClinicAdminSignup:
@@ -375,7 +375,7 @@ class TestClinicAdminSignup:
             },
         )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class TestLogin:
