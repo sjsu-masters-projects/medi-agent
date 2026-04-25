@@ -39,6 +39,10 @@
   },
   "overrides": {
     "flatted": ">=3.4.2",
+    "postcss": "8.5.10",
+    "next": {
+      "postcss": "8.5.10"
+    },
     "picomatch": ">=4.0.4",
     "vite": ">=7.3.2"
   }

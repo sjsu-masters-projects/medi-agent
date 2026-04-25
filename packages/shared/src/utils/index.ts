@@ -2,12 +2,12 @@
  * Shared utility functions.
  */
 
-import { DEFAULT_LOCALE } from "../types";
+import { DEFAULT_LOCALE, type Locale } from "../types";
 
 /**
  * Format a date string or Date object into a human-readable format.
  */
-export function formatDate(date: string | Date, locale: string = DEFAULT_LOCALE): string {
+export function formatDate(date: string | Date, locale: Locale = DEFAULT_LOCALE): string {
     const d = typeof date === "string" ? new Date(date) : date;
     if (Number.isNaN(d.getTime())) return "";
     return d.toLocaleDateString(locale, {
