@@ -619,8 +619,11 @@ async def test_login_requires_clinic_code_for_clinicians(auth_service, mock_auth
 
     mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
 
-    with pytest.raises(AuthenticationError, match="Clinic code is required"):
+    with pytest.raises(AuthenticationError) as exc_info:
         await auth_service.login(email="doctor@example.com", password="password123")
+
+    assert exc_info.value.message == "Clinic code is required for clinician login"
+    assert exc_info.value.code == "CLINIC_CONTEXT_INVALID"
 
 
 @pytest.mark.asyncio
@@ -655,8 +658,52 @@ async def test_assert_clinician_matches_clinic_rejects_different_clinic(
 
     mock_supabase_client.table.side_effect = [clinic_query, clinician_query]
 
-    with pytest.raises(AuthenticationError, match="does not belong to the selected clinic"):
+    with pytest.raises(AuthenticationError) as exc_info:
         auth_service._assert_clinician_matches_clinic("clinician-123", "ABC123")
+
+    assert exc_info.value.message == "Clinician account does not belong to the selected clinic"
+    assert exc_info.value.code == "CLINIC_CONTEXT_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_resolve_active_clinic_uses_explicit_invalid_code(auth_service, mock_supabase_client):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(data=[])
+
+    mock_supabase_client.table.return_value = clinic_query
+
+    with pytest.raises(ValidationError) as exc_info:
+        auth_service._resolve_active_clinic("INVALID")
+
+    assert exc_info.value.message == "Clinic code is invalid"
+    assert exc_info.value.code == "CLINIC_CODE_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_resolve_active_clinic_uses_explicit_inactive_code(auth_service, mock_supabase_client):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[
+            {
+                "id": "clinic-1",
+                "code": "ABC123",
+                "display_name": "Heart Health Clinic",
+                "status": "inactive",
+            }
+        ]
+    )
+
+    mock_supabase_client.table.return_value = clinic_query
+
+    with pytest.raises(ValidationError) as exc_info:
+        auth_service._resolve_active_clinic("ABC123")
+
+    assert exc_info.value.message == "Clinic code is inactive"
+    assert exc_info.value.code == "CLINIC_CODE_INACTIVE"
 
 
 @pytest.mark.asyncio

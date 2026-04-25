@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FiEye, FiEyeOff } from "react-icons/fi";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
@@ -33,6 +34,7 @@ export default function LoginPage() {
     const dispatch = useDispatch<AppDispatch>();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [passwordVisible, setPasswordVisible] = useState(false);
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
@@ -88,7 +90,22 @@ export default function LoginPage() {
                 <Card className="shadow-lg shadow-slate-100" padding="lg">
                     <form className="space-y-4" onSubmit={handleSubmit}>
                         <Input label="Email address" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
-                        <Input label="Password" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
+                        <Input
+                            label="Password"
+                            onChange={(event) => setPassword(event.target.value)}
+                            trailingAction={
+                                <button
+                                    aria-label={passwordVisible ? "Hide password" : "Show password"}
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:text-gray-700"
+                                    onClick={() => setPasswordVisible((current) => !current)}
+                                    type="button"
+                                >
+                                    {passwordVisible ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
+                                </button>
+                            }
+                            type={passwordVisible ? "text" : "password"}
+                            value={password}
+                        />
                         {error ? <p className="text-sm text-red-600">{error}</p> : null}
                         <Button disabled={submitting} fullWidth type="submit">
                             {submitting ? "Signing in..." : "Sign in"}

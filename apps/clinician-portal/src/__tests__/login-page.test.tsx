@@ -144,6 +144,42 @@ describe("Clinician login page", () => {
         ).toBeInTheDocument();
     });
 
+    it("keeps the user on the login form for invalid credentials", async () => {
+        post.mockResolvedValueOnce({
+            clinic_code: "ABC123",
+            clinic_id: "clinic-1",
+            clinic_name: "City Health",
+            status: "active",
+        });
+        post.mockRejectedValueOnce(
+            new ApiClientError("Invalid email or password", 401, {
+                error: { code: "AUTHENTICATION_ERROR", message: "Invalid email or password" },
+            }),
+        );
+
+        render(<ClinicianLoginPage />);
+
+        fireEvent.change(await screen.findByLabelText(/clinic code/i), {
+            target: { value: "abc123" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /verify clinic code/i }));
+        fireEvent.click(await screen.findByRole("button", { name: /already have an account/i }));
+
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: "doctor@example.com" },
+        });
+        fireEvent.change(screen.getByLabelText(/^password$/i), {
+            target: { value: "wrong-password" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+        expect(await screen.findByText(/invalid email or password/i)).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: /sign in/i })).toBeInTheDocument();
+        expect(screen.getByLabelText(/^password$/i)).toHaveValue("wrong-password");
+        expect(clearStoredClinicContext).not.toHaveBeenCalled();
+        expect(replace).not.toHaveBeenCalled();
+    });
+
     it("prompts for MFA when the login response requires it", async () => {
         post.mockResolvedValueOnce({
             clinic_code: "ABC123",
@@ -352,5 +388,35 @@ describe("Clinician login page", () => {
         await waitFor(() => {
             expect(clearStoredClinicContext).toHaveBeenCalled();
         });
+    });
+
+    it("toggles password visibility while typing", async () => {
+        post.mockResolvedValueOnce({
+            clinic_code: "ABC123",
+            clinic_id: "clinic-1",
+            clinic_name: "City Health",
+            status: "active",
+        });
+
+        render(<ClinicianLoginPage />);
+
+        fireEvent.change(await screen.findByLabelText(/clinic code/i), {
+            target: { value: "abc123" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /verify clinic code/i }));
+        fireEvent.click(await screen.findByRole("button", { name: /already have an account/i }));
+
+        const passwordInput = screen.getByLabelText(/^password$/i);
+        fireEvent.change(passwordInput, {
+            target: { value: "SecurePass123!" },
+        });
+
+        expect(passwordInput).toHaveAttribute("type", "password");
+
+        fireEvent.click(screen.getByRole("button", { name: /show password/i }));
+        expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("type", "text");
+
+        fireEvent.click(screen.getByRole("button", { name: /hide password/i }));
+        expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("type", "password");
     });
 });

@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 
+from app.core.exceptions import AuthenticationError
 from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
@@ -477,6 +478,7 @@ class TestLogin:
         )
 
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
+        assert result.json()["error"]["code"] == "CLINIC_CONTEXT_INVALID"
         assert "Clinic code is required" in result.json()["error"]["message"]
 
     def test_invalid_credentials(self, client, override_db, override_auth_service, mock_supabase_db):
@@ -488,6 +490,38 @@ class TestLogin:
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_clinician_login_returns_explicit_clinic_context_code(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
+        response = _make_auth_response(
+            user_id=str(uuid4()),
+            email="doctor@example.com",
+            role="clinician",
+        )
+        mock_supabase_db.auth.sign_in_with_password.return_value = response
+
+        original_clinic_check = AuthService._assert_clinician_matches_clinic
+        AuthService._assert_clinician_matches_clinic = lambda self, _id, _code: (_ for _ in ()).throw(
+            AuthenticationError(
+                "Clinician account does not belong to the selected clinic",
+                code="CLINIC_CONTEXT_INVALID",
+            )
+        )
+        try:
+            result = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "clinic_code": "ABC123",
+                    "email": "doctor@example.com",
+                    "password": "SecurePass123!",
+                },
+            )
+        finally:
+            AuthService._assert_clinician_matches_clinic = original_clinic_check
+
+        assert result.status_code == status.HTTP_401_UNAUTHORIZED
+        assert result.json()["error"]["code"] == "CLINIC_CONTEXT_INVALID"
 
 
 class TestRefresh:
