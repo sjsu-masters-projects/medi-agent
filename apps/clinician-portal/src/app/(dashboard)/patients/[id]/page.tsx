@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -70,7 +70,7 @@ function formatReminderSchedule(
 
 // ── Patient Deep Dive Page ─────────────────────────────────────────────────────
 
-export default function PatientDeepDivePage() {
+function PatientDeepDivePageContent() {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -623,5 +623,13 @@ export default function PatientDeepDivePage() {
                 )}
             </Card>
         </div>
+    );
+}
+
+export default function PatientDeepDivePage() {
+    return (
+        <Suspense fallback={null}>
+            <PatientDeepDivePageContent />
+        </Suspense>
     );
 }

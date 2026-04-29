@@ -1,8 +1,18 @@
 import { ApiClientError, api } from "@/services/api";
+import { waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { redirectToLogin } = vi.hoisted(() => ({
+    redirectToLogin: vi.fn(),
+}));
+
+vi.mock("@/services/auth-redirect", () => ({
+    redirectToLogin,
+}));
 
 describe("API client error mapping", () => {
     afterEach(() => {
+        redirectToLogin.mockReset();
         vi.unstubAllGlobals();
     });
 
@@ -63,5 +73,35 @@ describe("API client error mapping", () => {
             expect((error as ApiClientError).status).toBe(401);
             expect((error as ApiClientError).message).toBe("Unauthorized");
         }
+    });
+
+    it("clears stale authenticated sessions by redirecting to login on 401", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue(
+                new Response(
+                    JSON.stringify({
+                        error: {
+                            code: "AUTHENTICATION_ERROR",
+                            message: "Unauthorized",
+                        },
+                    }),
+                    {
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        status: 401,
+                    },
+                ),
+            ),
+        );
+
+        await expect(api.get("/api/v1/clinicians/me/dashboard", { token: "expired-token" })).rejects.toThrow(
+            "Unauthorized",
+        );
+
+        await waitFor(() => {
+            expect(redirectToLogin).toHaveBeenCalledWith({ reason: "session_expired" });
+        });
     });
 });

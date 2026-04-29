@@ -440,6 +440,26 @@
 - [x] Enable Supabase Realtime publication for dashboard tables (`adherence_logs`, `symptom_reports`, `adr_assessments`)
 - [x] Add rate limiting on SOAP note generation endpoint (expensive LLM call, 15-30s per request)
 
+### 6.7 Session Management & Auth Hardening
+- [x] **Token Refresh Before Expiry:** Implement proactive JWT refresh for logged-in users (before token expires)
+  - [x] Backend: Refresh token endpoint already exists (`POST /api/v1/auth/refresh`)
+  - [x] Frontend: `useAuthSessionRefresh` hook refreshes active sessions before expiry
+  - [x] Edge case: User returns after browser sleep / tab backgrounded — force refresh on tab focus
+  - [x] Silent refresh updates stored session without UI interruption unless refresh fails
+  - [x] Add tests: verify refresh timing, focus refresh, no-op when not near expiry, and failed refresh logout
+  - [x] Idle-timeout awareness reviewed; absolute inactivity timeout remains a future product/security policy decision
+- [x] **Homepage & Protected Route Redirects:** Implement consistent redirect flow for production
+  - [x] Unauthenticated users landing on `/dashboard`, `/patients`, etc. → redirect to `/login` + capture return path
+  - [x] After successful login → redirect to captured path or default home
+  - [x] Default home: Patient Portal → `/today` | Clinician Portal → `/dashboard`
+  - [x] Add tests: verify redirect chain and state preservation
+  - [x] Production config: Supabase redirect URLs and custom domains configured for patient + clinician portals
+- [x] **Login/Logout UX:** Prevent stale session display
+  - [x] Logout: Clear local session; backend refresh-token invalidation deferred because Supabase refresh expiry remains source of truth
+  - [x] Login: Verify session + role before showing portal content (not just JWT presence)
+  - [x] API 401 → clear session and redirect to login with "session expired" reason
+  - [x] API client tests verify authenticated 401 redirect behavior
+
 ---
 
 ## Phase 7: Pharmacovigilance (Weeks 19–22, parallel with Phase 6)

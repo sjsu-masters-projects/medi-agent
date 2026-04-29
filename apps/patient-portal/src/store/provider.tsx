@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { api } from "@/services/api";
 import { clearStoredSession, restoreStoredSession } from "@/services/auth-session";
 import { Provider } from "react-redux";
-import { PortalUserRole } from "@/types";
-import { finishHydration, hydrateSession, type PatientAuthSession } from "./slices/auth-slice";
+import { finishHydration, hydrateSession } from "./slices/auth-slice";
 import { store } from "./store";
+import { refreshPatientSession } from "@/services/auth-refresh";
+import { useAuthSessionRefresh } from "@/hooks/use-auth-session-refresh";
+
+function AuthSessionRefresh() {
+    useAuthSessionRefresh();
+    return null;
+}
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
@@ -14,38 +19,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         async function bootstrapAuth() {
             const session = await restoreStoredSession({
-                refreshSession: async (refreshToken) => {
-                    const response = await api.post<{
-                        tokens: {
-                            access_token: string;
-                            refresh_token: string;
-                            expires_at: number;
-                        };
-                        user: {
-                            email: string;
-                            id: string;
-                            role: typeof PortalUserRole[keyof typeof PortalUserRole];
-                        };
-                    }>("/api/v1/auth/refresh", {
-                        expected_role: PortalUserRole.PATIENT,
-                        refresh_token: refreshToken,
-                    });
-
-                    if (response.user.role !== PortalUserRole.PATIENT) {
-                        throw new Error("This session belongs to a clinician account.");
-                    }
-
-                    return {
-                        accessToken: response.tokens.access_token,
-                        expiresAt: response.tokens.expires_at,
-                        refreshToken: response.tokens.refresh_token,
-                        user: {
-                            email: response.user.email,
-                            id: response.user.id,
-                            role: PortalUserRole.PATIENT,
-                        },
-                    } satisfies PatientAuthSession;
-                },
+                refreshSession: refreshPatientSession,
             });
 
             if (!isMounted) {
@@ -67,5 +41,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-    return <Provider store={store}>{children}</Provider>;
+    return (
+        <Provider store={store}>
+            <AuthSessionRefresh />
+            {children}
+        </Provider>
+    );
 }

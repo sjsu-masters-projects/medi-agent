@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiOutlineBuildingOffice2 } from "react-icons/hi2";
@@ -70,7 +70,7 @@ function mapCareTeamMember(member: CareTeamResponse): CareTeamMember {
 
 const formatLanguage = getLocaleLabel;
 
-export default function ProfilePage() {
+function ProfilePageContent() {
     const dispatch = useDispatch<AppDispatch>();
     const { replace } = useRouter();
     const searchParams = useSearchParams();
@@ -339,5 +339,13 @@ export default function ProfilePage() {
                 ) : null}
             </div>
         </div>
+    );
+}
+
+export default function ProfilePage() {
+    return (
+        <Suspense fallback={null}>
+            <ProfilePageContent />
+        </Suspense>
     );
 }
