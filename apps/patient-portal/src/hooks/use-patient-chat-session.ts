@@ -128,6 +128,7 @@ interface PatientChatSessionState {
     loading: boolean;
     messages: ChatMessage[];
     selectedLanguage: ChatLocale;
+    safetyNotice: string | null;
     voiceError: string | null;
     voiceInterimTranscript: string;
     voiceModeEnabled: boolean;
@@ -136,6 +137,7 @@ interface PatientChatSessionState {
 
 interface PatientChatSessionActions {
     dismissDocumentContext: () => void;
+    dismissSafetyNotice: () => void;
     handleLanguageSelection: (language: ChatLocale) => void;
     handleMicClick: () => void;
     handlePlayAssistantMessage: (message: ChatMessage) => void;
@@ -179,6 +181,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [documentContext, setDocumentContext] =
         useState<PendingChatDocumentContext | null>(initialDocumentContext);
     const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
+    const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
 
     const recognitionRef = useRef<SpeechRecognitionController | null>(null);
     const playbackStopRef = useRef<(() => void) | null>(null);
@@ -230,6 +233,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         );
 
         dispatch(setChatError(null));
+        setSafetyNotice(null);
         resetVoiceFeedback();
         setInput("");
     }
@@ -380,14 +384,14 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     }
 
                     if (payload.escalation_required) {
-                        dispatch(
-                            setChatError("Urgent symptoms detected. Contact your care team today."),
+                        setSafetyNotice(
+                            getPatientChatCopy(selectedLanguageRef.current).escalationNotice,
                         );
                     }
                     return;
                 }
                 case "escalation_recommended":
-                    dispatch(setChatError(payload.message));
+                    setSafetyNotice(getPatientChatCopy(selectedLanguageRef.current).escalationNotice);
                     return;
                 case "error":
                     resetAssistantDraft();
@@ -447,6 +451,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     function dismissDocumentContext(): void {
         setActiveDocumentId(null);
         setDocumentContext(null);
+    }
+
+    function dismissSafetyNotice(): void {
+        setSafetyNotice(null);
     }
 
     function handleLanguageSelection(language: ChatLocale): void {
@@ -569,6 +577,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         canPlayAssistantAudio,
         connectionStatus,
         dismissDocumentContext,
+        dismissSafetyNotice,
         documentContext,
         error,
         handleLanguageSelection,
@@ -580,6 +589,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         isTyping,
         loading,
         messages,
+        safetyNotice,
         selectedLanguage,
         setInput,
         voiceError,
