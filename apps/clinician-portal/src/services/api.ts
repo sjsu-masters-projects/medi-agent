@@ -8,6 +8,22 @@ interface RequestOptions extends RequestInit {
     token?: string;
 }
 
+function handleUnauthorizedRequest(token: string | undefined) {
+    if (!token) {
+        return;
+    }
+
+    // Avoid SSR + avoid redirect loops.
+    if (typeof window === "undefined" || window.location.pathname === "/login") {
+        return;
+    }
+
+    // Lazy import to avoid hard dependency cycles for modules that only use `api`.
+    void import("@/services/auth-redirect").then(({ redirectToLogin }) => {
+        redirectToLogin({ reason: "session_expired" });
+    });
+}
+
 type JsonObject = Record<string, unknown>;
 
 interface ValidationErrorDetail {
@@ -150,6 +166,9 @@ class ApiClient {
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                handleUnauthorizedRequest(token);
+            }
             const errorPayload = await response.json().catch(() => null);
             const message = parseApiErrorMessage(response.status, errorPayload);
             throw new ApiClientError(message, response.status, errorPayload);

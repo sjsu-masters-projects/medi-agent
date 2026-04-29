@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import { Skeleton } from "@/components/ui";
 import type { RootState } from "@/store/store";
+import { buildLoginRedirectUrl } from "../../../../../packages/shared/src/utils/return-path";
 
 function LoadingSkeleton() {
     return (
@@ -21,12 +22,20 @@ function LoadingSkeleton() {
 export function ProtectedRoute({ children }: { children: ReactNode }) {
     const { isAuthenticated, loading } = useSelector((state: RootState) => state.auth);
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
-            router.replace("/login");
+            const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
+            router.replace(
+                buildLoginRedirectUrl({
+                    loginPath: "/login",
+                    returnPath,
+                }),
+            );
         }
-    }, [isAuthenticated, loading, router]);
+    }, [isAuthenticated, loading, pathname, router, searchParams]);
 
     if (loading) {
         return <LoadingSkeleton />;

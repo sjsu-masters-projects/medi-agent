@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
@@ -11,6 +11,7 @@ import { writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type PatientAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
 import { PortalUserRole } from "@/types";
+import { sanitizeReturnPath } from "../../../../../packages/shared/src/utils/return-path";
 
 interface AuthResponse {
     tokens: {
@@ -29,14 +30,29 @@ interface CareTeamMembership {
     id: string;
 }
 
-export default function LoginPage() {
+function LoginPageContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [passwordVisible, setPasswordVisible] = useState(false);
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
+
+    const notice = (() => {
+        const reason = searchParams?.get("reason") ?? "";
+        if (reason === "session_expired") {
+            return "Your session expired. Please sign in again.";
+        }
+        if (reason === "unauthorized") {
+            return "You no longer have access to this portal. Please sign in again.";
+        }
+        if (reason === "logged_out") {
+            return "You have been logged out.";
+        }
+        return "";
+    })();
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -64,7 +80,12 @@ export default function LoginPage() {
             if (careTeams.length === 0) {
                 router.replace("/profile?joinClinic=1");
             } else {
-                router.replace("/today");
+                const returnPath = sanitizeReturnPath(searchParams?.get("return_path"));
+                if (returnPath && returnPath !== "/login") {
+                    router.replace(returnPath);
+                } else {
+                    router.replace("/today");
+                }
             }
         } catch (submissionError) {
             setError((submissionError as Error).message);
@@ -106,6 +127,7 @@ export default function LoginPage() {
                             type={passwordVisible ? "text" : "password"}
                             value={password}
                         />
+                        {notice ? <p className="text-sm text-slate-600">{notice}</p> : null}
                         {error ? <p className="text-sm text-red-600">{error}</p> : null}
                         <Button disabled={submitting} fullWidth type="submit">
                             {submitting ? "Signing in..." : "Sign in"}
@@ -122,5 +144,13 @@ export default function LoginPage() {
                 </Card>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={null}>
+            <LoginPageContent />
+        </Suspense>
     );
 }
