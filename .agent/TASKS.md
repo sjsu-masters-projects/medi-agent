@@ -78,6 +78,12 @@
 - [x] Set up Google Cloud project / guide
 - [x] Configure Cloud Run strategy for backend
 - [ ] Configure Cloud Scheduler strategy for cron jobs — external/manual infrastructure dependency
+  - [x] Define cron job inventory and owner per job
+  - [x] Define schedule and timezone standards for production jobs
+  - [x] Define retry/backoff policy and idempotency requirements for scheduled endpoints
+  - [x] Define failure handling and replay expectations
+  - [ ] Define monitoring and alert thresholds for scheduled jobs
+  - [x] Document deployment and runbook requirements for Scheduler to Cloud Run
 - [x] Set up Vercel strategy (patient-portal, clinician-portal)
 - [x] Configure environment variables strategy
 - [ ] Set up Sentry strategy for error monitoring — external/manual infrastructure dependency
@@ -316,7 +322,9 @@
 - [x] Message persistence to `chat_messages` table
 - [x] Conversation history retrieval (sliding window + summary)
 - [x] Patient context injection (active meds, recent symptoms, conditions)
-- [x] Document context injection: "Ask about this document" → chat opens with document summary pre-loaded
+- [x] Document context injection API: accept `document_id` / `context=doc:<id>` and fetch parsed summary for chat context
+- [x] Chat pre-load behavior for "Ask about this document": initialize chat with fetched document summary context
+- [x] Document context completion criteria: backend context fetch and patient chat prefill UX are independently tested
 
 ### 5.2 Triage Agent
 - [x] Intent classification (symptom, medication_question, schedule, general, urgent)
@@ -376,8 +384,8 @@
 
 ### 5.9 Production Hardening Follow-ups
 - [x] Remove same-session conversation state race under concurrent WebSocket writers (optimistic lock/version check or equivalent DB claim strategy)
-- [ ] Enforce runtime topology for retry worker ownership (single logical worker owner in production)
-- [ ] Add multi-worker safety for retry processing (DB claim/update locking or Redis distributed lock if multiple worker-enabled instances run)
+- [ ] Enforce runtime topology for retry worker ownership as the default production model (single logical worker owner)
+- [ ] Add conditional multi-worker safety for retry processing as defense in depth if multiple worker-enabled instances run (DB claim/update locking or Redis distributed lock)
 - [ ] Add observability for A2A retry worker: dashboards/alerts for `retrying` and `dead_letter` counts, backlog age, and worker cycle failures
 
 ---
@@ -544,7 +552,12 @@
 - [ ] RLS policy review: verify no data leakage across patients/clinicians
 - [/] Auth flow review: verify MFA, token expiry, session management
   - [x] Local auth regression verification: clinic-code gate, clinician login, MFA setup/login, protected-route access
-  - [ ] Token expiry / refresh-session expiry behavior validated end to end
+  - [ ] Token/session expiry behavior validated end to end with explicit acceptance criteria
+    - [ ] Access token expires at configured TTL and protected APIs return 401 after the expiry boundary
+    - [ ] Refresh session expires at configured absolute timeout and requires re-authentication after timeout
+    - [ ] Refresh token rotation verified: refresh issues a new refresh token and invalidates the old token
+    - [ ] Reuse of an invalidated or rotated refresh token is rejected and logged
+    - [ ] Client expiry UX verified: silent refresh while valid, forced login when expired
   - [ ] Deployed-environment parity validated
 - [ ] Input validation: verify all user inputs are sanitized
 - [ ] File upload validation: verify type/size restrictions

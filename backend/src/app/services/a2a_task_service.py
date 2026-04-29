@@ -311,6 +311,7 @@ class A2ATaskService:
                 if is_last_attempt or not self.is_transient_supabase_error(exc):
                     raise
                 await asyncio.sleep(self._calculate_execute_retry_delay_seconds(attempt))
+        raise ExternalServiceError("Supabase", "A2A task query did not execute")
 
     @staticmethod
     def _is_unique_violation(exc: Exception) -> bool:
