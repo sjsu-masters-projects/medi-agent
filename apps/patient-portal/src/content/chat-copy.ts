@@ -4,6 +4,7 @@ interface PatientChatCopy {
     documentContextIntro: string;
     documentContextSuffix: string;
     emptyStateIntro: string;
+    escalationNotice: string;
     inputPlaceholder: string;
     quickPrompts: string[];
     welcomeMessage: string;
@@ -14,6 +15,7 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
         documentContextIntro: "Asking in",
         documentContextSuffix: ".",
         emptyStateIntro: "I can help with symptoms, results, and next steps. Try one of these prompts:",
+        escalationNotice: "Urgent symptoms detected. Contact your care team today. If symptoms are severe, seek emergency care now.",
         inputPlaceholder: "Type or speak a message...",
         quickPrompts: [
             "Explain my recent results",
@@ -26,6 +28,7 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
         documentContextIntro: "Asking in",
         documentContextSuffix: ".",
         emptyStateIntro: "I can help with symptoms, results, and next steps. Try one of these prompts:",
+        escalationNotice: "Urgent symptoms detected. Contact your care team today. If symptoms are severe, seek emergency care now.",
         inputPlaceholder: "Type or speak a message...",
         quickPrompts: [
             "Explain my recent results",
@@ -38,6 +41,7 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
         documentContextIntro: "Consultando en",
         documentContextSuffix: ".",
         emptyStateIntro: "Puedo ayudarte con síntomas, resultados y próximos pasos. Prueba una de estas preguntas:",
+        escalationNotice: "Se detectaron síntomas urgentes. Contacta a tu equipo clínico hoy. Si los síntomas son graves, busca atención de emergencia ahora.",
         inputPlaceholder: "Escribe o habla un mensaje...",
         quickPrompts: [
             "Explica mis resultados recientes",
