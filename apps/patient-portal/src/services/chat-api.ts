@@ -1,5 +1,11 @@
 import { api } from "@/services/api";
-import { normalizeLocale, type ChatMessage, type ChatRole, type Locale } from "@/types";
+import {
+    normalizeLocale,
+    type ChatMessage,
+    type ChatRole,
+    type DocumentType,
+    type Locale,
+} from "@/types";
 
 export interface ChatMessageApi {
     id: string;
@@ -36,6 +42,20 @@ export interface ChatHistoryEvent {
     messages: ChatMessageApi[];
 }
 
+export interface ChatDocumentContextApi {
+    id?: string | null;
+    file_name?: string | null;
+    document_type?: DocumentType | string | null;
+    summary?: string | null;
+    parse_status?: string | null;
+}
+
+export interface ChatContextLoadedEvent {
+    type: "chat_context_loaded";
+    context_type: "document";
+    document: ChatDocumentContextApi;
+}
+
 export interface UserMessageSavedEvent {
     type: "user_message_saved";
     message: ChatMessageApi;
@@ -56,6 +76,7 @@ export type ChatSocketEvent =
     | AssistantChunkEvent
     | AssistantCompleteEvent
     | AssistantStartEvent
+    | ChatContextLoadedEvent
     | ChatErrorEvent
     | ChatHistoryEvent
     | EscalationRecommendedEvent
@@ -83,13 +104,33 @@ export async function fetchChatHistory(patientId: string, token: string): Promis
     return response.map(mapChatMessageFromApi);
 }
 
-export function buildChatWebSocketUrl(patientId: string, token: string): string {
+export interface ChatWebSocketOptions {
+    documentId?: string | null;
+    sessionId?: string | null;
+}
+
+export function buildChatWebSocketUrl(
+    patientId: string,
+    token: string,
+    options: ChatWebSocketOptions = {},
+): string {
     const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
     const parsed = new URL(backendBaseUrl);
     parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
     parsed.pathname = `/ws/chat/${patientId}`;
     parsed.search = "";
     parsed.searchParams.set("token", token);
+
+    const documentId = options.documentId?.trim();
+    if (documentId) {
+        parsed.searchParams.set("context", `doc:${documentId}`);
+    }
+
+    const sessionId = options.sessionId?.trim();
+    if (sessionId) {
+        parsed.searchParams.set("session_id", sessionId);
+    }
+
     return parsed.toString();
 }
 

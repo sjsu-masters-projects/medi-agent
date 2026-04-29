@@ -36,4 +36,19 @@ describe("chat API helpers", () => {
 
         vi.unstubAllEnvs();
     });
+
+    it("adds document context and session parameters to websocket URLs", () => {
+        vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.com");
+
+        const url = buildChatWebSocketUrl("patient-1", "abc123==", {
+            documentId: "doc-1",
+            sessionId: "records",
+        });
+
+        expect(url).toBe(
+            "wss://api.example.com/ws/chat/patient-1?token=abc123%3D%3D&context=doc%3Adoc-1&session_id=records",
+        );
+
+        vi.unstubAllEnvs();
+    });
 });

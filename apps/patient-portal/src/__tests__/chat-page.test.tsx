@@ -230,6 +230,43 @@ describe("Patient chat page", () => {
             "aria-pressed",
             "true",
         );
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
+            "patient-1",
+            "access-token",
+            { documentId: "doc-1" },
+        );
+        expect(replace).toHaveBeenCalledWith("/chat");
+    });
+
+    it("shows backend-loaded document context when no bridge payload is stored", async () => {
+        searchParamsValue = new URLSearchParams("document=doc-2");
+        window.history.replaceState({}, "", "/chat?document=doc-2");
+
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({
+                type: "chat_context_loaded",
+                context_type: "document",
+                document: {
+                    id: "doc-2",
+                    file_name: "Discharge Summary.pdf",
+                    document_type: "discharge_summary",
+                    summary: "Follow up with primary care.",
+                    parse_status: "completed",
+                },
+            });
+        });
+
+        expect(await screen.findByText(/Discharge Summary\.pdf/i)).toBeInTheDocument();
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
+            "patient-1",
+            "access-token",
+            { documentId: "doc-2" },
+        );
         expect(replace).toHaveBeenCalledWith("/chat");
     });
 

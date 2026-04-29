@@ -316,7 +316,7 @@
 - [x] Message persistence to `chat_messages` table
 - [x] Conversation history retrieval (sliding window + summary)
 - [x] Patient context injection (active meds, recent symptoms, conditions)
-- [/] Document context injection: "Ask about this document" → chat opens with document summary pre-loaded
+- [x] Document context injection: "Ask about this document" → chat opens with document summary pre-loaded
 
 ### 5.2 Triage Agent
 - [x] Intent classification (symptom, medication_question, schedule, general, urgent)
@@ -363,8 +363,8 @@
 ### 5.7 Records → Chat Bridge
 - [x] "Ask about this document" button in Records modal
 - [x] Navigate to `/chat?document={document_id}`
-- [/] Chat page reads query param → loads document AI summary as system context
-- [/] Triage Agent uses document data for medication_question intent responses
+- [x] Chat page reads query param → loads document AI summary as system context
+- [x] Triage Agent uses document data for medication_question intent responses
 
 ### 5.8 Testing
 - [x] Golden-set for Triage Agent: 20+ test messages with expected intent + route
