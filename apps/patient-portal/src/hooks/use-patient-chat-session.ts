@@ -178,6 +178,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     });
     const [documentContext, setDocumentContext] =
         useState<PendingChatDocumentContext | null>(initialDocumentContext);
+    const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
 
     const recognitionRef = useRef<SpeechRecognitionController | null>(null);
     const playbackStopRef = useRef<(() => void) | null>(null);
@@ -295,7 +296,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
         const socket = new WebSocket(
             buildChatWebSocketUrl(user.id, accessToken, {
-                documentId: initialDocumentId,
+                documentId: activeDocumentId,
             }),
         );
         socketRef.current = socket;
@@ -340,6 +341,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                         selectedLanguageRef.current,
                     );
                     if (loadedDocumentContext) {
+                        setActiveDocumentId(loadedDocumentContext.documentId);
                         setDocumentContext(loadedDocumentContext);
                     }
                     return;
@@ -433,7 +435,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, dispatch, initialDocumentId, initialLanguage, user]);
+    }, [accessToken, activeDocumentId, dispatch, initialLanguage, user]);
 
     useEffect(() => {
         return () => {
@@ -443,6 +445,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     }, []);
 
     function dismissDocumentContext(): void {
+        setActiveDocumentId(null);
         setDocumentContext(null);
     }
 

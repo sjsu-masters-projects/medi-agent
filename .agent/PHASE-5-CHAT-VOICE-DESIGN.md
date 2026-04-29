@@ -17,11 +17,10 @@ This document reconciles the current code with the remaining work and defines th
 - Triage agent handles intent, urgency, safety copy, bilingual responses, and symptom routing.
 - Symptom agent extracts symptom data and writes `symptom_reports`.
 - A2A task lifecycle exists for symptom to pharmacovigilance delegation, including idempotency, retry, backoff, and dead-letter state.
-- Patient portal chat UI supports message bubbles, streaming assistant drafts, language selector, quick prompts, document-context banner, and browser voice fallback.
+- Patient portal chat UI supports message bubbles, streaming assistant drafts, language selector, quick prompts, document-context banner, Records to Chat context handoff, and browser voice fallback.
 
 ### Main gaps
 
-- Document context from Records is not fully passed into the WebSocket from the patient portal.
 - Medication and document questions need stronger grounding with document context and RAG citations.
 - Voice is currently browser Web Speech API only. The production path must use Deepgram STT and TTS through the backend.
 - Medical RAG is not implemented.
@@ -118,42 +117,23 @@ Patient-facing chat must:
 
 ## Implementation Pull Requests
 
-### PR 1: Design and tracker reconciliation
+### PR 1: Design, tracker reconciliation, and document-aware chat
 
 Scope:
 
 - Add this design document.
 - Update `TASKS.md` to track the implementation sequence.
-- Do not claim unchecked work is complete.
+- Complete the Records to Chat document context handoff by passing `context=doc:<id>` to the backend WebSocket.
+- Handle backend `chat_context_loaded` events in the patient portal.
+- Do not claim unrelated unchecked work is complete.
 
 Validation:
 
 - Markdown review.
 - Confirm tasks match code audit.
+- Focused patient portal chat tests and lint checks.
 
-### PR 2: Document-aware chat completion
-
-Scope:
-
-- Patient portal passes `document_id` or `context=doc:<id>` when opening the chat WebSocket.
-- Patient portal handles `chat_context_loaded`.
-- Backend keeps document context in conversation state.
-- Triage uses document data for document and medication questions.
-
-Key files:
-
-- `apps/patient-portal/src/services/chat-api.ts`
-- `apps/patient-portal/src/hooks/use-patient-chat-session.ts`
-- `backend/src/app/routers/chat.py`
-- `backend/src/app/services/chat_service.py`
-
-Tests:
-
-- Records to chat bridge sends document context.
-- WebSocket context event is handled.
-- Medication question with document context uses document data.
-
-### PR 3: Chat quality, safety, and multilingual UX
+### PR 2: Chat quality, safety, and multilingual UX
 
 Scope:
 
@@ -177,7 +157,7 @@ Tests:
 - Medication and document question cases.
 - Symptom follow-up cases.
 
-### PR 4: Medication RAG foundation
+### PR 3: Medication RAG foundation
 
 Scope:
 
@@ -203,7 +183,7 @@ Tests:
 - Citation inclusion.
 - No-answer fallback.
 
-### PR 5: Deepgram voice pipeline
+### PR 4: Deepgram voice pipeline
 
 Scope:
 
@@ -228,7 +208,7 @@ Tests:
 - Voice message persistence.
 - Language mapping.
 
-### PR 6: Symptom agent golden set and A2A confidence
+### PR 5: Symptom agent golden set and A2A confidence
 
 Scope:
 
@@ -242,7 +222,7 @@ Tests:
 - A2A lifecycle from chat-triggered symptom report.
 - Retry and dead-letter behavior stays covered.
 
-### PR 7: Final docs and Phase 5 closure
+### PR 6: Final docs and Phase 5 closure
 
 Scope:
 

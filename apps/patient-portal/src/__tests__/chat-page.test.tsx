@@ -270,6 +270,34 @@ describe("Patient chat page", () => {
         expect(replace).toHaveBeenCalledWith("/chat");
     });
 
+    it("reconnects without document context when the user dismisses it", async () => {
+        searchParamsValue = new URLSearchParams("document=doc-3");
+        window.history.replaceState({}, "", "/chat?document=doc-3");
+        storePendingChatDocumentContext({
+            documentId: "doc-3",
+            documentName: "Medication List.pdf",
+            documentType: "prescription",
+            preferredLanguage: Language.EN,
+            provider: "Care team",
+            suggestedQuestion: "Help me understand this medication list.",
+            summary: "Current medication list.",
+        });
+
+        renderPage();
+
+        expect(await screen.findByText(/Medication List\.pdf/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+
+        await waitFor(() => {
+            expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+                "patient-1",
+                "access-token",
+                { documentId: null },
+            );
+        });
+        expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
+    });
+
     it("turns off voice mode when the websocket disconnects", async () => {
         getVoiceCapabilities.mockReturnValue({ recognition: true, synthesis: true });
         renderPage();
