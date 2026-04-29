@@ -306,6 +306,11 @@
 
 ## Phase 5: Chat & Voice — Triage + Symptom Agents (Weeks 13–16)
 
+### 5.0 Implementation Plan
+- [x] Audit current Phase 5 chat, voice, RAG, multilingual, and A2A implementation state
+- [x] Define production architecture for chat, voice, model routing, RAG, safety, and multilingual behavior - `.agent/PHASE-5-CHAT-VOICE-DESIGN.md`
+- [ ] Ship Phase 5 as small reviewable PRs following the design plan
+
 ### 5.1 Chat Backend
 - [x] WebSocket endpoint `/ws/chat/{patient_id}`
 - [x] Message persistence to `chat_messages` table
