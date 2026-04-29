@@ -30,6 +30,7 @@ const { clearStoredClinicContext, readStoredClinicContext, writeStoredClinicCont
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace }),
+    useSearchParams: () => new URLSearchParams(""),
 }));
 
 vi.mock("react-redux", () => ({

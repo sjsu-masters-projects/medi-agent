@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
@@ -17,6 +17,7 @@ import {
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
 import { PortalUserRole } from "@/types";
+import { sanitizeReturnPath } from "../../../../../../packages/shared/src/utils/return-path";
 
 interface LoginResponse {
     mfa_factors?: MFAFactorSummary[];
@@ -101,8 +102,9 @@ function isClinicContextInvalidError(error: unknown): boolean {
     return typeof code === "string" && CLINIC_CONTEXT_ERROR_CODES.has(code);
 }
 
-export default function ClinicianLoginPage() {
+function ClinicianLoginPageContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
     const [stage, setStage] = useState<LoginStage>("verify");
     const [clinicCode, setClinicCode] = useState("");
@@ -117,6 +119,19 @@ export default function ClinicianLoginPage() {
     const [pendingMFAChallenge, setPendingMFAChallenge] =
         useState<PendingMFAChallenge | null>(null);
     const [submitting, setSubmitting] = useState(false);
+
+    const returnPath = sanitizeReturnPath(searchParams?.get("return_path")) ?? "/dashboard";
+    const reason = searchParams?.get("reason") ?? "";
+
+    useEffect(() => {
+        if (reason === "session_expired") {
+            setError("Your session expired. Please sign in again.");
+        }
+
+        if (reason === "unauthorized") {
+            setError("You no longer have access to this portal. Please sign in again.");
+        }
+    }, [reason]);
 
     useEffect(() => {
         const stored = readStoredClinicContext();
@@ -271,7 +286,7 @@ export default function ClinicianLoginPage() {
 
             writeStoredSession(session);
             dispatch(hydrateSession(session));
-            router.replace("/dashboard");
+            router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
         } catch (submissionError) {
             if (
                 !isRetryableApiError(submissionError)
@@ -326,7 +341,7 @@ export default function ClinicianLoginPage() {
             };
             writeStoredSession(session);
             dispatch(hydrateSession(session));
-            router.replace("/dashboard");
+            router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
         } catch (submissionError) {
             setError(
                 getErrorMessage(
@@ -522,5 +537,13 @@ export default function ClinicianLoginPage() {
                 </Card>
             </div>
         </div>
+    );
+}
+
+export default function ClinicianLoginPage() {
+    return (
+        <Suspense fallback={null}>
+            <ClinicianLoginPageContent />
+        </Suspense>
     );
 }
