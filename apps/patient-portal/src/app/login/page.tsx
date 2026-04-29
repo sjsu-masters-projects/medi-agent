@@ -81,7 +81,7 @@ function LoginPageContent() {
                 router.replace("/profile?joinClinic=1");
             } else {
                 const returnPath = sanitizeReturnPath(searchParams?.get("return_path"));
-                if (returnPath && returnPath !== "/login") {
+                if (returnPath && !returnPath.startsWith("/login")) {
                     router.replace(returnPath);
                 } else {
                     router.replace("/today");

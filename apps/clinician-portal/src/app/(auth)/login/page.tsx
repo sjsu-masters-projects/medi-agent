@@ -286,7 +286,7 @@ function ClinicianLoginPageContent() {
 
             writeStoredSession(session);
             dispatch(hydrateSession(session));
-            router.replace(returnPath === "/login" ? "/dashboard" : returnPath);
+            router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
         } catch (submissionError) {
             if (
                 !isRetryableApiError(submissionError)
@@ -341,7 +341,7 @@ function ClinicianLoginPageContent() {
             };
             writeStoredSession(session);
             dispatch(hydrateSession(session));
-            router.replace(returnPath === "/login" ? "/dashboard" : returnPath);
+            router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
         } catch (submissionError) {
             setError(
                 getErrorMessage(
