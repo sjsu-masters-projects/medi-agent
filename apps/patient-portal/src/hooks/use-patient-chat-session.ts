@@ -13,7 +13,9 @@ import {
     type VoiceStatus,
 } from "@/services/browser-voice";
 import {
+    buildSuggestedDocumentQuestion,
     consumePendingChatDocumentContext,
+    normalizeChatDocumentType,
     type PendingChatDocumentContext,
 } from "@/services/chat-bridge";
 import {
@@ -21,6 +23,7 @@ import {
     fetchChatHistory,
     isChatSocketEvent,
     mapChatMessageFromApi,
+    type ChatDocumentContextApi,
 } from "@/services/chat-api";
 import {
     addMessage,
@@ -41,6 +44,7 @@ import {
 } from "@/types";
 
 const CHAT_LANGUAGE_STORAGE_KEY = "patient-portal.chat.language";
+const FALLBACK_DOCUMENT_NAME = "medical record";
 
 function resolveInitialLanguage(): ChatLocale {
     if (typeof window === "undefined") {
@@ -73,6 +77,43 @@ function resolveInitialDocumentContext(): PendingChatDocumentContext | null {
 
     const documentId = new URLSearchParams(window.location.search).get("document");
     return consumePendingChatDocumentContext(documentId);
+}
+
+function resolveInitialDocumentId(): string | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    return new URLSearchParams(window.location.search).get("document");
+}
+
+function mapLoadedDocumentContext(
+    document: ChatDocumentContextApi,
+    preferredLanguage: ChatLocale,
+): PendingChatDocumentContext | null {
+    const documentId = typeof document.id === "string" ? document.id.trim() : "";
+    if (!documentId) {
+        return null;
+    }
+
+    const documentType = normalizeChatDocumentType(document.document_type);
+    const documentName =
+        typeof document.file_name === "string" && document.file_name.trim()
+            ? document.file_name.trim()
+            : FALLBACK_DOCUMENT_NAME;
+
+    return {
+        documentId,
+        documentName,
+        documentType,
+        preferredLanguage,
+        suggestedQuestion: buildSuggestedDocumentQuestion({
+            documentName,
+            documentType,
+            preferredLanguage,
+        }),
+        summary: typeof document.summary === "string" ? document.summary : undefined,
+    };
 }
 
 interface PatientChatSessionState {
@@ -115,6 +156,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [initialDocumentContext] = useState<PendingChatDocumentContext | null>(
         resolveInitialDocumentContext,
     );
+    const [initialDocumentId] = useState<string | null>(
+        () => initialDocumentContext?.documentId ?? resolveInitialDocumentId(),
+    );
     const [initialLanguage] = useState<ChatLocale>(
         () => initialDocumentContext?.preferredLanguage ?? resolveInitialLanguage(),
     );
@@ -134,6 +178,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     });
     const [documentContext, setDocumentContext] =
         useState<PendingChatDocumentContext | null>(initialDocumentContext);
+    const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
 
     const recognitionRef = useRef<SpeechRecognitionController | null>(null);
     const playbackStopRef = useRef<(() => void) | null>(null);
@@ -249,7 +294,11 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         dispatch(setConnectionStatus("connecting"));
         dispatch(setChatError(null));
 
-        const socket = new WebSocket(buildChatWebSocketUrl(user.id, accessToken));
+        const socket = new WebSocket(
+            buildChatWebSocketUrl(user.id, accessToken, {
+                documentId: activeDocumentId,
+            }),
+        );
         socketRef.current = socket;
 
         socket.onopen = () => {
@@ -284,6 +333,17 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                                 : [buildWelcomeMessage(user.id, selectedLanguageRef.current)],
                         ),
                     );
+                    return;
+                }
+                case "chat_context_loaded": {
+                    const loadedDocumentContext = mapLoadedDocumentContext(
+                        payload.document,
+                        selectedLanguageRef.current,
+                    );
+                    if (loadedDocumentContext) {
+                        setActiveDocumentId(loadedDocumentContext.documentId);
+                        setDocumentContext(loadedDocumentContext);
+                    }
                     return;
                 }
                 case "user_message_saved":
@@ -375,7 +435,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, dispatch, initialLanguage, user]);
+    }, [accessToken, activeDocumentId, dispatch, initialLanguage, user]);
 
     useEffect(() => {
         return () => {
@@ -385,6 +445,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     }, []);
 
     function dismissDocumentContext(): void {
+        setActiveDocumentId(null);
         setDocumentContext(null);
     }
 

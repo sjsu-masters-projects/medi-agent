@@ -42,6 +42,10 @@ function isDocumentType(value: unknown): value is DocumentTypeValue {
     return typeof value === "string" && DOCUMENT_TYPES.has(value as DocumentTypeValue);
 }
 
+export function normalizeChatDocumentType(value: unknown): DocumentTypeValue {
+    return isDocumentType(value) ? value : DocumentType.OTHER;
+}
+
 export function buildDocumentChatHref(documentId: string): string {
     return `/chat?document=${encodeURIComponent(documentId)}`;
 }
@@ -98,6 +102,7 @@ export function consumePendingChatDocumentContext(
         }
         return {
             ...parsed,
+            documentType: normalizeChatDocumentType(parsed.documentType),
             preferredLanguage: normalizeLocale(parsed.preferredLanguage),
         };
     } catch {

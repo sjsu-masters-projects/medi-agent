@@ -230,7 +230,72 @@ describe("Patient chat page", () => {
             "aria-pressed",
             "true",
         );
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
+            "patient-1",
+            "access-token",
+            { documentId: "doc-1" },
+        );
         expect(replace).toHaveBeenCalledWith("/chat");
+    });
+
+    it("shows backend-loaded document context when no bridge payload is stored", async () => {
+        searchParamsValue = new URLSearchParams("document=doc-2");
+        window.history.replaceState({}, "", "/chat?document=doc-2");
+
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({
+                type: "chat_context_loaded",
+                context_type: "document",
+                document: {
+                    id: "doc-2",
+                    file_name: "Discharge Summary.pdf",
+                    document_type: "discharge_summary",
+                    summary: "Follow up with primary care.",
+                    parse_status: "completed",
+                },
+            });
+        });
+
+        expect(await screen.findByText(/Discharge Summary\.pdf/i)).toBeInTheDocument();
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
+            "patient-1",
+            "access-token",
+            { documentId: "doc-2" },
+        );
+        expect(replace).toHaveBeenCalledWith("/chat");
+    });
+
+    it("reconnects without document context when the user dismisses it", async () => {
+        searchParamsValue = new URLSearchParams("document=doc-3");
+        window.history.replaceState({}, "", "/chat?document=doc-3");
+        storePendingChatDocumentContext({
+            documentId: "doc-3",
+            documentName: "Medication List.pdf",
+            documentType: "prescription",
+            preferredLanguage: Language.EN,
+            provider: "Care team",
+            suggestedQuestion: "Help me understand this medication list.",
+            summary: "Current medication list.",
+        });
+
+        renderPage();
+
+        expect(await screen.findByText(/Medication List\.pdf/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+
+        await waitFor(() => {
+            expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+                "patient-1",
+                "access-token",
+                { documentId: null },
+            );
+        });
+        expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
     });
 
     it("turns off voice mode when the websocket disconnects", async () => {

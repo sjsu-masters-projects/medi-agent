@@ -4,13 +4,20 @@
 
 import { DEFAULT_LOCALE, type Locale } from "../types";
 
+const INVALID_DATE_FALLBACK = "";
+
+function toValidDate(input: string | Date): Date | null {
+    const date = typeof input === "string" ? new Date(input) : input;
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /**
  * Format a date string or Date object into a human-readable format.
  */
 export function formatDate(date: string | Date, locale: Locale = DEFAULT_LOCALE): string {
-    const d = typeof date === "string" ? new Date(date) : date;
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(locale, {
+    const validDate = toValidDate(date);
+    if (!validDate) return INVALID_DATE_FALLBACK;
+    return validDate.toLocaleDateString(locale, {
         year: "numeric",
         month: "short",
         day: "numeric",
@@ -21,19 +28,19 @@ export function formatDate(date: string | Date, locale: Locale = DEFAULT_LOCALE)
  * Format a date string into a relative time string (e.g., "2 hours ago").
  */
 export function formatRelativeTime(date: string | Date): string {
-    const d = typeof date === "string" ? new Date(date) : date;
-    if (Number.isNaN(d.getTime())) return "";
+    const validDate = toValidDate(date);
+    if (!validDate) return INVALID_DATE_FALLBACK;
     const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    const diffHr = Math.floor(diffMin / 60);
-    const diffDay = Math.floor(diffHr / 24);
+    const diffMs = now.getTime() - validDate.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMin < 1) return "just now";
-    if (diffMin < 60) return `${diffMin}m ago`;
-    if (diffHr < 24) return `${diffHr}h ago`;
-    if (diffDay < 7) return `${diffDay}d ago`;
-    return formatDate(d);
+    if (diffMinutes < 1) return "just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return formatDate(validDate);
 }
 
 /**
