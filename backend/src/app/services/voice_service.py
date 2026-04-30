@@ -7,7 +7,6 @@ import base64
 import binascii
 import inspect
 import time
-from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
@@ -345,9 +344,7 @@ def _audio_extension(mime_type: str) -> str:
 
 async def _maybe_await(value: Any) -> None:
     if inspect.isawaitable(value):
-        awaitable_value = value if isinstance(value, Awaitable) else None
-        if awaitable_value is not None:
-            await awaitable_value
+        await value
 
 
 def _extract_deepgram_transcript(message: Any) -> str:
