@@ -342,9 +342,10 @@ def _audio_extension(mime_type: str) -> str:
     return "webm"
 
 
-async def _maybe_await(value: Any) -> None:
+async def _maybe_await(value: Any) -> Any:
     if inspect.isawaitable(value):
-        await value
+        return await value
+    return None
 
 
 def _extract_deepgram_transcript(message: Any) -> str:
