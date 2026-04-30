@@ -11,7 +11,12 @@ from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
 from app.models.enums import Language
-from app.services.voice_service import VoiceAudio, VoiceTranscript
+from app.services.voice_service import (
+    VoiceAudio,
+    VoiceStoredAudio,
+    VoiceStreamTranscript,
+    VoiceTranscript,
+)
 
 
 @pytest.fixture
@@ -21,7 +26,7 @@ def patient_id():
 
 @pytest.fixture(autouse=True)
 def _override_db():
-    app.dependency_overrides[get_db] = lambda: object()
+    app.dependency_overrides[get_db] = object
     yield
     app.dependency_overrides.clear()
 
@@ -96,13 +101,30 @@ def test_voice_websocket_generates_assistant_audio(client, monkeypatch, patient_
             encoding="mp3",
         )
 
+    async def _mock_persist_assistant(self, *, patient_id, message_id, audio):
+        assert message_id == "assistant-1"
+        return VoiceAudio(
+            audio=audio.audio,
+            language=audio.language,
+            model=audio.model,
+            mime_type=audio.mime_type,
+            encoding=audio.encoding,
+            audio_url=f"{patient_id}/assistant-1-assistant.mp3",
+            signed_url="https://storage.example.com/assistant-1.mp3",
+        )
+
     monkeypatch.setattr("app.routers.voice.VoiceService.synthesize_speech", _mock_synthesize)
+    monkeypatch.setattr(
+        "app.routers.voice.VoiceService.persist_assistant_audio_for_message",
+        _mock_persist_assistant,
+    )
 
     with client.websocket_connect(f"/ws/voice/{patient_id}?token=test-token") as websocket:
         assert websocket.receive_json()["type"] == "voice_ready"
         websocket.send_json(
             {
                 "type": "tts_request",
+                "message_id": "assistant-1",
                 "text": "Hydrate and call your care team if symptoms worsen.",
                 "language": "en-US",
             }
@@ -116,6 +138,100 @@ def test_voice_websocket_generates_assistant_audio(client, monkeypatch, patient_
             "encoding": "mp3",
             "language": "en-US",
             "model": "aura-2-asteria-en",
+            "audio_url": f"{patient_id}/assistant-1-assistant.mp3",
+            "signed_url": "https://storage.example.com/assistant-1.mp3",
+        }
+
+
+def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
+    client, monkeypatch, patient_id
+):
+    token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
+    monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
+    class FakeStream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def send_audio(self, audio):
+            assert audio == b"chunk"
+            return [
+                VoiceStreamTranscript(
+                    transcript="I feel dizzy",
+                    language=Language.EN,
+                    model="nova-3",
+                    is_final=False,
+                )
+            ]
+
+        async def finish(self):
+            return [
+                VoiceStreamTranscript(
+                    transcript="I feel dizzy",
+                    language=Language.EN,
+                    model="nova-3",
+                    is_final=True,
+                )
+            ]
+
+    def _mock_stream(self, *, language):
+        assert language == "en-US"
+        return FakeStream()
+
+    async def _mock_persist(self, *, patient_id, audio, mime_type, purpose, message_id=None):
+        assert audio == b"chunk"
+        assert mime_type == "audio/webm"
+        assert purpose == "user"
+        assert message_id is None
+        return VoiceStoredAudio(
+            path=f"{patient_id}/voice-user.webm",
+            signed_url="https://storage.example.com/voice-user.webm",
+        )
+
+    monkeypatch.setattr(
+        "app.routers.voice.VoiceService.create_streaming_transcription",
+        _mock_stream,
+    )
+    monkeypatch.setattr("app.routers.voice.VoiceService.persist_audio", _mock_persist)
+
+    with client.websocket_connect(f"/ws/voice/{patient_id}?token=test-token") as websocket:
+        assert websocket.receive_json()["type"] == "voice_ready"
+        websocket.send_json(
+            {
+                "type": "audio_start",
+                "mime_type": "audio/webm",
+                "language": "en-US",
+            }
+        )
+        assert websocket.receive_json() == {"type": "audio_stream_started"}
+
+        websocket.send_json(
+            {
+                "type": "audio_chunk",
+                "audio_base64": base64.b64encode(b"chunk").decode("ascii"),
+            }
+        )
+        assert websocket.receive_json() == {
+            "type": "transcript_partial",
+            "transcript": "I feel dizzy",
+            "language": "en-US",
+            "model": "nova-3",
+        }
+
+        websocket.send_json({"type": "audio_stop"})
+        assert websocket.receive_json() == {
+            "type": "transcript_final",
+            "transcript": "I feel dizzy",
+            "language": "en-US",
+            "model": "nova-3",
+        }
+        assert websocket.receive_json() == {
+            "type": "audio_stream_complete",
+            "audio_url": f"{patient_id}/voice-user.webm",
+            "signed_url": "https://storage.example.com/voice-user.webm",
         }
 
 

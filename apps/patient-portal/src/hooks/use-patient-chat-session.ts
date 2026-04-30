@@ -28,6 +28,7 @@ import {
 import {
     buildVoiceAudioDataUrl,
     buildVoiceWebSocketUrl,
+    blobToBase64,
     isVoiceSocketEvent,
     normalizeVoiceEventLanguage,
 } from "@/services/voice-api";
@@ -182,7 +183,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [voiceInterimTranscript, setVoiceInterimTranscript] = useState("");
     const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>(() => {
         const capabilities = getVoiceCapabilities();
-        return capabilities.recognition || capabilities.synthesis ? "idle" : "unsupported";
+        return capabilities.recording || capabilities.recognition || capabilities.synthesis
+            ? "idle"
+            : "unsupported";
     });
     const [documentContext, setDocumentContext] =
         useState<PendingChatDocumentContext | null>(initialDocumentContext);
@@ -190,24 +193,32 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
 
     const voiceRefs = useRef<{
+        finalTranscript: string;
+        mediaRecorder: MediaRecorder | null;
+        mediaStream: MediaStream | null;
         pendingPlayback: { language: ChatLocale; text: string } | null;
+        queuedVoiceEvents: string[];
         recognition: SpeechRecognitionController | null;
+        recordedAudioUrl: string | null;
         playbackStop: (() => void) | null;
         selectedLanguage: ChatLocale;
-        ttsRequest: string | null;
         voiceModeEnabled: boolean;
     }>({
+        finalTranscript: "",
+        mediaRecorder: null,
+        mediaStream: null,
         playbackStop: null,
         pendingPlayback: null,
+        queuedVoiceEvents: [],
         recognition: null,
+        recordedAudioUrl: null,
         selectedLanguage: initialLanguage,
-        ttsRequest: null,
         voiceModeEnabled: false,
     });
     const socketRef = useRef<WebSocket | null>(null);
     const voiceSocketRef = useRef<WebSocket | null>(null);
 
-    const canPlayAssistantAudio = voiceCapabilities.synthesis;
+    const canPlayAssistantAudio = Boolean(accessToken && user) || voiceCapabilities.synthesis;
 
     function resetAssistantDraft(): void {
         setAssistantDraft("");
@@ -228,6 +239,16 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     function stopSpeechRecognition(): void {
         voiceRefs.current.recognition?.stop();
         voiceRefs.current.recognition = null;
+    }
+
+    function stopMediaRecorder(): void {
+        const recorder = voiceRefs.current.mediaRecorder;
+        if (recorder && recorder.state !== "inactive") {
+            recorder.stop();
+        }
+        voiceRefs.current.mediaRecorder = null;
+        voiceRefs.current.mediaStream?.getTracks().forEach((track) => track.stop());
+        voiceRefs.current.mediaStream = null;
     }
 
     function sendChatMessage(content: string, audioUrl?: string): void {
@@ -275,21 +296,24 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     function closeVoiceSocket(): void {
         const socket = voiceSocketRef.current;
         voiceSocketRef.current = null;
-        voiceRefs.current.ttsRequest = null;
+        voiceRefs.current.queuedVoiceEvents = [];
         if (socket && socket.readyState !== WebSocket.CLOSED) {
             socket.close();
         }
     }
 
-    function sendQueuedVoiceRequest(): void {
+    function sendQueuedVoiceEvents(): void {
         const socket = voiceSocketRef.current;
-        const request = voiceRefs.current.ttsRequest;
-        if (!socket || socket.readyState !== WebSocket.OPEN || !request) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
             return;
         }
 
-        socket.send(request);
-        voiceRefs.current.ttsRequest = null;
+        while (voiceRefs.current.queuedVoiceEvents.length > 0) {
+            const nextEvent = voiceRefs.current.queuedVoiceEvents.shift();
+            if (nextEvent) {
+                socket.send(nextEvent);
+            }
+        }
     }
 
     function connectVoiceSocket(): WebSocket | null {
@@ -310,7 +334,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         voiceSocketRef.current = socket;
 
         socket.onopen = () => {
-            sendQueuedVoiceRequest();
+            sendQueuedVoiceEvents();
         };
 
         socket.onmessage = (event) => {
@@ -322,6 +346,41 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             }
 
             if (!isVoiceSocketEvent(payload)) {
+                return;
+            }
+
+            if (payload.type === "voice_ready") {
+                sendQueuedVoiceEvents();
+                return;
+            }
+
+            if (payload.type === "audio_stream_started") {
+                setVoiceStatus("listening");
+                return;
+            }
+
+            if (payload.type === "transcript_partial") {
+                setVoiceInterimTranscript(payload.transcript);
+                return;
+            }
+
+            if (payload.type === "transcript_final") {
+                voiceRefs.current.finalTranscript = payload.transcript;
+                setVoiceInterimTranscript(payload.transcript);
+                return;
+            }
+
+            if (payload.type === "audio_stream_complete") {
+                const transcript = voiceRefs.current.finalTranscript.trim();
+                voiceRefs.current.recordedAudioUrl = payload.audio_url ?? null;
+                voiceRefs.current.finalTranscript = "";
+                setVoiceInterimTranscript("");
+                if (transcript) {
+                    setVoiceStatus(voiceRefs.current.voiceModeEnabled ? "processing" : "idle");
+                    sendChatMessage(transcript, payload.audio_url ?? undefined);
+                } else {
+                    setVoiceStatus("idle");
+                }
                 return;
             }
 
@@ -400,6 +459,21 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         return socket;
     }
 
+    function sendVoiceSocketEvent(event: Record<string, unknown>): WebSocket | null {
+        const socket = connectVoiceSocket();
+        if (!socket) {
+            return null;
+        }
+
+        const payload = JSON.stringify(event);
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(payload);
+        } else {
+            voiceRefs.current.queuedVoiceEvents.push(payload);
+        }
+        return socket;
+    }
+
     function requestBackendAssistantAudio(message: ChatMessage): void {
         if (message.audioUrl) {
             playAssistantMessageWithBrowserFallback(message);
@@ -417,13 +491,13 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             language: message.language,
             text: message.content,
         };
-        voiceRefs.current.ttsRequest = JSON.stringify({
+        sendVoiceSocketEvent({
             type: "tts_request",
+            message_id: message.id,
             text: message.content,
             language: message.language,
         });
         setVoiceStatus("processing");
-        sendQueuedVoiceRequest();
     }
 
     const requestBackendAssistantAudioEvent = useEffectEvent((message: ChatMessage) => {
@@ -626,6 +700,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     useEffect(() => {
         return () => {
             stopSpeechRecognition();
+            stopMediaRecorder();
             stopAssistantVoicePlayback();
             closeVoiceSocket();
         };
@@ -664,6 +739,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
         if (!nextValue) {
             stopSpeechRecognition();
+            stopMediaRecorder();
             stopAssistantPlayback();
             setVoiceInterimTranscript("");
             setVoiceStatus("idle");
@@ -674,14 +750,20 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     }
 
     function handleMicClick(): void {
-        if (!voiceCapabilities.recognition) {
-            setVoiceStatus("unsupported");
-            setVoiceError("Speech recognition is not supported in this browser.");
+        if (voiceStatus === "listening") {
+            stopMediaRecorder();
+            stopSpeechRecognition();
             return;
         }
 
-        if (voiceStatus === "listening") {
-            stopSpeechRecognition();
+        if (voiceCapabilities.recording && accessToken && user) {
+            void startBackendVoiceRecording();
+            return;
+        }
+
+        if (!voiceCapabilities.recognition) {
+            setVoiceStatus("unsupported");
+            setVoiceError("Speech recognition is not supported in this browser.");
             return;
         }
 
@@ -733,8 +815,72 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         controller.start();
     }
 
+    async function startBackendVoiceRecording(): Promise<void> {
+        resetVoiceFeedback();
+
+        if (!navigator.mediaDevices?.getUserMedia || typeof window.MediaRecorder === "undefined") {
+            setVoiceStatus("unsupported");
+            setVoiceError("Voice recording is not supported in this browser.");
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+                ? "audio/webm;codecs=opus"
+                : "audio/webm";
+            const recorder = new MediaRecorder(stream, { mimeType });
+            voiceRefs.current.mediaStream = stream;
+            voiceRefs.current.mediaRecorder = recorder;
+            voiceRefs.current.finalTranscript = "";
+            voiceRefs.current.recordedAudioUrl = null;
+
+            sendVoiceSocketEvent({
+                type: "audio_start",
+                language: voiceRefs.current.selectedLanguage,
+                mime_type: mimeType,
+            });
+
+            recorder.ondataavailable = (event) => {
+                if (!event.data || event.data.size === 0) {
+                    return;
+                }
+
+                void blobToBase64(event.data)
+                    .then((audioBase64) => {
+                        sendVoiceSocketEvent({
+                            type: "audio_chunk",
+                            audio_base64: audioBase64,
+                        });
+                    })
+                    .catch(() => {
+                        setVoiceError("Unable to process microphone audio.");
+                    });
+            };
+
+            recorder.onerror = () => {
+                setVoiceStatus("idle");
+                setVoiceError("Voice recording failed. Please try again.");
+            };
+
+            recorder.onstop = () => {
+                stream.getTracks().forEach((track) => track.stop());
+                voiceRefs.current.mediaStream = null;
+                voiceRefs.current.mediaRecorder = null;
+                sendVoiceSocketEvent({ type: "audio_stop" });
+                setVoiceStatus("processing");
+            };
+
+            recorder.start(1000);
+            setVoiceStatus("listening");
+        } catch {
+            setVoiceStatus("idle");
+            setVoiceError("Microphone access was blocked. You can still type your message.");
+        }
+    }
+
     function handlePlayAssistantMessage(message: ChatMessage): void {
-        const canPlay = Boolean(message.audioUrl) || voiceCapabilities.synthesis;
+        const canPlay = Boolean(message.audioUrl) || Boolean(accessToken && user) || voiceCapabilities.synthesis;
         if (!canPlay) {
             setVoiceError("Audio playback is not available on this device.");
             return;

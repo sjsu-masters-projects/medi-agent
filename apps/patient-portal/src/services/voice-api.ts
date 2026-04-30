@@ -10,10 +10,12 @@ export interface VoiceReadyEvent {
 export interface AssistantAudioReadyEvent {
     type: "assistant_audio_ready";
     audio_base64: string;
+    audio_url?: string | null;
     mime_type: string;
     encoding: string;
     language: Locale;
     model: string;
+    signed_url?: string | null;
 }
 
 export interface TranscriptFinalEvent {
@@ -23,6 +25,23 @@ export interface TranscriptFinalEvent {
     model: string;
 }
 
+export interface TranscriptPartialEvent {
+    type: "transcript_partial";
+    transcript: string;
+    language: Locale;
+    model: string;
+}
+
+export interface AudioStreamStartedEvent {
+    type: "audio_stream_started";
+}
+
+export interface AudioStreamCompleteEvent {
+    type: "audio_stream_complete";
+    audio_url?: string | null;
+    signed_url?: string | null;
+}
+
 export interface VoiceErrorEvent {
     type: "voice_error";
     code?: string;
@@ -30,8 +49,11 @@ export interface VoiceErrorEvent {
 }
 
 export type VoiceSocketEvent =
+    | AudioStreamCompleteEvent
+    | AudioStreamStartedEvent
     | AssistantAudioReadyEvent
     | TranscriptFinalEvent
+    | TranscriptPartialEvent
     | VoiceErrorEvent
     | VoiceReadyEvent
     | { type: "pong" };
@@ -54,8 +76,11 @@ export function isVoiceSocketEvent(value: unknown): value is VoiceSocketEvent {
     const eventType = (value as { type?: unknown }).type;
     return (
         eventType === "assistant_audio_ready" ||
+        eventType === "audio_stream_complete" ||
+        eventType === "audio_stream_started" ||
         eventType === "pong" ||
         eventType === "transcript_final" ||
+        eventType === "transcript_partial" ||
         eventType === "voice_error" ||
         eventType === "voice_ready"
     );
@@ -67,4 +92,14 @@ export function buildVoiceAudioDataUrl(event: AssistantAudioReadyEvent): string 
 
 export function normalizeVoiceEventLanguage(language: unknown): Locale {
     return normalizeLocale(typeof language === "string" ? language : undefined);
+}
+
+export async function blobToBase64(blob: Blob): Promise<string> {
+    const buffer = await blob.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+    }
+    return window.btoa(binary);
 }

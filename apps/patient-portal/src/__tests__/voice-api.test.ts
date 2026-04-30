@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+    blobToBase64,
     buildVoiceAudioDataUrl,
     buildVoiceWebSocketUrl,
     isVoiceSocketEvent,
@@ -25,6 +26,8 @@ describe("voice-api", () => {
 
     it("recognizes supported voice socket events only", () => {
         expect(isVoiceSocketEvent({ type: "assistant_audio_ready" })).toBe(true);
+        expect(isVoiceSocketEvent({ type: "audio_stream_complete" })).toBe(true);
+        expect(isVoiceSocketEvent({ type: "transcript_partial" })).toBe(true);
         expect(isVoiceSocketEvent({ type: "transcript_final" })).toBe(true);
         expect(isVoiceSocketEvent({ type: "unknown" })).toBe(false);
         expect(isVoiceSocketEvent(null)).toBe(false);
@@ -46,5 +49,9 @@ describe("voice-api", () => {
     it("normalizes voice event language", () => {
         expect(normalizeVoiceEventLanguage("es")).toBe("es-MX");
         expect(normalizeVoiceEventLanguage(null)).toBe("en-US");
+    });
+
+    it("converts recorded audio blobs to base64", async () => {
+        expect(await blobToBase64(new Blob(["abc"], { type: "audio/webm" }))).toBe("YWJj");
     });
 });

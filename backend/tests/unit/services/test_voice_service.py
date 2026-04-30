@@ -1,12 +1,14 @@
 """Unit tests for backend voice transport service."""
 
 import base64
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
 from app.core.exceptions import ValidationError
 from app.models.enums import Language
-from app.services.voice_service import VoiceService
+from app.services.voice_service import VoiceAudio, VoiceService
 
 
 @pytest.mark.asyncio
@@ -73,6 +75,65 @@ async def test_synthesize_speech_returns_encoded_audio_metadata(monkeypatch):
 
 def test_encode_audio_base64_is_ascii_safe():
     assert VoiceService.encode_audio_base64(b"abc") == "YWJj"
+
+
+@pytest.mark.asyncio
+async def test_persist_assistant_audio_uploads_and_updates_chat_message():
+    patient_id = uuid4()
+    calls: list[tuple[str, object]] = []
+
+    class FakeTable:
+        def update(self, payload):
+            calls.append(("update", payload))
+            return self
+
+        def eq(self, key, value):
+            calls.append((key, value))
+            return self
+
+        def execute(self):
+            calls.append(("execute_table", None))
+            return SimpleNamespace(data=[{"id": "message-1"}])
+
+    class FakeBucket:
+        def upload(self, path, audio, options):
+            calls.append(("upload", (path, audio, options)))
+            return SimpleNamespace(path=path)
+
+        def create_signed_url(self, path, expires_in):
+            calls.append(("signed_url", (path, expires_in)))
+            return {"signedURL": f"https://storage.example.com/{path}"}
+
+    class FakeStorage:
+        def from_(self, bucket):
+            calls.append(("bucket", bucket))
+            return FakeBucket()
+
+    class FakeDb:
+        storage = FakeStorage()
+
+        def table(self, name):
+            calls.append(("table", name))
+            return FakeTable()
+
+    audio = await VoiceService(FakeDb()).persist_assistant_audio_for_message(
+        patient_id=patient_id,
+        message_id="message-1",
+        audio=VoiceAudio(
+            audio=b"mp3",
+            language=Language.EN,
+            model="aura-2-asteria-en",
+            mime_type="audio/mpeg",
+            encoding="mp3",
+        ),
+    )
+
+    assert audio.audio_url is not None
+    assert audio.signed_url is not None
+    assert ("bucket", "voice-messages") in calls
+    assert ("table", "chat_messages") in calls
+    assert ("id", "message-1") in calls
+    assert ("patient_id", str(patient_id)) in calls
 
 
 @pytest.mark.asyncio

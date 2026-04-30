@@ -349,7 +349,7 @@
   - [x] Add `drug_knowledge_chunks` pgvector schema and similarity-match RPC
   - [x] Add DailyMed label chunk builder/upsert service
   - [x] Add checked-in ingestion script for curated DailyMed labels
-  - [ ] Run ingestion against production Supabase and verify first curated drug label set
+  - [x] Run ingestion against production Supabase and verify first curated drug label set
 - [x] Embedding generation for medication knowledge base
   - [x] Add Google Gen AI embedding client with configurable model and dimensions
   - [x] Keep embedding dependency injectable for offline tests
@@ -365,13 +365,13 @@
 - [/] Deepgram STT client (streaming WebSocket)
   - [x] Add authenticated backend voice WebSocket contract (`/ws/voice/{patient_id}`)
   - [x] Add server-side final-audio STT path through Deepgram with validation/tests
-  - [ ] Add true incremental audio chunk streaming from browser mic to backend STT
+  - [x] Add true incremental audio chunk streaming from browser mic to backend STT
 - [/] Deepgram TTS client (text → audio stream)
   - [x] Add backend TTS generation path returning playable audio payload metadata
-  - [ ] Persist generated assistant audio in `voice-messages` storage and `chat_messages.audio_url`
-- [ ] Voice-to-voice pipeline: mic → STT → Triage Agent → response → TTS → speaker
+  - [x] Persist generated assistant audio in `voice-messages` storage and `chat_messages.audio_url`
+- [x] Voice-to-voice pipeline: mic → STT → Triage Agent → response → TTS → speaker
 - [ ] Language detection from audio
-- [ ] Audio message storage (Supabase Storage, URL in chat_messages)
+- [x] Audio message storage (Supabase Storage, URL in chat_messages)
 - [ ] Voice readback of document summaries: 🔊 button on Records modal → TTS in selected language
 - [ ] Multilingual TTS beyond EN/ES (Hindi, Chinese, Vietnamese, Tagalog — top US non-English medical populations)
 
