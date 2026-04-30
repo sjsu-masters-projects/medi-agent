@@ -1,0 +1,18 @@
+{
+  "name": "MediAgent Patient",
+  "short_name": "MediAgent",
+  "description": "A calm health companion for medications, records, reminders, and clinician updates.",
+  "start_url": "/today",
+  "display": "standalone",
+  "background_color": "#f6f1ea",
+  "theme_color": "#147465",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

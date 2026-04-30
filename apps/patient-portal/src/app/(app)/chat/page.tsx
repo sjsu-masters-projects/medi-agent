@@ -83,19 +83,19 @@ export default function ChatPage() {
     }, [assistantDraft, isTyping, messages]);
 
     return (
-        <div className="min-h-full bg-[#F5F8FE] px-3 py-4 text-[#23324A] sm:px-6 sm:py-6">
+        <div className="patient-page min-h-full px-3 py-4 text-[#17233a] sm:px-6 sm:py-6">
             <div className="mx-auto flex min-h-full max-w-[28rem] flex-col">
-                <div className="rounded-[28px] border border-[#E3EBF7] bg-white px-4 pt-5 pb-4 shadow-[0_18px_40px_rgba(70,96,140,0.10)] sm:px-5">
+                <div className="rounded-[32px] border border-white/70 bg-white/88 px-4 pt-5 pb-4 shadow-[0_18px_48px_rgba(42,58,84,0.10)] ring-1 ring-[#eadfd4]/70 backdrop-blur sm:px-5">
                     <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#DCE6F3] bg-[#F6FAFF] text-sm text-[#1B95E0] shadow-[0_12px_26px_rgba(80,119,177,0.12)]">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#b6d9d2] bg-[#e6f4f1] text-sm text-[#147465] shadow-[0_12px_26px_rgba(20,116,101,0.12)]">
                                 <HiSparkles className="h-5 w-5" />
                             </div>
                             <div className="space-y-1">
-                                <h1 className="text-[1.35rem] font-semibold tracking-[-0.02em] text-[#16263F]">
+                                <h1 className="text-[1.45rem] font-black tracking-[-0.03em] text-[#17233a]">
                                     Care Companion
                                 </h1>
-                                <p className="inline-flex items-center gap-2 text-sm text-[#6E829F]">
+                                <p className="inline-flex items-center gap-2 text-sm font-medium text-[#64748b]">
                                     <span
                                         className={`h-2 w-2 rounded-full ${
                                             connectionStatus === "connected"
@@ -111,7 +111,7 @@ export default function ChatPage() {
                         </div>
                         <div
                             aria-label="Chat language"
-                            className="inline-flex rounded-full border border-[#D9E4F2] bg-[#FBFCFF] p-1 shadow-[0_10px_24px_rgba(70,96,140,0.08)]"
+                            className="inline-flex rounded-full border border-[#d9cbc0] bg-[#fffaf4] p-1 shadow-[0_10px_24px_rgba(42,58,84,0.08)]"
                             role="group"
                         >
                             {SUPPORTED_LOCALES.map((locale) => {
@@ -119,10 +119,10 @@ export default function ChatPage() {
                                 return (
                                     <button
                                         aria-pressed={isActive}
-                                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                        className={`min-h-9 rounded-full px-3 py-1.5 text-xs font-bold transition ${
                                             isActive
-                                                ? "bg-[#EADFFF] text-[#5F4A90]"
-                                                : "text-[#5E6F8D] hover:bg-[#F4F8FD]"
+                                                ? "bg-[#147465] text-white"
+                                                : "text-[#5b6b83] hover:bg-white"
                                         }`}
                                         key={locale}
                                         onClick={() => handleLanguageSelection(locale)}
@@ -132,7 +132,7 @@ export default function ChatPage() {
                                     </button>
                                 );
                             })}
-                            <span className="pointer-events-none flex items-center px-1 text-[#7389A8]">
+                            <span className="pointer-events-none flex items-center px-1 text-[#8090a5]">
                                 <HiChevronDown className="h-3.5 w-3.5" />
                             </span>
                         </div>
@@ -140,26 +140,26 @@ export default function ChatPage() {
                 </div>
 
                 <div className="mt-4 flex-1 overflow-y-auto px-1 pb-4">
-                    <div className="mx-auto w-fit rounded-full border border-[#E3EBF7] bg-white px-3 py-1 text-[11px] font-medium text-[#7B8EA9] shadow-[0_10px_24px_rgba(70,96,140,0.08)]">
+                    <div className="mx-auto w-fit rounded-full border border-[#eadfd4] bg-white/82 px-3 py-1 text-[11px] font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
                         {sessionTimeLabel}
                     </div>
 
                     <div className="mt-4 space-y-4">
                         {documentContext ? (
-                            <div className="rounded-[24px] border border-[#DDE8F5] bg-white p-4 shadow-[0_18px_40px_rgba(70,96,140,0.10)]">
+                            <div className="rounded-[26px] border border-[#b6d9d2] bg-[#e6f4f1] p-4 shadow-[0_18px_40px_rgba(20,116,101,0.10)]">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-start gap-3">
-                                        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#DCE7F4] bg-[#F4F9FF] text-[#1B95E0]">
+                                        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#b6d9d2] bg-white text-[#147465]">
                                             <HiDocumentText className="h-5 w-5" />
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#6F88B0]">
+                                            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#147465]">
                                                 Record context attached
                                             </p>
-                                            <p className="text-sm font-medium text-[#16263F]">
+                                            <p className="text-base font-bold text-[#17233a]">
                                                 {documentContext.documentName}
                                             </p>
-                                            <p className="text-sm text-[#6E829F]">
+                                            <p className="text-sm leading-6 text-[#5b6b83]">
                                                 {chatCopy.documentContextIntro} {getLocaleLabel(documentContext.preferredLanguage)}
                                                 {documentContext.provider
                                                     ? ` about ${documentContext.provider}`
@@ -169,7 +169,7 @@ export default function ChatPage() {
                                         </div>
                                     </div>
                                     <button
-                                        className="rounded-full border border-[#D9E4F2] bg-[#F8FBFF] px-3 py-1 text-xs text-[#4C6286] transition hover:bg-white"
+                                        className="min-h-10 rounded-full border border-[#b6d9d2] bg-white px-3 py-1 text-xs font-bold text-[#147465] transition hover:bg-[#fffaf4]"
                                         onClick={dismissDocumentContext}
                                         type="button"
                                     >
@@ -180,26 +180,26 @@ export default function ChatPage() {
                         ) : null}
 
                         {error ? (
-                            <div className="rounded-[20px] border border-[#F1D4DA] bg-[#FFECEF] px-4 py-3 text-sm text-[#8D4155]">
+                            <div className="rounded-[20px] border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]">
                                 {error}
                             </div>
                         ) : null}
 
                         {voiceError ? (
-                            <div className="rounded-[20px] border border-[#F1D4DA] bg-[#FFF0F3] px-4 py-3 text-sm text-[#8D4155]">
+                            <div className="rounded-[20px] border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]">
                                 {voiceError}
                             </div>
                         ) : null}
 
                         {showQuickPrompts ? (
                             <div className="space-y-3">
-                                <div className="rounded-[22px] border border-[#E3EBF7] bg-white px-4 py-3 text-sm text-[#41536F] shadow-[0_16px_32px_rgba(70,96,140,0.08)]">
+                                <div className="rounded-[24px] border border-white/70 bg-white/86 px-4 py-3 text-base leading-7 text-[#42526b] shadow-[0_16px_32px_rgba(42,58,84,0.08)]">
                                     {chatCopy.emptyStateIntro}
                                 </div>
                                 <div className="flex flex-col gap-2">
                                     {quickPrompts.map((prompt) => (
                                         <button
-                                            className="rounded-[18px] border border-[#DDE8F5] bg-white px-4 py-2.5 text-left text-sm text-[#385678] shadow-[0_10px_24px_rgba(70,96,140,0.06)] transition hover:bg-[#F8FBFF]"
+                                            className="min-h-12 rounded-[20px] border border-[#d9cbc0] bg-white/88 px-4 py-3 text-left text-base text-[#30415f] shadow-[0_10px_24px_rgba(42,58,84,0.06)] transition hover:bg-[#fffaf4]"
                                             key={prompt}
                                             onClick={() => setInput(prompt)}
                                             type="button"
@@ -213,7 +213,7 @@ export default function ChatPage() {
 
                         <div className="space-y-4">
                             {loading && messages.length === 0 ? (
-                                <div className="rounded-[20px] border border-[#E3EBF7] bg-white px-4 py-3 text-sm text-[#6E829F] shadow-[0_14px_30px_rgba(70,96,140,0.08)]">
+                                <div className="rounded-[20px] border border-[#eadfd4] bg-white/88 px-4 py-3 text-base text-[#64748b] shadow-[0_14px_30px_rgba(42,58,84,0.08)]">
                                     Loading conversation...
                                 </div>
                             ) : null}
@@ -245,7 +245,7 @@ export default function ChatPage() {
                             ) : null}
 
                             {isTyping && !assistantDraft ? (
-                                <div className="w-fit rounded-full border border-[#E3EBF7] bg-white px-3 py-2 text-xs text-[#6E829F] shadow-[0_10px_24px_rgba(70,96,140,0.08)]">
+                                <div className="w-fit rounded-full border border-[#eadfd4] bg-white/88 px-3 py-2 text-xs font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
                                     Care Companion is typing...
                                 </div>
                             ) : null}
@@ -255,12 +255,12 @@ export default function ChatPage() {
                 </div>
 
                 <form
-                    className="sticky bottom-24 mt-2 rounded-[28px] border border-[#E3EBF7] bg-white px-4 py-4 shadow-[0_20px_40px_rgba(70,96,140,0.12)] sm:px-5"
+                    className="sticky bottom-28 mt-2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
                     onSubmit={handleSend}
                 >
-                    <div className="rounded-[24px] bg-[#FAFCFF] p-2.5">
+                    <div className="rounded-[26px] bg-[#fffaf4] p-2.5">
                         <Button
-                            className="mx-auto mb-3 block rounded-full border-0 bg-[#304463] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_22px_rgba(48,68,99,0.22)] hover:bg-[#243551]"
+                            className="mx-auto mb-3 block rounded-full border-0 bg-[#30415f] px-4 py-2 text-sm font-bold text-white shadow-[0_12px_22px_rgba(48,65,95,0.22)] hover:bg-[#17233a]"
                             onClick={handleVoiceModeToggle}
                             type="button"
                             variant="ghost"
@@ -271,7 +271,7 @@ export default function ChatPage() {
                         </Button>
 
                         {voiceModeEnabled ? (
-                            <div className="mb-3 rounded-[18px] border border-[#E3EBF7] bg-white px-4 py-3 text-sm text-[#5E6F8D]">
+                            <div className="mb-3 rounded-[20px] border border-[#b6d9d2] bg-[#e6f4f1] px-4 py-3 text-sm leading-6 text-[#147465]">
                                 Voice mode is on. Your speech sends as a message, and assistant replies play back automatically when audio is available.
                             </div>
                         ) : null}
@@ -285,8 +285,8 @@ export default function ChatPage() {
                                 }
                                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border shadow-[0_12px_22px_rgba(70,96,140,0.12)] transition ${
                                     voiceStatus === "listening"
-                                        ? "border-[#F4C7D1] bg-[#FFECEF] text-[#E15371]"
-                                        : "border-[#E3EBF7] bg-white text-[#48607E]"
+                                        ? "border-[#efbeb5] bg-[#fff2ef] text-[#b94032]"
+                                        : "border-[#d9cbc0] bg-white text-[#30415f]"
                                 }`}
                                 onClick={handleMicClick}
                                 type="button"
@@ -297,9 +297,9 @@ export default function ChatPage() {
                                     <HiMicrophone className="h-5 w-5" />
                                 )}
                             </button>
-                            <div className="flex-1 rounded-[24px] border border-[#E3EBF7] bg-white px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                            <div className="flex-1 rounded-[24px] border border-[#d9cbc0] bg-white px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                                 <Input
-                                    className="border-0 bg-transparent px-3 py-3 text-[#23324A] shadow-none placeholder:text-[#8DA0BA] focus:border-0 focus:ring-0"
+                                    className="border-0 bg-transparent px-3 py-3 text-[#17233a] shadow-none placeholder:text-[#8d9bae] focus:border-0 focus:ring-0"
                                     onChange={(event) => setInput(event.target.value)}
                                     placeholder={chatCopy.inputPlaceholder}
                                     value={input}
@@ -307,7 +307,7 @@ export default function ChatPage() {
                             </div>
                             <button
                                 aria-label="Send message"
-                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1B95E0] text-white shadow-[0_14px_28px_rgba(27,149,224,0.22)] transition hover:bg-[#1187D0] disabled:cursor-not-allowed disabled:bg-[#C8D9EC] disabled:text-[#7E96B6] disabled:shadow-none"
+                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#147465] text-white shadow-[0_14px_28px_rgba(20,116,101,0.24)] transition hover:bg-[#0f5f53] disabled:cursor-not-allowed disabled:bg-[#d7dce5] disabled:text-[#8090a5] disabled:shadow-none"
                                 disabled={!input.trim() || connectionStatus !== "connected"}
                                 type="submit"
                             >
@@ -316,9 +316,9 @@ export default function ChatPage() {
                         </div>
 
                         {voiceInterimTranscript ? (
-                            <p className="mt-3 text-sm text-[#7B8EA9]">
+                            <p className="mt-3 text-sm text-[#64748b]">
                                 Listening:{" "}
-                                <span className="text-[#23324A]">{voiceInterimTranscript}</span>
+                                <span className="font-semibold text-[#17233a]">{voiceInterimTranscript}</span>
                             </p>
                         ) : null}
                     </div>

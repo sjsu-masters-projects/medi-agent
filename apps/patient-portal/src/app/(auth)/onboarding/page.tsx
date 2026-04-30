@@ -98,11 +98,14 @@ export default function OnboardingPage() {
     }
 
     return (
-        <div className="app-shell min-h-dvh bg-gray-50 pb-10">
-            <div className="rounded-b-[28px] bg-sky-700 px-5 pt-12 pb-8 text-white shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">Step {step} of 4</p>
-                <h1 className="mt-3 text-3xl font-bold">Complete your profile</h1>
-                <p className="mt-2 text-sm text-sky-100">A few details help us personalize reminders and connect you to your clinic.</p>
+        <div className="app-shell patient-page min-h-dvh pb-10">
+            <div className="relative overflow-hidden rounded-b-[38px] bg-[#147465] px-6 pt-14 pb-10 text-white shadow-[0_24px_70px_rgba(20,116,101,0.25)]">
+                <div className="absolute -top-16 -right-14 h-52 w-52 rounded-full bg-white/12" />
+                <div className="absolute -bottom-20 left-5 h-56 w-56 rounded-full bg-[#d8aa57]/18" />
+                <div className="relative">
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-white/72">Step {step} of 4</p>
+                <h1 className="mt-3 text-[2.35rem] font-black leading-none tracking-[-0.04em]">Complete your profile</h1>
+                <p className="mt-4 text-base leading-7 text-white/82">A few details help us personalize reminders and connect you to your clinic.</p>
                 <div className="mt-5 flex items-center gap-2">
                     {[1, 2, 3, 4].map((value) => (
                         <span
@@ -111,15 +114,16 @@ export default function OnboardingPage() {
                         />
                     ))}
                 </div>
+                </div>
             </div>
 
-            <div className="-mt-4 px-5">
-                <Card className="space-y-6 shadow-lg shadow-slate-100" padding="lg">
+            <div className="patient-stack -mt-5 px-5">
+                <Card className="space-y-6 shadow-[0_24px_70px_rgba(42,58,84,0.14)]" padding="lg">
                 {step === 1 ? (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Personal info</p>
-                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Tell us about yourself</h2>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#8090a5]">Personal info</p>
+                            <h2 className="mt-1 text-xl font-black text-[#17233a]">Tell us about yourself</h2>
                         </div>
                         <Input label="First name" onChange={(event) => updateField("firstName", event.target.value)} value={formData.firstName} />
                         <Input label="Last name" onChange={(event) => updateField("lastName", event.target.value)} value={formData.lastName} />
@@ -128,15 +132,15 @@ export default function OnboardingPage() {
                 ) : null}
 
                 {step === 2 ? (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Preferences</p>
-                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Set your communication basics</h2>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#8090a5]">Preferences</p>
+                            <h2 className="mt-1 text-xl font-black text-[#17233a]">Set your communication basics</h2>
                         </div>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-[0.95rem] font-semibold text-[#30415f]">
                             Preferred language
                             <select
-                                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                className="mt-2 min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
                                 onChange={(event) => updateField("language", normalizeLocale(event.target.value))}
                                 value={formData.language}
                             >
@@ -147,10 +151,10 @@ export default function OnboardingPage() {
                                 ))}
                             </select>
                         </label>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-[0.95rem] font-semibold text-[#30415f]">
                             Timezone
                             <select
-                                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                className="mt-2 min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
                                 onChange={(event) => updateField("timezone", event.target.value)}
                                 value={formData.timezone}
                             >
@@ -161,10 +165,10 @@ export default function OnboardingPage() {
                                 ))}
                             </select>
                         </label>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-[0.95rem] font-semibold text-[#30415f]">
                             Gender (optional)
                             <select
-                                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                className="mt-2 min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
                                 onChange={(event) => updateField("gender", event.target.value)}
                                 value={formData.gender}
                             >
@@ -179,10 +183,10 @@ export default function OnboardingPage() {
                 ) : null}
 
                 {step === 3 ? (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Medical info</p>
-                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Add context for your care team</h2>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#8090a5]">Medical info</p>
+                            <h2 className="mt-1 text-xl font-black text-[#17233a]">Add context for your care team</h2>
                         </div>
                         <Input label="Known allergies" onChange={(event) => updateField("allergies", event.target.value)} placeholder="Penicillin, peanuts..." value={formData.allergies} />
                         <Input label="Known conditions" onChange={(event) => updateField("conditions", event.target.value)} placeholder="Diabetes, hypertension..." value={formData.conditions} />
@@ -190,18 +194,18 @@ export default function OnboardingPage() {
                 ) : null}
 
                 {step === 4 ? (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Join clinic</p>
-                            <h2 className="mt-1 text-lg font-semibold text-slate-900">Connect your care team</h2>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#8090a5]">Join clinic</p>
+                            <h2 className="mt-1 text-xl font-black text-[#17233a]">Connect your care team</h2>
                         </div>
                         <Input label="Clinic invite code" onChange={(event) => updateField("inviteCode", event.target.value)} placeholder="CITY-8832" value={formData.inviteCode} />
-                        <p className="text-sm text-gray-500">This code is required to finish setup and connect your clinic care team.</p>
+                        <p className="rounded-2xl bg-[#e6f4f1] px-4 py-3 text-sm font-medium text-[#147465]">This code is required to finish setup and connect your clinic care team.</p>
                     </div>
                 ) : null}
 
                 {error ? (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div className="rounded-2xl border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]">
                         {error}
                     </div>
                 ) : null}
@@ -211,9 +215,9 @@ export default function OnboardingPage() {
                         Back
                     </Button>
                     {step < 4 ? (
-                        <Button disabled={submitting} onClick={() => setStep((current) => Math.min(4, current + 1))}>Next</Button>
+                        <Button disabled={submitting} onClick={() => setStep((current) => Math.min(4, current + 1))} size="lg">Next</Button>
                     ) : (
-                        <Button disabled={submitting} onClick={handleFinish}>
+                        <Button disabled={submitting} onClick={handleFinish} size="lg">
                             {submitting ? "Saving..." : "Finish setup"}
                         </Button>
                     )}
