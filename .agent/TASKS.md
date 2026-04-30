@@ -349,7 +349,8 @@
   - [x] Add `drug_knowledge_chunks` pgvector schema and similarity-match RPC
   - [x] Add DailyMed label chunk builder/upsert service
   - [x] Add checked-in ingestion script for curated DailyMed labels
-  - [x] Run ingestion against production Supabase and verify first curated drug label set
+  - [x] Run first curated ingestion against production Supabase and verify a baseline label set
+  - [ ] Expand curated ingestion set and document repeatable production ingest cadence/runbook
 - [x] Embedding generation for medication knowledge base
   - [x] Add Google Gen AI embedding client with configurable model and dimensions
   - [x] Keep embedding dependency injectable for offline tests
@@ -374,6 +375,7 @@
 - [x] Audio message storage (Supabase Storage, URL in chat_messages)
 - [ ] Voice readback of document summaries: 🔊 button on Records modal → TTS in selected language
 - [ ] Multilingual TTS beyond EN/ES (Hindi, Chinese, Vietnamese, Tagalog — top US non-English medical populations)
+- [ ] Production readiness hardening: long-session stream stability, reconnect semantics, and explicit WS health metrics/alerts
 
 ### 5.6 Patient Portal — Chat UI
 - [x] Chat page layout (WhatsApp-style)
