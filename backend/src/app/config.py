@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     gemini_flash_model: str = "gemini-3.1-flash-lite-preview"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
     medgemma_model: str = "google/medgemma-27b-it"
+    google_embedding_model: str = "gemini-embedding-001"
+    rag_embedding_dimensions: int = 768
+    rag_min_similarity: float = 0.72
 
     # Vertex AI (for MedGemma deployment)
     vertex_ai_location: str = "us-central1"

@@ -344,10 +344,20 @@
 - [x] Add background retry worker: process `retrying` tasks where `next_retry_at <= now`
 
 ### 5.4 Medical RAG
-- [ ] Populate pgvector with drug information (from DailyMed)
-- [ ] Embedding generation for medication knowledge base
-- [ ] RAG retrieval pipeline: query → embed → similarity search → LLM response
-- [ ] Citation inclusion (source of information)
+- [/] Populate pgvector with drug information (from DailyMed)
+  - [x] Add `drug_knowledge_chunks` pgvector schema and similarity-match RPC
+  - [x] Add DailyMed label chunk builder/upsert service
+  - [ ] Run migration and ingest the first curated production drug label set
+- [x] Embedding generation for medication knowledge base
+  - [x] Add Google Gen AI embedding client with configurable model and dimensions
+  - [x] Keep embedding dependency injectable for offline tests
+- [x] RAG retrieval pipeline: query → embed → similarity search → LLM response
+  - [x] Retrieve medication chunks for likely medication questions using active medication names/RxCUIs
+  - [x] Pass retrieved medication context into the triage response prompt
+  - [x] Add safe fallback when retrieval is weak or unavailable
+- [x] Citation inclusion (source of information)
+  - [x] Preserve DailyMed source title, section, URL, and citation id in prompt context
+  - [x] Instruct patient-facing medication answers to cite grounded chunks
 
 ### 5.5 Voice Integration
 - [ ] Deepgram STT client (streaming WebSocket)
