@@ -100,3 +100,23 @@ async def test_triage_agent_fallback_returns_mental_health_guidance():
     assert output.escalation_required is True
     assert output.response_text is not None
     assert "988" in output.response_text
+
+
+@pytest.mark.asyncio
+async def test_triage_agent_fallback_handles_non_clinical_math_query():
+    agent = TriageAgent(router=_FailingRouter())
+
+    output = await agent.process(
+        TriageInput(
+            user_id=uuid4(),
+            patient_id=uuid4(),
+            message="2 + 2 = ?",
+            language=Language.EN,
+        )
+    )
+
+    assert output.status == "success"
+    assert output.intent == "general"
+    assert output.urgency == "routine"
+    assert output.response_text is not None
+    assert "focused on health support" in output.response_text

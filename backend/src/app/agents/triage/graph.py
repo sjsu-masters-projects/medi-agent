@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
@@ -78,6 +79,22 @@ MEDICATION_KEYWORDS = frozenset(
         "refill",
         "side effect",
         "reaction",
+        "aspirin",
+        "ibuprofen",
+        "acetaminophen",
+        "tylenol",
+        "advil",
+    }
+)
+MEDICATION_NAME_HINTS = frozenset(
+    {
+        "amoxicillin",
+        "atorvastatin",
+        "insulin",
+        "lisinopril",
+        "metformin",
+        "omeprazole",
+        "prednisone",
     }
 )
 MENTAL_HEALTH_KEYWORDS = frozenset(
@@ -157,6 +174,10 @@ TRIAGE_COPY = {
             "Thank you for sharing this. Please contact your care team today for timely "
             "clinical guidance."
         ),
+        "fallback_non_clinical": (
+            "I am focused on health support. For medication, symptoms, records, or appointments, "
+            "I can give more specific help."
+        ),
     },
     Language.EN.value: {
         "emergency_response": (
@@ -186,6 +207,10 @@ TRIAGE_COPY = {
             "Thank you for sharing this. Please contact your care team today for timely "
             "clinical guidance."
         ),
+        "fallback_non_clinical": (
+            "I am focused on health support. For medication, symptoms, records, or appointments, "
+            "I can give more specific help."
+        ),
     },
     Language.ES.value: {
         "emergency_response": (
@@ -214,6 +239,10 @@ TRIAGE_COPY = {
         "fallback_urgent": (
             "Gracias por compartir esto. Es importante que hables con tu equipo clínico hoy "
             "mismo para una evaluación oportuna."
+        ),
+        "fallback_non_clinical": (
+            "Estoy enfocada en apoyo de salud. Si tienes preguntas sobre medicamentos, síntomas, "
+            "documentos o citas, puedo ayudarte mejor."
         ),
     },
 }
@@ -295,7 +324,12 @@ async def generate_response(state: TriageState, router: ModelRouter) -> TriageSt
     if response:
         return _merge_response(state, response)
 
-    fallback = _fallback_response(language=context.language, intent=intent, urgency=urgency)
+    fallback = _fallback_response(
+        language=context.language,
+        intent=intent,
+        urgency=urgency,
+        message=context.message,
+    )
     return _merge_response(state, fallback)
 
 
@@ -396,6 +430,13 @@ def _classify_with_rules(context: _MessageContext) -> TriageClassificationResult
             reason="Medication keyword match",
         )
 
+    if _matches_any(normalized, MEDICATION_NAME_HINTS):
+        return TriageClassificationResult(
+            intent="medication_question",
+            urgency="routine",
+            reason="Medication name hint match",
+        )
+
     if _matches_any(normalized, MENTAL_HEALTH_KEYWORDS):
         return TriageClassificationResult(
             intent="mental_health",
@@ -433,7 +474,7 @@ def _emergency_response(language: str) -> str:
     return resolve_locale_resource(language, TRIAGE_COPY)["emergency_response"]
 
 
-def _fallback_response(*, language: str, intent: str, urgency: str) -> str:
+def _fallback_response(*, language: str, intent: str, urgency: str, message: str) -> str:
     localized_copy = resolve_locale_resource(language, TRIAGE_COPY)
     if intent == "medication_question":
         return localized_copy["fallback_medication_question"]
@@ -445,7 +486,21 @@ def _fallback_response(*, language: str, intent: str, urgency: str) -> str:
         return localized_copy["fallback_mental_health"]
     if urgency == "urgent":
         return localized_copy["fallback_urgent"]
+    if _is_non_clinical_math_query(message):
+        return localized_copy["fallback_non_clinical"]
     return localized_copy["fallback_general"]
+
+
+def _is_non_clinical_math_query(message: str) -> bool:
+    cleaned = message.strip().lower()
+    if not cleaned:
+        return False
+    if any(
+        token in cleaned
+        for token in ("symptom", "medication", "medicine", "dolor", "síntoma", "sintoma")
+    ):
+        return False
+    return bool(re.fullmatch(r"[0-9\s+\-*/().=?]+", cleaned))
 
 
 def _build_context(state: TriageState) -> _MessageContext:

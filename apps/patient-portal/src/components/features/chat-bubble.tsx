@@ -41,7 +41,7 @@ export function ChatBubble({
         <div className={`flex items-end gap-3 ${isUser ? "justify-end" : ""}`}>
             {!isUser ? (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[#b6d9d2] bg-[#e6f4f1] text-[10px] font-black uppercase tracking-[0.22em] text-[#147465] shadow-[0_10px_24px_rgba(20,116,101,0.10)]">
-                    AI
+                    M
                 </span>
             ) : null}
             <div className={`max-w-[82%] space-y-1.5 ${isUser ? "items-end text-right" : ""}`}>

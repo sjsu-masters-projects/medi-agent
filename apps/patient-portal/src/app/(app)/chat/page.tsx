@@ -95,7 +95,7 @@ export default function ChatPage() {
                             </div>
                             <div className="space-y-1">
                                 <h1 className="text-[1.45rem] font-black tracking-[-0.03em] text-[#17233a]">
-                                    Care Companion
+                                    Maya
                                 </h1>
                                 <p className="inline-flex items-center gap-2 text-sm font-medium text-[#64748b]">
                                     <span
@@ -141,7 +141,7 @@ export default function ChatPage() {
                     </div>
                 </div>
 
-                <div className="mt-4 flex-1 overflow-y-auto px-1 pb-4">
+                <div className="mt-4 flex-1 overflow-y-auto px-1 pb-44">
                     <div className="mx-auto w-fit rounded-full border border-[#eadfd4] bg-white/82 px-3 py-1 text-[11px] font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
                         {sessionTimeLabel}
                     </div>
@@ -266,7 +266,7 @@ export default function ChatPage() {
 
                             {isTyping && !assistantDraft ? (
                                 <div className="w-fit rounded-full border border-[#eadfd4] bg-white/88 px-3 py-2 text-xs font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
-                                    Care Companion is typing...
+                                    Maya is typing...
                                 </div>
                             ) : null}
                             <div ref={bottomRef} />
@@ -275,7 +275,7 @@ export default function ChatPage() {
                 </div>
 
                 <form
-                    className="sticky bottom-28 mt-2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
+                    className="sticky bottom-24 mt-2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
                     onSubmit={handleSend}
                 >
                     <div className="rounded-[26px] bg-[#fffaf4] p-2.5">
