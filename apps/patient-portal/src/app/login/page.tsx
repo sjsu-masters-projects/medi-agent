@@ -95,21 +95,34 @@ function LoginPageContent() {
     }
 
     return (
-        <div className="app-shell min-h-dvh bg-gray-50 pb-10">
-            <div className="rounded-b-[28px] bg-sky-700 px-5 pt-12 pb-8 text-white shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">MediAgent</p>
-                <h1 className="mt-3 text-3xl font-bold">Welcome back</h1>
-                <p className="mt-2 max-w-sm text-sm text-sky-100">
-                    Sign in to review today&apos;s schedule, records, and messages from your care team.
-                </p>
-                <div className="mt-5 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white">
+        <div className="app-shell patient-page min-h-dvh pb-10">
+            <div className="relative overflow-hidden rounded-b-[38px] bg-[#147465] px-6 pt-14 pb-10 text-white shadow-[0_24px_70px_rgba(20,116,101,0.25)]">
+                <div className="absolute -top-16 -right-14 h-52 w-52 rounded-full bg-white/12" />
+                <div className="absolute -bottom-20 left-5 h-56 w-56 rounded-full bg-[#d8aa57]/18" />
+                <div className="relative">
+                    <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-[24px] bg-white/16 text-lg font-black tracking-tight ring-1 ring-white/25">
+                        M
+                    </div>
+                    <p className="text-xs font-black uppercase tracking-[0.24em] text-white/72">MediAgent</p>
+                    <h1 className="mt-3 text-[2.45rem] font-black leading-[0.98] tracking-[-0.04em]">Welcome back</h1>
+                    <p className="mt-4 max-w-sm text-base leading-7 text-white/82">
+                        Your calm space for today&apos;s care plan, records, and messages from your care team.
+                    </p>
+                </div>
+                <div className="relative mt-6 inline-flex rounded-full bg-white/15 px-4 py-2 text-sm font-bold text-white ring-1 ring-white/20">
                     Patient portal
                 </div>
             </div>
 
-            <div className="-mt-4 space-y-5 px-5">
-                <Card className="shadow-lg shadow-slate-100" padding="lg">
-                    <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="patient-stack -mt-5 space-y-5 px-5">
+                <Card className="shadow-[0_24px_70px_rgba(42,58,84,0.14)]" padding="lg">
+                    <form className="space-y-5" onSubmit={handleSubmit}>
+                        <div>
+                            <h2 className="text-xl font-black text-[#17233a]">Sign in securely</h2>
+                            <p className="mt-1 text-base leading-7 text-[#64748b]">
+                                We&apos;ll keep you in the right patient workspace.
+                            </p>
+                        </div>
                         <Input label="Email address" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
                         <Input
                             label="Password"
@@ -117,28 +130,28 @@ function LoginPageContent() {
                             trailingAction={
                                 <button
                                     aria-label={passwordVisible ? "Hide password" : "Show password"}
-                                    className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:text-gray-700"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[#64748b] hover:bg-[#f4f0ea] hover:text-[#17233a]"
                                     onClick={() => setPasswordVisible((current) => !current)}
                                     type="button"
                                 >
-                                    {passwordVisible ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
+                                    {passwordVisible ? <FiEyeOff className="h-5 w-5" /> : <FiEye className="h-5 w-5" />}
                                 </button>
                             }
                             type={passwordVisible ? "text" : "password"}
                             value={password}
                         />
-                        {notice ? <p className="text-sm text-slate-600">{notice}</p> : null}
-                        {error ? <p className="text-sm text-red-600">{error}</p> : null}
-                        <Button disabled={submitting} fullWidth type="submit">
+                        {notice ? <p className="rounded-2xl bg-[#e6f4f1] px-4 py-3 text-sm font-medium text-[#147465]">{notice}</p> : null}
+                        {error ? <p className="rounded-2xl bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]">{error}</p> : null}
+                        <Button disabled={submitting} fullWidth size="lg" type="submit">
                             {submitting ? "Signing in..." : "Sign in"}
                         </Button>
                     </form>
                 </Card>
 
-                <Card className="space-y-3 border-sky-100 bg-sky-50" padding="md">
-                    <p className="text-sm font-semibold text-slate-900">New to MediAgent?</p>
-                    <p className="text-sm text-slate-600">Create your account to get medication reminders and clinician updates.</p>
-                    <Link className="inline-flex text-sm font-medium text-sky-700" href="/signup">
+                <Card className="space-y-3 border-[#b6d9d2] bg-[#e6f4f1]" padding="md">
+                    <p className="text-base font-bold text-[#17233a]">New to MediAgent?</p>
+                    <p className="text-base leading-7 text-[#5b6b83]">Create your account to get medication reminders and clinician updates.</p>
+                    <Link className="inline-flex min-h-11 items-center text-base font-bold text-[#147465]" href="/signup">
                         Create one
                     </Link>
                 </Card>

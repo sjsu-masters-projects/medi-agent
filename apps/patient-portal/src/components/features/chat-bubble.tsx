@@ -40,16 +40,16 @@ export function ChatBubble({
     return (
         <div className={`flex items-end gap-3 ${isUser ? "justify-end" : ""}`}>
             {!isUser ? (
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#D9E4F2] bg-white text-[10px] font-semibold uppercase tracking-[0.22em] text-[#36506F] shadow-[0_10px_24px_rgba(31,54,88,0.10)]">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[#b6d9d2] bg-[#e6f4f1] text-[10px] font-black uppercase tracking-[0.22em] text-[#147465] shadow-[0_10px_24px_rgba(20,116,101,0.10)]">
                     AI
                 </span>
             ) : null}
             <div className={`max-w-[82%] space-y-1.5 ${isUser ? "items-end text-right" : ""}`}>
                 <div
-                    className={`rounded-[24px] px-4 py-3.5 text-sm leading-6 shadow-[0_18px_40px_rgba(3,8,22,0.28)] ${
+                    className={`rounded-[24px] px-4 py-3.5 text-base leading-7 shadow-[0_18px_40px_rgba(3,8,22,0.16)] ${
                         isUser
-                            ? "rounded-br-[10px] border border-[#1B95E0] bg-[#1B95E0] text-white shadow-[0_16px_30px_rgba(27,149,224,0.20)]"
-                            : "rounded-bl-[10px] border border-[#E6DDF8] bg-[#F5EEFF] text-[#26324B] shadow-[0_12px_28px_rgba(129,105,174,0.12)]"
+                            ? "rounded-br-[10px] border border-[#147465] bg-[#147465] text-white shadow-[0_16px_30px_rgba(20,116,101,0.20)]"
+                            : "rounded-bl-[10px] border border-[#eadfd4] bg-white/90 text-[#17233a] shadow-[0_12px_28px_rgba(42,58,84,0.10)]"
                     }`}
                 >
                     <div className="space-y-3">
@@ -57,18 +57,18 @@ export function ChatBubble({
                         {!isUser && (languageLabel || onPlayAudio || isStreaming) ? (
                             <div className="flex flex-wrap items-center gap-2 text-[11px]">
                                 {languageLabel ? (
-                                    <span className="rounded-full border border-[#D8CCF5] bg-white/70 px-2.5 py-1 text-[#5C4C85]">
+                                    <span className="rounded-full border border-[#b6d9d2] bg-[#e6f4f1] px-2.5 py-1 text-[#147465]">
                                         {languageLabel}
                                     </span>
                                 ) : null}
                                 {isStreaming ? (
-                                    <span className="rounded-full border border-[#96D4F4] bg-[#EAF7FF] px-2.5 py-1 text-[#1679BE]">
+                                    <span className="rounded-full border border-[#b6d9d2] bg-[#e6f4f1] px-2.5 py-1 text-[#147465]">
                                         Live response
                                     </span>
                                 ) : null}
                                 {onPlayAudio ? (
                                     <button
-                                        className="inline-flex items-center gap-1 rounded-full border border-[#E2D7FA] bg-white/80 px-2.5 py-1 text-[#485775] transition hover:border-[#D1C3F2] hover:bg-white"
+                                        className="inline-flex items-center gap-1 rounded-full border border-[#d9cbc0] bg-white/80 px-2.5 py-1 text-[#30415f] transition hover:border-[#b6d9d2] hover:bg-white"
                                         onClick={onPlayAudio}
                                         type="button"
                                     >
@@ -80,7 +80,7 @@ export function ChatBubble({
                         ) : null}
                     </div>
                 </div>
-                <p className="px-1 text-[10px] text-[#8EA0BA]">{formatTimestamp(timestamp)}</p>
+                <p className="px-1 text-[11px] font-medium text-[#8090a5]">{formatTimestamp(timestamp)}</p>
             </div>
         </div>
     );

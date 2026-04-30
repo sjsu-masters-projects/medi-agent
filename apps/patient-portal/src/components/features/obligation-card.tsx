@@ -30,10 +30,10 @@ const typeLabel = {
 } as const;
 
 const cardClasses = {
-    active: "border-blue-700 shadow-md shadow-blue-100",
-    completed: "border-slate-100 bg-slate-50 opacity-70",
-    missed: "border-red-200 bg-red-50/60",
-    upcoming: "border-slate-100 bg-white",
+    active: "border-[#147465] bg-white shadow-[0_20px_46px_rgba(20,116,101,0.16)]",
+    completed: "border-[#dbe7df] bg-[#f2f8f4]",
+    missed: "border-[#efbeb5] bg-[#fff5f2]",
+    upcoming: "border-white/70 bg-white/82",
 } as const;
 
 export function ObligationCard({
@@ -45,15 +45,15 @@ export function ObligationCard({
     type,
 }: ObligationCardProps) {
     return (
-        <Card className={`space-y-4 ${cardClasses[status]}`} padding="sm">
+        <Card className={`space-y-4 ${cardClasses[status]}`} padding="md">
             <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                    {time ? <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{time}</p> : null}
-                    <h3 className={`text-sm font-semibold ${status === "completed" ? "text-slate-400 line-through" : "text-slate-800"}`}>{description}</h3>
-                    <p className={`text-sm ${status === "completed" ? "text-slate-400 line-through" : "text-slate-500"}`}>{obligationLabel[type]}</p>
+                    {time ? <p className="text-sm font-bold text-[#147465]">{time}</p> : null}
+                    <h3 className={`text-lg font-bold leading-snug ${status === "completed" ? "text-[#77869a] line-through" : "text-[#17233a]"}`}>{description}</h3>
+                    <p className={`text-base leading-7 ${status === "completed" ? "text-[#9aa7b8] line-through" : "text-[#5b6b83]"}`}>{obligationLabel[type]}</p>
                 </div>
-                <div className="space-y-2 text-right">
-                    <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                <div className="flex shrink-0 flex-col items-end gap-2 text-right">
+                    <span className="inline-flex rounded-full bg-[#f4f0ea] px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#5b6b83]">
                         {typeLabel[type]}
                     </span>
                     <Badge variant={badgeVariant[status]}>
@@ -62,7 +62,7 @@ export function ObligationCard({
                 </div>
             </div>
             {status === "active" || status === "missed" ? (
-                <Button fullWidth onClick={() => onMarkComplete(id)} variant={status === "missed" ? "danger" : "primary"}>
+                <Button fullWidth onClick={() => onMarkComplete(id)} size="lg" variant={status === "missed" ? "danger" : "primary"}>
                     Mark as Done
                 </Button>
             ) : null}

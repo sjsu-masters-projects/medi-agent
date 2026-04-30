@@ -10,25 +10,25 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export function Input({ className = "", error, icon, id, label, trailingAction, ...props }: InputProps) {
     return (
         <label className="block">
-            {label ? <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span> : null}
+            {label ? <span className="mb-2 block text-[0.95rem] font-semibold text-[#30415f]">{label}</span> : null}
             <span className="relative block">
                 {icon ? (
-                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+                    <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-[#8090a5]">
                         {icon}
                     </span>
                 ) : null}
                 <input
-                    className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${icon ? "pl-10" : ""} ${trailingAction ? "pr-11" : ""} ${error ? "border-red-300 focus:border-red-400 focus:ring-red-200" : ""} ${className}`}
+                    className={`min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-[0_8px_20px_rgba(42,58,84,0.05)] outline-none transition placeholder:text-[#8d9bae] focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15 ${icon ? "pl-11" : ""} ${trailingAction ? "pr-12" : ""} ${error ? "border-[#d55b4d] focus:border-[#d55b4d] focus:ring-[#d55b4d]/15" : ""} ${className}`}
                     id={id}
                     {...props}
                 />
                 {trailingAction ? (
-                    <span className="absolute inset-y-0 right-3 flex items-center text-gray-500">
+                    <span className="absolute inset-y-0 right-4 flex items-center text-[#64748b]">
                         {trailingAction}
                     </span>
                 ) : null}
             </span>
-            {error ? <span className="mt-1 block text-xs text-red-600">{error}</span> : null}
+            {error ? <span className="mt-2 block text-sm font-medium text-[#b94032]">{error}</span> : null}
         </label>
     );
 }

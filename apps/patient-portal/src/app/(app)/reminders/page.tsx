@@ -270,12 +270,12 @@ export default function ReminderSettingsPage() {
     }
 
     return (
-        <div className="space-y-4 bg-gray-50 pb-8">
+        <div className="patient-page space-y-4 pb-8">
             <PageHeader
                 subtitle="Choose the exact days and times you want reminder nudges."
                 title="Reminder Settings"
             />
-            <div className="-mt-4 space-y-4 px-5">
+            <div className="patient-stack -mt-4 space-y-4 px-5">
                 {loading ? (
                     <div className="space-y-4">
                         <Skeleton className="h-40 w-full rounded-3xl" />
@@ -297,16 +297,16 @@ export default function ReminderSettingsPage() {
                         <Card className="space-y-4">
                             <div className="flex items-start justify-between gap-3">
                                 <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Timezone</p>
-                                    <h2 className="mt-1 text-lg font-semibold text-slate-900">Your local schedule</h2>
-                                    <p className="mt-1 text-sm text-slate-500">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Timezone</p>
+                                    <h2 className="mt-1 text-xl font-semibold text-[#17233a]">Your local schedule</h2>
+                                    <p className="mt-1 text-base leading-7 text-[#5b6b83]">
                                         Reminder times are interpreted in this timezone.
                                     </p>
                                 </div>
                                 <Badge variant="info">Saved to profile</Badge>
                             </div>
                             <select
-                                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
                                 onChange={(event) => setPatientTimezone(event.target.value)}
                                 value={patientTimezone}
                             >
@@ -316,13 +316,13 @@ export default function ReminderSettingsPage() {
                                     </option>
                                 ))}
                             </select>
-                            <Button disabled={savingTimezone} onClick={saveTimezone}>
+                            <Button disabled={savingTimezone} onClick={saveTimezone} size="lg">
                                 {savingTimezone ? "Saving timezone..." : "Save timezone"}
                             </Button>
                         </Card>
 
                         {actionMessage ? (
-                            <Card className="border-green-200 bg-green-50 text-sm text-green-800">
+                            <Card className="border-[#b9e0cf] bg-[#ecf8ef] text-base font-medium text-[#256047]">
                                 {actionMessage}
                             </Card>
                         ) : null}
@@ -337,13 +337,13 @@ export default function ReminderSettingsPage() {
                                 <Card className="space-y-4" key={key}>
                                     <div className="flex items-start justify-between gap-3">
                                         <div>
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">
                                                 {target.targetType}
                                             </p>
-                                            <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                                            <h3 className="mt-1 text-xl font-semibold text-[#17233a]">
                                                 {target.name}
                                             </h3>
-                                            <p className="mt-1 text-sm text-slate-500">
+                                            <p className="mt-1 text-base leading-7 text-[#5b6b83]">
                                                 {target.frequency}
                                                 {target.providerName ? ` · ${target.providerName}` : ""}
                                             </p>
@@ -354,33 +354,34 @@ export default function ReminderSettingsPage() {
                                     </div>
 
                                     {target.description ? (
-                                        <p className="text-sm text-slate-600">{target.description}</p>
+                                        <p className="text-base leading-7 text-[#48627c]">{target.description}</p>
                                     ) : null}
 
                                     {target.guidance.guidanceText ? (
-                                        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                        <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 text-base leading-7 text-[#5b6b83] ring-1 ring-[#eaded3]">
                                             {target.guidance.guidanceText}
                                         </div>
                                     ) : null}
 
                                     {disableAutomatic ? (
-                                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                        <div className="rounded-2xl border border-[#f3d7a1] bg-[#fff4d8] px-4 py-3 text-base leading-7 text-[#7a4f00]">
                                             Automatic reminders are off for as-needed items. Keep this regimen available in Today, but only set reminders if your clinician specifically asked you to.
                                         </div>
                                     ) : (
                                         <>
                                             <div>
-                                                <p className="mb-2 text-sm font-medium text-gray-700">Days</p>
+                                                <p className="mb-3 text-base font-semibold text-[#30415f]">Days</p>
                                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                                     {DAYS.map((day) => {
                                                         const checked = draft.daysOfWeek.includes(day);
                                                         return (
                                                             <label
-                                                                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                                                                className={`flex min-h-12 items-center gap-2 rounded-2xl border px-3 py-2 text-base font-medium transition ${checked ? "border-[#147465] bg-[#e7f4f1] text-[#147465]" : "border-[#eaded3] bg-white/80 text-[#5b6b83]"}`}
                                                                 key={day}
                                                             >
                                                                 <input
                                                                     checked={checked}
+                                                                    className="h-5 w-5 accent-[#147465]"
                                                                     onChange={() =>
                                                                         updateDraft(target, (current) => ({
                                                                             ...current,
@@ -400,9 +401,9 @@ export default function ReminderSettingsPage() {
 
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
-                                                    <p className="text-sm font-medium text-gray-700">Reminder times</p>
+                                                    <p className="text-base font-semibold text-[#30415f]">Reminder times</p>
                                                     <button
-                                                        className="text-sm font-medium text-sky-700"
+                                                        className="min-h-11 rounded-full px-3 text-sm font-semibold text-[#147465] hover:bg-[#e7f4f1]"
                                                         onClick={() =>
                                                             updateDraft(target, (current) => ({
                                                                 ...current,
@@ -417,7 +418,7 @@ export default function ReminderSettingsPage() {
                                                 {draft.timesOfDay.map((value, index) => (
                                                     <div className="flex items-center gap-3" key={`${key}-time-${index}`}>
                                                         <input
-                                                            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                            className="min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
                                                             onChange={(event) =>
                                                                 updateDraft(target, (current) => ({
                                                                     ...current,
@@ -430,7 +431,7 @@ export default function ReminderSettingsPage() {
                                                             value={value}
                                                         />
                                                         <button
-                                                            className="text-sm font-medium text-red-600"
+                                                            className="min-h-11 rounded-full px-3 text-sm font-semibold text-[#b94032] hover:bg-[#fff2ef]"
                                                             onClick={() =>
                                                                 updateDraft(target, (current) => ({
                                                                     ...current,
@@ -459,12 +460,14 @@ export default function ReminderSettingsPage() {
                                                 || draft.timesOfDay.length === 0
                                             }
                                             onClick={() => void saveSchedule(target)}
+                                            size="lg"
                                         >
                                             {isSaving ? "Saving..." : "Save reminder schedule"}
                                         </Button>
                                         <Button
                                             disabled={isSaving || !target.reminderSchedule}
                                             onClick={() => void clearSchedule(target)}
+                                            size="lg"
                                             variant="secondary"
                                         >
                                             Clear schedule
