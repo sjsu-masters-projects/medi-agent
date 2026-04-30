@@ -7,7 +7,7 @@ describe("Button", () => {
         render(<Button variant="primary">Click me</Button>);
         const button = screen.getByRole("button", { name: /click me/i });
         expect(button).toBeInTheDocument();
-        expect(button.className).toContain("bg-blue-600");
+        expect(button.className).toContain("bg-[#147465]");
     });
 
     it("calls onClick handlers", () => {

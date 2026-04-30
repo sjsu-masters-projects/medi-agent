@@ -15,16 +15,16 @@ export function Modal({ children, onClose, open, title }: ModalProps) {
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-[#17233a]/45 backdrop-blur-sm" onClick={onClose}>
             <div
-                className="max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white p-6"
+                className="mx-auto max-h-[88vh] w-full max-w-[480px] overflow-y-auto rounded-t-[34px] border border-white/70 bg-[#fffaf4] p-6 shadow-[0_-24px_80px_rgba(23,35,58,0.20)] safe-bottom"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                    <h3 className="text-xl font-bold text-[#17233a]">{title}</h3>
                     <button
                         aria-label="Close modal"
-                        className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                        className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#64748b] shadow-sm transition hover:bg-[#f4f0ea] hover:text-[#17233a]"
                         onClick={onClose}
                         type="button"
                     >
