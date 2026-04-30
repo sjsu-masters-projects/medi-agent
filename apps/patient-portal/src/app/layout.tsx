@@ -4,16 +4,20 @@ import { StoreProvider } from "@/store/provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MediAgent Patient",
+  title: "MediAgent Care",
   description: "A calm health companion for medications, records, care reminders, and clinician updates.",
-  applicationName: "MediAgent Patient",
+  applicationName: "MediAgent Care",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "MediAgent",
+    title: "MediAgent Care",
   },
   formatDetection: {
     telephone: false,
+  },
+  icons: {
+    icon: "/pwa-icon.svg",
+    shortcut: "/pwa-icon.svg",
   },
   manifest: "/manifest.webmanifest",
 };

@@ -18,14 +18,16 @@ This document reconciles the current code with the remaining work and defines th
 - Symptom agent extracts symptom data and writes `symptom_reports`.
 - A2A task lifecycle exists for symptom to pharmacovigilance delegation, including idempotency, retry, backoff, and dead-letter state.
 - Patient portal chat UI supports message bubbles, streaming assistant drafts, language selector, quick prompts, document-context banner, Records to Chat context handoff, and browser voice fallback.
+- Medication RAG foundation exists: pgvector chunk schema, retrieval service, prompt grounding with citation ids, and safe weak-retrieval fallback.
+- DailyMed ingestion script is checked in for curated-label ingestion runs.
+- Backend Deepgram voice transport foundation exists: authenticated `/ws/voice/{patient_id}`, incremental STT stream events, TTS generation, and assistant audio persistence to storage.
 
 ### Main gaps
 
-- Medication and document questions need stronger grounding with document context and RAG citations.
-- Voice is currently browser Web Speech API only. The production path must use Deepgram STT and TTS through the backend.
-- Medical RAG is not implemented.
+- Production RAG ingestion runbook is still partially manual (migration/apply, curated production ingestion execution, and verification).
+- Voice streaming reliability hardening is still needed for production scale (long-session resilience, reconnect semantics, and full browser-to-backend end-to-end coverage).
 - Symptom agent golden conversations are missing.
-- Voice pipeline tests are missing.
+- Browser mic → backend STT → chat → backend TTS end-to-end test coverage is still incomplete.
 - A2A worker topology, multi-worker safety, and observability remain production hardening follow-ups.
 
 ## Architecture

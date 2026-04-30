@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
@@ -94,8 +95,11 @@ export default function SignupPage() {
                 <div className="absolute -top-16 -right-14 h-52 w-52 rounded-full bg-white/12" />
                 <div className="absolute -bottom-20 left-5 h-56 w-56 rounded-full bg-[#d8aa57]/18" />
                 <div className="relative">
+                    <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-[26px] bg-white/16 p-2 ring-1 ring-white/25">
+                        <Image alt="" height={52} priority src="/pwa-icon.svg" width={52} />
+                    </div>
                     <p className="text-xs font-black uppercase tracking-[0.24em] text-white/72">Patient signup</p>
-                    <h1 className="mt-3 text-[2.35rem] font-black leading-none tracking-[-0.04em]">Join MediAgent</h1>
+                    <h1 className="mt-3 text-[2.35rem] font-black leading-none tracking-[-0.04em]">Join MediAgent Care</h1>
                     <p className="mt-4 max-w-sm text-base leading-7 text-white/82">
                         Set up your account to track medications, symptoms, and care updates in one place.
                     </p>

@@ -1,6 +1,7 @@
 import { normalizeLocale, type Locale } from "@/types";
 
 export interface VoiceCapabilities {
+    recording: boolean;
     recognition: boolean;
     synthesis: boolean;
 }
@@ -71,6 +72,11 @@ function getSpeechLocale(locale: Locale): string {
 
 export function getVoiceCapabilities(): VoiceCapabilities {
     return {
+        recording:
+            typeof window !== "undefined"
+            && typeof navigator !== "undefined"
+            && Boolean(navigator.mediaDevices?.getUserMedia)
+            && typeof window.MediaRecorder !== "undefined",
         recognition: getSpeechRecognitionConstructor() !== null,
         synthesis:
             typeof window !== "undefined"

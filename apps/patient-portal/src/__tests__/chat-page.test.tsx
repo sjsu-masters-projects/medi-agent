@@ -12,11 +12,13 @@ const {
     buildChatWebSocketUrl,
     fetchChatHistory,
     getVoiceCapabilities,
+    playAssistantVoiceResponse,
     replace,
 } = vi.hoisted(() => ({
     buildChatWebSocketUrl: vi.fn(),
     fetchChatHistory: vi.fn(),
-    getVoiceCapabilities: vi.fn(() => ({ recognition: false, synthesis: false })),
+    getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
+    playAssistantVoiceResponse: vi.fn(() => null),
     replace: vi.fn(),
 }));
 
@@ -42,11 +44,13 @@ vi.mock("@/services/chat-api", async () => {
 vi.mock("@/services/browser-voice", () => ({
     createSpeechRecognitionController: vi.fn(() => null),
     getVoiceCapabilities,
-    playAssistantVoiceResponse: vi.fn(() => null),
+    playAssistantVoiceResponse,
     stopAssistantVoicePlayback: vi.fn(),
 }));
 
 class MockWebSocket {
+    static CLOSED = 3;
+    static CONNECTING = 0;
     static instances: MockWebSocket[] = [];
     static OPEN = 1;
 
@@ -100,6 +104,7 @@ describe("Patient chat page", () => {
         buildChatWebSocketUrl.mockReset();
         fetchChatHistory.mockReset();
         getVoiceCapabilities.mockReset();
+        playAssistantVoiceResponse.mockReset();
         replace.mockReset();
         searchParamsValue = new URLSearchParams();
         MockWebSocket.reset();
@@ -127,7 +132,7 @@ describe("Patient chat page", () => {
 
         buildChatWebSocketUrl.mockReturnValue("ws://chat.test/patient-1");
         fetchChatHistory.mockResolvedValue([]);
-        getVoiceCapabilities.mockReturnValue({ recognition: false, synthesis: false });
+        getVoiceCapabilities.mockReturnValue({ recording: false, recognition: false, synthesis: false });
     });
 
     it("renders assistant chunks progressively before completion", async () => {
@@ -332,7 +337,7 @@ describe("Patient chat page", () => {
     });
 
     it("turns off voice mode when the websocket disconnects", async () => {
-        getVoiceCapabilities.mockReturnValue({ recognition: true, synthesis: true });
+        getVoiceCapabilities.mockReturnValue({ recording: false, recognition: true, synthesis: true });
         renderPage();
 
         await screen.findByText(/I can help explain results/i);
@@ -355,5 +360,137 @@ describe("Patient chat page", () => {
                 screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }),
             ).toBeInTheDocument();
         });
+    });
+
+    it("requests backend TTS audio when voice mode assistant response completes", async () => {
+        getVoiceCapabilities.mockReturnValue({ recording: false, recognition: true, synthesis: true });
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const chatSocket = MockWebSocket.instances[0];
+        await act(async () => {
+            chatSocket.emitOpen();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }));
+
+        await act(async () => {
+            chatSocket.emitMessage({
+                type: "assistant_complete",
+                message: {
+                    audio_url: null,
+                    content: "Please take your medication with food.",
+                    created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-voice-1",
+                    intent: "medication_question",
+                    language: "en-US",
+                    patient_id: "patient-1",
+                    role: "assistant",
+                },
+            });
+        });
+
+        const voiceSocket = MockWebSocket.instances[1];
+        expect(JSON.parse(voiceSocket.sent[0])).toEqual({
+            language: "en-US",
+            message_id: "assistant-voice-1",
+            text: "Please take your medication with food.",
+            type: "tts_request",
+        });
+
+        await act(async () => {
+            voiceSocket.emitMessage({
+                audio_base64: "YWJj",
+                encoding: "mp3",
+                language: "en-US",
+                mime_type: "audio/mpeg",
+                model: "aura-2-asteria-en",
+                type: "assistant_audio_ready",
+            });
+        });
+
+        expect(playAssistantVoiceResponse).toHaveBeenCalledWith(
+            expect.objectContaining({
+                audioUrl: "data:audio/mpeg;base64,YWJj",
+                text: "Please take your medication with food.",
+            }),
+        );
+    });
+
+    it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {
+        getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
+        const trackStop = vi.fn();
+        const getUserMedia = vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: trackStop }],
+        });
+        vi.stubGlobal("navigator", {
+            ...window.navigator,
+            mediaDevices: { getUserMedia },
+        });
+
+        class MockMediaRecorder {
+            static isTypeSupported = vi.fn(() => true);
+            ondataavailable: ((event: { data: Blob }) => void) | null = null;
+            onerror: (() => void) | null = null;
+            onstop: (() => void) | null = null;
+            state = "inactive";
+
+            constructor(_stream: MediaStream, readonly options: { mimeType: string }) {}
+
+            start() {
+                this.state = "recording";
+                this.ondataavailable?.({ data: new Blob(["chunk"], { type: this.options.mimeType }) });
+            }
+
+            stop() {
+                this.state = "inactive";
+                this.onstop?.();
+            }
+        }
+        vi.stubGlobal("MediaRecorder", MockMediaRecorder);
+
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const chatSocket = MockWebSocket.instances[0];
+        await act(async () => {
+            chatSocket.emitOpen();
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: /Start voice recording/i }));
+        });
+
+        const voiceSocket = MockWebSocket.instances[1];
+        await waitFor(() => {
+            expect(voiceSocket.sent.some((event) => JSON.parse(event).type === "audio_start")).toBe(true);
+            expect(voiceSocket.sent.some((event) => JSON.parse(event).type === "audio_chunk")).toBe(true);
+        });
+
+        await act(async () => {
+            voiceSocket.emitMessage({
+                language: "en-US",
+                model: "nova-3",
+                transcript: "I feel dizzy",
+                type: "transcript_final",
+            });
+            fireEvent.click(screen.getByRole("button", { name: /Stop voice recording/i }));
+            voiceSocket.emitMessage({
+                audio_url: "patient-1/voice-user.webm",
+                signed_url: "https://storage.example.com/voice-user.webm",
+                type: "audio_stream_complete",
+            });
+        });
+
+        await waitFor(() => {
+            expect(chatSocket.sent.some((event) => JSON.parse(event).type === "user_message")).toBe(true);
+        });
+        const userMessage = chatSocket.sent.map((event) => JSON.parse(event)).find((event) => event.type === "user_message");
+        expect(userMessage).toMatchObject({
+            audio_url: "patient-1/voice-user.webm",
+            content: "I feel dizzy",
+            type: "user_message",
+        });
+        expect(trackStop).toHaveBeenCalled();
     });
 });
