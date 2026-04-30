@@ -23,8 +23,8 @@ function sanitizeRelativePath(raw: string | null | undefined): string | null {
         return null;
     }
 
-    // Prevent absolute URLs sneaking in.
-    if (value.includes("://")) {
+    // Prevent any URI scheme, including handlers without "//" such as "javascript:".
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) {
         return null;
     }
 
@@ -32,7 +32,19 @@ function sanitizeRelativePath(raw: string | null | undefined): string | null {
         return null;
     }
 
-    const pathname = value.split(/[?#]/, 1)[0];
+    let pathname = value.split(/[?#]/, 1)[0];
+    try {
+        for (let index = 0; index < 3; index += 1) {
+            const decoded = decodeURIComponent(pathname);
+            if (decoded === pathname) {
+                break;
+            }
+            pathname = decoded;
+        }
+    } catch {
+        return null;
+    }
+
     const segments = pathname.split("/");
     if (segments.some((segment) => segment === "." || segment === "..")) {
         return null;
