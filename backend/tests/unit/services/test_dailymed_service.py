@@ -119,6 +119,63 @@ async def test_get_drug_label_success():
 
 
 @pytest.mark.asyncio
+async def test_get_drug_label_success_from_spl_xml():
+    """Test successful drug label retrieval from DailyMed's current XML endpoint."""
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <document xmlns="urn:hl7-org:v3">
+      <title>METFORMIN HYDROCHLORIDE tablet</title>
+      <component>
+        <structuredBody>
+          <component>
+            <section>
+              <title>INDICATIONS AND USAGE</title>
+              <text>Metformin is indicated as an adjunct to diet and exercise.</text>
+            </section>
+          </component>
+          <component>
+            <section>
+              <title>DOSAGE AND ADMINISTRATION</title>
+              <text>Individualize dosage based on effectiveness and tolerability.</text>
+            </section>
+          </component>
+          <component>
+            <section>
+              <title>WARNINGS AND PRECAUTIONS</title>
+              <text>Assess renal function before initiation and periodically thereafter.</text>
+            </section>
+          </component>
+          <component>
+            <section>
+              <title>ADVERSE REACTIONS</title>
+              <text>Common adverse reactions include diarrhea, nausea, and vomiting.</text>
+            </section>
+          </component>
+        </structuredBody>
+      </component>
+    </document>
+    """
+
+    with patch("httpx.AsyncClient.get") as mock_get:
+        mock_get.return_value = httpx.Response(
+            200,
+            content=xml.encode("utf-8"),
+            request=httpx.Request("GET", "https://example.test"),
+        )
+
+        result = await get_drug_label("test-setid-123")
+
+        assert "error" not in result
+        assert result["setid"] == "test-setid-123"
+        assert result["title"] == "METFORMIN HYDROCHLORIDE tablet"
+        assert "renal function" in result["warnings"]
+        assert "diarrhea" in result["adverse_reactions"]
+        assert "diet and exercise" in result["indications"]
+        assert "Individualize dosage" in result["dosage"]
+        mock_get.assert_called_once()
+        assert str(mock_get.call_args.args[0]).endswith("/spls/test-setid-123.xml")
+
+
+@pytest.mark.asyncio
 async def test_get_drug_label_invalid_setid():
     """Test get drug label with invalid setid."""
     with patch("httpx.AsyncClient.get") as mock_get:

@@ -91,6 +91,7 @@
 ### 1.5 External Service Setup
 - [x] Get Gemini API key (Google AI Studio / Vertex AI)
 - [x] Get Deepgram API key and configure SDK
+  - [x] Configure Spanish Deepgram Aura-2 TTS model (`DEEPGRAM_TTS_MODEL_ES`) in environment
 - [x] Set up Resend for email
 - [x] Test DailyMed API access  
 - [x] Test RxNorm API access
@@ -347,7 +348,8 @@
 - [/] Populate pgvector with drug information (from DailyMed)
   - [x] Add `drug_knowledge_chunks` pgvector schema and similarity-match RPC
   - [x] Add DailyMed label chunk builder/upsert service
-  - [ ] Run migration and ingest the first curated production drug label set
+  - [x] Add checked-in ingestion script for curated DailyMed labels
+  - [ ] Run ingestion against production Supabase and verify first curated drug label set
 - [x] Embedding generation for medication knowledge base
   - [x] Add Google Gen AI embedding client with configurable model and dimensions
   - [x] Keep embedding dependency injectable for offline tests
@@ -360,8 +362,13 @@
   - [x] Instruct patient-facing medication answers to cite grounded chunks
 
 ### 5.5 Voice Integration
-- [ ] Deepgram STT client (streaming WebSocket)
-- [ ] Deepgram TTS client (text → audio stream)
+- [/] Deepgram STT client (streaming WebSocket)
+  - [x] Add authenticated backend voice WebSocket contract (`/ws/voice/{patient_id}`)
+  - [x] Add server-side final-audio STT path through Deepgram with validation/tests
+  - [ ] Add true incremental audio chunk streaming from browser mic to backend STT
+- [/] Deepgram TTS client (text → audio stream)
+  - [x] Add backend TTS generation path returning playable audio payload metadata
+  - [ ] Persist generated assistant audio in `voice-messages` storage and `chat_messages.audio_url`
 - [ ] Voice-to-voice pipeline: mic → STT → Triage Agent → response → TTS → speaker
 - [ ] Language detection from audio
 - [ ] Audio message storage (Supabase Storage, URL in chat_messages)
@@ -387,7 +394,9 @@
 ### 5.8 Testing
 - [x] Golden-set for Triage Agent: 20+ test messages with expected intent + route
 - [ ] Golden-set for Symptom Agent: 10+ symptom conversations with expected structured output
-- [ ] Voice pipeline end-to-end test
+- [/] Voice pipeline end-to-end test
+  - [x] Add backend voice WebSocket contract tests for STT/TTS events and validation errors
+  - [ ] Add browser mic → backend STT → chat → backend TTS end-to-end test
 - [x] Load test for WebSocket connections
 - [x] Document→Chat context injection test: open chat from document → verify context available
 - [x] Unit tests for A2A idempotency and retry/dead-letter transitions

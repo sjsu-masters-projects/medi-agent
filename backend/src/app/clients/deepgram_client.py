@@ -1,5 +1,6 @@
 """Deepgram client for voice transcription (STT) and speech generation (TTS)."""
 
+from io import BytesIO
 from typing import BinaryIO
 
 from deepgram import AsyncDeepgramClient, DeepgramClient
@@ -82,6 +83,21 @@ async def transcribe_audio_file_async(
     return response.results.channels[0].alternatives[0].transcript  # type: ignore[no-any-return]
 
 
+async def transcribe_audio_bytes_async(
+    audio_data: bytes,
+    model: str = "nova-3",
+    language: str = Language.EN.value,
+    smart_format: bool = True,
+) -> str:
+    """Async transcribe in-memory audio bytes to text."""
+    return await transcribe_audio_file_async(
+        BytesIO(audio_data),
+        model=model,
+        language=language,
+        smart_format=smart_format,
+    )
+
+
 async def generate_speech_async(
     text: str,
     model: str = "aura-2-asteria-en",
@@ -90,8 +106,9 @@ async def generate_speech_async(
     """Async convert text to speech. Returns audio bytes."""
     client = get_async_deepgram_client()
 
-    # Deepgram async returns a generator, need to collect chunks
-    response = client.speak.v1.audio.generate(
+    # Deepgram async returns an async byte stream, so collect chunks for callers that need
+    # a single playable payload.
+    response = await client.speak.v1.audio.generate(
         text=text,
         model=model,
         encoding=encoding,

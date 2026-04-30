@@ -607,4 +607,4 @@ async def chat_websocket_endpoint(
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 
-# WebSocket route is mounted in main.py at /ws/chat/{patient_id}.
+# WebSocket routes are mounted in main.py.

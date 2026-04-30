@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { getPatientChatCopy } from "@/content/chat-copy";
@@ -25,6 +25,12 @@ import {
     mapChatMessageFromApi,
     type ChatDocumentContextApi,
 } from "@/services/chat-api";
+import {
+    buildVoiceAudioDataUrl,
+    buildVoiceWebSocketUrl,
+    isVoiceSocketEvent,
+    normalizeVoiceEventLanguage,
+} from "@/services/voice-api";
 import {
     addMessage,
     clearChatState,
@@ -184,17 +190,22 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
 
     const voiceRefs = useRef<{
+        pendingPlayback: { language: ChatLocale; text: string } | null;
         recognition: SpeechRecognitionController | null;
         playbackStop: (() => void) | null;
         selectedLanguage: ChatLocale;
+        ttsRequest: string | null;
         voiceModeEnabled: boolean;
     }>({
         playbackStop: null,
+        pendingPlayback: null,
         recognition: null,
         selectedLanguage: initialLanguage,
+        ttsRequest: null,
         voiceModeEnabled: false,
     });
     const socketRef = useRef<WebSocket | null>(null);
+    const voiceSocketRef = useRef<WebSocket | null>(null);
 
     const canPlayAssistantAudio = voiceCapabilities.synthesis;
 
@@ -211,6 +222,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     function stopAssistantPlayback(): void {
         voiceRefs.current.playbackStop?.();
         voiceRefs.current.playbackStop = null;
+        voiceRefs.current.pendingPlayback = null;
     }
 
     function stopSpeechRecognition(): void {
@@ -244,6 +256,179 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         resetVoiceFeedback();
         setInput("");
     }
+
+    function playAssistantMessageWithBrowserFallback(message: ChatMessage): void {
+        stopAssistantPlayback();
+        voiceRefs.current.playbackStop = playAssistantVoiceResponse({
+            audioUrl: message.audioUrl,
+            language: message.language,
+            onEnd: () => {
+                setVoiceStatus("idle");
+            },
+            onStart: () => {
+                setVoiceStatus("playing");
+            },
+            text: message.content,
+        });
+    }
+
+    function closeVoiceSocket(): void {
+        const socket = voiceSocketRef.current;
+        voiceSocketRef.current = null;
+        voiceRefs.current.ttsRequest = null;
+        if (socket && socket.readyState !== WebSocket.CLOSED) {
+            socket.close();
+        }
+    }
+
+    function sendQueuedVoiceRequest(): void {
+        const socket = voiceSocketRef.current;
+        const request = voiceRefs.current.ttsRequest;
+        if (!socket || socket.readyState !== WebSocket.OPEN || !request) {
+            return;
+        }
+
+        socket.send(request);
+        voiceRefs.current.ttsRequest = null;
+    }
+
+    function connectVoiceSocket(): WebSocket | null {
+        if (!accessToken || !user) {
+            return null;
+        }
+
+        const existingSocket = voiceSocketRef.current;
+        if (
+            existingSocket &&
+            (existingSocket.readyState === WebSocket.CONNECTING ||
+                existingSocket.readyState === WebSocket.OPEN)
+        ) {
+            return existingSocket;
+        }
+
+        const socket = new WebSocket(buildVoiceWebSocketUrl(user.id, accessToken));
+        voiceSocketRef.current = socket;
+
+        socket.onopen = () => {
+            sendQueuedVoiceRequest();
+        };
+
+        socket.onmessage = (event) => {
+            let payload: unknown;
+            try {
+                payload = JSON.parse(event.data as string);
+            } catch {
+                return;
+            }
+
+            if (!isVoiceSocketEvent(payload)) {
+                return;
+            }
+
+            if (payload.type === "assistant_audio_ready") {
+                const pendingPlayback = voiceRefs.current.pendingPlayback;
+                if (!pendingPlayback) {
+                    return;
+                }
+
+                stopAssistantPlayback();
+                voiceRefs.current.playbackStop = playAssistantVoiceResponse({
+                    audioUrl: buildVoiceAudioDataUrl(payload),
+                    language: normalizeVoiceEventLanguage(payload.language),
+                    onEnd: () => {
+                        setVoiceStatus("idle");
+                    },
+                    onStart: () => {
+                        setVoiceStatus("playing");
+                    },
+                    text: pendingPlayback.text,
+                });
+                return;
+            }
+
+            if (payload.type === "voice_error") {
+                const pendingPlayback = voiceRefs.current.pendingPlayback;
+                voiceRefs.current.pendingPlayback = null;
+                setVoiceError(
+                    payload.message || "Voice playback is temporarily unavailable. Using device audio.",
+                );
+
+                if (pendingPlayback && voiceCapabilities.synthesis) {
+                    voiceRefs.current.playbackStop = playAssistantVoiceResponse({
+                        language: pendingPlayback.language,
+                        onEnd: () => {
+                            setVoiceStatus("idle");
+                        },
+                        onStart: () => {
+                            setVoiceStatus("playing");
+                        },
+                        text: pendingPlayback.text,
+                    });
+                } else {
+                    setVoiceStatus("idle");
+                }
+            }
+        };
+
+        socket.onerror = () => {
+            const pendingPlayback = voiceRefs.current.pendingPlayback;
+            voiceRefs.current.pendingPlayback = null;
+            setVoiceError("Voice playback is reconnecting. Using device audio for now.");
+
+            if (pendingPlayback && voiceCapabilities.synthesis) {
+                voiceRefs.current.playbackStop = playAssistantVoiceResponse({
+                    language: pendingPlayback.language,
+                    onEnd: () => {
+                        setVoiceStatus("idle");
+                    },
+                    onStart: () => {
+                        setVoiceStatus("playing");
+                    },
+                    text: pendingPlayback.text,
+                });
+            } else {
+                setVoiceStatus("idle");
+            }
+        };
+
+        socket.onclose = () => {
+            if (voiceSocketRef.current === socket) {
+                voiceSocketRef.current = null;
+            }
+        };
+
+        return socket;
+    }
+
+    function requestBackendAssistantAudio(message: ChatMessage): void {
+        if (message.audioUrl) {
+            playAssistantMessageWithBrowserFallback(message);
+            return;
+        }
+
+        const socket = connectVoiceSocket();
+        if (!socket) {
+            playAssistantMessageWithBrowserFallback(message);
+            return;
+        }
+
+        stopAssistantPlayback();
+        voiceRefs.current.pendingPlayback = {
+            language: message.language,
+            text: message.content,
+        };
+        voiceRefs.current.ttsRequest = JSON.stringify({
+            type: "tts_request",
+            text: message.content,
+            language: message.language,
+        });
+        setVoiceStatus("processing");
+        sendQueuedVoiceRequest();
+    }
+
+    const requestBackendAssistantAudioEvent = useEffectEvent((message: ChatMessage) => {
+        requestBackendAssistantAudio(message);
+    });
 
     useEffect(() => {
         voiceRefs.current.selectedLanguage = selectedLanguage;
@@ -376,18 +561,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     dispatch(addMessage(assistantMessage));
 
                     if (voiceRefs.current.voiceModeEnabled) {
-                        stopAssistantPlayback();
-                        voiceRefs.current.playbackStop = playAssistantVoiceResponse({
-                            audioUrl: assistantMessage.audioUrl,
-                            language: assistantMessage.language,
-                            onEnd: () => {
-                                setVoiceStatus("idle");
-                            },
-                            onStart: () => {
-                                setVoiceStatus("playing");
-                            },
-                            text: assistantMessage.content,
-                        });
+                        requestBackendAssistantAudioEvent(assistantMessage);
                     }
 
                     if (payload.escalation_required) {
@@ -443,6 +617,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             isMounted = false;
             stopSpeechRecognition();
             stopAssistantPlayback();
+            closeVoiceSocket();
             socketRef.current = null;
             socket.close();
         };
@@ -452,6 +627,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         return () => {
             stopSpeechRecognition();
             stopAssistantVoicePlayback();
+            closeVoiceSocket();
         };
     }, []);
 
@@ -565,17 +741,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         }
 
         stopAssistantPlayback();
-        voiceRefs.current.playbackStop = playAssistantVoiceResponse({
-            audioUrl: message.audioUrl,
-            language: message.language,
-            onEnd: () => {
-                setVoiceStatus("idle");
-            },
-            onStart: () => {
-                setVoiceStatus("playing");
-            },
-            text: message.content,
-        });
+        requestBackendAssistantAudio(message);
     }
 
     return {

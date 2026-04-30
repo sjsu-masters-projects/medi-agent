@@ -12,11 +12,13 @@ const {
     buildChatWebSocketUrl,
     fetchChatHistory,
     getVoiceCapabilities,
+    playAssistantVoiceResponse,
     replace,
 } = vi.hoisted(() => ({
     buildChatWebSocketUrl: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recognition: false, synthesis: false })),
+    playAssistantVoiceResponse: vi.fn(() => null),
     replace: vi.fn(),
 }));
 
@@ -42,11 +44,13 @@ vi.mock("@/services/chat-api", async () => {
 vi.mock("@/services/browser-voice", () => ({
     createSpeechRecognitionController: vi.fn(() => null),
     getVoiceCapabilities,
-    playAssistantVoiceResponse: vi.fn(() => null),
+    playAssistantVoiceResponse,
     stopAssistantVoicePlayback: vi.fn(),
 }));
 
 class MockWebSocket {
+    static CLOSED = 3;
+    static CONNECTING = 0;
     static instances: MockWebSocket[] = [];
     static OPEN = 1;
 
@@ -100,6 +104,7 @@ describe("Patient chat page", () => {
         buildChatWebSocketUrl.mockReset();
         fetchChatHistory.mockReset();
         getVoiceCapabilities.mockReset();
+        playAssistantVoiceResponse.mockReset();
         replace.mockReset();
         searchParamsValue = new URLSearchParams();
         MockWebSocket.reset();
@@ -355,5 +360,59 @@ describe("Patient chat page", () => {
                 screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }),
             ).toBeInTheDocument();
         });
+    });
+
+    it("requests backend TTS audio when voice mode assistant response completes", async () => {
+        getVoiceCapabilities.mockReturnValue({ recognition: true, synthesis: true });
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const chatSocket = MockWebSocket.instances[0];
+        await act(async () => {
+            chatSocket.emitOpen();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }));
+
+        await act(async () => {
+            chatSocket.emitMessage({
+                type: "assistant_complete",
+                message: {
+                    audio_url: null,
+                    content: "Please take your medication with food.",
+                    created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-voice-1",
+                    intent: "medication_question",
+                    language: "en-US",
+                    patient_id: "patient-1",
+                    role: "assistant",
+                },
+            });
+        });
+
+        const voiceSocket = MockWebSocket.instances[1];
+        expect(JSON.parse(voiceSocket.sent[0])).toEqual({
+            language: "en-US",
+            text: "Please take your medication with food.",
+            type: "tts_request",
+        });
+
+        await act(async () => {
+            voiceSocket.emitMessage({
+                audio_base64: "YWJj",
+                encoding: "mp3",
+                language: "en-US",
+                mime_type: "audio/mpeg",
+                model: "aura-2-asteria-en",
+                type: "assistant_audio_ready",
+            });
+        });
+
+        expect(playAssistantVoiceResponse).toHaveBeenCalledWith(
+            expect.objectContaining({
+                audioUrl: "data:audio/mpeg;base64,YWJj",
+                text: "Please take your medication with food.",
+            }),
+        );
     });
 });
