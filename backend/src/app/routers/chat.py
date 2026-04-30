@@ -23,6 +23,7 @@ from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
 from app.services.a2a_task_service import A2ATaskService
 from app.services.chat_service import ChatService, ConversationStateConflictError
+from app.services.drug_knowledge_service import DrugKnowledgeService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -283,6 +284,7 @@ async def chat_websocket_endpoint(
     await websocket.accept()
     service = ChatService(db)
     a2a_service = A2ATaskService(db)
+    drug_knowledge_service = DrugKnowledgeService(db)
     triage_agent = TriageAgent()
     symptom_agent = SymptomAgent()
 
@@ -400,6 +402,16 @@ async def chat_websocket_endpoint(
             await websocket.send_json({"type": "user_message_saved", "message": user_payload})
 
             try:
+                drug_knowledge_context = await drug_knowledge_service.retrieve_for_patient_message(
+                    message=incoming.content,
+                    medications=patient_context.get("medications", []),
+                )
+                if drug_knowledge_context.get("status") != "not_applicable":
+                    patient_context = {
+                        **patient_context,
+                        "drug_knowledge": drug_knowledge_context,
+                    }
+
                 triage_result = await triage_agent(
                     TriageInput(
                         user_id=current_user.id,

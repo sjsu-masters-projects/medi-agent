@@ -10,6 +10,9 @@ describe("return path helpers", () => {
         expect(sanitizeReturnPath("https://evil.com")).toBe(null);
         expect(sanitizeReturnPath("http://evil.com")).toBe(null);
         expect(sanitizeReturnPath("//evil.com/path")).toBe(null);
+        expect(sanitizeReturnPath("javascript:alert(1)")).toBe(null);
+        expect(sanitizeReturnPath("data:text/html,alert(1)")).toBe(null);
+        expect(sanitizeReturnPath("vbscript:msgbox(1)")).toBe(null);
     });
 
     it("rejects protocol-relative URLs", () => {
@@ -24,6 +27,8 @@ describe("return path helpers", () => {
         expect(sanitizeReturnPath("/../admin")).toBe(null);
         expect(sanitizeReturnPath("/dashboard/./settings")).toBe(null);
         expect(sanitizeReturnPath("/dashboard\\settings")).toBe(null);
+        expect(sanitizeReturnPath("/%2e%2e/admin")).toBe(null);
+        expect(sanitizeReturnPath("/%252e%252e/admin")).toBe(null);
     });
 
     it("sanitizes login paths before building redirects", () => {

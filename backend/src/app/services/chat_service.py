@@ -247,7 +247,7 @@ class ChatService:
     async def _fetch_active_medications(self, patient_id: str) -> list[dict[str, Any]]:
         result = await self._execute(
             self.db.table("medications")
-            .select("id, name, dosage, frequency, route")
+            .select("id, name, generic_name, rxcui, dosage, frequency, route")
             .eq("patient_id", patient_id)
             .eq("is_active", True)
             .order("created_at", desc=True)
