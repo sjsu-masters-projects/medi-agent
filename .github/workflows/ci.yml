@@ -13,6 +13,36 @@ permissions:
   contents: read
 
 jobs:
+  pr-policy:
+    name: PR Policy Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required PR checklist items
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request?.body || "";
+            const requiredChecks = [
+              "I have read `CONTRIBUTING.md` and `.agent/CODING_STANDARDS.md`.",
+              "My code follows the architecture in `.agent/ARCHITECTURE.md`.",
+              "I ran required lint checks for touched surfaces (`ruff` / `eslint`).",
+              "I ran required type/test checks for touched surfaces (`mypy` / `pytest` / frontend tests/build).",
+              "I added or updated tests for changed behavior, or documented why tests are not applicable.",
+              "I verified no secrets or credentials were added (including `.env*`, keys, tokens, service-account files).",
+              "I listed manual verification steps below.",
+            ];
+
+            const missing = requiredChecks.filter((item) => !body.includes(`- [x] ${item}`));
+            if (missing.length > 0) {
+              core.setFailed(
+                "PR checklist policy failed. Mark these items as completed in the PR body:\n- "
+                + missing.join("\n- ")
+              );
+            } else {
+              core.info("PR checklist policy passed.");
+            }
+
   # ── Backend Pipeline ──────────────────────────────────────
   backend-ruff-lint:
     name: Backend Lint (Ruff)
