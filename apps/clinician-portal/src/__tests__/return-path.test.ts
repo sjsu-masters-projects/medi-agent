@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildLoginRedirectUrl, sanitizeReturnPath } from "../../../../packages/shared/src/utils/return-path";
+import {
+    buildLoginRedirectUrl,
+    sanitizeLoginPath,
+    sanitizeReturnPath,
+} from "../../../../packages/shared/src/utils/return-path";
 
 describe("return path helpers", () => {
     it("rejects absolute and protocol-relative URLs", () => {
@@ -14,6 +18,25 @@ describe("return path helpers", () => {
 
     it("accepts relative paths and preserves query", () => {
         expect(sanitizeReturnPath("/dashboard?tab=risk")).toBe("/dashboard?tab=risk");
+    });
+
+    it("rejects traversal and backslash return paths", () => {
+        expect(sanitizeReturnPath("/../admin")).toBe(null);
+        expect(sanitizeReturnPath("/dashboard/./settings")).toBe(null);
+        expect(sanitizeReturnPath("/dashboard\\settings")).toBe(null);
+    });
+
+    it("sanitizes login paths before building redirects", () => {
+        expect(sanitizeLoginPath("/login")).toBe("/login");
+        expect(sanitizeLoginPath("//evil.com/login")).toBe(null);
+        expect(sanitizeLoginPath("javascript:alert(1)")).toBe(null);
+
+        const url = buildLoginRedirectUrl({
+            loginPath: "//evil.com/login",
+            returnPath: "/dashboard",
+        });
+
+        expect(url).toBe("/login?return_path=%2Fdashboard");
     });
 
     it("builds login redirect URL with encoded return_path", () => {

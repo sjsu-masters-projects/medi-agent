@@ -51,6 +51,7 @@ export default function ChatPage() {
         canPlayAssistantAudio,
         connectionStatus,
         dismissDocumentContext,
+        dismissSafetyNotice,
         documentContext,
         error,
         handleLanguageSelection,
@@ -62,6 +63,7 @@ export default function ChatPage() {
         isTyping,
         loading,
         messages,
+        safetyNotice,
         selectedLanguage,
         setInput,
         voiceError,
@@ -182,6 +184,24 @@ export default function ChatPage() {
                         {error ? (
                             <div className="rounded-[20px] border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]">
                                 {error}
+                            </div>
+                        ) : null}
+
+                        {safetyNotice ? (
+                            <div
+                                className="rounded-[20px] border border-[#F6D49A] bg-[#FFF7E8] px-4 py-3 text-sm text-[#7A4C00]"
+                                role="alert"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <p>{safetyNotice}</p>
+                                    <button
+                                        className="rounded-full border border-[#F0D7AA] bg-white/70 px-3 py-1 text-xs font-semibold text-[#7A4C00] transition hover:bg-white"
+                                        onClick={dismissSafetyNotice}
+                                        type="button"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
                             </div>
                         ) : null}
 

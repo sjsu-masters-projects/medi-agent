@@ -207,6 +207,39 @@ describe("Patient chat page", () => {
         });
     });
 
+    it("shows escalation as a dismissible safety notice instead of a chat error", async () => {
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({
+                type: "assistant_complete",
+                escalation_required: true,
+                message: {
+                    audio_url: null,
+                    content: "Please contact your care team today.",
+                    created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-urgent",
+                    intent: "symptom",
+                    language: "en",
+                    patient_id: "patient-1",
+                    role: "assistant",
+                },
+            });
+        });
+
+        const safetyNotice = await screen.findByRole("alert");
+        expect(safetyNotice).toHaveTextContent(/Contact your care team today/i);
+        expect(screen.queryByText(/Live chat connection encountered/i)).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+        await waitFor(() => {
+            expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        });
+    });
+
     it("hydrates document context into chat from the records bridge", async () => {
         searchParamsValue = new URLSearchParams("document=doc-1");
         window.history.replaceState({}, "", "/chat?document=doc-1");
