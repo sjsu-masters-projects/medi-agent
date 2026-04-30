@@ -248,7 +248,7 @@ Phase 5 is complete when all of the following pass:
 
 ## References
 
-- Deepgram Python SDK: https://github.com/deepgram/deepgram-python-sdk
-- Google Gen AI Python SDK: https://github.com/googleapis/python-genai
-- Vertex AI Model Garden: https://cloud.google.com/vertex-ai/docs
-- MedGemma model card: https://developers.google.com/health-ai-developer-foundations/medgemma/model-card
+- Deepgram Python SDK: https://github.com/deepgram/deepgram-python-sdk (last verified: 2026-04-29; archive backup: https://web.archive.org/web/*/https://github.com/deepgram/deepgram-python-sdk)
+- Google Gen AI Python SDK: https://github.com/googleapis/python-genai (last verified: 2026-04-29; archive backup: https://web.archive.org/web/*/https://github.com/googleapis/python-genai)
+- Vertex AI Model Garden: https://cloud.google.com/vertex-ai/docs (last verified: 2026-04-29; archive backup: https://web.archive.org/web/*/https://cloud.google.com/vertex-ai/docs)
+- MedGemma model card: https://developers.google.com/health-ai-developer-foundations/medgemma/model-card (last verified: 2026-04-29; archive backup: https://web.archive.org/web/*/https://developers.google.com/health-ai-developer-foundations/medgemma/model-card)

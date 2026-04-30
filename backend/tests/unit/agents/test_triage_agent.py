@@ -53,3 +53,50 @@ async def test_triage_agent_fallback_returns_spanish_urgent_guidance():
     assert output.escalation_required is True
     assert output.response_text is not None
     assert "equipo clínico" in output.response_text.lower()
+
+
+@pytest.mark.asyncio
+async def test_triage_agent_fallback_returns_document_guidance():
+    agent = TriageAgent(router=_FailingRouter())
+
+    output = await agent.process(
+        TriageInput(
+            user_id=uuid4(),
+            patient_id=uuid4(),
+            message="Can you explain this report?",
+            language=Language.EN,
+            document_context={
+                "id": str(uuid4()),
+                "file_name": "discharge.pdf",
+                "summary": "Follow up with primary care.",
+            },
+        )
+    )
+
+    assert output.status == "success"
+    assert output.intent == "document_question"
+    assert output.urgency == "routine"
+    assert output.escalation_required is False
+    assert output.response_text is not None
+    assert "attached record" in output.response_text
+
+
+@pytest.mark.asyncio
+async def test_triage_agent_fallback_returns_mental_health_guidance():
+    agent = TriageAgent(router=_FailingRouter())
+
+    output = await agent.process(
+        TriageInput(
+            user_id=uuid4(),
+            patient_id=uuid4(),
+            message="I feel hopeless and overwhelmed",
+            language=Language.EN,
+        )
+    )
+
+    assert output.status == "success"
+    assert output.intent == "mental_health"
+    assert output.urgency == "urgent"
+    assert output.escalation_required is True
+    assert output.response_text is not None
+    assert "988" in output.response_text

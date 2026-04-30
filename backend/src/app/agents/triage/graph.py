@@ -38,7 +38,31 @@ EMERGENCY_KEYWORDS = frozenset(
         "kill myself",
     }
 )
-SCHEDULE_KEYWORDS = frozenset({"appointment", "reschedule", "book", "visit"})
+DOCUMENT_KEYWORDS = frozenset(
+    {
+        "document",
+        "record",
+        "report",
+        "result",
+        "results",
+        "lab",
+        "labs",
+        "prescription",
+        "discharge",
+        "informe",
+        "resultado",
+        "resultados",
+        "laboratorio",
+        "receta",
+        "alta",
+    }
+)
+DOCUMENT_CONTEXT_REFERENCES = frozenset(
+    {"this", "that", "it", "these", "those", "esto", "eso", "este", "esta", "estos", "estas"}
+)
+SCHEDULE_KEYWORDS = frozenset(
+    {"appointment", "reschedule", "book", "visit", "cita", "agendar", "reagendar", "visita"}
+)
 MEDICATION_KEYWORDS = frozenset(
     {
         "medication",
@@ -94,7 +118,14 @@ ADVERSE_EFFECT_KEYWORDS = frozenset(
     }
 )
 
-IntentType = Literal["symptom", "medication_question", "schedule", "mental_health", "general"]
+IntentType = Literal[
+    "symptom",
+    "medication_question",
+    "schedule",
+    "document_question",
+    "mental_health",
+    "general",
+]
 UrgencyType = Literal["routine", "urgent", "emergency"]
 
 TRIAGE_COPY = {
@@ -109,6 +140,18 @@ TRIAGE_COPY = {
         "fallback_medication_question": (
             "I can help track your medication-related concerns. If symptoms worsen, please "
             "contact your care team right away."
+        ),
+        "fallback_document_question": (
+            "I can help explain the attached record in plain language. I will stick to what is "
+            "available in your record and suggest questions for your care team when details are unclear."
+        ),
+        "fallback_schedule": (
+            "I can help you prepare scheduling questions. For appointment changes, please confirm "
+            "directly with your clinic."
+        ),
+        "fallback_mental_health": (
+            "I am sorry you are feeling this way. If you might hurt yourself or feel unsafe, call "
+            "988 or emergency services now. Otherwise, contact your care team today for support."
         ),
         "fallback_urgent": (
             "Thank you for sharing this. Please contact your care team today for timely "
@@ -127,6 +170,18 @@ TRIAGE_COPY = {
             "I can help track your medication-related concerns. If symptoms worsen, please "
             "contact your care team right away."
         ),
+        "fallback_document_question": (
+            "I can help explain the attached record in plain language. I will stick to what is "
+            "available in your record and suggest questions for your care team when details are unclear."
+        ),
+        "fallback_schedule": (
+            "I can help you prepare scheduling questions. For appointment changes, please confirm "
+            "directly with your clinic."
+        ),
+        "fallback_mental_health": (
+            "I am sorry you are feeling this way. If you might hurt yourself or feel unsafe, call "
+            "988 or emergency services now. Otherwise, contact your care team today for support."
+        ),
         "fallback_urgent": (
             "Thank you for sharing this. Please contact your care team today for timely "
             "clinical guidance."
@@ -143,6 +198,18 @@ TRIAGE_COPY = {
         "fallback_medication_question": (
             "Puedo ayudarte a revisar tus síntomas relacionados con medicamentos. Si notas "
             "empeoramiento, contacta a tu equipo clínico de inmediato."
+        ),
+        "fallback_document_question": (
+            "Puedo ayudarte a explicar el documento adjunto en lenguaje sencillo. Me basaré en "
+            "la información disponible y sugeriré preguntas para tu equipo clínico si algo no queda claro."
+        ),
+        "fallback_schedule": (
+            "Puedo ayudarte a preparar preguntas sobre citas. Para cambiar una cita, confirma "
+            "directamente con tu clínica."
+        ),
+        "fallback_mental_health": (
+            "Siento que te estés sintiendo así. Si podrías hacerte daño o no te sientes a salvo, "
+            "llama al 988 o a emergencias ahora. Si no, contacta a tu equipo clínico hoy para recibir apoyo."
         ),
         "fallback_urgent": (
             "Gracias por compartir esto. Es importante que hables con tu equipo clínico hoy "
@@ -206,7 +273,7 @@ async def classify_intent(state: TriageState, router: ModelRouter) -> TriageStat
         return _empty_message_state(state)
 
     llm_result = await _classify_with_llm(router, context)
-    rule_result = llm_result or _classify_with_rules(context.message)
+    rule_result = llm_result or _classify_with_rules(context)
     result = _apply_safety_override(rule_result, context.message)
     return _merge_classification(state, result)
 
@@ -306,8 +373,8 @@ async def _generate_response_with_llm(router: ModelRouter, request: _ResponseReq
     return cleaned or None
 
 
-def _classify_with_rules(message: str) -> TriageClassificationResult:
-    normalized = message.lower()
+def _classify_with_rules(context: _MessageContext) -> TriageClassificationResult:
+    normalized = context.message.lower()
     if _matches_any(normalized, EMERGENCY_KEYWORDS):
         return TriageClassificationResult(
             intent="symptom",
@@ -343,6 +410,13 @@ def _classify_with_rules(message: str) -> TriageClassificationResult:
             reason="Symptom keyword match",
         )
 
+    if _has_document_signal(normalized, has_document_context=bool(context.document_context)):
+        return TriageClassificationResult(
+            intent="document_question",
+            urgency="routine",
+            reason="Document context or document keyword match",
+        )
+
     return TriageClassificationResult(
         intent="general",
         urgency="routine",
@@ -361,10 +435,16 @@ def _emergency_response(language: str) -> str:
 
 def _fallback_response(*, language: str, intent: str, urgency: str) -> str:
     localized_copy = resolve_locale_resource(language, TRIAGE_COPY)
-    if urgency == "urgent":
-        return localized_copy["fallback_urgent"]
     if intent == "medication_question":
         return localized_copy["fallback_medication_question"]
+    if intent == "document_question":
+        return localized_copy["fallback_document_question"]
+    if intent == "schedule":
+        return localized_copy["fallback_schedule"]
+    if intent == "mental_health":
+        return localized_copy["fallback_mental_health"]
+    if urgency == "urgent":
+        return localized_copy["fallback_urgent"]
     return localized_copy["fallback_general"]
 
 
@@ -440,6 +520,15 @@ def _apply_safety_override(
 
 def _matches_any(text: str, keywords: frozenset[str]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+def _has_document_signal(text: str, *, has_document_context: bool) -> bool:
+    if _matches_any(text, DOCUMENT_KEYWORDS):
+        return True
+    if not has_document_context or not _matches_any(text, DOCUMENT_CONTEXT_REFERENCES):
+        return False
+    document_verbs = ("explain", "mean", "understand", "review", "explica", "significa", "entender")
+    return any(verb in text for verb in document_verbs)
 
 
 def _route_for_intent(intent: str) -> str:
