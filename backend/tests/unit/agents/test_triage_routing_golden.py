@@ -37,6 +37,7 @@ GOLDEN_CASES = [
     ("Just checking in with no major issues", "general", "routine", "triage"),
     ("Hello there", "general", "routine", "triage"),
     ("I need refill for my medication", "medication_question", "routine", "triage"),
+    ("Can you explain what aspirin does", "medication_question", "routine", "triage"),
     ("Swelling and faint feeling after dose", "medication_question", "urgent", "triage"),
 ]
 
