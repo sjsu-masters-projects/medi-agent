@@ -183,11 +183,18 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
 
-    const recognitionRef = useRef<SpeechRecognitionController | null>(null);
-    const playbackStopRef = useRef<(() => void) | null>(null);
-    const selectedLanguageRef = useRef<ChatLocale>(initialLanguage);
+    const voiceRefs = useRef<{
+        recognition: SpeechRecognitionController | null;
+        playbackStop: (() => void) | null;
+        selectedLanguage: ChatLocale;
+        voiceModeEnabled: boolean;
+    }>({
+        playbackStop: null,
+        recognition: null,
+        selectedLanguage: initialLanguage,
+        voiceModeEnabled: false,
+    });
     const socketRef = useRef<WebSocket | null>(null);
-    const voiceModeRef = useRef(false);
 
     const canPlayAssistantAudio = voiceCapabilities.synthesis;
 
@@ -202,13 +209,13 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     }
 
     function stopAssistantPlayback(): void {
-        playbackStopRef.current?.();
-        playbackStopRef.current = null;
+        voiceRefs.current.playbackStop?.();
+        voiceRefs.current.playbackStop = null;
     }
 
     function stopSpeechRecognition(): void {
-        recognitionRef.current?.stop();
-        recognitionRef.current = null;
+        voiceRefs.current.recognition?.stop();
+        voiceRefs.current.recognition = null;
     }
 
     function sendChatMessage(content: string, audioUrl?: string): void {
@@ -227,7 +234,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             JSON.stringify({
                 type: "user_message",
                 content: trimmedContent,
-                language: selectedLanguageRef.current,
+                language: voiceRefs.current.selectedLanguage,
                 audio_url: audioUrl ?? null,
             }),
         );
@@ -239,14 +246,14 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     }
 
     useEffect(() => {
-        selectedLanguageRef.current = selectedLanguage;
+        voiceRefs.current.selectedLanguage = selectedLanguage;
         if (typeof window !== "undefined") {
             window.localStorage.setItem(CHAT_LANGUAGE_STORAGE_KEY, selectedLanguage);
         }
     }, [selectedLanguage]);
 
     useEffect(() => {
-        voiceModeRef.current = voiceModeEnabled;
+        voiceRefs.current.voiceModeEnabled = voiceModeEnabled;
     }, [voiceModeEnabled]);
 
     useEffect(() => {
@@ -334,7 +341,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                         setMessages(
                             incomingHistory.length > 0
                                 ? incomingHistory
-                                : [buildWelcomeMessage(user.id, selectedLanguageRef.current)],
+                                : [buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)],
                         ),
                     );
                     return;
@@ -342,7 +349,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                 case "chat_context_loaded": {
                     const loadedDocumentContext = mapLoadedDocumentContext(
                         payload.document,
-                        selectedLanguageRef.current,
+                        voiceRefs.current.selectedLanguage,
                     );
                     if (loadedDocumentContext) {
                         setActiveDocumentId(loadedDocumentContext.documentId);
@@ -368,9 +375,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     dispatch(setTyping(false));
                     dispatch(addMessage(assistantMessage));
 
-                    if (voiceModeRef.current) {
+                    if (voiceRefs.current.voiceModeEnabled) {
                         stopAssistantPlayback();
-                        playbackStopRef.current = playAssistantVoiceResponse({
+                        voiceRefs.current.playbackStop = playAssistantVoiceResponse({
                             audioUrl: assistantMessage.audioUrl,
                             language: assistantMessage.language,
                             onEnd: () => {
@@ -385,13 +392,13 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
                     if (payload.escalation_required) {
                         setSafetyNotice(
-                            getPatientChatCopy(selectedLanguageRef.current).escalationNotice,
+                            getPatientChatCopy(voiceRefs.current.selectedLanguage).escalationNotice,
                         );
                     }
                     return;
                 }
                 case "escalation_recommended":
-                    setSafetyNotice(getPatientChatCopy(selectedLanguageRef.current).escalationNotice);
+                    setSafetyNotice(getPatientChatCopy(voiceRefs.current.selectedLanguage).escalationNotice);
                     return;
                 case "error":
                     resetAssistantDraft();
@@ -399,7 +406,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     dispatch(setChatError(payload.message || "Chat request failed."));
                     setVoiceStatus("idle");
                     setVoiceModeEnabled(false);
-                    voiceModeRef.current = false;
+                    voiceRefs.current.voiceModeEnabled = false;
                     return;
                 default:
                     return;
@@ -417,7 +424,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             dispatch(setChatError("Live chat connection encountered an issue."));
             setVoiceStatus("idle");
             setVoiceModeEnabled(false);
-            voiceModeRef.current = false;
+            voiceRefs.current.voiceModeEnabled = false;
         };
 
         socket.onclose = () => {
@@ -429,7 +436,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             dispatch(setTyping(false));
             setVoiceStatus("idle");
             setVoiceModeEnabled(false);
-            voiceModeRef.current = false;
+            voiceRefs.current.voiceModeEnabled = false;
         };
 
         return () => {
@@ -459,7 +466,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
     function handleLanguageSelection(language: ChatLocale): void {
         const nextLocale = normalizeLocale(language);
-        selectedLanguageRef.current = nextLocale;
+        voiceRefs.current.selectedLanguage = nextLocale;
         setSelectedLanguage(nextLocale);
         setVoiceError(null);
     }
@@ -476,7 +483,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         }
 
         const nextValue = !voiceModeEnabled;
-        voiceModeRef.current = nextValue;
+        voiceRefs.current.voiceModeEnabled = nextValue;
         setVoiceModeEnabled(nextValue);
 
         if (!nextValue) {
@@ -504,10 +511,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
         resetVoiceFeedback();
 
-        const controller = createSpeechRecognitionController(selectedLanguageRef.current, {
+        const controller = createSpeechRecognitionController(voiceRefs.current.selectedLanguage, {
             onEnd: (finalTranscript) => {
-                recognitionRef.current = null;
-                setVoiceStatus(voiceModeRef.current ? "processing" : "idle");
+                voiceRefs.current.recognition = null;
+                setVoiceStatus(voiceRefs.current.voiceModeEnabled ? "processing" : "idle");
                 setVoiceInterimTranscript("");
 
                 if (!finalTranscript) {
@@ -515,7 +522,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     return;
                 }
 
-                if (voiceModeRef.current) {
+                if (voiceRefs.current.voiceModeEnabled) {
                     sendChatMessage(finalTranscript);
                     return;
                 }
@@ -524,7 +531,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                 setVoiceStatus("idle");
             },
             onError: (message) => {
-                recognitionRef.current = null;
+                voiceRefs.current.recognition = null;
                 setVoiceStatus("idle");
                 setVoiceInterimTranscript("");
                 setVoiceError(message);
@@ -533,7 +540,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                 setVoiceStatus("listening");
             },
             onTranscript: ({ finalTranscript, interimTranscript }) => {
-                if (!voiceModeRef.current && finalTranscript) {
+                if (!voiceRefs.current.voiceModeEnabled && finalTranscript) {
                     setInput(finalTranscript);
                 }
                 setVoiceInterimTranscript(interimTranscript);
@@ -546,7 +553,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             return;
         }
 
-        recognitionRef.current = controller;
+        voiceRefs.current.recognition = controller;
         controller.start();
     }
 
@@ -558,7 +565,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         }
 
         stopAssistantPlayback();
-        playbackStopRef.current = playAssistantVoiceResponse({
+        voiceRefs.current.playbackStop = playAssistantVoiceResponse({
             audioUrl: message.audioUrl,
             language: message.language,
             onEnd: () => {

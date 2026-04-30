@@ -356,7 +356,8 @@ class A2ATaskService:
     @staticmethod
     def _calculate_retry_delay_seconds(attempt: int) -> int:
         # Exponential backoff with a cap to avoid runaway delays.
-        return int(min(2 ** max(attempt, 1), 300))
+        normalized_attempt = max(attempt - 1, 0)
+        return int(min(2**normalized_attempt, 300))
 
     @staticmethod
     def _calculate_execute_retry_delay_seconds(attempt: int) -> float:

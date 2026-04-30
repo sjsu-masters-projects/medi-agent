@@ -4,7 +4,7 @@ export interface BuildLoginRedirectUrlParams {
     returnPath?: string;
 }
 
-export function sanitizeReturnPath(raw: string | null | undefined): string | null {
+function sanitizeRelativePath(raw: string | null | undefined): string | null {
     if (!raw) {
         return null;
     }
@@ -28,7 +28,25 @@ export function sanitizeReturnPath(raw: string | null | undefined): string | nul
         return null;
     }
 
+    if (value.includes("\\")) {
+        return null;
+    }
+
+    const pathname = value.split(/[?#]/, 1)[0];
+    const segments = pathname.split("/");
+    if (segments.some((segment) => segment === "." || segment === "..")) {
+        return null;
+    }
+
     return value;
+}
+
+export function sanitizeReturnPath(raw: string | null | undefined): string | null {
+    return sanitizeRelativePath(raw);
+}
+
+export function sanitizeLoginPath(raw: string | null | undefined): string | null {
+    return sanitizeRelativePath(raw);
 }
 
 export function buildLoginRedirectUrl({
@@ -36,6 +54,7 @@ export function buildLoginRedirectUrl({
     reason,
     returnPath,
 }: BuildLoginRedirectUrlParams): string {
+    const sanitizedLoginPath = sanitizeLoginPath(loginPath) ?? "/login";
     const sanitizedReturnPath = sanitizeReturnPath(returnPath) ?? "/";
 
     const params = new URLSearchParams();
@@ -46,5 +65,5 @@ export function buildLoginRedirectUrl({
 
     params.set("return_path", sanitizedReturnPath);
 
-    return `${loginPath}?${params.toString()}`;
+    return `${sanitizedLoginPath}?${params.toString()}`;
 }
