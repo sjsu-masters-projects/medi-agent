@@ -1,19 +1,35 @@
 ## Description
 <!-- Describe what this PR does, why it's needed, and provide context -->
-- Context: 
-- What changed: 
+- Context:
+- What changed:
+- Risk/impact:
 
-## Related Tasks
+## Related Tasks / Issues
 <!-- Link to the specific `.agent/TASKS.md` item or issue this PR resolves -->
-- Resolves: 
+- Resolves:
 
-## Verification Checklist
-<!-- Check the boxes before requesting a review -->
-- [ ] I have read the `CONTRIBUTING.md` and `.agent/CODING_STANDARDS.md`.
-- [ ] My code matches existing architecture patterns (`.agent/ARCHITECTURE.md`).
-- [ ] I have verified that tests pass (`pytest` / `vitest`).
-- [ ] I have run local linting (`ruff` / `eslint`).
-- [ ] I have added/updated tests for this feature.
-- [ ] There are no new warnings, secrets, or hallucinated dependencies.
+## Docs Impact
+<!-- Mark all that apply -->
+- [ ] No docs update required.
+- [ ] Updated `.agent/TASKS.md`.
+- [ ] Updated `.agent/specs/*` docs.
+- [ ] Updated `README.md` and/or `CONTRIBUTING.md`.
 
-<!-- (Optional) Add screenshots for any UI/Frontend changes here -->
+## Required Verification Checklist
+<!-- These checks are policy-gated in CI -->
+- [ ] I have read `CONTRIBUTING.md` and `.agent/CODING_STANDARDS.md`.
+- [ ] My code follows the architecture in `.agent/ARCHITECTURE.md`.
+- [ ] I ran required lint checks for touched surfaces (`ruff` / `eslint`).
+- [ ] I ran required type/test checks for touched surfaces (`mypy` / `pytest` / frontend tests/build).
+- [ ] I added or updated tests for changed behavior, or documented why tests are not applicable.
+- [ ] I verified no secrets or credentials were added (including `.env*`, keys, tokens, service-account files).
+- [ ] I listed manual verification steps below.
+
+## Manual Verification
+<!-- Provide reproducible steps a reviewer can run -->
+1.
+2.
+3.
+
+## UI Evidence (if applicable)
+<!-- Add screenshots/GIFs for visual changes -->
