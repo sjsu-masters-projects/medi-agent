@@ -288,53 +288,57 @@ async def chat_websocket_endpoint(
     triage_agent = TriageAgent()
     symptom_agent = SymptomAgent()
 
-    history = await service.get_history(str(patient_id), limit=50)
-    conversation_history = [_serialize_chat_message(item) for item in history]
-    await websocket.send_json({"type": "chat_history", "messages": conversation_history})
+    try:
+        history = await service.get_history(str(patient_id), limit=50)
+        conversation_history = [_serialize_chat_message(item) for item in history]
+        await websocket.send_json({"type": "chat_history", "messages": conversation_history})
 
-    context_document_id = _extract_document_context_id(websocket)
-    chat_context = await service.get_context(
-        patient_id=str(patient_id),
-        document_id=context_document_id,
-    )
-    patient_context = {
-        "medications": chat_context.get("medications", []),
-        "conditions": chat_context.get("conditions", []),
-        "recent_symptoms": chat_context.get("recent_symptoms", []),
-    }
-    document_context = chat_context.get("document")
-    sent_document_context_event = False
-    if document_context:
-        await websocket.send_json(
-            {
-                "type": "chat_context_loaded",
-                "context_type": "document",
-                "document": document_context,
-            }
+        context_document_id = _extract_document_context_id(websocket)
+        chat_context = await service.get_context(
+            patient_id=str(patient_id),
+            document_id=context_document_id,
         )
-        sent_document_context_event = True
+        patient_context = {
+            "medications": chat_context.get("medications", []),
+            "conditions": chat_context.get("conditions", []),
+            "recent_symptoms": chat_context.get("recent_symptoms", []),
+        }
+        document_context = chat_context.get("document")
+        sent_document_context_event = False
+        if document_context:
+            await websocket.send_json(
+                {
+                    "type": "chat_context_loaded",
+                    "context_type": "document",
+                    "document": document_context,
+                }
+            )
+            sent_document_context_event = True
 
-    session_id = _read_session_id(websocket)
-    state_record = await service.get_or_create_conversation_state(
-        patient_id=str(patient_id),
-        options={
-            "session_id": session_id,
-            "language": Language.EN,
-            "document_context": document_context,
-            "turn_count": len(conversation_history),
-        },
-    )
-    if not document_context and isinstance(state_record.get("document_context"), dict):
-        document_context = state_record["document_context"]
-    if document_context and not sent_document_context_event:
-        await websocket.send_json(
-            {
-                "type": "chat_context_loaded",
-                "context_type": "document",
-                "document": document_context,
-            }
+        session_id = _read_session_id(websocket)
+        state_record = await service.get_or_create_conversation_state(
+            patient_id=str(patient_id),
+            options={
+                "session_id": session_id,
+                "language": Language.EN,
+                "document_context": document_context,
+                "turn_count": len(conversation_history),
+            },
         )
-    conversation_state = _conversation_state_from_record(state_record)
+        if not document_context and isinstance(state_record.get("document_context"), dict):
+            document_context = state_record["document_context"]
+        if document_context and not sent_document_context_event:
+            await websocket.send_json(
+                {
+                    "type": "chat_context_loaded",
+                    "context_type": "document",
+                    "document": document_context,
+                }
+            )
+        conversation_state = _conversation_state_from_record(state_record)
+    except WebSocketDisconnect:
+        logger.info("Chat websocket disconnected during initialization")
+        return
 
     try:
         while True:
