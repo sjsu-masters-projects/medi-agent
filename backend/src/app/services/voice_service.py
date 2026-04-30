@@ -88,33 +88,30 @@ class DeepgramLiveTranscriptionSession:
         )
         self._connection = await self._context.__aenter__()
         self._connection.on(EventType.MESSAGE, self._handle_message)
-        start_result = self._connection.start_listening()
-        if inspect.isawaitable(start_result):
-            await start_result
+        await _maybe_await(self._connection.start_listening())
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        if self._connection is not None:
-            close_result = self._connection.send_close_stream()
-            if inspect.isawaitable(close_result):
-                await close_result
+        await self._close_stream()
         if self._context is not None:
             await self._context.__aexit__(exc_type, exc, traceback)
+            self._context = None
 
     async def send_audio(self, audio: bytes) -> list[VoiceStreamTranscript]:
         if self._connection is None:
             raise ValidationError("Voice stream is not ready")
-        send_result = self._connection.send_media(audio)
-        if inspect.isawaitable(send_result):
-            await send_result
+        await _maybe_await(self._connection.send_media(audio))
         return self.pop_events()
 
     async def finish(self) -> list[VoiceStreamTranscript]:
-        if self._connection is not None:
-            close_result = self._connection.send_close_stream()
-            if inspect.isawaitable(close_result):
-                await close_result
+        await self._close_stream()
         return self.pop_events()
+
+    async def _close_stream(self) -> None:
+        connection = self._connection
+        self._connection = None
+        if connection is not None:
+            await _maybe_await(connection.send_close_stream())
 
     def pop_events(self) -> list[VoiceStreamTranscript]:
         events = self._events
@@ -343,6 +340,11 @@ def _audio_extension(mime_type: str) -> str:
     if normalized == "audio/mp4":
         return "mp4"
     return "webm"
+
+
+async def _maybe_await(value: Any) -> None:
+    if inspect.isawaitable(value):
+        await value
 
 
 def _extract_deepgram_transcript(message: Any) -> str:
