@@ -1,6 +1,6 @@
 {
-  "name": "MediAgent Patient",
-  "short_name": "MediAgent",
+  "name": "MediAgent Care",
+  "short_name": "Care",
   "description": "A calm health companion for medications, records, reminders, and clinician updates.",
   "start_url": "/today",
   "display": "standalone",
