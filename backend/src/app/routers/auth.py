@@ -110,6 +110,7 @@ async def signup_clinician(
         clinic_code=body.clinic_code,
         type1_npi=body.type1_npi,
         role=body.role,
+        allow_admin_role=body.role == "admin",
     )
     return AuthResponse(
         tokens=AuthTokens(**result["tokens"]),
