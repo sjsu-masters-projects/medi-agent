@@ -53,6 +53,7 @@ export default function ClinicianSignupPage() {
     const [submitting, setSubmitting] = useState(false);
     const [inviteLoading, setInviteLoading] = useState(false);
     const [clinicContext, setClinicContext] = useState<ClinicContext | null>(null);
+    const [inviteRole, setInviteRole] = useState<ClinicianRole | null>(null);
     const inviteHydrated = useRef(false);
     const [formData, setFormData] = useState({
         confirmPassword: "",
@@ -87,8 +88,18 @@ export default function ClinicianSignupPage() {
             updateField("email", emailParam);
         }
 
-        if (roleParam === ClinicianRole.NURSE) {
-            updateField("role", ClinicianRole.NURSE);
+        const resolvedRole =
+            roleParam === ClinicianRole.ADMIN
+                ? ClinicianRole.ADMIN
+                : roleParam === ClinicianRole.NURSE
+                  ? ClinicianRole.NURSE
+                  : roleParam === ClinicianRole.PROVIDER
+                    ? ClinicianRole.PROVIDER
+                    : null;
+
+        if (resolvedRole) {
+            updateField("role", resolvedRole);
+            setInviteRole(resolvedRole);
         }
 
         if (!codeParam) {
@@ -215,12 +226,19 @@ export default function ClinicianSignupPage() {
                             <span className="mb-1 block text-sm font-medium text-gray-700">Role access</span>
                             <select
                                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                disabled={Boolean(inviteRole)}
                                 onChange={(event) => updateField("role", event.target.value)}
                                 value={formData.role}
                             >
                                 <option value={ClinicianRole.PROVIDER}>Provider</option>
                                 <option value={ClinicianRole.NURSE}>Nurse / MA</option>
+                                {inviteRole === ClinicianRole.ADMIN ? (
+                                    <option value={ClinicianRole.ADMIN}>Clinic Admin (invite)</option>
+                                ) : null}
                             </select>
+                            {inviteRole ? (
+                                <p className="mt-1 text-xs text-slate-500">Role access is set by your invite.</p>
+                            ) : null}
                         </label>
                         <Input label="NPI number (optional)" onChange={(event) => updateField("npiNumber", event.target.value)} value={formData.npiNumber} />
                         <Input label="Password" onChange={(event) => updateField("password", event.target.value)} type="password" value={formData.password} />

@@ -16,7 +16,7 @@ from pydantic import BaseModel, EmailStr, Field
 from app.models.enums import Language
 
 AuthRole = Literal["patient", "clinician"]
-ClinicianSignupRole = Literal["provider", "nurse"]
+ClinicianSignupRole = Literal["provider", "nurse", "admin"]
 
 # ── Requests ────────────────────────────────────────────────
 
