@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
@@ -66,9 +66,9 @@ export default function ClinicianSignupPage() {
         specialty: "",
     });
 
-    function updateField(field: keyof typeof formData, value: string) {
+    const updateField = useCallback((field: keyof typeof formData, value: string) => {
         setFormData((current) => ({ ...current, [field]: value }));
-    }
+    }, []);
 
     useEffect(() => {
         const stored = readStoredClinicContext();
@@ -131,7 +131,7 @@ export default function ClinicianSignupPage() {
         };
 
         void resolveInviteClinic();
-    }, [searchParams]);
+    }, [searchParams, updateField]);
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
