@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
@@ -45,7 +45,7 @@ function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
     };
 }
 
-export default function ClinicianSignupPage() {
+function ClinicianSignupPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
@@ -274,5 +274,13 @@ export default function ClinicianSignupPage() {
                 </Card>
             </div>
         </div>
+    );
+}
+
+export default function ClinicianSignupPage() {
+    return (
+        <Suspense fallback={null}>
+            <ClinicianSignupPageContent />
+        </Suspense>
     );
 }
