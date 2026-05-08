@@ -107,14 +107,13 @@ def _build_appointment_proposal(
     message: str,
     patient_context: dict[str, Any],
 ) -> dict[str, Any] | None:
-    care_teams = [
-        item for item in patient_context.get("care_teams", []) if isinstance(item, dict)
-    ]
+    care_teams = [item for item in patient_context.get("care_teams", []) if isinstance(item, dict)]
     if not care_teams:
         return None
 
     care_team = care_teams[0]
-    clinician = care_team.get("clinicians") if isinstance(care_team.get("clinicians"), dict) else {}
+    raw_clinician = care_team.get("clinicians")
+    clinician: dict[str, Any] = raw_clinician if isinstance(raw_clinician, dict) else {}
     clinician_name = " ".join(
         part
         for part in [
@@ -662,9 +661,7 @@ async def chat_websocket_endpoint(
             # text chunked here. Streamed responses already had per-token chunks.
             if not streamed_response and assistant_content:
                 for chunk in _chunk_text(assistant_content):
-                    await websocket.send_json(
-                        {"type": "assistant_chunk", "content": chunk}
-                    )
+                    await websocket.send_json({"type": "assistant_chunk", "content": chunk})
 
             assistant_message = await service.save_message(
                 patient_id=str(patient_id),

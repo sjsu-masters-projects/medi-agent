@@ -54,9 +54,13 @@ class AppointmentService:
         clinician_id = str(care_team.get("clinician_id") or "")
 
         if role == "patient" and patient_id != str(user_id):
-            raise AuthorizationError("Patients can only create appointments for their own care team")
+            raise AuthorizationError(
+                "Patients can only create appointments for their own care team"
+            )
         if role == "clinician" and clinician_id != str(user_id):
-            raise AuthorizationError("Clinicians can only create appointments for assigned patients")
+            raise AuthorizationError(
+                "Clinicians can only create appointments for assigned patients"
+            )
         if role not in {"patient", "clinician"}:
             raise AuthorizationError("Unsupported role for appointments")
 

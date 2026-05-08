@@ -11,6 +11,7 @@ from pydantic import Field
 
 from app.agents.base import AgentInput, AgentOutput, BaseAgent
 from app.agents.triage.graph import (
+    TriageState,
     _apply_safety_override,
     _build_context,
     _classify_with_llm,
@@ -124,7 +125,7 @@ class TriageAgent(BaseAgent[TriageInput, TriageOutput]):
         """
         self._log_start(agent_input)
 
-        state = {
+        state: TriageState = {
             "patient_id": str(agent_input.patient_id),
             "user_id": str(agent_input.user_id),
             "language": agent_input.language.value,
