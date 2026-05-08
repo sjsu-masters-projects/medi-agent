@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiOutlineBuildingOffice2 } from "react-icons/hi2";
@@ -70,7 +70,7 @@ function mapCareTeamMember(member: CareTeamResponse): CareTeamMember {
 
 const formatLanguage = getLocaleLabel;
 
-export default function ProfilePage() {
+function ProfilePageContent() {
     const dispatch = useDispatch<AppDispatch>();
     const { replace } = useRouter();
     const searchParams = useSearchParams();
@@ -177,9 +177,9 @@ export default function ProfilePage() {
     }
 
     return (
-        <div className="space-y-4 bg-gray-50 pb-8">
+        <div className="patient-page space-y-4 pb-8">
             <PageHeader subtitle="Manage your account and linked clinics." title="Profile" />
-            <div className="-mt-4 space-y-4 px-5">
+            <div className="patient-stack -mt-4 space-y-4 px-5">
                 {loading ? (
                     <div className="space-y-4">
                         <Skeleton className="h-32 w-full rounded-3xl" />
@@ -206,17 +206,17 @@ export default function ProfilePage() {
                             </Card>
                         ) : null}
 
-                        <Card className="overflow-hidden border-sky-100 bg-gradient-to-br from-sky-600 to-sky-700 text-white shadow-lg shadow-sky-100">
+                        <Card className="overflow-hidden border-[#b9ded6] bg-gradient-to-br from-[#147465] to-[#285d8f] text-white shadow-[0_24px_55px_rgba(20,116,101,0.24)]">
                             <div className="flex items-center gap-4">
                                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 text-2xl font-semibold">
                                     {patientProfile.firstName.charAt(0)}
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">Patient account</p>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#ccebe5]">Patient account</p>
                                     <h2 className="truncate text-xl font-semibold text-white">
                                         {patientProfile.firstName} {patientProfile.lastName}
                                     </h2>
-                                    <p className="mt-1 text-sm text-sky-100">{patientProfile.email}</p>
+                                    <p className="mt-1 text-sm text-[#dcefeb]">{patientProfile.email}</p>
                                 </div>
                             </div>
                         </Card>
@@ -224,23 +224,23 @@ export default function ProfilePage() {
                         <Card className="space-y-4">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Profile details</p>
-                                    <h3 className="mt-1 text-lg font-semibold text-slate-900">Personal information</h3>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Profile details</p>
+                                    <h3 className="mt-1 text-xl font-semibold text-[#17233a]">Personal information</h3>
                                 </div>
                                 <Badge variant="info">Active</Badge>
                             </div>
-                            <div className="grid gap-3 text-sm text-slate-600">
-                                <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Date of birth</p>
-                                    <p className="mt-1 font-medium text-slate-800">{patientProfile.dateOfBirth}</p>
+                            <div className="grid gap-3 text-sm text-[#5b6b83]">
+                                <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Date of birth</p>
+                                    <p className="mt-1 font-semibold text-[#30415f]">{patientProfile.dateOfBirth}</p>
                                 </div>
-                                <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Preferred language</p>
-                                    <p className="mt-1 font-medium text-slate-800">{formatLanguage(patientProfile.preferredLanguage)}</p>
+                                <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Preferred language</p>
+                                    <p className="mt-1 font-semibold text-[#30415f]">{formatLanguage(patientProfile.preferredLanguage)}</p>
                                 </div>
-                                <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Timezone</p>
-                                    <p className="mt-1 font-medium text-slate-800">{patientProfile.timezone ?? "UTC"}</p>
+                                <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Timezone</p>
+                                    <p className="mt-1 font-semibold text-[#30415f]">{patientProfile.timezone ?? "UTC"}</p>
                                 </div>
                             </div>
                         </Card>
@@ -248,38 +248,38 @@ export default function ProfilePage() {
                         <Card className="space-y-4">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reminders</p>
-                                    <h3 className="mt-1 text-lg font-semibold text-slate-900">Medication and task reminder times</h3>
-                                    <p className="mt-1 text-sm text-slate-500">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Reminders</p>
+                                    <h3 className="mt-1 text-xl font-semibold text-[#17233a]">Medication and task reminder times</h3>
+                                    <p className="mt-1 text-base leading-7 text-[#5b6b83]">
                                         Choose the exact times and days you want reminders sent.
                                     </p>
                                 </div>
                                 <Badge variant="info">Patient controlled</Badge>
                             </div>
                             <Link href="/reminders">
-                                <Button fullWidth>Manage reminders</Button>
+                                <Button fullWidth size="lg">Manage reminders</Button>
                             </Link>
                         </Card>
 
                         <Card className="space-y-4">
                             <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Connected clinics</p>
-                                <h3 className="mt-1 text-lg font-semibold text-slate-900">Care teams</h3>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Connected clinics</p>
+                                <h3 className="mt-1 text-xl font-semibold text-[#17233a]">Care teams</h3>
                             </div>
                             {careTeam.length ? (
                                 <div className="space-y-3">
                                     {careTeam.map((member) => (
-                                        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4" key={member.id}>
+                                        <div className="rounded-2xl border border-[#eaded3] bg-[#fff7ed] px-4 py-4" key={member.id}>
                                             <div className="flex items-start justify-between gap-3">
                                                 <div>
-                                                    <p className="font-medium text-slate-900">
+                                                    <p className="font-semibold text-[#17233a]">
                                                         Dr. {member.clinicianFirstName} {member.clinicianLastName}
                                                     </p>
-                                                    <p className="mt-1 text-sm text-slate-500">{member.role}</p>
+                                                    <p className="mt-1 text-sm text-[#5b6b83]">{member.role}</p>
                                                 </div>
                                                 <Badge variant="success">Linked</Badge>
                                             </div>
-                                            <p className="mt-3 text-sm text-slate-500">{member.clinicName || member.specialtyContext || "Care team active"}</p>
+                                            <p className="mt-3 text-sm text-[#5b6b83]">{member.clinicName || member.specialtyContext || "Care team active"}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -294,9 +294,9 @@ export default function ProfilePage() {
 
                         <Card className="space-y-4">
                             <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Join another clinic</p>
-                                <h3 className="mt-1 text-lg font-semibold text-slate-900">Add care team access</h3>
-                                <p className="mt-1 text-sm text-slate-500">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Join another clinic</p>
+                                <h3 className="mt-1 text-xl font-semibold text-[#17233a]">Add care team access</h3>
+                                <p className="mt-1 text-base leading-7 text-[#5b6b83]">
                                     If another clinic shares a code with you, enter it here to link that team to your account.
                                 </p>
                             </div>
@@ -315,9 +315,9 @@ export default function ProfilePage() {
                                     placeholder="CITY-8832"
                                     value={inviteCode}
                                 />
-                                {joinError ? <p className="text-sm text-red-600">{joinError}</p> : null}
-                                {joinSuccess ? <p className="text-sm text-green-600">{joinSuccess}</p> : null}
-                                <Button disabled={joining} fullWidth type="submit">
+                                {joinError ? <div className="rounded-2xl bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#b94032]">{joinError}</div> : null}
+                                {joinSuccess ? <div className="rounded-2xl bg-[#ecf8ef] px-4 py-3 text-sm font-medium text-[#256047]">{joinSuccess}</div> : null}
+                                <Button disabled={joining} fullWidth size="lg" type="submit">
                                     {joining ? "Joining clinic..." : "Join clinic"}
                                 </Button>
                             </form>
@@ -331,7 +331,7 @@ export default function ProfilePage() {
                                     Use this if you are on a shared phone or finished reviewing your care plan.
                                 </p>
                             </div>
-                            <Button fullWidth onClick={handleLogout} variant="danger">
+                            <Button fullWidth onClick={handleLogout} size="lg" variant="danger">
                                 Sign out
                             </Button>
                         </Card>
@@ -339,5 +339,13 @@ export default function ProfilePage() {
                 ) : null}
             </div>
         </div>
+    );
+}
+
+export default function ProfilePage() {
+    return (
+        <Suspense fallback={null}>
+            <ProfilePageContent />
+        </Suspense>
     );
 }

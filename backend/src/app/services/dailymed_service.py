@@ -4,6 +4,7 @@ Provides functions to query drug information, labels, and adverse reactions.
 """
 
 from typing import Any
+from xml.etree import ElementTree
 
 import httpx
 import structlog
@@ -95,29 +96,15 @@ async def get_drug_label(setid: str) -> dict[str, Any]:
     """
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{BASE_URL}/spls/{setid}.json", timeout=10.0)
+            response = await client.get(f"{BASE_URL}/spls/{setid}.xml", timeout=10.0)
             response.raise_for_status()
-            data = response.json()
-
-            if not data or "data" not in data or not data["data"]:
-                logger.warning("dailymed_label_not_found", setid=setid)
-                return {"setid": setid, "error": "Drug label not found"}
-
-            spl_data = data["data"][0]
+            spl_data = _parse_label_response(response, setid)
+            if spl_data.get("error"):
+                return spl_data
 
             logger.info("dailymed_label_success", setid=setid)
 
-            return {
-                "setid": setid,
-                "title": spl_data.get("title"),
-                "generic_name": spl_data.get("generic_medicine_name"),
-                "brand_name": spl_data.get("brand_name"),
-                "manufacturer": spl_data.get("labeler"),
-                "warnings": spl_data.get("warnings"),
-                "adverse_reactions": spl_data.get("adverse_reactions"),
-                "indications": spl_data.get("indications_and_usage"),
-                "dosage": spl_data.get("dosage_and_administration"),
-            }
+            return spl_data
 
     except httpx.TimeoutException:
         logger.error("dailymed_label_timeout", setid=setid)
@@ -131,6 +118,103 @@ async def get_drug_label(setid: str) -> dict[str, Any]:
     except Exception as e:
         logger.error("dailymed_label_unexpected_error", setid=setid, error=str(e))
         return {"setid": setid, "error": "Unexpected error occurred"}
+
+
+def _parse_label_response(response: httpx.Response, setid: str) -> dict[str, Any]:
+    xml_text = _response_xml_text(response)
+    if xml_text:
+        return _parse_spl_xml_label(setid, xml_text)
+
+    # Compatibility path for tests and any internal callers still using the old JSON shape.
+    data = response.json()
+    if not data or "data" not in data or not data["data"]:
+        logger.warning("dailymed_label_not_found", setid=setid)
+        return {"setid": setid, "error": "Drug label not found"}
+    spl_data = data["data"][0]
+    return {
+        "setid": setid,
+        "title": spl_data.get("title"),
+        "generic_name": spl_data.get("generic_medicine_name"),
+        "brand_name": spl_data.get("brand_name"),
+        "manufacturer": spl_data.get("labeler"),
+        "warnings": spl_data.get("warnings"),
+        "adverse_reactions": spl_data.get("adverse_reactions"),
+        "indications": spl_data.get("indications_and_usage"),
+        "dosage": spl_data.get("dosage_and_administration"),
+    }
+
+
+def _response_xml_text(response: httpx.Response) -> str | None:
+    if not isinstance(response, httpx.Response):
+        return None
+
+    content = getattr(response, "content", b"")
+    if isinstance(content, bytes) and content.lstrip().startswith(b"<"):
+        return content.decode(response.encoding or "utf-8", errors="replace")
+
+    text = getattr(response, "text", "")
+    if isinstance(text, str) and text.lstrip().startswith("<"):
+        return text
+    return None
+
+
+def _parse_spl_xml_label(setid: str, xml_text: str) -> dict[str, Any]:
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        logger.warning("dailymed_label_invalid_xml", setid=setid)
+        return {"setid": setid, "error": "Drug label not found"}
+
+    ns = {"hl7": "urn:hl7-org:v3"}
+    title = _xml_text(root.find("./hl7:title", ns))
+    sections = _extract_label_sections(root, ns)
+    if not title and not sections:
+        logger.warning("dailymed_label_not_found", setid=setid)
+        return {"setid": setid, "error": "Drug label not found"}
+
+    return {
+        "setid": setid,
+        "title": title,
+        "generic_name": None,
+        "brand_name": None,
+        "manufacturer": None,
+        "warnings": sections.get("warnings"),
+        "adverse_reactions": sections.get("adverse_reactions"),
+        "indications": sections.get("indications"),
+        "dosage": sections.get("dosage"),
+    }
+
+
+def _extract_label_sections(root: ElementTree.Element, ns: dict[str, str]) -> dict[str, str | None]:
+    section_aliases = {
+        "warnings": ("warnings", "boxed warning", "warnings and precautions"),
+        "adverse_reactions": ("adverse reactions",),
+        "indications": ("indications and usage",),
+        "dosage": ("dosage and administration",),
+    }
+    sections: dict[str, str | None] = {
+        "warnings": None,
+        "adverse_reactions": None,
+        "indications": None,
+        "dosage": None,
+    }
+    for section in root.findall(".//hl7:section", ns):
+        section_title = _xml_text(section.find("hl7:title", ns)).lower()
+        text_node = section.find("hl7:text", ns)
+        section_text = _xml_text(text_node)
+        if not section_title or not section_text:
+            continue
+        for key, aliases in section_aliases.items():
+            if sections[key] is None and any(alias in section_title for alias in aliases):
+                sections[key] = section_text
+                break
+    return sections
+
+
+def _xml_text(element: ElementTree.Element | None) -> str:
+    if element is None:
+        return ""
+    return " ".join(" ".join(element.itertext()).split())
 
 
 async def get_ndc_info(ndc: str) -> dict[str, Any]:

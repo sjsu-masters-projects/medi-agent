@@ -362,30 +362,30 @@ export default function RecordsPage() {
     ).length;
 
     return (
-        <div className="space-y-4 bg-gray-50 pb-8">
+        <div className="patient-page space-y-4 pb-8">
             <PageHeader
                 rightAction={<Button onClick={() => fileInputRef.current?.click()} variant="secondary">Upload</Button>}
                 subtitle="View clinical records and plain-language explanations."
                 title="My Records"
             />
             <input className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
-            <div className="-mt-4 space-y-4 px-5">
+            <div className="patient-stack -mt-4 space-y-4 px-5">
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-100">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Stored</p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">{documents.length}</p>
-                        <p className="text-xs text-slate-500">Secure records</p>
+                    <div className="rounded-[1.4rem] bg-white/90 px-4 py-4 shadow-[0_12px_28px_rgba(37,52,82,0.08)] ring-1 ring-[#eaded3]">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Stored</p>
+                        <p className="mt-1 text-3xl font-bold text-[#17233a]">{documents.length}</p>
+                        <p className="text-sm text-[#5b6b83]">Secure records</p>
                     </div>
-                    <div className="rounded-2xl bg-sky-50 px-4 py-3 shadow-sm ring-1 ring-sky-100">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                    <div className="rounded-[1.4rem] bg-[#e7f4f1] px-4 py-4 shadow-[0_12px_28px_rgba(20,116,101,0.10)] ring-1 ring-[#b9ded6]">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#147465]">
                             {processingCount > 0 ? "Parsing" : "AI Ready"}
                         </p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                        <p className="mt-1 text-3xl font-bold text-[#17233a]">
                             {processingCount > 0
                                 ? processingCount
                                 : documents.filter((document) => document.parsed && document.aiSummary).length}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm text-[#48627c]">
                             {processingCount > 0 ? "Documents in progress" : "Summaries available"}
                         </p>
                     </div>
@@ -419,7 +419,7 @@ export default function RecordsPage() {
                     />
                 ) : null}
                 {loading ? (
-                    <p className="text-sm text-slate-500">Loading documents...</p>
+                    <p className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-medium text-[#5b6b83] shadow-sm ring-1 ring-[#eaded3]">Loading documents...</p>
                 ) : null}
                 {!loading && !pageError && documents.length === 0 ? (
                     <EmptyState description="Upload PDFs or images from your clinic visits." icon={<HiOutlineFolder />} title="No records yet" />
@@ -431,36 +431,36 @@ export default function RecordsPage() {
                     const status = getDocumentStatus(displayDocument);
 
                     return (
-                    <DocumentCard
-                        date={new Date(document.createdAt).toLocaleDateString(explanationLang, { month: "short", day: "numeric", year: "numeric" })}
-                        hasAiSummary={document.parsed && Boolean(document.aiSummary)}
-                        icon={document.icon}
-                        id={document.id}
-                        key={document.id}
-                        name={document.fileName}
-                        onClick={() => openDocument(document)}
-                        provider={document.provider}
-                        statusLabel={status?.label}
-                        statusVariant={status?.variant}
-                        type={document.documentType.replaceAll("_", " ")}
-                    />
+                        <DocumentCard
+                            date={new Date(document.createdAt).toLocaleDateString(explanationLang, { month: "short", day: "numeric", year: "numeric" })}
+                            hasAiSummary={document.parsed && Boolean(document.aiSummary)}
+                            icon={document.icon}
+                            id={document.id}
+                            key={document.id}
+                            name={document.fileName}
+                            onClick={() => openDocument(document)}
+                            provider={document.provider}
+                            statusLabel={status?.label}
+                            statusVariant={status?.variant}
+                            type={document.documentType.replaceAll("_", " ")}
+                        />
                     );
                 })}
             </div>
             <Modal onClose={() => setSelectedDocument(null)} open={Boolean(selectedDocument)} title={selectedDocument?.fileName ?? "Record details"}>
                 <div className="space-y-4">
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Source</p>
-                        <p className="mt-1 text-sm font-medium text-slate-700">{selectedDocument?.provider}</p>
+                    <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Source</p>
+                        <p className="mt-1 text-sm font-semibold text-[#30415f]">{selectedDocument?.provider}</p>
                     </div>
                     {selectedDocument?.mimeType === "application/pdf" && selectedDocument.fileUrl ? (
                         <PdfViewer documentUrl={selectedDocument.fileUrl} height="400px" />
                     ) : null}
-                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <div className="rounded-3xl border border-[#b9ded6] bg-[#e7f4f1] p-4">
                         <div className="flex items-center justify-between gap-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Explain this to me</p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#147465]">Explain this to me</p>
                             <select
-                                className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700"
+                                className="min-h-11 rounded-xl border border-[#b9ded6] bg-white px-3 py-2 text-sm font-medium text-[#147465] outline-none focus:ring-4 focus:ring-[#147465]/15"
                                 onChange={(event) => handleLanguageChange(event.target.value as Locale)}
                                 value={explanationLang}
                             >
@@ -471,14 +471,14 @@ export default function RecordsPage() {
                                 ))}
                             </select>
                         </div>
-                        <p className="mt-2 text-sm text-gray-700">
+                        <p className="mt-3 text-base leading-7 text-[#30415f]">
                             {explanationLoading
                                 ? "Translating..."
                                 : explanationText ?? "AI summary will appear here after parsing completes."}
                         </p>
                     </div>
                     <div className="space-y-3">
-                        <Button fullWidth onClick={handleAskAboutDocument}>
+                        <Button fullWidth onClick={handleAskAboutDocument} size="lg">
                             Ask about this document
                         </Button>
                         <div className="grid grid-cols-2 gap-3">

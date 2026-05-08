@@ -55,7 +55,7 @@ export default function TodayPage() {
 
     if (loading && tasks.length === 0) {
         return (
-            <div className="space-y-4 px-5 py-10">
+            <div className="patient-page space-y-4 px-5 py-10">
                 <Skeleton className="h-24 w-full" variant="rect" />
                 <Skeleton className="h-28 w-full" variant="rect" />
                 <Skeleton className="h-28 w-full" variant="rect" />
@@ -64,12 +64,15 @@ export default function TodayPage() {
     }
 
     return (
-        <div className="bg-white pb-8">
-            <div className="rounded-b-[28px] bg-sky-700 px-5 pt-10 pb-6 text-white shadow-sm">
-                <div className="flex items-start justify-between gap-4">
+        <div className="patient-page pb-8">
+            <div className="relative overflow-hidden rounded-b-[38px] bg-[#147465] px-6 pt-11 pb-7 text-white shadow-[0_24px_70px_rgba(20,116,101,0.25)]">
+                <div className="absolute -top-16 -right-14 h-52 w-52 rounded-full bg-white/12" />
+                <div className="absolute -bottom-20 left-5 h-56 w-56 rounded-full bg-[#d8aa57]/18" />
+                <div className="relative flex items-start justify-between gap-4">
                     <div>
-                        <h1 className="text-[30px] font-bold leading-tight">Hi, Sarah</h1>
-                        <p className="mt-1 text-sm text-sky-100">
+                        <p className="text-xs font-black uppercase tracking-[0.24em] text-white/68">Today</p>
+                        <h1 className="mt-2 text-[2.35rem] font-black leading-none tracking-[-0.04em]">Hi, Sarah</h1>
+                        <p className="mt-2 text-base text-white/82">
                             {new Date().toLocaleDateString(undefined, {
                                 day: "numeric",
                                 month: "long",
@@ -77,16 +80,16 @@ export default function TodayPage() {
                             })}
                         </p>
                     </div>
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-lg font-bold text-sky-700 shadow-sm">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[24px] bg-white text-lg font-black text-[#147465] shadow-sm">
                         S
                     </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between gap-4 rounded-2xl bg-white/15 p-4 backdrop-blur">
+                <div className="relative mt-6 flex items-center justify-between gap-4 rounded-[28px] border border-white/18 bg-white/15 p-5 backdrop-blur">
                     <div className="space-y-1">
-                        <p className="text-lg font-semibold text-white">Daily Progress</p>
-                        <p className="text-sm text-sky-100">{completedLabel}</p>
-                        <p className="text-xs text-sky-100">{adherenceStats.currentStreakDays}-day streak</p>
+                        <p className="text-xl font-black text-white">Daily progress</p>
+                        <p className="text-base text-white/82">{completedLabel}</p>
+                        <p className="text-sm font-semibold text-white/76">{adherenceStats.currentStreakDays}-day streak</p>
                     </div>
                     <div className="space-y-2 text-right">
                         {usingMockData ? <Badge variant="info">Demo data</Badge> : null}
@@ -100,20 +103,20 @@ export default function TodayPage() {
                 </div>
             </div>
 
-            <div className="space-y-5 px-5 pt-6">
+            <div className="patient-stack space-y-5 px-5 pt-6">
                 {hasScheduleGaps ? (
                     <Link href="/reminders">
-                        <Card className="border-amber-200 bg-amber-50">
-                            <p className="text-sm font-semibold text-amber-900">Set reminder times</p>
-                            <p className="mt-1 text-sm text-amber-700">
+                        <Card className="border-[#edd59a] bg-[#fff7dc]">
+                            <p className="text-base font-black text-[#6f4b00]">Set reminder times</p>
+                            <p className="mt-1 text-base leading-7 text-[#7a5a15]">
                                 Some care-plan items still need your preferred days and times.
                             </p>
                         </Card>
                     </Link>
                 ) : null}
                 <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-slate-800">Today&apos;s Schedule</h2>
-                    <p className="text-sm text-slate-500">{tasks.length} tasks</p>
+                    <h2 className="text-xl font-black text-[#17233a]">Today&apos;s schedule</h2>
+                    <p className="rounded-full bg-white/80 px-3 py-1 text-sm font-bold text-[#64748b]">{tasks.length} tasks</p>
                 </div>
                 {tasks.length === 0 ? (
                     <EmptyState
@@ -122,17 +125,17 @@ export default function TodayPage() {
                         title="Nothing scheduled"
                     />
                 ) : null}
-                <div className="ml-2 border-l-2 border-rose-100 pl-6">
+                <div className="ml-2 border-l-2 border-[#d7e5de] pl-6">
                 {tasks.map((task) => {
                     const status = mapTaskStatus(task.status);
                     const dotClasses =
                         status === "completed"
-                            ? "bg-blue-700 text-white"
+                            ? "bg-[#147465] text-white"
                             : status === "active"
-                              ? "border-4 border-blue-700 bg-white"
+                              ? "border-4 border-[#147465] bg-white"
                               : status === "missed"
-                                ? "bg-red-500"
-                                : "bg-slate-200";
+                                ? "bg-[#d55b4d]"
+                                : "bg-[#d7e5de]";
 
                     if (task.type === FeedTaskType.MEDICATION) {
                         const medication = splitMedicationName(task.name);
@@ -141,7 +144,7 @@ export default function TodayPage() {
                                 <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
                                     {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
                                 </span>
-                                <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
+                                <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                     {formatTimeLabel(
                                         task.scheduledTime,
                                         task.status,
@@ -167,7 +170,7 @@ export default function TodayPage() {
                             <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
                                 {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
                             </span>
-                            <p className={`mb-2 text-xs font-medium ${status === "active" ? "text-sky-700" : "text-slate-400"}`}>
+                            <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                 {formatTimeLabel(
                                     task.scheduledTime,
                                     task.status,
@@ -190,12 +193,12 @@ export default function TodayPage() {
 
             <div className="px-5 pt-2">
                 <Link href="/symptoms">
-                    <Card className="flex items-center justify-between border-sky-100 bg-sky-50">
+                    <Card className="flex items-center justify-between border-[#b6d9d2] bg-[#e6f4f1]">
                         <div>
-                            <p className="text-sm font-semibold text-slate-900">Report a symptom</p>
-                            <p className="text-sm text-slate-500">Log how you feel and share updates with your care team.</p>
+                            <p className="text-base font-black text-[#17233a]">Report a symptom</p>
+                            <p className="text-base leading-7 text-[#5b6b83]">Log how you feel and share updates with your care team.</p>
                         </div>
-                        <span className="text-lg text-sky-700">→</span>
+                        <span className="text-2xl text-[#147465]">→</span>
                     </Card>
                 </Link>
             </div>

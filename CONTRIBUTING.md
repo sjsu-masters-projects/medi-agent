@@ -1,49 +1,26 @@
 # Contributing to MediAgent
 
-> Developer guide — how to set up, develop, test, and submit code.
+Developer guide for setup, architecture orientation, verification, and pull requests. This file is the **onboarding entry**; deeper product and design decisions live under `.agent/`.
 
 ---
 
-## Before You Start
+## Read first
 
-Read these docs (in order):
+Before writing code, read in this order:
 
-1. **[PROJECT.md](.agent/PROJECT.md)** — what MediAgent is, decision log
-2. **[ARCHITECTURE.md](.agent/ARCHITECTURE.md)** — system design, data model
-3. **[CODING_STANDARDS.md](.agent/CODING_STANDARDS.md)** — how we write code
-4. **[DESIGN_SYSTEM.md](.agent/DESIGN_SYSTEM.md)** — UI guidelines (if doing frontend)
-5. **[TEAM.md](.agent/TEAM.md)** — sprints, Git workflow, PR process
+1. [PROJECT.md](.agent/PROJECT.md) — product context and decisions  
+2. [ARCHITECTURE.md](.agent/ARCHITECTURE.md) — system design and data model  
+3. [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md) — how we write code  
+4. [TASKS.md](.agent/TASKS.md) — phase status and backlog  
+5. [TEAM.md](.agent/TEAM.md) — Git workflow and PR norms  
+
+For UI work, also use [DESIGN_SYSTEM.md](.agent/DESIGN_SYSTEM.md).
 
 ---
 
-## Development Setup
+## Local setup
 
-### Backend
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt   # includes production + test/lint deps
-```
-
-Verify it works:
-```bash
-PYTHONPATH=src uvicorn app.main:app --reload
-# open http://localhost:8000/docs
-```
-
-### Frontend (either portal)
-
-```bash
-cd apps/patient-portal   # or apps/clinician-portal
-npm install
-npm run dev
-```
-
-### Environment Variables
-
-Copy the env templates and fill in your keys. Never commit real env files.
+### Environment files
 
 ```bash
 cp .env.example .env
@@ -51,34 +28,64 @@ cp apps/patient-portal/.env.example apps/patient-portal/.env.local
 cp apps/clinician-portal/.env.example apps/clinician-portal/.env.local
 ```
 
-Use:
-- `/.env.example` for backend/root env vars
-- `apps/patient-portal/.env.example` for patient portal vars
-- `apps/clinician-portal/.env.example` for clinician portal vars
+Fill values from your team’s secret store or team lead. **Never commit** `.env` or `.env.local`.
 
-See each `.env.example` file for where to get its keys (URLs are in the comments).
+Validate:
 
-For team credentials, check the team's 1Password vault or ask the team lead.
+```bash
+./scripts/preflight.sh
+./scripts/check-env.sh
+```
 
-| Variable | Where to get it |
-|----------|-----------------|
-| `SUPABASE_URL` | Supabase dashboard → Settings → API |
-| `SUPABASE_ANON_KEY` | Same place |
-| `SUPABASE_SERVICE_ROLE_KEY` | Same place |
-| `GOOGLE_API_KEY` | Google AI Studio |
-| `DEEPGRAM_API_KEY` | Deepgram console |
-| `RESEND_API_KEY` | Resend dashboard |
+### Environment variables (reference)
+
+| Variable | Purpose |
+|----------|---------|
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` | Supabase DB, Auth, RLS |
+| `GOOGLE_API_KEY` | Gemini / AI Studio paths |
+| `GOOGLE_PROJECT_ID` | Vertex AI when using project-backed models |
+| `VERTEX_AI_*` | MedGemma / Vertex endpoints |
+| `DEEPGRAM_API_KEY` | Voice STT/TTS |
+| `RESEND_API_KEY` | Transactional email (clinician invites; extend for other mail later) |
+| `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL` | From address for clinician invite mail (use a verified-domain sender in production) |
+| `RESEND_FROM_EMAIL` | Optional fallback “From” when the clinician onboarding sender is unset (see `config.py`) |
+| `BACKEND_URL`, `PATIENT_PORTAL_URL`, `CLINICIAN_PORTAL_URL` | App URLs (email links, CORS) |
+| `*_SENTRY_*` | Error monitoring (optional in dev) |
+
+See root [`.env.example`](.env.example) and each app’s `.env.example` for the full list and comments.
+
+### Backend
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+PYTHONPATH=src uvicorn app.main:app --reload
+```
+
+Open `http://localhost:8000/docs`.
+
+### Frontend (either portal)
+
+```bash
+cd apps/patient-portal   # or apps/clinician-portal
+npm ci
+npm run dev
+```
+
+Clinician app often uses port 3001: `npm run dev -- --port 3001`.
 
 ---
 
-## Database Setup
+## Database setup
 
-Full guide: **[docs/supabase_setup_guide.md](docs/supabase_setup_guide.md)**
+Full procedure, RLS, and Auth hooks: **[docs/supabase_setup_guide.md](docs/supabase_setup_guide.md)**.
 
-Migrations live in `backend/src/app/db/migrations/` and must be run in order:
+SQL migrations live in `backend/src/app/db/migrations/`. Apply **in numeric/filename order** against your Supabase Postgres (or local DB). Example:
 
 ```bash
-export DB_URL="postgresql://postgres:YOUR_PASSWORD@db.tsbjrzlzrejzlfkmhxpz.supabase.co:5432/postgres"
+export DB_URL="postgresql://postgres:YOUR_PASSWORD@YOUR_HOST:5432/postgres"
 
 psql "$DB_URL" -f backend/src/app/db/migrations/001_initial_schema.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/002_rls_policies.sql
@@ -90,216 +97,226 @@ psql "$DB_URL" -f backend/src/app/db/migrations/007_clinic_identity_foundation.s
 psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/011_locale_contract_upgrade.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/011_enable_dashboard_realtime_publication.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/011_locale_contract_upgrade.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/012_document_review_queue.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/013_cron_scheduler_foundation.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/014_patient_timezones_and_reminder_schedules.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/015_drug_knowledge_rag.sql
 ```
 
-After running migrations, wire up the JWT claims hook in the Supabase Dashboard → Auth → Hooks. See the setup guide for details.
+After migrations, configure the JWT claims hook in Supabase Dashboard → Auth → Hooks per the setup guide.
 
 ---
 
-## Preflight Check
+## Development workflow
 
-Run this after cloning or pulling new changes — catches setup issues before you debug:
+See [TEAM.md](.agent/TEAM.md) for sprint and review expectations.
 
-```bash
-./scripts/preflight.sh
-```
+### Starting a feature
 
-This checks: required tools, `.env` completeness, backend venv, frontend `node_modules`, and Supabase connection.
+1. Pick or create a task in [TASKS.md](.agent/TASKS.md) or a GitHub issue.  
+2. Branch: `feature/short-description`, `fix/...`, or `hotfix/...`.  
+3. Follow [.agent/workflows/new-feature.md](.agent/workflows/new-feature.md) for larger work.  
+4. Implement per [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md).  
+5. Add or update tests.  
+6. Run checks below.  
+7. Open a PR using the repo template.
 
-To quickly validate backend and frontend env files:
+### Adding an AI agent
 
-```bash
-./scripts/check-env.sh
-```
+Follow [.agent/workflows/new-agent.md](.agent/workflows/new-agent.md). Typical layout under `backend/src/app/agents/<name>/`:
 
-> [!TIP]
-> When you add a new env var, always add it to the matching `.env.example` file first with a comment. The `check-env.sh` script will then catch it when backend or portal env files are out of date.
+- `agent.py` — agent entry  
+- `graph.py` — LangGraph workflow  
+- `prompts.py` — prompt templates  
 
----
-
-## Development Workflow
-
-We follow a structured workflow. See [TEAM.md](.agent/TEAM.md) for full details.
-
-### Starting a New Feature
-
-Follow **[.agent/workflows/new-feature.md](.agent/workflows/new-feature.md)**. The short version:
-
-1. Pick a task from [TASKS.md](.agent/TASKS.md)
-2. Create a branch: `feature/short-description`
-3. Read the relevant project docs before coding
-4. Write code following [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md)
-5. Write tests
-6. Run linters (see below)
-7. Open a PR
-
-### Adding a New AI Agent
-
-Follow **[.agent/workflows/new-agent.md](.agent/workflows/new-agent.md)**. Each agent gets its own sub-package under `backend/src/app/agents/` with:
-- `agent.py` — the agent class (extends `BaseAgent`)
-- `graph.py` — the LangGraph state graph
-- `prompts.py` — system/user prompt templates
-
-### Git Branch Naming
-
-| Type | Format | Example |
-|------|--------|---------|
-| Feature | `feature/description` | `feature/document-parsing` |
-| Bugfix | `fix/description` | `fix/login-redirect` |
-| Hotfix | `hotfix/description` | `hotfix/prod-crash` |
-
-### Commit Messages
+### Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-feat: add document upload endpoint
+feat: add staff invite email
 fix: handle empty medication list
-docs: update API examples in README
-test: add adherence scoring unit tests
-refactor: extract PDF parsing into tool
+docs: update CONTRIBUTING migration list
+test: add staff service coverage
+refactor: extract clinic lookup helper
 ```
+
+### Branch naming
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Feature | `feature/description` | `feature/feed-real-data` |
+| Bugfix | `fix/description` | `fix/ws-disconnect` |
+| Hotfix | `hotfix/description` | `hotfix/prod-auth` |
 
 ---
 
-## Running Linters & Tests
+## Required checks before PR
 
 ### Backend
 
 ```bash
 cd backend
 source .venv/bin/activate
-
-# Lint
 ruff check src/
 ruff format --check src/
-
-# Type check
 mypy src/ --ignore-missing-imports
-
-# Test
 PYTHONPATH=src pytest tests/ -v
-
-# All at once
-ruff check src/ && ruff format --check src/ && mypy src/ --ignore-missing-imports && PYTHONPATH=src pytest tests/ -v
 ```
+
+Use a **focused** `pytest` path when appropriate; say so in the PR.
 
 ### Frontend
 
 ```bash
 cd apps/patient-portal   # or apps/clinician-portal
-
-# Lint
 npm run lint
-
-# Build (catches type errors)
 npm run build
-
-# Test (when tests are added)
-npm run test
+npm run test             # when tests cover your change
 ```
+
+### AI-assisted / agent-generated code
+
+- Routers stay thin; business logic lives in `services/`.  
+- No secrets, API keys, or real `.env` contents in commits.  
+- Match existing patterns; prefer `packages/shared` over duplicating types/utils.  
+- Document behavior or scope changes (see **Documentation updates**).  
+- List **manual** verification steps in the PR.
 
 ---
 
-## Project Architecture (Quick Reference)
+## Project architecture (quick reference)
 
 ```
-Request → Router → Service → DB / Agent → Response
+Request → Router → Service → DB / external client / Agent → Response
 ```
 
-- **Routers** are thin — validate input, call services, return responses
-- **Services** hold all business logic — no FastAPI imports, easy to test
-- **Agents** are LangGraph state machines that use tools and LLMs
-- **Models** are Pydantic schemas — separate Create/Read/Update per entity
-- **Tools** are standalone functions agents can call (RxNorm, Naranjo, etc.)
+| Layer | Responsibility |
+|-------|----------------|
+| `routers/` | HTTP validation, call services, map responses |
+| `services/` | Business rules (avoid FastAPI imports here) |
+| `agents/` | LangGraph flows, LLM/tool orchestration |
+| `models/` | Pydantic request/response schemas |
+| `clients/` | Third-party SDKs (Gemini, Deepgram, Resend, …) |
+| `db/` | Migrations; repositories where used |
 
-### Key Design Decisions
+### Design choices (why things look this way)
 
-| Decision | Why |
-|----------|-----|
-| `src/app/` layout | Production packaging — avoids import conflicts |
-| `StrEnum` for categorical fields | Catches invalid values at the API boundary, serializes to plain strings |
-| `UUID` for all IDs | Matches Supabase's default primary keys |
-| `BaseAgent` ABC | SOLID — all agents are interchangeable |
-| Separate `services/` from `routers/` | Testable business logic without spinning up FastAPI |
-| Separate `tools/` from `agents/` | Tools are reusable across multiple agents |
+| Decision | Rationale |
+|----------|-----------|
+| `backend/src/app/` layout | Clean package boundary; `PYTHONPATH=src` for runs |
+| Pydantic + `StrEnum` | Validate at API boundary |
+| UUID IDs | Align with Supabase defaults |
+| Services separate from routers | Easier unit tests without ASGI |
+
+### Backend package map
+
+| Package | Role |
+|---------|------|
+| `core/` | Auth helpers, exceptions, shared constants |
+| `models/` | API schemas |
+| `routers/` | Routes |
+| `services/` | Domain logic |
+| `agents/` | LangGraph agents |
+| `tools/` | Reusable agent tools |
+| `mcp/` | MCP server adapters |
+| `a2a/` | Agent-to-agent protocol pieces |
+| `clients/` | External APIs |
+| `db/` | Migrations / DB access |
+| `middleware/` | CORS, logging, etc. |
 
 ---
 
-## Backend Package Map
+## Frontend quick reference
 
-| Package | Purpose | Example |
-|---------|---------|---------|
-| `core/` | Exceptions, auth, constants | `NotFoundError`, `get_current_user` |
-| `models/` | Pydantic schemas | `PatientCreate`, `MedicationRead` |
-| `routers/` | HTTP endpoints | `POST /api/v1/documents/upload` |
-| `services/` | Business logic | `DocumentService.explain()` |
-| `agents/` | LangGraph agents | `IngestionAgent`, `TriageAgent` |
-| `tools/` | Agent tools | `naranjo.score()`, `rxnorm.lookup()` |
-| `mcp/` | MCP servers | External API wrappers for agents |
-| `a2a/` | Agent-to-Agent protocol | Agent cards, task routing |
-| `clients/` | SDK wrappers | `GeminiClient`, `DeepgramClient` |
-| `db/` | Database layer | Queries, migrations, seed data |
-| `middleware/` | Request processing | Auth, CORS, rate limiting, logging |
+Both portals: Next.js App Router, Redux Toolkit, Tailwind, shared types in `packages/shared`.
 
----
+| Area | Location |
+|------|----------|
+| Pages | `src/app/` |
+| State | `src/store/` |
+| API | `src/services/` |
+| UI | `src/components/` |
 
-## Frontend Quick Reference
+### Patient portal routes (typical)
 
-Both portals use the same stack and structure:
-
-| Layer | Tech | Location |
-|-------|------|----------|
-| Pages | Next.js App Router | `src/app/` |
-| State | Redux Toolkit | `src/store/` |
-| API | Fetch wrapper | `src/services/api.ts` |
-| Types | TypeScript | `src/types/` |
-| Components | React + Tailwind | `src/components/` |
-| Shared code | `@mediagent/shared` | `packages/shared/src/` |
-
-### Patient Portal Routes
-
-| Route Group | Pages |
-|-------------|-------|
+| Group | Screens |
+|-------|---------|
 | `(auth)/` | login, signup, onboarding |
-| `(dashboard)/` | today (feed), records, chat, settings |
+| `(app)/` or dashboard group | today (feed), records, chat, profile/settings |
 
-### Clinician Portal Routes
+### Clinician portal routes (typical)
 
-| Route Group | Pages |
-|-------------|-------|
-| `(auth)/` | login, setup |
-| `(dashboard)/` | Risk Radar, patients/[id], medwatch, messages, settings |
+| Group | Screens |
+|-------|---------|
+| `(auth)/` | login, signup, clinic admin bootstrap |
+| `(dashboard)/` | dashboard, patients, settings, etc. |
 
----
-
-## Code Review Checklist
-
-Before opening a PR, run through **[.agent/workflows/ai-code-review.md](.agent/workflows/ai-code-review.md)**:
-
-- [ ] Follows [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md)
-- [ ] No hardcoded secrets or API keys
-- [ ] Pydantic models have proper field validation
-- [ ] Services don't import from FastAPI
-- [ ] Error handling uses custom exceptions from `core/exceptions.py`
-- [ ] Frontend follows [DESIGN_SYSTEM.md](.agent/DESIGN_SYSTEM.md)
-- [ ] Tests exist for new business logic
-- [ ] Linter and type checker pass
+Exact routes evolve; treat `src/app/` as source of truth.
 
 ---
 
-## Questions?
+## Documentation updates
 
-Check the docs first:
-- Architecture question → [ARCHITECTURE.md](.agent/ARCHITECTURE.md)
-- "How should I structure this?" → [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md)
-- "What's the task priority?" → [TASKS.md](.agent/TASKS.md)
-- "How does the team work?" → [TEAM.md](.agent/TEAM.md)
-- Database/schema question → [Supabase Setup Guide](docs/supabase_setup_guide.md)
+When your change affects behavior, contracts, or rollout:
 
-If it's not in the docs, ask the team.
+- [.agent/TASKS.md](.agent/TASKS.md) — checklist status  
+- [.agent/specs/](.agent/specs/) — design notes for features/phases  
+- [README.md](README.md) / this file — contributor-facing workflow or setup  
+
+If you intentionally skip docs, say **why** in the PR.
+
+---
+
+## Pull requests
+
+Every PR should make easy for a reviewer to trust the change:
+
+- **What** changed and **why**  
+- **Risk** / blast radius  
+- Link to issue or TASKS item  
+- **Tests**: commands + outcome  
+- **Manual** steps to verify  
+
+The GitHub PR template and CI policy check reinforce required checklist items.
+
+---
+
+## Repository enforcement
+
+- CI: lint, typecheck, tests, portal builds (see `.github/workflows/ci.yml`)  
+- PR policy job: required checklist items in PR body  
+- Husky + lint-staged: pre-commit on staged files  
+
+**Recommended (org/repo admin):** protect `main`, require green CI, require at least one approval.
+
+---
+
+## Code review checklist
+
+Before requesting review, walk through [.agent/workflows/ai-code-review.md](.agent/workflows/ai-code-review.md) and confirm:
+
+- [ ] Matches [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md)  
+- [ ] No secrets or credentials in code or commits  
+- [ ] Pydantic models validate inputs appropriately  
+- [ ] Services do not import FastAPI  
+- [ ] Errors use `core/exceptions` patterns where applicable  
+- [ ] UI matches [DESIGN_SYSTEM.md](.agent/DESIGN_SYSTEM.md) for touched screens  
+- [ ] New logic has tests or a short justification if not testable  
+- [ ] Linters and typecheck pass locally  
+
+---
+
+## Need help?
+
+| Question | Doc |
+|----------|-----|
+| System design | [ARCHITECTURE.md](.agent/ARCHITECTURE.md) |
+| Code style | [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md) |
+| What to build next | [TASKS.md](.agent/TASKS.md) |
+| Team process | [TEAM.md](.agent/TEAM.md) |
+| DB / Supabase | [docs/supabase_setup_guide.md](docs/supabase_setup_guide.md) |
+
+If it is not documented, ask the team and consider updating the docs in the same PR when you learn the answer.

@@ -32,6 +32,7 @@ from app.routers import (
     patients,
     reminders,
     staff,
+    voice,
 )
 from app.services.a2a_retry_worker import A2ARetryWorker
 
@@ -135,6 +136,7 @@ def create_app() -> FastAPI:
     application.include_router(reminders.router, prefix=f"{api}/reminders", tags=["Reminders"])
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
     application.add_api_websocket_route("/ws/chat/{patient_id}", chat.chat_websocket_endpoint)
+    application.add_api_websocket_route("/ws/voice/{patient_id}", voice.voice_websocket_endpoint)
 
     # ── Health Check ────────────────────────────────────
     @application.get("/health", tags=["Health"])

@@ -23,6 +23,7 @@ from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
 from app.services.a2a_task_service import A2ATaskService
 from app.services.chat_service import ChatService, ConversationStateConflictError
+from app.services.drug_knowledge_service import DrugKnowledgeService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -283,56 +284,61 @@ async def chat_websocket_endpoint(
     await websocket.accept()
     service = ChatService(db)
     a2a_service = A2ATaskService(db)
+    drug_knowledge_service = DrugKnowledgeService(db)
     triage_agent = TriageAgent()
     symptom_agent = SymptomAgent()
 
-    history = await service.get_history(str(patient_id), limit=50)
-    conversation_history = [_serialize_chat_message(item) for item in history]
-    await websocket.send_json({"type": "chat_history", "messages": conversation_history})
+    try:
+        history = await service.get_history(str(patient_id), limit=50)
+        conversation_history = [_serialize_chat_message(item) for item in history]
+        await websocket.send_json({"type": "chat_history", "messages": conversation_history})
 
-    context_document_id = _extract_document_context_id(websocket)
-    chat_context = await service.get_context(
-        patient_id=str(patient_id),
-        document_id=context_document_id,
-    )
-    patient_context = {
-        "medications": chat_context.get("medications", []),
-        "conditions": chat_context.get("conditions", []),
-        "recent_symptoms": chat_context.get("recent_symptoms", []),
-    }
-    document_context = chat_context.get("document")
-    sent_document_context_event = False
-    if document_context:
-        await websocket.send_json(
-            {
-                "type": "chat_context_loaded",
-                "context_type": "document",
-                "document": document_context,
-            }
+        context_document_id = _extract_document_context_id(websocket)
+        chat_context = await service.get_context(
+            patient_id=str(patient_id),
+            document_id=context_document_id,
         )
-        sent_document_context_event = True
+        patient_context = {
+            "medications": chat_context.get("medications", []),
+            "conditions": chat_context.get("conditions", []),
+            "recent_symptoms": chat_context.get("recent_symptoms", []),
+        }
+        document_context = chat_context.get("document")
+        sent_document_context_event = False
+        if document_context:
+            await websocket.send_json(
+                {
+                    "type": "chat_context_loaded",
+                    "context_type": "document",
+                    "document": document_context,
+                }
+            )
+            sent_document_context_event = True
 
-    session_id = _read_session_id(websocket)
-    state_record = await service.get_or_create_conversation_state(
-        patient_id=str(patient_id),
-        options={
-            "session_id": session_id,
-            "language": Language.EN,
-            "document_context": document_context,
-            "turn_count": len(conversation_history),
-        },
-    )
-    if not document_context and isinstance(state_record.get("document_context"), dict):
-        document_context = state_record["document_context"]
-    if document_context and not sent_document_context_event:
-        await websocket.send_json(
-            {
-                "type": "chat_context_loaded",
-                "context_type": "document",
-                "document": document_context,
-            }
+        session_id = _read_session_id(websocket)
+        state_record = await service.get_or_create_conversation_state(
+            patient_id=str(patient_id),
+            options={
+                "session_id": session_id,
+                "language": Language.EN,
+                "document_context": document_context,
+                "turn_count": len(conversation_history),
+            },
         )
-    conversation_state = _conversation_state_from_record(state_record)
+        if not document_context and isinstance(state_record.get("document_context"), dict):
+            document_context = state_record["document_context"]
+        if document_context and not sent_document_context_event:
+            await websocket.send_json(
+                {
+                    "type": "chat_context_loaded",
+                    "context_type": "document",
+                    "document": document_context,
+                }
+            )
+        conversation_state = _conversation_state_from_record(state_record)
+    except WebSocketDisconnect:
+        logger.info("Chat websocket disconnected during initialization")
+        return
 
     try:
         while True:
@@ -400,6 +406,16 @@ async def chat_websocket_endpoint(
             await websocket.send_json({"type": "user_message_saved", "message": user_payload})
 
             try:
+                drug_knowledge_context = await drug_knowledge_service.retrieve_for_patient_message(
+                    message=incoming.content,
+                    medications=patient_context.get("medications", []),
+                )
+                if drug_knowledge_context.get("status") != "not_applicable":
+                    patient_context = {
+                        **patient_context,
+                        "drug_knowledge": drug_knowledge_context,
+                    }
+
                 triage_result = await triage_agent(
                     TriageInput(
                         user_id=current_user.id,
@@ -595,4 +611,4 @@ async def chat_websocket_endpoint(
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 
-# WebSocket route is mounted in main.py at /ws/chat/{patient_id}.
+# WebSocket routes are mounted in main.py.

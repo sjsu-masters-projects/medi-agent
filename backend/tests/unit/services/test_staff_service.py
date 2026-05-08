@@ -449,8 +449,11 @@ async def test_invite_existing_different_clinic(service, mock_db):
 
     mock_db.table.side_effect = [chain_admin, chain_existing, chain_update]
 
+    service.resend_client.send_clinician_invite = MagicMock(return_value=True)  # type: ignore[method-assign]
+
     result = await service.invite_member(admin_id, "other@test.com", "nurse")
     assert result["status"] == "added"
+    assert result["email_sent"] is True
 
 
 @pytest.mark.asyncio
@@ -469,5 +472,8 @@ async def test_invite_new_email_pending(service, mock_db):
 
     mock_db.table.side_effect = [chain_admin, chain_existing]
 
+    service.resend_client.send_clinician_invite = MagicMock(return_value=False)  # type: ignore[method-assign]
+
     result = await service.invite_member(admin_id, "new@test.com", "provider")
     assert result["status"] == "pending"
+    assert result["email_sent"] is False

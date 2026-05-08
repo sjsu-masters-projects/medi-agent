@@ -11,11 +11,11 @@ interface CircularProgressProps {
 export function CircularProgress({
     className = "",
     percent,
-    progressClassName = "stroke-blue-600",
+    progressClassName = "stroke-[#147465]",
     size = 64,
     strokeWidth = 6,
-    textClassName = "text-gray-900",
-    trackClassName = "stroke-blue-100",
+    textClassName = "text-[#17233a]",
+    trackClassName = "stroke-[#d7e5de]",
 }: CircularProgressProps) {
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;

@@ -25,7 +25,11 @@ export function formatDate(date: string | Date, locale: Locale = DEFAULT_LOCALE)
 }
 
 /**
- * Format a date string into a relative time string (e.g., "2 hours ago").
+ * Format a date into a compact relative time string for recent values
+ * (e.g., "just now", "2m ago", "3h ago", "5d ago").
+ * For dates older than 7 days, this falls back to {@link formatDate}
+ * and returns an absolute date string instead.
+ * Returns an empty string for invalid dates.
  */
 export function formatRelativeTime(date: string | Date): string {
     const validDate = toValidDate(date);
@@ -52,3 +56,5 @@ export function clamp(value: number, min: number, max: number): number {
 
 export type { SharedAuthSession, SharedAuthUser } from "./auth-session";
 export { createAuthSessionStorage } from "./auth-session";
+export type { BuildLoginRedirectUrlParams } from "./return-path";
+export { buildLoginRedirectUrl, sanitizeLoginPath, sanitizeReturnPath } from "./return-path";

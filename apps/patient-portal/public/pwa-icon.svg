@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MediAgent Care">
+  <defs>
+    <linearGradient id="canvas" x1="70" y1="52" x2="442" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1B8B78"/>
+      <stop offset="0.54" stop-color="#147465"/>
+      <stop offset="1" stop-color="#285D8F"/>
+    </linearGradient>
+    <linearGradient id="care" x1="142" y1="120" x2="366" y2="386" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8EE"/>
+      <stop offset="1" stop-color="#E8F5F1"/>
+    </linearGradient>
+    <filter id="softShadow" x="64" y="70" width="384" height="372" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0B3F37" flood-opacity="0.26"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="#F6F1EA"/>
+  <rect x="34" y="34" width="444" height="444" rx="96" fill="url(#canvas)"/>
+  <path d="M256 92c60 38 118 44 118 44v112c0 83-53 132-118 172-65-40-118-89-118-172V136s58-6 118-44Z" fill="url(#care)" filter="url(#softShadow)"/>
+  <path d="M170 266h55l23-56 40 104 26-48h28" fill="none" stroke="#147465" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M196 188c18-28 55-32 77-10 22-22 59-18 77 10 25 40-14 88-77 124-63-36-102-84-77-124Z" fill="#D8AA57" opacity="0.24"/>
+  <circle cx="256" cy="256" r="154" fill="none" stroke="#F6DFAF" stroke-width="14" opacity="0.82"/>
+</svg>

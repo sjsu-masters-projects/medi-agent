@@ -91,6 +91,7 @@
 ### 1.5 External Service Setup
 - [x] Get Gemini API key (Google AI Studio / Vertex AI)
 - [x] Get Deepgram API key and configure SDK
+  - [x] Configure Spanish Deepgram Aura-2 TTS model (`DEEPGRAM_TTS_MODEL_ES`) in environment
 - [x] Set up Resend for email
 - [x] Test DailyMed API access  
 - [x] Test RxNorm API access
@@ -344,19 +345,37 @@
 - [x] Add background retry worker: process `retrying` tasks where `next_retry_at <= now`
 
 ### 5.4 Medical RAG
-- [ ] Populate pgvector with drug information (from DailyMed)
-- [ ] Embedding generation for medication knowledge base
-- [ ] RAG retrieval pipeline: query → embed → similarity search → LLM response
-- [ ] Citation inclusion (source of information)
+- [/] Populate pgvector with drug information (from DailyMed)
+  - [x] Add `drug_knowledge_chunks` pgvector schema and similarity-match RPC
+  - [x] Add DailyMed label chunk builder/upsert service
+  - [x] Add checked-in ingestion script for curated DailyMed labels
+  - [x] Run first curated ingestion against production Supabase and verify a baseline label set
+  - [ ] Expand curated ingestion set and document repeatable production ingest cadence/runbook
+- [x] Embedding generation for medication knowledge base
+  - [x] Add Google Gen AI embedding client with configurable model and dimensions
+  - [x] Keep embedding dependency injectable for offline tests
+- [x] RAG retrieval pipeline: query → embed → similarity search → LLM response
+  - [x] Retrieve medication chunks for likely medication questions using active medication names/RxCUIs
+  - [x] Pass retrieved medication context into the triage response prompt
+  - [x] Add safe fallback when retrieval is weak or unavailable
+- [x] Citation inclusion (source of information)
+  - [x] Preserve DailyMed source title, section, URL, and citation id in prompt context
+  - [x] Instruct patient-facing medication answers to cite grounded chunks
 
 ### 5.5 Voice Integration
-- [ ] Deepgram STT client (streaming WebSocket)
-- [ ] Deepgram TTS client (text → audio stream)
-- [ ] Voice-to-voice pipeline: mic → STT → Triage Agent → response → TTS → speaker
+- [/] Deepgram STT client (streaming WebSocket)
+  - [x] Add authenticated backend voice WebSocket contract (`/ws/voice/{patient_id}`)
+  - [x] Add server-side final-audio STT path through Deepgram with validation/tests
+  - [x] Add true incremental audio chunk streaming from browser mic to backend STT
+- [/] Deepgram TTS client (text → audio stream)
+  - [x] Add backend TTS generation path returning playable audio payload metadata
+  - [x] Persist generated assistant audio in `voice-messages` storage and `chat_messages.audio_url`
+- [x] Voice-to-voice pipeline: mic → STT → Triage Agent → response → TTS → speaker
 - [ ] Language detection from audio
-- [ ] Audio message storage (Supabase Storage, URL in chat_messages)
+- [x] Audio message storage (Supabase Storage, URL in chat_messages)
 - [ ] Voice readback of document summaries: 🔊 button on Records modal → TTS in selected language
 - [ ] Multilingual TTS beyond EN/ES (Hindi, Chinese, Vietnamese, Tagalog — top US non-English medical populations)
+- [ ] Production readiness hardening: long-session stream stability, reconnect semantics, and explicit WS health metrics/alerts
 
 ### 5.6 Patient Portal — Chat UI
 - [x] Chat page layout (WhatsApp-style)
@@ -377,7 +396,9 @@
 ### 5.8 Testing
 - [x] Golden-set for Triage Agent: 20+ test messages with expected intent + route
 - [ ] Golden-set for Symptom Agent: 10+ symptom conversations with expected structured output
-- [ ] Voice pipeline end-to-end test
+- [/] Voice pipeline end-to-end test
+  - [x] Add backend voice WebSocket contract tests for STT/TTS events and validation errors
+  - [ ] Add browser mic → backend STT → chat → backend TTS end-to-end test
 - [x] Load test for WebSocket connections
 - [x] Document→Chat context injection test: open chat from document → verify context available
 - [x] Unit tests for A2A idempotency and retry/dead-letter transitions
@@ -439,6 +460,26 @@
 - [x] Add realistic Recharts rendering tests (current tests mock all chart components to bare divs)
 - [x] Enable Supabase Realtime publication for dashboard tables (`adherence_logs`, `symptom_reports`, `adr_assessments`)
 - [x] Add rate limiting on SOAP note generation endpoint (expensive LLM call, 15-30s per request)
+
+### 6.7 Session Management & Auth Hardening
+- [x] **Token Refresh Before Expiry:** Implement proactive JWT refresh for logged-in users (before token expires)
+  - [x] Backend: Refresh token endpoint already exists (`POST /api/v1/auth/refresh`)
+  - [x] Frontend: `useAuthSessionRefresh` hook refreshes active sessions before expiry
+  - [x] Edge case: User returns after browser sleep / tab backgrounded — force refresh on tab focus
+  - [x] Silent refresh updates stored session without UI interruption unless refresh fails
+  - [x] Add tests: verify refresh timing, focus refresh, no-op when not near expiry, and failed refresh logout
+  - [x] Idle-timeout awareness reviewed; absolute inactivity timeout remains a future product/security policy decision
+- [x] **Homepage & Protected Route Redirects:** Implement consistent redirect flow for production
+  - [x] Unauthenticated users landing on `/dashboard`, `/patients`, etc. → redirect to `/login` + capture return path
+  - [x] After successful login → redirect to captured path or default home
+  - [x] Default home: Patient Portal → `/today` | Clinician Portal → `/dashboard`
+  - [x] Add tests: verify redirect chain and state preservation
+  - [x] Production config: Supabase redirect URLs and custom domains configured for patient + clinician portals
+- [x] **Login/Logout UX:** Prevent stale session display
+  - [x] Logout: Clear local session; backend refresh-token invalidation deferred because Supabase refresh expiry remains source of truth
+  - [x] Login: Verify session + role before showing portal content (not just JWT presence)
+  - [x] API 401 → clear session and redirect to login with "session expired" reason
+  - [x] API client tests verify authenticated 401 redirect behavior
 
 ---
 

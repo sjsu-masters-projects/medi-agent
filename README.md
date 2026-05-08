@@ -1,246 +1,164 @@
 # MediAgent
 
-> A dual-portal healthcare platform powered by multi-agent AI — Patient Portal + Clinician Portal.
+Dual-portal healthcare platform with AI-assisted patient support and clinician workflows.
 
-**Patients** get a bilingual health companion that parses medical documents, manages medication schedules, explains reports in plain language, and supports voice-to-voice conversations.
+- `apps/patient-portal`: patient-facing PWA
+- `apps/clinician-portal`: clinician-facing PWA
+- `backend`: FastAPI API + agents + integrations
+- `packages/shared`: shared TypeScript types/utilities
 
-**Clinicians** get real-time patient monitoring, automated pharmacovigilance (ADR detection → FDA MedWatch reporting), bidirectional document sync, and care continuity across providers.
+## What It Does
 
----
+- Patient document upload + AI explanation
+- Medication/obligation tracking and adherence logging
+- Real-time patient chat (WebSocket) with triage/symptom routing
+- Voice transport foundation for chat/assistive workflows
+- Clinician dashboard and clinic/team management flows
+- Pharmacovigilance workflow foundations (ADR lifecycle tracking)
 
-## Monorepo Structure
+For exact phase-by-phase status and backlog, use `.agent/TASKS.md`.
 
-```
+## Monorepo Layout
+
+```text
 medi-agent/
-├── .agent/                          # 📚 Project brain — start here
-│   ├── PROJECT.md                   #    What MediAgent is, decision log
-│   ├── ARCHITECTURE.md              #    System design, data model, agent flow
-│   ├── CODING_STANDARDS.md          #    Code style, SOLID, naming, testing
-│   ├── DESIGN_SYSTEM.md             #    Colors, typography, components (from Figma)
-│   ├── TASKS.md                     #    Full task breakdown by phase
-│   ├── TEAM.md                      #    Team structure, sprints, Git workflow
-│   └── workflows/                   #    Step-by-step guides
-│       ├── new-feature.md           #    How to start a new feature
-│       ├── new-agent.md             #    How to add a new AI agent
-│       └── ai-code-review.md        #    AI code review checklist
-│
-├── backend/                         # 🐍 Python FastAPI backend
-│   ├── src/app/
-│   │   ├── main.py                  #    App factory, middleware, routers
-│   │   ├── config.py                #    Env vars via pydantic-settings
-│   │   ├── core/                    #    Exceptions, auth, constants
-│   │   ├── models/                  #    Pydantic schemas (15 files, 32 schemas)
-│   │   ├── routers/                 #    API routes — thin handlers
-│   │   ├── services/                #    Business logic — framework-independent
-│   │   ├── agents/                  #    LangGraph agents (7 sub-packages)
-│   │   ├── tools/                   #    Agent tools (FHIR, RxNorm, Naranjo, etc.)
-│   │   ├── mcp/                     #    MCP servers (Supabase, DailyMed, etc.)
-│   │   ├── a2a/                     #    Agent-to-Agent protocol
-│   │   ├── clients/                 #    SDK wrappers (Gemini, Deepgram, Resend)
-│   │   ├── db/                      #    Database queries, migrations, seed
-│   │   │   └── migrations/          #    SQL schema files (run in order)
-│   │   ├── middleware/              #    Auth, CORS, rate limiting, logging
-│   │   └── utils/                   #    Shared helpers
-│   ├── tests/                       #    pytest test suite
-│   ├── requirements.txt             #    Production deps (pinned)
-│   ├── requirements-dev.txt         #    Dev/test deps
-│   ├── pyproject.toml               #    Ruff, mypy, pytest config
-│   └── Dockerfile
-│
+├── .agent/                  # Product, architecture, tasks, standards
 ├── apps/
-│   ├── patient-portal/              # 💊 Next.js PWA — patient-facing
-│   │   └── src/
-│   │       ├── app/                 #    App Router pages
-│   │       ├── components/          #    UI, features, layouts
-│   │       ├── store/               #    Redux Toolkit (auth, feed, chat, records)
-│   │       ├── services/            #    API client
-│   │       ├── hooks/               #    Custom React hooks
-│   │       └── types/               #    TypeScript types
-│   │
-│   └── clinician-portal/            # 🩺 Next.js PWA — clinician-facing
-│       └── src/
-│           ├── app/                 #    App Router pages
-│           ├── components/          #    UI, features, layouts
-│           ├── store/               #    Redux Toolkit (auth, dashboard, patients, medwatch)
-│           ├── services/            #    API client
-│           ├── hooks/               #    Custom React hooks
-│           └── types/               #    TypeScript types
-│
-├── packages/
-│   └── shared/                      # 📦 Shared TypeScript types, utils, constants
-│       └── src/
-│           ├── types/               #    12 domain interfaces (single source of truth)
-│           ├── utils/               #    formatDate, formatRelativeTime, clamp
-│           └── constants/           #    API_ROUTES, NARANJO_THRESHOLD, RISK_LEVELS
-│
-├── docs/                            # 📄 Team-facing guides
-│   └── supabase_setup_guide.md      #    DB setup, migrations, RLS, auth hooks
-│
-├── .github/workflows/ci.yml        # CI — lint + test + build
-├── docker-compose.yml               # Local dev (backend, both portals)
-├── .env.example                     # All required env var keys
-├── CONTRIBUTING.md                  # Developer guide (you're reading it here ↓)
-└── README.md                        # This file
+│   ├── patient-portal/      # Next.js patient app
+│   └── clinician-portal/    # Next.js clinician app
+├── backend/                 # FastAPI backend
+├── packages/shared/         # Shared TS package
+├── docs/                    # Setup guides and docs
+└── scripts/                 # Repo utility scripts
 ```
-
----
 
 ## Quick Start
 
 ### Prerequisites
 
-| Tool | Version | Check |
-|------|---------|-------|
-| Python | 3.12+ | `python3 --version` |
-| Node.js | 20.9+ | `node --version` |
-| npm | 10+ | `npm --version` |
+- Python `3.12+`
+- Node `20+`
+- npm `10+`
 
-### 1. Clone & configure
+### 1) Clone + env setup
 
 ```bash
-git clone <repo-url> && cd medi-agent
+git clone <repo-url>
+cd medi-agent
+
 cp .env.example .env
 cp apps/patient-portal/.env.example apps/patient-portal/.env.local
 cp apps/clinician-portal/.env.example apps/clinician-portal/.env.local
-# Fill in API keys — see .env.example for where to get each one
 ```
 
-Verify your setup:
+Validate environment:
+
 ```bash
-./scripts/preflight.sh       # checks tools, .env, deps
-./scripts/check-env.sh       # validates backend + both portal env files
+./scripts/preflight.sh
+./scripts/check-env.sh
 ```
 
-### 2. Backend
+Clinician invite emails require `RESEND_API_KEY` (and a verified-domain `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL` in production); see `CONTRIBUTING.md` and root `.env.example`.
+
+### 2) Run backend
 
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
 PYTHONPATH=src uvicorn app.main:app --reload
-# API docs → http://localhost:8000/docs
 ```
 
-### 3. Patient Portal
+Backend docs: `http://localhost:8000/docs`
+
+### 3) Run portals
+
+Patient:
 
 ```bash
 cd apps/patient-portal
-npm install
+npm ci
 npm run dev
-# → http://localhost:3000
 ```
 
-### 4. Clinician Portal
+Clinician:
 
 ```bash
 cd apps/clinician-portal
-npm install
+npm ci
 npm run dev -- --port 3001
-# → http://localhost:3001
 ```
 
-### 5. All at once (Docker)
+## Core Stack
 
-```bash
-docker compose up
-# Backend → :8000  |  Patient → :3000  |  Clinician → :3001
-```
+- Backend: FastAPI, Pydantic, Supabase
+- AI: Gemini (Flash/Pro), MedGemma routing foundations, LangGraph
+- Voice: Deepgram
+- Email: Resend
+- Frontend: Next.js 16 + Redux Toolkit + Tailwind v4
 
----
+## Documentation Map
 
-## Tech Stack
+Start here:
 
-| Layer | Tech | Version |
-|-------|------|---------|
-| Backend | FastAPI + Pydantic | 0.135.1 / 2.12.5 |
-| Database | Supabase (Postgres + Auth + Storage) | 2.28.0 |
-| AI / Clinical | MedGemma 27B-it (Vertex AI) | — |
-| AI / Patient-facing | Gemini 3.1 Flash Lite Preview | — |
-| AI / Reasoning | Gemini 3.1 Pro Preview | — |
-| Agent Framework | LangGraph | 1.0.10 |
-| Voice | Deepgram SDK | 6.0.1 |
-| Frontend | Next.js 16 (App Router, Turbopack) | 16.1.6 |
-| State | Redux Toolkit | 2.11.2 |
-| Styling | Tailwind CSS v4 | 4.2.1 |
-| Charts | Recharts | 3.7.0 |
-| Email | Resend | 2.23.0 |
+- `.agent/PROJECT.md`
+- `.agent/ARCHITECTURE.md`
+- `.agent/TASKS.md`
+- `.agent/CODING_STANDARDS.md`
+- `CONTRIBUTING.md`
 
----
+Workflow docs:
 
-## Documentation
+- `.agent/workflows/new-feature.md`
+- `.agent/workflows/new-agent.md`
+- `.agent/workflows/ai-code-review.md`
 
-> **Start here → `.agent/PROJECT.md`** — explains what MediAgent is, the business thesis, and all architecture decisions.
+Infra docs:
 
-### For Everyone
+- `docs/supabase_setup_guide.md`
 
-| Doc | What it covers |
-|-----|----------------|
-| [PROJECT.md](.agent/PROJECT.md) | Product context, decision log, tech stack, user personas |
-| [ARCHITECTURE.md](.agent/ARCHITECTURE.md) | System design, data model, agent flow, API design, deployment |
-| [TASKS.md](.agent/TASKS.md) | Full task breakdown by phase — what's done, what's next |
-| [TEAM.md](.agent/TEAM.md) | Team structure, sprint process, Git workflow, PR conventions |
+## Quality Gates
 
-### For Developers
+Repository checks include:
 
-| Doc | What it covers |
-|-----|----------------|
-| [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md) | SOLID principles, naming, error handling, file structure, testing |
-| [DESIGN_SYSTEM.md](.agent/DESIGN_SYSTEM.md) | Colors, typography, components, layout (from Figma designs) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to set up, develop, test, and submit code |
-| [Supabase Setup Guide](docs/supabase_setup_guide.md) | Database schema, migrations, RLS policies, auth hooks, storage |
+- CI lint/type/test/build workflows
+- PR policy check for required checklist completion
+- PR template with docs/test verification sections
+- Husky/lint-staged local pre-commit checks
 
-### Workflows (step-by-step guides)
+Recommended GitHub settings:
 
-| Workflow | When to use |
-|----------|-------------|
-| [new-feature.md](.agent/workflows/new-feature.md) | Starting any new feature |
-| [new-agent.md](.agent/workflows/new-agent.md) | Adding a new AI agent to the LangGraph system |
-| [ai-code-review.md](.agent/workflows/ai-code-review.md) | Reviewing AI-generated code before committing |
-
----
-
-## For AI Agents
-
-If you're an AI coding assistant working on this repo:
-
-1. **Always read first:** `.agent/PROJECT.md` → `.agent/ARCHITECTURE.md` → `.agent/CODING_STANDARDS.md`
-2. **Before any feature:** Follow `.agent/workflows/new-feature.md`
-3. **Before any new agent:** Follow `.agent/workflows/new-agent.md`
-4. **Before committing:** Run through `.agent/workflows/ai-code-review.md`
-5. **UI work:** Reference `.agent/DESIGN_SYSTEM.md` for colors, fonts, and components
-6. **Task context:** Check `.agent/TASKS.md` for what phase we're in
-
-These docs are your ground truth. Don't guess — read them.
-
----
+- Protect `main`
+- Require all CI checks
+- Require at least one PR approval
 
 ## API Overview
 
-All endpoints live under `/api/v1/`. Full interactive docs at `/docs` (Swagger) or `/redoc`.
+Base path: `/api/v1`
 
-| Resource | Prefix | Key Endpoints |
-|----------|--------|---------------|
-| Auth | `/auth` | signup, clinic-admin signup, login, refresh, password reset |
-| Clinics | `/clinics` | resolve clinic code |
-| Cron | `/cron` | internal scheduler jobs for reminders and ADR scans |
-| Patients | `/patients` | profile, care team, join clinic |
-| Reminders | `/reminders` | patient-owned reminder schedule targets and upserts |
-| Clinicians | `/clinicians` | profile, patient list, invite code generate/list/revoke |
-| Documents | `/documents` | upload, list, explain (AI) |
-| Medications | `/medications` | CRUD, active/inactive |
-| Obligations | `/obligations` | CRUD (diet, exercise, custom) |
-| Adherence | `/adherence` | log events, get scores |
-| Chat | `/chat` | history, WebSocket (Phase 5) |
-| Feed | `/feed` | aggregated daily tasks |
-| ADR | `/adr` | assessments, MedWatch queue |
-| Appointments | `/appointments` | CRUD, status tracking |
-| Notifications | `/notifications` | list, mark read |
+Primary route groups:
+
+- `/auth`
+- `/patients`
+- `/clinicians`
+- `/staff`
+- `/documents`
+- `/medications`
+- `/obligations`
+- `/adherence`
+- `/chat` (REST + WebSocket)
+- `/feed`
+- `/adr`
+- `/cron`
 
 Health check: `GET /health`
 
----
+## Security Notes
+
+- Never commit `.env`, `.env.local`, keys, tokens, or service account files.
+- Rotate any credential that is accidentally exposed in logs/chat/screenshots.
 
 ## License
 
-Proprietary — all rights reserved.
+Proprietary - all rights reserved.

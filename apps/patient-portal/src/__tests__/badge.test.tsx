@@ -12,8 +12,8 @@ describe("Badge", () => {
             </div>,
         );
 
-        expect(screen.getByText("Done").className).toContain("bg-green-100");
-        expect(screen.getByText("Review").className).toContain("bg-yellow-100");
-        expect(screen.getByText("Critical").className).toContain("bg-red-100");
+        expect(screen.getByText("Done").className).toContain("bg-[#e9f7ef]");
+        expect(screen.getByText("Review").className).toContain("bg-[#fff7dc]");
+        expect(screen.getByText("Critical").className).toContain("bg-[#fff2ef]");
     });
 });

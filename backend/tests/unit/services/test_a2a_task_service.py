@@ -256,6 +256,15 @@ async def test_process_due_retries_dead_letters_unsupported_task_type(mock_db):
     }
 
 
+def test_calculate_retry_delay_starts_at_one_second(mock_db):
+    service = A2ATaskService(mock_db)
+
+    assert service._calculate_retry_delay_seconds(0) == 1
+    assert service._calculate_retry_delay_seconds(1) == 1
+    assert service._calculate_retry_delay_seconds(2) == 2
+    assert service._calculate_retry_delay_seconds(3) == 4
+
+
 @pytest.mark.asyncio
 async def test_execute_retries_transient_connection_errors(mock_db):
     query = MagicMock()

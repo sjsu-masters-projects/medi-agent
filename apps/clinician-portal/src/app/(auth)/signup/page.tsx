@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
-import { readStoredClinicContext, type ClinicContext } from "@/services/clinic-context";
+import {
+    readStoredClinicContext,
+    writeStoredClinicContext,
+    type ClinicContext,
+} from "@/services/clinic-context";
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
 import { ClinicianRole, PortalUserRole } from "@/types";
@@ -25,12 +29,32 @@ interface SignupResponse {
     };
 }
 
-export default function ClinicianSignupPage() {
+interface ClinicResolveResponse {
+    clinic_code: string;
+    clinic_id: string;
+    clinic_name: string;
+    status: "active" | "suspended";
+}
+
+function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
+    return {
+        clinicCode: response.clinic_code,
+        clinicId: response.clinic_id,
+        clinicName: response.clinic_name,
+        status: response.status,
+    };
+}
+
+function ClinicianSignupPageContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [inviteLoading, setInviteLoading] = useState(false);
     const [clinicContext, setClinicContext] = useState<ClinicContext | null>(null);
+    const [inviteRole, setInviteRole] = useState<ClinicianRole | null>(null);
+    const inviteHydrated = useRef(false);
     const [formData, setFormData] = useState({
         confirmPassword: "",
         email: "",
@@ -42,14 +66,72 @@ export default function ClinicianSignupPage() {
         specialty: "",
     });
 
-    function updateField(field: keyof typeof formData, value: string) {
+    const updateField = useCallback((field: keyof typeof formData, value: string) => {
         setFormData((current) => ({ ...current, [field]: value }));
-    }
+    }, []);
 
     useEffect(() => {
         const stored = readStoredClinicContext();
         setClinicContext(stored);
     }, []);
+
+    useEffect(() => {
+        if (inviteHydrated.current) {
+            return;
+        }
+
+        const emailParam = searchParams?.get("email")?.trim() ?? "";
+        const roleParam = searchParams?.get("role")?.trim().toLowerCase() ?? "";
+        const codeParam = searchParams?.get("code")?.trim() ?? "";
+
+        if (emailParam) {
+            updateField("email", emailParam);
+        }
+
+        const resolvedRole =
+            roleParam === ClinicianRole.ADMIN
+                ? ClinicianRole.ADMIN
+                : roleParam === ClinicianRole.NURSE
+                  ? ClinicianRole.NURSE
+                  : roleParam === ClinicianRole.PROVIDER
+                    ? ClinicianRole.PROVIDER
+                    : null;
+
+        if (resolvedRole) {
+            updateField("role", resolvedRole);
+            setInviteRole(resolvedRole);
+        }
+
+        if (!codeParam) {
+            inviteHydrated.current = true;
+            return;
+        }
+
+        inviteHydrated.current = true;
+        setInviteLoading(true);
+        setError("");
+
+        const resolveInviteClinic = async () => {
+            try {
+                const resolved = await api.post<ClinicResolveResponse>(
+                    "/api/v1/clinics/resolve-code",
+                    { clinic_code: codeParam.toUpperCase() },
+                );
+                const context = mapClinicContext(resolved);
+                writeStoredClinicContext(context);
+                setClinicContext(context);
+            } catch (submissionError) {
+                setError(
+                    (submissionError as Error).message ||
+                        "Unable to verify the clinic invite. Please verify your clinic code first.",
+                );
+            } finally {
+                setInviteLoading(false);
+            }
+        };
+
+        void resolveInviteClinic();
+    }, [searchParams, updateField]);
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -144,12 +226,19 @@ export default function ClinicianSignupPage() {
                             <span className="mb-1 block text-sm font-medium text-gray-700">Role access</span>
                             <select
                                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                disabled={Boolean(inviteRole)}
                                 onChange={(event) => updateField("role", event.target.value)}
                                 value={formData.role}
                             >
                                 <option value={ClinicianRole.PROVIDER}>Provider</option>
                                 <option value={ClinicianRole.NURSE}>Nurse / MA</option>
+                                {inviteRole === ClinicianRole.ADMIN ? (
+                                    <option value={ClinicianRole.ADMIN}>Clinic Admin (invite)</option>
+                                ) : null}
                             </select>
+                            {inviteRole ? (
+                                <p className="mt-1 text-xs text-slate-500">Role access is set by your invite.</p>
+                            ) : null}
                         </label>
                         <Input label="NPI number (optional)" onChange={(event) => updateField("npiNumber", event.target.value)} value={formData.npiNumber} />
                         <Input label="Password" onChange={(event) => updateField("password", event.target.value)} type="password" value={formData.password} />
@@ -161,7 +250,11 @@ export default function ClinicianSignupPage() {
                         />
                         {error ? <p className="text-sm text-red-600 md:col-span-2">{error}</p> : null}
                         <div className="md:col-span-2">
-                            <Button disabled={submitting || !clinicContext} fullWidth type="submit">
+                            <Button
+                                disabled={submitting || inviteLoading || !clinicContext}
+                                fullWidth
+                                type="submit"
+                            >
                                 {submitting ? "Creating account..." : "Create clinician account"}
                             </Button>
                         </div>
@@ -181,5 +274,13 @@ export default function ClinicianSignupPage() {
                 </Card>
             </div>
         </div>
+    );
+}
+
+export default function ClinicianSignupPage() {
+    return (
+        <Suspense fallback={null}>
+            <ClinicianSignupPageContent />
+        </Suspense>
     );
 }

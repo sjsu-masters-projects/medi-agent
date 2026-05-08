@@ -265,12 +265,16 @@ export default function SettingsPage() {
         setError(null);
         setInviteStatus(null);
         try {
-            const result = await api.post<{ status: string }>(
+            const result = await api.post<{ status: string; email_sent?: boolean }>(
                 "/api/v1/staff/invite",
                 { email: inviteEmail, role: inviteRole },
                 { token },
             );
-            setInviteStatus(result.status === "added" ? "Added to clinic" : "Invitation pending");
+            if (result.email_sent) {
+                setInviteStatus(result.status === "added" ? "Added to clinic and invitation email sent" : "Invitation email sent");
+            } else {
+                setInviteStatus(result.status === "added" ? "Added to clinic (email not sent)" : "Invitation pending (email not sent)");
+            }
             setInviteEmail("");
             void loadStaff();
         } catch (e) {

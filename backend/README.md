@@ -67,9 +67,9 @@ src/app/
 ├── mcp/              # MCP servers (external API wrappers)
 ├── a2a/              # Agent-to-Agent protocol
 ├── clients/          # SDK wrappers (Gemini, Deepgram, etc.)
-├── db/               # Queries, migrations, seed data
+├── db/               # Supabase connection helpers, repositories, migrations, seed data
 │   └── migrations/   # SQL files — run in order (001_, 002_, ...)
-├── middleware/        # Request processing (auth, logging, etc.)
+├── middleware/        # Shared middleware helpers such as endpoint rate limiting
 └── utils/            # Shared helpers
 ```
 
@@ -94,8 +94,39 @@ Migrations are plain SQL files in `src/app/db/migrations/`:
 | `012_document_review_queue.sql` | Adds document review queue storage |
 | `013_cron_scheduler_foundation.sql` | Adds cron run tracking and notification dedupe metadata |
 | `014_patient_timezones_and_reminder_schedules.sql` | Adds patient timezone preferences, obligation notes, and structured reminder schedules |
+| `015_drug_knowledge_rag.sql` | Adds pgvector-backed DailyMed medication knowledge chunks and retrieval RPC |
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
+
+## DailyMed Medication RAG Ingestion
+
+Run migration `015_drug_knowledge_rag.sql` before ingesting labels. The migration creates
+`drug_knowledge_chunks`, indexes, RLS, and the `match_drug_knowledge_chunks` RPC.
+
+Dry-run the first curated set:
+
+```bash
+cd backend
+PYTHONPATH=src .venv/bin/python scripts/ingest_dailymed_rag.py --default-curated --dry-run
+```
+
+Ingest into the configured Supabase project:
+
+```bash
+cd backend
+PYTHONPATH=src .venv/bin/python scripts/ingest_dailymed_rag.py --default-curated
+```
+
+For repeatable production ingestion, pin reviewed DailyMed SET IDs:
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/ingest_dailymed_rag.py \
+  --label metformin=<SETID> \
+  --label lisinopril=<SETID>
+```
+
+The script uses the service-role Supabase client and requires `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, and Google embedding configuration.
 
 ## Key Conventions
 

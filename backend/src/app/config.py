@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     gemini_flash_model: str = "gemini-3.1-flash-lite-preview"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
     medgemma_model: str = "google/medgemma-27b-it"
+    google_embedding_model: str = "gemini-embedding-001"
+    rag_embedding_dimensions: int = 768
+    rag_min_similarity: float = 0.72
 
     # Vertex AI (for MedGemma deployment)
     vertex_ai_location: str = "us-central1"
@@ -48,9 +51,17 @@ class Settings(BaseSettings):
 
     # Deepgram
     deepgram_api_key: str = ""
+    deepgram_stt_model: str = "nova-3"
+    deepgram_tts_model_en: str = "aura-2-asteria-en"
+    deepgram_tts_model_es: str = ""
+    voice_max_audio_bytes: int = 5 * 1024 * 1024
 
     # Resend (email)
     resend_api_key: str = ""
+    resend_from_email: str = "MediAgent <onboarding@resend.dev>"
+    resend_clinician_onboarding_from_email: str = (
+        "MediAgent Clinician Onboarding <onboarding@mail.mediagent.live>"
+    )
 
     # Syncfusion
     syncfusion_license_key: str = ""

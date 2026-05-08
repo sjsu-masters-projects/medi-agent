@@ -12,6 +12,7 @@ from uuid import UUID
 
 from supabase import Client
 
+from app.clients.resend import ResendClient
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.db.repositories import ClinicianRepository, ClinicRepository
 
@@ -25,6 +26,7 @@ class StaffService:
         self.db = db
         self.clinic_repo = ClinicRepository(self)
         self.clinician_repo = ClinicianRepository(self)
+        self.resend_client = ResendClient()
 
     @staticmethod
     def _is_no_rows_error(exc: Exception) -> bool:
@@ -43,6 +45,20 @@ class StaffService:
             return []
 
         return [row for row in value if isinstance(row, dict)]
+
+    def _send_clinician_invite_email(
+        self,
+        email: str,
+        context: dict[str, Any],
+        role: str,
+    ) -> bool:
+        """Notify invitee via Resend; isolated for tests and single call site."""
+        return self.resend_client.send_clinician_invite(
+            to_email=email,
+            clinic_name=str(context["clinic_name"]),
+            role=role,
+            clinic_code=(str(context["clinic_code"]) if context.get("clinic_code") else None),
+        )
 
     def _lookup_code_by_clinic_id(self, clinic_id: str) -> str | None:
         """Lookup clinic code by clinic UUID with best-effort error handling."""
@@ -285,6 +301,9 @@ class StaffService:
                 role=role,
             )
 
-            return {"status": "added", "email": email, "role": role}
+            email_sent = self._send_clinician_invite_email(email, context, role)
 
-        return {"status": "pending", "email": email, "role": role}
+            return {"status": "added", "email": email, "role": role, "email_sent": email_sent}
+
+        email_sent = self._send_clinician_invite_email(email, context, role)
+        return {"status": "pending", "email": email, "role": role, "email_sent": email_sent}
