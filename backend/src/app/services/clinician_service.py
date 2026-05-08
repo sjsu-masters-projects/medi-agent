@@ -147,12 +147,14 @@ class ClinicianService:
         channel = data.get("channel") or MessageChannel.IN_APP
         channel_value = channel.value if isinstance(channel, MessageChannel) else str(channel)
 
+        subject = data.get("subject")
+        body = str(data.get("body", "")).strip()
         payload = {
             "clinician_id": str(clinician_id),
             "patient_id": str(patient_id),
             "channel": channel_value,
-            "subject": data.get("subject"),
-            "body": str(data.get("body", "")).strip(),
+            "subject": subject,
+            "body": body,
         }
         result = await self._execute(self.db.table("clinician_messages").insert(payload))
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
@@ -160,12 +162,13 @@ class ClinicianService:
             raise ExternalServiceError("Supabase", "Failed to send patient message")
 
         message = rows[0]
+        notification_body = subject if subject else body[:160]
         await NotificationService(self.db).create(
             str(patient_id),
             {
                 "notification_type": NotificationType.DOCTOR_MESSAGE.value,
                 "title": "New message from your care team",
-                "body": payload["subject"] or payload["body"][:160],
+                "body": notification_body,
                 "action_url": "/chat",
             },
         )

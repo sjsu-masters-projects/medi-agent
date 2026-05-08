@@ -295,7 +295,9 @@ class ChatService:
     async def _fetch_active_care_teams(self, patient_id: str) -> list[dict[str, Any]]:
         result = await self._execute(
             self.db.table("care_teams")
-            .select("id, clinician_id, role, specialty_context, clinic_name, clinicians(first_name, last_name)")
+            .select(
+                "id, clinician_id, role, specialty_context, clinic_name, clinicians(first_name, last_name)"
+            )
             .eq("patient_id", patient_id)
             .eq("status", "active")
             .limit(5)

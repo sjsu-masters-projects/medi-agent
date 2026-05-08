@@ -130,9 +130,7 @@ async def voice_websocket_endpoint(
                                     smart_format=True,
                                 )
                             ).strip()
-                            logger.info(
-                                "Voice batch transcribe: %r", transcript_text or "<empty>"
-                            )
+                            logger.info("Voice batch transcribe: %r", transcript_text or "<empty>")
                             if transcript_text:
                                 await websocket.send_json(
                                     {
@@ -162,9 +160,7 @@ async def voice_websocket_endpoint(
                                 }
                             )
                         except Exception as exc:
-                            logger.warning(
-                                "Voice audio persistence failed: %s", exc
-                            )
+                            logger.warning("Voice audio persistence failed: %s", exc)
                             await websocket.send_json({"type": "audio_stream_complete"})
                     else:
                         await websocket.send_json({"type": "audio_stream_complete"})
