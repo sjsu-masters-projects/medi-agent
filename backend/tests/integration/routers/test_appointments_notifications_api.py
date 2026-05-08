@@ -70,7 +70,7 @@ def test_patient_lists_and_marks_notifications_read(client, monkeypatch):
         email="patient@test.com",
         role="patient",
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = MagicMock
 
     list_mock = AsyncMock(
         return_value=[
