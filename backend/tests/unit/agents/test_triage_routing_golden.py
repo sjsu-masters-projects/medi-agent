@@ -18,7 +18,17 @@ GOLDEN_CASES = [
     ("My father passed out and is unconscious", "symptom", "emergency", "symptom"),
     ("I think I am having a stroke", "symptom", "emergency", "symptom"),
     ("I have severe bleeding", "symptom", "emergency", "symptom"),
-    ("I want to kill myself", "symptom", "emergency", "symptom"),
+    # G6: self-harm phrases route to mental_health/emergency so the response
+    # surfaces the 988 crisis line in addition to 911.
+    ("I want to kill myself", "mental_health", "emergency", "triage"),
+    ("I am suicidal and need help", "mental_health", "emergency", "triage"),
+    # G2: Spanish emergency keywords now classified by rule (not LLM-only).
+    ("Tengo dolor de pecho fuerte", "symptom", "emergency", "symptom"),
+    ("No puedo respirar bien", "symptom", "emergency", "symptom"),
+    ("Creo que es un infarto", "symptom", "emergency", "symptom"),
+    ("Quiero quitarme la vida", "mental_health", "emergency", "triage"),
+    # G2: Spanish mental-health keywords for routine/urgent path.
+    ("Me siento ansioso y deprimido", "mental_health", "urgent", "triage"),
     ("Can we book an appointment next week", "schedule", "routine", "triage"),
     ("Need to reschedule my visit", "schedule", "routine", "triage"),
     ("Can you explain this lab report", "document_question", "routine", "triage"),

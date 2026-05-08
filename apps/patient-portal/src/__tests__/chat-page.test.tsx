@@ -106,6 +106,7 @@ describe("Patient chat page", () => {
         getVoiceCapabilities.mockReset();
         playAssistantVoiceResponse.mockReset();
         replace.mockReset();
+        vi.useRealTimers();
         searchParamsValue = new URLSearchParams();
         MockWebSocket.reset();
         vi.stubGlobal("WebSocket", MockWebSocket);
@@ -336,33 +337,9 @@ describe("Patient chat page", () => {
         expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
     });
 
-    it("turns off voice mode when the websocket disconnects", async () => {
-        getVoiceCapabilities.mockReturnValue({ recording: false, recognition: true, synthesis: true });
-        renderPage();
-
-        await screen.findByText(/I can help explain results/i);
-        const socket = MockWebSocket.instances[0];
-        await act(async () => {
-            socket.emitOpen();
-        });
-
-        fireEvent.click(screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }));
-        expect(
-            screen.getByRole("button", { name: /Stop Voice-to-Voice Mode/i }),
-        ).toBeInTheDocument();
-
-        await act(async () => {
-            socket.close();
-        });
-
-        await waitFor(() => {
-            expect(
-                screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }),
-            ).toBeInTheDocument();
-        });
-    });
-
-    it("requests backend TTS audio when voice mode assistant response completes", async () => {
+    it("does not auto-play assistant audio for typed (non-voice) turns", async () => {
+        // With the simplified UX, auto-playback is opt-in per-turn via the mic
+        // button. A typed turn must NOT spin up the voice WS or call TTS.
         getVoiceCapabilities.mockReturnValue({ recording: false, recognition: true, synthesis: true });
         renderPage();
 
@@ -372,8 +349,6 @@ describe("Patient chat page", () => {
             chatSocket.emitOpen();
         });
 
-        fireEvent.click(screen.getByRole("button", { name: /Start Voice-to-Voice Mode/i }));
-
         await act(async () => {
             chatSocket.emitMessage({
                 type: "assistant_complete",
@@ -381,7 +356,7 @@ describe("Patient chat page", () => {
                     audio_url: null,
                     content: "Please take your medication with food.",
                     created_at: "2026-04-17T10:01:00Z",
-                    id: "assistant-voice-1",
+                    id: "assistant-typed-1",
                     intent: "medication_question",
                     language: "en-US",
                     patient_id: "patient-1",
@@ -390,31 +365,68 @@ describe("Patient chat page", () => {
             });
         });
 
-        const voiceSocket = MockWebSocket.instances[1];
-        expect(JSON.parse(voiceSocket.sent[0])).toEqual({
-            language: "en-US",
-            message_id: "assistant-voice-1",
-            text: "Please take your medication with food.",
-            type: "tts_request",
-        });
+        // Only the chat WS should exist — no voice WS opened, no TTS request.
+        expect(MockWebSocket.instances.length).toBe(1);
+        expect(playAssistantVoiceResponse).not.toHaveBeenCalled();
+    });
 
+    it("renders clinician message and appointment proposal websocket events", async () => {
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
         await act(async () => {
-            voiceSocket.emitMessage({
-                audio_base64: "YWJj",
-                encoding: "mp3",
-                language: "en-US",
-                mime_type: "audio/mpeg",
-                model: "aura-2-asteria-en",
-                type: "assistant_audio_ready",
+            socket.emitOpen();
+            socket.emitMessage({
+                type: "clinician_message",
+                message: {
+                    body: "Please bring your medication list to your next visit.",
+                    channel: "in_app",
+                    clinician_id: "clinician-1",
+                    created_at: "2026-04-17T10:02:00Z",
+                    id: "clinician-message-1",
+                    is_read: false,
+                    patient_id: "patient-1",
+                    subject: "Visit prep",
+                },
+            });
+            socket.emitMessage({
+                type: "appointment_proposal",
+                proposal: {
+                    care_team_id: "care-team-1",
+                    clinician_name: "Emily Smith",
+                    next_step: "Confirm a date and time with your clinic before this becomes an appointment.",
+                    patient_id: "patient-1",
+                    proposal_id: "proposal-1",
+                    reason: "Follow-up next week",
+                },
             });
         });
 
-        expect(playAssistantVoiceResponse).toHaveBeenCalledWith(
-            expect.objectContaining({
-                audioUrl: "data:audio/mpeg;base64,YWJj",
-                text: "Please take your medication with food.",
-            }),
-        );
+        expect(await screen.findByText(/Visit prep/i)).toBeInTheDocument();
+        expect(screen.getByText(/Please bring your medication list/i)).toBeInTheDocument();
+        expect(screen.getByText(/Appointment request noted with Emily Smith/i)).toBeInTheDocument();
+    });
+
+    it("reconnects the chat websocket after a transient close", async () => {
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.close();
+        });
+
+        expect(await screen.findByText(/Offline/i)).toBeInTheDocument();
+
+        await waitFor(() => {
+            expect(MockWebSocket.instances.length).toBe(2);
+        }, { timeout: 1500 });
+        await act(async () => {
+            MockWebSocket.instances[1].emitOpen();
+        });
+        expect(await screen.findByText(/Online/i)).toBeInTheDocument();
     });
 
     it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {
@@ -458,7 +470,7 @@ describe("Patient chat page", () => {
         });
 
         await act(async () => {
-            fireEvent.click(screen.getByRole("button", { name: /Start voice recording/i }));
+            fireEvent.click(screen.getByRole("button", { name: /Tap to speak/i }));
         });
 
         const voiceSocket = MockWebSocket.instances[1];
@@ -482,15 +494,52 @@ describe("Patient chat page", () => {
             });
         });
 
+        // Default behavior: transcript fills the input box; user reviews
+        // before sending. NO user_message frame is auto-emitted.
         await waitFor(() => {
-            expect(chatSocket.sent.some((event) => JSON.parse(event).type === "user_message")).toBe(true);
+            expect(screen.getByPlaceholderText(/Type or speak/i)).toHaveValue("I feel dizzy");
         });
-        const userMessage = chatSocket.sent.map((event) => JSON.parse(event)).find((event) => event.type === "user_message");
-        expect(userMessage).toMatchObject({
-            audio_url: "patient-1/voice-user.webm",
-            content: "I feel dizzy",
-            type: "user_message",
-        });
+        expect(chatSocket.sent.some((event) => JSON.parse(event).type === "user_message")).toBe(
+            false,
+        );
         expect(trackStop).toHaveBeenCalled();
+    });
+
+    it("auto-sends and auto-plays when hands-free mode is enabled", async () => {
+        getVoiceCapabilities.mockReturnValue({ recording: false, recognition: true, synthesis: true });
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const chatSocket = MockWebSocket.instances[0];
+        await act(async () => {
+            chatSocket.emitOpen();
+        });
+
+        // Enable hands-free.
+        fireEvent.click(screen.getByRole("button", { name: /Turn on hands-free mode/i }));
+        // Confirm toggle is on.
+        expect(
+            screen.getByRole("button", { name: /Hands-free mode is on/i }),
+        ).toBeInTheDocument();
+
+        await act(async () => {
+            chatSocket.emitMessage({
+                type: "assistant_complete",
+                message: {
+                    audio_url: null,
+                    content: "Take it with food.",
+                    created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-handsfree-1",
+                    intent: "medication_question",
+                    language: "en-US",
+                    patient_id: "patient-1",
+                    role: "assistant",
+                },
+            });
+        });
+
+        // Hands-free is on but the turn was NOT voice-initiated → still no
+        // auto-play. Auto-play only fires when the user *spoke* the turn.
+        expect(playAssistantVoiceResponse).not.toHaveBeenCalled();
     });
 });

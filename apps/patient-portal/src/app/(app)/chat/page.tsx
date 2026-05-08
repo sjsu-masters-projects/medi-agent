@@ -8,10 +8,11 @@ import {
     HiDocumentText,
     HiMicrophone,
     HiSparkles,
+    HiSpeakerWave,
     HiStop,
 } from "react-icons/hi2";
 import { ChatBubble } from "@/components/features";
-import { Button, Input } from "@/components/ui";
+import { Input } from "@/components/ui";
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
 import {
     ChatRole,
@@ -54,11 +55,12 @@ export default function ChatPage() {
         dismissSafetyNotice,
         documentContext,
         error,
+        handleHandsFreeToggle,
         handleLanguageSelection,
         handleMicClick,
         handlePlayAssistantMessage,
         handleSend,
-        handleVoiceModeToggle,
+        handsFreeMode,
         input,
         isTyping,
         loading,
@@ -67,8 +69,6 @@ export default function ChatPage() {
         selectedLanguage,
         setInput,
         voiceError,
-        voiceInterimTranscript,
-        voiceModeEnabled,
         voiceStatus,
     } = usePatientChatSession();
     const sessionTimeLabel = formatSessionTimeLabel(selectedLanguage);
@@ -86,7 +86,7 @@ export default function ChatPage() {
 
     return (
         <div className="patient-page min-h-full px-3 py-4 text-[#17233a] sm:px-6 sm:py-6">
-            <div className="mx-auto flex min-h-full max-w-[28rem] flex-col">
+            <div className="mx-auto flex min-h-[100dvh] max-w-[28rem] flex-col">
                 <div className="rounded-[32px] border border-white/70 bg-white/88 px-4 pt-5 pb-4 shadow-[0_18px_48px_rgba(42,58,84,0.10)] ring-1 ring-[#eadfd4]/70 backdrop-blur sm:px-5">
                     <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-3">
@@ -111,6 +111,28 @@ export default function ChatPage() {
                                 </p>
                             </div>
                         </div>
+                        <button
+                            aria-label={
+                                handsFreeMode
+                                    ? "Hands-free mode is on. Tap to turn off."
+                                    : "Turn on hands-free mode"
+                            }
+                            aria-pressed={handsFreeMode}
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border shadow-[0_10px_24px_rgba(42,58,84,0.08)] transition ${
+                                handsFreeMode
+                                    ? "border-[#b6d9d2] bg-[#147465] text-white"
+                                    : "border-[#d9cbc0] bg-[#fffaf4] text-[#5b6b83] hover:bg-white"
+                            }`}
+                            onClick={handleHandsFreeToggle}
+                            title={
+                                handsFreeMode
+                                    ? "Hands-free on: voice replies will play automatically"
+                                    : "Hands-free off: dictate then review before sending"
+                            }
+                            type="button"
+                        >
+                            <HiSpeakerWave className="h-4 w-4" />
+                        </button>
                         <div
                             aria-label="Chat language"
                             className="inline-flex rounded-full border border-[#d9cbc0] bg-[#fffaf4] p-1 shadow-[0_10px_24px_rgba(42,58,84,0.08)]"
@@ -141,7 +163,7 @@ export default function ChatPage() {
                     </div>
                 </div>
 
-                <div className="mt-4 flex-1 overflow-y-auto px-1 pb-44">
+                <div className="mt-4 flex-1 px-1 pb-[260px]">
                     <div className="mx-auto w-fit rounded-full border border-[#eadfd4] bg-white/82 px-3 py-1 text-[11px] font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
                         {sessionTimeLabel}
                     </div>
@@ -275,39 +297,30 @@ export default function ChatPage() {
                 </div>
 
                 <form
-                    className="sticky bottom-24 mt-2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
+                    className="fixed bottom-[calc(94px+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
                     onSubmit={handleSend}
                 >
                     <div className="rounded-[26px] bg-[#fffaf4] p-2.5">
-                        <Button
-                            className="mx-auto mb-3 block rounded-full border-0 bg-[#30415f] px-4 py-2 text-sm font-bold text-white shadow-[0_12px_22px_rgba(48,65,95,0.22)] hover:bg-[#17233a]"
-                            onClick={handleVoiceModeToggle}
-                            type="button"
-                            variant="ghost"
-                        >
-                            {voiceModeEnabled
-                                ? "Stop Voice-to-Voice Mode"
-                                : "Start Voice-to-Voice Mode"}
-                        </Button>
-
-                        {voiceModeEnabled ? (
-                            <div className="mb-3 rounded-[20px] border border-[#b6d9d2] bg-[#e6f4f1] px-4 py-3 text-sm leading-6 text-[#147465]">
-                                Voice mode is on. Your speech sends as a message, and assistant replies play back automatically when audio is available.
-                            </div>
-                        ) : null}
-
                         <div className="flex items-end gap-3">
                             <button
                                 aria-label={
                                     voiceStatus === "listening"
                                         ? "Stop voice recording"
-                                        : "Start voice recording"
+                                        : voiceStatus === "playing"
+                                          ? "Interrupt and speak"
+                                          : "Tap to speak"
                                 }
+                                aria-pressed={voiceStatus === "listening"}
                                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border shadow-[0_12px_22px_rgba(70,96,140,0.12)] transition ${
                                     voiceStatus === "listening"
-                                        ? "border-[#efbeb5] bg-[#fff2ef] text-[#b94032]"
-                                        : "border-[#d9cbc0] bg-white text-[#30415f]"
+                                        ? "animate-pulse border-[#efbeb5] bg-[#fff2ef] text-[#b94032]"
+                                        : voiceStatus === "processing"
+                                          ? "border-[#d9cbc0] bg-[#fffaf4] text-[#8090a5]"
+                                          : voiceStatus === "playing"
+                                            ? "border-[#b6d9d2] bg-[#e6f4f1] text-[#147465]"
+                                            : "border-[#d9cbc0] bg-white text-[#30415f]"
                                 }`}
+                                disabled={voiceStatus === "unsupported" || voiceStatus === "processing"}
                                 onClick={handleMicClick}
                                 type="button"
                             >
@@ -321,7 +334,13 @@ export default function ChatPage() {
                                 <Input
                                     className="border-0 bg-transparent px-3 py-3 text-[#17233a] shadow-none placeholder:text-[#8d9bae] focus:border-0 focus:ring-0"
                                     onChange={(event) => setInput(event.target.value)}
-                                    placeholder={chatCopy.inputPlaceholder}
+                                    placeholder={
+                                        voiceStatus === "listening"
+                                            ? "Listening…"
+                                            : voiceStatus === "processing"
+                                              ? "Transcribing…"
+                                              : chatCopy.inputPlaceholder
+                                    }
                                     value={input}
                                 />
                             </div>
@@ -335,10 +354,9 @@ export default function ChatPage() {
                             </button>
                         </div>
 
-                        {voiceInterimTranscript ? (
-                            <p className="mt-3 text-sm text-[#64748b]">
-                                Listening:{" "}
-                                <span className="font-semibold text-[#17233a]">{voiceInterimTranscript}</span>
+                        {handsFreeMode ? (
+                            <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[#147465]">
+                                Hands-free on — replies will play automatically
                             </p>
                         ) : null}
                     </div>

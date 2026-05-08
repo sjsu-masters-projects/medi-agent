@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { HiOutlineBeaker, HiOutlineClipboardDocumentList, HiOutlineDocumentText, HiOutlineFolder } from "react-icons/hi2";
+import {
+    HiMiniSpeakerWave,
+    HiOutlineBeaker,
+    HiOutlineClipboardDocumentList,
+    HiOutlineDocumentText,
+    HiOutlineFolder,
+} from "react-icons/hi2";
 import { DocumentCard, PdfViewer } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
@@ -13,6 +19,7 @@ import {
     buildSuggestedDocumentQuestion,
     storePendingChatDocumentContext,
 } from "@/services/chat-bridge";
+import { playAssistantVoiceResponse } from "@/services/browser-voice";
 import { inferDocumentType, type DocumentApiRecord } from "@/services/documents";
 import { uploadDocumentToStorage } from "@/services/storage";
 import type { RootState } from "@/store/store";
@@ -117,6 +124,7 @@ export default function RecordsPage() {
     const [loading, setLoading] = useState(true);
     const [pageError, setPageError] = useState<string | null>(null);
     const [parseError, setParseError] = useState<string | null>(null);
+    const [readbackActive, setReadbackActive] = useState(false);
     const [parsingDocIds, setParsingDocIds] = useState<Set<string>>(new Set());
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploading, setUploading] = useState(false);
@@ -355,6 +363,24 @@ export default function RecordsPage() {
         }
     }
 
+    function handleReadSummary() {
+        const text = explanationText ?? selectedDocument?.aiSummary;
+        if (!text) {
+            return;
+        }
+
+        const stop = playAssistantVoiceResponse({
+            language: explanationLang,
+            onEnd: () => setReadbackActive(false),
+            onStart: () => setReadbackActive(true),
+            text,
+        });
+
+        if (!stop) {
+            setReadbackActive(false);
+        }
+    }
+
     const processingCount = documents.filter(
         (document) =>
             parsingDocIds.has(document.id)
@@ -461,21 +487,34 @@ export default function RecordsPage() {
                     <div className="rounded-3xl border border-[#b9ded6] bg-[#e7f4f1] p-4">
                         <div className="flex items-center justify-between gap-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-[#147465]">Explain this to me</p>
-                            <select
-                                className="min-h-11 rounded-xl border border-[#b9ded6] bg-white px-3 py-2 text-sm font-medium text-[#147465] outline-none focus:ring-4 focus:ring-[#147465]/15"
-                                onChange={(event) => handleLanguageChange(event.target.value as Locale)}
-                                value={explanationLang}
-                            >
-                                {SUPPORTED_LOCALES.map((locale) => (
-                                    <option key={locale} value={locale}>
-                                        {getLocaleLabel(locale)}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    aria-label="Read summary aloud"
+                                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#b9ded6] bg-white text-[#147465] transition hover:bg-[#f8fffd] disabled:cursor-not-allowed disabled:text-[#8aa39e]"
+                                    disabled={!explanationText && !selectedDocument?.aiSummary}
+                                    onClick={handleReadSummary}
+                                    type="button"
+                                >
+                                    <HiMiniSpeakerWave className="h-5 w-5" />
+                                </button>
+                                <select
+                                    className="min-h-11 rounded-xl border border-[#b9ded6] bg-white px-3 py-2 text-sm font-medium text-[#147465] outline-none focus:ring-4 focus:ring-[#147465]/15"
+                                    onChange={(event) => handleLanguageChange(event.target.value as Locale)}
+                                    value={explanationLang}
+                                >
+                                    {SUPPORTED_LOCALES.map((locale) => (
+                                        <option key={locale} value={locale}>
+                                            {getLocaleLabel(locale)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                         <p className="mt-3 text-base leading-7 text-[#30415f]">
                             {explanationLoading
                                 ? "Translating..."
+                                : readbackActive
+                                  ? `Reading in ${getLocaleLabel(explanationLang)}...`
                                 : explanationText ?? "AI summary will appear here after parsing completes."}
                         </p>
                     </div>

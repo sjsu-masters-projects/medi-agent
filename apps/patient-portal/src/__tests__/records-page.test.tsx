@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import RecordsPage from "@/app/(app)/records/page";
 import { DocumentParseStatus, DocumentType } from "@/types";
 
-const { deleteRequest, get, post, push, uploadDocumentToStorage } = vi.hoisted(() => ({
-    deleteRequest: vi.fn(),
-    get: vi.fn(),
-    post: vi.fn(),
-    push: vi.fn(),
-    uploadDocumentToStorage: vi.fn(),
-}));
+const { deleteRequest, get, playAssistantVoiceResponse, post, push, uploadDocumentToStorage } =
+    vi.hoisted(() => ({
+        deleteRequest: vi.fn(),
+        get: vi.fn(),
+        playAssistantVoiceResponse: vi.fn(() => null),
+        post: vi.fn(),
+        push: vi.fn(),
+        uploadDocumentToStorage: vi.fn(),
+    }));
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push }),
@@ -33,10 +35,16 @@ vi.mock("@/services/storage", () => ({
     uploadDocumentToStorage,
 }));
 
+vi.mock("@/services/browser-voice", () => ({
+    playAssistantVoiceResponse,
+}));
+
 describe("RecordsPage", () => {
     beforeEach(() => {
         deleteRequest.mockReset();
         get.mockReset();
+        playAssistantVoiceResponse.mockReset();
+        playAssistantVoiceResponse.mockReturnValue(null);
         post.mockReset();
         push.mockReset();
         uploadDocumentToStorage.mockReset();
@@ -159,5 +167,39 @@ describe("RecordsPage", () => {
                 { token: "access-token" },
             );
         });
+    });
+
+    it("reads the visible document summary aloud", async () => {
+        get.mockResolvedValue([
+            {
+                ai_summary: "Your lab values are stable and no urgent action is needed.",
+                created_at: "2026-04-20T12:00:00Z",
+                document_type: DocumentType.LAB_REPORT,
+                file_name: "April Lab Report.txt",
+                file_size_bytes: 1200,
+                file_url: "https://example.test/lab.txt",
+                id: "doc-1",
+                mime_type: "text/plain",
+                parse_status: DocumentParseStatus.COMPLETED,
+                parsed: true,
+                patient_id: "patient-1",
+                source_clinic: "City Health",
+                uploaded_by: "patient-1",
+                uploaded_by_role: "patient",
+                visibility: "shared",
+            },
+        ]);
+
+        render(<RecordsPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: /April Lab Report\.txt/i }));
+        fireEvent.click(screen.getByRole("button", { name: /read summary aloud/i }));
+
+        expect(playAssistantVoiceResponse).toHaveBeenCalledWith(
+            expect.objectContaining({
+                language: "en-US",
+                text: "Your lab values are stable and no urgent action is needed.",
+            }),
+        );
     });
 });

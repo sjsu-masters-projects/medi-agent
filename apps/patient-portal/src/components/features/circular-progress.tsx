@@ -19,7 +19,7 @@ export function CircularProgress({
 }: CircularProgressProps) {
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
-    const safePercent = Math.max(0, Math.min(100, percent));
+    const safePercent = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
     const dashOffset = circumference - (safePercent / 100) * circumference;
 
     return (

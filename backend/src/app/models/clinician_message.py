@@ -23,3 +23,9 @@ class ClinicianMessageRead(BaseModel):
     body: str
     is_read: bool = False
     created_at: str
+
+
+class ClinicianPatientMessageCreate(BaseModel):
+    channel: MessageChannel = MessageChannel.IN_APP
+    subject: str | None = Field(default=None, max_length=200)
+    body: str = Field(..., min_length=1, max_length=5000)

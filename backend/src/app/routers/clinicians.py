@@ -24,6 +24,7 @@ from app.db.connection import get_db
 from app.middleware.rate_limit import soap_note_rate_limiter
 from app.models.auth import CurrentUser
 from app.models.clinician import ClinicianRead, ClinicianUpdate
+from app.models.clinician_message import ClinicianMessageRead, ClinicianPatientMessageCreate
 from app.models.dashboard import (
     A2ATimelineResponse,
     AnnotationCreate,
@@ -104,6 +105,36 @@ async def get_patient_detail(
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
     return await service.get_patient_detail(user.id, patient_id)
+
+
+@router.post(
+    "/me/patients/{patient_id}/message",
+    response_model=ClinicianMessageRead,
+    summary="Send an in-app message to an assigned patient",
+)
+async def send_patient_message(
+    patient_id: UUID,
+    data: ClinicianPatientMessageCreate,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.send_patient_message(user.id, patient_id, data.model_dump())
+
+
+@router.post(
+    "/me/patients/{patient_id}/email",
+    response_model=ClinicianMessageRead,
+    summary="Record an email message to an assigned patient",
+)
+async def send_patient_email(
+    patient_id: UUID,
+    data: ClinicianPatientMessageCreate,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    payload = data.model_dump()
+    payload["channel"] = "email"
+    return await service.send_patient_message(user.id, patient_id, payload)
 
 
 @router.post(

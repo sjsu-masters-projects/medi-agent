@@ -14,6 +14,7 @@ export type {
     Obligation,
     Document,
     ChatMessage,
+    ChatAppointmentProposal,
     Notification,
     Appointment,
     CareTeamMember,
