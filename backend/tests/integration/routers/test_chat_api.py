@@ -17,6 +17,36 @@ from app.main import app
 from app.models.auth import CurrentUser
 
 
+def _make_stream_mock(output: TriageOutput):
+    """Build a TriageAgent.process_stream mock that yields events matching `output`."""
+
+    async def _mock_process_stream(_self, _agent_input):
+        intent = output.intent or "general"
+        urgency = output.urgency or "routine"
+        route = output.route or ("symptom" if intent == "symptom" else "triage")
+        yield {
+            "type": "classification",
+            "intent": intent,
+            "urgency": urgency,
+            "route": route,
+            "escalation_required": bool(output.escalation_required),
+            "classification_reason": "test mock",
+        }
+        # When route=symptom, chat.py aborts the stream before chunks arrive,
+        # so we don't need to yield a chunk here. Yielding it doesn't hurt
+        # either; chat.py simply won't consume it.
+        text = output.response_text or ""
+        if text:
+            yield {"type": "chunk", "content": text}
+        yield {
+            "type": "complete",
+            "response_text": text,
+            "fallback_used": False,
+        }
+
+    return _mock_process_stream
+
+
 @pytest.fixture
 def patient_id():
     return uuid4()
@@ -146,6 +176,12 @@ class TestChatWebSocket:
         async def _update_state(_self, patient_id, updates):
             return updates
 
+        async def _get_recent_clinician_messages(_self, patient_id, limit=20):
+            return []
+
+        async def _fetch_active_care_teams(_self, patient_id):
+            return []
+
         monkeypatch.setattr(
             "app.routers.chat.ChatService.get_or_create_conversation_state",
             _get_or_create_state,
@@ -153,6 +189,14 @@ class TestChatWebSocket:
         monkeypatch.setattr(
             "app.routers.chat.ChatService.update_conversation_state",
             _update_state,
+        )
+        monkeypatch.setattr(
+            "app.routers.chat.ChatService.get_recent_clinician_messages",
+            _get_recent_clinician_messages,
+        )
+        monkeypatch.setattr(
+            "app.services.chat_service.ChatService._fetch_active_care_teams",
+            _fetch_active_care_teams,
         )
 
     def test_rejects_websocket_when_patient_id_mismatch(self, client, override_db, monkeypatch):
@@ -176,18 +220,35 @@ class TestChatWebSocket:
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
         captured_context: dict[str, Any] = {}
 
-        async def _mock_triage_process(_self, _agent_input):
-            captured_context["patient_context"] = _agent_input.patient_context
-            return TriageOutput(
-                agent_id="triage-test",
-                status="success",
-                intent="general",
-                urgency="routine",
-                response_text="Please stay hydrated and monitor your symptoms.",
-                escalation_required=False,
-            )
+        triage_output = TriageOutput(
+            agent_id="triage-test",
+            status="success",
+            intent="general",
+            urgency="routine",
+            response_text="Please stay hydrated and monitor your symptoms.",
+            escalation_required=False,
+        )
 
-        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
+        async def _mock_process_stream(_self, agent_input):
+            captured_context["patient_context"] = agent_input.patient_context
+            yield {
+                "type": "classification",
+                "intent": "general",
+                "urgency": "routine",
+                "route": "triage",
+                "escalation_required": False,
+                "classification_reason": "test mock",
+            }
+            yield {"type": "chunk", "content": triage_output.response_text}
+            yield {
+                "type": "complete",
+                "response_text": triage_output.response_text,
+                "fallback_used": False,
+            }
+
+        monkeypatch.setattr(
+            "app.routers.chat.TriageAgent.process_stream", _mock_process_stream
+        )
 
         user_row = {
             "id": str(uuid4()),
@@ -348,17 +409,23 @@ class TestChatWebSocket:
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
-        async def _mock_triage_process(_self, _agent_input):
-            return TriageOutput(
-                agent_id="triage-test",
-                status="success",
-                intent="symptom",
-                urgency="urgent",
-                response_text="Please contact your care team today for urgent review.",
-                escalation_required=True,
-            )
+        # Intent=symptom but route forced to triage so SymptomAgent (unmocked
+        # in this test) is not invoked. The escalation flow only depends on
+        # urgency/escalation_required, not on the symptom branch.
+        triage_output = TriageOutput(
+            agent_id="triage-test",
+            status="success",
+            intent="symptom",
+            urgency="urgent",
+            response_text="Please contact your care team today for urgent review.",
+            escalation_required=True,
+            route="triage",
+        )
 
-        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
+        monkeypatch.setattr(
+            "app.routers.chat.TriageAgent.process_stream",
+            _make_stream_mock(triage_output),
+        )
 
         user_row = {
             "id": str(uuid4()),
@@ -531,16 +598,18 @@ class TestChatWebSocket:
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
+        triage_output = TriageOutput(
+            agent_id="triage-test",
+            status="success",
+            intent="symptom",
+            urgency="urgent",
+            response_text="Please share when this started.",
+            escalation_required=False,
+            route="symptom",
+        )
+
         async def _mock_triage_process(_self, _agent_input):
-            return TriageOutput(
-                agent_id="triage-test",
-                status="success",
-                intent="symptom",
-                urgency="urgent",
-                response_text="Please share when this started.",
-                escalation_required=False,
-                route="symptom",
-            )
+            return triage_output
 
         async def _mock_symptom_process(_self, _agent_input):
             return SymptomOutput(
@@ -557,6 +626,13 @@ class TestChatWebSocket:
                 flagged_for_adr=True,
             )
 
+        # Streaming path runs first (route=symptom → aborts after classification),
+        # then chat.py invokes the buffered triage_agent + symptom_agent. Both
+        # mocks are needed.
+        monkeypatch.setattr(
+            "app.routers.chat.TriageAgent.process_stream",
+            _make_stream_mock(triage_output),
+        )
         monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
         monkeypatch.setattr("app.routers.chat.SymptomAgent.process", _mock_symptom_process)
         symptom_event_id = str(uuid4())

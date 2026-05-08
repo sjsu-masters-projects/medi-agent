@@ -580,6 +580,15 @@ export interface ChatMessage {
     createdAt: string;
 }
 
+export interface ChatAppointmentProposal {
+    proposalId: string;
+    patientId: string;
+    careTeamId?: string;
+    clinicianName?: string;
+    reason?: string;
+    nextStep: string;
+}
+
 export interface Notification {
     id: string;
     patientId: string;

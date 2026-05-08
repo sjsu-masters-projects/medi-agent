@@ -17,6 +17,7 @@ from app.agents.triage.prompts import (
     build_triage_response_prompt,
 )
 from app.clients.model_router import ModelRouter, TaskType
+from app.core.observability import record_chat_fallback
 from app.models.enums import Language, coerce_locale
 from app.utils.localization import resolve_locale_resource
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 EMERGENCY_KEYWORDS = frozenset(
     {
+        # English
         "chest pain",
         "cannot breathe",
         "can't breathe",
@@ -34,9 +36,44 @@ EMERGENCY_KEYWORDS = frozenset(
         "seizure",
         "severe bleeding",
         "anaphylaxis",
+        "heart attack",
+        # Spanish
+        "dolor de pecho",
+        "no puedo respirar",
+        "falta de aire",
+        "infarto",
+        "ataque cardiaco",
+        "ataque al corazon",
+        "ataque al corazón",
+        "derrame cerebral",
+        "embolia",
+        "convulsion",
+        "convulsión",
+        "sangrado severo",
+        "anafilaxia",
+        "perdi el conocimiento",
+        "perdí el conocimiento",
+        "me desmaye",
+        "me desmayé",
+    }
+)
+MENTAL_HEALTH_EMERGENCY_KEYWORDS = frozenset(
+    {
+        # English
         "suicidal",
         "suicide",
         "kill myself",
+        "want to die",
+        "end my life",
+        "harm myself",
+        # Spanish
+        "suicidio",
+        "suicidarme",
+        "matarme",
+        "quitarme la vida",
+        "hacerme dano",
+        "hacerme daño",
+        "quiero morir",
     }
 )
 DOCUMENT_KEYWORDS = frozenset(
@@ -99,12 +136,27 @@ MEDICATION_NAME_HINTS = frozenset(
 )
 MENTAL_HEALTH_KEYWORDS = frozenset(
     {
+        # English
         "panic",
         "anxious",
         "anxiety",
         "depressed",
+        "depression",
         "hopeless",
         "overwhelmed",
+        # Spanish
+        "panico",
+        "pánico",
+        "ansioso",
+        "ansiosa",
+        "ansiedad",
+        "deprimido",
+        "deprimida",
+        "depresion",
+        "depresión",
+        "sin esperanza",
+        "abrumado",
+        "abrumada",
     }
 )
 SYMPTOM_KEYWORDS = frozenset(
@@ -151,6 +203,11 @@ TRIAGE_COPY = {
             "This may be an emergency. Please call 911 now or go to the nearest emergency "
             "department immediately. If possible, notify your care team as well."
         ),
+        "mental_health_emergency_response": (
+            "If you are in immediate danger, call 911 now. If you are thinking about hurting "
+            "yourself or feeling unsafe, call or text 988 (Suicide and Crisis Lifeline) right "
+            "away — they are available 24/7. You are not alone, and help is available."
+        ),
         "fallback_general": (
             "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
         ),
@@ -184,6 +241,11 @@ TRIAGE_COPY = {
             "This may be an emergency. Please call 911 now or go to the nearest emergency "
             "department immediately. If possible, notify your care team as well."
         ),
+        "mental_health_emergency_response": (
+            "If you are in immediate danger, call 911 now. If you are thinking about hurting "
+            "yourself or feeling unsafe, call or text 988 (Suicide and Crisis Lifeline) right "
+            "away — they are available 24/7. You are not alone, and help is available."
+        ),
         "fallback_general": (
             "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
         ),
@@ -216,6 +278,12 @@ TRIAGE_COPY = {
         "emergency_response": (
             "Esto podría ser una emergencia. Llama al 911 ahora o acude al servicio de "
             "urgencias más cercano de inmediato. Si puedes, avisa también a tu equipo clínico."
+        ),
+        "mental_health_emergency_response": (
+            "Si estás en peligro inmediato, llama al 911 ahora. Si tienes pensamientos de "
+            "hacerte daño o no te sientes a salvo, llama o envía un mensaje al 988 (Línea de "
+            "Prevención del Suicidio y Crisis) de inmediato — están disponibles 24/7. No estás "
+            "solo y hay ayuda disponible."
         ),
         "fallback_general": (
             "Gracias por el mensaje. Estoy aquí para ayudarte y puedo seguir dando seguimiento a tus síntomas."
@@ -314,7 +382,9 @@ async def generate_response(state: TriageState, router: ModelRouter) -> TriageSt
     urgency = str(state.get("urgency", "routine"))
     if urgency == "emergency":
         return _merge_response(
-            state, _emergency_response(context.language), escalation_required=True
+            state,
+            _emergency_response(context.language, intent=intent),
+            escalation_required=True,
         )
 
     response = await _generate_response_with_llm(
@@ -375,7 +445,16 @@ async def _classify_with_llm(
             temperature=0.1,
         )
     except Exception as exc:
-        logger.warning("Triage LLM classification failed; falling back to rules: %s", exc)
+        fallback_reason = categorize_llm_failure(exc)
+        record_chat_fallback(layer="L1_classification", reason=fallback_reason)
+        logger.warning(
+            "Triage LLM classification failed; falling back to rules: %s",
+            exc,
+            extra={
+                "chat_fallback_layer": "L1_classification",
+                "chat_fallback_reason": fallback_reason,
+            },
+        )
         return None
 
 
@@ -400,15 +479,41 @@ async def _generate_response_with_llm(router: ModelRouter, request: _ResponseReq
             max_tokens=512,
         )
     except Exception as exc:
-        logger.warning("Triage LLM response generation failed; using fallback: %s", exc)
+        fallback_reason = categorize_llm_failure(exc)
+        record_chat_fallback(layer="L2_response", reason=fallback_reason)
+        logger.warning(
+            "Triage LLM response generation failed; using fallback: %s",
+            exc,
+            extra={
+                "chat_fallback_layer": "L2_response",
+                "chat_fallback_reason": fallback_reason,
+            },
+        )
         return None
 
     cleaned = response.strip()
-    return cleaned or None
+    if not cleaned:
+        record_chat_fallback(layer="L2_response", reason="empty_response")
+        logger.info(
+            "Triage LLM returned empty response; using fallback",
+            extra={
+                "chat_fallback_layer": "L2_response",
+                "chat_fallback_reason": "empty_response",
+            },
+        )
+        return None
+    return cleaned
 
 
 def _classify_with_rules(context: _MessageContext) -> TriageClassificationResult:
     normalized = context.message.lower()
+    if _matches_any(normalized, MENTAL_HEALTH_EMERGENCY_KEYWORDS):
+        return TriageClassificationResult(
+            intent="mental_health",
+            urgency="emergency",
+            reason="Mental-health emergency keyword match",
+        )
+
     if _matches_any(normalized, EMERGENCY_KEYWORDS):
         return TriageClassificationResult(
             intent="symptom",
@@ -470,8 +575,30 @@ def _contains_adverse_effect_signal(text: str) -> bool:
     return _matches_any(normalized, ADVERSE_EFFECT_KEYWORDS)
 
 
-def _emergency_response(language: str) -> str:
-    return resolve_locale_resource(language, TRIAGE_COPY)["emergency_response"]
+def categorize_llm_failure(exc: BaseException) -> str:
+    """Bucket an LLM exception into a stable label for metrics/dashboards."""
+    name = type(exc).__name__
+    text = f"{name}: {exc}".lower()
+    if "credentials" in text or "permissiondenied" in name.lower() or "403" in text:
+        return "auth_error"
+    if "notfound" in name.lower() or "404" in text:
+        return "endpoint_not_found"
+    if "timeout" in name.lower() or "deadline" in text or "timed out" in text:
+        return "timeout"
+    if "429" in text or "quota" in text or "resourceexhausted" in name.lower():
+        return "quota_exceeded"
+    if "validation" in name.lower() or "json" in name.lower() or "parse" in text:
+        return "parse_error"
+    if "connection" in name.lower() or "network" in name.lower():
+        return "network_error"
+    return "unknown_error"
+
+
+def _emergency_response(language: str, *, intent: str = "symptom") -> str:
+    localized = resolve_locale_resource(language, TRIAGE_COPY)
+    if intent == "mental_health":
+        return localized["mental_health_emergency_response"]
+    return localized["emergency_response"]
 
 
 def _fallback_response(*, language: str, intent: str, urgency: str, message: str) -> str:
@@ -560,17 +687,27 @@ def _apply_safety_override(
     result: TriageClassificationResult,
     message: str,
 ) -> TriageClassificationResult:
-    if result.intent != "medication_question":
+    if result.urgency == "emergency":
         return result
 
     if not _contains_adverse_effect_signal(message):
         return result
 
-    return TriageClassificationResult(
-        intent="medication_question",
-        urgency="urgent",
-        reason="Potential medication side-effect pattern detected",
-    )
+    if result.intent == "medication_question":
+        return TriageClassificationResult(
+            intent="medication_question",
+            urgency="urgent",
+            reason="Potential medication side-effect pattern detected",
+        )
+
+    if result.urgency == "routine":
+        return TriageClassificationResult(
+            intent=result.intent,
+            urgency="urgent",
+            reason=f"{result.reason} + adverse-effect signal forced urgent",
+        )
+
+    return result
 
 
 def _matches_any(text: str, keywords: frozenset[str]) -> bool:

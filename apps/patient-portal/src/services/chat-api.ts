@@ -72,13 +72,57 @@ export interface EscalationRecommendedEvent {
     message: string;
 }
 
+export interface ClinicianMessageApi {
+    id: string;
+    clinician_id: string;
+    patient_id: string;
+    channel: "in_app" | "email";
+    subject?: string | null;
+    body: string;
+    is_read?: boolean;
+    created_at: string;
+}
+
+export interface ClinicianMessageEvent {
+    type: "clinician_message";
+    message: ClinicianMessageApi;
+}
+
+export interface AppointmentProposalApi {
+    proposal_id: string;
+    patient_id: string;
+    care_team_id?: string | null;
+    clinician_name?: string | null;
+    reason?: string | null;
+    next_step: string;
+}
+
+export interface AppointmentProposalEvent {
+    type: "appointment_proposal";
+    proposal: AppointmentProposalApi;
+}
+
+export interface AppointmentCreatedEvent {
+    type: "appointment_created";
+    appointment: {
+        id: string;
+        scheduled_at: string;
+        clinician_name?: string | null;
+        location?: string | null;
+        reason?: string | null;
+    };
+}
+
 export type ChatSocketEvent =
+    | AppointmentCreatedEvent
+    | AppointmentProposalEvent
     | AssistantChunkEvent
     | AssistantCompleteEvent
     | AssistantStartEvent
     | ChatContextLoadedEvent
     | ChatErrorEvent
     | ChatHistoryEvent
+    | ClinicianMessageEvent
     | EscalationRecommendedEvent
     | UserMessageSavedEvent
     | { type: "pong" };
@@ -93,6 +137,20 @@ export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
         language: normalizeLocale(message.language),
         patientId: message.patient_id,
         role: message.role,
+    };
+}
+
+export function mapClinicianMessageFromApi(message: ClinicianMessageApi): ChatMessage {
+    const subject = typeof message.subject === "string" && message.subject.trim()
+        ? `${message.subject.trim()}\n\n`
+        : "";
+    return {
+        content: `${subject}${message.body}`,
+        createdAt: message.created_at,
+        id: `clinician-message-${message.id}`,
+        language: normalizeLocale(undefined),
+        patientId: message.patient_id,
+        role: "system" as ChatRole,
     };
 }
 

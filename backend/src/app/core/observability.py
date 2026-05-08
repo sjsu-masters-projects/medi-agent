@@ -7,7 +7,22 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
+import sentry_sdk
+
 logger = logging.getLogger(__name__)
+
+
+def record_chat_fallback(*, layer: str, reason: str) -> None:
+    """Attach chat fallback metadata to the active Sentry scope and logs."""
+    sentry_sdk.set_tag("chat_fallback_layer", layer)
+    sentry_sdk.set_tag("chat_fallback_reason", reason)
+    logger.info(
+        "Chat fallback recorded",
+        extra={
+            "chat_fallback_layer": layer,
+            "chat_fallback_reason": reason,
+        },
+    )
 
 
 @asynccontextmanager

@@ -12,7 +12,11 @@ from app.models.clinic import (
     ClinicRead,
 )
 from app.models.clinician import ClinicianCreate, ClinicianRead, ClinicianUpdate
-from app.models.clinician_message import ClinicianMessageCreate, ClinicianMessageRead
+from app.models.clinician_message import (
+    ClinicianMessageCreate,
+    ClinicianMessageRead,
+    ClinicianPatientMessageCreate,
+)
 
 # Schemas
 from app.models.common import ErrorResponse, PaginatedResponse, SuccessResponse, TimestampMixin
@@ -168,6 +172,7 @@ __all__ = [
     # Clinician Messages
     "ClinicianMessageCreate",
     "ClinicianMessageRead",
+    "ClinicianPatientMessageCreate",
     # Dashboard (Phase 6)
     "AdherenceDataPoint",
     "AnnotationCreate",

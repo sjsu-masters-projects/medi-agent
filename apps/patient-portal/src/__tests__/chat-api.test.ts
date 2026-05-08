@@ -1,4 +1,8 @@
-import { buildChatWebSocketUrl, mapChatMessageFromApi } from "@/services/chat-api";
+import {
+    buildChatWebSocketUrl,
+    mapChatMessageFromApi,
+    mapClinicianMessageFromApi,
+} from "@/services/chat-api";
 import { Locale } from "@/types";
 import { describe, expect, it, vi } from "vitest";
 
@@ -35,6 +39,27 @@ describe("chat API helpers", () => {
         expect(url).toBe("wss://api.example.com/ws/chat/patient-1?token=abc123%3D%3D");
 
         vi.unstubAllEnvs();
+    });
+
+    it("maps clinician messages to system chat messages", () => {
+        const mapped = mapClinicianMessageFromApi({
+            body: "Please schedule labs this week.",
+            channel: "in_app",
+            clinician_id: "clinician-1",
+            created_at: "2026-04-17T10:00:00Z",
+            id: "clinician-message-1",
+            is_read: false,
+            patient_id: "patient-1",
+            subject: "Lab follow-up",
+        });
+
+        expect(mapped).toMatchObject({
+            content: "Lab follow-up\n\nPlease schedule labs this week.",
+            createdAt: "2026-04-17T10:00:00Z",
+            id: "clinician-message-clinician-message-1",
+            patientId: "patient-1",
+            role: "system",
+        });
     });
 
     it("adds document context and session parameters to websocket URLs", () => {

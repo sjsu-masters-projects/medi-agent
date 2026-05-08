@@ -409,6 +409,24 @@
 - [ ] Add conditional multi-worker safety for retry processing as defense in depth if multiple worker-enabled instances run (DB claim/update locking or Redis distributed lock)
 - [ ] Add observability for A2A retry worker: dashboards/alerts for `retrying` and `dead_letter` counts, backlog age, and worker cycle failures
 
+### 5.10 Chat Audit Follow-ups (see `.agent/specs/chat-scenario-matrix.md`)
+
+- [x] Build comprehensive scenario matrix (happy/failure/edge) with code citations — `.agent/specs/chat-scenario-matrix.md`
+- [x] Document expected user-visible behavior for AI-call failure modes (3 fallback layers, 15 failure cases)
+- [x] Map routing for non-clinical / medication / urgent / document-context prompts
+- [x] G1 — Distinct outer-fallback wording + structured `chat_fallback_layer` / `chat_fallback_reason` log fields, with `categorize_llm_failure` bucketing (auth/timeout/quota/parse/network/unknown)
+- [x] G2 — Spanish emergency keywords (dolor de pecho, no puedo respirar, infarto, …) + Spanish mental-health keywords (ansioso, deprimido, …) so rule fallback is bilingual
+- [x] G3 — Isolate `DrugKnowledgeService` failures from triage so RAG outage doesn't collapse the turn to L3 outer fallback
+- [x] G6 — Self-harm phrases route to `mental_health/emergency` with a 988+911 response template (instead of generic 911 only)
+- [x] G8 — `_apply_safety_override` now never downgrades emergency and broadens to non-medication intents on adverse-effect signal
+- [x] G9 — Sanitize `validation_error` user message; raw Pydantic text only goes to logs
+- [x] Backend tests: 9 new cases in `tests/unit/agents/test_triage_safety_overrides.py` + golden-set extended with bilingual + G6 cases
+- [ ] G7 — Frontend WS auto-reconnect with exponential backoff, preserve voice mode across transient closes (next PR)
+- [ ] Wire `chat_fallback_layer` log fields into a counter sink (Sentry tag / Prometheus / OTel) — currently structured-log-only
+- [ ] Manual end-to-end portal testing of H1–H6 (happy paths) once ADC is verified in CI/staging
+- [ ] UI overlap audit on chat page (typing indicator, timestamps, language label, mobile ergonomics) — needs running dev server walkthrough
+- [ ] Forced model-failure manual test (kill ADC, verify graceful UX with new outer-fallback wording)
+
 ---
 
 ## Phase 6: Clinician Dashboard (Weeks 19–22)

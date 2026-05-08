@@ -106,17 +106,14 @@ async def generate_speech_async(
     """Async convert text to speech. Returns audio bytes."""
     client = get_async_deepgram_client()
 
-    # Deepgram async returns an async byte stream, so collect chunks for callers that need
-    # a single playable payload.
-    response = await client.speak.v1.audio.generate(
+    # Deepgram async returns an async generator of audio bytes; iterate directly
+    # (no `await` — the generator itself is not awaitable in SDK 6.x).
+    audio_chunks: list[bytes] = []
+    async for chunk in client.speak.v1.audio.generate(
         text=text,
         model=model,
         encoding=encoding,
-    )
-
-    # Collect all audio chunks
-    audio_chunks = []
-    async for chunk in response:
+    ):
         audio_chunks.append(chunk)
 
     return b"".join(audio_chunks)

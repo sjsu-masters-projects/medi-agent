@@ -287,6 +287,63 @@ class TestGetPatientDetail:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+
+class TestClinicianPatientMessages:
+    def test_send_patient_message(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        message_id = uuid4()
+        clinician_id = uuid4()
+        override_service.send_patient_message = AsyncMock(
+            return_value={
+                "id": str(message_id),
+                "clinician_id": str(clinician_id),
+                "patient_id": str(patient_id),
+                "channel": "in_app",
+                "subject": "Follow-up",
+                "body": "Please bring your medication list.",
+                "is_read": False,
+                "created_at": "2026-05-07T10:00:00Z",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/patients/{patient_id}/message",
+            json={"subject": "Follow-up", "body": "Please bring your medication list."},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["body"] == "Please bring your medication list."
+        override_service.send_patient_message.assert_awaited_once()
+
+    def test_send_patient_email_forces_email_channel(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        override_service.send_patient_message = AsyncMock(
+            return_value={
+                "id": str(uuid4()),
+                "clinician_id": str(uuid4()),
+                "patient_id": str(patient_id),
+                "channel": "email",
+                "subject": "Lab follow-up",
+                "body": "Please schedule labs this week.",
+                "is_read": False,
+                "created_at": "2026-05-07T10:00:00Z",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/patients/{patient_id}/email",
+            json={
+                "channel": "in_app",
+                "subject": "Lab follow-up",
+                "body": "Please schedule labs this week.",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["channel"] == "email"
+        _, _, payload = override_service.send_patient_message.await_args.args
+        assert payload["channel"] == "email"
+
     def test_patient_not_found(self, client, override_auth, override_db, mock_supabase_db):
         """Handle patient not found after authorization check."""
         patient_id = uuid4()
