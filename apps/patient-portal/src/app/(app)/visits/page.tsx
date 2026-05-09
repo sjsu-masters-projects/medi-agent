@@ -21,7 +21,7 @@ export default function VisitsPage() {
                     </h2>
                     <p className="mt-2 text-base leading-7 text-[#dcefeb]">
                         Your clinician will propose appointments based on your follow-up
-                        instructions. You'll be able to confirm and track them here.
+                        instructions. You&apos;ll be able to confirm and track them here.
                     </p>
                 </Card>
 

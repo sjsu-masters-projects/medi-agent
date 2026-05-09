@@ -47,7 +47,6 @@ export function usePatientProfile(): PatientProfile | null {
 
     useEffect(() => {
         if (!accessToken) {
-            setProfile(null);
             return;
         }
 
