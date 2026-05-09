@@ -122,7 +122,11 @@ class DocumentExtractionImportService:
         )
         condition_ids = self._create_conditions(patient_id, effective_extraction)
         allergy_ids = self._create_allergies(patient_id, effective_extraction)
-        obligation_ids = await self._create_obligations(patient_id, effective_extraction)
+        obligation_ids = await self._create_obligations(
+            patient_id,
+            document_id,
+            effective_extraction,
+        )
 
         self.document_service.update_parse_result(
             document_id=document_id,
@@ -229,6 +233,7 @@ class DocumentExtractionImportService:
     async def _create_obligations(
         self,
         patient_id: UUID,
+        document_id: UUID,
         extraction: DocumentExtractionResult,
     ) -> list[str]:
         created_ids: list[str] = []

@@ -78,7 +78,15 @@ async def test_full_ingestion_pipeline():
     assert result["medications_created"] == 1
     assert result["obligations_created"] == 1
     service._med_service.create_medication.assert_awaited()
-    service._obligation_service.create_obligation.assert_awaited()
+    service._obligation_service.create_obligation.assert_awaited_once_with(
+        PATIENT_ID,
+        {
+            "description": "Walk daily",
+            "frequency": "daily",
+            "obligation_type": "exercise",
+            "source_document_id": str(DOCUMENT_ID),
+        },
+    )
     assert db.table("documents").update.call_count >= 2
 
 
