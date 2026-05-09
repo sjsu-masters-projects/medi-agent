@@ -32,7 +32,7 @@ def mock_supabase_db():
     db.table.return_value = table
 
     # Make all query methods chainable
-    for method in ["select", "eq", "single", "insert", "order", "delete"]:
+    for method in ["select", "eq", "single", "insert", "order", "delete", "in_"]:
         getattr(table, method).return_value = table
 
     # Mock storage
@@ -312,6 +312,8 @@ class TestDeleteDocument:
         self, client, override_auth, override_db, mock_supabase_db, patient_id
     ):
         document_id = uuid4()
+        medication_id = uuid4()
+        obligation_id = uuid4()
         file_path = f"{patient_id}/lab-results.pdf"
         document_data = {
             "id": str(document_id),
@@ -335,15 +337,27 @@ class TestDeleteDocument:
         }
         mock_supabase_db.table().execute.side_effect = [
             MagicMock(data=document_data),
+            MagicMock(data=[{"id": str(medication_id)}]),
+            MagicMock(data=[{"id": str(obligation_id)}]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
             MagicMock(data=[document_data]),
         ]
 
         response = client.delete(f"/api/v1/documents/{document_id}")
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
+        mock_supabase_db.table.assert_any_call("adherence_logs")
+        mock_supabase_db.table.assert_any_call("reminder_schedules")
+        mock_supabase_db.table.assert_any_call("medications")
+        mock_supabase_db.table.assert_any_call("obligations")
         mock_supabase_db.storage.from_.assert_called_with("documents")
         mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
-        mock_supabase_db.table().delete.assert_called_once()
+        assert mock_supabase_db.table().delete.call_count == 7
 
     def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
         document_id = uuid4()

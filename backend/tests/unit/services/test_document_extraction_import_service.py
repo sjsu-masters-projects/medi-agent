@@ -102,6 +102,7 @@ async def test_import_demo_extraction_creates_document_derived_feed_records() ->
         db.store["obligations"][0]["description"]
         == "Review discharge instructions from Discharge Summary"
     )
+    assert db.store["obligations"][0]["source_document_id"] == result["document"]["id"]
     assert db.store["documents_updates"][0]["parse_status"] == "completed"
 
 
@@ -141,3 +142,4 @@ async def test_import_custom_extraction_uses_project_owned_schema() -> None:
     assert result["document"]["source_clinic"] == "City Health"
     assert result["summary"] == "Patient should hydrate and check blood pressure daily."
     assert db.store["obligations"][0]["frequency"] == "daily"
+    assert db.store["obligations"][0]["source_document_id"] == result["document"]["id"]

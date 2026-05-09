@@ -234,6 +234,7 @@ class DocumentExtractionImportService:
                 "obligation_type": obligation.obligation_type.value,
                 "description": obligation.description,
                 "frequency": obligation.frequency,
+                "source_document_id": str(document_id),
             }
             created = await self.obligation_service.create_obligation(patient_id, payload)
             created_ids.append(str(created["id"]))
