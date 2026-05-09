@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, type ChangeEvent } from "react";
 import Link from "next/link";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
@@ -54,13 +55,14 @@ export default function TodayPage() {
         documentImportError,
         documentImporting,
         error,
-        importDemoDocument,
+        importDocumentFile,
         loading,
         markComplete,
         refreshFeed,
         summary,
         tasks,
     } = useFeedData();
+    const documentInputRef = useRef<HTMLInputElement | null>(null);
     const profile = usePatientProfile();
     const displayName = profile?.firstName ?? "";
     const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
@@ -69,6 +71,16 @@ export default function TodayPage() {
         : 0;
     const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
     const hasScheduleGaps = tasks.some((task) => task.requiresScheduleConfiguration);
+
+    function handleDocumentFileChange(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        void importDocumentFile(file);
+        event.target.value = "";
+    }
 
     if (loading && tasks.length === 0) {
         return (
@@ -136,17 +148,29 @@ export default function TodayPage() {
                     <div>
                         <p className="text-base font-black text-[#17233a]">Clinical document</p>
                         <p className="text-sm font-semibold text-[#48627c]">
-                            {documentImporting ? "Importing..." : "Demo extraction"}
+                            {documentImporting ? "Importing..." : "Upload PDF or image"}
                         </p>
                     </div>
-                    <Button disabled={documentImporting} onClick={importDemoDocument} size="sm" variant="secondary">
+                    <Button
+                        disabled={documentImporting}
+                        onClick={() => documentInputRef.current?.click()}
+                        size="sm"
+                        variant="secondary"
+                    >
                         {documentImporting ? "Importing" : "Import"}
                     </Button>
+                    <input
+                        accept="application/pdf,image/*,text/plain,text/csv,application/json"
+                        className="hidden"
+                        onChange={handleDocumentFileChange}
+                        ref={documentInputRef}
+                        type="file"
+                    />
                 </Card>
                 {documentImportError ? (
                     <ErrorState
                         description={documentImportError}
-                        onRetry={() => void importDemoDocument()}
+                        onRetry={() => documentInputRef.current?.click()}
                         title="Document import failed"
                     />
                 ) : null}

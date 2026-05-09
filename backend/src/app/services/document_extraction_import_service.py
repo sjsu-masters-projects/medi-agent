@@ -89,6 +89,7 @@ class DocumentExtractionImportService:
         patient_id: UUID,
         uploaded_by: UUID,
         uploaded_by_role: str,
+        document_id: UUID | None = None,
         extraction: DocumentExtractionResult | None = None,
     ) -> dict[str, Any]:
         effective_extraction = extraction or DEMO_DOCUMENT_EXTRACTION
@@ -96,20 +97,23 @@ class DocumentExtractionImportService:
         serialized_extraction = effective_extraction.model_dump(mode="json")
         summary = effective_extraction.summary or self._summary(effective_extraction)
 
-        document = await self.document_service.create_document(
-            patient_id=patient_id,
-            uploaded_by=uploaded_by,
-            uploaded_by_role=uploaded_by_role,
-            file_name=self._file_name(document_payload.title),
-            file_path="",
-            file_size_bytes=len(json.dumps(serialized_extraction).encode("utf-8")),
-            mime_type="application/json",
-            document_type=document_payload.document_type.value,
-            source_clinic=document_payload.source_name or "Document extraction demo",
-            notes=document_payload.notes,
-            sign_file_url=False,
-        )
-        document_id = UUID(str(document["id"]))
+        if document_id is None:
+            document = await self.document_service.create_document(
+                patient_id=patient_id,
+                uploaded_by=uploaded_by,
+                uploaded_by_role=uploaded_by_role,
+                file_name=self._file_name(document_payload.title),
+                file_path="",
+                file_size_bytes=len(json.dumps(serialized_extraction).encode("utf-8")),
+                mime_type="application/json",
+                document_type=document_payload.document_type.value,
+                source_clinic=document_payload.source_name or "Document extraction demo",
+                notes=document_payload.notes,
+                sign_file_url=False,
+            )
+            document_id = UUID(str(document["id"]))
+        else:
+            document = await self.document_service.get_document(document_id, patient_id)
 
         medication_ids = await self._create_medications(
             patient_id,

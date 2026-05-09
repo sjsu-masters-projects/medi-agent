@@ -8,6 +8,8 @@ this shape.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 from app.models.enums import DocumentType, MedicationRoute, ObligationType
@@ -72,4 +74,5 @@ class DocumentExtractionResult(BaseModel):
 class DocumentExtractionImportRequest(BaseModel):
     """Optional extraction payload for local/demo import flows."""
 
+    document_id: UUID | None = None
     extraction: DocumentExtractionResult | None = None

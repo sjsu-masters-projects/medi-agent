@@ -20,8 +20,10 @@ class FakeTable:
     def __init__(self, name: str, store: dict[str, list[dict[str, Any]]]) -> None:
         self.name = name
         self.store = store
+        self.filters: list[tuple[str, str]] = []
         self.pending_insert: dict[str, Any] | None = None
         self.pending_update: dict[str, Any] | None = None
+        self.return_single = False
 
     def insert(self, payload: dict[str, Any]) -> FakeTable:
         self.pending_insert = payload
@@ -31,7 +33,15 @@ class FakeTable:
         self.pending_update = payload
         return self
 
-    def eq(self, *_args: Any) -> FakeTable:
+    def select(self, *_args: Any) -> FakeTable:
+        return self
+
+    def single(self) -> FakeTable:
+        self.return_single = True
+        return self
+
+    def eq(self, column: str, value: Any) -> FakeTable:
+        self.filters.append((column, str(value)))
         return self
 
     def execute(self) -> FakeResult:
@@ -52,7 +62,13 @@ class FakeTable:
             self.pending_update = None
             return FakeResult([payload])
 
-        return FakeResult(self.store.get(self.name, []))
+        rows = self.store.get(self.name, [])
+        for column, value in self.filters:
+            rows = [row for row in rows if str(row.get(column)) == value]
+
+        if self.return_single:
+            return FakeResult(rows[0] if rows else None)
+        return FakeResult(rows)
 
 
 class FakeStorageBucket:
@@ -143,3 +159,46 @@ async def test_import_custom_extraction_uses_project_owned_schema() -> None:
     assert result["summary"] == "Patient should hydrate and check blood pressure daily."
     assert db.store["obligations"][0]["frequency"] == "daily"
     assert db.store["obligations"][0]["source_document_id"] == result["document"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_import_extraction_can_attach_to_existing_uploaded_document() -> None:
+    db = FakeSupabase()
+    document_id = uuid4()
+    db.store["documents"] = [
+        {
+            "id": str(document_id),
+            "patient_id": str(PATIENT_ID),
+            "uploaded_by": str(PATIENT_ID),
+            "uploaded_by_role": "patient",
+            "file_name": "vatsal-discharge-summary.pdf",
+            "file_url": "https://storage.example.test/document.pdf",
+            "file_path": f"{PATIENT_ID}/vatsal-discharge-summary.pdf",
+            "file_size_bytes": 1200,
+            "mime_type": "application/pdf",
+            "document_type": "discharge_summary",
+            "source_clinic": "Patient uploaded document",
+            "parsed": False,
+            "ai_summary": None,
+            "parse_status": "pending",
+            "parse_error": None,
+            "parse_attempts": 0,
+            "visibility": "all_providers",
+            "created_at": "2026-05-01T00:00:00Z",
+        }
+    ]
+    service = DocumentExtractionImportService(db)  # type: ignore[arg-type]
+
+    result = await service.import_extraction(
+        patient_id=PATIENT_ID,
+        uploaded_by=PATIENT_ID,
+        uploaded_by_role="patient",
+        document_id=document_id,
+    )
+
+    assert result["document"]["id"] == str(document_id)
+    assert result["document"]["file_name"] == "vatsal-discharge-summary.pdf"
+    assert len(db.store["documents"]) == 1
+    assert db.store["documents_updates"][0]["parse_status"] == "completed"
+    assert all(row["source_document_id"] == str(document_id) for row in db.store["medications"])
+    assert all(row["source_document_id"] == str(document_id) for row in db.store["obligations"])

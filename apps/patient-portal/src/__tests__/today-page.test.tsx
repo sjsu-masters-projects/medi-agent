@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
-const { importDemoDocument, markComplete, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
-    importDemoDocument: vi.fn(),
+const { importDocumentFile, markComplete, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
+    importDocumentFile: vi.fn(),
     markComplete: vi.fn(),
     refreshFeed: vi.fn(),
     useFeedData: vi.fn(),
@@ -32,7 +32,7 @@ function baseFeedData() {
         documentImportError: null,
         documentImporting: false,
         error: null,
-        importDemoDocument,
+        importDocumentFile,
         loading: false,
         markComplete,
         refreshFeed,
@@ -46,7 +46,7 @@ function baseFeedData() {
 
 describe("TodayPage", () => {
     beforeEach(() => {
-        importDemoDocument.mockReset();
+        importDocumentFile.mockReset();
         markComplete.mockReset();
         refreshFeed.mockReset();
         useFeedData.mockReset();
@@ -135,13 +135,31 @@ describe("TodayPage", () => {
         expect(screen.getByText(/^Set reminder time$/i)).toBeInTheDocument();
     });
 
-    it("lets patients import a demo clinical document extraction into the real feed pipeline", () => {
+    it("opens the file picker when patients import a clinical document", () => {
+        const inputClick = vi
+            .spyOn(HTMLInputElement.prototype, "click")
+            .mockImplementation(() => {});
         mockFeedData();
 
         render(<TodayPage />);
 
         fireEvent.click(screen.getByRole("button", { name: /^Import$/i }));
 
-        expect(importDemoDocument).toHaveBeenCalledOnce();
+        expect(inputClick).toHaveBeenCalledOnce();
+        inputClick.mockRestore();
+    });
+
+    it("imports the selected clinical document file", () => {
+        mockFeedData();
+
+        const { container } = render(<TodayPage />);
+        const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+        const file = new File(["test"], "vatsal-discharge-summary.pdf", {
+            type: "application/pdf",
+        });
+
+        fireEvent.change(input!, { target: { files: [file] } });
+
+        expect(importDocumentFile).toHaveBeenCalledWith(file);
     });
 });
