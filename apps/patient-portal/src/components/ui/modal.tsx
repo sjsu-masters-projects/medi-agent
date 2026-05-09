@@ -15,9 +15,9 @@ export function Modal({ children, onClose, open, title }: ModalProps) {
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-[#17233a]/45 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-60 flex flex-col justify-end bg-[#17233a]/45 backdrop-blur-sm" onClick={onClose}>
             <div
-                className="mx-auto max-h-[88vh] w-full max-w-[480px] overflow-y-auto rounded-t-[34px] border border-white/70 bg-[#fffaf4] p-6 pb-10 shadow-[0_-24px_80px_rgba(23,35,58,0.20)]"
+                className="mx-auto max-h-[88vh] w-full max-w-[480px] overflow-y-auto rounded-t-[34px] border border-white/70 bg-[#fffaf4] p-6 pb-32 shadow-[0_-24px_80px_rgba(23,35,58,0.20)]"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-center justify-between">
