@@ -136,7 +136,7 @@ export function useFeedData() {
         }
 
         api.get<ApiAdherenceStats>("/api/v1/adherence/stats", {
-            token: accessToken ?? undefined,
+            token: accessToken,
         })
             .then((response) => setAdherenceStats(mapAdherenceStats(response)))
             .catch(() => setAdherenceStats(emptyAdherenceStats));
