@@ -10,9 +10,10 @@ from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException
 from starlette import status
 
+from app.clients.deepgram_client import transcribe_audio_bytes_async
 from app.config import settings
 from app.core.exceptions import ValidationError
-from app.models.enums import Language
+from app.models.enums import Language, coerce_locale
 from app.routers.chat import _authenticate_ws_patient
 from app.services.voice_service import VoiceService, VoiceStreamTranscript
 
@@ -44,7 +45,7 @@ async def voice_websocket_endpoint(
         }
     )
 
-    stream: Any | None = None
+    stream_active = False
     stream_audio_chunks: list[bytes] = []
     stream_language: object = Language.EN
     stream_mime_type = "audio/webm"
@@ -65,7 +66,7 @@ async def voice_websocket_endpoint(
                 continue
 
             if event_type == "audio_start":
-                if stream is not None:
+                if stream_active:
                     await _send_voice_error(
                         websocket,
                         code="voice_stream_active",
@@ -75,23 +76,16 @@ async def voice_websocket_endpoint(
                 stream_language = payload.get("language", Language.EN)
                 stream_mime_type = str(payload.get("mime_type") or "audio/webm")
                 stream_audio_chunks = []
-                stream = service.create_streaming_transcription(language=stream_language)
-                try:
-                    await stream.__aenter__()
-                except Exception as exc:
-                    logger.warning("Voice streaming STT failed to start: %s", exc)
-                    stream = None
-                    await _send_voice_error(
-                        websocket,
-                        code="voice_processing_failed",
-                        message="Voice streaming is unavailable. Please try text chat.",
-                    )
-                    continue
+                stream_active = True
+                # Note: we deliberately skip Deepgram live streaming. Browser
+                # MediaRecorder produces WebM-Opus fragments that the live API
+                # can't decode (subsequent chunks lack the container header).
+                # Buffering and batch-transcribing at audio_stop is reliable.
                 await websocket.send_json({"type": "audio_stream_started"})
                 continue
 
             if event_type == "audio_chunk":
-                if stream is None:
+                if not stream_active:
                     await _send_voice_error(
                         websocket,
                         code="voice_stream_inactive",
@@ -104,20 +98,12 @@ async def voice_websocket_endpoint(
                         mime_type=stream_mime_type,
                     )
                     stream_audio_chunks.append(chunk)
-                    await _emit_stream_transcripts(websocket, await stream.send_audio(chunk))
                 except ValidationError as exc:
                     await _send_voice_error(websocket, code="validation_error", message=exc.message)
-                except Exception as exc:
-                    logger.warning("Voice streaming STT chunk failed: %s", exc)
-                    await _send_voice_error(
-                        websocket,
-                        code="voice_processing_failed",
-                        message="Voice processing failed. Please try again or use text chat.",
-                    )
                 continue
 
             if event_type == "audio_stop":
-                if stream is None:
+                if not stream_active:
                     await _send_voice_error(
                         websocket,
                         code="voice_stream_inactive",
@@ -125,27 +111,61 @@ async def voice_websocket_endpoint(
                     )
                     continue
                 try:
-                    await _emit_stream_transcripts(websocket, await stream.finish())
                     audio = b"".join(stream_audio_chunks)
+                    logger.info(
+                        "Voice audio_stop: chunks=%d, audio_bytes=%d, mime=%s",
+                        len(stream_audio_chunks),
+                        len(audio),
+                        stream_mime_type,
+                    )
+
                     if audio:
-                        stored = await service.persist_audio(
-                            patient_id=patient_id,
-                            audio=audio,
-                            mime_type=stream_mime_type,
-                            purpose="user",
-                        )
-                        await websocket.send_json(
-                            {
-                                "type": "audio_stream_complete",
-                                "audio_url": stored.path,
-                                "signed_url": stored.signed_url,
-                            }
-                        )
+                        try:
+                            locale = coerce_locale(stream_language)
+                            transcript_text = (
+                                await transcribe_audio_bytes_async(
+                                    audio,
+                                    model=settings.deepgram_stt_model,
+                                    language=locale.value,
+                                    smart_format=True,
+                                )
+                            ).strip()
+                            logger.info("Voice batch transcribe: %r", transcript_text or "<empty>")
+                            if transcript_text:
+                                await websocket.send_json(
+                                    {
+                                        "type": "transcript_final",
+                                        "transcript": transcript_text,
+                                        "language": locale.value,
+                                        "model": settings.deepgram_stt_model,
+                                    }
+                                )
+                        except Exception as exc:
+                            logger.warning(
+                                "Voice batch transcription failed: %s", exc, exc_info=True
+                            )
+
+                        try:
+                            stored = await service.persist_audio(
+                                patient_id=patient_id,
+                                audio=audio,
+                                mime_type=stream_mime_type,
+                                purpose="user",
+                            )
+                            await websocket.send_json(
+                                {
+                                    "type": "audio_stream_complete",
+                                    "audio_url": stored.path,
+                                    "signed_url": stored.signed_url,
+                                }
+                            )
+                        except Exception as exc:
+                            logger.warning("Voice audio persistence failed: %s", exc)
+                            await websocket.send_json({"type": "audio_stream_complete"})
                     else:
                         await websocket.send_json({"type": "audio_stream_complete"})
                 finally:
-                    await stream.__aexit__(None, None, None)
-                    stream = None
+                    stream_active = False
                     stream_audio_chunks = []
                 continue
 
@@ -160,9 +180,6 @@ async def voice_websocket_endpoint(
             )
     except WebSocketDisconnect:
         logger.info("Voice websocket disconnected")
-    finally:
-        if stream is not None:
-            await stream.__aexit__(None, None, None)
 
 
 async def _receive_voice_payload(websocket: WebSocket) -> dict[str, Any] | None:

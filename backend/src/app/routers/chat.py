@@ -14,8 +14,10 @@ from supabase import Client
 
 from app.agents.symptom import SymptomAgent, SymptomInput
 from app.agents.triage import TriageAgent, TriageInput
+from app.agents.triage.graph import categorize_llm_failure
 from app.config import settings
-from app.core.exceptions import AgentError, AuthorizationError, ValidationError
+from app.core.exceptions import AuthorizationError, ValidationError
+from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
 from app.db.connection import get_db
 from app.models import ChatMessage, ChatMessageCreate
@@ -96,6 +98,37 @@ def _conversation_state_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "last_urgency": str(record.get("last_urgency") or "routine"),
         "last_route": str(record.get("last_route") or "triage"),
         "summary": str(record.get("summary") or ""),
+    }
+
+
+def _build_appointment_proposal(
+    *,
+    patient_id: UUID,
+    message: str,
+    patient_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    care_teams = [item for item in patient_context.get("care_teams", []) if isinstance(item, dict)]
+    if not care_teams:
+        return None
+
+    care_team = care_teams[0]
+    raw_clinician = care_team.get("clinicians")
+    clinician: dict[str, Any] = raw_clinician if isinstance(raw_clinician, dict) else {}
+    clinician_name = " ".join(
+        part
+        for part in [
+            str(clinician.get("first_name") or "").strip(),
+            str(clinician.get("last_name") or "").strip(),
+        ]
+        if part
+    )
+    return {
+        "proposal_id": f"chat-schedule:{patient_id}",
+        "patient_id": str(patient_id),
+        "care_team_id": care_team.get("id"),
+        "clinician_name": clinician_name or None,
+        "reason": message[:240],
+        "next_step": "Confirm a date and time with your clinic before this becomes an appointment.",
     }
 
 
@@ -292,6 +325,9 @@ async def chat_websocket_endpoint(
         history = await service.get_history(str(patient_id), limit=50)
         conversation_history = [_serialize_chat_message(item) for item in history]
         await websocket.send_json({"type": "chat_history", "messages": conversation_history})
+        clinician_messages = await service.get_recent_clinician_messages(str(patient_id))
+        for message in clinician_messages:
+            await websocket.send_json({"type": "clinician_message", "message": message})
 
         context_document_id = _extract_document_context_id(websocket)
         chat_context = await service.get_context(
@@ -381,18 +417,30 @@ async def chat_websocket_endpoint(
                 continue
 
             try:
+                raw_content = str(payload.get("content", ""))
+                if not raw_content.strip():
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "code": "validation_error",
+                            "message": "Message content is required.",
+                        }
+                    )
+                    continue
+
                 incoming = ChatMessageCreate(
-                    content=str(payload.get("content", "")),
+                    content=raw_content,
                     role=ChatRole.USER,
                     language=payload.get("language", Language.EN),
                     audio_url=payload.get("audio_url"),
                 )
             except Exception as exc:
+                logger.info("Rejected user_message payload: %s", exc)
                 await websocket.send_json(
                     {
                         "type": "error",
                         "code": "validation_error",
-                        "message": str(exc),
+                        "message": "Message could not be processed. Please check the content and try again.",
                     }
                 )
                 continue
@@ -405,6 +453,7 @@ async def chat_websocket_endpoint(
             conversation_history.append(user_payload)
             await websocket.send_json({"type": "user_message_saved", "message": user_payload})
 
+            # Drug knowledge is best-effort; failures must NOT collapse the turn.
             try:
                 drug_knowledge_context = await drug_knowledge_service.retrieve_for_patient_message(
                     message=incoming.content,
@@ -415,32 +464,90 @@ async def chat_websocket_endpoint(
                         **patient_context,
                         "drug_knowledge": drug_knowledge_context,
                     }
-
-                triage_result = await triage_agent(
-                    TriageInput(
-                        user_id=current_user.id,
-                        patient_id=patient_id,
-                        session_id=session_id,
-                        message=incoming.content,
-                        language=incoming.language,
-                        history=conversation_history[-12:],
-                        patient_context=patient_context,
-                        document_context=document_context,
-                        conversation_state=conversation_state,
-                    )
-                )
-                if triage_result.status != "success":
-                    raise AgentError("Triage returned non-success status")
-                assistant_content = str(triage_result.response_text or "").strip()
-                assistant_intent = str(triage_result.intent or "general")
-                assistant_urgency = str(triage_result.urgency or "routine")
-                escalation_required = bool(triage_result.escalation_required)
-                route = str(triage_result.route or "triage")
             except Exception as exc:
-                logger.warning("Triage processing failed, using deterministic fallback: %s", exc)
+                fallback_reason = categorize_llm_failure(exc)
+                record_chat_fallback(layer="drug_knowledge", reason=fallback_reason)
+                logger.warning(
+                    "Drug knowledge retrieval failed; continuing without RAG context: %s",
+                    exc,
+                    extra={
+                        "chat_fallback_layer": "drug_knowledge",
+                        "chat_fallback_reason": fallback_reason,
+                    },
+                )
+
+            triage_input = TriageInput(
+                user_id=current_user.id,
+                patient_id=patient_id,
+                session_id=session_id,
+                message=incoming.content,
+                language=incoming.language,
+                history=conversation_history[-12:],
+                patient_context=patient_context,
+                document_context=document_context,
+                conversation_state=conversation_state,
+            )
+
+            assistant_content = ""
+            assistant_intent = "general"
+            assistant_urgency = "routine"
+            escalation_required = False
+            route = "triage"
+            assistant_start_sent = False
+            streamed_response = False
+            outer_fallback = False
+
+            try:
+                stream_iter = triage_agent.process_stream(triage_input)
+                async for event in stream_iter:
+                    ev_type = event.get("type")
+                    if ev_type == "classification":
+                        assistant_intent = str(event.get("intent", "general"))
+                        assistant_urgency = str(event.get("urgency", "routine"))
+                        route = str(event.get("route", "triage"))
+                        escalation_required = bool(event.get("escalation_required", False))
+
+                        await websocket.send_json(
+                            {
+                                "type": "assistant_start",
+                                "intent": assistant_intent,
+                                "urgency": assistant_urgency,
+                            }
+                        )
+                        assistant_start_sent = True
+
+                        # Symptom path needs the SymptomAgent response, not the
+                        # triage response. Abort the LLM stream and fall back to
+                        # buffered triage + symptom orchestration below.
+                        if route == "symptom":
+                            await stream_iter.aclose()
+                            break
+                    elif ev_type == "chunk":
+                        chunk_text = str(event.get("content", ""))
+                        if not chunk_text:
+                            continue
+                        await websocket.send_json(
+                            {"type": "assistant_chunk", "content": chunk_text}
+                        )
+                        streamed_response = True
+                    elif ev_type == "complete":
+                        assistant_content = str(event.get("response_text", "")).strip()
+            except Exception as exc:
+                fallback_reason = categorize_llm_failure(exc)
+                record_chat_fallback(layer="L3_outer", reason=fallback_reason)
+                logger.warning(
+                    "Triage processing failed, using outer deterministic fallback: %s",
+                    exc,
+                    extra={
+                        "chat_fallback_layer": "L3_outer",
+                        "chat_fallback_reason": fallback_reason,
+                    },
+                )
+                outer_fallback = True
                 assistant_content = (
-                    "I have recorded your message. Please continue monitoring your symptoms and "
-                    "contact your care team if anything worsens."
+                    "I'm having trouble reaching my care assistant right now. Your message is "
+                    "saved. Please try again in a moment, and contact your care team directly "
+                    "if this is urgent."
                 )
                 assistant_intent = "general"
                 assistant_urgency = "routine"
@@ -450,6 +557,24 @@ async def chat_websocket_endpoint(
             if route == "symptom":
                 delegation_events: list[dict[str, Any]] = []
                 saved_report: dict[str, Any] | None = None
+                # Buffered triage response (we aborted the stream after
+                # classification). Symptom agent may override below.
+                if not assistant_content and not outer_fallback:
+                    try:
+                        triage_result = await triage_agent(triage_input)
+                        if triage_result.status == "success":
+                            assistant_content = str(triage_result.response_text or "").strip()
+                    except Exception as exc:
+                        fallback_reason = categorize_llm_failure(exc)
+                        record_chat_fallback(layer="L3_outer", reason=fallback_reason)
+                        logger.warning(
+                            "Buffered triage call failed in symptom branch: %s",
+                            exc,
+                            extra={
+                                "chat_fallback_layer": "L3_outer",
+                                "chat_fallback_reason": fallback_reason,
+                            },
+                        )
                 try:
                     symptom_result = await symptom_agent(
                         SymptomInput(
@@ -507,26 +632,36 @@ async def chat_websocket_endpoint(
 
                     assistant_intent = "symptom"
                 except Exception as exc:
-                    logger.warning("Symptom routing failed, continuing triage response: %s", exc)
+                    fallback_reason = categorize_llm_failure(exc)
+                    record_chat_fallback(layer="symptom_agent", reason=fallback_reason)
+                    logger.warning(
+                        "Symptom routing failed, continuing triage response: %s",
+                        exc,
+                        extra={
+                            "chat_fallback_layer": "symptom_agent",
+                            "chat_fallback_reason": fallback_reason,
+                        },
+                    )
                     delegation_events = []
             else:
                 delegation_events = []
 
-            await websocket.send_json(
-                {
-                    "type": "assistant_start",
-                    "intent": assistant_intent,
-                    "urgency": assistant_urgency,
-                }
-            )
-
-            for chunk in _chunk_text(assistant_content):
+            # If we never sent assistant_start (e.g. exception before classification),
+            # emit it now so the client transitions out of "loading" state.
+            if not assistant_start_sent:
                 await websocket.send_json(
                     {
-                        "type": "assistant_chunk",
-                        "content": chunk,
+                        "type": "assistant_start",
+                        "intent": assistant_intent,
+                        "urgency": assistant_urgency,
                     }
                 )
+
+            # Buffered fallback paths (symptom route, outer fallback) need their
+            # text chunked here. Streamed responses already had per-token chunks.
+            if not streamed_response and assistant_content:
+                for chunk in _chunk_text(assistant_content):
+                    await websocket.send_json({"type": "assistant_chunk", "content": chunk})
 
             assistant_message = await service.save_message(
                 patient_id=str(patient_id),
@@ -570,6 +705,19 @@ async def chat_websocket_endpoint(
             )
             if delegation_events:
                 await _emit_a2a_task_events(websocket, delegation_events)
+            if assistant_intent == "schedule":
+                proposal = _build_appointment_proposal(
+                    patient_id=patient_id,
+                    message=incoming.content,
+                    patient_context=patient_context,
+                )
+                if proposal:
+                    await websocket.send_json(
+                        {
+                            "type": "appointment_proposal",
+                            "proposal": proposal,
+                        }
+                    )
             if escalation_required:
                 clinicians_notified = await service.notify_assigned_clinicians(
                     patient_id=str(patient_id),

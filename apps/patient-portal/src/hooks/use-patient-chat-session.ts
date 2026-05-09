@@ -22,6 +22,7 @@ import {
     buildChatWebSocketUrl,
     fetchChatHistory,
     isChatSocketEvent,
+    mapClinicianMessageFromApi,
     mapChatMessageFromApi,
     type ChatDocumentContextApi,
 } from "@/services/chat-api";
@@ -51,7 +52,30 @@ import {
 } from "@/types";
 
 const CHAT_LANGUAGE_STORAGE_KEY = "patient-portal.chat.language";
+const HANDS_FREE_STORAGE_KEY = "patient-portal.chat.handsFree";
 const FALLBACK_DOCUMENT_NAME = "medical record";
+
+function resolveInitialHandsFree(): boolean {
+    if (typeof window === "undefined") {
+        return false;
+    }
+    return window.localStorage.getItem(HANDS_FREE_STORAGE_KEY) === "true";
+}
+
+function composeDictatedInput(prefix: string, transcript: string): string {
+    const trimmedTranscript = transcript.trim();
+    if (!trimmedTranscript) {
+        return prefix;
+    }
+    if (!prefix) {
+        return trimmedTranscript;
+    }
+    const needsSpace = !/\s$/.test(prefix);
+    return `${prefix}${needsSpace ? " " : ""}${trimmedTranscript}`;
+}
+const MAX_CHAT_RECONNECT_ATTEMPTS = 5;
+const BASE_CHAT_RECONNECT_DELAY_MS = 800;
+const MAX_CHAT_RECONNECT_DELAY_MS = 8_000;
 
 function resolveInitialLanguage(): ChatLocale {
     if (typeof window === "undefined") {
@@ -130,6 +154,7 @@ interface PatientChatSessionState {
     connectionStatus: RootState["chat"]["connectionStatus"];
     documentContext: PendingChatDocumentContext | null;
     error: string | null;
+    handsFreeMode: boolean;
     input: string;
     isTyping: boolean;
     loading: boolean;
@@ -138,18 +163,17 @@ interface PatientChatSessionState {
     safetyNotice: string | null;
     voiceError: string | null;
     voiceInterimTranscript: string;
-    voiceModeEnabled: boolean;
     voiceStatus: VoiceStatus;
 }
 
 interface PatientChatSessionActions {
     dismissDocumentContext: () => void;
     dismissSafetyNotice: () => void;
+    handleHandsFreeToggle: () => void;
     handleLanguageSelection: (language: ChatLocale) => void;
     handleMicClick: () => void;
     handlePlayAssistantMessage: (message: ChatMessage) => void;
     handleSend: (event: FormEvent<HTMLFormElement>) => void;
-    handleVoiceModeToggle: () => void;
     setInput: (value: string) => void;
 }
 
@@ -178,7 +202,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [selectedLanguage, setSelectedLanguage] = useState<ChatLocale>(initialLanguage);
     const [assistantDraft, setAssistantDraft] = useState("");
     const [assistantDraftStartedAt, setAssistantDraftStartedAt] = useState<string | null>(null);
-    const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
+    const [handsFreeMode, setHandsFreeMode] = useState<boolean>(resolveInitialHandsFree);
     const [voiceError, setVoiceError] = useState<string | null>(null);
     const [voiceInterimTranscript, setVoiceInterimTranscript] = useState("");
     const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>(() => {
@@ -191,6 +215,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         useState<PendingChatDocumentContext | null>(initialDocumentContext);
     const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
+    const [reconnectSignal, setReconnectSignal] = useState(0);
 
     const voiceRefs = useRef<{
         finalTranscript: string;
@@ -202,7 +227,14 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         recordedAudioUrl: string | null;
         playbackStop: (() => void) | null;
         selectedLanguage: ChatLocale;
-        voiceModeEnabled: boolean;
+        // Set true when the user sends a turn via the mic in hands-free mode;
+        // consumed and reset on the next assistant_complete to trigger
+        // auto-playback. Typed turns and dictation turns leave this false.
+        autoPlayNextAssistantMessage: boolean;
+        // Existing input text captured at the moment recording starts, so
+        // dictated transcript can be appended (matches iOS keyboard dictation).
+        inputPrefixForDictation: string;
+        handsFreeMode: boolean;
     }>({
         finalTranscript: "",
         mediaRecorder: null,
@@ -213,10 +245,19 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         recognition: null,
         recordedAudioUrl: null,
         selectedLanguage: initialLanguage,
-        voiceModeEnabled: false,
+        autoPlayNextAssistantMessage: false,
+        inputPrefixForDictation: "",
+        handsFreeMode: resolveInitialHandsFree(),
     });
     const socketRef = useRef<WebSocket | null>(null);
     const voiceSocketRef = useRef<WebSocket | null>(null);
+    const reconnectRef = useRef<{
+        attempts: number;
+        timer: ReturnType<typeof setTimeout> | null;
+    }>({
+        attempts: 0,
+        timer: null,
+    });
 
     const canPlayAssistantAudio = Boolean(accessToken && user) || voiceCapabilities.synthesis;
 
@@ -361,24 +402,49 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
             if (payload.type === "transcript_partial") {
                 setVoiceInterimTranscript(payload.transcript);
+                setInput(
+                    composeDictatedInput(
+                        voiceRefs.current.inputPrefixForDictation,
+                        payload.transcript,
+                    ),
+                );
                 return;
             }
 
             if (payload.type === "transcript_final") {
                 voiceRefs.current.finalTranscript = payload.transcript;
-                setVoiceInterimTranscript(payload.transcript);
+                setVoiceInterimTranscript("");
+                setInput(
+                    composeDictatedInput(
+                        voiceRefs.current.inputPrefixForDictation,
+                        payload.transcript,
+                    ),
+                );
                 return;
             }
 
             if (payload.type === "audio_stream_complete") {
                 const transcript = voiceRefs.current.finalTranscript.trim();
-                voiceRefs.current.recordedAudioUrl = payload.audio_url ?? null;
+                const audioUrl = payload.audio_url ?? null;
+                voiceRefs.current.recordedAudioUrl = audioUrl;
                 voiceRefs.current.finalTranscript = "";
                 setVoiceInterimTranscript("");
-                if (transcript) {
-                    setVoiceStatus(voiceRefs.current.voiceModeEnabled ? "processing" : "idle");
-                    sendChatMessage(transcript, payload.audio_url ?? undefined);
+
+                if (!transcript) {
+                    setVoiceStatus("idle");
+                    return;
+                }
+
+                if (voiceRefs.current.handsFreeMode) {
+                    // Hands-free: auto-send + auto-play TTS reply.
+                    voiceRefs.current.autoPlayNextAssistantMessage = true;
+                    setVoiceStatus("processing");
+                    sendChatMessage(transcript, audioUrl ?? undefined);
                 } else {
+                    // Default dictation: leave transcript in input, user reviews
+                    // and taps Send. The transcript is already in `input` from
+                    // the transcript_final handler above.
+                    voiceRefs.current.inputPrefixForDictation = "";
                     setVoiceStatus("idle");
                 }
                 return;
@@ -459,6 +525,36 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         return socket;
     }
 
+    function clearChatReconnectTimer(): void {
+        const timer = reconnectRef.current.timer;
+        if (timer) {
+            clearTimeout(timer);
+            reconnectRef.current.timer = null;
+        }
+    }
+
+    function scheduleChatReconnect(): void {
+        if (reconnectRef.current.timer) {
+            return;
+        }
+
+        const attempt = reconnectRef.current.attempts;
+        if (attempt >= MAX_CHAT_RECONNECT_ATTEMPTS) {
+            dispatch(setChatError("Live chat is offline. Refresh the page to reconnect."));
+            return;
+        }
+
+        const delay = Math.min(
+            BASE_CHAT_RECONNECT_DELAY_MS * 2 ** attempt,
+            MAX_CHAT_RECONNECT_DELAY_MS,
+        );
+        reconnectRef.current.attempts = attempt + 1;
+        reconnectRef.current.timer = setTimeout(() => {
+            reconnectRef.current.timer = null;
+            setReconnectSignal((current) => current + 1);
+        }, delay);
+    }
+
     function sendVoiceSocketEvent(event: Record<string, unknown>): WebSocket | null {
         const socket = connectVoiceSocket();
         if (!socket) {
@@ -503,6 +599,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const requestBackendAssistantAudioEvent = useEffectEvent((message: ChatMessage) => {
         requestBackendAssistantAudio(message);
     });
+    const scheduleChatReconnectEvent = useEffectEvent(() => {
+        scheduleChatReconnect();
+    });
 
     useEffect(() => {
         voiceRefs.current.selectedLanguage = selectedLanguage;
@@ -510,10 +609,6 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             window.localStorage.setItem(CHAT_LANGUAGE_STORAGE_KEY, selectedLanguage);
         }
     }, [selectedLanguage]);
-
-    useEffect(() => {
-        voiceRefs.current.voiceModeEnabled = voiceModeEnabled;
-    }, [voiceModeEnabled]);
 
     useEffect(() => {
         const documentId = searchParams.get("document");
@@ -576,6 +671,8 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                 return;
             }
 
+            clearChatReconnectTimer();
+            reconnectRef.current.attempts = 0;
             dispatch(setConnectionStatus("connected"));
             dispatch(setChatError(null));
         };
@@ -616,6 +713,46 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     }
                     return;
                 }
+                case "clinician_message":
+                    dispatch(addMessage(mapClinicianMessageFromApi(payload.message)));
+                    return;
+                case "appointment_proposal": {
+                    const clinician = payload.proposal.clinician_name
+                        ? ` with ${payload.proposal.clinician_name}`
+                        : "";
+                    const reason = payload.proposal.reason
+                        ? `\n\nReason: ${payload.proposal.reason}`
+                        : "";
+                    dispatch(
+                        addMessage({
+                            content: `Appointment request noted${clinician}. ${payload.proposal.next_step}${reason}`,
+                            createdAt: new Date().toISOString(),
+                            id: `appointment-proposal-${payload.proposal.proposal_id}`,
+                            language: voiceRefs.current.selectedLanguage,
+                            patientId: user.id,
+                            role: ChatRole.SYSTEM,
+                        }),
+                    );
+                    return;
+                }
+                case "appointment_created":
+                    dispatch(
+                        addMessage({
+                            content: `Appointment scheduled for ${new Intl.DateTimeFormat(
+                                voiceRefs.current.selectedLanguage,
+                                {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                },
+                            ).format(new Date(payload.appointment.scheduled_at))}.`,
+                            createdAt: new Date().toISOString(),
+                            id: `appointment-created-${payload.appointment.id}`,
+                            language: voiceRefs.current.selectedLanguage,
+                            patientId: user.id,
+                            role: ChatRole.SYSTEM,
+                        }),
+                    );
+                    return;
                 case "user_message_saved":
                     dispatch(addMessage(mapChatMessageFromApi(payload.message)));
                     return;
@@ -634,7 +771,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     dispatch(setTyping(false));
                     dispatch(addMessage(assistantMessage));
 
-                    if (voiceRefs.current.voiceModeEnabled) {
+                    // Auto-play only when this turn was voice-initiated.
+                    // Typed turns never trigger TTS automatically.
+                    if (voiceRefs.current.autoPlayNextAssistantMessage) {
+                        voiceRefs.current.autoPlayNextAssistantMessage = false;
                         requestBackendAssistantAudioEvent(assistantMessage);
                     }
 
@@ -652,9 +792,12 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     resetAssistantDraft();
                     dispatch(setTyping(false));
                     dispatch(setChatError(payload.message || "Chat request failed."));
-                    setVoiceStatus("idle");
-                    setVoiceModeEnabled(false);
-                    voiceRefs.current.voiceModeEnabled = false;
+                    // A backend error mid-turn invalidates pending auto-play
+                    // but does NOT take the mic offline; user can retry.
+                    voiceRefs.current.autoPlayNextAssistantMessage = false;
+                    setVoiceStatus((prev) =>
+                        prev === "processing" || prev === "playing" ? "idle" : prev,
+                    );
                     return;
                 default:
                     return;
@@ -670,9 +813,8 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             dispatch(setConnectionStatus("error"));
             dispatch(setTyping(false));
             dispatch(setChatError("Live chat connection encountered an issue."));
-            setVoiceStatus("idle");
-            setVoiceModeEnabled(false);
-            voiceRefs.current.voiceModeEnabled = false;
+            voiceRefs.current.autoPlayNextAssistantMessage = false;
+            setVoiceStatus((prev) => (prev === "processing" || prev === "playing" ? "idle" : prev));
         };
 
         socket.onclose = () => {
@@ -682,9 +824,12 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setTyping(false));
-            setVoiceStatus("idle");
-            setVoiceModeEnabled(false);
-            voiceRefs.current.voiceModeEnabled = false;
+            voiceRefs.current.autoPlayNextAssistantMessage = false;
+            // Don't change voiceStatus on close — if user is mid-recording on
+            // the voice WS that's an independent connection. Only reset when
+            // we were waiting on the chat WS for a reply.
+            setVoiceStatus((prev) => (prev === "processing" || prev === "playing" ? "idle" : prev));
+            scheduleChatReconnectEvent();
         };
 
         return () => {
@@ -695,7 +840,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, activeDocumentId, dispatch, initialLanguage, user]);
+    }, [accessToken, activeDocumentId, dispatch, initialLanguage, reconnectSignal, user]);
 
     useEffect(() => {
         return () => {
@@ -703,6 +848,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             stopMediaRecorder();
             stopAssistantVoicePlayback();
             closeVoiceSocket();
+            clearChatReconnectTimer();
         };
     }, []);
 
@@ -727,35 +873,51 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         sendChatMessage(input);
     }
 
-    function handleVoiceModeToggle(): void {
-        if (voiceStatus === "unsupported") {
-            setVoiceError("Voice mode is not available on this device.");
-            return;
+    function handleHandsFreeToggle(): void {
+        const next = !handsFreeMode;
+        setHandsFreeMode(next);
+        voiceRefs.current.handsFreeMode = next;
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(HANDS_FREE_STORAGE_KEY, next ? "true" : "false");
         }
-
-        const nextValue = !voiceModeEnabled;
-        voiceRefs.current.voiceModeEnabled = nextValue;
-        setVoiceModeEnabled(nextValue);
-
-        if (!nextValue) {
-            stopSpeechRecognition();
-            stopMediaRecorder();
+        // Turning hands-free off mid-flight: stop any in-progress playback.
+        if (!next) {
             stopAssistantPlayback();
-            setVoiceInterimTranscript("");
-            setVoiceStatus("idle");
-            return;
+            voiceRefs.current.autoPlayNextAssistantMessage = false;
         }
-
-        setVoiceError(null);
     }
 
     function handleMicClick(): void {
+        // Tap while listening = stop and let onstop/onEnd handle send.
         if (voiceStatus === "listening") {
             stopMediaRecorder();
             stopSpeechRecognition();
             return;
         }
 
+        // While we're waiting on transcription, ignore taps so the user
+        // can't start a new recording before the previous transcript arrives.
+        if (voiceStatus === "processing") {
+            return;
+        }
+
+        // While the assistant is speaking, tapping mic interrupts playback so
+        // the user can speak again immediately (matches phone-assistant UX).
+        if (voiceStatus === "playing") {
+            stopAssistantPlayback();
+            setVoiceStatus("idle");
+        }
+
+        if (voiceStatus === "unsupported") {
+            setVoiceError("Voice mode is not available on this device.");
+            return;
+        }
+
+        // Capture whatever the user has already typed so dictated text appends
+        // to it instead of replacing it.
+        voiceRefs.current.inputPrefixForDictation = input;
+
+        // Prefer backend recording (Deepgram via voice WS) when available.
         if (voiceCapabilities.recording && accessToken && user) {
             void startBackendVoiceRecording();
             return;
@@ -769,10 +931,12 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
         resetVoiceFeedback();
 
+        // Browser SpeechRecognition fallback. Default behavior matches the
+        // backend path: transcript fills the input box; user reviews and
+        // taps Send. In hands-free mode the transcript auto-sends.
         const controller = createSpeechRecognitionController(voiceRefs.current.selectedLanguage, {
             onEnd: (finalTranscript) => {
                 voiceRefs.current.recognition = null;
-                setVoiceStatus(voiceRefs.current.voiceModeEnabled ? "processing" : "idle");
                 setVoiceInterimTranscript("");
 
                 if (!finalTranscript) {
@@ -780,13 +944,20 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     return;
                 }
 
-                if (voiceRefs.current.voiceModeEnabled) {
-                    sendChatMessage(finalTranscript);
-                    return;
-                }
+                const composed = composeDictatedInput(
+                    voiceRefs.current.inputPrefixForDictation,
+                    finalTranscript,
+                );
 
-                setInput(finalTranscript);
-                setVoiceStatus("idle");
+                if (voiceRefs.current.handsFreeMode) {
+                    voiceRefs.current.autoPlayNextAssistantMessage = true;
+                    setVoiceStatus("processing");
+                    sendChatMessage(composed);
+                } else {
+                    setInput(composed);
+                    voiceRefs.current.inputPrefixForDictation = "";
+                    setVoiceStatus("idle");
+                }
             },
             onError: (message) => {
                 voiceRefs.current.recognition = null;
@@ -797,11 +968,14 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             onStart: () => {
                 setVoiceStatus("listening");
             },
-            onTranscript: ({ finalTranscript, interimTranscript }) => {
-                if (!voiceRefs.current.voiceModeEnabled && finalTranscript) {
-                    setInput(finalTranscript);
-                }
+            onTranscript: ({ interimTranscript }) => {
                 setVoiceInterimTranscript(interimTranscript);
+                setInput(
+                    composeDictatedInput(
+                        voiceRefs.current.inputPrefixForDictation,
+                        interimTranscript,
+                    ),
+                );
             },
         });
 
@@ -899,11 +1073,12 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         dismissSafetyNotice,
         documentContext,
         error,
+        handleHandsFreeToggle,
         handleLanguageSelection,
         handleMicClick,
         handlePlayAssistantMessage,
         handleSend,
-        handleVoiceModeToggle,
+        handsFreeMode,
         input,
         isTyping,
         loading,
@@ -913,7 +1088,6 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         setInput,
         voiceError,
         voiceInterimTranscript,
-        voiceModeEnabled,
         voiceStatus,
     };
 }

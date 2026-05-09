@@ -59,6 +59,21 @@ class ChatService:
         result = await self._execute(query)
         return [row for row in (result.data or []) if isinstance(row, dict)]
 
+    async def get_recent_clinician_messages(
+        self,
+        patient_id: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        result = await self._execute(
+            self.db.table("clinician_messages")
+            .select("id, clinician_id, patient_id, channel, subject, body, is_read, created_at")
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        return list(reversed(rows))
+
     async def get_context(
         self,
         patient_id: str,
@@ -67,6 +82,7 @@ class ChatService:
         medications = await self._fetch_active_medications(patient_id)
         conditions = await self._fetch_active_conditions(patient_id)
         recent_symptoms = await self._fetch_recent_symptoms(patient_id)
+        care_teams = await self._fetch_active_care_teams(patient_id)
 
         document_context = None
         if document_id:
@@ -76,6 +92,7 @@ class ChatService:
             "medications": medications,
             "conditions": conditions,
             "recent_symptoms": recent_symptoms,
+            "care_teams": care_teams,
             "document": document_context,
         }
 
@@ -272,6 +289,18 @@ class ChatService:
             .eq("patient_id", patient_id)
             .order("created_at", desc=True)
             .limit(6)
+        )
+        return [row for row in (result.data or []) if isinstance(row, dict)]
+
+    async def _fetch_active_care_teams(self, patient_id: str) -> list[dict[str, Any]]:
+        result = await self._execute(
+            self.db.table("care_teams")
+            .select(
+                "id, clinician_id, role, specialty_context, clinic_name, clinicians(first_name, last_name)"
+            )
+            .eq("patient_id", patient_id)
+            .eq("status", "active")
+            .limit(5)
         )
         return [row for row in (result.data or []) if isinstance(row, dict)]
 

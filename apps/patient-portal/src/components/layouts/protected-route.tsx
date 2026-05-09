@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import { Skeleton } from "@/components/ui";
@@ -24,8 +24,16 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const mounted = useSyncExternalStore(
+        () => () => {},
+        () => true,
+        () => false,
+    );
 
     useEffect(() => {
+        if (!mounted) {
+            return;
+        }
         if (!loading && !isAuthenticated) {
             const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
             router.replace(
@@ -35,9 +43,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
                 }),
             );
         }
-    }, [isAuthenticated, loading, pathname, router, searchParams]);
+    }, [isAuthenticated, loading, mounted, pathname, router, searchParams]);
 
-    if (loading) {
+    if (!mounted || loading) {
         return <LoadingSkeleton />;
     }
 
