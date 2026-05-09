@@ -12,6 +12,29 @@ from app.main import app
 from app.models.auth import CurrentUser
 
 
+def _make_stream_mock(output: TriageOutput):
+    """Build a TriageAgent.process_stream mock that yields events matching `output`."""
+
+    async def _mock_process_stream(_self, _agent_input):
+        intent = output.intent or "general"
+        urgency = output.urgency or "routine"
+        route = output.route or ("symptom" if intent == "symptom" else "triage")
+        yield {
+            "type": "classification",
+            "intent": intent,
+            "urgency": urgency,
+            "route": route,
+            "escalation_required": bool(output.escalation_required),
+            "classification_reason": "test mock",
+        }
+        text = output.response_text or ""
+        if text:
+            yield {"type": "chunk", "content": text}
+        yield {"type": "complete", "response_text": text, "fallback_used": False}
+
+    return _mock_process_stream
+
+
 @pytest.fixture
 def patient_id():
     return uuid4()
@@ -103,18 +126,24 @@ class TestChatWebSocketStability:
     ):
         _patch_chat_runtime(monkeypatch, patient_id)
 
+        triage_output = TriageOutput(
+            agent_id="triage-load-test",
+            status="success",
+            intent="general",
+            urgency="routine",
+            response_text="Acknowledged. Please continue.",
+            escalation_required=False,
+            route="triage",
+        )
+
         async def _mock_triage_process(_self, _agent_input):
-            return TriageOutput(
-                agent_id="triage-load-test",
-                status="success",
-                intent="general",
-                urgency="routine",
-                response_text="Acknowledged. Please continue.",
-                escalation_required=False,
-                route="triage",
-            )
+            return triage_output
 
         monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
+        monkeypatch.setattr(
+            "app.routers.chat.TriageAgent.process_stream",
+            _make_stream_mock(triage_output),
+        )
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             history = websocket.receive_json()
@@ -150,18 +179,24 @@ class TestChatWebSocketStability:
     ):
         _patch_chat_runtime(monkeypatch, patient_id)
 
+        triage_output = TriageOutput(
+            agent_id="triage-load-test",
+            status="success",
+            intent="general",
+            urgency="routine",
+            response_text="ok",
+            escalation_required=False,
+            route="triage",
+        )
+
         async def _mock_triage_process(_self, _agent_input):
-            return TriageOutput(
-                agent_id="triage-load-test",
-                status="success",
-                intent="general",
-                urgency="routine",
-                response_text="ok",
-                escalation_required=False,
-                route="triage",
-            )
+            return triage_output
 
         monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
+        monkeypatch.setattr(
+            "app.routers.chat.TriageAgent.process_stream",
+            _make_stream_mock(triage_output),
+        )
 
         with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
