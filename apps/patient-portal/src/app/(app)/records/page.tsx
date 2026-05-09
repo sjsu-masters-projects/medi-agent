@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
 import {
     HiMiniSpeakerWave,
     HiOutlineBeaker,
@@ -14,6 +15,9 @@ import { DocumentCard, PdfViewer } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal, ProgressBar } from "@/components/ui";
 import { api } from "@/services/api";
+import { redirectToLogin } from "@/services/auth-redirect";
+import { refreshPatientSession } from "@/services/auth-refresh";
+import { writeStoredSession } from "@/services/auth-session";
 import {
     buildDocumentChatHref,
     buildSuggestedDocumentQuestion,
@@ -22,7 +26,12 @@ import {
 import { playAssistantVoiceResponse } from "@/services/browser-voice";
 import { inferDocumentType, type DocumentApiRecord } from "@/services/documents";
 import { uploadDocumentToStorage } from "@/services/storage";
-import type { RootState } from "@/store/store";
+import {
+    hydrateSession,
+    logout,
+} from "@/store/slices/auth-slice";
+import { fetchTodayFeed } from "@/store/slices/feed-slice";
+import type { AppDispatch, RootState } from "@/store/store";
 import {
     DEFAULT_LOCALE,
     DocumentParseStatus,
@@ -33,7 +42,7 @@ import {
     normalizeLocale,
     type Document,
 } from "@/types";
-import { useSelector } from "react-redux";
+import { getEffectiveSessionExpiresAt } from "../../../../../../packages/shared/src/utils/jwt-expiry";
 
 type PortalDocument = Document & { icon: ReactNode; provider: string };
 
@@ -112,6 +121,7 @@ function getDocumentStatus(document: PortalDocument) {
 }
 
 export default function RecordsPage() {
+    const dispatch = useDispatch<AppDispatch>();
     const router = useRouter();
     const [documents, setDocuments] = useState<PortalDocument[]>([]);
     const [selectedDocument, setSelectedDocument] = useState<PortalDocument | null>(null);
@@ -129,7 +139,9 @@ export default function RecordsPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const { accessToken, user } = useSelector((state: RootState) => state.auth);
+    const { accessToken, expiresAt, refreshToken, user } = useSelector((state: RootState) => state.auth);
+
+    const IMPORT_REFRESH_WINDOW_SECONDS = 2 * 60;
 
     const loadDocuments = useCallback(async () => {
         if (!accessToken) {
@@ -230,14 +242,44 @@ export default function RecordsPage() {
         setParseError(PARSING_TIMEOUT_MESSAGE);
     }
 
+    async function getUploadSession() {
+        if (!accessToken || !user) {
+            setPageError("Please sign in again before uploading a document.");
+            return null;
+        }
+
+        const effectiveExpiresAt = getEffectiveSessionExpiresAt(expiresAt, accessToken);
+        const shouldRefresh =
+            !effectiveExpiresAt ||
+            effectiveExpiresAt - Math.floor(Date.now() / 1000) <= IMPORT_REFRESH_WINDOW_SECONDS;
+
+        if (!shouldRefresh) {
+            return { accessToken, user };
+        }
+
+        if (!refreshToken) {
+            dispatch(logout());
+            redirectToLogin({ reason: "session_expired" });
+            setPageError("Your session expired. Please sign in again before uploading.");
+            return null;
+        }
+
+        try {
+            const session = await refreshPatientSession(refreshToken);
+            writeStoredSession(session);
+            dispatch(hydrateSession(session));
+            return session;
+        } catch {
+            dispatch(logout());
+            redirectToLogin({ reason: "session_expired" });
+            setPageError("Your session expired. Please sign in again before uploading.");
+            return null;
+        }
+    }
+
     async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
         if (!file) {
-            return;
-        }
-
-        if (!accessToken || !user) {
-            setPageError("Please sign in again before uploading a document.");
             return;
         }
 
@@ -250,10 +292,15 @@ export default function RecordsPage() {
         }
 
         try {
+            const session = await getUploadSession();
+            if (!session) {
+                return;
+            }
+
             const filePath = await uploadDocumentToStorage({
                 file,
-                patientId: user.id,
-                token: accessToken,
+                patientId: session.user.id,
+                token: session.accessToken,
             });
             const created = await api.post<DocumentApiRecord>(
                 "/api/v1/documents/",
@@ -263,11 +310,21 @@ export default function RecordsPage() {
                     file_path: filePath,
                     file_size_bytes: file.size,
                     mime_type: file.type || "application/octet-stream",
+                    source_clinic: "Patient uploaded document",
+                    start_ingestion: false,
                 },
-                { token: accessToken },
+                { token: session.accessToken },
             );
             const nextDocument = mapDocument(created);
             setDocuments((current) => [nextDocument, ...current]);
+            // Trigger extraction import so the document is parsed and the
+            // Today Feed auto-populates, mirroring the old Today Feed behaviour.
+            await api.post(
+                "/api/v1/documents/extractions/import",
+                { document_id: created.id },
+                { token: session.accessToken },
+            );
+            await dispatch(fetchTodayFeed({ token: session.accessToken })).unwrap();
             void pollForParsedStatus(nextDocument.id);
         } catch (error) {
             setPageError((error as Error).message || "Upload failed. Please try again.");
@@ -396,7 +453,7 @@ export default function RecordsPage() {
                 subtitle="View clinical records and plain-language explanations."
                 title="My Records"
             />
-            <input className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
+            <input accept="application/pdf,image/*,text/plain,text/csv,application/json" className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
             <div className="patient-stack -mt-4 space-y-4 px-5">
                 <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-[1.4rem] bg-white/90 px-4 py-4 shadow-[0_12px_28px_rgba(37,52,82,0.08)] ring-1 ring-[#eaded3]">

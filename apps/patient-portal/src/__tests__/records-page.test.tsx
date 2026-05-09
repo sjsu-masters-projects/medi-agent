@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import RecordsPage from "@/app/(app)/records/page";
 import { DocumentParseStatus, DocumentType } from "@/types";
 
-const { deleteRequest, get, playAssistantVoiceResponse, post, push, uploadDocumentToStorage } =
+const { deleteRequest, dispatch, get, playAssistantVoiceResponse, post, push, uploadDocumentToStorage } =
     vi.hoisted(() => ({
         deleteRequest: vi.fn(),
+        dispatch: vi.fn(() => ({ unwrap: vi.fn().mockResolvedValue(undefined) })),
         get: vi.fn(),
         playAssistantVoiceResponse: vi.fn(() => null),
         post: vi.fn(),
@@ -18,10 +19,13 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("react-redux", () => ({
+    useDispatch: () => dispatch,
     useSelector: (selector: (state: unknown) => unknown) =>
         selector({
             auth: {
                 accessToken: "access-token",
+                expiresAt: Math.floor(Date.now() / 1000) + 3600,
+                refreshToken: "refresh-token",
                 user: { id: "patient-1" },
             },
         }),
@@ -42,6 +46,8 @@ vi.mock("@/services/browser-voice", () => ({
 describe("RecordsPage", () => {
     beforeEach(() => {
         deleteRequest.mockReset();
+        dispatch.mockReset();
+        dispatch.mockReturnValue({ unwrap: vi.fn().mockResolvedValue(undefined) });
         get.mockReset();
         playAssistantVoiceResponse.mockReset();
         playAssistantVoiceResponse.mockReturnValue(null);
