@@ -13,6 +13,7 @@ class ObligationCreate(BaseModel):
     description: str = Field(..., min_length=1, max_length=500)
     frequency: str = Field(..., examples=["daily", "3x per week", "after meals"])
     set_by_care_team_id: UUID | None = None
+    source_document_id: UUID | None = None
     notes: str | None = None
 
 
@@ -30,6 +31,7 @@ class ObligationRead(BaseModel):
     description: str
     frequency: str
     set_by_care_team_id: UUID | None = None
+    source_document_id: UUID | None = None
     notes: str | None = None
     is_active: bool = True
     reminder_schedule: ReminderScheduleRead | None = None

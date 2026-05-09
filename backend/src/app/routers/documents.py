@@ -53,6 +53,7 @@ class DocumentCreateRequest(BaseModel):
     document_type: DocumentType
     source_clinic: str | None = None
     notes: str | None = None
+    start_ingestion: bool = True
 
 
 class ExplainRequest(BaseModel):
@@ -109,13 +110,14 @@ async def create_document(
         source_clinic=body.source_clinic,
         notes=body.notes,
     )
-    background_tasks.add_task(
-        _run_ingestion_safe,
-        document_id=str(document["id"]),
-        patient_id=user.id,
-        file_path=body.file_path,
-        document_type=body.document_type.value,
-    )
+    if body.start_ingestion:
+        background_tasks.add_task(
+            _run_ingestion_safe,
+            document_id=str(document["id"]),
+            patient_id=user.id,
+            file_path=body.file_path,
+            document_type=body.document_type.value,
+        )
     return document
 
 
@@ -159,6 +161,7 @@ async def import_document_extraction(
         patient_id=user.id,
         uploaded_by=user.id,
         uploaded_by_role=user.role,
+        document_id=body.document_id if body else None,
         extraction=body.extraction if body else None,
     )
 

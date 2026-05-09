@@ -32,7 +32,7 @@ def mock_supabase_db():
     db.table.return_value = table
 
     # Make all query methods chainable
-    for method in ["select", "eq", "single", "insert", "order", "delete"]:
+    for method in ["select", "eq", "single", "insert", "order", "delete", "in_"]:
         getattr(table, method).return_value = table
 
     # Mock storage
@@ -124,6 +124,56 @@ class TestCreateDocument:
         assert "file_url" in data
         assert data["parse_status"] == "pending"
         mock_ingest.assert_awaited_once()
+
+    def test_can_skip_background_ingestion_for_mock_import(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        """Create document metadata without starting parser when mock import will attach."""
+        document_id = uuid4()
+        document_data = {
+            "id": str(document_id),
+            "patient_id": str(patient_id),
+            "uploaded_by": str(patient_id),
+            "uploaded_by_role": "patient",
+            "file_name": "discharge-summary.pdf",
+            "file_url": "https://storage.example.com/signed-url",
+            "file_path": f"{patient_id}/discharge-summary.pdf",
+            "file_size_bytes": 1024000,
+            "mime_type": "application/pdf",
+            "document_type": "discharge_summary",
+            "source_clinic": "Patient uploaded document",
+            "notes": None,
+            "parsed": False,
+            "ai_summary": None,
+            "parse_status": "pending",
+            "parse_error": None,
+            "parse_attempts": 0,
+            "visibility": "all_providers",
+            "created_at": "2025-01-15T00:00:00Z",
+        }
+
+        mock_supabase_db.table().insert().execute.return_value = MagicMock(data=[document_data])
+
+        with patch(
+            "app.routers.documents._run_ingestion_safe",
+            new=AsyncMock(),
+        ) as mock_ingest:
+            response = client.post(
+                "/api/v1/documents/",
+                json={
+                    "document_type": "discharge_summary",
+                    "file_name": "discharge-summary.pdf",
+                    "file_path": f"{patient_id}/discharge-summary.pdf",
+                    "file_size_bytes": 1024000,
+                    "mime_type": "application/pdf",
+                    "source_clinic": "Patient uploaded document",
+                    "start_ingestion": False,
+                },
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["file_name"] == "discharge-summary.pdf"
+        mock_ingest.assert_not_awaited()
 
     def test_invalid_mime_type(self, client, override_auth, override_db):
         """Reject unsupported file type."""
@@ -312,6 +362,8 @@ class TestDeleteDocument:
         self, client, override_auth, override_db, mock_supabase_db, patient_id
     ):
         document_id = uuid4()
+        medication_id = uuid4()
+        obligation_id = uuid4()
         file_path = f"{patient_id}/lab-results.pdf"
         document_data = {
             "id": str(document_id),
@@ -335,15 +387,27 @@ class TestDeleteDocument:
         }
         mock_supabase_db.table().execute.side_effect = [
             MagicMock(data=document_data),
+            MagicMock(data=[{"id": str(medication_id)}]),
+            MagicMock(data=[{"id": str(obligation_id)}]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
             MagicMock(data=[document_data]),
         ]
 
         response = client.delete(f"/api/v1/documents/{document_id}")
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
+        mock_supabase_db.table.assert_any_call("adherence_logs")
+        mock_supabase_db.table.assert_any_call("reminder_schedules")
+        mock_supabase_db.table.assert_any_call("medications")
+        mock_supabase_db.table.assert_any_call("obligations")
         mock_supabase_db.storage.from_.assert_called_with("documents")
         mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
-        mock_supabase_db.table().delete.assert_called_once()
+        assert mock_supabase_db.table().delete.call_count == 7
 
     def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
         document_id = uuid4()

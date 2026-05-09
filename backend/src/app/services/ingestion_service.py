@@ -112,6 +112,7 @@ class IngestionService:
         )
         obligation_ids = await self._save_obligations(
             patient_id,
+            document_id,
             extracted_data.get("follow_up_instructions", []),
         )
 
@@ -208,6 +209,7 @@ class IngestionService:
     async def _save_obligations(
         self,
         patient_id: UUID,
+        document_id: UUID,
         follow_up_instructions: list[dict[str, Any]],
     ) -> list[str]:
         """Save follow-up instructions as obligations via ObligationService."""
@@ -222,6 +224,7 @@ class IngestionService:
                 "frequency": instruction.get("timing")
                 or instruction.get("frequency")
                 or "as directed",
+                "source_document_id": str(document_id),
             }
             created = await self._obligation_service.create_obligation(patient_id, payload)
             created_ids.append(str(created["id"]))

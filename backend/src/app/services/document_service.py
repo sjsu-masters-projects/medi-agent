@@ -144,6 +144,8 @@ class DocumentService:
     async def delete_document(self, document_id: UUID, patient_id: UUID) -> None:
         """Delete a patient-owned document metadata row and its storage object."""
         document = self._get_document_row(document_id, patient_id)
+        self._delete_document_derived_records(document_id, patient_id)
+
         file_path = str(document.get("file_path") or "").strip()
         if file_path:
             self._delete_storage_file(file_path)
@@ -153,6 +155,86 @@ class DocumentService:
             .delete()
             .eq("id", str(document_id))
             .eq("patient_id", str(patient_id))
+            .execute()
+        )
+
+    def _delete_document_derived_records(self, document_id: UUID, patient_id: UUID) -> None:
+        """Delete Today-feed records that were created from this document."""
+        medication_ids = self._get_document_derived_record_ids(
+            "medications",
+            document_id,
+            patient_id,
+        )
+        obligation_ids = self._get_document_derived_record_ids(
+            "obligations",
+            document_id,
+            patient_id,
+        )
+
+        self._delete_feed_target_records("medication", medication_ids, patient_id)
+        self._delete_feed_target_records("obligation", obligation_ids, patient_id)
+        self._delete_document_derived_rows("medications", medication_ids, patient_id)
+        self._delete_document_derived_rows("obligations", obligation_ids, patient_id)
+
+    def _get_document_derived_record_ids(
+        self,
+        table_name: str,
+        document_id: UUID,
+        patient_id: UUID,
+    ) -> list[str]:
+        """Find patient-owned rows that were extracted from a document."""
+        result = (
+            self.db.table(table_name)
+            .select("id")
+            .eq("patient_id", str(patient_id))
+            .eq("source_document_id", str(document_id))
+            .execute()
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        return [str(row["id"]) for row in rows if row.get("id")]
+
+    def _delete_feed_target_records(
+        self,
+        target_type: str,
+        target_ids: list[str],
+        patient_id: UUID,
+    ) -> None:
+        """Delete logs and reminder schedules for removed feed targets."""
+        if not target_ids:
+            return
+
+        (
+            self.db.table("adherence_logs")
+            .delete()
+            .eq("patient_id", str(patient_id))
+            .eq("target_type", target_type)
+            .in_("target_id", target_ids)
+            .execute()
+        )
+        (
+            self.db.table("reminder_schedules")
+            .delete()
+            .eq("patient_id", str(patient_id))
+            .eq("target_type", target_type)
+            .in_("target_id", target_ids)
+            .execute()
+        )
+
+    def _delete_document_derived_rows(
+        self,
+        table_name: str,
+        row_ids: list[str],
+        patient_id: UUID,
+    ) -> None:
+        """Delete document-derived medication or obligation rows."""
+        if not row_ids:
+            return
+
+        (
+            self.db.table(table_name)
+            .delete()
+            .eq("patient_id", str(patient_id))
+            .in_("id", row_ids)
             .execute()
         )
 

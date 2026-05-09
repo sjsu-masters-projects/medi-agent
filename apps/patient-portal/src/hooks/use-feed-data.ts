@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { api } from "@/services/api";
+import { inferDocumentType, type DocumentApiRecord } from "@/services/documents";
+import { uploadDocumentToStorage } from "@/services/storage";
 import {
     fetchTodayFeed,
     markTaskComplete,
@@ -70,7 +72,7 @@ function getMissedTaskIds(tasks: FeedTask[]) {
 export function useFeedData() {
     const dispatch = useDispatch<AppDispatch>();
     const feed = useSelector((state: RootState) => state.feed);
-    const accessToken = useSelector((state: RootState) => state.auth.accessToken);
+    const { accessToken, user } = useSelector((state: RootState) => state.auth);
     const [adherenceStats, setAdherenceStats] = useState<AdherenceStats>(emptyAdherenceStats);
     const [documentImportError, setDocumentImportError] = useState<string | null>(null);
     const [documentImporting, setDocumentImporting] = useState(false);
@@ -129,8 +131,8 @@ export function useFeedData() {
         }
     }
 
-    async function importDemoDocument() {
-        if (!accessToken) {
+    async function importDocumentFile(file: File) {
+        if (!accessToken || !user) {
             setDocumentImportError("Please sign in again before importing a clinical document.");
             return;
         }
@@ -138,7 +140,25 @@ export function useFeedData() {
         setDocumentImporting(true);
         setDocumentImportError(null);
         try {
-            await api.post("/api/v1/documents/extractions/import", undefined, {
+            const filePath = await uploadDocumentToStorage({
+                file,
+                patientId: user.id,
+                token: accessToken,
+            });
+            const document = await api.post<DocumentApiRecord>(
+                "/api/v1/documents/",
+                {
+                    document_type: inferDocumentType(file),
+                    file_name: file.name,
+                    file_path: filePath,
+                    file_size_bytes: file.size,
+                    mime_type: file.type || "application/octet-stream",
+                    source_clinic: "Patient uploaded document",
+                    start_ingestion: false,
+                },
+                { token: accessToken },
+            );
+            await api.post("/api/v1/documents/extractions/import", { document_id: document.id }, {
                 token: accessToken,
             });
             await dispatch(fetchTodayFeed({ token: accessToken })).unwrap();
@@ -154,7 +174,7 @@ export function useFeedData() {
         documentImportError,
         documentImporting,
         error: feed.error,
-        importDemoDocument,
+        importDocumentFile,
         loading: feed.loading,
         markComplete,
         refreshFeed,
