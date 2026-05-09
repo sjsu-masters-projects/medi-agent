@@ -19,14 +19,28 @@ const session: PatientAuthSession = {
     },
 };
 
+function makeUnsignedJwt(expiresAt: number) {
+    const encode = (value: unknown) =>
+        Buffer.from(JSON.stringify(value)).toString("base64url");
+
+    return `${encode({ alg: "none", typ: "JWT" })}.${encode({ exp: expiresAt })}.`;
+}
+
 describe("patient auth session", () => {
     it("detects expiring sessions", () => {
-        expect(isSessionExpiring(Math.floor(Date.now() / 1000) + 30)).toBe(true);
-        expect(isSessionExpiring(Math.floor(Date.now() / 1000) + 600)).toBe(false);
+        expect(isSessionExpiring(Math.floor(Date.now() / 1000) + 30)).toBe(
+            true,
+        );
+        expect(isSessionExpiring(Math.floor(Date.now() / 1000) + 600)).toBe(
+            false,
+        );
     });
 
     it("refreshes and persists an expiring session", async () => {
-        writeStoredSession({ ...session, expiresAt: Math.floor(Date.now() / 1000) + 10 });
+        writeStoredSession({
+            ...session,
+            expiresAt: Math.floor(Date.now() / 1000) + 10,
+        });
         const refreshSession = vi.fn().mockResolvedValue({
             ...session,
             accessToken: "new-access-token",
@@ -37,23 +51,55 @@ describe("patient auth session", () => {
 
         expect(refreshSession).toHaveBeenCalledWith("refresh-token");
         expect(restored?.accessToken).toBe("new-access-token");
-        expect(window.localStorage.getItem(PATIENT_AUTH_STORAGE_KEY)).toContain("new-access-token");
+        expect(window.localStorage.getItem(PATIENT_AUTH_STORAGE_KEY)).toContain(
+            "new-access-token",
+        );
+    });
+
+    it("refreshes when the access token exp claim is stale even if stored expiry is later", async () => {
+        writeStoredSession({
+            ...session,
+            accessToken: makeUnsignedJwt(Math.floor(Date.now() / 1000) + 10),
+            expiresAt: Math.floor(Date.now() / 1000) + 900,
+        });
+        const refreshSession = vi.fn().mockResolvedValue({
+            ...session,
+            accessToken: "new-access-token",
+            expiresAt: Math.floor(Date.now() / 1000) + 900,
+        });
+
+        const restored = await restoreStoredSession({ refreshSession });
+
+        expect(refreshSession).toHaveBeenCalledWith("refresh-token");
+        expect(restored?.accessToken).toBe("new-access-token");
     });
 
     it("clears storage when refresh fails", async () => {
-        writeStoredSession({ ...session, expiresAt: Math.floor(Date.now() / 1000) + 10 });
+        writeStoredSession({
+            ...session,
+            expiresAt: Math.floor(Date.now() / 1000) + 10,
+        });
 
         const restored = await restoreStoredSession({
-            refreshSession: vi.fn().mockRejectedValue(new Error("refresh failed")),
+            refreshSession: vi
+                .fn()
+                .mockRejectedValue(new Error("refresh failed")),
         });
 
         expect(restored).toBeNull();
-        expect(window.localStorage.getItem(PATIENT_AUTH_STORAGE_KEY)).toBeNull();
+        expect(
+            window.localStorage.getItem(PATIENT_AUTH_STORAGE_KEY),
+        ).toBeNull();
     });
 
     it("clears invalid sessions", () => {
-        window.localStorage.setItem(PATIENT_AUTH_STORAGE_KEY, JSON.stringify({ token: "bad" }));
+        window.localStorage.setItem(
+            PATIENT_AUTH_STORAGE_KEY,
+            JSON.stringify({ token: "bad" }),
+        );
         clearStoredSession();
-        expect(window.localStorage.getItem(PATIENT_AUTH_STORAGE_KEY)).toBeNull();
+        expect(
+            window.localStorage.getItem(PATIENT_AUTH_STORAGE_KEY),
+        ).toBeNull();
     });
 });

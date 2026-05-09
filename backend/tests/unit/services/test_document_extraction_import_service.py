@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
+from postgrest.exceptions import APIError
 
 from app.models.document_extraction import DocumentExtractionResult
 from app.services.document_extraction_import_service import DocumentExtractionImportService
@@ -202,3 +204,32 @@ async def test_import_extraction_can_attach_to_existing_uploaded_document() -> N
     assert db.store["documents_updates"][0]["parse_status"] == "completed"
     assert all(row["source_document_id"] == str(document_id) for row in db.store["medications"])
     assert all(row["source_document_id"] == str(document_id) for row in db.store["obligations"])
+
+
+@pytest.mark.asyncio
+async def test_import_extraction_skips_obligations_when_source_document_column_is_missing() -> None:
+    db = FakeSupabase()
+    service = DocumentExtractionImportService(db)  # type: ignore[arg-type]
+    service.obligation_service.create_obligation = AsyncMock(  # type: ignore[method-assign]
+        side_effect=APIError(
+            {
+                "message": (
+                    "Could not find the 'source_document_id' column of 'obligations' "
+                    "in the schema cache"
+                ),
+                "code": "PGRST204",
+                "hint": None,
+                "details": None,
+            }
+        )
+    )
+
+    result = await service.import_extraction(
+        patient_id=PATIENT_ID,
+        uploaded_by=PATIENT_ID,
+        uploaded_by_role="patient",
+    )
+
+    assert result["medications_created"] == 2
+    assert result["obligations_created"] == 0
+    assert db.store["documents_updates"][0]["parse_status"] == "completed"
