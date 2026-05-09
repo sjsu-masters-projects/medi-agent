@@ -20,7 +20,7 @@ def test_create_appointment_for_authenticated_patient(client, monkeypatch):
         email="patient@test.com",
         role="patient",
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = MagicMock
 
     create_mock = AsyncMock(
         return_value={
