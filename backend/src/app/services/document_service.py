@@ -11,12 +11,22 @@ import logging
 from typing import Any, cast
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.enums import DocumentReviewStatus, UploaderRole
 
 logger = logging.getLogger(__name__)
+
+
+def _is_missing_source_document_column_error(error: APIError, table_name: str) -> bool:
+    message = str(getattr(error, "message", error))
+    code = str(getattr(error, "code", ""))
+    return (
+        code in {"PGRST204", "42703"} and "source_document_id" in message and table_name in message
+    )
+
 
 # File validation constants
 ALLOWED_MIME_TYPES = frozenset(
@@ -183,13 +193,24 @@ class DocumentService:
         patient_id: UUID,
     ) -> list[str]:
         """Find patient-owned rows that were extracted from a document."""
-        result = (
-            self.db.table(table_name)
-            .select("id")
-            .eq("patient_id", str(patient_id))
-            .eq("source_document_id", str(document_id))
-            .execute()
-        )
+        try:
+            result = (
+                self.db.table(table_name)
+                .select("id")
+                .eq("patient_id", str(patient_id))
+                .eq("source_document_id", str(document_id))
+                .execute()
+            )
+        except APIError as exc:
+            if _is_missing_source_document_column_error(exc, table_name):
+                logger.warning(
+                    "Skipping document-derived %s lookup because %s.source_document_id "
+                    "is missing from the database schema",
+                    table_name,
+                    table_name,
+                )
+                return []
+            raise
         rows = cast(list[dict[str, Any]], result.data or [])
         return [str(row["id"]) for row in rows if row.get("id")]
 

@@ -8,25 +8,34 @@ import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import { writeStoredSession } from "@/services/auth-session";
 import { refreshPatientSession } from "@/services/auth-refresh";
 import { redirectToLogin } from "@/services/auth-redirect";
+import { getEffectiveSessionExpiresAt } from "../../../../packages/shared/src/utils/jwt-expiry";
 
 const REFRESH_EARLY_WINDOW_SECONDS = 30 * 60;
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000;
 
-function shouldRefreshSoon(expiresAt: number, nowSeconds = Math.floor(Date.now() / 1000)) {
+function shouldRefreshSoon(
+    expiresAt: number,
+    nowSeconds = Math.floor(Date.now() / 1000),
+) {
     return expiresAt - nowSeconds <= REFRESH_EARLY_WINDOW_SECONDS;
 }
 
 export function useAuthSessionRefresh() {
     const dispatch = useDispatch<AppDispatch>();
-    const { expiresAt, refreshToken, isAuthenticated, loading } = useSelector(
-        (state: RootState) => state.auth,
-    );
+    const { accessToken, expiresAt, refreshToken, isAuthenticated, loading } =
+        useSelector((state: RootState) => state.auth);
 
     const refreshState = useRef({ inFlight: false });
 
     const refreshContext = useMemo(
-        () => ({ expiresAt, refreshToken, isAuthenticated, loading }),
-        [expiresAt, refreshToken, isAuthenticated, loading],
+        () => ({
+            accessToken,
+            expiresAt,
+            refreshToken,
+            isAuthenticated,
+            loading,
+        }),
+        [accessToken, expiresAt, refreshToken, isAuthenticated, loading],
     );
 
     useEffect(() => {
@@ -52,7 +61,12 @@ export function useAuthSessionRefresh() {
                 return;
             }
 
-            if (!shouldRefreshSoon(currentExpiresAt)) {
+            const effectiveExpiresAt = getEffectiveSessionExpiresAt(
+                currentExpiresAt,
+                refreshContext.accessToken,
+            );
+
+            if (effectiveExpiresAt && !shouldRefreshSoon(effectiveExpiresAt)) {
                 return;
             }
 
@@ -63,7 +77,8 @@ export function useAuthSessionRefresh() {
             refreshState.current.inFlight = true;
 
             try {
-                const session = await refreshPatientSession(currentRefreshToken);
+                const session =
+                    await refreshPatientSession(currentRefreshToken);
                 writeStoredSession(session);
                 dispatch(hydrateSession(session));
             } catch {

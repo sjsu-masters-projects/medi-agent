@@ -1,3 +1,5 @@
+import { getEffectiveSessionExpiresAt } from "./jwt-expiry";
+
 export interface SharedAuthUser<Role extends string> {
     email: string;
     id: string;
@@ -14,7 +16,10 @@ export interface SharedAuthSession<
     user: User;
 }
 
-interface LegacyStoredSession<Role extends string, User extends SharedAuthUser<Role>> {
+interface LegacyStoredSession<
+    Role extends string,
+    User extends SharedAuthUser<Role>,
+> {
     token?: string | null;
     refreshToken?: string | null;
     expiresAt?: number | null;
@@ -37,22 +42,36 @@ export function createAuthSessionStorage<
     Role extends string,
     User extends SharedAuthUser<Role>,
     Session extends SharedAuthSession<Role, User>,
->({ refreshWindowSeconds = DEFAULT_REFRESH_WINDOW_SECONDS, role, storageKey }: CreateAuthSessionStorageConfig<Role>) {
+>({
+    refreshWindowSeconds = DEFAULT_REFRESH_WINDOW_SECONDS,
+    role,
+    storageKey,
+}: CreateAuthSessionStorageConfig<Role>) {
     function normalizeStoredSession(value: string | null): Session | null {
         if (!value) {
             return null;
         }
 
         try {
-            const parsed = JSON.parse(value) as Session | LegacyStoredSession<Role, User>;
+            const parsed = JSON.parse(value) as
+                | Session
+                | LegacyStoredSession<Role, User>;
             const user = parsed.user;
 
             if (!user || user.role !== role) {
                 return null;
             }
 
-            if ("accessToken" in parsed && "refreshToken" in parsed && "expiresAt" in parsed) {
-                if (!parsed.accessToken || !parsed.refreshToken || !parsed.expiresAt) {
+            if (
+                "accessToken" in parsed &&
+                "refreshToken" in parsed &&
+                "expiresAt" in parsed
+            ) {
+                if (
+                    !parsed.accessToken ||
+                    !parsed.refreshToken ||
+                    !parsed.expiresAt
+                ) {
                     return null;
                 }
 
@@ -79,7 +98,10 @@ export function createAuthSessionStorage<
         }
     }
 
-    function isSessionExpiring(expiresAt: number, nowSeconds = Math.floor(Date.now() / 1000)) {
+    function isSessionExpiring(
+        expiresAt: number,
+        nowSeconds = Math.floor(Date.now() / 1000),
+    ) {
         return expiresAt - nowSeconds <= refreshWindowSeconds;
     }
 
@@ -105,12 +127,19 @@ export function createAuthSessionStorage<
             return null;
         }
 
-        if (!isSessionExpiring(storedSession.expiresAt)) {
+        const effectiveExpiresAt = getEffectiveSessionExpiresAt(
+            storedSession.expiresAt,
+            storedSession.accessToken,
+        );
+
+        if (effectiveExpiresAt && !isSessionExpiring(effectiveExpiresAt)) {
             return storedSession;
         }
 
         try {
-            const refreshedSession = await refreshSession(storedSession.refreshToken);
+            const refreshedSession = await refreshSession(
+                storedSession.refreshToken,
+            );
 
             if (refreshedSession.user.role !== role) {
                 clearStoredSession();
