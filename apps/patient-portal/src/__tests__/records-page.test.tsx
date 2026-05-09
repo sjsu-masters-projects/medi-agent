@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import RecordsPage from "@/app/(app)/records/page";
 import { DocumentParseStatus, DocumentType } from "@/types";
 
-const { deleteRequest, get, post, push } = vi.hoisted(() => ({
+const { deleteRequest, get, post, push, uploadDocumentToStorage } = vi.hoisted(() => ({
     deleteRequest: vi.fn(),
     get: vi.fn(),
     post: vi.fn(),
     push: vi.fn(),
+    uploadDocumentToStorage: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -29,7 +30,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 vi.mock("@/services/storage", () => ({
-    uploadDocumentToStorage: vi.fn(),
+    uploadDocumentToStorage,
 }));
 
 describe("RecordsPage", () => {
@@ -38,6 +39,7 @@ describe("RecordsPage", () => {
         get.mockReset();
         post.mockReset();
         push.mockReset();
+        uploadDocumentToStorage.mockReset();
         window.sessionStorage.clear();
     });
 
@@ -116,5 +118,46 @@ describe("RecordsPage", () => {
             expect(screen.queryByText(/Discharge Summary\.txt/i)).not.toBeInTheDocument();
         });
         expect(screen.getByText(/No records yet/i)).toBeInTheDocument();
+    });
+
+    it("infers a discharge summary type from uploaded PDF filenames", async () => {
+        get.mockResolvedValue([]);
+        uploadDocumentToStorage.mockResolvedValue("patient-1/vatsal-discharge-summary.pdf");
+        post.mockResolvedValue({
+            ai_summary: null,
+            created_at: "2026-04-20T12:00:00Z",
+            document_type: DocumentType.DISCHARGE_SUMMARY,
+            file_name: "vatsal-discharge-summary.pdf",
+            file_size_bytes: 1400,
+            file_url: "https://example.test/discharge.pdf",
+            id: "doc-upload",
+            mime_type: "application/pdf",
+            parse_status: DocumentParseStatus.PENDING,
+            parsed: false,
+            patient_id: "patient-1",
+            source_clinic: null,
+            uploaded_by: "patient-1",
+            uploaded_by_role: "patient",
+            visibility: "shared",
+        });
+
+        const { container } = render(<RecordsPage />);
+        const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+        const file = new File(["test"], "vatsal-discharge-summary.pdf", {
+            type: "application/pdf",
+        });
+
+        fireEvent.change(input!, { target: { files: [file] } });
+
+        await waitFor(() => {
+            expect(post).toHaveBeenCalledWith(
+                "/api/v1/documents/",
+                expect.objectContaining({
+                    document_type: DocumentType.DISCHARGE_SUMMARY,
+                    file_name: "vatsal-discharge-summary.pdf",
+                }),
+                { token: "access-token" },
+            );
+        });
     });
 });

@@ -3,15 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
-const { importDemoDocument, markComplete, refreshFeed, useFeedData } = vi.hoisted(() => ({
+const { importDemoDocument, markComplete, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
     importDemoDocument: vi.fn(),
     markComplete: vi.fn(),
     refreshFeed: vi.fn(),
     useFeedData: vi.fn(),
+    usePatientProfile: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-feed-data", () => ({
     useFeedData,
+}));
+
+vi.mock("@/hooks/use-patient-profile", () => ({
+    usePatientProfile,
 }));
 
 function mockFeedData(overrides: Partial<ReturnType<typeof baseFeedData>> = {}) {
@@ -45,6 +50,18 @@ describe("TodayPage", () => {
         markComplete.mockReset();
         refreshFeed.mockReset();
         useFeedData.mockReset();
+        usePatientProfile.mockReset();
+        usePatientProfile.mockReturnValue(null);
+    });
+
+    it("uses the logged-in patient profile for the greeting and avatar", () => {
+        usePatientProfile.mockReturnValue({ firstName: "Vatsal" });
+        mockFeedData({ tasks: [] });
+
+        render(<TodayPage />);
+
+        expect(screen.getByRole("heading", { name: "Hi, Vatsal" })).toBeInTheDocument();
+        expect(screen.getByText("V")).toBeInTheDocument();
     });
 
     it("renders a calm loading state while the first feed load is pending", () => {
