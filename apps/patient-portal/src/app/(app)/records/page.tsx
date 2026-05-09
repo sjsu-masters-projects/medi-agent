@@ -127,17 +127,39 @@ function inferDocumentType(file: File): DocumentType {
     const normalizedName = file.name.toLowerCase();
     const normalizedType = file.type.toLowerCase();
 
-    if (normalizedType.includes("pdf") || normalizedName.endsWith(".pdf")) {
-        return DocumentType.LAB_REPORT;
-    }
     if (normalizedType.startsWith("image/")) {
         return DocumentType.DIAGNOSTIC_REPORT;
     }
-    if (normalizedType === "text/csv" || normalizedName.endsWith(".csv")) {
+
+    if (normalizedName.includes("discharge") || normalizedName.includes("summary")) {
+        return DocumentType.DISCHARGE_SUMMARY;
+    }
+    if (normalizedName.includes("prescription") || normalizedName.includes("rx")) {
+        return DocumentType.PRESCRIPTION;
+    }
+    if (normalizedName.includes("referral")) {
+        return DocumentType.REFERRAL;
+    }
+    if (normalizedName.includes("insurance")) {
+        return DocumentType.INSURANCE;
+    }
+    if (
+        normalizedName.includes("lab")
+        || normalizedName.includes("blood")
+        || normalizedName.includes("result")
+        || normalizedType === "text/csv"
+        || normalizedName.endsWith(".csv")
+    ) {
         return DocumentType.LAB_REPORT;
     }
-    if (normalizedType === "text/plain" || normalizedName.endsWith(".txt")) {
-        return DocumentType.DISCHARGE_SUMMARY;
+    if (
+        normalizedName.includes("diagnostic")
+        || normalizedName.includes("xray")
+        || normalizedName.includes("mri")
+        || normalizedName.includes("ct")
+        || normalizedName.includes("scan")
+    ) {
+        return DocumentType.DIAGNOSTIC_REPORT;
     }
     return DocumentType.OTHER;
 }

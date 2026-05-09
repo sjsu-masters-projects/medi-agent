@@ -6,6 +6,7 @@ import { CircularProgress, MedicationCard, ObligationCard } from "@/components/f
 import type { TaskCardStatus } from "@/components/features/task-card.types";
 import { Button, Card, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
+import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
 function splitMedicationName(name: string) {
@@ -60,6 +61,9 @@ export default function TodayPage() {
         summary,
         tasks,
     } = useFeedData();
+    const profile = usePatientProfile();
+    const displayName = profile?.firstName ?? "";
+    const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
     const completionPercent = Number.isFinite(adherenceStats.overallScore)
         ? Math.round(adherenceStats.overallScore * 100)
         : 0;
@@ -84,7 +88,9 @@ export default function TodayPage() {
                 <div className="relative flex items-start justify-between gap-4">
                     <div>
                         <p className="text-xs font-black uppercase tracking-[0.24em] text-white/68">Today</p>
-                        <h1 className="mt-2 text-[2.35rem] font-black leading-none tracking-[-0.04em]">Hi, Sarah</h1>
+                        <h1 className="mt-2 text-[2.35rem] font-black leading-none tracking-[-0.04em]">
+                            {displayName ? `Hi, ${displayName}` : "Hi there"}
+                        </h1>
                         <p className="mt-2 text-base text-white/82">
                             {new Date().toLocaleDateString(undefined, {
                                 day: "numeric",
@@ -94,7 +100,7 @@ export default function TodayPage() {
                         </p>
                     </div>
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[24px] bg-white text-lg font-black text-[#147465] shadow-sm">
-                        S
+                        {avatarInitial}
                     </div>
                 </div>
 
@@ -221,7 +227,7 @@ export default function TodayPage() {
                                         onMarkComplete={() => markComplete(task)}
                                         status={status}
                                         time={task.scheduledTime ?? ""}
-                                        type={task.frequency.includes("walk") ? "exercise" : "custom"}
+                                        type={task.frequency?.includes("walk") ? "exercise" : "custom"}
                                     />
                                 </div>
                             );
