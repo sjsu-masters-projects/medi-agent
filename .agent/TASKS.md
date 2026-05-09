@@ -213,6 +213,10 @@
 - [x] Tap to mark done (optimistic update + API call)
 - [x] Missed task visual indicator
 - [x] Adherence score display (percentage + streak)
+- [x] Fix greeting to use real patient name from auth/API (was hardcoded "Sarah")
+- [x] Fix avatar initial to derive from real first name (was hardcoded "S")
+- [x] Fix NaN% adherence display — backend returns snake_case (`overall_score`), add `normalizeAdherenceStats()` mapper in `use-feed-data.ts`
+- [x] Guard `task.frequency?.includes()` against undefined crash
 
 ### 3.4 Patient Portal — My Records
 - [x] Document list view
@@ -222,6 +226,7 @@
 - [x] Syncfusion PDF viewer UI component (in-app viewing)
 - [x] "Explain This to Me" button + summary display
 - [x] Language selector for explanation
+- [x] Fix `inferDocumentType()` — all PDFs were mapped to `LAB_REPORT`; now uses filename keywords (discharge, prescription, referral, lab, diagnostic, etc.)
 
 ### 3.5 Clinician Portal — Auth
 - [x] Login page (email + password)
@@ -250,6 +255,14 @@
 - [x] Refactor clinician patients page to use reusable `DataTable` component
 - [x] Revert `--webpack` build flag to Turbopack once infra supports it
 - [x] Fix vite path traversal vulnerability (upgrade to ≥7.3.2)
+
+### 3.8 Patient Portal — Profile Page (Audit Fixes)
+- [x] Profile page is read-only — add full edit form (first name, last name, preferred language, gender)
+- [x] Wire edit form to `PUT /api/v1/patients/me`
+- [x] Display gender field in read view (was present in API response but never rendered)
+- [x] Add `use-patient-profile.ts` hook to fetch/cache patient profile across pages
+- [x] Visits page was 100% hardcoded fake data — replace with proper empty state + link to chat
+- [x] Visits page "Schedule visit" button had no handler — replaced with "Message care team" CTA
 
 ---
 
