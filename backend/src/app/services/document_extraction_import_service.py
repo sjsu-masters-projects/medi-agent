@@ -7,10 +7,12 @@ condition, allergy, and obligation tables that power the Today feed.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, cast
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.models.document_extraction import DocumentExtractionResult
@@ -18,6 +20,17 @@ from app.models.enums import DocumentType, MedicationRoute, ObligationType
 from app.services.document_service import DocumentService
 from app.services.medication_service import MedicationService
 from app.services.obligation_service import ObligationService
+
+logger = logging.getLogger(__name__)
+
+
+def _is_missing_source_document_column_error(error: APIError, table_name: str) -> bool:
+    message = str(getattr(error, "message", error))
+    code = str(getattr(error, "code", ""))
+    return (
+        code in {"PGRST204", "42703"} and "source_document_id" in message and table_name in message
+    )
+
 
 DEMO_DOCUMENT_EXTRACTION = DocumentExtractionResult.model_validate(
     {
@@ -245,7 +258,16 @@ class DocumentExtractionImportService:
                 "frequency": obligation.frequency,
                 "source_document_id": str(document_id),
             }
-            created = await self.obligation_service.create_obligation(patient_id, payload)
+            try:
+                created = await self.obligation_service.create_obligation(patient_id, payload)
+            except APIError as exc:
+                if _is_missing_source_document_column_error(exc, "obligations"):
+                    logger.warning(
+                        "Skipping document-derived obligations because obligations.source_document_id "
+                        "is missing from the database schema"
+                    )
+                    return created_ids
+                raise
             created_ids.append(str(created["id"]))
 
         return created_ids

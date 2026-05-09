@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import status
+from postgrest.exceptions import APIError
 
 from app.core.security import get_current_user
 from app.db.connection import get_db
@@ -408,6 +409,56 @@ class TestDeleteDocument:
         mock_supabase_db.storage.from_.assert_called_with("documents")
         mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
         assert mock_supabase_db.table().delete.call_count == 7
+
+    def test_delete_skips_obligation_lookup_when_source_document_column_is_missing(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        document_id = uuid4()
+        medication_id = uuid4()
+        file_path = f"{patient_id}/lab-results.pdf"
+        document_data = {
+            "id": str(document_id),
+            "patient_id": str(patient_id),
+            "uploaded_by": str(patient_id),
+            "uploaded_by_role": "patient",
+            "file_name": "lab-results.pdf",
+            "file_path": file_path,
+            "file_url": "https://storage.example.com/signed-url",
+            "file_size_bytes": 1024000,
+            "mime_type": "application/pdf",
+            "document_type": "lab_report",
+            "source_clinic": None,
+            "parsed": True,
+            "ai_summary": "Summary",
+            "parse_status": "completed",
+            "parse_error": None,
+            "parse_attempts": 1,
+            "visibility": "all_providers",
+            "created_at": "2025-01-15T00:00:00Z",
+        }
+        missing_column_error = APIError(
+            {
+                "message": "column obligations.source_document_id does not exist",
+                "code": "42703",
+                "hint": None,
+                "details": None,
+            }
+        )
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(data=document_data),
+            MagicMock(data=[{"id": str(medication_id)}]),
+            missing_column_error,
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[document_data]),
+        ]
+
+        response = client.delete(f"/api/v1/documents/{document_id}")
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
+        assert mock_supabase_db.table().delete.call_count == 4
 
     def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
         document_id = uuid4()
