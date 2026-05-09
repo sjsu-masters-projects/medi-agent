@@ -532,7 +532,7 @@ export default function RecordsPage() {
                     );
                 })}
             </div>
-            <Modal onClose={closeDocumentModal} open={Boolean(selectedDocument)} title={selectedDocument?.fileName ?? "Record details"}>
+            <Modal onClose={closeDocumentModal} open={Boolean(selectedDocument)} size="wide" title={selectedDocument?.fileName ?? "Record details"}>
                 <div className="space-y-4">
                     <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
                         <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Source</p>

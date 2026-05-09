@@ -109,6 +109,16 @@ a {
     min-height: calc(100dvh - 36px);
     border-radius: 36px;
   }
+
+  .app-shell--responsive {
+    width: min(calc(100% - 2rem), 760px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-shell--responsive {
+    width: min(calc(100% - 3rem), 1120px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

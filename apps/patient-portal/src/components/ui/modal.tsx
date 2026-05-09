@@ -7,9 +7,15 @@ interface ModalProps {
     onClose: () => void;
     title: string;
     children: ReactNode;
+    size?: "default" | "wide";
 }
 
-export function Modal({ children, onClose, open, title }: ModalProps) {
+const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
+    default: "max-w-[480px]",
+    wide: "max-w-[480px] md:max-w-[720px] lg:max-w-[960px] xl:max-w-[1080px]",
+};
+
+export function Modal({ children, onClose, open, size = "default", title }: ModalProps) {
     if (!open) {
         return null;
     }
@@ -17,7 +23,7 @@ export function Modal({ children, onClose, open, title }: ModalProps) {
     return (
         <div className="fixed inset-0 z-60 flex flex-col justify-end bg-[#17233a]/45 backdrop-blur-sm" onClick={onClose}>
             <div
-                className="mx-auto max-h-[88vh] w-full max-w-[480px] overflow-y-auto rounded-t-[34px] border border-white/70 bg-[#fffaf4] p-6 pb-32 shadow-[0_-24px_80px_rgba(23,35,58,0.20)]"
+                className={`mx-auto max-h-[88vh] w-full ${sizeClasses[size]} overflow-y-auto rounded-t-[34px] border border-white/70 bg-[#fffaf4] p-6 pb-32 shadow-[0_-24px_80px_rgba(23,35,58,0.20)]`}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-center justify-between">

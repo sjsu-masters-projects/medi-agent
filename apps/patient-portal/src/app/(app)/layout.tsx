@@ -10,7 +10,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     return (
         <Suspense fallback={null}>
             <ProtectedRoute>
-                <div className="app-shell flex min-h-dvh flex-col">
+                <div className="app-shell app-shell--responsive flex min-h-dvh flex-col">
                     <main className="flex-1 overflow-y-auto pb-32">{children}</main>
                     <BottomNav currentPath={pathname} />
                 </div>
