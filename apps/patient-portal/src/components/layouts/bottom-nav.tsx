@@ -48,7 +48,7 @@ function NavItem({
 
 export function BottomNav({ currentPath }: BottomNavProps) {
     return (
-        <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[480px] -translate-x-1/2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[920px]">
+        <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[480px] -translate-x-1/2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="relative flex min-h-[82px] items-center justify-around rounded-[30px] border border-white/80 bg-white/92 px-2 shadow-[0_-18px_60px_rgba(31,45,69,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur-xl">
                 <NavItem
                     active={currentPath === "/today"}
