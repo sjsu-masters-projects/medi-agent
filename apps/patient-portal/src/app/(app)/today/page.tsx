@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, type ChangeEvent } from "react";
 import Link from "next/link";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
-import { Button, Card, EmptyState, ErrorState, Skeleton } from "@/components/ui";
+import { Card, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
@@ -52,17 +51,13 @@ function formatTimeLabel(
 export default function TodayPage() {
     const {
         adherenceStats,
-        documentImportError,
-        documentImporting,
         error,
-        importDocumentFile,
         loading,
         markComplete,
         refreshFeed,
         summary,
         tasks,
     } = useFeedData();
-    const documentInputRef = useRef<HTMLInputElement | null>(null);
     const profile = usePatientProfile();
     const displayName = profile?.firstName ?? "";
     const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
@@ -71,16 +66,6 @@ export default function TodayPage() {
         : 0;
     const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
     const hasScheduleGaps = tasks.some((task) => task.requiresScheduleConfiguration);
-
-    function handleDocumentFileChange(event: ChangeEvent<HTMLInputElement>) {
-        const file = event.target.files?.[0];
-        if (!file) {
-            return;
-        }
-
-        void importDocumentFile(file);
-        event.target.value = "";
-    }
 
     if (loading && tasks.length === 0) {
         return (
@@ -144,36 +129,7 @@ export default function TodayPage() {
                         </Card>
                     </Link>
                 ) : null}
-                <Card className="flex items-center justify-between gap-4 border-[#b9ded6] bg-[#e7f4f1]">
-                    <div>
-                        <p className="text-base font-black text-[#17233a]">Clinical document</p>
-                        <p className="text-sm font-semibold text-[#48627c]">
-                            {documentImporting ? "Importing..." : "Upload PDF or image"}
-                        </p>
-                    </div>
-                    <Button
-                        disabled={documentImporting}
-                        onClick={() => documentInputRef.current?.click()}
-                        size="sm"
-                        variant="secondary"
-                    >
-                        {documentImporting ? "Importing" : "Import"}
-                    </Button>
-                    <input
-                        accept="application/pdf,image/*,text/plain,text/csv,application/json"
-                        className="hidden"
-                        onChange={handleDocumentFileChange}
-                        ref={documentInputRef}
-                        type="file"
-                    />
-                </Card>
-                {documentImportError ? (
-                    <ErrorState
-                        description={documentImportError}
-                        onRetry={() => documentInputRef.current?.click()}
-                        title="Document import failed"
-                    />
-                ) : null}
+
                 {error ? (
                     <ErrorState
                         description={error}
