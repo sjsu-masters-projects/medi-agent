@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import RecordsPage from "@/app/(app)/records/page";
 import { DocumentParseStatus, DocumentType } from "@/types";
 
-const { get, post, push } = vi.hoisted(() => ({
+const { deleteRequest, get, post, push } = vi.hoisted(() => ({
+    deleteRequest: vi.fn(),
     get: vi.fn(),
     post: vi.fn(),
     push: vi.fn(),
@@ -24,7 +25,7 @@ vi.mock("react-redux", () => ({
 }));
 
 vi.mock("@/services/api", () => ({
-    api: { get, post },
+    api: { delete: deleteRequest, get, post },
 }));
 
 vi.mock("@/services/storage", () => ({
@@ -33,6 +34,7 @@ vi.mock("@/services/storage", () => ({
 
 describe("RecordsPage", () => {
     beforeEach(() => {
+        deleteRequest.mockReset();
         get.mockReset();
         post.mockReset();
         push.mockReset();
@@ -74,5 +76,45 @@ describe("RecordsPage", () => {
         await waitFor(() => {
             expect(push).toHaveBeenCalledWith("/chat?document=doc-1");
         });
+    });
+
+    it("deletes a selected document after confirmation", async () => {
+        get.mockResolvedValue([
+            {
+                ai_summary: "Discharge instructions are ready.",
+                created_at: "2026-04-20T12:00:00Z",
+                document_type: DocumentType.DISCHARGE_SUMMARY,
+                file_name: "Discharge Summary.txt",
+                file_size_bytes: 1200,
+                file_url: "https://example.test/discharge.txt",
+                id: "doc-delete",
+                mime_type: "text/plain",
+                parse_status: DocumentParseStatus.COMPLETED,
+                parsed: true,
+                patient_id: "patient-1",
+                source_clinic: "City Health",
+                uploaded_by: "patient-1",
+                uploaded_by_role: "patient",
+                visibility: "shared",
+            },
+        ]);
+        deleteRequest.mockResolvedValue(undefined);
+
+        render(<RecordsPage />);
+
+        expect(await screen.findByText(/Discharge Summary\.txt/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /Discharge Summary\.txt/i }));
+        fireEvent.click(screen.getByRole("button", { name: /delete document/i }));
+        fireEvent.click(screen.getByRole("button", { name: /delete permanently/i }));
+
+        await waitFor(() => {
+            expect(deleteRequest).toHaveBeenCalledWith("/api/v1/documents/doc-delete", {
+                token: "access-token",
+            });
+        });
+        await waitFor(() => {
+            expect(screen.queryByText(/Discharge Summary\.txt/i)).not.toBeInTheDocument();
+        });
+        expect(screen.getByText(/No records yet/i)).toBeInTheDocument();
     });
 });

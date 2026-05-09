@@ -32,13 +32,14 @@ def mock_supabase_db():
     db.table.return_value = table
 
     # Make all query methods chainable
-    for method in ["select", "eq", "single", "insert", "order"]:
+    for method in ["select", "eq", "single", "insert", "order", "delete"]:
         getattr(table, method).return_value = table
 
     # Mock storage
     storage = MagicMock()
     bucket = MagicMock()
     bucket.create_signed_url.return_value = {"signedURL": "https://storage.example.com/signed-url"}
+    bucket.remove.return_value = []
     storage.from_.return_value = bucket
     db.storage = storage
 
@@ -302,6 +303,56 @@ class TestGetDocument:
         response = client.get(f"/api/v1/documents/{document_id}")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+class TestDeleteDocument:
+    """DELETE /api/v1/documents/{document_id} - Delete a document."""
+
+    def test_success_removes_document_and_storage_object(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        document_id = uuid4()
+        file_path = f"{patient_id}/lab-results.pdf"
+        document_data = {
+            "id": str(document_id),
+            "patient_id": str(patient_id),
+            "uploaded_by": str(patient_id),
+            "uploaded_by_role": "patient",
+            "file_name": "lab-results.pdf",
+            "file_path": file_path,
+            "file_url": "https://storage.example.com/signed-url",
+            "file_size_bytes": 1024000,
+            "mime_type": "application/pdf",
+            "document_type": "lab_report",
+            "source_clinic": None,
+            "parsed": False,
+            "ai_summary": None,
+            "parse_status": "completed",
+            "parse_error": None,
+            "parse_attempts": 1,
+            "visibility": "all_providers",
+            "created_at": "2025-01-15T00:00:00Z",
+        }
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(data=document_data),
+            MagicMock(data=[document_data]),
+        ]
+
+        response = client.delete(f"/api/v1/documents/{document_id}")
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        mock_supabase_db.storage.from_.assert_called_with("documents")
+        mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
+        mock_supabase_db.table().delete.assert_called_once()
+
+    def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
+        document_id = uuid4()
+        mock_supabase_db.table().execute.return_value = MagicMock(data=None)
+
+        response = client.delete(f"/api/v1/documents/{document_id}")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        mock_supabase_db.table().delete.assert_not_called()
 
 
 class TestExplainDocument:

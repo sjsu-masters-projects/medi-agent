@@ -22,7 +22,9 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
 from app.models.document import DocumentRead
+from app.models.document_extraction import DocumentExtractionImportRequest
 from app.models.enums import DocumentType, Language, coerce_locale
+from app.services.document_extraction_import_service import DocumentExtractionImportService
 from app.services.document_service import DocumentService
 from app.services.explanation_service import ExplanationService
 from app.services.ingestion_service import IngestionService
@@ -129,6 +131,38 @@ async def list_documents(
     return await service.list_documents(user.id)
 
 
+@router.post(
+    "/extractions/import",
+    status_code=status.HTTP_201_CREATED,
+    summary="Import extracted document data",
+    description=(
+        "Imports a normalized document extraction result into document, medication, "
+        "allergy, condition, and feed-backed obligation records. If no extraction is "
+        "provided, a bundled demo discharge summary extraction is used."
+    ),
+)
+async def import_document_extraction(
+    body: DocumentExtractionImportRequest | None = None,
+    user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    if user.role != "patient":
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only patients can import document extraction results",
+        )
+
+    service = DocumentExtractionImportService(db)
+    return await service.import_extraction(
+        patient_id=user.id,
+        uploaded_by=user.id,
+        uploaded_by_role=user.role,
+        extraction=body.extraction if body else None,
+    )
+
+
 @router.get(
     "/{document_id}",
     response_model=DocumentRead,
@@ -140,6 +174,19 @@ async def get_document(
     service: DocumentService = Depends(_get_service),
 ) -> Any:
     return await service.get_document(document_id, user.id)
+
+
+@router.delete(
+    "/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a document",
+)
+async def delete_document(
+    document_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+    service: DocumentService = Depends(_get_service),
+) -> None:
+    await service.delete_document(document_id, user.id)
 
 
 @router.post(

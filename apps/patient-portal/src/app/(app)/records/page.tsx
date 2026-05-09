@@ -146,6 +146,9 @@ export default function RecordsPage() {
     const router = useRouter();
     const [documents, setDocuments] = useState<PortalDocument[]>([]);
     const [selectedDocument, setSelectedDocument] = useState<PortalDocument | null>(null);
+    const [deleteConfirming, setDeleteConfirming] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+    const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
     const [explanationLang, setExplanationLang] = useState<Locale>(DEFAULT_LOCALE);
     const [explanationText, setExplanationText] = useState<string | null>(null);
     const [explanationLoading, setExplanationLoading] = useState(false);
@@ -179,6 +182,8 @@ export default function RecordsPage() {
 
     const openDocument = useCallback((document: PortalDocument) => {
         setSelectedDocument(document);
+        setDeleteConfirming(false);
+        setDeleteError(null);
         setExplanationLang(DEFAULT_LOCALE);
         setExplanationLoading(false);
 
@@ -198,6 +203,12 @@ export default function RecordsPage() {
 
         setExplanationText(document.aiSummary ?? null);
     }, [parsingDocIds]);
+
+    const closeDocumentModal = useCallback(() => {
+        setSelectedDocument(null);
+        setDeleteConfirming(false);
+        setDeleteError(null);
+    }, []);
 
     useEffect(() => {
         if (!accessToken) {
@@ -350,8 +361,36 @@ export default function RecordsPage() {
             summary: explanationText ?? selectedDocument.aiSummary,
         });
 
-        setSelectedDocument(null);
+        closeDocumentModal();
         router.push(buildDocumentChatHref(selectedDocument.id));
+    }
+
+    async function handleDeleteDocument() {
+        if (!selectedDocument) {
+            return;
+        }
+
+        if (!accessToken) {
+            setDeleteError("Please sign in again before deleting this document.");
+            return;
+        }
+
+        setDeletingDocumentId(selectedDocument.id);
+        setDeleteError(null);
+        try {
+            await api.delete<void>(`/api/v1/documents/${selectedDocument.id}`, {
+                token: accessToken,
+            });
+            setDocuments((current) =>
+                current.filter((document) => document.id !== selectedDocument.id),
+            );
+            setParsingDocIds((current) => removeTrackedDocumentId(current, selectedDocument.id));
+            closeDocumentModal();
+        } catch (error) {
+            setDeleteError((error as Error).message || "Delete failed. Please try again.");
+        } finally {
+            setDeletingDocumentId(null);
+        }
     }
 
     const processingCount = documents.filter(
@@ -360,6 +399,7 @@ export default function RecordsPage() {
             || document.parseStatus === "pending"
             || document.parseStatus === "processing",
     ).length;
+    const isDeletingSelectedDocument = deletingDocumentId === selectedDocument?.id;
 
     return (
         <div className="patient-page space-y-4 pb-8">
@@ -447,7 +487,7 @@ export default function RecordsPage() {
                     );
                 })}
             </div>
-            <Modal onClose={() => setSelectedDocument(null)} open={Boolean(selectedDocument)} title={selectedDocument?.fileName ?? "Record details"}>
+            <Modal onClose={closeDocumentModal} open={Boolean(selectedDocument)} title={selectedDocument?.fileName ?? "Record details"}>
                 <div className="space-y-4">
                     <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
                         <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Source</p>
@@ -489,6 +529,48 @@ export default function RecordsPage() {
                                 Upload another
                             </Button>
                         </div>
+                        {deleteError ? (
+                            <ErrorState
+                                description={deleteError}
+                                onRetry={() => void handleDeleteDocument()}
+                                title="Could not delete document"
+                            />
+                        ) : null}
+                        {deleteConfirming ? (
+                            <div className="rounded-3xl border border-[#f0b8ae] bg-[#fff2ef] p-4">
+                                <p className="text-base font-bold text-[#7f2c23]">Delete this document?</p>
+                                <p className="mt-1 text-sm leading-6 text-[#9b4539]">
+                                    This removes the record from your documents. Existing care-plan items created from prior parsing are not removed.
+                                </p>
+                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                    <Button
+                                        disabled={isDeletingSelectedDocument}
+                                        fullWidth
+                                        onClick={() => setDeleteConfirming(false)}
+                                        variant="secondary"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        disabled={isDeletingSelectedDocument}
+                                        fullWidth
+                                        onClick={() => void handleDeleteDocument()}
+                                        variant="danger"
+                                    >
+                                        {isDeletingSelectedDocument ? "Deleting" : "Delete permanently"}
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <Button
+                                disabled={isDeletingSelectedDocument}
+                                fullWidth
+                                onClick={() => setDeleteConfirming(true)}
+                                variant="danger"
+                            >
+                                Delete document
+                            </Button>
+                        )}
                     </div>
                 </div>
             </Modal>
