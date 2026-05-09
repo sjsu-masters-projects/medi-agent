@@ -4,7 +4,7 @@ import Link from "next/link";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
-import { Badge, Card, EmptyState, Skeleton } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
@@ -48,8 +48,21 @@ function formatTimeLabel(
 }
 
 export default function TodayPage() {
-    const { adherenceStats, loading, markComplete, summary, tasks, usingMockData } = useFeedData();
-    const completionPercent = Math.round(adherenceStats.overallScore * 100);
+    const {
+        adherenceStats,
+        documentImportError,
+        documentImporting,
+        error,
+        importDemoDocument,
+        loading,
+        markComplete,
+        refreshFeed,
+        summary,
+        tasks,
+    } = useFeedData();
+    const completionPercent = Number.isFinite(adherenceStats.overallScore)
+        ? Math.round(adherenceStats.overallScore * 100)
+        : 0;
     const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
     const hasScheduleGaps = tasks.some((task) => task.requiresScheduleConfiguration);
 
@@ -92,7 +105,6 @@ export default function TodayPage() {
                         <p className="text-sm font-semibold text-white/76">{adherenceStats.currentStreakDays}-day streak</p>
                     </div>
                     <div className="space-y-2 text-right">
-                        {usingMockData ? <Badge variant="info">Demo data</Badge> : null}
                         <CircularProgress
                             percent={completionPercent}
                             progressClassName="stroke-white"
@@ -114,81 +126,108 @@ export default function TodayPage() {
                         </Card>
                     </Link>
                 ) : null}
+                <Card className="flex items-center justify-between gap-4 border-[#b9ded6] bg-[#e7f4f1]">
+                    <div>
+                        <p className="text-base font-black text-[#17233a]">Clinical document</p>
+                        <p className="text-sm font-semibold text-[#48627c]">
+                            {documentImporting ? "Importing..." : "Demo extraction"}
+                        </p>
+                    </div>
+                    <Button disabled={documentImporting} onClick={importDemoDocument} size="sm" variant="secondary">
+                        {documentImporting ? "Importing" : "Import"}
+                    </Button>
+                </Card>
+                {documentImportError ? (
+                    <ErrorState
+                        description={documentImportError}
+                        onRetry={() => void importDemoDocument()}
+                        title="Document import failed"
+                    />
+                ) : null}
+                {error ? (
+                    <ErrorState
+                        description={error}
+                        onRetry={refreshFeed}
+                        title={tasks.length > 0 ? "Schedule may be stale" : "Could not load schedule"}
+                    />
+                ) : null}
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl font-black text-[#17233a]">Today&apos;s schedule</h2>
                     <p className="rounded-full bg-white/80 px-3 py-1 text-sm font-bold text-[#64748b]">{tasks.length} tasks</p>
                 </div>
-                {tasks.length === 0 ? (
+                {!error && tasks.length === 0 ? (
                     <EmptyState
                         description="Your clinicians have not assigned anything for today."
                         icon={<HiOutlineCalendarDays />}
                         title="Nothing scheduled"
                     />
                 ) : null}
-                <div className="ml-2 border-l-2 border-[#d7e5de] pl-6">
-                {tasks.map((task) => {
-                    const status = mapTaskStatus(task.status);
-                    const dotClasses =
-                        status === "completed"
-                            ? "bg-[#147465] text-white"
-                            : status === "active"
-                              ? "border-4 border-[#147465] bg-white"
-                              : status === "missed"
-                                ? "bg-[#d55b4d]"
-                                : "bg-[#d7e5de]";
+                {tasks.length > 0 ? (
+                    <div className="ml-2 border-l-2 border-[#d7e5de] pl-6">
+                        {tasks.map((task) => {
+                            const status = mapTaskStatus(task.status);
+                            const dotClasses =
+                                status === "completed"
+                                    ? "bg-[#147465] text-white"
+                                    : status === "active"
+                                      ? "border-4 border-[#147465] bg-white"
+                                      : status === "missed"
+                                        ? "bg-[#d55b4d]"
+                                        : "bg-[#d7e5de]";
 
-                    if (task.type === FeedTaskType.MEDICATION) {
-                        const medication = splitMedicationName(task.name);
-                        return (
-                            <div className="relative pb-6 last:pb-0" key={task.id}>
-                                <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
-                                    {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
-                                </span>
-                                <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
-                                    {formatTimeLabel(
-                                        task.scheduledTime,
-                                        task.status,
-                                        task.requiresScheduleConfiguration,
-                                    )}
-                                </p>
-                                <MedicationCard
-                                    dosage={medication.dosage}
-                                    id={task.id}
-                                    instructions={task.description}
-                                    name={medication.name}
-                                    onMarkComplete={() => markComplete(task)}
-                                    prescriber={task.provider?.name}
-                                    status={status}
-                                    time={task.scheduledTime ?? ""}
-                                />
-                            </div>
-                        );
-                    }
+                            if (task.type === FeedTaskType.MEDICATION) {
+                                const medication = splitMedicationName(task.name);
+                                return (
+                                    <div className="relative pb-6 last:pb-0" key={task.id}>
+                                        <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
+                                            {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
+                                        </span>
+                                        <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
+                                            {formatTimeLabel(
+                                                task.scheduledTime,
+                                                task.status,
+                                                task.requiresScheduleConfiguration,
+                                            )}
+                                        </p>
+                                        <MedicationCard
+                                            dosage={medication.dosage}
+                                            id={task.id}
+                                            instructions={task.description}
+                                            name={medication.name}
+                                            onMarkComplete={() => markComplete(task)}
+                                            prescriber={task.provider?.name}
+                                            status={status}
+                                            time={task.scheduledTime ?? ""}
+                                        />
+                                    </div>
+                                );
+                            }
 
-                    return (
-                        <div className="relative pb-6 last:pb-0" key={task.id}>
-                            <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
-                                {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
-                            </span>
-                            <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
-                                {formatTimeLabel(
-                                    task.scheduledTime,
-                                    task.status,
-                                    task.requiresScheduleConfiguration,
-                                )}
-                            </p>
-                            <ObligationCard
-                                description={task.name}
-                                id={task.id}
-                                onMarkComplete={() => markComplete(task)}
-                                status={status}
-                                time={task.scheduledTime ?? ""}
-                                type={task.frequency.includes("walk") ? "exercise" : "custom"}
-                            />
-                        </div>
-                    );
-                })}
-                </div>
+                            return (
+                                <div className="relative pb-6 last:pb-0" key={task.id}>
+                                    <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
+                                        {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
+                                    </span>
+                                    <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
+                                        {formatTimeLabel(
+                                            task.scheduledTime,
+                                            task.status,
+                                            task.requiresScheduleConfiguration,
+                                        )}
+                                    </p>
+                                    <ObligationCard
+                                        description={task.name}
+                                        id={task.id}
+                                        onMarkComplete={() => markComplete(task)}
+                                        status={status}
+                                        time={task.scheduledTime ?? ""}
+                                        type={task.frequency.includes("walk") ? "exercise" : "custom"}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : null}
             </div>
 
             <div className="px-5 pt-2">

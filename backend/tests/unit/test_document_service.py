@@ -24,6 +24,10 @@ class TestFileValidation:
         svc = self._make_service()
         svc._validate_file("image/jpeg", 1024)
 
+    def test_accepts_json_extraction_document(self):
+        svc = self._make_service()
+        svc._validate_file("application/json", 1024)
+
     def test_rejects_executable(self):
         from app.core.exceptions import ValidationError
 
@@ -53,5 +57,6 @@ class TestFileValidation:
         """Ensure we haven't accidentally emptied the allowed list."""
         assert len(ALLOWED_MIME_TYPES) >= 7
         assert "application/pdf" in ALLOWED_MIME_TYPES
+        assert "application/json" in ALLOWED_MIME_TYPES
         assert "image/jpeg" in ALLOWED_MIME_TYPES
         assert "text/plain" in ALLOWED_MIME_TYPES

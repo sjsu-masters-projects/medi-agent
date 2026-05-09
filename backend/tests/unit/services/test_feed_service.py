@@ -1,6 +1,6 @@
 """Tests for Feed service."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, Mock
 from uuid import uuid4
 
@@ -416,7 +416,7 @@ async def test_get_today_empty_feed(feed_service, mock_supabase_client):
     patient_id = uuid4()
     result = await feed_service.get_today(patient_id)
 
-    assert result["date"] == date.today().isoformat()
+    assert result["date"] == datetime.now(UTC).date().isoformat()
     assert result["timezone"] == "UTC"
     assert result["tasks"] == []
     assert result["summary"]["total"] == 0

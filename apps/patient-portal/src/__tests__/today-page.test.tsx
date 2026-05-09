@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
-const { markComplete, useFeedData } = vi.hoisted(() => ({
+const { importDemoDocument, markComplete, refreshFeed, useFeedData } = vi.hoisted(() => ({
+    importDemoDocument: vi.fn(),
     markComplete: vi.fn(),
+    refreshFeed: vi.fn(),
     useFeedData: vi.fn(),
 }));
 
@@ -22,20 +24,26 @@ function baseFeedData() {
             currentStreakDays: 4,
             overallScore: 0.5,
         },
+        documentImportError: null,
+        documentImporting: false,
+        error: null,
+        importDemoDocument,
         loading: false,
         markComplete,
+        refreshFeed,
         summary: {
             completed: 1,
             total: 2,
         },
         tasks: [] as FeedTask[],
-        usingMockData: false,
     };
 }
 
 describe("TodayPage", () => {
     beforeEach(() => {
+        importDemoDocument.mockReset();
         markComplete.mockReset();
+        refreshFeed.mockReset();
         useFeedData.mockReset();
     });
 
@@ -108,5 +116,15 @@ describe("TodayPage", () => {
         const setupLink = screen.getByRole("link", { name: /set reminder times/i });
         expect(setupLink).toHaveAttribute("href", "/reminders");
         expect(screen.getByText(/^Set reminder time$/i)).toBeInTheDocument();
+    });
+
+    it("lets patients import a demo clinical document extraction into the real feed pipeline", () => {
+        mockFeedData();
+
+        render(<TodayPage />);
+
+        fireEvent.click(screen.getByRole("button", { name: /^Import$/i }));
+
+        expect(importDemoDocument).toHaveBeenCalledOnce();
     });
 });

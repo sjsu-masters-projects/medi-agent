@@ -1,87 +1,58 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { api } from "@/services/api";
 import {
     fetchTodayFeed,
-    loadMockFeed,
     markTaskComplete,
     setMissedTasks,
 } from "@/store/slices/feed-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import { FeedTaskStatus, FeedTaskType, type AdherenceStats, type FeedSummary, type FeedTask } from "@/types";
+import { FeedTaskStatus, FeedTaskType, type AdherenceStats, type FeedTask } from "@/types";
 
-const mockFeedTasks: FeedTask[] = [
-    {
-        completedAt: new Date().toISOString(),
-        description: "Take with breakfast.",
-        frequency: "daily",
-        id: "demo-1",
-        name: "Metformin 500mg",
-        provider: {
-            clinicName: "City Health",
-            id: "provider-1",
-            name: "Dr. Smith",
-            specialty: "Primary Care",
-        },
-        scheduledTime: "08:00:00",
-        status: FeedTaskStatus.COMPLETED,
-        targetId: "target-1",
-        type: FeedTaskType.MEDICATION,
-    },
-    {
-        description: "30 minutes of low-impact walking.",
-        frequency: "daily",
-        id: "demo-2",
-        name: "Daily walk",
-        provider: {
-            clinicName: "City Health",
-            id: "provider-2",
-            name: "Dr. Patel",
-            specialty: "Cardiology",
-        },
-        scheduledTime: "12:00:00",
-        status: FeedTaskStatus.PENDING,
-        targetId: "target-2",
-        type: FeedTaskType.OBLIGATION,
-    },
-    {
-        description: "Take with dinner.",
-        frequency: "daily",
-        id: "demo-3",
-        name: "Lisinopril 10mg",
-        provider: {
-            clinicName: "City Health",
-            id: "provider-2",
-            name: "Dr. Patel",
-            specialty: "Cardiology",
-        },
-        scheduledTime: "18:00:00",
-        status: FeedTaskStatus.PENDING,
-        targetId: "target-3",
-        type: FeedTaskType.MEDICATION,
-    },
-];
+interface ApiAdherenceStats {
+    current_streak_days?: number;
+    currentStreakDays?: number;
+    medication_score?: number;
+    medicationScore?: number;
+    obligation_score?: number;
+    obligationScore?: number;
+    overall_score?: number;
+    overallScore?: number;
+    patient_id?: string;
+    patientId?: string;
+    period_days?: number;
+    periodDays?: number;
+    total_completed?: number;
+    totalCompleted?: number;
+    total_expected?: number;
+    totalExpected?: number;
+}
 
-const mockFeedSummary: FeedSummary = {
-    completed: 1,
-    missed: 0,
-    pending: 2,
-    skipped: 0,
-    total: 3,
-};
-
-const mockAdherenceStats: AdherenceStats = {
-    currentStreakDays: 4,
-    medicationScore: 0.83,
-    obligationScore: 0.67,
-    overallScore: 0.75,
-    patientId: "demo-patient",
+const emptyAdherenceStats: AdherenceStats = {
+    currentStreakDays: 0,
+    medicationScore: 0,
+    obligationScore: 0,
+    overallScore: 0,
+    patientId: "",
     periodDays: 30,
-    totalCompleted: 18,
-    totalExpected: 24,
+    totalCompleted: 0,
+    totalExpected: 0,
 };
+
+function mapAdherenceStats(stats: ApiAdherenceStats): AdherenceStats {
+    return {
+        currentStreakDays: stats.currentStreakDays ?? stats.current_streak_days ?? 0,
+        medicationScore: stats.medicationScore ?? stats.medication_score ?? 0,
+        obligationScore: stats.obligationScore ?? stats.obligation_score ?? 0,
+        overallScore: stats.overallScore ?? stats.overall_score ?? 0,
+        patientId: stats.patientId ?? stats.patient_id ?? "",
+        periodDays: stats.periodDays ?? stats.period_days ?? 30,
+        totalCompleted: stats.totalCompleted ?? stats.total_completed ?? 0,
+        totalExpected: stats.totalExpected ?? stats.total_expected ?? 0,
+    };
+}
 
 function getMissedTaskIds(tasks: FeedTask[]) {
     const now = new Date();
@@ -100,20 +71,31 @@ export function useFeedData() {
     const dispatch = useDispatch<AppDispatch>();
     const feed = useSelector((state: RootState) => state.feed);
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
-    const [adherenceStats, setAdherenceStats] = useState<AdherenceStats>(mockAdherenceStats);
+    const [adherenceStats, setAdherenceStats] = useState<AdherenceStats>(emptyAdherenceStats);
+    const [documentImportError, setDocumentImportError] = useState<string | null>(null);
+    const [documentImporting, setDocumentImporting] = useState(false);
 
-    useEffect(() => {
-        dispatch(fetchTodayFeed({ token: accessToken }))
-            .unwrap()
-            .catch(() => {
-                dispatch(loadMockFeed({ summary: mockFeedSummary, tasks: mockFeedTasks }));
-            });
+    const refreshFeed = useCallback(() => {
+        if (!accessToken) {
+            return;
+        }
+
+        void dispatch(fetchTodayFeed({ token: accessToken }));
     }, [accessToken, dispatch]);
 
     useEffect(() => {
-        api.get<AdherenceStats>("/api/v1/adherence/stats", { token: accessToken ?? undefined })
-            .then((response) => setAdherenceStats(response))
-            .catch(() => setAdherenceStats(mockAdherenceStats));
+        refreshFeed();
+    }, [refreshFeed]);
+
+    useEffect(() => {
+        if (!accessToken) {
+            setAdherenceStats(emptyAdherenceStats);
+            return;
+        }
+
+        api.get<ApiAdherenceStats>("/api/v1/adherence/stats", { token: accessToken ?? undefined })
+            .then((response) => setAdherenceStats(mapAdherenceStats(response)))
+            .catch(() => setAdherenceStats(emptyAdherenceStats));
     }, [accessToken]);
 
     useEffect(() => {
@@ -147,13 +129,36 @@ export function useFeedData() {
         }
     }
 
+    async function importDemoDocument() {
+        if (!accessToken) {
+            setDocumentImportError("Please sign in again before importing a clinical document.");
+            return;
+        }
+
+        setDocumentImporting(true);
+        setDocumentImportError(null);
+        try {
+            await api.post("/api/v1/documents/extractions/import", undefined, {
+                token: accessToken,
+            });
+            await dispatch(fetchTodayFeed({ token: accessToken })).unwrap();
+        } catch (error) {
+            setDocumentImportError((error as Error).message || "Document import failed.");
+        } finally {
+            setDocumentImporting(false);
+        }
+    }
+
     return {
         adherenceStats,
+        documentImportError,
+        documentImporting,
         error: feed.error,
+        importDemoDocument,
         loading: feed.loading,
         markComplete,
+        refreshFeed,
         summary: feed.summary,
         tasks: feed.tasks,
-        usingMockData: feed.usingMockData,
     };
 }

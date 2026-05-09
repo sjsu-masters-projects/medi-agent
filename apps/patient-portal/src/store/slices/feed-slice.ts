@@ -2,12 +2,46 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 import { api } from "@/services/api";
 import { FeedTaskStatus, type FeedSummary, type FeedTask, type TodayFeedResponse } from "@/types";
 
+interface ApiFeedProvider {
+    id: string;
+    name: string;
+    specialty: string;
+    clinic_name?: string;
+    clinicName?: string;
+}
+
+interface ApiFeedTask {
+    id: string;
+    type: FeedTask["type"];
+    target_id?: string;
+    targetId?: string;
+    name: string;
+    description?: string | null;
+    frequency: string;
+    scheduled_time?: string | null;
+    scheduledTime?: string | null;
+    scheduled_at?: string | null;
+    scheduledAt?: string | null;
+    status: FeedTask["status"];
+    completed_at?: string | null;
+    completedAt?: string | null;
+    requires_schedule_configuration?: boolean;
+    requiresScheduleConfiguration?: boolean;
+    provider?: ApiFeedProvider | null;
+}
+
+interface ApiTodayFeedResponse {
+    date: string;
+    timezone: string;
+    tasks: ApiFeedTask[];
+    summary: FeedSummary;
+}
+
 interface FeedState {
     tasks: FeedTask[];
     summary: FeedSummary;
     loading: boolean;
     error: string | null;
-    usingMockData: boolean;
 }
 
 export const defaultFeedSummary: FeedSummary = {
@@ -23,8 +57,51 @@ const initialState: FeedState = {
     summary: defaultFeedSummary,
     loading: false,
     error: null,
-    usingMockData: false,
 };
+
+function mapApiProvider(provider?: ApiFeedProvider | null): FeedTask["provider"] {
+    if (!provider) {
+        return undefined;
+    }
+
+    return {
+        clinicName: provider.clinicName ?? provider.clinic_name ?? "",
+        id: provider.id,
+        name: provider.name,
+        specialty: provider.specialty,
+    };
+}
+
+function mapApiTask(task: ApiFeedTask): FeedTask {
+    return {
+        completedAt: task.completedAt ?? task.completed_at ?? undefined,
+        description: task.description ?? undefined,
+        frequency: task.frequency,
+        id: task.id,
+        name: task.name,
+        provider: mapApiProvider(task.provider),
+        requiresScheduleConfiguration: Boolean(
+            task.requiresScheduleConfiguration ?? task.requires_schedule_configuration ?? false,
+        ),
+        scheduledAt: task.scheduledAt ?? task.scheduled_at ?? undefined,
+        scheduledTime: task.scheduledTime ?? task.scheduled_time ?? undefined,
+        status: task.status,
+        targetId: task.targetId ?? task.target_id ?? "",
+        type: task.type,
+    };
+}
+
+function mapTodayFeedResponse(response: ApiTodayFeedResponse): TodayFeedResponse {
+    return {
+        date: response.date,
+        summary: {
+            ...defaultFeedSummary,
+            ...response.summary,
+        },
+        tasks: response.tasks.map(mapApiTask),
+        timezone: response.timezone,
+    };
+}
 
 export const fetchTodayFeed = createAsyncThunk<
     TodayFeedResponse,
@@ -32,9 +109,10 @@ export const fetchTodayFeed = createAsyncThunk<
     { rejectValue: string }
 >("feed/fetchToday", async (payload, { rejectWithValue }) => {
     try {
-        return await api.get<TodayFeedResponse>("/api/v1/feed/today", {
+        const response = await api.get<ApiTodayFeedResponse>("/api/v1/feed/today", {
             token: payload?.token ?? undefined,
         });
+        return mapTodayFeedResponse(response);
     } catch (error) {
         return rejectWithValue((error as Error).message);
     }
@@ -44,16 +122,6 @@ export const feedSlice = createSlice({
     name: "feed",
     initialState,
     reducers: {
-        loadMockFeed: (
-            state,
-            action: PayloadAction<{ summary: FeedSummary; tasks: FeedTask[] }>,
-        ) => {
-            state.tasks = action.payload.tasks;
-            state.summary = action.payload.summary;
-            state.loading = false;
-            state.error = null;
-            state.usingMockData = true;
-        },
         markTaskComplete: (
             state,
             action: PayloadAction<{ completedAt: string; taskId: string }>,
@@ -94,7 +162,6 @@ export const feedSlice = createSlice({
                 state.summary = action.payload.summary;
                 state.loading = false;
                 state.error = null;
-                state.usingMockData = false;
             })
             .addCase(fetchTodayFeed.rejected, (state, action) => {
                 state.loading = false;
@@ -103,4 +170,4 @@ export const feedSlice = createSlice({
     },
 });
 
-export const { loadMockFeed, markTaskComplete, setMissedTasks } = feedSlice.actions;
+export const { markTaskComplete, setMissedTasks } = feedSlice.actions;

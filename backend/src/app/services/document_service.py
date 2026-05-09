@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_MIME_TYPES = frozenset(
     {
         "application/pdf",
+        "application/json",
         "image/jpeg",
         "image/png",
         "image/webp",
@@ -55,6 +56,7 @@ class DocumentService:
         document_type: str,
         source_clinic: str | None = None,
         notes: str | None = None,
+        sign_file_url: bool = True,
     ) -> Any:
         """Store document metadata after the frontend has uploaded the file.
 
@@ -63,7 +65,7 @@ class DocumentService:
         self._validate_file(mime_type, file_size_bytes)
 
         # Generate a signed URL for immediate access
-        file_url = self._generate_signed_url(file_path)
+        file_url = self._generate_signed_url(file_path) if sign_file_url else ""
 
         row: dict[str, Any] = {
             "patient_id": str(patient_id),
@@ -109,7 +111,7 @@ class DocumentService:
         # Refresh signed URLs for each document
         data = cast(list[dict[str, Any]], result.data or [])
         for doc in data:
-            if doc.get("file_path"):
+            if self._should_sign_url(doc):
                 doc["file_url"] = self._generate_signed_url(doc["file_path"])
         return data
 
@@ -117,6 +119,15 @@ class DocumentService:
 
     async def get_document(self, document_id: UUID, patient_id: UUID) -> Any:
         """Get a single document with a fresh signed URL."""
+        data = self._get_document_row(document_id, patient_id)
+
+        # Refresh the signed URL
+        if self._should_sign_url(data):
+            data["file_url"] = self._generate_signed_url(data["file_path"])
+        return data
+
+    def _get_document_row(self, document_id: UUID, patient_id: UUID) -> dict[str, Any]:
+        """Fetch a patient-owned document row without mutating signed URLs."""
         result = (
             self.db.table("documents")
             .select("*")
@@ -128,17 +139,54 @@ class DocumentService:
         if not result.data:
             raise NotFoundError("Document", str(document_id))
 
-        # Refresh the signed URL
-        data = cast(dict[str, Any], result.data)
-        if data.get("file_path"):
-            data["file_url"] = self._generate_signed_url(data["file_path"])
-        return data
+        return cast(dict[str, Any], result.data)
+
+    async def delete_document(self, document_id: UUID, patient_id: UUID) -> None:
+        """Delete a patient-owned document metadata row and its storage object."""
+        document = self._get_document_row(document_id, patient_id)
+        file_path = str(document.get("file_path") or "").strip()
+        if file_path:
+            self._delete_storage_file(file_path)
+
+        (
+            self.db.table("documents")
+            .delete()
+            .eq("id", str(document_id))
+            .eq("patient_id", str(patient_id))
+            .execute()
+        )
 
     async def update_summary(self, document_id: UUID, patient_id: UUID, summary: str) -> None:
         """Cache an AI summary on the document row."""
         (
             self.db.table("documents")
             .update({"ai_summary": summary, "parsed": True})
+            .eq("id", str(document_id))
+            .eq("patient_id", str(patient_id))
+            .execute()
+        )
+
+    def update_parse_result(
+        self,
+        document_id: UUID,
+        patient_id: UUID,
+        *,
+        ai_summary: str | None,
+        parse_status: str,
+        parsed: bool,
+        parse_error: str | None = None,
+    ) -> None:
+        """Persist a completed or failed parse result for a patient document."""
+        (
+            self.db.table("documents")
+            .update(
+                {
+                    "ai_summary": ai_summary,
+                    "parse_error": parse_error,
+                    "parse_status": parse_status,
+                    "parsed": parsed,
+                }
+            )
             .eq("id", str(document_id))
             .eq("patient_id", str(patient_id))
             .execute()
@@ -170,3 +218,14 @@ class DocumentService:
         except Exception as e:
             logger.warning("Failed to sign URL for %s: %s", file_path, e)
             return ""
+
+    def _delete_storage_file(self, file_path: str) -> None:
+        """Best-effort removal of a document object from Supabase Storage."""
+        try:
+            self.db.storage.from_("documents").remove([file_path])
+        except Exception as e:
+            logger.warning("Failed to delete storage object %s: %s", file_path, e)
+
+    def _should_sign_url(self, document: dict[str, Any]) -> bool:
+        """Only storage-backed documents have a path that should be signed."""
+        return bool(document.get("file_path"))
