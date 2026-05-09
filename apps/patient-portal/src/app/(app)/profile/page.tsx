@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { HiOutlineBuildingOffice2 } from "react-icons/hi2";
+import { HiOutlineBuildingOffice2, HiOutlinePencilSquare, HiOutlineCheck, HiOutlineXMark } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { PageHeader } from "@/components/layouts";
 import { api } from "@/services/api";
@@ -11,7 +11,7 @@ import { clearStoredSession } from "@/services/auth-session";
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Skeleton } from "@/components/ui";
 import { logout } from "@/store/slices/auth-slice";
 import type { AppDispatch, RootState } from "@/store/store";
-import { getLocaleLabel, normalizeLocale, type Locale } from "@/types";
+import { Gender, Locale, SUPPORTED_LOCALES, getLocaleLabel, normalizeLocale } from "@/types";
 import type { CareTeamMember, Patient } from "@/types";
 
 interface PatientProfileResponse {
@@ -37,6 +37,13 @@ interface CareTeamResponse {
     clinic_name?: string;
     status: CareTeamMember["status"];
     created_at: string;
+}
+
+interface EditDraft {
+    firstName: string;
+    lastName: string;
+    preferredLanguage: Locale;
+    gender: Patient["gender"] | "";
 }
 
 function mapPatient(profile: PatientProfileResponse): Patient {
@@ -68,7 +75,12 @@ function mapCareTeamMember(member: CareTeamResponse): CareTeamMember {
     };
 }
 
-const formatLanguage = getLocaleLabel;
+const GENDER_LABELS: Record<string, string> = {
+    [Gender.MALE]: "Male",
+    [Gender.FEMALE]: "Female",
+    [Gender.OTHER]: "Other",
+    [Gender.PREFER_NOT_TO_SAY]: "Prefer not to say",
+};
 
 function ProfilePageContent() {
     const dispatch = useDispatch<AppDispatch>();
@@ -83,6 +95,14 @@ function ProfilePageContent() {
     const [loading, setLoading] = useState(true);
     const [pageError, setPageError] = useState("");
     const [joining, setJoining] = useState(false);
+
+    // Edit state
+    const [editing, setEditing] = useState(false);
+    const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState("");
+    const [saveSuccess, setSaveSuccess] = useState("");
+
     const showJoinClinicPrompt = searchParams.get("joinClinic") === "1" && careTeam.length === 0;
 
     async function fetchCareTeam(token: string) {
@@ -99,7 +119,6 @@ function ProfilePageContent() {
         }
 
         const token: string = accessToken;
-
         let isMounted = true;
 
         async function loadAccount() {
@@ -112,28 +131,19 @@ function ProfilePageContent() {
                     fetchCareTeam(token),
                 ]);
 
-                if (!isMounted) {
-                    return;
-                }
+                if (!isMounted) return;
 
                 setPatientProfile(mapPatient(profileResponse));
                 setCareTeam(careTeamResponse);
             } catch (error) {
-                if (isMounted) {
-                    setPageError((error as Error).message);
-                }
+                if (isMounted) setPageError((error as Error).message);
             } finally {
-                if (isMounted) {
-                    setLoading(false);
-                }
+                if (isMounted) setLoading(false);
             }
         }
 
         void loadAccount();
-
-        return () => {
-            isMounted = false;
-        };
+        return () => { isMounted = false; };
     }, [accessToken, replace]);
 
     function handleLogout() {
@@ -142,13 +152,59 @@ function ProfilePageContent() {
         replace("/login");
     }
 
+    function startEditing() {
+        if (!patientProfile) return;
+        setEditDraft({
+            firstName: patientProfile.firstName,
+            gender: patientProfile.gender ?? "",
+            lastName: patientProfile.lastName,
+            preferredLanguage: patientProfile.preferredLanguage,
+        });
+        setSaveError("");
+        setSaveSuccess("");
+        setEditing(true);
+    }
+
+    function cancelEditing() {
+        setEditing(false);
+        setEditDraft(null);
+        setSaveError("");
+    }
+
+    async function handleSaveProfile(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!accessToken || !editDraft) return;
+
+        setSaving(true);
+        setSaveError("");
+        setSaveSuccess("");
+
+        try {
+            const updated = await api.put<PatientProfileResponse>(
+                "/api/v1/patients/me",
+                {
+                    first_name: editDraft.firstName.trim(),
+                    last_name: editDraft.lastName.trim(),
+                    preferred_language: editDraft.preferredLanguage,
+                    ...(editDraft.gender ? { gender: editDraft.gender } : {}),
+                },
+                { token: accessToken },
+            );
+            setPatientProfile(mapPatient(updated));
+            setSaveSuccess("Profile updated successfully.");
+            setEditing(false);
+            setEditDraft(null);
+        } catch (error) {
+            setSaveError((error as Error).message || "Failed to save profile. Please try again.");
+        } finally {
+            setSaving(false);
+        }
+    }
+
     async function handleJoinClinic(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        if (!accessToken) {
-            replace("/login");
-            return;
-        }
+        if (!accessToken) { replace("/login"); return; }
 
         if (!inviteCode.trim()) {
             setJoinError("Enter a clinic invite code to continue.");
@@ -206,6 +262,7 @@ function ProfilePageContent() {
                             </Card>
                         ) : null}
 
+                        {/* Header card */}
                         <Card className="overflow-hidden border-[#b9ded6] bg-gradient-to-br from-[#147465] to-[#285d8f] text-white shadow-[0_24px_55px_rgba(20,116,101,0.24)]">
                             <div className="flex items-center gap-4">
                                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 text-2xl font-semibold">
@@ -221,30 +278,140 @@ function ProfilePageContent() {
                             </div>
                         </Card>
 
+                        {/* Personal information card */}
                         <Card className="space-y-4">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
                                     <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Profile details</p>
                                     <h3 className="mt-1 text-xl font-semibold text-[#17233a]">Personal information</h3>
                                 </div>
-                                <Badge variant="info">Active</Badge>
+                                {!editing ? (
+                                    <button
+                                        aria-label="Edit profile"
+                                        className="flex min-h-10 items-center gap-1.5 rounded-2xl border border-[#b9ded6] bg-[#e6f4f1] px-3 py-2 text-sm font-semibold text-[#147465] transition hover:bg-[#d0eceb]"
+                                        onClick={startEditing}
+                                        type="button"
+                                    >
+                                        <HiOutlinePencilSquare className="h-4 w-4" />
+                                        Edit
+                                    </button>
+                                ) : (
+                                    <Badge variant="info">Editing</Badge>
+                                )}
                             </div>
-                            <div className="grid gap-3 text-sm text-[#5b6b83]">
-                                <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Date of birth</p>
-                                    <p className="mt-1 font-semibold text-[#30415f]">{patientProfile.dateOfBirth}</p>
+
+                            {saveSuccess && !editing ? (
+                                <div className="flex items-center gap-2 rounded-2xl bg-[#ecf8ef] px-4 py-3 text-sm font-medium text-[#256047]">
+                                    <HiOutlineCheck className="h-4 w-4 shrink-0" />
+                                    {saveSuccess}
                                 </div>
-                                <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Preferred language</p>
-                                    <p className="mt-1 font-semibold text-[#30415f]">{formatLanguage(patientProfile.preferredLanguage)}</p>
+                            ) : null}
+
+                            {editing && editDraft ? (
+                                <form className="space-y-4" onSubmit={handleSaveProfile}>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <Input
+                                            label="First name"
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, firstName: e.target.value } : d)}
+                                            required
+                                            value={editDraft.firstName}
+                                        />
+                                        <Input
+                                            label="Last name"
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, lastName: e.target.value } : d)}
+                                            required
+                                            value={editDraft.lastName}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="block text-[0.95rem] font-semibold text-[#30415f]">
+                                            Preferred language
+                                        </label>
+                                        <select
+                                            className="min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, preferredLanguage: e.target.value as Locale } : d)}
+                                            value={editDraft.preferredLanguage}
+                                        >
+                                            {SUPPORTED_LOCALES.map((locale) => (
+                                                <option key={locale} value={locale}>
+                                                    {getLocaleLabel(locale)}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="block text-[0.95rem] font-semibold text-[#30415f]">
+                                            Gender <span className="font-normal text-[#8090a5]">(optional)</span>
+                                        </label>
+                                        <select
+                                            className="min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, gender: e.target.value as Patient["gender"] | "" } : d)}
+                                            value={editDraft.gender}
+                                        >
+                                            <option value="">Prefer not to say</option>
+                                            {Object.entries(GENDER_LABELS).map(([value, label]) => (
+                                                <option key={value} value={value}>{label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {saveError ? (
+                                        <div className="rounded-2xl bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#b94032]">
+                                            {saveError}
+                                        </div>
+                                    ) : null}
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Button
+                                            disabled={saving}
+                                            fullWidth
+                                            size="lg"
+                                            type="submit"
+                                        >
+                                            {saving ? "Saving..." : "Save changes"}
+                                        </Button>
+                                        <Button
+                                            disabled={saving}
+                                            fullWidth
+                                            onClick={cancelEditing}
+                                            size="lg"
+                                            type="button"
+                                            variant="secondary"
+                                        >
+                                            <HiOutlineXMark className="mr-1 h-4 w-4" />
+                                            Cancel
+                                        </Button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div className="grid gap-3 text-sm text-[#5b6b83]">
+                                    <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Date of birth</p>
+                                        <p className="mt-1 font-semibold text-[#30415f]">{patientProfile.dateOfBirth}</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Preferred language</p>
+                                        <p className="mt-1 font-semibold text-[#30415f]">{getLocaleLabel(patientProfile.preferredLanguage)}</p>
+                                    </div>
+                                    {patientProfile.gender ? (
+                                        <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Gender</p>
+                                            <p className="mt-1 font-semibold text-[#30415f]">
+                                                {GENDER_LABELS[patientProfile.gender] ?? patientProfile.gender}
+                                            </p>
+                                        </div>
+                                    ) : null}
+                                    <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Timezone</p>
+                                        <p className="mt-1 font-semibold text-[#30415f]">{patientProfile.timezone ?? "UTC"}</p>
+                                    </div>
                                 </div>
-                                <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Timezone</p>
-                                    <p className="mt-1 font-semibold text-[#30415f]">{patientProfile.timezone ?? "UTC"}</p>
-                                </div>
-                            </div>
+                            )}
                         </Card>
 
+                        {/* Reminders card */}
                         <Card className="space-y-4">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
@@ -261,6 +428,7 @@ function ProfilePageContent() {
                             </Link>
                         </Card>
 
+                        {/* Care teams card */}
                         <Card className="space-y-4">
                             <div>
                                 <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Connected clinics</p>
@@ -292,6 +460,7 @@ function ProfilePageContent() {
                             )}
                         </Card>
 
+                        {/* Join clinic card */}
                         <Card className="space-y-4">
                             <div>
                                 <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Join another clinic</p>
@@ -305,12 +474,8 @@ function ProfilePageContent() {
                                     label="Clinic invite code"
                                     onChange={(event) => {
                                         setInviteCode(event.target.value);
-                                        if (joinError) {
-                                            setJoinError("");
-                                        }
-                                        if (joinSuccess) {
-                                            setJoinSuccess("");
-                                        }
+                                        if (joinError) setJoinError("");
+                                        if (joinSuccess) setJoinSuccess("");
                                     }}
                                     placeholder="CITY-8832"
                                     value={inviteCode}
@@ -323,6 +488,7 @@ function ProfilePageContent() {
                             </form>
                         </Card>
 
+                        {/* Sign out card */}
                         <Card className="space-y-3 border-red-100 bg-red-50/70">
                             <div>
                                 <p className="text-xs font-semibold uppercase tracking-wide text-red-400">Account</p>

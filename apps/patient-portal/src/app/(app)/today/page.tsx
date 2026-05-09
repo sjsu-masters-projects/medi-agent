@@ -6,6 +6,7 @@ import { CircularProgress, MedicationCard, ObligationCard } from "@/components/f
 import type { TaskCardStatus } from "@/components/features/task-card.types";
 import { Badge, Card, EmptyState, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
+import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
 function splitMedicationName(name: string) {
@@ -49,7 +50,10 @@ function formatTimeLabel(
 
 export default function TodayPage() {
     const { adherenceStats, loading, markComplete, summary, tasks, usingMockData } = useFeedData();
-    const completionPercent = Math.round(adherenceStats.overallScore * 100);
+    const profile = usePatientProfile();
+    const displayName = profile?.firstName ?? "";
+    const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
+    const completionPercent = Math.round((adherenceStats.overallScore ?? 0) * 100);
     const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
     const hasScheduleGaps = tasks.some((task) => task.requiresScheduleConfiguration);
 
@@ -71,7 +75,9 @@ export default function TodayPage() {
                 <div className="relative flex items-start justify-between gap-4">
                     <div>
                         <p className="text-xs font-black uppercase tracking-[0.24em] text-white/68">Today</p>
-                        <h1 className="mt-2 text-[2.35rem] font-black leading-none tracking-[-0.04em]">Hi, Sarah</h1>
+                        <h1 className="mt-2 text-[2.35rem] font-black leading-none tracking-[-0.04em]">
+                            {displayName ? `Hi, ${displayName}` : "Hi there"}
+                        </h1>
                         <p className="mt-2 text-base text-white/82">
                             {new Date().toLocaleDateString(undefined, {
                                 day: "numeric",
@@ -81,7 +87,7 @@ export default function TodayPage() {
                         </p>
                     </div>
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[24px] bg-white text-lg font-black text-[#147465] shadow-sm">
-                        S
+                        {avatarInitial}
                     </div>
                 </div>
 
@@ -89,7 +95,7 @@ export default function TodayPage() {
                     <div className="space-y-1">
                         <p className="text-xl font-black text-white">Daily progress</p>
                         <p className="text-base text-white/82">{completedLabel}</p>
-                        <p className="text-sm font-semibold text-white/76">{adherenceStats.currentStreakDays}-day streak</p>
+                        <p className="text-sm font-semibold text-white/76">{adherenceStats.currentStreakDays ?? 0}-day streak</p>
                     </div>
                     <div className="space-y-2 text-right">
                         {usingMockData ? <Badge variant="info">Demo data</Badge> : null}
@@ -126,19 +132,45 @@ export default function TodayPage() {
                     />
                 ) : null}
                 <div className="ml-2 border-l-2 border-[#d7e5de] pl-6">
-                {tasks.map((task) => {
-                    const status = mapTaskStatus(task.status);
-                    const dotClasses =
-                        status === "completed"
-                            ? "bg-[#147465] text-white"
-                            : status === "active"
-                              ? "border-4 border-[#147465] bg-white"
-                              : status === "missed"
-                                ? "bg-[#d55b4d]"
-                                : "bg-[#d7e5de]";
+                    {tasks.map((task) => {
+                        const status = mapTaskStatus(task.status);
+                        const dotClasses =
+                            status === "completed"
+                                ? "bg-[#147465] text-white"
+                                : status === "active"
+                                    ? "border-4 border-[#147465] bg-white"
+                                    : status === "missed"
+                                        ? "bg-[#d55b4d]"
+                                        : "bg-[#d7e5de]";
 
-                    if (task.type === FeedTaskType.MEDICATION) {
-                        const medication = splitMedicationName(task.name);
+                        if (task.type === FeedTaskType.MEDICATION) {
+                            const medication = splitMedicationName(task.name);
+                            return (
+                                <div className="relative pb-6 last:pb-0" key={task.id}>
+                                    <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
+                                        {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
+                                    </span>
+                                    <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
+                                        {formatTimeLabel(
+                                            task.scheduledTime,
+                                            task.status,
+                                            task.requiresScheduleConfiguration,
+                                        )}
+                                    </p>
+                                    <MedicationCard
+                                        dosage={medication.dosage}
+                                        id={task.id}
+                                        instructions={task.description}
+                                        name={medication.name}
+                                        onMarkComplete={() => markComplete(task)}
+                                        prescriber={task.provider?.name}
+                                        status={status}
+                                        time={task.scheduledTime ?? ""}
+                                    />
+                                </div>
+                            );
+                        }
+
                         return (
                             <div className="relative pb-6 last:pb-0" key={task.id}>
                                 <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
@@ -151,43 +183,17 @@ export default function TodayPage() {
                                         task.requiresScheduleConfiguration,
                                     )}
                                 </p>
-                                <MedicationCard
-                                    dosage={medication.dosage}
+                                <ObligationCard
+                                    description={task.name}
                                     id={task.id}
-                                    instructions={task.description}
-                                    name={medication.name}
                                     onMarkComplete={() => markComplete(task)}
-                                    prescriber={task.provider?.name}
                                     status={status}
                                     time={task.scheduledTime ?? ""}
+                                    type={task.frequency?.includes("walk") ? "exercise" : "custom"}
                                 />
                             </div>
                         );
-                    }
-
-                    return (
-                        <div className="relative pb-6 last:pb-0" key={task.id}>
-                            <span className={`absolute -left-[34px] top-5 flex h-5 w-5 items-center justify-center rounded-full border-4 border-white ${dotClasses}`}>
-                                {status === "completed" ? <HiOutlineCheck className="h-3.5 w-3.5" /> : null}
-                            </span>
-                            <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
-                                {formatTimeLabel(
-                                    task.scheduledTime,
-                                    task.status,
-                                    task.requiresScheduleConfiguration,
-                                )}
-                            </p>
-                            <ObligationCard
-                                description={task.name}
-                                id={task.id}
-                                onMarkComplete={() => markComplete(task)}
-                                status={status}
-                                time={task.scheduledTime ?? ""}
-                                type={task.frequency.includes("walk") ? "exercise" : "custom"}
-                            />
-                        </div>
-                    );
-                })}
+                    })}
                 </div>
             </div>
 

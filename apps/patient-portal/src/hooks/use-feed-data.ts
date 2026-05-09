@@ -12,6 +12,34 @@ import {
 import type { AppDispatch, RootState } from "@/store/store";
 import { FeedTaskStatus, FeedTaskType, type AdherenceStats, type FeedSummary, type FeedTask } from "@/types";
 
+/**
+ * Raw shape of the adherence stats API response.
+ * The FastAPI backend returns snake_case keys by default.
+ */
+interface AdherenceStatsRaw {
+    patient_id: string;
+    overall_score: number;
+    medication_score: number;
+    obligation_score: number;
+    current_streak_days: number;
+    period_days: number;
+    total_expected: number;
+    total_completed: number;
+}
+
+function normalizeAdherenceStats(raw: AdherenceStatsRaw): AdherenceStats {
+    return {
+        currentStreakDays: raw.current_streak_days ?? 0,
+        medicationScore: raw.medication_score ?? 0,
+        obligationScore: raw.obligation_score ?? 0,
+        overallScore: raw.overall_score ?? 0,
+        patientId: raw.patient_id,
+        periodDays: raw.period_days ?? 30,
+        totalCompleted: raw.total_completed ?? 0,
+        totalExpected: raw.total_expected ?? 0,
+    };
+}
+
 const mockFeedTasks: FeedTask[] = [
     {
         completedAt: new Date().toISOString(),
@@ -111,8 +139,8 @@ export function useFeedData() {
     }, [accessToken, dispatch]);
 
     useEffect(() => {
-        api.get<AdherenceStats>("/api/v1/adherence/stats", { token: accessToken ?? undefined })
-            .then((response) => setAdherenceStats(response))
+        api.get<AdherenceStatsRaw>("/api/v1/adherence/stats", { token: accessToken ?? undefined })
+            .then((response) => setAdherenceStats(normalizeAdherenceStats(response)))
             .catch(() => setAdherenceStats(mockAdherenceStats));
     }, [accessToken]);
 
