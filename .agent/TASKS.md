@@ -34,7 +34,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Not complete | FHIR-aligned only; no genuine SMART launch or CDS Hooks integration |
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
-| CI | Complete locally; remote confirmation pending | Four bounded backend shards, full coverage, frontend quality gates, migration syntax validation, secret scanning, artifacts, and summaries are configured; three green GitHub runs are still required |
+| CI | First PR run green; main confirmation pending | Run 32280310908 passed all required gates in 5m 46s; three green GitHub runs on `main` are still required |
 | Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
 | Demo data | Not complete | Reproducible synthetic seed is missing |
 
@@ -73,7 +73,7 @@ A task is done only when its implementation, authorization, error handling, audi
 
 - [x] A clean clone installs reproducibly using documented commands.
 - [ ] Full required CI passes on `main` three consecutive times.
-- [ ] Full CI completes in 20 minutes or less.
+- [x] Full CI completes in 20 minutes or less.
 - [x] No critical dependency vulnerability remains.
 - [x] The current backend suite completes with live Sentry and Deepgram initialization disabled at test startup.
 - [x] Per-test, pytest-session, and workflow timeouts identify the responsible test or step instead of waiting indefinitely.
@@ -90,7 +90,7 @@ A task is done only when its implementation, authorization, error handling, audi
 - The local sandbox blocks Turbopack's internal build port, so production-build verification used Next's webpack builder; the ordinary CI build command remains unchanged for GitHub runners.
 - The parallel backend shards cover 158 router tests, 66 integration workflow tests, 241 unit-foundation tests, and 219 service tests; the full coverage gate passed all 684 tests in 14.64 seconds at 81.80% coverage.
 - All 17 SQL migrations passed filename/order continuity and PostgreSQL syntax parsing with pglast 8.4.
-- CI now uploads JUnit failure evidence, includes a required-check and duration summary, and runs TruffleHog 3.97.0 on each GitHub change. The first remote execution is pending push.
+- CI now uploads JUnit failure evidence, includes a required-check and duration summary, and runs TruffleHog 3.97.0 on each GitHub change. GitHub Actions run 32280310908 passed every required gate in 5m 46s; the three green `main` runs remain pending a reviewed merge.
 
 ---
 
