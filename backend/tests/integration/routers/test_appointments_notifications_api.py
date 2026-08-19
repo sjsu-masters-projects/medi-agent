@@ -20,7 +20,7 @@ def test_create_appointment_for_authenticated_patient(client, monkeypatch):
         email="patient@test.com",
         role="patient",
     )
-    app.dependency_overrides[get_db] = MagicMock
+    app.dependency_overrides[get_db] = lambda: MagicMock()
 
     create_mock = AsyncMock(
         return_value={
@@ -56,7 +56,7 @@ def test_create_appointment_for_authenticated_patient(client, monkeypatch):
         },
     )
 
-    assert response.status_code == status.HTTP_201_CREATED
+    assert response.status_code == status.HTTP_201_CREATED, response.text
     assert response.json()["status"] == "scheduled"
     create_mock.assert_awaited_once()
     app.dependency_overrides.clear()
@@ -70,7 +70,7 @@ def test_patient_lists_and_marks_notifications_read(client, monkeypatch):
         email="patient@test.com",
         role="patient",
     )
-    app.dependency_overrides[get_db] = MagicMock
+    app.dependency_overrides[get_db] = lambda: MagicMock()
 
     list_mock = AsyncMock(
         return_value=[
@@ -110,7 +110,7 @@ def test_patient_lists_and_marks_notifications_read(client, monkeypatch):
     list_response = client.get("/api/v1/notifications/")
     read_response = client.put(f"/api/v1/notifications/{notification_id}/read")
 
-    assert list_response.status_code == status.HTTP_200_OK
+    assert list_response.status_code == status.HTTP_200_OK, list_response.text
     assert list_response.json()[0]["notification_type"] == "doctor_message"
     assert read_response.status_code == status.HTTP_200_OK
     assert read_response.json()["is_read"] is True

@@ -14,7 +14,6 @@ from app.models.enums import Language
 from app.services.voice_service import (
     VoiceAudio,
     VoiceStoredAudio,
-    VoiceStreamTranscript,
     VoiceTranscript,
 )
 
@@ -149,37 +148,12 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
     token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
     monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
-    class FakeStream:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            return None
-
-        async def send_audio(self, audio):
-            assert audio == b"chunk"
-            return [
-                VoiceStreamTranscript(
-                    transcript="I feel dizzy",
-                    language=Language.EN,
-                    model="nova-3",
-                    is_final=False,
-                )
-            ]
-
-        async def finish(self):
-            return [
-                VoiceStreamTranscript(
-                    transcript="I feel dizzy",
-                    language=Language.EN,
-                    model="nova-3",
-                    is_final=True,
-                )
-            ]
-
-    def _mock_stream(self, *, language):
+    async def _mock_transcribe(audio, *, model, language, smart_format):
+        assert audio == b"chunk"
+        assert model == "nova-3"
         assert language == "en-US"
-        return FakeStream()
+        assert smart_format is True
+        return "I feel dizzy"
 
     async def _mock_persist(self, *, patient_id, audio, mime_type, purpose, message_id=None):
         assert audio == b"chunk"
@@ -192,8 +166,8 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
         )
 
     monkeypatch.setattr(
-        "app.routers.voice.VoiceService.create_streaming_transcription",
-        _mock_stream,
+        "app.routers.voice.transcribe_audio_bytes_async",
+        _mock_transcribe,
     )
     monkeypatch.setattr("app.routers.voice.VoiceService.persist_audio", _mock_persist)
 
@@ -214,13 +188,9 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
                 "audio_base64": base64.b64encode(b"chunk").decode("ascii"),
             }
         )
-        assert websocket.receive_json() == {
-            "type": "transcript_partial",
-            "transcript": "I feel dizzy",
-            "language": "en-US",
-            "model": "nova-3",
-        }
-
+        # The route intentionally buffers MediaRecorder WebM chunks because
+        # fragments after the first do not contain a decodable container
+        # header. Transcription is emitted only after audio_stop.
         websocket.send_json({"type": "audio_stop"})
         assert websocket.receive_json() == {
             "type": "transcript_final",

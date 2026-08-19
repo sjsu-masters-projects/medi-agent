@@ -106,6 +106,16 @@ async def test_get_context_returns_patient_and_document_context(mock_db):
     med_rows = [{"id": str(uuid4()), "name": "Metformin", "dosage": "500mg"}]
     condition_rows = [{"id": str(uuid4()), "name": "Hypertension", "status": "active"}]
     symptom_rows = [{"id": str(uuid4()), "symptom": "dizziness", "severity": 4}]
+    care_team_rows = [
+        {
+            "id": str(uuid4()),
+            "clinician_id": str(uuid4()),
+            "role": "primary",
+            "specialty_context": "Primary care",
+            "clinic_name": "City Health",
+            "clinicians": {"first_name": "Emily", "last_name": "Smith"},
+        }
+    ]
     document_rows = [
         {
             "id": document_id,
@@ -121,6 +131,7 @@ async def test_get_context_returns_patient_and_document_context(mock_db):
         _response(med_rows),
         _response(condition_rows),
         _response(symptom_rows),
+        _response(care_team_rows),
         _response(document_rows),
     ]
 
@@ -130,6 +141,7 @@ async def test_get_context_returns_patient_and_document_context(mock_db):
     assert context["medications"] == med_rows
     assert context["conditions"] == condition_rows
     assert context["recent_symptoms"] == symptom_rows
+    assert context["care_teams"] == care_team_rows
     assert context["document"] is not None
     assert context["document"]["id"] == document_id
 

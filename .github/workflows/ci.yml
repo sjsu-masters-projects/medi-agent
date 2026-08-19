@@ -11,6 +11,7 @@ env:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   pr-policy:
@@ -111,11 +112,23 @@ jobs:
       - backend-ruff-format
       - backend-mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Acquit needs the PR base locally and fails closed on shallow clones.
+          fetch-depth: 0
+      - name: Analyze pytest impact with Acquit (canary)
+        if: github.event_name == 'pull_request'
+        uses: rajeev-chaurasia/acquit@4214cd115819dd3d389149f49a0d5e83b22cdc7e # v0.1.1
+        with:
+          acquit-version: "0.1.1"
+          comment: "true"
+          mode: canary
+          working-directory: .
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

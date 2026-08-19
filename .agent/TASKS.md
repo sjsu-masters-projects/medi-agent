@@ -52,12 +52,17 @@ A task is done only when its implementation, authorization, error handling, audi
 
 **Why first:** No feature work can be measured safely while the primary backend test workflow hangs and dependency state is nondeterministic.
 
-- [/] Reproduce the backend CI hang locally or identify the workflow step that consumes the six-hour window.
-- [ ] Record suite collection count, per-group duration, slowest tests, and external-service waits.
-- [ ] Remove unintended live network/service dependencies from unit and integration tests.
-- [ ] Add explicit timeouts to network, model, database, and websocket test paths.
+- [x] Reproduce the backend CI hang: a stale voice-websocket test waited forever for a retired streaming-transcript event.
+- [x] Record the current baseline: 684 tests pass with coverage in 15.42–26.63 seconds across local runs; the prior websocket wait was the observed long-running path.
+- [x] Prevent the test process from inheriting live Sentry, Deepgram, or retry-worker configuration from the repository `.env`.
+- [x] Bound each test at 30 seconds, the pytest session at 20 minutes, and the GitHub backend-test job at 25 minutes.
 - [ ] Split backend tests into bounded CI groups that can run in parallel.
 - [ ] Add dependency caching without allowing stale lock state.
+- [x] Integrate Acquit 0.1.1 in fail-closed PR canary mode with explicit monorepo import roots.
+- [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; keep the explicit-root workaround and do not enable enforcement yet.
+- [ ] Validate Acquit across at least 10 selective PRs with zero canary alarms.
+- [ ] Add an Acquit regression case for nested `backend/src` projects before considering enforcement.
+- [ ] Promote Acquit from `canary` to `enforce` only after the validation gate passes.
 - [ ] Create deterministic Python and JavaScript lock/install paths.
 - [ ] Resolve all critical dependency vulnerabilities.
 - [ ] Triage high-severity findings as upgrade, replace, remove, or documented exception.
@@ -70,8 +75,8 @@ A task is done only when its implementation, authorization, error handling, audi
 - [ ] Full required CI passes on `main` three consecutive times.
 - [ ] Full CI completes in 20 minutes or less.
 - [ ] No critical dependency vulnerability remains.
-- [ ] No test relies accidentally on a live external service.
-- [ ] Failure output identifies the responsible test or step without waiting for a global timeout.
+- [x] The current backend suite completes with live Sentry and Deepgram initialization disabled at test startup.
+- [x] Per-test, pytest-session, and workflow timeouts identify the responsible test or step instead of waiting indefinitely.
 
 ---
 
