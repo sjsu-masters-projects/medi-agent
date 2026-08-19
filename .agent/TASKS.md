@@ -34,7 +34,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Not complete | FHIR-aligned only; no genuine SMART launch or CDS Hooks integration |
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
-| CI | Bounded locally; remote confirmation pending | Backend completes in 16.06 seconds with per-test, session, and job timeouts; three green GitHub runs are still required |
+| CI | Complete locally; remote confirmation pending | Four bounded backend shards, full coverage, frontend quality gates, migration syntax validation, secret scanning, artifacts, and summaries are configured; three green GitHub runs are still required |
 | Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
 | Demo data | Not complete | Reproducible synthetic seed is missing |
 
@@ -56,7 +56,7 @@ A task is done only when its implementation, authorization, error handling, audi
 - [x] Record the current baseline: 684 tests pass with coverage in 15.42–27.34 seconds across local runs; the prior websocket wait was the observed long-running path.
 - [x] Prevent the test process from inheriting live Sentry, Deepgram, or retry-worker configuration from the repository `.env`.
 - [x] Bound each test at 30 seconds, the pytest session at 20 minutes, and the GitHub backend-test job at 25 minutes.
-- [ ] Split backend tests into bounded CI groups that can run in parallel.
+- [x] Split backend tests into four bounded CI shards that run in parallel, retain a separate full-suite coverage gate, and publish JUnit artifacts on success or failure.
 - [x] Add lock-keyed Python, uv, and npm dependency caching while verifying generated Python locks and installing JavaScript with `npm ci`.
 - [x] Integrate Acquit 0.1.2 in fail-closed PR canary mode with explicit monorepo import roots.
 - [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; verify the published 0.1.2 fix against the minimal reproduction and historical MediAgent commit `089303d`.
@@ -66,8 +66,8 @@ A task is done only when its implementation, authorization, error handling, audi
 - [x] Create deterministic Python and JavaScript lock/install paths.
 - [x] Resolve all critical dependency vulnerabilities.
 - [x] Triage high-severity findings: upgrade affected JavaScript packages, replace `python-jose`/unfixable `ecdsa` with PyJWT and maintained cryptography, and retain no exceptions.
-- [ ] Require backend Ruff, mypy, pytest, frontend lint, typecheck, tests, builds, migration validation, and secret scanning.
-- [ ] Publish CI duration and failure diagnostics in the workflow summary.
+- [x] Require backend Ruff, mypy, pytest, frontend lint, typecheck, tests, builds, PostgreSQL migration syntax validation, and secret scanning.
+- [x] Publish CI duration and failure diagnostics in the workflow summary.
 
 **Acceptance criteria**
 
@@ -88,6 +88,9 @@ A task is done only when its implementation, authorization, error handling, audi
 - Patient portal: ESLint completed with zero errors, 74 tests passed, and the Next 16.3.1 production build passed.
 - Clinician portal: ESLint passed, 66 tests passed, and the Next 16.3.1 production build passed.
 - The local sandbox blocks Turbopack's internal build port, so production-build verification used Next's webpack builder; the ordinary CI build command remains unchanged for GitHub runners.
+- The parallel backend shards cover 158 router tests, 66 integration workflow tests, 241 unit-foundation tests, and 219 service tests; the full coverage gate passed all 684 tests in 14.64 seconds at 81.80% coverage.
+- All 17 SQL migrations passed filename/order continuity and PostgreSQL syntax parsing with pglast 8.4.
+- CI now uploads JUnit failure evidence, includes a required-check and duration summary, and runs TruffleHog 3.97.0 on each GitHub change. The first remote execution is pending push.
 
 ---
 

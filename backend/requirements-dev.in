@@ -15,3 +15,4 @@ httpx==0.28.1
 # -- Linting & Formatting --
 ruff==0.9.10
 mypy==1.15.0
+pglast==8.4
