@@ -10,11 +10,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError
 from supabase import Client, create_client
 
 from app.config import settings
 from app.core.exceptions import AuthenticationError, ValidationError
+from app.core.jwt_utils import decode_unverified_claims
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class MFAService:
     def _extract_expires_at(access_token: str, fallback: int | None = None) -> int:
         """Read the JWT expiry from the returned access token."""
         try:
-            claims = jwt.get_unverified_claims(access_token)
+            claims = decode_unverified_claims(access_token)
         except JWTError:
             return fallback or 0
         exp = claims.get("exp")

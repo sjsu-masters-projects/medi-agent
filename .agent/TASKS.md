@@ -23,7 +23,7 @@ A task is done only when its implementation, authorization, error handling, audi
 
 | Area | Status | Evidence / risk |
 |---|---|---|
-| Repository | Clean | Local `main` equals `origin/main` at `f6e34d2` |
+| Repository | Revival work committed locally | Local `main` contains reviewed revival commits atop `origin/main`; push is intentionally pending |
 | Historical work | Needs reconciliation | Two remote branches and one April stash remain |
 | Patient portal | Partial | Major screens exist; several workflows require real end-to-end completion |
 | Clinician portal | Partial | Dashboard/deep dive exist; consolidated review and action lifecycle incomplete |
@@ -34,8 +34,8 @@ A task is done only when its implementation, authorization, error handling, audi
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Not complete | FHIR-aligned only; no genuine SMART launch or CDS Hooks integration |
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
-| CI | Untrustworthy | Latest backend test workflow was cancelled after about six hours |
-| Dependency security | Failing gate | 159 alerts: 2 critical, 86 high, 57 moderate, 14 low |
+| CI | Bounded locally; remote confirmation pending | Backend completes in 16.06 seconds with per-test, session, and job timeouts; three green GitHub runs are still required |
+| Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
 | Demo data | Not complete | Reproducible synthetic seed is missing |
 
 ## Active task
@@ -57,26 +57,37 @@ A task is done only when its implementation, authorization, error handling, audi
 - [x] Prevent the test process from inheriting live Sentry, Deepgram, or retry-worker configuration from the repository `.env`.
 - [x] Bound each test at 30 seconds, the pytest session at 20 minutes, and the GitHub backend-test job at 25 minutes.
 - [ ] Split backend tests into bounded CI groups that can run in parallel.
-- [ ] Add dependency caching without allowing stale lock state.
+- [x] Add lock-keyed Python, uv, and npm dependency caching while verifying generated Python locks and installing JavaScript with `npm ci`.
 - [x] Integrate Acquit 0.1.2 in fail-closed PR canary mode with explicit monorepo import roots.
 - [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; verify the published 0.1.2 fix against the minimal reproduction and historical MediAgent commit `089303d`.
 - [ ] Validate Acquit across at least 10 selective PRs with zero canary alarms.
 - [x] Verify Acquit 0.1.2 ships regression coverage for nested `backend/src` discovery, replay safety, and release-version synchronization.
 - [ ] Promote Acquit from `canary` to `enforce` only after the validation gate passes.
-- [ ] Create deterministic Python and JavaScript lock/install paths.
-- [ ] Resolve all critical dependency vulnerabilities.
-- [ ] Triage high-severity findings as upgrade, replace, remove, or documented exception.
+- [x] Create deterministic Python and JavaScript lock/install paths.
+- [x] Resolve all critical dependency vulnerabilities.
+- [x] Triage high-severity findings: upgrade affected JavaScript packages, replace `python-jose`/unfixable `ecdsa` with PyJWT and maintained cryptography, and retain no exceptions.
 - [ ] Require backend Ruff, mypy, pytest, frontend lint, typecheck, tests, builds, migration validation, and secret scanning.
 - [ ] Publish CI duration and failure diagnostics in the workflow summary.
 
 **Acceptance criteria**
 
-- [ ] A clean clone installs reproducibly using documented commands.
+- [x] A clean clone installs reproducibly using documented commands.
 - [ ] Full required CI passes on `main` three consecutive times.
 - [ ] Full CI completes in 20 minutes or less.
-- [ ] No critical dependency vulnerability remains.
+- [x] No critical dependency vulnerability remains.
 - [x] The current backend suite completes with live Sentry and Deepgram initialization disabled at test startup.
 - [x] Per-test, pytest-session, and workflow timeouts identify the responsible test or step instead of waiting indefinitely.
+
+**Verification evidence — 2026-08-19**
+
+- Python 3.12 clean environment: exact development lock installed successfully; Ruff and mypy passed; 684 tests passed with 81.71% coverage in 16.06 seconds.
+- Python lock regeneration is deterministic: both lockfile SHA-256 values remained identical after recompilation with uv 0.9.24.
+- `pip-audit` 2.10.1 found zero known vulnerabilities in the exact development lock.
+- A generated ES256 token passed real PyJWT/JWK signature, audience, and issuer verification after the `python-jose` replacement.
+- Fresh `npm ci` completed from the root, patient, and clinician lockfiles; each install and follow-up audit found zero vulnerabilities.
+- Patient portal: ESLint completed with zero errors, 74 tests passed, and the Next 16.3.1 production build passed.
+- Clinician portal: ESLint passed, 66 tests passed, and the Next 16.3.1 production build passed.
+- The local sandbox blocks Turbopack's internal build port, so production-build verification used Next's webpack builder; the ordinary CI build command remains unchanged for GitHub runners.
 
 ---
 

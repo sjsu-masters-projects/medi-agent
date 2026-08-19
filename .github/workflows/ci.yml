@@ -45,8 +45,32 @@ jobs:
             }
 
   # ── Backend Pipeline ──────────────────────────────────────
+  backend-dependency-lock:
+    name: Backend Dependency Lock & Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.0.0
+        with:
+          version: "0.9.24"
+          enable-cache: true
+          cache-dependency-glob: |
+            backend/requirements.in
+            backend/requirements-dev.in
+      - name: Verify compiled dependency locks
+        run: |
+          uv pip compile requirements.in --universal --python-version 3.12 --output-file requirements.txt
+          uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt
+          git diff --exit-code -- requirements.txt requirements-dev.txt
+      - name: Audit locked Python dependencies
+        run: uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt
+
   backend-ruff-lint:
     name: Backend Lint (Ruff)
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,12 +85,13 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements-dev.txt
       - name: Lint (Ruff)
         run: ruff check src/
 
   backend-ruff-format:
     name: Backend Format Check (Ruff)
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -81,12 +106,13 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements-dev.txt
       - name: Format check (Ruff)
         run: ruff format --check src/
 
   backend-mypy:
     name: Backend Type Check (mypy)
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -101,7 +127,7 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements-dev.txt
       - name: Type check (mypy)
         run: mypy src/ --ignore-missing-imports
 
@@ -137,7 +163,7 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements-dev.txt
       - name: Test (pytest)
         env:
           SUPABASE_URL: "https://test.supabase.co"

@@ -10,6 +10,16 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
+`requirements.in` and `requirements-dev.in` contain direct dependency intent;
+the corresponding `.txt` files are exact, generated locks used by CI and
+Docker. After changing an `.in` file, refresh both locks with the pinned CI
+resolver:
+
+```bash
+uv pip compile requirements.in --universal --python-version 3.12 --output-file requirements.txt
+uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt
+```
+
 ## Run
 
 ```bash

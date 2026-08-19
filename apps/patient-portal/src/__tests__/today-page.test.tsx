@@ -3,8 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
-const { importDocumentFile, markComplete, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
-    importDocumentFile: vi.fn(),
+const { markComplete, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
     markComplete: vi.fn(),
     refreshFeed: vi.fn(),
     useFeedData: vi.fn(),
@@ -29,10 +28,7 @@ function baseFeedData() {
             currentStreakDays: 4,
             overallScore: 0.5,
         },
-        documentImportError: null,
-        documentImporting: false,
         error: null,
-        importDocumentFile,
         loading: false,
         markComplete,
         refreshFeed,
@@ -46,7 +42,6 @@ function baseFeedData() {
 
 describe("TodayPage", () => {
     beforeEach(() => {
-        importDocumentFile.mockReset();
         markComplete.mockReset();
         refreshFeed.mockReset();
         useFeedData.mockReset();
@@ -135,31 +130,4 @@ describe("TodayPage", () => {
         expect(screen.getByText(/^Set reminder time$/i)).toBeInTheDocument();
     });
 
-    it("opens the file picker when patients import a clinical document", () => {
-        const inputClick = vi
-            .spyOn(HTMLInputElement.prototype, "click")
-            .mockImplementation(() => {});
-        mockFeedData();
-
-        render(<TodayPage />);
-
-        fireEvent.click(screen.getByRole("button", { name: /^Import$/i }));
-
-        expect(inputClick).toHaveBeenCalledOnce();
-        inputClick.mockRestore();
-    });
-
-    it("imports the selected clinical document file", () => {
-        mockFeedData();
-
-        const { container } = render(<TodayPage />);
-        const input = container.querySelector<HTMLInputElement>('input[type="file"]');
-        const file = new File(["test"], "vatsal-discharge-summary.pdf", {
-            type: "application/pdf",
-        });
-
-        fireEvent.change(input!, { target: { files: [file] } });
-
-        expect(importDocumentFile).toHaveBeenCalledWith(file);
-    });
 });

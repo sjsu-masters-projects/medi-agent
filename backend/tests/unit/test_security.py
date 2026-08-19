@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-from jose import JWTError
+from jwt import PyJWTError as JWTError
 
 from app.core import security
 
@@ -47,6 +47,7 @@ def test_decode_supabase_token_supports_es256_via_jwks(monkeypatch):
         lambda _token: {"alg": "ES256", "kid": "key-123"},
     )
     monkeypatch.setattr(security, "_find_jwks_key", lambda kid: {"kid": kid, "kty": "EC"})
+    monkeypatch.setattr(security.PyJWK, "from_dict", lambda key, algorithm: key)
 
     captured: dict[str, object] = {}
 

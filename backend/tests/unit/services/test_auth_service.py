@@ -682,7 +682,9 @@ async def test_resolve_active_clinic_uses_explicit_invalid_code(auth_service, mo
 
 
 @pytest.mark.asyncio
-async def test_resolve_active_clinic_uses_explicit_inactive_code(auth_service, mock_supabase_client):
+async def test_resolve_active_clinic_uses_explicit_inactive_code(
+    auth_service, mock_supabase_client
+):
     clinic_query = MagicMock()
     clinic_query.select.return_value = clinic_query
     clinic_query.eq.return_value = clinic_query
@@ -725,9 +727,7 @@ async def test_assert_clinician_matches_clinic_transient_failure(
 async def test_login_invalid_credentials(auth_service, mock_auth_client):
     """Test login with invalid credentials."""
     # Mock sign_in_with_password raising exception
-    mock_auth_client.auth.sign_in_with_password.side_effect = Exception(
-        "Invalid login credentials"
-    )
+    mock_auth_client.auth.sign_in_with_password.side_effect = Exception("Invalid login credentials")
 
     # Should raise AuthenticationError
     with pytest.raises(AuthenticationError, match="Invalid email or password"):
@@ -860,9 +860,7 @@ async def test_request_password_reset_email_not_found(auth_service, mock_auth_cl
     await auth_service.request_password_reset(email="nonexistent@example.com")
 
     # Verify reset_password_email was called
-    mock_auth_client.auth.reset_password_email.assert_called_once_with(
-        "nonexistent@example.com"
-    )
+    mock_auth_client.auth.reset_password_email.assert_called_once_with("nonexistent@example.com")
 
 
 # ── Session Formatting Tests ──────────────────────────────────
@@ -955,7 +953,7 @@ async def test_format_session_uses_jwt_claim_role_when_metadata_missing(auth_ser
     mock_response.session = mock_session
 
     monkeypatch.setattr(
-        "app.services.auth_service.jwt.get_unverified_claims",
+        "app.services.auth_service.decode_unverified_claims",
         lambda _: {"user_role": "clinician"},
     )
 
@@ -983,7 +981,7 @@ async def test_format_session_rejects_unsupported_jwt_claim_role(auth_service, m
     mock_response.session = mock_session
 
     monkeypatch.setattr(
-        "app.services.auth_service.jwt.get_unverified_claims",
+        "app.services.auth_service.decode_unverified_claims",
         lambda _: {"user_role": "admin"},
     )
 
