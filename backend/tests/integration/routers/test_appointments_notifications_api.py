@@ -11,6 +11,10 @@ from app.main import app
 from app.models.auth import CurrentUser
 
 
+def _mock_db_dependency():
+    return MagicMock()
+
+
 def test_create_appointment_for_authenticated_patient(client, monkeypatch):
     patient_id = uuid4()
     appointment_id = uuid4()
@@ -20,7 +24,7 @@ def test_create_appointment_for_authenticated_patient(client, monkeypatch):
         email="patient@test.com",
         role="patient",
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _mock_db_dependency
 
     create_mock = AsyncMock(
         return_value={
@@ -70,7 +74,7 @@ def test_patient_lists_and_marks_notifications_read(client, monkeypatch):
         email="patient@test.com",
         role="patient",
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _mock_db_dependency
 
     list_mock = AsyncMock(
         return_value=[
