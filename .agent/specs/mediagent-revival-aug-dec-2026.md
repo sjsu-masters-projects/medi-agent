@@ -219,7 +219,7 @@ Shared domain types will include `ClinicalFact`, `EvidenceCitation`, `SourceProv
 - Reconcile and remove preserved stale branches and stash.
 - Replace stale documentation and backlog.
 - Fix dependency security and the cancelled backend CI path.
-- Run Acquit 0.1.1 in fail-closed PR canary mode with explicit `backend/src` import roots. Require zero unsafe-skip alarms across at least 10 selective PRs before enabling enforcement; pushes to `main` continue to run the full suite.
+- Run Acquit 0.1.2 in fail-closed PR canary mode with explicit `backend/src` import roots. Require zero unsafe-skip alarms across at least 10 selective PRs before enabling enforcement; pushes to `main` continue to run the full suite.
 - Lock dependencies and establish repeatable setup.
 - Seed two synthetic clinics and longitudinal patients.
 

@@ -53,15 +53,15 @@ A task is done only when its implementation, authorization, error handling, audi
 **Why first:** No feature work can be measured safely while the primary backend test workflow hangs and dependency state is nondeterministic.
 
 - [x] Reproduce the backend CI hang: a stale voice-websocket test waited forever for a retired streaming-transcript event.
-- [x] Record the current baseline: 684 tests pass with coverage in 15.42–26.63 seconds across local runs; the prior websocket wait was the observed long-running path.
+- [x] Record the current baseline: 684 tests pass with coverage in 15.42–27.34 seconds across local runs; the prior websocket wait was the observed long-running path.
 - [x] Prevent the test process from inheriting live Sentry, Deepgram, or retry-worker configuration from the repository `.env`.
 - [x] Bound each test at 30 seconds, the pytest session at 20 minutes, and the GitHub backend-test job at 25 minutes.
 - [ ] Split backend tests into bounded CI groups that can run in parallel.
 - [ ] Add dependency caching without allowing stale lock state.
-- [x] Integrate Acquit 0.1.1 in fail-closed PR canary mode with explicit monorepo import roots.
-- [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; keep the explicit-root workaround and do not enable enforcement yet.
+- [x] Integrate Acquit 0.1.2 in fail-closed PR canary mode with explicit monorepo import roots.
+- [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; verify the published 0.1.2 fix against the minimal reproduction and historical MediAgent commit `089303d`.
 - [ ] Validate Acquit across at least 10 selective PRs with zero canary alarms.
-- [ ] Add an Acquit regression case for nested `backend/src` projects before considering enforcement.
+- [x] Verify Acquit 0.1.2 ships regression coverage for nested `backend/src` discovery, replay safety, and release-version synchronization.
 - [ ] Promote Acquit from `canary` to `enforce` only after the validation gate passes.
 - [ ] Create deterministic Python and JavaScript lock/install paths.
 - [ ] Resolve all critical dependency vulnerabilities.
