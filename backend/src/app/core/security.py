@@ -27,9 +27,11 @@ from typing import Any, TypedDict
 from uuid import UUID
 
 import httpx
+import jwt
 from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt import PyJWK
+from jwt import PyJWTError as JWTError
 
 from app.clients.supabase import create_anon_client
 from app.config import settings
@@ -136,7 +138,7 @@ def _decode_supabase_token(token: str) -> dict[str, Any]:
 
         return jwt.decode(
             token,
-            jwk_key,
+            PyJWK.from_dict(jwk_key, algorithm=algorithm),
             algorithms=[algorithm],
             audience="authenticated",
             issuer=_supabase_issuer(),

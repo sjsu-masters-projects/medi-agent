@@ -21,7 +21,7 @@ def test_all_expected_routes_registered():
     from app.main import create_app
 
     app = create_app()
-    paths = {r.path for r in app.routes if hasattr(r, "methods")}
+    paths = set(app.openapi()["paths"])
 
     expected_auth = {
         "/api/v1/auth/signup/patient",
@@ -80,5 +80,5 @@ def test_health_endpoint():
     from app.main import create_app
 
     app = create_app()
-    paths = {r.path for r in app.routes if hasattr(r, "methods")}
+    paths = set(app.openapi()["paths"])
     assert "/health" in paths

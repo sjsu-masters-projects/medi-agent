@@ -60,7 +60,7 @@ See root [`.env.example`](.env.example) and each app’s `.env.example` for the 
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements-dev.txt
 PYTHONPATH=src uvicorn app.main:app --reload
 ```
 
@@ -103,9 +103,17 @@ psql "$DB_URL" -f backend/src/app/db/migrations/012_document_review_queue.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/013_cron_scheduler_foundation.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/014_patient_timezones_and_reminder_schedules.sql
 psql "$DB_URL" -f backend/src/app/db/migrations/015_drug_knowledge_rag.sql
+psql "$DB_URL" -f backend/src/app/db/migrations/016_obligation_source_document.sql
 ```
 
 After migrations, configure the JWT claims hook in Supabase Dashboard → Auth → Hooks per the setup guide.
+
+Before applying a migration change, run the parser-backed validation from the backend virtual environment:
+
+```bash
+cd backend
+python scripts/validate_migrations.py
+```
 
 ---
 

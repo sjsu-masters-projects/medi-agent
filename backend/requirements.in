@@ -1,0 +1,56 @@
+# >=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=
+# MediAgent Backend — Direct Production Dependencies
+# >=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=
+
+# -- Web Framework --
+fastapi
+uvicorn[standard]
+python-multipart
+
+# -- Data Validation & Settings --
+pydantic
+pydantic-settings
+email-validator
+
+# -- Database --
+supabase
+
+# -- AI / LLM --
+google-genai
+google-generativeai
+google-cloud-aiplatform
+langgraph
+langchain-google-genai
+
+# -- Voice --
+deepgram-sdk
+
+# -- Email --
+resend
+
+# -- Auth --
+# PyJWT uses the maintained cryptography backend and avoids python-jose's
+# unfixable transitive python-ecdsa advisory.
+PyJWT[crypto]>=2.11.0,<3.0.0
+cryptography>=50.0.0,<51.0.0
+passlib[bcrypt]
+
+# -- HTTP Client --
+httpx
+
+# -- Logging --
+structlog
+sentry-sdk
+
+# -- Document Processing --
+PyMuPDF
+pytesseract
+Pillow
+
+# -- PII Redaction --
+presidio-analyzer
+presidio-anonymizer
+spacy
+
+# -- FHIR --
+fhir.resources

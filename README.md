@@ -66,7 +66,7 @@ Clinician invite emails require `RESEND_API_KEY` (and a verified-domain `RESEND_
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements-dev.txt
 PYTHONPATH=src uvicorn app.main:app --reload
 ```
 

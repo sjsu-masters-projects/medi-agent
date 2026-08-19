@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock, Mock, patch
 
+import jwt
 import pytest
-from jose import jwt
 
 from app.core.exceptions import AuthenticationError, ValidationError
 from app.services.mfa_service import MFAService
@@ -164,5 +164,5 @@ async def test_unenroll_failure(service, mock_client):
 
 
 def test_extract_expires_at_reads_jwt_claim():
-    token = jwt.encode({"exp": 2234567890}, "secret", algorithm="HS256")
+    token = jwt.encode({"exp": 2234567890}, "test-secret-at-least-32-bytes-long", algorithm="HS256")
     assert MFAService._extract_expires_at(token) == 2234567890

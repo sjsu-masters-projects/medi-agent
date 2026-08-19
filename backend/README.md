@@ -10,6 +10,16 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
+`requirements.in` and `requirements-dev.in` contain direct dependency intent;
+the corresponding `.txt` files are exact, generated locks used by CI and
+Docker. After changing an `.in` file, refresh both locks with the pinned CI
+resolver:
+
+```bash
+uv pip compile requirements.in --universal --python-version 3.12 --output-file requirements.txt
+uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt
+```
+
 ## Run
 
 ```bash
@@ -95,8 +105,15 @@ Migrations are plain SQL files in `src/app/db/migrations/`:
 | `013_cron_scheduler_foundation.sql` | Adds cron run tracking and notification dedupe metadata |
 | `014_patient_timezones_and_reminder_schedules.sql` | Adds patient timezone preferences, obligation notes, and structured reminder schedules |
 | `015_drug_knowledge_rag.sql` | Adds pgvector-backed DailyMed medication knowledge chunks and retrieval RPC |
+| `016_obligation_source_document.sql` | Links generated obligations back to their source document |
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
+
+Validate migration naming, sequence continuity, and PostgreSQL syntax before applying a change:
+
+```bash
+python scripts/validate_migrations.py
+```
 
 ## DailyMed Medication RAG Ingestion
 

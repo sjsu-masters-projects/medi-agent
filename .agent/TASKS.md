@@ -1,677 +1,473 @@
-# MediAgent — Master Task Breakdown
+# MediAgent — August–December 2026 Execution Tracker
 
-> This is the single source of truth for ALL tasks. Update status as you work.
-> `[ ]` = Backlog · `[/]` = In Progress · `[x]` = Done
+> **Active plan:** [`specs/mediagent-revival-aug-dec-2026.md`](specs/mediagent-revival-aug-dec-2026.md)
+>
+> **Baseline date:** 2026-08-18
+>
+> **Feature freeze:** 2026-12-04
+>
+> **Primary outcome:** A complete, deployed product prototype using synthetic or de-identified data.
 
----
+This file is the execution source of truth. The previous semester tracker remains available in Git history at commit `1d06658` and is no longer an accurate measure of product readiness.
 
-## Phase 0: Product & Design (Weeks 1–2)
+## Status rules
 
-### 0.1 Product Definition
-- [x] Draft initial product concept
-- [x] Define user personas (Sarah, Dr. Smith, Dr. Patel)
-- [x] Create comprehensive PRD (features, priorities, architecture)
-- [x] Design multi-provider care model (care_teams)
-- [x] Finalize tech stack decisions
-- [x] Document coding standards and team processes
-- [x] Lock protocol decisions (MCP, A2A, MedGemma, thinking mode)
-- [x] Get full team alignment on PRD
+- `[ ]` Backlog
+- `[/]` In progress
+- `[x]` Done and verified
+- `[!]` Blocked; the reason and owner must be written beside it
 
-### 0.2 Design & UX
-- [x] Create information architecture (sitemap) for Patient Portal
-- [x] Create information architecture (sitemap) for Clinician Portal
-- [x] Define user flows: patient onboarding
-- [x] Define user flows: document upload → parse → Today Feed
-- [x] Define user flows: chat + voice symptom reporting
-- [x] Define user flows: clinician dashboard → patient deep dive → MedWatch
-- [x] Create Figma wireframes for Patient Portal (all screens)
-- [x] Create Figma wireframes for Clinician Portal (all screens)
-- [x] Define design system: colors, typography, spacing, component library
-- [x] Create high-fidelity mockups (Figma AI can accelerate this)
+A task is done only when its implementation, authorization, error handling, audit behavior, tests, and user-visible acceptance path are complete. A route, mock, empty agent shell, or UI-only screen is not a finished feature.
 
----
+## Current release status
 
-## Phase 1: Infrastructure & Setup (Weeks 3–4)
+| Area | Status | Evidence / risk |
+|---|---|---|
+| Repository | Revival work committed locally | Local `main` contains reviewed revival commits atop `origin/main`; push is intentionally pending |
+| Historical work | Needs reconciliation | Two remote branches and one April stash remain |
+| Patient portal | Partial | Major screens exist; several workflows require real end-to-end completion |
+| Clinician portal | Partial | Dashboard/deep dive exist; consolidated review and action lifecycle incomplete |
+| Backend foundation | Partial | Broad API and test base; empty modules and reachable placeholders remain |
+| Records ingestion | Functional foundation | Needs provenance, correction, FHIR validation, and reconciliation hardening |
+| Chat and triage | Functional foundation | Needs provider abstraction, bilingual qualification, recovery, and full journey tests |
+| Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
+| Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
+| Interoperability | Not complete | FHIR-aligned only; no genuine SMART launch or CDS Hooks integration |
+| MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
+| CI | First PR run green; main confirmation pending | Run 32280310908 passed all required gates in 5m 46s; three green GitHub runs on `main` are still required |
+| Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
+| Demo data | Not complete | Reproducible synthetic seed is missing |
 
-### 1.1 Repository Setup
-- [x] Initialize monorepo structure
-- [x] Set up `apps/patient-portal` (Next.js + PWA)
-- [x] Set up `apps/clinician-portal` (Next.js + PWA)
-- [x] Set up `packages/shared` (types, utils)
-- [x] Set up `backend/` (FastAPI project)
-- [x] Configure TailwindCSS for both portals
-- [x] Configure Redux store for both portals
-- [x] Create `docker-compose.yml` for local dev
+## Active task
 
-### 1.2 Supabase Setup
-- [x] Create Supabase project
-- [x] Create all database tables (see ARCHITECTURE.md data model)
-  - [x] `patients`
-  - [x] `clinicians`
-  - [x] `care_teams`
-  - [x] `documents`
-  - [x] `medications`
-  - [x] `obligations`
-  - [x] `adherence_logs`
-  - [x] `conditions`
-  - [x] `allergies`
-  - [x] `symptom_reports`
-  - [x] `adr_assessments`
-  - [x] `appointments`
-  - [x] `chat_messages`
-  - [x] `notifications`
-  - [x] `clinician_messages`
-- [x] Configure Row-Level Security (RLS) policies for all tables
-- [x] Set up Supabase Auth (magic link + email/password + MFA + JWT claims hook)
-- [x] Set up Supabase Storage buckets (documents, avatars, voice-messages)
-- [ ] Test RLS policies with different user roles — external/manual validation with real auth users
+### REV-001 — Restore a trustworthy green CI baseline
 
-### 1.3 CI/CD
-- [x] Set up GitHub Actions: lint on PR (Ruff + ESLint)
-- [x] Set up GitHub Actions: test on PR (pytest + Vitest)
-- [x] Set up GitHub Actions: build check on PR
-- [x] Set up GitHub Actions: deploy backend to Cloud Run on merge to main
-- [x] Set up GitHub Actions: deploy portals to Vercel on merge to main
-- [x] Set up Husky pre-commit hooks (lint + format)
+**Status:** `[/]` In progress
 
-### 1.4 Cloud Infrastructure
-- [x] Set up Google Cloud project / guide
-- [x] Configure Cloud Run strategy for backend
-- [ ] Configure Cloud Scheduler strategy for cron jobs — external/manual infrastructure dependency
-  - [x] Define cron job inventory and owner per job
-  - [x] Define schedule and timezone standards for production jobs
-  - [x] Define retry/backoff policy and idempotency requirements for scheduled endpoints
-  - [x] Define failure handling and replay expectations
-  - [ ] Define monitoring and alert thresholds for scheduled jobs
-  - [x] Document deployment and runbook requirements for Scheduler to Cloud Run
-- [x] Set up Vercel strategy (patient-portal, clinician-portal)
-- [x] Configure environment variables strategy
-- [ ] Set up Sentry strategy for error monitoring — external/manual infrastructure dependency
+**Priority:** P0
 
-### 1.5 External Service Setup
-- [x] Get Gemini API key (Google AI Studio / Vertex AI)
-- [x] Get Deepgram API key and configure SDK
-  - [x] Configure Spanish Deepgram Aura-2 TTS model (`DEEPGRAM_TTS_MODEL_ES`) in environment
-- [x] Set up Resend for email
-- [x] Test DailyMed API access  
-- [x] Test RxNorm API access
-- [ ] Obtain Syncfusion Community License key — external/manual license dependency
-- [ ] Download and test MedGemma model access (Hugging Face / Vertex AI) — external/manual model-access dependency
+**Milestone:** Revival Gate
 
-### 1.6 Service Layer & MCP Servers (for AI Agents)
-- [x] DailyMed service — drug labels, ADR profiles (`app/services/dailymed_service.py`)
-- [x] RxNorm service — drug normalization (`app/services/rxnorm_service.py`)
-- [x] Supabase MCP server — patient data queries, shared connection (`app/mcp/supabase_server.py`)
-- [x] Deepgram MCP server — voice STT/TTS, shared client (`app/mcp/deepgram_server.py`)
-- [x] MCP base class and module init (`app/mcp/base.py`)
-- [x] Add comprehensive integration tests and strict type hints
+**Owner:** Integration owner; assign a team member before implementation PR
 
-### 1.7 A2A Protocol Setup
-- [ ] Create Agent Card JSON schema for each agent
-- [ ] Expose `/.well-known/agent.json` endpoint on backend
-- [/] Implement A2A task management (submit, status, artifacts) — internal lifecycle persistence, retry/backoff, dead-letter, and clinician timeline landed in Phase 5; public A2A protocol exposure is still open
-- [ ] Create mock "Hospital EHR Agent" for demo
+**Why first:** No feature work can be measured safely while the primary backend test workflow hangs and dependency state is nondeterministic.
+
+- [x] Reproduce the backend CI hang: a stale voice-websocket test waited forever for a retired streaming-transcript event.
+- [x] Record the current baseline: 684 tests pass with coverage in 15.42–27.34 seconds across local runs; the prior websocket wait was the observed long-running path.
+- [x] Prevent the test process from inheriting live Sentry, Deepgram, or retry-worker configuration from the repository `.env`.
+- [x] Bound each test at 30 seconds, the pytest session at 20 minutes, and the GitHub backend-test job at 25 minutes.
+- [x] Split backend tests into four bounded CI shards that run in parallel, retain a separate full-suite coverage gate, and publish JUnit artifacts on success or failure.
+- [x] Add lock-keyed Python, uv, and npm dependency caching while verifying generated Python locks and installing JavaScript with `npm ci`.
+- [x] Integrate Acquit 0.1.2 in fail-closed PR canary mode with explicit monorepo import roots.
+- [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; verify the published 0.1.2 fix against the minimal reproduction and historical MediAgent commit `089303d`.
+- [ ] Validate Acquit across at least 10 selective PRs with zero canary alarms.
+- [x] Verify Acquit 0.1.2 ships regression coverage for nested `backend/src` discovery, replay safety, and release-version synchronization.
+- [ ] Promote Acquit from `canary` to `enforce` only after the validation gate passes.
+- [x] Create deterministic Python and JavaScript lock/install paths.
+- [x] Resolve all critical dependency vulnerabilities.
+- [x] Triage high-severity findings: upgrade affected JavaScript packages, replace `python-jose`/unfixable `ecdsa` with PyJWT and maintained cryptography, and retain no exceptions.
+- [x] Require backend Ruff, mypy, pytest, frontend lint, typecheck, tests, builds, PostgreSQL migration syntax validation, and secret scanning.
+- [x] Publish CI duration and failure diagnostics in the workflow summary.
+
+**Acceptance criteria**
+
+- [x] A clean clone installs reproducibly using documented commands.
+- [ ] Full required CI passes on `main` three consecutive times.
+- [x] Full CI completes in 20 minutes or less.
+- [x] No critical dependency vulnerability remains.
+- [x] The current backend suite completes with live Sentry and Deepgram initialization disabled at test startup.
+- [x] Per-test, pytest-session, and workflow timeouts identify the responsible test or step instead of waiting indefinitely.
+
+**Verification evidence — 2026-08-19**
+
+- Python 3.12 clean environment: exact development lock installed successfully; Ruff and mypy passed; 684 tests passed with 81.71% coverage in 16.06 seconds.
+- Python lock regeneration is deterministic: both lockfile SHA-256 values remained identical after recompilation with uv 0.9.24.
+- `pip-audit` 2.10.1 found zero known vulnerabilities in the exact development lock.
+- A generated ES256 token passed real PyJWT/JWK signature, audience, and issuer verification after the `python-jose` replacement.
+- Fresh `npm ci` completed from the root, patient, and clinician lockfiles; each install and follow-up audit found zero vulnerabilities.
+- Patient portal: ESLint completed with zero errors, 74 tests passed, and the Next 16.3.1 production build passed.
+- Clinician portal: ESLint passed, 66 tests passed, and the Next 16.3.1 production build passed.
+- The local sandbox blocks Turbopack's internal build port, so production-build verification used Next's webpack builder; the ordinary CI build command remains unchanged for GitHub runners.
+- The parallel backend shards cover 158 router tests, 66 integration workflow tests, 241 unit-foundation tests, and 219 service tests; the full coverage gate passed all 684 tests in 14.64 seconds at 81.80% coverage.
+- All 17 SQL migrations passed filename/order continuity and PostgreSQL syntax parsing with pglast 8.4.
+- CI now uploads JUnit failure evidence, includes a required-check and duration summary, and runs TruffleHog 3.97.0 on each GitHub change. GitHub Actions run 32280310908 passed every required gate in 5m 46s; the three green `main` runs remain pending a reviewed merge.
 
 ---
 
-## Phase 2: Backend Core (Weeks 5–8)
+## Milestone R0 — Revival and truth restoration · Weeks 1–2
 
-### 2.1 FastAPI Foundation
-- [x] Set up FastAPI app with middleware (CORS, auth, logging)
-- [x] Create Pydantic models for all entities (request/response schemas)
-- [x] Create Supabase client service (connection, queries)
-- [x] Create base error handling (custom exceptions, error responses)
-- [x] Set up API versioning (`/api/v1/`)
-- [x] Auto-generate OpenAPI docs
+### REV-002 — Reconcile preserved historical work
 
-### 2.2 Authentication API
-- [x] `POST /api/v1/auth/signup/patient` — patient signup
-- [x] `POST /api/v1/auth/signup/clinician` — clinician signup
-- [x] `POST /api/v1/auth/signup/clinic-admin` — bootstrap clinic + first clinic admin
-- [x] `POST /api/v1/auth/login` — email/password login
-- [x] `POST /api/v1/auth/refresh` — token refresh
-- [x] `POST /api/v1/auth/password-reset` — password reset email
-- [x] `GET /api/v1/auth/me` — current user from JWT
-- [x] Validate clinician signup against active clinic codes + allowed roles
-- [x] JWT middleware for route protection
-- [x] Role-based access control (patient vs clinician)
-- [x] Harden JWT claims parsing + role extraction fallback for auth sessions
-- [x] Write auth integration tests
+- [ ] Add regression tests for real patient greeting and avatar identity.
+- [ ] Add regression test ensuring adherence percentages never render `NaN`.
+- [ ] Add regression test for missing obligation frequency.
+- [ ] Verify patient profile editing persists through the API.
+- [ ] Verify visits contain no hardcoded fake appointment.
+- [ ] Verify document types are inferred from content/metadata rather than mapping every PDF to a lab report.
+- [ ] Verify upload completes before extraction/import begins.
+- [ ] Verify expired import sessions fail safely and visibly.
+- [ ] Reimplement only behavior that is still missing on current `main`.
+- [ ] Delete `origin/codex/patient-portal-audit-followup` after verification.
+- [ ] Delete `origin/fix/patient-portal-audit` after verification.
+- [ ] Drop the stale April stash after verification.
 
-### 2.3 Patient API
-- [x] `GET /api/v1/patients/me` — get own profile
-- [x] `PUT /api/v1/patients/me` — update profile
-- [x] `GET /api/v1/patients/me/care-team` — list patient's providers
-- [x] `POST /api/v1/patients/me/care-team/join` — join clinic via code
-- [x] Enforce invite lifecycle checks (invalid, expired, claimed, already linked)
-- [x] Write patient API tests
+### REV-003 — Make documentation truthful
 
-### 2.4 Clinician API
-- [x] `GET /api/v1/clinicians/me` — get own profile
-- [x] `GET /api/v1/clinicians/me/patients` — list assigned patients
-- [x] `GET /api/v1/clinicians/me/patients/{id}` — get patient detail
-- [x] `POST /api/v1/clinicians/me/invite-code` — generate patient invite code
-- [x] `GET /api/v1/clinicians/me/invite-code` — read latest pending invite code
-- [x] `GET /api/v1/clinicians/me/invite-codes` — list invite lifecycle history
-- [x] `POST /api/v1/clinicians/me/invite-codes/{care_team_id}/revoke` — revoke pending invite code
-- [x] `POST /api/v1/clinics/resolve-code` — resolve clinic code pre-auth
-- [x] Write clinician API tests
+- [x] Save the approved August–December revival plan.
+- [x] Replace the stale semester checkbox inventory with this tracker.
+- [ ] Rewrite `PROJECT.md` with the approved clinic/polypharmacy thesis and clinical boundaries.
+- [ ] Rewrite `ARCHITECTURE.md` to match deployed code, FHIR, safety, MCP, and A2A decisions.
+- [ ] Replace placeholder names and obsolete `develop` workflow in `TEAM.md`.
+- [ ] Mark all superseded model and chain-of-thought decisions without deleting decision history.
+- [ ] Add a one-command setup and validation guide.
 
-### 2.5 Document API
-- [x] `POST /api/v1/documents/` — register uploaded document (metadata-only)
-- [x] `GET /api/v1/documents` — list patient's documents
-- [x] `GET /api/v1/documents/{id}` — get document detail + signed URL
-- [x] `POST /api/v1/documents/{id}/explain` — 501 placeholder (Phase 4)
-- [x] File validation + signed URL generation
-- [x] Write document API tests
+### REV-004 — Remove architecture theater
 
-### 2.6 Medications & Obligations API
-- [x] `GET /api/v1/medications` — list patient's active medications
-- [x] `POST /api/v1/medications` — create medication
-- [x] `PUT /api/v1/medications/{id}` — update medication
-- [x] `GET /api/v1/obligations` — list patient's obligations
-- [x] `POST /api/v1/obligations` — create obligation
-- [x] `GET /api/v1/reminders/targets` — list reminder-eligible medications and obligations
-- [x] `PUT /api/v1/reminders/{target_type}/{target_id}` — upsert patient-owned reminder schedule
-- [x] `POST /api/v1/adherence` — log medication taken / obligation completed
-- [x] `GET /api/v1/adherence/stats` — adherence score + streak calculation
-- [x] Write medication and adherence tests
+- [ ] Inventory empty modules, placeholder returns, mock-success paths, and reachable `NotImplementedError` statements.
+- [ ] Delete unjustified agent shells.
+- [ ] Convert scheduling, notification, auth, and database work into deterministic services.
+- [ ] Keep only the four approved agent/worker boundaries.
+- [ ] Add a CI check preventing new empty production modules and reachable placeholders.
 
-### 2.7 Today Feed API
-- [x] `GET /api/v1/feed/today` — aggregated daily tasks (meds + obligations from all providers)
-- [x] Include source provider info for each task
-- [x] Calculate which tasks are pending/completed/missed
-- [x] Generate per-occurrence tasks from patient reminder schedules when configured
-- [x] Write feed tests
+### REV-005 — Create deterministic synthetic environments
+
+- [ ] Seed two synthetic clinics with assigned clinicians and staff.
+- [ ] Seed English- and Spanish-preferring chronic-care patients.
+- [ ] Include longitudinal documents, medication changes, allergies, adherence, symptoms, appointments, and care-team history.
+- [ ] Make seed/reset idempotent and safe for local and demo environments.
+- [ ] Add documented demo accounts without embedding secrets in the repository.
+
+**R0 exit gate**
+
+- [ ] REV-001 through REV-005 acceptance paths are green.
+- [ ] Repository contains no ambiguous preserved work.
+- [ ] Documentation reflects the intended product and actual implementation.
+- [ ] A clean environment can be created and validated reproducibly.
 
 ---
 
-## Phase 3: Frontend Core (Weeks 5–8, parallel with Phase 2)
+## Milestone R1 — Clinical data, provenance, and interoperability · Weeks 3–4
 
-### 3.1 Design System
-- [x] Set up TailwindCSS theme (colors, typography, spacing)
-- [x] Create base UI components: Button, Input, Card, Badge, Modal, Dropdown
-- [x] Create layout components: AppShell, Sidebar, TopBar, BottomNav
-- [x] Create loading states (skeleton screens)
-- [x] Create empty states
-- [x] Create error states
-- [x] Make all components responsive (mobile-first for patient, desktop-first for clinician)
+### INT-001 — Canonical clinical facts and provenance
 
-### 3.2 Patient Portal — Auth
-- [x] Sign-up page (email/password flow via Supabase Auth)
-- [x] Onboarding flow (name, DOB, language, allergies)
-- [x] Join clinic (enter code or use invite link)
-- [x] Redirect patients without care team to profile join-clinic flow
-- [x] Auth state management in Redux
-- [x] Protected route wrapper
+- [ ] Define shared `ClinicalFact`, `EvidenceCitation`, `SourceProvenance`, and confidence/uncertainty types.
+- [ ] Store original source, document location, extractor version, model version, timestamp, and reviewer state.
+- [ ] Prevent unreviewed facts from silently becoming approved clinical truth.
+- [ ] Add lineage queries from derived fact to original artifact and from artifact to all derived facts.
+- [ ] Audit creation, correction, approval, rejection, and deletion.
 
-### 3.3 Patient Portal — Today Feed
-- [x] Today Feed page layout
-- [x] Medication task card component (name, dosage, time, instructions)
-- [x] Obligation task card component (type badge, description)
-- [x] Provider grouping (show which doctor set each task)
-- [x] Tap to mark done (optimistic update + API call)
-- [x] Missed task visual indicator
-- [x] Adherence score display (percentage + streak)
+### INT-002 — FHIR R4 validation and mapping
 
-### 3.4 Patient Portal — My Records
-- [x] Document list view
-- [x] Document upload button (file picker + camera capture)
-- [x] Upload progress indicator
-- [x] Research and configure Syncfusion PDF viewer integration
-- [x] Syncfusion PDF viewer UI component (in-app viewing)
-- [x] "Explain This to Me" button + summary display
-- [x] Language selector for explanation
+- [ ] Map Patient, Practitioner, Organization, and CareTeam.
+- [ ] Map Condition, AllergyIntolerance, MedicationRequest, and MedicationStatement.
+- [ ] Map Observation, DocumentReference, Appointment, Communication, and CarePlan.
+- [ ] Generate Provenance and AuditEvent resources.
+- [ ] Validate resource shape and identifiers before persistence/export.
+- [ ] Handle missing, partial, duplicate, and unsupported resources safely.
+- [ ] Add round-trip import/export fixture tests.
 
-### 3.5 Clinician Portal — Auth
-- [x] Login page (email + password)
-- [x] MFA setup flow
-- [x] Clinic setup page (name, NPI)
-- [x] Role management (Admin, Provider, Nurse)
-- [x] Clinic-code verification gate before clinician login/signup
-- [x] Clinic-admin bootstrap signup page (`/signup/admin`)
-- [x] Auth state in Redux
-- [x] Protected routes
+### INT-003 — SMART-on-FHIR sandbox launch
 
-### 3.6 Clinician Portal — Dashboard Shell
-- [x] Dashboard layout (sidebar + content area)
-- [x] Navigation (Dashboard, Patients, MedWatch, Settings)
-- [x] Patient list table component
-- [x] Risk badge component (🟢🟡🔴)
-- [x] Responsive layout
+- [ ] Implement `/api/v1/smart/launch` and `/api/v1/smart/callback`.
+- [ ] Validate OAuth state, issuer, token audience, scopes, and expiry.
+- [ ] Consume patient and encounter launch context.
+- [ ] Import the supported patient bundle from a public sandbox.
+- [ ] Show launch context and imported provenance in the clinician portal.
+- [ ] Document sandbox setup and reproducible conformance test.
 
-### 3.7 Phase 3 — Known Limitations & Tech Debt
-- [x] Create generic error state component (`components/ui/error-state.tsx`)
-- [x] Research and configure Syncfusion PDF viewer integration
-- [x] Language selector for AI record explanations
-- [x] Clinician MFA setup flow
-- [x] Clinician role management (Admin, Provider, Nurse)
-- [x] Clinician protected route wrapper
-- [x] Refactor clinician patients page to use reusable `DataTable` component
-- [x] Revert `--webpack` build flag to Turbopack once infra supports it
-- [x] Fix vite path traversal vulnerability (upgrade to ≥7.3.2)
+### SAFE-001 — Approval and audit infrastructure
+
+- [ ] Define `ClinicalRecommendation`, `ApprovalDecision`, `ActionEnvelope`, and `AuditRecord`.
+- [ ] Enforce tiered action authority server-side.
+- [ ] Require idempotency keys for externally visible actions.
+- [ ] Record proposer, evidence, reviewer, edits, decision, executor, and outcome.
+- [ ] Prevent approval by an unauthorized or unassigned clinician.
+- [ ] Add replay and duplicate-action tests.
+
+### AI-001 — Provider-neutral AI and voice interfaces
+
+- [ ] Define model capabilities and structured error taxonomy.
+- [ ] Implement Gemini text provider behind the interface.
+- [ ] Add optional MedGemma and NVIDIA NIM comparison adapters.
+- [ ] Place Deepgram and Gemini Live behind a voice-provider interface.
+- [ ] Record latency, model/version, tool calls, token/usage data, and fallback path.
+- [ ] Guarantee deterministic text fallback when audio is unavailable.
+
+**R1 exit gate**
+
+- [ ] A synthetic patient launches through SMART and imports a validated FHIR bundle.
+- [ ] Every clinical fact can be traced to its source.
+- [ ] Clinical actions cannot bypass approval policy.
 
 ---
 
-## Phase 4: Ingestion Agent (Weeks 9–12)
+## Milestone R2 — Records and medication safety · Weeks 5–6
 
-### 4.1 Agent Core
-- [x] Create BaseAgent abstract class (SOLID compliant) — `agents/base.py`
-- [x] Create Gemini client service (retry, timeout, structured output) — `clients/gemini.py`
-- [x] Create MedGemma client service (Vertex AI + HF + fallback) — `clients/medgemma.py`
-- [x] Fix MedGemma: Gemma chat template for vLLM endpoint
-- [x] Fix MedGemma: prompt-echo stripping
-- [x] Create LangGraph state schema for ingestion workflow — `agents/ingestion/graph.py`
-- [x] Agent execution observability/tracing — `core/observability.py`
-- [x] Create ModelRouter service (route tasks to correct model)
-- [x] Implement Ingestion Agent graph nodes:
-  - [x] Node: receive_document (validate input, set state)
-  - [x] Node: extract_content (MedGemma 27B for clinical extraction)
-  - [x] Node: validate_fhir (validate against FHIR schemas)
-  - [x] Node: normalize_medications (RxNorm MCP lookup)
-  - [x] Node: save_to_database (Supabase MCP upsert)
-  - [x] Node: generate_summary (Flash Lite for patient-facing summary)
-  - [x] Node: create_feed_tasks (extract meds + follow-ups → obligations)
-- [x] Codebase cleanup (remove duplicates and unnecessary files)
+### REC-001 — Complete record ingestion lifecycle
 
-### 4.2 Tools
-- [x] FHIR Resource Builder (MedicationRequest, Condition, AllergyIntolerance, Appointment)
-- [x] RxNorm API client (brand → generic → RxCUI normalization)
-- [x] Medication normalizer (parse dosage strings, frequency extraction)
+- [ ] Support patient and clinician PDF/image upload.
+- [ ] Persist upload, extraction, review, correction, and failure states.
+- [ ] Show field-level provenance and confidence.
+- [ ] Route low-confidence and contradictory fields to review.
+- [ ] Support approve, correct, reject, retry, and safe deletion.
+- [ ] Reconcile derived data when a document is deleted.
+- [ ] Cover duplicate upload, corrupt file, unsupported type, timeout, and expired-session cases.
 
-### 4.3 MedGemma Evaluation
-- [x] Deploy MedGemma 27B on Vertex AI Model Garden
-- [x] Create 5 clinical benchmark scenarios (lab, ADR, drug interaction, triage, discharge)
-- [x] Run 4 benchmark iterations (fix prompt format, fix model names, fix chat template)
-- [x] Compare accuracy: MedGemma 27B vs Gemini Flash Lite vs Gemini Pro
-- [x] Decision: adopt MedGemma 27B for clinical tasks (parsing, ADR, interactions, triage)
-- [x] Document results — `backend/reports/benchmark_27b_20260321_192905.md`
-- [x] Add D17/D18 to PROJECT.md Decision Log
+### MED-001 — Multi-source medication reconciliation
 
-### 4.4 Testing
-- [x] Create synthetic test documents (discharge summary, lab report, prescription, diagnostic report)
-  - [x] `backend/tests/fixtures/discharge_summary.txt`
-  - [x] `backend/tests/fixtures/lab_report.txt`
-  - [x] `backend/tests/fixtures/prescription.txt`
-  - [x] `backend/tests/fixtures/diagnostic_report.txt`
-- [x] Golden-set evaluation: expected parsing output for each test document
-  - [x] `backend/tests/fixtures/discharge_summary_expected.json`
-  - [x] `backend/tests/fixtures/lab_report_expected.json`
-  - [x] `backend/tests/fixtures/prescription_expected.json`
-  - [x] `backend/tests/fixtures/diagnostic_report_expected.json`
-- [x] Golden-set integration test: load fixture → run pipeline → assert against expected JSON
-- [x] Unit tests for FHIR builder and normalizer
-- [x] Integration test: upload → parse → database → Today Feed
+- [ ] Normalize medication identity using RxNorm when possible.
+- [ ] Combine patient, clinician, document, and FHIR medication sources.
+- [ ] Detect duplicate therapy, dose change, missing medication, status conflict, and allergy conflict.
+- [ ] Attach DailyMed/RxNorm evidence and freshness.
+- [ ] Display uncertainty instead of fabricating resolution.
+- [ ] Require clinician approval for the canonical medication list.
+- [ ] Preserve full reconciliation history.
 
-### 4.5 Patient Portal Integration
-- [x] Wire up document upload → API → Ingestion Agent → DB
-- [x] Today Feed auto-populates after document parsing
-- [x] "Explain This" calls AI and displays summary
-- [x] Handle parsing errors gracefully (show status, allow retry)
+### MED-002 — Clinician reconciliation experience
+
+- [ ] Build side-by-side source comparison.
+- [ ] Support accept, reject, edit, defer, and request-patient-confirmation actions.
+- [ ] Display evidence, provenance, confidence, and last-updated time.
+- [ ] Reflect approved changes in both portals and FHIR export.
+
+**R2 exit gate**
+
+- [ ] A clinician can turn an uploaded synthetic record into an approved medication list without hidden or fabricated data.
 
 ---
 
-## Phase 5: Chat & Voice — Triage + Symptom Agents (Weeks 13–16)
+## Milestone R3 — Patient companion and follow-up · Weeks 7–8
 
-### 5.0 Implementation Plan
-- [x] Audit current Phase 5 chat, voice, RAG, multilingual, and A2A implementation state
-- [x] Define production architecture for chat, voice, model routing, RAG, safety, and multilingual behavior - `.agent/specs/phase-5-chat-voice-design.md`
-- [ ] Ship Phase 5 as small reviewable PRs following the design plan
+### PAT-001 — Reliable conversation lifecycle
 
-### 5.1 Chat Backend
-- [x] WebSocket endpoint `/ws/chat/{patient_id}`
-- [x] Message persistence to `chat_messages` table
-- [x] Conversation history retrieval (sliding window + summary)
-- [x] Patient context injection (active meds, recent symptoms, conditions)
-- [x] Document context injection API: accept `document_id` / `context=doc:<id>` and fetch parsed summary for chat context
-- [x] Chat pre-load behavior for "Ask about this document": initialize chat with fetched document summary context
-- [x] Document context completion criteria: backend context fetch and patient chat prefill UX are independently tested
+- [ ] Persist sessions, messages, structured state, and tool outcomes.
+- [ ] Recover after refresh, websocket reconnect, provider timeout, and quota exhaustion.
+- [ ] Prevent duplicate messages and duplicate tool actions.
+- [ ] Show when an answer is based on approved records, general evidence, or insufficient information.
 
-### 5.2 Triage Agent
-- [x] Intent classification (symptom, medication_question, schedule, general, urgent)
-- [x] Multi-turn conversation state management
-- [/] Routing logic: intent → appropriate sub-agent/tool
-- [x] Safety rails: detect urgent/emergency → escalation response + clinician notification
-- [x] Bilingual response generation (auto-detect language, respond in same)
+### PAT-002 — Adherence, symptom, and barrier collection
 
-### 5.3 Symptom Analysis Agent
-- [/] Follow-up question generation (severity, timing, related meds, recent changes)
-- [/] Structured symptom report creation (symptom, severity 1-10, onset, related_med)
-- [x] Save to `symptom_reports` table
-- [/] Delegate to Pharmacovigilance Agent via A2A protocol (not direct function call)
-- [x] Verify A2A task lifecycle: submitted → working → completed
-- [x] Enforce per-symptom-event A2A idempotency keys for task creation
-- [x] Add A2A retry/backoff policy with dead-letter terminal state
-- [x] Add background retry worker: process `retrying` tasks where `next_retry_at <= now`
+- [ ] Record medication adherence with patient confirmation.
+- [ ] Collect onset, duration, severity, related medication, and red flags for symptoms.
+- [ ] Capture barriers such as cost, side effects, access, confusion, and schedule.
+- [ ] Create follow-up tasks and care-gap state.
+- [ ] Make structured reports visible in the clinician timeline.
 
-### 5.4 Medical RAG
-- [/] Populate pgvector with drug information (from DailyMed)
-  - [x] Add `drug_knowledge_chunks` pgvector schema and similarity-match RPC
-  - [x] Add DailyMed label chunk builder/upsert service
-  - [x] Add checked-in ingestion script for curated DailyMed labels
-  - [x] Run first curated ingestion against production Supabase and verify a baseline label set
-  - [ ] Expand curated ingestion set and document repeatable production ingest cadence/runbook
-- [x] Embedding generation for medication knowledge base
-  - [x] Add Google Gen AI embedding client with configurable model and dimensions
-  - [x] Keep embedding dependency injectable for offline tests
-- [x] RAG retrieval pipeline: query → embed → similarity search → LLM response
-  - [x] Retrieve medication chunks for likely medication questions using active medication names/RxCUIs
-  - [x] Pass retrieved medication context into the triage response prompt
-  - [x] Add safe fallback when retrieval is weak or unavailable
-- [x] Citation inclusion (source of information)
-  - [x] Preserve DailyMed source title, section, URL, and citation id in prompt context
-  - [x] Instruct patient-facing medication answers to cite grounded chunks
+### SAFE-002 — Deterministic triage overrides
 
-### 5.5 Voice Integration
-- [/] Deepgram STT client (streaming WebSocket)
-  - [x] Add authenticated backend voice WebSocket contract (`/ws/voice/{patient_id}`)
-  - [x] Add server-side final-audio STT path through Deepgram with validation/tests
-  - [x] Add true incremental audio chunk streaming from browser mic to backend STT
-- [/] Deepgram TTS client (text → audio stream)
-  - [x] Add backend TTS generation path returning playable audio payload metadata
-  - [x] Persist generated assistant audio in `voice-messages` storage and `chat_messages.audio_url`
-- [x] Voice-to-voice pipeline: mic → STT → Triage Agent → response → TTS → speaker
-- [ ] Language detection from audio
-- [x] Audio message storage (Supabase Storage, URL in chat_messages)
-- [ ] Voice readback of document summaries: 🔊 button on Records modal → TTS in selected language
-- [ ] Multilingual TTS beyond EN/ES (Hindi, Chinese, Vietnamese, Tagalog — top US non-English medical populations)
-- [ ] Production readiness hardening: long-session stream stability, reconnect semantics, and explicit WS health metrics/alerts
+- [ ] Finalize emergency, self-harm, severe allergy, and urgent medication rules in English and Spanish.
+- [ ] Execute safety rules before model routing.
+- [ ] Prevent model output from weakening required escalation language.
+- [ ] Store the triggered rule and escalation result.
+- [ ] Add adversarial and multilingual regression coverage.
 
-### 5.6 Patient Portal — Chat UI
-- [x] Chat page layout (WhatsApp-style)
-- [x] Message bubble components (user, assistant)
-- [x] Text input with send button
-- [x] Voice input button (hold-to-record or tap-to-toggle)
-- [x] Voice mode toggle (switch to full voice-to-voice)
-- [x] Audio playback for TTS responses
-- [x] Real-time message streaming (typing indicator, progressive display)
-- [x] Language indicator
+### PAT-003 — English and Spanish product parity
 
-### 5.7 Records → Chat Bridge
-- [x] "Ask about this document" button in Records modal
-- [x] Navigate to `/chat?document={document_id}`
-- [x] Chat page reads query param → loads document AI summary as system context
-- [x] Triage Agent uses document data for medication_question intent responses
+- [ ] Translate dynamic and static patient journeys.
+- [ ] Preserve clinical terminology and evidence meaning across languages.
+- [ ] Test language switching mid-session.
+- [ ] Validate voice transcript, error, consent, and emergency flows in both languages.
+- [ ] Complete clinician/pharmacist review of high-risk bilingual content.
 
-### 5.8 Testing
-- [x] Golden-set for Triage Agent: 20+ test messages with expected intent + route
-- [ ] Golden-set for Symptom Agent: 10+ symptom conversations with expected structured output
-- [/] Voice pipeline end-to-end test
-  - [x] Add backend voice WebSocket contract tests for STT/TTS events and validation errors
-  - [ ] Add browser mic → backend STT → chat → backend TTS end-to-end test
-- [x] Load test for WebSocket connections
-- [x] Document→Chat context injection test: open chat from document → verify context available
-- [x] Unit tests for A2A idempotency and retry/dead-letter transitions
+**R3 exit gate**
 
-### 5.9 Production Hardening Follow-ups
-- [x] Remove same-session conversation state race under concurrent WebSocket writers (optimistic lock/version check or equivalent DB claim strategy)
-- [ ] Enforce runtime topology for retry worker ownership as the default production model (single logical worker owner)
-- [ ] Add conditional multi-worker safety for retry processing as defense in depth if multiple worker-enabled instances run (DB claim/update locking or Redis distributed lock)
-- [ ] Add observability for A2A retry worker: dashboards/alerts for `retrying` and `dead_letter` counts, backlog age, and worker cycle failures
-
-### 5.10 Chat Audit Follow-ups (see `.agent/specs/chat-scenario-matrix.md`)
-
-- [x] Build comprehensive scenario matrix (happy/failure/edge) with code citations — `.agent/specs/chat-scenario-matrix.md`
-- [x] Document expected user-visible behavior for AI-call failure modes (3 fallback layers, 15 failure cases)
-- [x] Map routing for non-clinical / medication / urgent / document-context prompts
-- [x] G1 — Distinct outer-fallback wording + structured `chat_fallback_layer` / `chat_fallback_reason` log fields, with `categorize_llm_failure` bucketing (auth/timeout/quota/parse/network/unknown)
-- [x] G2 — Spanish emergency keywords (dolor de pecho, no puedo respirar, infarto, …) + Spanish mental-health keywords (ansioso, deprimido, …) so rule fallback is bilingual
-- [x] G3 — Isolate `DrugKnowledgeService` failures from triage so RAG outage doesn't collapse the turn to L3 outer fallback
-- [x] G6 — Self-harm phrases route to `mental_health/emergency` with a 988+911 response template (instead of generic 911 only)
-- [x] G8 — `_apply_safety_override` now never downgrades emergency and broadens to non-medication intents on adverse-effect signal
-- [x] G9 — Sanitize `validation_error` user message; raw Pydantic text only goes to logs
-- [x] Backend tests: 9 new cases in `tests/unit/agents/test_triage_safety_overrides.py` + golden-set extended with bilingual + G6 cases
-- [ ] G7 — Frontend WS auto-reconnect with exponential backoff, preserve voice mode across transient closes (next PR)
-- [ ] Wire `chat_fallback_layer` log fields into a counter sink (Sentry tag / Prometheus / OTel) — currently structured-log-only
-- [ ] Manual end-to-end portal testing of H1–H6 (happy paths) once ADC is verified in CI/staging
-- [ ] UI overlap audit on chat page (typing indicator, timestamps, language label, mobile ergonomics) — needs running dev server walkthrough
-- [ ] Forced model-failure manual test (kill ADC, verify graceful UX with new outer-fallback wording)
+- [ ] A patient completes record explanation, adherence, symptom reporting, and follow-up in English and Spanish.
 
 ---
 
-## Phase 6: Clinician Dashboard (Weeks 19–22)
+## Milestone R4 — Clinician review and pharmacovigilance · Weeks 9–10
 
-### 6.1 Risk Radar
-- [x] Risk score calculation service (adherence + symptoms + ADR flags)
-- [x] `GET /api/v1/clinicians/me/dashboard` — aggregated risk data with sort/filter/pagination params
-- [x] Risk Radar UI: patient cards with 🟢🟡🔴 badges (includes `unknown` for new patients)
-- [x] Sortable/filterable (by risk, last activity, med count) — backend + frontend wired
-- [x] Real-time updates via Supabase Realtime (subscription hook in dashboard page wired to `patchPatient`) — PR #36
-- [x] Click-through to patient deep dive
+### CLN-001 — Consolidated review workspace
 
-### 6.2 Patient Deep Dive
-- [x] Patient profile view (demographics, conditions, allergies)
-- [x] Medications list with source provider (enriched via care_teams join)
-- [x] Adherence chart (Recharts LineChart — 30-day daily series)
-- [x] Symptom log with severity timeline (Recharts AreaChart) — snake/camel normalization at API boundary
-- [x] Obligation compliance tracking (obligation count + completion rate displayed in adherence tab)
-- [x] Chat transcript viewer (read-only ChatTranscript component)
-- [x] SOAP note display (AI-generated, with Regenerate button + error display)
+- [ ] Combine document, medication, symptom, adherence, ADR, and pending-action queues.
+- [ ] Add explainable priority, age, source, freshness, and assignment filters.
+- [ ] Support approve, reject, amend, defer, dismiss, and request-information decisions.
+- [ ] Update queue and patient deep dive without manual refresh.
+- [ ] Prevent cross-clinic and unassigned-patient access.
 
-### 6.3 Summarization Agent
-- [x] Aggregate patient data: adherence logs, symptoms, chats, labs
-- [x] Generate SOAP note (Subjective, Objective, Assessment, Plan)
-- [x] Update on-demand when clinician clicks "Generate SOAP Note"
-- [x] Store in `soap_notes` table (migration 008 created)
-- [x] Graph error handling: conditional edge skips store on LLM failure
-- [x] Prompt injection mitigation: patient chat sanitized + delimited in prompt
+### CLN-002 — Explainable Risk Radar and timeline
 
-### 6.4 Document Upload & Sync
-- [x] Clinician document upload UI (drag-and-drop, multi-file — DocumentUploadZone, document type selector)
-- [x] Set obligations form (type: diet/exercise/custom, description, frequency) — reusable after success
-- [x] Bidirectional sync: clinician upload → patient sees in My Records
-- [x] Patient upload → clinician review queue — dedicated clinician review queue with approve/reject workflow and deep dive review badges/actions
-- [x] Trigger AI parsing on clinician uploads (backend background task)
+- [ ] Calculate risk from versioned, reproducible signals.
+- [ ] Display contributing factors and freshness for every risk level.
+- [ ] Show document, medication, symptom, adherence, message, appointment, approval, and action events chronologically.
+- [ ] Link events to source evidence and reviewer outcomes.
 
-### 6.5 Structured Document Summary UI
-- [x] Parse AI summary into sections: Medications | Watch For | Follow-up Dates
-- [x] Display as accordion/cards instead of plain text blob (DocumentSummary component)
-- [x] Each medication links to patient adherence context (clickable link from document summary)
-- [x] Clinician annotations: clinician adds notes that patient sees alongside AI summary
+### PV-001 — ADR and Naranjo workflow
 
-### 6.6 Phase 6 — Known Remaining Work & Tech Debt
-- [x] Wire Supabase Realtime subscription on dashboard (hook → `patchPatient` dispatch)
-- [x] Build patient upload review queue (filter by `uploaded_by_role === 'patient'`, approve/reject UI)
-- [x] Split clinician document review/deep-dive document workflow into focused service + UI components (`ClinicianDocumentWorkflowService`, `PatientDocumentsPanel`)
-- [x] Add integration tests for `get_dashboard_data` and `get_patient_deep_dive` async service methods
-- [x] Add graph node unit tests for `gather_patient_data`, `generate_soap_note`, `store_soap_note`
-- [x] Add realistic Recharts rendering tests (current tests mock all chart components to bare divs)
-- [x] Enable Supabase Realtime publication for dashboard tables (`adherence_logs`, `symptom_reports`, `adr_assessments`)
-- [x] Add rate limiting on SOAP note generation endpoint (expensive LLM call, 15-30s per request)
+- [ ] Replace empty pharmacovigilance modules with tested implementation.
+- [ ] Collect complete ADR evidence and missing-information requests.
+- [ ] Calculate Naranjo assistance deterministically where possible.
+- [ ] Keep model-generated classification separate from reviewer decision.
+- [ ] Support reassessment when evidence changes.
 
-### 6.7 Session Management & Auth Hardening
-- [x] **Token Refresh Before Expiry:** Implement proactive JWT refresh for logged-in users (before token expires)
-  - [x] Backend: Refresh token endpoint already exists (`POST /api/v1/auth/refresh`)
-  - [x] Frontend: `useAuthSessionRefresh` hook refreshes active sessions before expiry
-  - [x] Edge case: User returns after browser sleep / tab backgrounded — force refresh on tab focus
-  - [x] Silent refresh updates stored session without UI interruption unless refresh fails
-  - [x] Add tests: verify refresh timing, focus refresh, no-op when not near expiry, and failed refresh logout
-  - [x] Idle-timeout awareness reviewed; absolute inactivity timeout remains a future product/security policy decision
-- [x] **Homepage & Protected Route Redirects:** Implement consistent redirect flow for production
-  - [x] Unauthenticated users landing on `/dashboard`, `/patients`, etc. → redirect to `/login` + capture return path
-  - [x] After successful login → redirect to captured path or default home
-  - [x] Default home: Patient Portal → `/today` | Clinician Portal → `/dashboard`
-  - [x] Add tests: verify redirect chain and state preservation
-  - [x] Production config: Supabase redirect URLs and custom domains configured for patient + clinician portals
-- [x] **Login/Logout UX:** Prevent stale session display
-  - [x] Logout: Clear local session; backend refresh-token invalidation deferred because Supabase refresh expiry remains source of truth
-  - [x] Login: Verify session + role before showing portal content (not just JWT presence)
-  - [x] API 401 → clear session and redirect to login with "session expired" reason
-  - [x] API client tests verify authenticated 401 redirect behavior
+### PV-002 — MedWatch draft lifecycle
+
+- [ ] Generate an editable MedWatch-compatible draft.
+- [ ] Link every populated field to source evidence.
+- [ ] Require clinician/pharmacist approval.
+- [ ] Export the approved draft without submitting it.
+- [ ] Audit edits and reviewer sign-off.
+
+**R4 exit gate**
+
+- [ ] Every clinical recommendation has evidence, reviewer state, and an auditable outcome.
 
 ---
 
-## Phase 7: Pharmacovigilance (Weeks 19–22, parallel with Phase 6)
+## Milestone R5 — Scheduling, messaging, voice, and continuity · Weeks 11–12
 
-### 7.1 Pharmacovigilance Agent
-- [ ] DailyMed MCP server queries (drug labels, ADR profiles)
-- [ ] Naranjo Algorithm calculator (automated scoring for 10 questions)
-- [ ] Cross-reference symptom with all active medications (including cross-provider)
-- [ ] Causality assessment using Gemini 3.0 Pro **thinking mode** (transparent reasoning chain)
-- [ ] Log thinking chain for clinician review (show WHY, not just score)
-- [ ] MedWatch 3500A form template (all required fields)
-- [ ] Auto-populate form from patient data + ADR assessment
-- [ ] De-identification pipeline (strip PHI for FDA submission)
+### SCH-001 — Appointment lifecycle
 
-### 7.2 Nightly Batch Job
-- [ ] Cloud Scheduler cron: trigger nightly ADR scan
-- [ ] Scan all patients: new symptoms since last scan
-- [ ] Batch pharmacovigilance agent runs
-- [ ] Generate new MedWatch drafts where appropriate
+- [ ] Clinician or approved workflow proposes slots.
+- [ ] Patient accepts, declines, or requests alternatives.
+- [ ] Confirmed appointment appears in both portals.
+- [ ] Support calendar export and timezone-safe rendering.
+- [ ] Handle conflicts, cancellation, rescheduling, expiration, and duplicate confirmation.
 
-### 7.3 MedWatch Queue UI
-- [ ] MedWatch inbox page (list of drafted reports)
-- [ ] Draft card: risk badge, one-line summary, Naranjo score, suspect drug
-- [ ] Detail view: full form preview in Syncfusion PDF Viewer
-- [ ] Edit form inline
-- [ ] Approve button → submit (or stage for submission)
-- [ ] Dismiss button → reason required → logged for audit
-- [ ] Status tracking: Draft → Reviewed → Submitted
+### COM-001 — Care-team communication and notifications
 
-### 7.4 Testing
-- [ ] Golden-set: known drug-symptom pairs → expected Naranjo scores
-- [ ] Test with synthetic patient data: patient on multiple meds reports dizziness
-- [ ] Verify MedWatch form fields are correctly populated
-- [ ] Test de-identification pipeline
+- [ ] Complete patient-to-care-team and clinician-to-patient message paths.
+- [ ] Require approval for clinical outbound messages.
+- [ ] Support opted-in administrative reminders.
+- [ ] Add retry, deduplication, delivery state, and operations queue.
+- [ ] Create care-gap tasks for missed follow-up.
 
----
+### VOI-001 — Text-first voice experience
 
-## Phase 8: Communication & Scheduling (Weeks 23–26)
+- [ ] Support streaming capture/playback when the configured provider is available.
+- [ ] Persist the canonical transcript and structured state.
+- [ ] Support interruption, reconnect, cancellation, and text fallback.
+- [ ] Validate English and Spanish terminology and safety behavior.
+- [ ] Never make audio the only way to complete a journey.
 
-### 8.1 Patient Communication
-- [ ] `POST /api/v1/clinicians/patients/{id}/message` — send in-app message
-- [ ] `POST /api/v1/clinicians/patients/{id}/email` — send email
-- [ ] `POST /api/v1/clinicians/bulk-message` — send to multiple patients
-- [ ] Message appears in patient's chat as system message
-- [ ] Email via Resend (templated + freeform)
-- [ ] Clinician portal: message compose UI
-- [ ] Patient portal: display clinician messages in chat + notification
+### CON-001 — Multi-provider continuity
 
-### 8.2 Scheduling Agent
-- [ ] Parse follow-up instructions from documents ("Return in 2 weeks")
-- [ ] Propose appointments based on parsed instructions
-- [ ] Patient confirmation via chat
-- [ ] `POST /api/v1/appointments` — create appointment
-- [ ] Calendar view for clinicians
-- [ ] Reminder notifications (24hr and 1hr before)
+- [ ] Build provenance-preserving longitudinal timeline.
+- [ ] Generate an evidence-linked handoff summary for clinician review.
+- [ ] Export a portable patient care summary.
+- [ ] Respect care-team visibility and patient restrictions.
 
-### 8.3 Pre-Visit Prep Agent
-- [ ] Cloud Scheduler: trigger 24hr before appointment
-- [ ] Send questionnaire notification to patient
-- [ ] Collect patient responses
-- [ ] Generate visit prep summary: adherence, symptoms, med changes since last visit
-- [ ] Display prep summary in clinician's Patient Deep Dive
+**R5 exit gate**
 
-### 8.4 Notification System
-- [ ] Push notification service (via PWA Service Worker)
-- [ ] Notification types: med reminder, missed dose, appointment, doctor message, obligation
-- [ ] Quiet hours configuration
-- [ ] `GET /api/v1/notifications` — list patient notifications
-- [ ] Mark as read
-- [ ] Notification bell UI in both portals
+- [ ] The full clinic care loop works without manual database intervention.
 
 ---
 
-## Phase 9: Care Continuity (Weeks 27–30)
+## Milestone R6 — Standards, evaluation, and hardening · Weeks 13–14
 
-### 9.1 Medical Timeline
-- [ ] Unified patient timeline: meds, symptoms, docs, appointments, notes
-- [ ] Chronological view with filters (by type, by provider, by date range)
-- [ ] Timeline UI component
+### STD-001 — CDS Hooks integration
 
-### 9.2 Provider Transfer
-- [ ] Transfer care team relationship (mark old as `transferred`, create new)
-- [ ] Auto-generate Patient Handoff Summary (all active meds, conditions, adherence trends, key events)
-- [ ] New provider sees handoff summary on first access
+- [ ] Implement service discovery.
+- [ ] Implement `patient-view` risk/continuity cards.
+- [ ] Implement `medication-prescribe` medication-safety cards.
+- [ ] Include source links, evidence, and override-safe suggestions.
+- [ ] Add conformance, malformed-context, timeout, and authorization tests.
 
-### 9.3 FHIR Export
-- [ ] Convert patient data to FHIR Bundle (JSON)
-- [ ] Export as downloadable PDF (formatted summary)
-- [ ] Export UI in clinician portal
+### STD-002 — Real MCP server
 
----
+- [ ] Replace the custom tool ABC with an official protocol server.
+- [ ] Expose approved document, evidence, medication, follow-up, and scheduling tools.
+- [ ] Enforce schemas, authorization, audit context, request IDs, and safe errors.
+- [ ] Add protocol and security conformance tests.
 
-## Phase 10: Integration & QA (Weeks 31–33)
+### STD-003 — Focused A2A delegation
 
-### 10.1 End-to-End Testing
-- [ ] Full patient flow: signup → upload → feed → chat → voice → symptom
-- [ ] Full clinician flow: login → dashboard → deep dive → MedWatch → message
-- [ ] Cross-portal flow: patient reports symptom → clinician sees alert → messages patient
-- [ ] Provider transfer flow: old doc → new doc handoff
-- [ ] Playwright E2E test suite for all critical paths
+- [ ] Publish `/.well-known/agent-card.json`.
+- [ ] Implement Care Coordinator to Medication Safety Worker delegation.
+- [ ] Support submit, status, artifacts, cancellation, idempotency, and failure.
+- [ ] Remove obsolete `/.well-known/agent.json` claims.
+- [ ] Add end-to-end delegation and authorization tests.
 
-### 10.2 Performance
-- [ ] API response time audit (target: < 500ms for CRUD, < 3s for AI operations)
-- [ ] Frontend bundle size optimization
-- [ ] Lighthouse audit for both portals (target: > 90 performance)
-- [ ] WebSocket connection stability testing
-- [ ] LLM response latency measurement and optimization
+### EVA-001 — Internal model and safety evaluation
 
-### 10.3 Security Audit
-- [ ] RLS policy review: verify no data leakage across patients/clinicians
-- [/] Auth flow review: verify MFA, token expiry, session management
-  - [x] Local auth regression verification: clinic-code gate, clinician login, MFA setup/login, protected-route access
-  - [ ] Token/session expiry behavior validated end to end with explicit acceptance criteria
-    - [ ] Access token expires at configured TTL and protected APIs return 401 after the expiry boundary
-    - [ ] Refresh session expires at configured absolute timeout and requires re-authentication after timeout
-    - [ ] Refresh token rotation verified: refresh issues a new refresh token and invalidates the old token
-    - [ ] Reuse of an invalidated or rotated refresh token is rejected and logged
-    - [ ] Client expiry UX verified: silent refresh while valid, forced login when expired
-  - [ ] Deployed-environment parity validated
-- [ ] Input validation: verify all user inputs are sanitized
-- [ ] File upload validation: verify type/size restrictions
-- [ ] OWASP Top 10 review
-- [ ] Dependency vulnerability scan (`pip audit`, `npm audit`)
+- [ ] Create 120 synthetic scenarios across all required risk classes.
+- [ ] Mirror high-risk scenarios in English and Spanish.
+- [ ] Obtain clinician/pharmacist adjudication for at least 40 high-risk cases.
+- [ ] Compare providers on accuracy, safety, evidence, latency, reliability, and zero-cost feasibility.
+- [ ] Select default and fallback providers from results.
+- [ ] Store repeatable evaluation inputs, rubrics, results, and environment metadata.
 
-### 10.4 Accessibility
-- [ ] Keyboard navigation for all interactive elements
-- [ ] Screen reader compatibility (aria labels, roles)
-- [ ] Color contrast compliance (WCAG AA)
-- [ ] Font size scaling for elderly users
+### QUA-001 — Release hardening
+
+- [ ] Test RBAC, RLS, object ownership, clinic isolation, and privilege escalation.
+- [ ] Test timeouts, quotas, network loss, duplicate requests, malformed FHIR, and provider outage.
+- [ ] Meet WCAG 2.2 AA on core journeys.
+- [ ] Meet responsive PWA requirements on supported mobile and desktop browsers.
+- [ ] Add useful structured logs, traces, health checks, and alerting.
+- [ ] Confirm no secret, PHI, hardcoded identity, or production mock state is exposed.
+
+**R6 exit gate**
+
+- [ ] Safety, interoperability, protocol, security, and product thresholds pass.
 
 ---
 
-## Phase 11: Demo Prep (Weeks 34–35)
+## Milestone R7 — Freeze and delivery · Weeks 15–16
 
-### 11.1 Synthetic Data
-- [ ] Create realistic patient profiles (3-5 patients, diverse demographics)
-- [ ] Generate synthetic medical documents (discharge summaries, lab reports, prescriptions)
-- [ ] Pre-seed: medications, conditions, adherence history, symptom reports
-- [ ] Pre-seed: clinician profiles (2 clinics, 3 doctors)
-- [ ] Pre-seed: care_team relationships (multi-provider scenarios)
-- [ ] Pre-seed: MedWatch drafts at various statuses
-- [ ] Seeding script: `backend/app/db/seed/demo_data.py`
+### REL-001 — Release qualification
 
-### 11.2 Demo Script
-- [ ] Write minute-by-minute demo walkthrough
-- [ ] Identify the "wow moments" for each feature
-- [ ] Practice: patient onboarding flow
-- [ ] Practice: voice symptom reporting (bilingual)
-- [ ] Practice: clinician dashboard → MedWatch
-- [ ] Practice: care continuity / provider handoff
-- [ ] Backup plan: pre-recorded video of each flow in case of live failure
+- [ ] Freeze features on 2026-12-04.
+- [ ] Run clean-install and migration rehearsal.
+- [ ] Run full unit, integration, browser, voice, bilingual, security, and recovery suites.
+- [ ] Resolve all release-blocking defects.
+- [ ] Tag the final release candidate and production demonstration release.
 
-### 11.3 Presentation
-- [ ] Create slide deck: problem → solution → demo → architecture → impact
-- [ ] Architecture diagram (polished version)
-- [ ] Metrics: response times, accuracy scores, adherence improvement potential
-- [ ] Future roadmap slide (EHR integration, telehealth, FDA API submission)
+### REL-002 — Demonstration deployment
 
-### 11.4 Deployment Hardening
-- [x] Production environment variables verified
-- [x] DNS and custom domains configured (Vercel apps, Resend sending domain, Supabase auth URLs, Cloud Run custom domain)
-- [x] SSL certificates confirmed (`api.mediagent.live`, `app.mediagent.live`, `clinician.mediagent.live`, `mail.mediagent.live`)
-- [ ] Cloud Run auto-scaling tested
-- [ ] Monitoring alerts configured
-- [ ] Fallback responses for LLM rate limits
-- [ ] Cache layer for common LLM responses (demo queries)
+- [ ] Deploy backend and both portals using synthetic data.
+- [ ] Verify domains, TLS, OAuth redirects, environment variables, scaling, and health checks.
+- [ ] Validate demo accounts and reset workflow.
+- [ ] Prepare a fallback recording for external-service outages.
+
+### REL-003 — Product delivery package
+
+- [ ] Prepare the complete clinic care-loop demonstration script.
+- [ ] Prepare architecture, interoperability, safety, and operations briefs.
+- [ ] Prepare installation, deployment, reset, and troubleshooting guides.
+- [ ] Prepare startup product narrative and concise pitch materials.
+- [ ] Record limitations honestly: synthetic data, supervised CDS, public sandbox, and no HIPAA-production claim.
+
+**Final acceptance gate**
+
+- [ ] All eight product journeys pass end to end.
+- [ ] Emergency red-flag recall is 100% on the deterministic suite.
+- [ ] Unauthorized clinical actions are zero.
+- [ ] Approval and audit coverage are 100% for clinical actions.
+- [ ] Evidence-to-source validity is at least 95%.
+- [ ] Required-field extraction accuracy is at least 90%.
+- [ ] Medication-discrepancy precision and recall are each at least 90% on the internal set.
+- [ ] No material English/Spanish safety disparity remains.
+- [ ] Full CI completes in 20 minutes or less.
+- [ ] No critical dependency vulnerability remains.
+- [ ] No empty functional module, reachable `NotImplementedError`, production mock success, or hardcoded patient identity remains.
 
 ---
 
-## Phase 12: Expo (Week 36) 🎉
+## Team allocation
 
-- [ ] Final deployment check (all services green)
-- [ ] Demo dry run (full walkthrough, time it)
-- [ ] Expo presentation
-- [ ] Collect feedback
-- [ ] Post-expo retrospective
+| Role | Primary lane | Required secondary review |
+|---|---|---|
+| Engineer 1 | Platform, Supabase, security, FHIR, SMART, deployment | Clinician authorization |
+| Engineer 2 | Agent runtime, model adapters, evidence, safety, evaluation | Voice and ADR |
+| Engineer 3 | Patient portal, bilingual companion, adherence, voice | Scheduling |
+| Engineer 4 | Clinician portal, review queues, PV, messaging, continuity | FHIR workflow UX |
+
+- [ ] Replace Engineer 1–4 with team-member names.
+- [ ] Assign the first integration owner.
+- [ ] Assign a clinician/pharmacist review schedule.
+- [ ] Require one peer review for every PR.
+- [ ] Require safety-owner and clinical review for safety-sensitive behavior.
+- [ ] Demonstrate one integrated vertical increment every week.
+
+## Decision log
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-08-18 | Product is a supervised closed-loop outpatient clinic platform | Generic multi-agent healthcare assistants are no longer differentiated |
+| 2026-08-18 | Polypharmacy chronic care is the evaluated cohort | Strong clinical need and alignment with existing portals/data |
+| 2026-08-18 | English and Spanish are committed | Depth and clinical validation over shallow language breadth |
+| 2026-08-18 | Synthetic/de-identified data only | Zero-cost AI tiers are incompatible with a real-PHI production claim |
+| 2026-08-18 | SMART/FHIR public sandbox is mandatory | Interoperability must be demonstrated, not described |
+| 2026-08-18 | Clinical actions use tiered approval | Clinicians retain authority over clinical conclusions and actions |
+| 2026-08-18 | Product delivery outranks research publication | Evaluation supports engineering and safety decisions |
+| 2026-08-18 | REV-001 is the first engineering task | Trustworthy, bounded CI is required before feature delivery |

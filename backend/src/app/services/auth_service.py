@@ -18,11 +18,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError
 from supabase import Client
 
 from app.clients.supabase import create_anon_client
 from app.core.exceptions import AuthenticationError, ExternalServiceError, ValidationError
+from app.core.jwt_utils import decode_unverified_claims
 from app.db.repositories import ClinicianRepository, ClinicRepository
 from app.models.enums import ClinicianRole, coerce_locale
 from app.services.clinic_service import ClinicService
@@ -406,7 +407,7 @@ class AuthService:
     def _extract_aal(access_token: str) -> str:
         """Read the current MFA assurance level from the JWT."""
         try:
-            claims = jwt.get_unverified_claims(access_token)
+            claims = decode_unverified_claims(access_token)
         except JWTError:
             return "aal1"
         return str(claims.get("aal", "aal1"))
@@ -455,7 +456,7 @@ class AuthService:
             return None
 
         try:
-            claims = jwt.get_unverified_claims(access_token)
+            claims = decode_unverified_claims(access_token)
         except Exception:  # pragma: no cover
             return None
 
