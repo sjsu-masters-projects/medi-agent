@@ -59,6 +59,20 @@ describe("TodayPage", () => {
         expect(screen.getByText("V")).toBeInTheDocument();
     });
 
+    it("renders a safe zero percent when adherence is not finite", () => {
+        mockFeedData({
+            adherenceStats: {
+                currentStreakDays: 0,
+                overallScore: Number.NaN,
+            },
+        });
+
+        render(<TodayPage />);
+
+        expect(screen.getByText("0%")).toBeInTheDocument();
+        expect(screen.queryByText("NaN%")).not.toBeInTheDocument();
+    });
+
     it("renders a calm loading state while the first feed load is pending", () => {
         mockFeedData({ loading: true, tasks: [] });
 
@@ -128,6 +142,27 @@ describe("TodayPage", () => {
         const setupLink = screen.getByRole("link", { name: /set reminder times/i });
         expect(setupLink).toHaveAttribute("href", "/reminders");
         expect(screen.getByText(/^Set reminder time$/i)).toBeInTheDocument();
+    });
+
+    it("renders obligations without a frequency", () => {
+        const incompleteObligation = {
+            description: "Record a blood-pressure reading",
+            id: "task-3",
+            name: "Blood pressure check",
+            requiresScheduleConfiguration: false,
+            scheduledTime: undefined,
+            status: FeedTaskStatus.PENDING,
+            targetId: "obligation-2",
+            type: FeedTaskType.OBLIGATION,
+        } as unknown as FeedTask;
+        mockFeedData({
+            tasks: [incompleteObligation],
+        });
+
+        render(<TodayPage />);
+
+        expect(screen.getByText("Blood pressure check")).toBeInTheDocument();
+        expect(screen.getByText("Any time")).toBeInTheDocument();
     });
 
 });
