@@ -2,11 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ProfilePage from "@/app/(app)/profile/page";
 
-const { clearStoredSession, dispatch, get, post, replace, searchParamGet } = vi.hoisted(() => ({
+const { clearStoredSession, dispatch, get, post, put, replace, searchParamGet } = vi.hoisted(() => ({
     clearStoredSession: vi.fn(),
     dispatch: vi.fn(),
     get: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
     replace: vi.fn(),
     searchParamGet: vi.fn(),
 }));
@@ -25,7 +26,7 @@ vi.mock("react-redux", () => ({
 }));
 
 vi.mock("@/services/api", () => ({
-    api: { get, post },
+    api: { get, post, put },
 }));
 
 vi.mock("@/services/auth-session", () => ({
@@ -38,6 +39,7 @@ describe("Patient profile page", () => {
         dispatch.mockReset();
         get.mockReset();
         post.mockReset();
+        put.mockReset();
         replace.mockReset();
         searchParamGet.mockReset();
         searchParamGet.mockReturnValue(null);
@@ -53,7 +55,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
@@ -80,6 +82,61 @@ describe("Patient profile page", () => {
         expect(screen.getByText("City Health")).toBeInTheDocument();
     });
 
+    it("persists profile edits through the patient API", async () => {
+        get.mockImplementation(async (endpoint: string) => {
+            if (endpoint === "/api/v1/patients/me") {
+                return {
+                    created_at: "2026-01-10T00:00:00Z",
+                    date_of_birth: "1985-03-15",
+                    email: "sarah@example.com",
+                    first_name: "Sarah",
+                    id: "patient-1",
+                    last_name: "Johnson",
+                    preferred_language: "en-US",
+                };
+            }
+
+            return [];
+        });
+        put.mockResolvedValue({
+            created_at: "2026-01-10T00:00:00Z",
+            date_of_birth: "1985-03-15",
+            email: "sarah@example.com",
+            first_name: "Sara",
+            gender: "female",
+            id: "patient-1",
+            last_name: "Johnson",
+            preferred_language: "es-MX",
+        });
+
+        render(<ProfilePage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
+        fireEvent.change(screen.getByLabelText(/^first name$/i), {
+            target: { value: "Sara" },
+        });
+        fireEvent.change(screen.getByLabelText(/^preferred language$/i), {
+            target: { value: "es-MX" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+        await waitFor(() => {
+            expect(put).toHaveBeenCalledWith(
+                "/api/v1/patients/me",
+                {
+                    first_name: "Sara",
+                    last_name: "Johnson",
+                    preferred_language: "es-MX",
+                },
+                { token: "access-token" },
+            );
+        });
+
+        expect(await screen.findByText(/profile updated successfully/i)).toBeInTheDocument();
+        expect(screen.getByText("Sara Johnson")).toBeInTheDocument();
+        expect(screen.getByText("Female")).toBeInTheDocument();
+    });
+
     it("lets the patient join another clinic after onboarding", async () => {
         let careTeamResponse: Array<Record<string, string>> = [];
         get.mockImplementation(async (endpoint: string) => {
@@ -91,7 +148,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
@@ -146,7 +203,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
@@ -178,7 +235,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 

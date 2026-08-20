@@ -98,18 +98,26 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ### REV-002 — Reconcile preserved historical work
 
-- [ ] Add regression tests for real patient greeting and avatar identity.
-- [ ] Add regression test ensuring adherence percentages never render `NaN`.
-- [ ] Add regression test for missing obligation frequency.
-- [ ] Verify patient profile editing persists through the API.
-- [ ] Verify visits contain no hardcoded fake appointment.
-- [ ] Verify document types are inferred from content/metadata rather than mapping every PDF to a lab report.
-- [ ] Verify upload completes before extraction/import begins.
-- [ ] Verify expired import sessions fail safely and visibly.
-- [ ] Reimplement only behavior that is still missing on current `main`.
-- [ ] Delete `origin/codex/patient-portal-audit-followup` after verification.
-- [ ] Delete `origin/fix/patient-portal-audit` after verification.
-- [ ] Drop the stale April stash after verification.
+- [x] Add regression tests for real patient greeting and avatar identity.
+- [x] Add regression test ensuring adherence percentages never render `NaN`.
+- [x] Add regression test for missing obligation frequency.
+- [x] Verify patient profile editing persists through the API.
+- [x] Verify visits contain no hardcoded fake appointment.
+- [x] Verify document types are inferred from content/metadata rather than mapping every PDF to a lab report.
+- [x] Verify upload completes before extraction/import begins.
+- [x] Verify expired import sessions fail safely and visibly.
+- [x] Reimplement only behavior that is still missing on current `main`.
+- [x] Delete `origin/codex/patient-portal-audit-followup` after verification.
+- [x] Delete `origin/fix/patient-portal-audit` after verification.
+- [x] Drop the stale April stash after verification.
+
+Verification evidence: the patient portal suite passed 79 tests, and the patient, document,
+feed, and extraction-import backend suites passed 59 tests on 2026-08-20. Current `main`
+already covered greeting/avatar, visits, document-type inference, and backend patient updates.
+The reconciliation restored the missing patient-profile edit flow and added regression coverage
+for non-finite adherence, missing obligation frequency, upload/import ordering, and expired
+upload-session recovery.
+The two obsolete audit branches and the April 29 stash were deleted on 2026-08-20.
 
 ### REV-003 — Make documentation truthful
 
