@@ -107,9 +107,9 @@ A task is done only when its implementation, authorization, error handling, audi
 - [x] Verify upload completes before extraction/import begins.
 - [x] Verify expired import sessions fail safely and visibly.
 - [x] Reimplement only behavior that is still missing on current `main`.
-- [ ] Delete `origin/codex/patient-portal-audit-followup` after verification.
-- [ ] Delete `origin/fix/patient-portal-audit` after verification.
-- [ ] Drop the stale April stash after verification.
+- [x] Delete `origin/codex/patient-portal-audit-followup` after verification.
+- [x] Delete `origin/fix/patient-portal-audit` after verification.
+- [x] Drop the stale April stash after verification.
 
 Verification evidence: the patient portal suite passed 79 tests, and the patient, document,
 feed, and extraction-import backend suites passed 59 tests on 2026-08-20. Current `main`
@@ -117,6 +117,7 @@ already covered greeting/avatar, visits, document-type inference, and backend pa
 The reconciliation restored the missing patient-profile edit flow and added regression coverage
 for non-finite adherence, missing obligation frequency, upload/import ordering, and expired
 upload-session recovery.
+The two obsolete audit branches and the April 29 stash were deleted on 2026-08-20.
 
 ### REV-003 — Make documentation truthful
 
