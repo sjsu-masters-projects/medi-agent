@@ -125,19 +125,19 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 
 - [x] Save the approved August–December revival plan.
 - [x] Replace the stale semester checkbox inventory with this tracker.
-- [ ] Rewrite `PROJECT.md` with the approved clinic/polypharmacy thesis and clinical boundaries.
-- [ ] Rewrite `ARCHITECTURE.md` to match deployed code, FHIR, safety, MCP, and A2A decisions.
-- [ ] Replace placeholder names and obsolete `develop` workflow in `TEAM.md`.
-- [ ] Mark all superseded model and chain-of-thought decisions without deleting decision history.
-- [ ] Add a one-command setup and validation guide.
+- [x] Rewrite `PROJECT.md` with the approved clinic/polypharmacy thesis and clinical boundaries.
+- [x] Rewrite `ARCHITECTURE.md` to match deployed code, FHIR, safety, MCP, and A2A decisions.
+- [x] Replace placeholder names and obsolete `develop` workflow in `TEAM.md`.
+- [x] Mark all superseded model and chain-of-thought decisions without deleting decision history.
+- [x] Add a one-command setup and validation guide.
 
 ### REV-004 — Remove architecture theater
 
-- [ ] Inventory empty modules, placeholder returns, mock-success paths, and reachable `NotImplementedError` statements.
-- [ ] Delete unjustified agent shells.
-- [ ] Convert scheduling, notification, auth, and database work into deterministic services.
-- [ ] Keep only the four approved agent/worker boundaries.
-- [ ] Add a CI check preventing new empty production modules and reachable placeholders.
+- [x] Inventory empty modules, placeholder returns, mock-success paths, and reachable `NotImplementedError` statements.
+- [x] Delete unjustified agent shells.
+- [x] Convert scheduling, notification, auth, and database work into deterministic services.
+- [x] Keep only the four approved agent/worker boundaries.
+- [x] Add a CI check preventing new empty production modules and reachable placeholders.
 
 ### REV-005 — Create deterministic synthetic environments
 

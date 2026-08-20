@@ -16,7 +16,6 @@ from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.routers import (
     adherence,
-    adr,
     appointments,
     auth,
     chat,
@@ -125,7 +124,6 @@ def create_app() -> FastAPI:
     application.include_router(adherence.router, prefix=f"{api}/adherence", tags=["Adherence"])
     application.include_router(chat.router, prefix=f"{api}/chat", tags=["Chat"])
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
-    application.include_router(adr.router, prefix=f"{api}/adr", tags=["ADR"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])
     application.include_router(
         appointments.router, prefix=f"{api}/appointments", tags=["Appointments"]

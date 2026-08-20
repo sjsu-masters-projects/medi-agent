@@ -69,6 +69,17 @@ jobs:
       - name: Audit locked Python dependencies
         run: uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt
 
+  production-placeholder-check:
+    name: Production Placeholder Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Reject empty modules and placeholder handlers
+        run: python backend/scripts/check_production_placeholders.py
+
   backend-ruff-lint:
     name: Backend Lint (Ruff)
     needs: backend-dependency-lock
@@ -365,6 +376,7 @@ jobs:
     if: always()
     needs:
       - backend-dependency-lock
+      - production-placeholder-check
       - backend-test-impact
       - backend-test
       - backend-coverage
@@ -402,6 +414,7 @@ jobs:
       - name: Publish required-check outcomes
         env:
           BACKEND_LOCK: ${{ needs.backend-dependency-lock.result }}
+          PLACEHOLDERS: ${{ needs.production-placeholder-check.result }}
           BACKEND_IMPACT: ${{ needs.backend-test-impact.result }}
           BACKEND_TESTS: ${{ needs.backend-test.result }}
           BACKEND_COVERAGE: ${{ needs.backend-coverage.result }}
@@ -416,6 +429,7 @@ jobs:
             echo "| Required check | Result |"
             echo "| --- | --- |"
             echo "| Dependency lock and audit | ${BACKEND_LOCK} |"
+            echo "| Production placeholder check | ${PLACEHOLDERS} |"
             echo "| Acquit canary | ${BACKEND_IMPACT} |"
             echo "| Backend test shards | ${BACKEND_TESTS} |"
             echo "| Backend full-suite coverage | ${BACKEND_COVERAGE} |"
@@ -425,6 +439,7 @@ jobs:
             echo "| Clinician portal | ${CLINICIAN} |"
           } >> "$GITHUB_STEP_SUMMARY"
           test "$BACKEND_LOCK" = success
+          test "$PLACEHOLDERS" = success
           test "$BACKEND_IMPACT" = success
           test "$BACKEND_TESTS" = success
           test "$BACKEND_COVERAGE" = success
