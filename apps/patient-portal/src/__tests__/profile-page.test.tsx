@@ -55,7 +55,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
@@ -92,7 +92,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
@@ -148,7 +148,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
@@ -203,7 +203,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
@@ -235,7 +235,7 @@ describe("Patient profile page", () => {
                     first_name: "Sarah",
                     id: "patient-1",
                     last_name: "Johnson",
-                    preferred_language: "en",
+                    preferred_language: "en-US",
                 };
             }
 
