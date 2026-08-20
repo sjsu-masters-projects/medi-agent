@@ -18,6 +18,10 @@ Dual-portal healthcare platform with AI-assisted patient support and clinician w
 
 For exact phase-by-phase status and backlog, use `.agent/TASKS.md`.
 
+For the deterministic synthetic demonstration environment, see
+[`docs/demo-environment.md`](docs/demo-environment.md) and its
+[`synthetic data catalog`](docs/synthetic-data-catalog.md).
+
 ## Monorepo Layout
 
 ```text

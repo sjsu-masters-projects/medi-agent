@@ -72,7 +72,7 @@ A task is done only when its implementation, authorization, error handling, audi
 **Acceptance criteria**
 
 - [x] A clean clone installs reproducibly using documented commands.
-- [ ] Full required CI passes on `main` three consecutive times.
+- [x] Full required CI passes on `main` three consecutive times.
 - [x] Full CI completes in 20 minutes or less.
 - [x] No critical dependency vulnerability remains.
 - [x] The current backend suite completes with live Sentry and Deepgram initialization disabled at test startup.
@@ -91,6 +91,8 @@ A task is done only when its implementation, authorization, error handling, audi
 - The parallel backend shards cover 158 router tests, 66 integration workflow tests, 241 unit-foundation tests, and 219 service tests; the full coverage gate passed all 684 tests in 14.64 seconds at 81.80% coverage.
 - All 17 SQL migrations passed filename/order continuity and PostgreSQL syntax parsing with pglast 8.4.
 - CI now uploads JUnit failure evidence, includes a required-check and duration summary, and runs TruffleHog 3.97.0 on each GitHub change. GitHub Actions run 32280310908 passed every required gate in 5m 46s; the three green `main` runs remain pending a reviewed merge.
+- GitHub Actions confirmed the third green main observation on 2026-08-20: the restored baseline succeeded twice (run 32283434650, attempts 1 and 2) and the next merged main change succeeded (run 32407010020).
+- Acquit remains in canary mode. PR #64 ran the full backend suite after CI, dependency, and test-configuration changes; PR #65 safely selected zero of 58 backend test files for a patient-portal-only change; PR #66 ran the full suite after workflow and resource changes. This is one selective observation, not the ten required before enforcement.
 
 ---
 
@@ -139,11 +141,11 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 
 ### REV-005 — Create deterministic synthetic environments
 
-- [ ] Seed two synthetic clinics with assigned clinicians and staff.
-- [ ] Seed English- and Spanish-preferring chronic-care patients.
-- [ ] Include longitudinal documents, medication changes, allergies, adherence, symptoms, appointments, and care-team history.
-- [ ] Make seed/reset idempotent and safe for local and demo environments.
-- [ ] Add documented demo accounts without embedding secrets in the repository.
+- [x] Seed two synthetic clinics with assigned clinicians and staff.
+- [x] Seed English- and Spanish-preferring chronic-care patients.
+- [x] Include longitudinal documents, medication changes, allergies, adherence, symptoms, appointments, and care-team history.
+- [x] Make seed/reset idempotent and safe for local and demo environments.
+- [x] Add documented demo accounts without embedding secrets in the repository.
 
 **R0 exit gate**
 
