@@ -8,6 +8,8 @@ roots = ["backend/src", "backend"]
 assume_inert = [
   ".agent/**",
   "apps/**",
+  "*.md",
+  "docs/**",
   "meetings/**",
   "packages/**",
 ]
