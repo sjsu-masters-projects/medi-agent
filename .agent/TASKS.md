@@ -139,11 +139,11 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 
 ### REV-005 — Create deterministic synthetic environments
 
-- [ ] Seed two synthetic clinics with assigned clinicians and staff.
-- [ ] Seed English- and Spanish-preferring chronic-care patients.
-- [ ] Include longitudinal documents, medication changes, allergies, adherence, symptoms, appointments, and care-team history.
-- [ ] Make seed/reset idempotent and safe for local and demo environments.
-- [ ] Add documented demo accounts without embedding secrets in the repository.
+- [x] Seed two synthetic clinics with assigned clinicians and staff.
+- [x] Seed English- and Spanish-preferring chronic-care patients.
+- [x] Include longitudinal documents, medication changes, allergies, adherence, symptoms, appointments, and care-team history.
+- [x] Make seed/reset idempotent and safe for local and demo environments.
+- [x] Add documented demo accounts without embedding secrets in the repository.
 
 **R0 exit gate**
 
