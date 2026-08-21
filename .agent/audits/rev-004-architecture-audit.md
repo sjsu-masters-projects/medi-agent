@@ -1,6 +1,6 @@
 # REV-004 Architecture Audit
 
-**Audited:** 2026-08-20  
+**Audited:** 2026-08-20
 **Scope:** `backend/src/app` production Python modules and registered API routes.
 
 ## Findings and disposition
