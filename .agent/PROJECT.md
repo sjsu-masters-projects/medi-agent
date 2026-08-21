@@ -1,143 +1,91 @@
-# MediAgent — Project Context
+# MediAgent — Product Context
 
-> **Read this first.** This is the single source of truth for what MediAgent is, what we're building, and all decisions made. Every team member and AI coding assistant should have context from this file.
+> **Current direction:** August–December 2026 revival. This file records the
+> product decision and boundaries; `.agent/TASKS.md` is the execution tracker.
 
----
+## Product thesis
 
-## What Is MediAgent?
+MediAgent is a supervised, evidence-backed, bilingual closed-loop care platform for
+outpatient clinics managing chronic-care and polypharmacy patients. It is not a
+generic chat product and it is not an autonomous clinician.
 
-A dual-portal healthcare platform powered by multi-agent AI:
-- **Patient Portal (PWA):** Bilingual health companion — parses medical documents, creates medication & obligation schedules, explains reports in plain language, voice-to-voice conversations, agentic appointment management.
-- **Clinician Portal (PWA):** Real-time patient monitoring, automated pharmacovigilance (ADR detection → FDA MedWatch reporting), bidirectional document sync, patient communication, care continuity across providers.
+The demonstrated loop is: import a record with provenance; reconcile medication and
+surface a safety discrepancy; collect symptoms, adherence, or barriers; route an
+evidence-backed candidate action to a clinician; execute an approved follow-up; and
+retain the result in the patient's longitudinal timeline.
 
-## Why Does It Matter?
+## Focus and boundaries
 
-| Problem | Impact |
-|---------|--------|
-| Patients can't understand medical documents | 50% medication non-adherence |
-| ADR reporting is manual (30 min/form) | 95% of ADRs go unreported to FDA |
-| Records don't transfer between providers | Fragmented care, missed drug interactions |
+| Area | Decision |
+| --- | --- |
+| Buyer and setting | Outpatient clinic or small clinic network |
+| Evaluated cohort | Polypharmacy chronic care: diabetes, hypertension, hyperlipidemia, and related comorbidities |
+| Users | Patients, clinicians, pharmacists/reviewers, and clinic staff |
+| Languages | American English (`en-US`) and Mexican Spanish (`es-MX`) |
+| Data | Synthetic or rigorously de-identified data only |
+| Clinical posture | Supervised clinical decision support |
 
-## Startup Thesis
+MediAgent must not diagnose, prescribe, autonomously modify medication, or submit a
+regulatory report. A real-PHI or HIPAA-production claim is out of scope without the
+required agreements, compliant infrastructure, and legal review.
 
-B2B2C SaaS — sold to clinics/health systems, deployed to their patients.
+## Action authority
 
----
+| Action | Authority |
+| --- | --- |
+| Explain an approved record with evidence | Automatic |
+| Ask follow-up questions; record patient-confirmed symptoms or adherence | Automatic |
+| Send opted-in administrative reminders; propose or confirm a patient-selected slot | Automatic |
+| Draft routine care message | Clinician approval |
+| Change medication status or dosage | Clinician approval |
+| Classify an ADR or issue a clinical escalation | Clinician approval |
+| Generate a MedWatch report | Draft only |
+| Diagnose, prescribe, submit a regulatory report | Prohibited |
 
-## Key Architecture Decisions (Decision Log)
+Every clinical output must ultimately carry its source, confidence, uncertainty,
+generation timestamp/version, required approval, approval decision, and action
+execution status. Show concise evidence-linked rationale and action traces; do not
+store or present private chain-of-thought.
 
-| # | Decision | Date | Rationale |
-|---|----------|------|-----------|
-| D1 | **PWA for both portals** (not native mobile) | 2026-03-02 | Camera, mic, push notifications, installable — covers all needs. No App Store approval. One codebase per portal. |
-| D2 | **Multi-provider care model** (care_teams junction) | 2026-03-02 | Patients see multiple doctors. Single profile, unified record, multiple care relationships. Default-share visibility with restrict option. |
-| D3 | **Gemini 3.0 Flash/Pro as primary LLMs** | 2026-03-02 | Free tier through Google Cloud. Flash for speed, Pro for complex reasoning (pharmacovigilance). |
-| D4 | **Deepgram for STT/TTS** | 2026-03-02 | Team has credits. Excellent medical vocab. Streaming support. |
-| D5 | **Supabase as all-in-one data platform** | 2026-03-02 | PostgreSQL + pgvector + Auth + Storage + Realtime in one platform. Free tier sufficient for dev. |
-| D6 | **Syncfusion PDF Viewer from day one** | 2026-03-02 | Free community license. Viewing + annotation + form filling + redaction. Upgrade path to Apryse if academic license available. |
-| D7 | **Next.js + Redux + TailwindCSS** | 2026-03-02 | SSR, PWA support, strong ecosystem. Redux for complex state. Tailwind for rapid styling. |
-| D8 | **LangGraph for agent orchestration** | 2026-03-02 | Stateful multi-agent workflows, conditional routing, retries, human-in-the-loop. |
-| D9 | **Monorepo** | 2026-03-02 | Team of 4, shared types/utils, easier CI/CD, single PR per feature. |
-| D10 | **FHIR-aligned data model** | 2026-03-02 | Interoperability. Data exportable as FHIR Bundles. Major selling point for startup viability. |
-| D11 | **In-app messaging + email only** (no SMS for now) | 2026-03-02 | Simplicity. Email via Resend (free tier). SMS can be added later with Twilio. |
-| D12 | **MCP (Model Context Protocol) for tool access** | 2026-03-03 | Agents access tools (DailyMed, RxNorm, Supabase, Deepgram) via MCP servers. Vendor-independent — swap LLM providers without changing tools. |
-| D13 | **A2A Protocol for inter-agent communication** | 2026-03-03 | Expose Agent Cards (`.well-known/agent.json`). Internal demo: Triage→Pharma via A2A. Future-proofs for EHR/pharmacy integration. NOT connecting to real external hospital agents — our own agents speak A2A to each other. |
-| D14 | **Gemini 3.0 Pro thinking mode for pharmacovigilance** | 2026-03-03 | Transparent chain-of-thought reasoning for Naranjo scoring. Clinicians see WHY the AI scored an ADR, not just the score. |
-| D15 | **Explore Gemini Multimodal Live API** | 2026-03-03 | Could collapse STT→LLM→TTS into one WebSocket. Deepgram is primary pipeline; Gemini Live is stretch goal. |
-| D16 | **Evaluate MedGemma for medical tasks** | 2026-03-03 | Google's open healthcare model (based on Gemma 3). Benchmark against Gemini 3.0 Flash/Pro for: doc parsing, symptom triage, FHIR extraction. Use if quality is better for specific tasks. |
-| D17 | **Hybrid model routing: MedGemma 27B + Gemini Flash Lite + Pro** | 2026-03-21 | Benchmarked 5 clinical scenarios (4 runs). MedGemma wins clinical extraction (92% completeness, Naranjo 8-9). Flash Lite wins patient-facing UX (2.8s, 96%). Pro wins deep reasoning (SOAP/MedWatch). See `backend/reports/benchmark_27b_20260321_192905.md`. |
-| D18 | **Gemma chat template required for MedGemma vLLM endpoints** | 2026-03-21 | MedGemma-it expects `<start_of_turn>user\n...` format. Without it, model does text completion instead of instruction following. |
+## Operating decisions
 
-> **Adding a decision?** Append to this table with date and rationale. Never delete entries — only mark as superseded if changed.
+1. Evolve the current Next.js, FastAPI, Supabase, LangGraph, DailyMed, RxNorm, Vercel,
+   and Cloud Run foundation rather than rewriting it.
+2. Use four meaningful worker boundaries: Care Coordinator, Document and Evidence,
+   Medication Safety, and Follow-up. Scheduling, notifications, authentication,
+   authorization, and database operations are deterministic services.
+3. Demonstrate FHIR R4 and SMART-on-FHIR with a public sandbox, not merely docs.
+4. Treat MCP and A2A as interoperability commitments, not labels. Claim compatibility
+   only after an official endpoint, conformance coverage, and end-to-end flow exist.
+5. Keep provider choices replaceable and task-benchmarked. No free consumer endpoint
+   receives real PHI.
 
----
+## Decision history
 
-## User Personas
+The March 2026 decisions below are retained as history. They are **superseded where
+they conflict with the August 2026 revival plan**, not deleted.
 
-| Persona | Who | Core Need |
-|---------|-----|-----------|
-| **Sarah** | 65, Spanish-speaking, diabetes + hypertension, sees multiple doctors | Understand her health, stay on track |
-| **Dr. Smith** | PCP, 200+ patients, City Health | Spot problems early, reduce ADR paperwork |
-| **Dr. Patel** | Cardiologist, Heart Center, receives referrals | Get up to speed with complete patient context |
+| Ref | Historical decision | Current status |
+| --- | --- | --- |
+| D1 | PWA portals | Retained |
+| D2 | Multi-provider care model | Retained, subject to provenance and authorization work |
+| D3, D14, D17, D18 | Fixed model choices and model-specific reasoning claims | Superseded by provider-neutral, repeatably benchmarked routing; no chain-of-thought claims |
+| D4 | Deepgram voice | Retained behind an adapter; transcript/text fallback required |
+| D5 | Supabase platform | Retained |
+| D6 | Syncfusion viewer | Retained only where licensed and actually used |
+| D7 | Next.js, Redux, Tailwind | Retained foundation |
+| D8 | LangGraph orchestration | Retained only for the four approved worker boundaries |
+| D9 | Monorepo | Retained |
+| D10 | FHIR-aligned model | Strengthened to validated FHIR R4 import/export and provenance |
+| D11 | In-app and email messaging | Retained; clinical content requires approval |
+| D12 | MCP for tool access | Superseded by official MCP server and conformance proof |
+| D13 | A2A Agent Cards and external discovery | Superseded by one authenticated, tested internal delegation first |
+| D15 | Native-audio exploration | Optional experiment with text/transcript fallback |
+| D16 | Medical-model evaluation | Retained as task-specific evaluation, not a dependency |
 
----
+## References
 
-## Tech Stack (Final)
-
-| Layer | Technology |
-|-------|----------|
-| Both Portals | Next.js (PWA) + Redux + TailwindCSS |
-| Document Viewer | Syncfusion PDF Viewer |
-| Backend API | Python FastAPI |
-| AI Orchestration | LangGraph |
-| Agent Tools | MCP Servers (standardized tool access) |
-| Agent Communication | A2A Protocol (inter-agent messaging) |
-| Clinical LLM | MedGemma 27B-it (Vertex AI — document parsing, ADR, interactions, triage) |
-| Patient-facing LLM | Gemini 3.1 Flash Lite Preview (chat, voice, explanations) |
-| Reasoning LLM | Gemini 3.1 Pro Preview (SOAP notes, MedWatch, batch analysis) |
-| STT | Deepgram Nova-2 |
-| TTS | Deepgram Aura |
-| Voice (explore) | Gemini Multimodal Live API (stretch goal) |
-| DB + Vectors | Supabase (PostgreSQL + pgvector) |
-| Auth | Supabase Auth |
-| Storage | Supabase Storage |
-| Realtime | Supabase Realtime |
-| Drug APIs | DailyMed + RxNorm (NLM) |
-| Email | Resend |
-| Backend Host | Google Cloud Run |
-| Frontend Host | Vercel |
-| CI/CD | GitHub Actions |
-
----
-
-## Feature Overview
-
-### Patient Portal (PWA)
-
-| ID | Feature | Priority |
-|----|---------|----------|
-| F-P1 | Onboarding (magic link, health profile, clinic join) | P0 |
-| F-P2 | Document Upload & AI Parsing (all doc types → FHIR) | P0 |
-| F-P3 | "Explain This to Me" (plain-language, bilingual) | P0 |
-| F-P4 | "Today" Feed (meds + obligations, aggregated across providers) | P0 |
-| F-P5 | Health Companion Chat (text + voice, bilingual, symptom triage) | P0 |
-| F-P6 | Voice-to-Voice Mode (hands-free, STT→LLM→TTS) | P0 |
-| F-P7 | Agentic Scheduling (AI-suggested appointments) | P1 |
-| F-P8 | Symptom Timeline (visual, pattern detection) | P1 |
-| F-P9 | Notifications (push, configurable) | P0 |
-
-### Clinician Portal (PWA)
-
-| ID | Feature | Priority |
-|----|---------|----------|
-| F-C1 | Auth & Clinic Setup (MFA, roles) | P0 |
-| F-C2 | Risk Radar Dashboard (traffic light, real-time) | P0 |
-| F-C3 | Patient Deep Dive (charts, SOAP notes) | P0 |
-| F-C4 | Document Upload & Sync (bidirectional) | P0 |
-| F-C5 | Patient Communication (in-app + email) | P0 |
-| F-C6 | Scheduling & Follow-ups | P1 |
-| F-C7 | MedWatch Queue (auto-drafted FDA 3500A) | P0 |
-| F-C8 | Care Continuity (timeline, handoff summary) | P1 |
-| F-C9 | Analytics | P2 |
-
-### AI Agents
-
-| Agent | Trigger | LLM |
-|-------|---------|-----|
-| Ingestion | Document upload | MedGemma 27B (extraction) + Flash Lite (summary) |
-| Triage | Chat message | MedGemma 27B (classification) + Flash Lite (response) |
-| Symptom Analysis | Routed from Triage | Flash Lite (follow-up) + MedGemma 27B (assessment) |
-| Pharmacovigilance | After symptom / nightly batch | MedGemma 27B (ADR) + Pro (MedWatch) |
-| Pre-Visit Prep | 24hr before appointment | Flash Lite |
-| Summarization / SOAP | On-demand / daily | Pro |
-| Scheduling | Triage / proactive | Flash Lite |
-
----
-
-## Links
-
-- **Full PRD:** See `implementation_plan.md` in the brain directory
-- **Coding Standards:** `.agent/CODING_STANDARDS.md`
-- **Architecture:** `.agent/ARCHITECTURE.md`
-- **Design System:** `.agent/DESIGN_SYSTEM.md`
-- **Task Breakdown:** `.agent/TASKS.md`
-- **Team & Process:** `.agent/TEAM.md`
+- `.agent/ARCHITECTURE.md` — verified implementation shape and target boundaries
+- `.agent/TASKS.md` — status, owners, and acceptance checklist
+- `.agent/specs/mediagent-revival-aug-dec-2026.md` — approved revival plan
+- `CONTRIBUTING.md` — contribution and review expectations

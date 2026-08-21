@@ -44,7 +44,20 @@ medi-agent/
 - Node `20+`
 - npm `10+`
 
-### 1) Clone + env setup
+### 1) One-command setup and validation
+
+For a clean local checkout, create the development dependencies and run the quality
+gates with:
+
+```bash
+./scripts/bootstrap-and-validate.sh
+```
+
+The command uses the locked backend and portal dependencies, creates `backend/.venv`
+when needed, and runs the local lint, format, type, migration, test, and build checks.
+It does not create credentials or contact a clinical system.
+
+### 2) Clone + env setup
 
 ```bash
 git clone <repo-url>
@@ -64,7 +77,7 @@ Validate environment:
 
 Clinician invite emails require `RESEND_API_KEY` (and a verified-domain `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL` in production); see `CONTRIBUTING.md` and root `.env.example`.
 
-### 2) Run backend
+### 3) Run backend
 
 ```bash
 cd backend
@@ -76,7 +89,7 @@ PYTHONPATH=src uvicorn app.main:app --reload
 
 Backend docs: `http://localhost:8000/docs`
 
-### 3) Run portals
+### 4) Run portals
 
 Patient:
 
@@ -153,7 +166,6 @@ Primary route groups:
 - `/adherence`
 - `/chat` (REST + WebSocket)
 - `/feed`
-- `/adr`
 - `/cron`
 
 Health check: `GET /health`
