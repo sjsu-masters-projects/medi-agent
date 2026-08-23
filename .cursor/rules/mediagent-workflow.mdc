@@ -1,0 +1,12 @@
+---
+description: MediAgent project workflow and task routing
+alwaysApply: true
+---
+
+Read and follow the repository-root `AGENTS.md` before planning, editing, or
+running commands. It is the canonical project instruction source. Use its
+routing table to load only the task-specific product, safety, and verification
+documents that apply to the files you touch.
+
+Do not duplicate or override `AGENTS.md` here. Repository-wide changes to this
+workflow belong in `AGENTS.md` and `docs/contributor-agent-workflow.md`.

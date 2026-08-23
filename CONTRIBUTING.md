@@ -8,11 +8,12 @@ Developer guide for setup, architecture orientation, verification, and pull requ
 
 Before writing code, read in this order:
 
-1. [PROJECT.md](.agent/PROJECT.md) — product context and decisions  
-2. [ARCHITECTURE.md](.agent/ARCHITECTURE.md) — system design and data model  
-3. [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md) — how we write code  
-4. [TASKS.md](.agent/TASKS.md) — phase status and backlog  
-5. [TEAM.md](.agent/TEAM.md) — Git workflow and PR norms  
+1. [AGENTS.md](AGENTS.md) — shared task routing, safety, and delivery contract
+2. [TASKS.md](.agent/TASKS.md) — phase status and backlog
+3. [PROJECT.md](.agent/PROJECT.md) — product context and decisions
+4. [ARCHITECTURE.md](.agent/ARCHITECTURE.md) — system design and data model
+5. [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md) — how we write code
+6. [TEAM.md](.agent/TEAM.md) — Git workflow and PR norms
 
 For UI work, also use [DESIGN_SYSTEM.md](.agent/DESIGN_SYSTEM.md).
 
@@ -131,7 +132,7 @@ See [TEAM.md](.agent/TEAM.md) for sprint and review expectations.
 6. Run checks below.  
 7. Open a PR using the repo template.
 
-### Adding an AI agent
+### Adding a product worker
 
 Follow [.agent/workflows/new-agent.md](.agent/workflows/new-agent.md). Typical layout under `backend/src/app/agents/<name>/`:
 
@@ -185,7 +186,7 @@ npm run build
 npm run test             # when tests cover your change
 ```
 
-### AI-assisted / agent-generated code
+### Automated-code safeguards
 
 - Routers stay thin; business logic lives in `services/`.  
 - No secrets, API keys, or real `.env` contents in commits.  
@@ -321,6 +322,8 @@ Before requesting review, walk through [.agent/workflows/ai-code-review.md](.age
 
 | Question | Doc |
 |----------|-----|
+| Shared task routing and safety rules | [AGENTS.md](AGENTS.md) |
+| Supported coding-environment setup | [Contributor agent workflow](docs/contributor-agent-workflow.md) |
 | System design | [ARCHITECTURE.md](.agent/ARCHITECTURE.md) |
 | Code style | [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md) |
 | What to build next | [TASKS.md](.agent/TASKS.md) |
