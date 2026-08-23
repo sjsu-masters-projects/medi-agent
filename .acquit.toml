@@ -2,12 +2,13 @@
 # uses a nested src layout, so declare its import roots explicitly.
 roots = ["backend/src", "backend"]
 
-# Backend pytest never reads these frontend/project-management trees. Changes
-# here cannot alter Python test behavior; frontend CI remains responsible for
-# apps and shared TypeScript packages.
+# Backend pytest never reads these frontend, editor-configuration, and
+# project-management trees. Changes here cannot alter Python test behavior;
+# frontend CI remains responsible for apps and shared TypeScript packages.
 assume_inert = [
   ".agent/**",
   "apps/**",
+  ".cursor/**",
   "*.md",
   "docs/**",
   "meetings/**",
