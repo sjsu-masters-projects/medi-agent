@@ -36,7 +36,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
 | CI | First PR run green; main confirmation pending | Run 32280310908 passed all required gates in 5m 46s; three green GitHub runs on `main` are still required |
 | Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
-| Demo data | Not complete | Reproducible synthetic seed is missing |
+| Demo data | Staging access verification pending | The canonical fixture is seeded and idempotency-verified in staging; RLS isolation and portal login journeys remain |
 
 ## Active task
 
@@ -141,11 +141,32 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 
 ### REV-005 — Create deterministic synthetic environments
 
-- [x] Seed two synthetic clinics with assigned clinicians and staff.
-- [x] Seed English- and Spanish-preferring chronic-care patients.
-- [x] Include longitudinal documents, medication changes, allergies, adherence, symptoms, appointments, and care-team history.
-- [x] Make seed/reset idempotent and safe for local and demo environments.
-- [x] Add documented demo accounts without embedding secrets in the repository.
+- [x] Add a canonical, checksum-locked eight-patient California synthetic fixture with five `en-US` and three `es-MX` scenarios.
+- [x] Map supported source content into two clinics, sixteen synthetic accounts, care teams, conditions, allergies, medications, metadata-only documents, appointments, five reviewed portal messages, and in-portal notifications.
+- [x] Keep unsupported preferences, proxies, accessibility data, non-portal concerns, adherence events, and care-team scopes unpersisted and documented rather than inventing schema or false records.
+- [x] Make seed/reset idempotent and guarded by environment, explicit confirmation, exact fixture-account deletion, and a migration-checksum preflight.
+- [x] Document deterministic fixture accounts without embedding secrets in the repository.
+- [x] Run the approved staging seed and verify table counts, source-specific mappings, ledger checksums, and idempotency.
+- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment.
+
+**Verification evidence — 2026-08-22**
+
+- The canonical JSON fixture is SHA-256 locked and loaded through a typed adapter; its local
+  mapping, checksum, language split, null-gender handling, event transport boundaries,
+  idempotency, reset safety, and migration-ledger checks passed in seven focused tests.
+- Ruff, formatting, mypy, and 21-migration parser validation passed. Dry run reports two
+  clinics, sixteen synthetic accounts, and eight patient scenarios.
+- Staging was seeded twice without reset on 2026-08-22 after the migration ledger and
+  required-table preflight passed. The second run created no duplicates.
+- The staging audit confirmed 16 Auth users; 2 clinics; 8 clinicians; 8 patients;
+  9 care-team assignments; 16 conditions; 6 allergies; 26 medications; 16 documents;
+  8 appointments; 5 portal messages; 1 notification; and zero obligations, adherence
+  logs, or symptom reports. The source language split remains 5 `en-US` / 3 `es-MX`,
+  and all 8 persisted patient gender values are null.
+- The ledger contains the expected entries for migrations 021 and 022, which grant the
+  server-only service role the least privileges required for the guarded seed preflight
+  and fixture adapter. RLS and portal-login acceptance checks remain before marking
+  REV-005 complete.
 
 **R0 exit gate**
 
@@ -160,48 +181,64 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 
 ### INT-001 — Canonical clinical facts and provenance
 
-- [ ] Define shared `ClinicalFact`, `EvidenceCitation`, `SourceProvenance`, and confidence/uncertainty types.
-- [ ] Store original source, document location, extractor version, model version, timestamp, and reviewer state.
-- [ ] Prevent unreviewed facts from silently becoming approved clinical truth.
-- [ ] Add lineage queries from derived fact to original artifact and from artifact to all derived facts.
-- [ ] Audit creation, correction, approval, rejection, and deletion.
+- [x] Define shared `ClinicalFact`, `EvidenceCitation`, `SourceProvenance`, and confidence/uncertainty types.
+- [x] Store original source, document location, extractor version, model version, timestamp, and reviewer state.
+- [x] Prevent unreviewed facts from silently becoming approved clinical truth.
+- [x] Add lineage queries from derived fact to original artifact and from artifact to all derived facts.
+- [x] Audit creation, correction, approval, rejection, and deletion.
+
+**Implemented:** The clinical-fact registry stores pending candidates, citations, source
+provenance, and append-only audit events. Document-extraction imports enroll derived
+records as pending candidates; `list_approved` is the clinical-display query. See
+`docs/clinical-facts-provenance.md` for lifecycle and access boundaries.
 
 ### INT-002 — FHIR R4 validation and mapping
 
-- [ ] Map Patient, Practitioner, Organization, and CareTeam.
-- [ ] Map Condition, AllergyIntolerance, MedicationRequest, and MedicationStatement.
-- [ ] Map Observation, DocumentReference, Appointment, Communication, and CarePlan.
+- [x] Establish an R4-compatible validation boundary; the maintained dependency provides R4B while emitted payloads remain R4-compatible.
+- [/] Map Patient; Practitioner, Organization, and CareTeam remain deferred because the local clinician/care-team model is authoritative.
+- [x] Map Condition, AllergyIntolerance, MedicationRequest, and MedicationStatement.
+- [/] Map Observation, DocumentReference, and CarePlan; Appointment and Communication remain deferred.
 - [ ] Generate Provenance and AuditEvent resources.
-- [ ] Validate resource shape and identifiers before persistence/export.
-- [ ] Handle missing, partial, duplicate, and unsupported resources safely.
-- [ ] Add round-trip import/export fixture tests.
+- [/] Validate supported resource shape before persistence; identifier-quality and export validation remain deferred.
+- [x] Handle missing, partial, duplicate, and unsupported resources safely.
+- [/] Add import fixture tests; FHIR export and round-trip fixtures remain deferred.
+
+**Plan:** `.agent/specs/int-002-003-interoperability-plan.md` defines the mapping
+registry, import-envelope persistence, duplicate rules, and fixture evidence. Exact R4
+sandbox conformance is an end-to-end acceptance test; the maintained runtime validator
+uses the compatible R4B model.
 
 ### INT-003 — SMART-on-FHIR sandbox launch
 
-- [ ] Implement `/api/v1/smart/launch` and `/api/v1/smart/callback`.
-- [ ] Validate OAuth state, issuer, token audience, scopes, and expiry.
-- [ ] Consume patient and encounter launch context.
-- [ ] Import the supported patient bundle from a public sandbox.
-- [ ] Show launch context and imported provenance in the clinician portal.
-- [ ] Document sandbox setup and reproducible conformance test.
+- [x] Implement `/api/v1/smart/launch` and `/api/v1/smart/callback`.
+- [/] Validate PKCE, OAuth state, issuer, and expiry; token audience/scope conformance awaits a live sandbox registration.
+- [x] Consume patient and encounter launch context.
+- [/] Import the supported patient bundle; live public-sandbox verification awaits the replacement Supabase project and Cloud Run callback.
+- [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; lineage inspection is exposed by API.
+- [x] Document sandbox setup and reproducible conformance test.
+
+**Plan:** Build SMART authorization-code + PKCE handling after the INT-002 import
+registry, then bind the resulting imported-record session to a locally authenticated
+clinician. The plan records sandbox, HTTPS callback, and replacement-Supabase
+prerequisites; none of them block fixture or route-test work.
 
 ### SAFE-001 — Approval and audit infrastructure
 
-- [ ] Define `ClinicalRecommendation`, `ApprovalDecision`, `ActionEnvelope`, and `AuditRecord`.
-- [ ] Enforce tiered action authority server-side.
-- [ ] Require idempotency keys for externally visible actions.
-- [ ] Record proposer, evidence, reviewer, edits, decision, executor, and outcome.
-- [ ] Prevent approval by an unauthorized or unassigned clinician.
-- [ ] Add replay and duplicate-action tests.
+- [x] Define `ClinicalRecommendation`, `ApprovalDecision`, `ActionEnvelope`, and `AuditRecord`.
+- [/] Enforce tiered action authority server-side; feature-specific action executors will adopt the gate as they are implemented.
+- [x] Require idempotency keys for action envelopes.
+- [x] Record proposer, evidence, reviewer, edits, decision, executor, and outcome.
+- [x] Prevent approval by an unauthorized, unassigned, or proposing clinician.
+- [x] Add replay and duplicate-action tests.
 
 ### AI-001 — Provider-neutral AI and voice interfaces
 
-- [ ] Define model capabilities and structured error taxonomy.
-- [ ] Implement Gemini text provider behind the interface.
+- [x] Define model capabilities and structured error taxonomy.
+- [/] Wrap existing text clients behind the interface; concrete provider registry migration remains next.
 - [ ] Add optional MedGemma and NVIDIA NIM comparison adapters.
-- [ ] Place Deepgram and Gemini Live behind a voice-provider interface.
-- [ ] Record latency, model/version, tool calls, token/usage data, and fallback path.
-- [ ] Guarantee deterministic text fallback when audio is unavailable.
+- [/] Define the voice-provider interface; live voice transport migration remains next.
+- [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
+- [x] Guarantee deterministic text fallback when audio is unavailable.
 
 **R1 exit gate**
 

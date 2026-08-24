@@ -52,10 +52,15 @@ clinical fact without review.
 
 ## Evidence, FHIR, and safety
 
-The codebase has FHIR-oriented extraction and resource tooling, but full FHIR R4
-round-trip validation, provenance types, SMART launch, CDS Hooks, and clinician
-approval/audit coverage are planned work. Until those acceptance paths exist, describe
-them as targets rather than integrations.
+The codebase validates a supported import subset with maintained FHIR R4B models and
+emits R4-compatible payload fields. SMART authorization-code + PKCE handling stores
+only encrypted transient verifier state, raw FHIR envelopes, and a short-lived local
+review handoff; SMART identity never grants local clinical authority. Imported records
+are bound to an assigned synthetic patient and become pending provenance-backed facts.
+Canonical clinical-fact provenance retains citations, confidence/uncertainty, review
+state, lineage queries, and lifecycle audit events. Exact public-sandbox and Inferno
+conformance, FHIR export, CDS Hooks, and action-approval infrastructure remain
+acceptance work rather than completed integrations.
 
 Safety rules are deterministic before probabilistic routing for emergency signals,
 authorization, malformed data, retries, and idempotency. The user-facing result must

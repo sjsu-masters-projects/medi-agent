@@ -1,0 +1,826 @@
+{
+  "dataset_metadata": {
+    "dataset_id": "SYN-CA-PORTAL-DEMO-2026-08",
+    "dataset_type": "synthetic_test_data",
+    "is_synthetic": true,
+    "contains_real_patient_data": false,
+    "contains_real_provider_identifiers": false,
+    "purpose": "Deterministic demo and regression fixtures for a California-focused patient/clinician portal.",
+    "not_medical_advice": true,
+    "statement": "Every record in this dataset is fabricated for software testing. No record represents a real person, provider, clinic, address, phone number, NPI, insurance identifier, or copied clinical note. Nothing here is medical advice or a treatment recommendation.",
+    "generated_for_timezone": "America/Los_Angeles",
+    "date_range_covered": "2025-01-01 through 2026-12-31",
+    "supported_locales": ["en-US", "es-MX"],
+    "determinism": {
+      "all_ids_stable": true,
+      "all_timestamps_fixed": true,
+      "no_relative_dates": true,
+      "note": "No value is computed at runtime; fixtures must load identically on every test run."
+    },
+    "representation_policy": {
+      "preferences_are_declared_only": true,
+      "statement": "Preferred language, accessibility needs, work schedule, transportation, caregiving, cost concerns, and communication preferences are stored as individually declared fields. No such attribute was derived from name, sex, age, diagnosis, language, ZIP code, or any ethnicity signal.",
+      "race_ethnicity_fields_present": false,
+      "display_names_are_non_identifying_labels": true
+    }
+  },
+
+  "clinics": [
+    {
+      "clinic_id": "SYN-CLINIC-001",
+      "display_name_en_us": "Northgate Community Health — Synthetic Demo Clinic",
+      "display_name_es_mx": "Clínica Comunitaria Northgate — Clínica Sintética de Demostración",
+      "is_synthetic": true,
+      "region_label": "Synthetic Northern California region",
+      "street_address": null,
+      "phone": null,
+      "npi": null,
+      "requires_validation": ["street_address", "phone", "npi"],
+      "timezone": "America/Los_Angeles",
+      "supported_locales": ["en-US", "es-MX"],
+      "service_lines": ["primary care", "chronic condition follow-up", "outpatient pharmacy coordination"],
+      "portal_features_enabled": [
+        "patient_login",
+        "secure_messaging",
+        "medication_timeline",
+        "document_metadata_review",
+        "appointment_scheduling",
+        "notifications_sms_email_voice"
+      ]
+    },
+    {
+      "clinic_id": "SYN-CLINIC-002",
+      "display_name_en_us": "Willow Terrace Family Medicine — Synthetic Demo Clinic",
+      "display_name_es_mx": "Medicina Familiar Willow Terrace — Clínica Sintética de Demostración",
+      "is_synthetic": true,
+      "region_label": "Synthetic Central Coast California region",
+      "street_address": null,
+      "phone": null,
+      "npi": null,
+      "requires_validation": ["street_address", "phone", "npi"],
+      "timezone": "America/Los_Angeles",
+      "supported_locales": ["en-US", "es-MX"],
+      "service_lines": ["primary care", "outpatient follow-up", "telehealth"],
+      "portal_features_enabled": [
+        "patient_login",
+        "secure_messaging",
+        "medication_timeline",
+        "document_metadata_review",
+        "appointment_scheduling",
+        "telehealth_with_captions",
+        "notifications_sms_email_voice"
+      ]
+    }
+  ],
+
+  "staff_accounts": [
+    {
+      "staff_id": "SYN-PROV-001",
+      "display_label": "Provider One (synthetic)",
+      "role": "physician",
+      "clinic_id": "SYN-CLINIC-001",
+      "npi": null,
+      "license_number": null,
+      "requires_validation": ["npi", "license_number"],
+      "portal_role_permissions": ["view_assigned_patients", "write_notes", "order_entry_demo_stub", "message_patients"],
+      "default_locale": "en-US",
+      "additional_locales": []
+    },
+    {
+      "staff_id": "SYN-PROV-002",
+      "display_label": "Provider Two (synthetic)",
+      "role": "nurse_practitioner",
+      "clinic_id": "SYN-CLINIC-001",
+      "npi": null,
+      "license_number": null,
+      "requires_validation": ["npi", "license_number"],
+      "portal_role_permissions": ["view_assigned_patients", "write_notes", "order_entry_demo_stub", "message_patients"],
+      "default_locale": "es-MX",
+      "additional_locales": ["en-US"]
+    },
+    {
+      "staff_id": "SYN-PROV-003",
+      "display_label": "Provider Three (synthetic)",
+      "role": "physician",
+      "clinic_id": "SYN-CLINIC-002",
+      "npi": null,
+      "license_number": null,
+      "requires_validation": ["npi", "license_number"],
+      "portal_role_permissions": ["view_assigned_patients", "write_notes", "order_entry_demo_stub", "message_patients"],
+      "default_locale": "en-US",
+      "additional_locales": []
+    },
+    {
+      "staff_id": "SYN-PROV-004",
+      "display_label": "Provider Four (synthetic)",
+      "role": "physician_assistant",
+      "clinic_id": "SYN-CLINIC-002",
+      "npi": null,
+      "license_number": null,
+      "requires_validation": ["npi", "license_number"],
+      "portal_role_permissions": ["view_assigned_patients", "write_notes", "order_entry_demo_stub", "message_patients"],
+      "default_locale": "en-US",
+      "additional_locales": ["es-MX"]
+    },
+    {
+      "staff_id": "SYN-NURSE-001",
+      "display_label": "Nurse One (synthetic)",
+      "role": "registered_nurse",
+      "clinic_id": "SYN-CLINIC-001",
+      "npi": null,
+      "license_number": null,
+      "requires_validation": ["npi", "license_number"],
+      "portal_role_permissions": ["view_care_team_assigned_patients_only", "message_patients"],
+      "default_locale": "es-MX",
+      "additional_locales": ["en-US"],
+      "access_note": "Has no patient access except where an explicit care_team_assignments row exists."
+    },
+    {
+      "staff_id": "SYN-NURSE-002",
+      "display_label": "Nurse Two (synthetic)",
+      "role": "registered_nurse",
+      "clinic_id": "SYN-CLINIC-002",
+      "npi": null,
+      "license_number": null,
+      "requires_validation": ["npi", "license_number"],
+      "portal_role_permissions": ["view_care_team_assigned_patients_only", "message_patients"],
+      "default_locale": "en-US",
+      "additional_locales": [],
+      "access_note": "Intentionally has NO care-team assignment in this fixture set. Used for negative-access regression."
+    },
+    {
+      "staff_id": "SYN-ADMIN-001",
+      "display_label": "Scheduler One (synthetic)",
+      "role": "front_desk_admin",
+      "clinic_id": "SYN-CLINIC-001",
+      "npi": null,
+      "requires_validation": ["npi"],
+      "portal_role_permissions": ["view_appointment_slots", "view_patient_demographics_minimal_when_assigned"],
+      "default_locale": "es-MX",
+      "additional_locales": ["en-US"],
+      "access_note": "No clinical record access under any condition in this fixture set."
+    },
+    {
+      "staff_id": "SYN-ADMIN-002",
+      "display_label": "Records Admin One (synthetic)",
+      "role": "records_admin",
+      "clinic_id": "SYN-CLINIC-002",
+      "npi": null,
+      "requires_validation": ["npi"],
+      "portal_role_permissions": ["view_document_metadata_when_assigned"],
+      "default_locale": "en-US",
+      "additional_locales": [],
+      "access_note": "No care-team assignment in this fixture set; used to test metadata-level denial."
+    }
+  ],
+
+  "patient_scenarios": [
+    {
+      "patient_id": "SYN-PT-001",
+      "display_label": "Demo Patient 001 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "25-34",
+      "sex_recorded_for_demo": "female",
+      "gender_identity_declared": "woman",
+      "clinic_id": "SYN-CLINIC-001",
+      "assigned_provider_id": "SYN-PROV-001",
+      "preferred_language": "en-US",
+      "declared_preferences": {
+        "source": "patient_self_declared_in_portal_intake",
+        "accessibility_needs": ["none declared"],
+        "contact_preference_primary": "sms",
+        "contact_preference_secondary": "portal_message",
+        "quiet_hours_declared": "08:00-15:00 (sleeps during day)",
+        "work_schedule_declared": "overnight warehouse shifts, Sun-Thu",
+        "transportation_declared": "own vehicle",
+        "caregiving_responsibilities_declared": "none",
+        "cost_concerns_declared": "none declared",
+        "interpreter_requested": false
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated adult portal user who works overnight shifts and manages two long-standing outpatient conditions. Used to exercise SMS notification quiet-hours logic and inhaler refill timelines. Not a real person and not a real patient story.",
+      "conditions": [
+        {"condition_id": "SYN-CND-001-A", "label_en_us": "Mild persistent asthma", "label_es_mx": "Asma persistente leve", "onset_date": "2019-04-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-001-B", "label_en_us": "Seasonal allergic rhinitis", "label_es_mx": "Rinitis alérgica estacional", "onset_date": "2021-05-01", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [
+        {"allergy_id": "SYN-ALG-001-A", "substance_label": "amoxicillin", "reaction_label": "rash", "severity_label": "mild", "recorded_date": "2020-02-11", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "medications": [
+        {"medication_id": "SYN-MED-001-A", "label": "fluticasone/salmeterol inhaler", "dose_text_for_display_only": "1 inhalation twice daily", "route": "inhalation", "start_date": "2025-03-14", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-001-B", "label": "albuterol inhaler", "dose_text_for_display_only": "as-needed rescue use", "route": "inhalation", "start_date": "2025-03-14", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-001-C", "label": "cetirizine", "dose_text_for_display_only": "10 mg once daily", "route": "oral", "start_date": "2025-06-02", "end_date": "2025-09-08", "status": "discontinued", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-001-D", "label": "loratadine", "dose_text_for_display_only": "10 mg once daily", "route": "oral", "start_date": "2025-09-08", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-001-01", "type": "office_visit", "timestamp": "2025-03-14T09:15:00-07:00", "summary_en_us": "Synthetic scenario. Routine outpatient follow-up; inhaler regimen recorded as started."},
+        {"event_id": "SYN-EVT-001-02", "type": "medication_start", "timestamp": "2025-06-02T11:40:00-07:00", "summary_en_us": "Synthetic scenario. Oral antihistamine record opened."},
+        {"event_id": "SYN-EVT-001-03", "type": "medication_change", "timestamp": "2025-09-08T14:05:00-07:00", "summary_en_us": "Synthetic scenario. Antihistamine record closed and a different antihistamine record opened. Flagged as a clinician-review cue only; no diagnosis or cause is asserted by this dataset.", "review_cue": true},
+        {"event_id": "SYN-EVT-001-04", "type": "adherence_event", "timestamp": "2025-11-12T08:30:00-08:00", "summary_en_us": "Synthetic scenario. Controller inhaler refill recorded 9 days after the expected refill window.", "adherence_signal": "refill_gap_days_9"},
+        {"event_id": "SYN-EVT-001-05", "type": "patient_reported_concern", "timestamp": "2026-07-28T16:12:00-07:00", "summary_en_us": "Synthetic scenario. Portal message reports more nighttime coughing after work shifts. Routed to assigned provider queue; no clinical interpretation stored."},
+        {"event_id": "SYN-EVT-001-06", "type": "notification_sent", "timestamp": "2026-08-10T17:00:00-07:00", "channel": "sms", "locale": "en-US", "summary_en_us": "Synthetic scenario. Refill reminder delivered outside declared quiet hours."},
+        {"event_id": "SYN-EVT-001-07", "type": "appointment_scheduled", "timestamp": "2026-09-17T17:30:00-07:00", "summary_en_us": "Synthetic scenario. Upcoming evening follow-up appointment consistent with declared overnight work schedule."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-001-A", "title_en_us": "Outpatient follow-up summary (synthetic)", "document_type": "visit_summary", "created_at": "2025-03-14T10:02:00-07:00", "language": "en-US", "page_count": 2, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "patient_viewed_at": "2025-03-15T22:41:00-07:00"},
+        {"document_id": "SYN-DOC-001-B", "title_en_us": "Medication list snapshot (synthetic)", "document_type": "medication_list", "created_at": "2025-09-08T14:20:00-07:00", "language": "en-US", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "patient_viewed_at": null}
+      ],
+      "test_journeys_supported": [
+        "patient_login_en_us",
+        "notification_quiet_hours_suppression",
+        "medication_timeline_with_one_discontinued_and_one_active_agent",
+        "adherence_refill_gap_badge",
+        "unviewed_document_indicator",
+        "patient_reported_concern_routing_to_assigned_provider"
+      ],
+      "timeline_coherence_explanation": "Both medication records tied to the 2025-09-08 change are non-overlapping: the first ends on the same date the second begins, so no discontinued dose is ever active. The refill gap follows an active controller medication, the concern message postdates all medication records, and the appointment is the only future-dated event."
+    },
+
+    {
+      "patient_id": "SYN-PT-002",
+      "display_label": "Demo Patient 002 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "55-64",
+      "sex_recorded_for_demo": "male",
+      "gender_identity_declared": "man",
+      "clinic_id": "SYN-CLINIC-001",
+      "assigned_provider_id": "SYN-PROV-002",
+      "preferred_language": "es-MX",
+      "declared_preferences": {
+        "source": "patient_self_declared_by_phone_intake",
+        "accessibility_needs": ["prefers spoken instructions over written text (self-declared)"],
+        "contact_preference_primary": "voice_call",
+        "contact_preference_secondary": "printed_mail",
+        "quiet_hours_declared": "21:00-07:00",
+        "work_schedule_declared": "weekday daytime hours, limited flexibility",
+        "transportation_declared": "public bus; no household vehicle",
+        "caregiving_responsibilities_declared": "none",
+        "cost_concerns_declared": "asks for lowest-cost pharmacy options",
+        "interpreter_requested": false
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated adult portal user whose declared preference is voice contact in Mexican Spanish and who has limited transportation. Used to exercise es-MX localization, voice notification fallback, and a dose-record transition in the medication timeline. Not a real person.",
+      "narrative_es_mx": "Synthetic scenario. Escenario sintético. Persona ficticia creada para pruebas: usa el portal en español, prefiere que le llamen por teléfono y se traslada en camión. Sirve para probar la traducción al es-MX, los avisos por llamada y un cambio de registro de dosis en la línea de tiempo. No es una persona real.",
+      "conditions": [
+        {"condition_id": "SYN-CND-002-A", "label_en_us": "Type 2 diabetes", "label_es_mx": "Diabetes tipo 2", "onset_date": "2018-08-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-002-B", "label_en_us": "High blood pressure", "label_es_mx": "Presión arterial alta", "onset_date": "2020-01-15", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [],
+      "medications": [
+        {"medication_id": "SYN-MED-002-A", "label": "metformin", "dose_text_for_display_only": "500 mg twice daily", "route": "oral", "start_date": "2025-01-21", "end_date": "2025-07-15", "status": "discontinued", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-002-B", "label": "metformin", "dose_text_for_display_only": "1000 mg twice daily", "route": "oral", "start_date": "2025-07-15", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-002-C", "label": "lisinopril", "dose_text_for_display_only": "10 mg once daily", "route": "oral", "start_date": "2025-01-21", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-002-D", "label": "atorvastatin", "dose_text_for_display_only": "20 mg once daily", "route": "oral", "start_date": "2026-02-04", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-002-01", "type": "office_visit", "timestamp": "2025-01-21T13:00:00-08:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Consulta de control; se abrieron dos registros de medicamento."},
+        {"event_id": "SYN-EVT-002-02", "type": "medication_change", "timestamp": "2025-07-15T10:30:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Se cerró el registro de dosis anterior y se abrió un registro de dosis distinta. Marcado únicamente como aviso para revisión del personal clínico; estos datos no afirman ningún diagnóstico ni causa.", "review_cue": true},
+        {"event_id": "SYN-EVT-002-03", "type": "monitoring_document_filed", "timestamp": "2025-07-16T09:05:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Se archivó un documento de seguimiento de laboratorio (solo metadatos; sin valores ni rangos de referencia)."},
+        {"event_id": "SYN-EVT-002-04", "type": "adherence_event", "timestamp": "2026-01-09T11:15:00-08:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. El paciente reporta que se le acabó el medicamento tres días antes de poder ir a la farmacia por falta de transporte.", "adherence_signal": "self_reported_gap_days_3"},
+        {"event_id": "SYN-EVT-002-05", "type": "medication_start", "timestamp": "2026-02-04T14:45:00-08:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Se abrió un nuevo registro de medicamento."},
+        {"event_id": "SYN-EVT-002-06", "type": "patient_reported_concern", "timestamp": "2026-06-11T09:20:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. El paciente comenta por teléfono que el costo de la farmacia le preocupa. Se envía al equipo asignado; el sistema no guarda ninguna interpretación clínica."},
+        {"event_id": "SYN-EVT-002-07", "type": "notification_sent", "timestamp": "2026-08-12T10:00:00-07:00", "channel": "voice_call", "locale": "es-MX", "summary_es_mx": "Synthetic scenario. Escenario sintético. Recordatorio de cita entregado por llamada, según la preferencia declarada."},
+        {"event_id": "SYN-EVT-002-08", "type": "appointment_scheduled", "timestamp": "2026-09-03T10:15:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Cita de seguimiento programada en horario de la mañana."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-002-A", "title_es_mx": "Resumen de la consulta (sintético)", "document_type": "visit_summary", "created_at": "2025-01-21T13:40:00-08:00", "language": "es-MX", "page_count": 3, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "patient_viewed_at": null},
+        {"document_id": "SYN-DOC-002-B", "title_es_mx": "Documento de seguimiento de laboratorio (sintético, solo metadatos)", "document_type": "lab_report_metadata", "created_at": "2025-07-16T09:05:00-07:00", "language": "es-MX", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "result_values": null, "reference_ranges": null, "requires_validation": true, "patient_viewed_at": null}
+      ],
+      "test_journeys_supported": [
+        "patient_login_es_mx",
+        "full_es_mx_ui_and_document_localization",
+        "voice_notification_channel_fallback",
+        "same_medication_two_dose_records_no_overlap",
+        "nurse_access_via_explicit_care_team_assignment",
+        "lab_document_metadata_without_values"
+      ],
+      "timeline_coherence_explanation": "The two records for the same medication share the boundary date 2025-07-15 with no overlap, so the earlier dose is never active after it closes. The monitoring document is filed the day after the change, the adherence gap and cost concern both postdate the active regimen, and the only future-dated row is the appointment."
+    },
+
+    {
+      "patient_id": "SYN-PT-003",
+      "display_label": "Demo Patient 003 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "65-74",
+      "sex_recorded_for_demo": "female",
+      "gender_identity_declared": "nonbinary",
+      "pronouns_declared": "they/them",
+      "clinic_id": "SYN-CLINIC-002",
+      "assigned_provider_id": "SYN-PROV-003",
+      "preferred_language": "en-US",
+      "declared_preferences": {
+        "source": "patient_self_declared_in_portal_settings",
+        "accessibility_needs": ["screen reader user", "requests tagged/accessible PDFs", "requests no image-only documents"],
+        "contact_preference_primary": "email",
+        "contact_preference_secondary": "portal_message",
+        "quiet_hours_declared": "22:00-08:00",
+        "work_schedule_declared": "retired",
+        "transportation_declared": "own vehicle, daytime driving only",
+        "caregiving_responsibilities_declared": "none",
+        "cost_concerns_declared": "none declared",
+        "interpreter_requested": false
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated retired adult portal user who navigates with a screen reader and has requested accessible document formats. Used to exercise accessibility metadata, correct pronoun rendering, and a dose-record transition. Not a real person.",
+      "conditions": [
+        {"condition_id": "SYN-CND-003-A", "label_en_us": "Hypothyroidism", "label_es_mx": "Hipotiroidismo", "onset_date": "2016-11-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-003-B", "label_en_us": "Osteoarthritis of the knee", "label_es_mx": "Osteoartritis de rodilla", "onset_date": "2022-03-01", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [
+        {"allergy_id": "SYN-ALG-003-A", "substance_label": "sulfamethoxazole", "reaction_label": "hives", "severity_label": "moderate", "recorded_date": "2014-06-20", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "medications": [
+        {"medication_id": "SYN-MED-003-A", "label": "levothyroxine", "dose_text_for_display_only": "50 mcg once daily", "route": "oral", "start_date": "2025-02-10", "end_date": "2025-10-06", "status": "discontinued", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-003-B", "label": "levothyroxine", "dose_text_for_display_only": "75 mcg once daily", "route": "oral", "start_date": "2025-10-06", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-003-C", "label": "acetaminophen", "dose_text_for_display_only": "as-needed use recorded", "route": "oral", "start_date": "2025-02-10", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-003-D", "label": "topical diclofenac gel", "dose_text_for_display_only": "topical application, as recorded", "route": "topical", "start_date": "2025-05-19", "end_date": "2026-03-23", "status": "discontinued", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-003-01", "type": "office_visit", "timestamp": "2025-02-10T08:45:00-08:00", "summary_en_us": "Synthetic scenario. Outpatient visit; baseline medication records opened."},
+        {"event_id": "SYN-EVT-003-02", "type": "medication_start", "timestamp": "2025-05-19T15:20:00-07:00", "summary_en_us": "Synthetic scenario. Topical medication record opened."},
+        {"event_id": "SYN-EVT-003-03", "type": "monitoring_document_filed", "timestamp": "2025-10-05T08:00:00-07:00", "summary_en_us": "Synthetic scenario. Monitoring document filed as metadata only; no values or reference ranges stored."},
+        {"event_id": "SYN-EVT-003-04", "type": "medication_change", "timestamp": "2025-10-06T09:10:00-07:00", "summary_en_us": "Synthetic scenario. Prior dose record closed and a different dose record opened the same day. Surfaced to the assigned clinician as a review cue only.", "review_cue": true},
+        {"event_id": "SYN-EVT-003-05", "type": "adherence_event", "timestamp": "2026-02-17T07:55:00-08:00", "summary_en_us": "Synthetic scenario. Daily medication marked as taken 27 of 28 days in the portal tracker.", "adherence_signal": "self_tracked_27_of_28"},
+        {"event_id": "SYN-EVT-003-06", "type": "medication_end", "timestamp": "2026-03-23T11:00:00-07:00", "summary_en_us": "Synthetic scenario. Topical medication record closed; no replacement record opened."},
+        {"event_id": "SYN-EVT-003-07", "type": "patient_reported_concern", "timestamp": "2026-05-04T13:35:00-07:00", "summary_en_us": "Synthetic scenario. Portal message reports that a filed document was not readable with assistive technology."},
+        {"event_id": "SYN-EVT-003-08", "type": "notification_sent", "timestamp": "2026-08-14T09:00:00-07:00", "channel": "email", "locale": "en-US", "summary_en_us": "Synthetic scenario. Accessible-format appointment reminder delivered by email."},
+        {"event_id": "SYN-EVT-003-09", "type": "appointment_scheduled", "timestamp": "2026-10-08T11:00:00-07:00", "summary_en_us": "Synthetic scenario. Daytime follow-up appointment consistent with declared daytime-driving preference."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-003-A", "title_en_us": "Monitoring document (synthetic, metadata only)", "document_type": "lab_report_metadata", "created_at": "2025-10-05T08:00:00-07:00", "language": "en-US", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "result_values": null, "reference_ranges": null, "accessibility_tagged": false, "requires_validation": true, "patient_viewed_at": "2026-05-04T13:20:00-07:00"},
+        {"document_id": "SYN-DOC-003-B", "title_en_us": "Accessible visit summary (synthetic)", "document_type": "visit_summary", "created_at": "2025-10-06T09:40:00-07:00", "language": "en-US", "page_count": 2, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "accessibility_tagged": true, "patient_viewed_at": "2025-10-06T19:02:00-07:00"}
+      ],
+      "test_journeys_supported": [
+        "patient_login_en_us",
+        "screen_reader_navigation_of_medication_timeline",
+        "accessible_vs_untagged_document_flagging",
+        "declared_pronoun_rendering_in_ui_and_documents",
+        "discontinued_medication_with_no_successor",
+        "accessibility_complaint_routing"
+      ],
+      "timeline_coherence_explanation": "The dose transition closes and opens on the same date with no overlap, and the monitoring document precedes it by one day so the review cue has a plausible antecedent. The topical medication ends without a successor, the accessibility complaint postdates the document it references, and only the appointment is future-dated."
+    },
+
+    {
+      "patient_id": "SYN-PT-004",
+      "display_label": "Demo Patient 004 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "75-84",
+      "sex_recorded_for_demo": "male",
+      "gender_identity_declared": "man",
+      "clinic_id": "SYN-CLINIC-002",
+      "assigned_provider_id": "SYN-PROV-004",
+      "preferred_language": "es-MX",
+      "declared_preferences": {
+        "source": "patient_self_declared_with_family_member_present",
+        "accessibility_needs": ["large print documents", "requests printed copies in addition to portal"],
+        "contact_preference_primary": "printed_mail",
+        "contact_preference_secondary": "voice_call",
+        "quiet_hours_declared": "20:00-08:00",
+        "work_schedule_declared": "retired",
+        "transportation_declared": "rides from a family member",
+        "caregiving_responsibilities_declared": "none",
+        "cost_concerns_declared": "none declared",
+        "interpreter_requested": false,
+        "proxy_portal_access_declared": "patient has authorized one family proxy account (SYN-PROXY-004)"
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated retired adult portal user with a declared preference for large-print printed materials and an authorized proxy account. Used to exercise proxy access, print-channel notifications, and a medication substitution recorded as a review cue. Not a real person.",
+      "narrative_es_mx": "Synthetic scenario. Escenario sintético. Persona ficticia creada para pruebas: prefiere recibir los documentos impresos y en letra grande, y autorizó a un familiar como representante en el portal. Sirve para probar el acceso del representante, los avisos por correo impreso y el cambio de un medicamento por otro. No es una persona real.",
+      "conditions": [
+        {"condition_id": "SYN-CND-004-A", "label_en_us": "High cholesterol", "label_es_mx": "Colesterol alto", "onset_date": "2015-09-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-004-B", "label_en_us": "Benign prostatic hyperplasia", "label_es_mx": "Crecimiento benigno de la próstata", "onset_date": "2021-06-01", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [],
+      "medications": [
+        {"medication_id": "SYN-MED-004-A", "label": "tamsulosin", "dose_text_for_display_only": "0.4 mg once daily", "route": "oral", "start_date": "2025-04-08", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-004-B", "label": "rosuvastatin", "dose_text_for_display_only": "10 mg once daily", "route": "oral", "start_date": "2025-04-08", "end_date": "2026-01-27", "status": "discontinued", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-004-C", "label": "pravastatin", "dose_text_for_display_only": "20 mg once daily", "route": "oral", "start_date": "2026-01-27", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-004-01", "type": "office_visit", "timestamp": "2025-04-08T10:20:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Consulta de control; se abrieron dos registros de medicamento."},
+        {"event_id": "SYN-EVT-004-02", "type": "patient_reported_concern", "timestamp": "2026-01-20T15:45:00-08:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. El paciente reporta molestias musculares en las piernas. Se registra tal como lo dijo el paciente; el sistema no guarda ninguna causa ni conclusión."},
+        {"event_id": "SYN-EVT-004-03", "type": "medication_change", "timestamp": "2026-01-27T09:30:00-08:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Se cerró un registro de medicamento y se abrió otro distinto el mismo día. Aparece únicamente como aviso para revisión del personal clínico; los datos no afirman que un evento haya causado el otro.", "review_cue": true},
+        {"event_id": "SYN-EVT-004-04", "type": "adherence_event", "timestamp": "2026-04-14T08:10:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Resurtido recogido dentro del periodo esperado.", "adherence_signal": "refill_on_time"},
+        {"event_id": "SYN-EVT-004-05", "type": "notification_sent", "timestamp": "2026-08-05T09:00:00-07:00", "channel": "printed_mail", "locale": "es-MX", "summary_es_mx": "Synthetic scenario. Escenario sintético. Aviso de cita enviado por correo impreso en letra grande."},
+        {"event_id": "SYN-EVT-004-06", "type": "appointment_scheduled", "timestamp": "2026-09-24T13:45:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Cita de seguimiento programada por la tarde."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-004-A", "title_es_mx": "Resumen de la consulta en letra grande (sintético)", "document_type": "visit_summary", "created_at": "2025-04-08T11:05:00-07:00", "language": "es-MX", "page_count": 4, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "large_print_variant": true, "patient_viewed_at": null, "proxy_viewed_at": "2025-04-09T18:30:00-07:00"},
+        {"document_id": "SYN-DOC-004-B", "title_es_mx": "Instantánea de la lista de medicamentos (sintético)", "document_type": "medication_list", "created_at": "2026-01-27T09:55:00-08:00", "language": "es-MX", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "large_print_variant": true, "patient_viewed_at": null, "proxy_viewed_at": "2026-01-28T09:12:00-08:00"}
+      ],
+      "test_journeys_supported": [
+        "patient_login_es_mx",
+        "authorized_proxy_account_access_and_audit_trail",
+        "printed_mail_notification_channel",
+        "large_print_document_variant_selection",
+        "medication_substitution_review_cue_without_causal_language",
+        "patient_viewed_vs_proxy_viewed_distinction"
+      ],
+      "timeline_coherence_explanation": "The patient-reported concern precedes the medication change by seven days, which gives the review cue a chronological antecedent without the dataset asserting any causal link. The two lipid-lowering records share the 2026-01-27 boundary with no overlap, the on-time refill follows the active record, and the appointment is the only future event."
+    },
+
+    {
+      "patient_id": "SYN-PT-005",
+      "display_label": "Demo Patient 005 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "35-44",
+      "sex_recorded_for_demo": "female",
+      "gender_identity_declared": "woman",
+      "clinic_id": "SYN-CLINIC-001",
+      "assigned_provider_id": "SYN-PROV-001",
+      "preferred_language": "en-US",
+      "declared_preferences": {
+        "source": "patient_self_declared_in_portal_settings",
+        "accessibility_needs": ["requests reduced-motion interface", "requests dark mode"],
+        "contact_preference_primary": "portal_message",
+        "contact_preference_secondary": "email",
+        "quiet_hours_declared": "21:30-06:30",
+        "work_schedule_declared": "hybrid office role, weekdays",
+        "transportation_declared": "own vehicle",
+        "caregiving_responsibilities_declared": "provides weekday care for an older adult household member",
+        "cost_concerns_declared": "requests generic options when available",
+        "interpreter_requested": false
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated adult portal user with declared caregiving responsibilities and a declared cost preference. Used to exercise reduced-motion rendering, as-needed medication display, and a discontinuation with no successor. Not a real person.",
+      "conditions": [
+        {"condition_id": "SYN-CND-005-A", "label_en_us": "Episodic migraine", "label_es_mx": "Migraña episódica", "onset_date": "2017-02-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-005-B", "label_en_us": "Iron deficiency anemia", "label_es_mx": "Anemia por deficiencia de hierro", "onset_date": "2024-11-01", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [
+        {"allergy_id": "SYN-ALG-005-A", "substance_label": "latex", "reaction_label": "contact rash", "severity_label": "mild", "recorded_date": "2019-08-05", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "medications": [
+        {"medication_id": "SYN-MED-005-A", "label": "sumatriptan", "dose_text_for_display_only": "as-needed use recorded", "route": "oral", "start_date": "2025-01-30", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-005-B", "label": "propranolol", "dose_text_for_display_only": "20 mg twice daily", "route": "oral", "start_date": "2025-06-18", "end_date": "2025-12-02", "status": "discontinued", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-005-C", "label": "ferrous sulfate", "dose_text_for_display_only": "325 mg once daily", "route": "oral", "start_date": "2025-01-30", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-005-01", "type": "office_visit", "timestamp": "2025-01-30T16:00:00-08:00", "summary_en_us": "Synthetic scenario. Outpatient visit; two medication records opened."},
+        {"event_id": "SYN-EVT-005-02", "type": "medication_start", "timestamp": "2025-06-18T09:25:00-07:00", "summary_en_us": "Synthetic scenario. Additional daily medication record opened."},
+        {"event_id": "SYN-EVT-005-03", "type": "patient_reported_concern", "timestamp": "2025-11-24T20:40:00-08:00", "summary_en_us": "Synthetic scenario. Portal message reports daytime tiredness that is difficult to manage alongside caregiving duties. Stored verbatim as patient-reported; no interpretation recorded."},
+        {"event_id": "SYN-EVT-005-04", "type": "medication_end", "timestamp": "2025-12-02T10:05:00-08:00", "summary_en_us": "Synthetic scenario. Daily medication record closed with no successor record opened. Flagged as a clinician-review cue only.", "review_cue": true},
+        {"event_id": "SYN-EVT-005-05", "type": "monitoring_document_filed", "timestamp": "2026-03-11T07:50:00-08:00", "summary_en_us": "Synthetic scenario. Monitoring document filed as metadata only; no values or reference ranges stored."},
+        {"event_id": "SYN-EVT-005-06", "type": "adherence_event", "timestamp": "2026-05-06T21:00:00-07:00", "summary_en_us": "Synthetic scenario. Portal tracker records 18 of 30 daily doses logged.", "adherence_signal": "self_tracked_18_of_30"},
+        {"event_id": "SYN-EVT-005-07", "type": "notification_sent", "timestamp": "2026-08-18T18:15:00-07:00", "channel": "portal_message", "locale": "en-US", "summary_en_us": "Synthetic scenario. In-portal reminder delivered before declared quiet hours."},
+        {"event_id": "SYN-EVT-005-08", "type": "appointment_scheduled", "timestamp": "2026-09-29T08:30:00-07:00", "summary_en_us": "Synthetic scenario. Early-morning follow-up appointment."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-005-A", "title_en_us": "Monitoring document (synthetic, metadata only)", "document_type": "lab_report_metadata", "created_at": "2026-03-11T07:50:00-08:00", "language": "en-US", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "result_values": null, "reference_ranges": null, "requires_validation": true, "patient_viewed_at": "2026-03-11T22:14:00-08:00"},
+        {"document_id": "SYN-DOC-005-B", "title_en_us": "Medication list snapshot (synthetic)", "document_type": "medication_list", "created_at": "2025-12-02T10:30:00-08:00", "language": "en-US", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "patient_viewed_at": null}
+      ],
+      "test_journeys_supported": [
+        "patient_login_en_us",
+        "reduced_motion_and_dark_mode_rendering",
+        "as_needed_medication_display_without_adherence_scoring",
+        "low_adherence_percentage_badge",
+        "discontinuation_without_successor_in_timeline",
+        "cost_preference_flag_surfaced_to_assigned_provider"
+      ],
+      "timeline_coherence_explanation": "The concern message precedes the discontinuation by eight days, so the review cue has an antecedent without any causal claim in the data. The as-needed medication is excluded from adherence tracking while the daily medication is scored, and the closed record has no successor and never reappears as active."
+    },
+
+    {
+      "patient_id": "SYN-PT-006",
+      "display_label": "Demo Patient 006 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "19-24",
+      "sex_recorded_for_demo": "male",
+      "gender_identity_declared": "man",
+      "clinic_id": "SYN-CLINIC-002",
+      "assigned_provider_id": "SYN-PROV-003",
+      "preferred_language": "en-US",
+      "declared_preferences": {
+        "source": "patient_self_declared_in_portal_intake",
+        "accessibility_needs": ["deaf or hard of hearing (self-declared)", "requests live captions for telehealth", "requests ASL interpreter for in-person visits", "declines voice-call contact"],
+        "contact_preference_primary": "sms",
+        "contact_preference_secondary": "portal_message",
+        "quiet_hours_declared": "01:00-09:00",
+        "work_schedule_declared": "gig work with variable hours",
+        "transportation_declared": "rideshare and bicycle",
+        "caregiving_responsibilities_declared": "none",
+        "cost_concerns_declared": "requests cost estimate before scheduling",
+        "interpreter_requested": true,
+        "interpreter_type_declared": "ASL"
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated young adult portal user who has declined voice contact and requested captioning and interpreter services. Used to exercise channel suppression, interpreter booking flags, and a two-medication timeline with no discontinuations. Not a real person.",
+      "conditions": [
+        {"condition_id": "SYN-CND-006-A", "label_en_us": "Atopic dermatitis", "label_es_mx": "Dermatitis atópica", "onset_date": "2012-01-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-006-B", "label_en_us": "Seasonal allergic rhinitis", "label_es_mx": "Rinitis alérgica estacional", "onset_date": "2018-04-01", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [],
+      "medications": [
+        {"medication_id": "SYN-MED-006-A", "label": "triamcinolone topical cream", "dose_text_for_display_only": "topical application, as recorded", "route": "topical", "start_date": "2025-08-21", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-006-B", "label": "fluticasone nasal spray", "dose_text_for_display_only": "1 spray each nostril daily", "route": "nasal", "start_date": "2025-08-21", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-006-01", "type": "telehealth_visit", "timestamp": "2025-08-21T12:30:00-07:00", "summary_en_us": "Synthetic scenario. Captioned telehealth visit; two medication records opened."},
+        {"event_id": "SYN-EVT-006-02", "type": "accessibility_service_flag", "timestamp": "2025-08-21T12:31:00-07:00", "summary_en_us": "Synthetic scenario. Interpreter and captioning flags attached to the patient record per declared preference."},
+        {"event_id": "SYN-EVT-006-03", "type": "notification_suppressed", "timestamp": "2026-02-05T10:00:00-08:00", "channel": "voice_call", "summary_en_us": "Synthetic scenario. Voice-call reminder blocked by declared channel preference and re-sent by SMS."},
+        {"event_id": "SYN-EVT-006-04", "type": "notification_sent", "timestamp": "2026-02-05T10:01:00-08:00", "channel": "sms", "locale": "en-US", "summary_en_us": "Synthetic scenario. SMS reminder delivered as the fallback channel."},
+        {"event_id": "SYN-EVT-006-05", "type": "adherence_event", "timestamp": "2026-04-30T13:20:00-07:00", "summary_en_us": "Synthetic scenario. Nasal spray refill recorded 14 days after the expected refill window.", "adherence_signal": "refill_gap_days_14"},
+        {"event_id": "SYN-EVT-006-06", "type": "patient_reported_concern", "timestamp": "2026-06-22T23:10:00-07:00", "summary_en_us": "Synthetic scenario. Portal message reports that variable work hours make weekday appointments hard to keep."},
+        {"event_id": "SYN-EVT-006-07", "type": "appointment_scheduled", "timestamp": "2026-10-01T15:00:00-07:00", "summary_en_us": "Synthetic scenario. In-person appointment scheduled with an ASL interpreter request attached."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-006-A", "title_en_us": "Telehealth visit summary (synthetic)", "document_type": "visit_summary", "created_at": "2025-08-21T13:10:00-07:00", "language": "en-US", "page_count": 2, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "patient_viewed_at": "2025-08-21T23:55:00-07:00"},
+        {"document_id": "SYN-DOC-006-B", "title_en_us": "Interpreter service request record (synthetic)", "document_type": "service_request_metadata", "created_at": "2026-09-15T09:00:00-07:00", "language": "en-US", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "patient_viewed_at": null}
+      ],
+      "test_journeys_supported": [
+        "patient_login_en_us",
+        "voice_channel_suppression_and_sms_fallback",
+        "interpreter_request_attached_to_appointment",
+        "captioned_telehealth_flag_persistence",
+        "refill_gap_on_one_of_two_active_medications",
+        "quiet_hours_spanning_midnight"
+      ],
+      "timeline_coherence_explanation": "Both medication records open on the visit date and remain active, so no discontinued dose exists to re-use. The suppressed voice notification and its SMS fallback are one minute apart in the correct order, the refill gap attaches only to the medication with a refill schedule, and the interpreter request document precedes the appointment it supports."
+    },
+
+    {
+      "patient_id": "SYN-PT-007",
+      "display_label": "Demo Patient 007 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "45-54",
+      "sex_recorded_for_demo": "female",
+      "gender_identity_declared": "woman",
+      "clinic_id": "SYN-CLINIC-001",
+      "assigned_provider_id": "SYN-PROV-002",
+      "preferred_language": "es-MX",
+      "declared_preferences": {
+        "source": "patient_self_declared_in_portal_settings",
+        "accessibility_needs": ["low vision (self-declared)", "requests large text and high contrast interface", "requests text-to-speech compatible documents"],
+        "contact_preference_primary": "sms",
+        "contact_preference_secondary": "voice_call",
+        "quiet_hours_declared": "23:00-06:00",
+        "work_schedule_declared": "two part-time jobs; available only after 18:00 on weekdays",
+        "transportation_declared": "public transit and rides from a coworker",
+        "caregiving_responsibilities_declared": "none",
+        "cost_concerns_declared": "none declared",
+        "interpreter_requested": false
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated adult portal user with declared low vision and evening-only availability. Used to exercise high-contrast rendering, evening scheduling constraints, and a medication substitution in Spanish. Not a real person.",
+      "narrative_es_mx": "Synthetic scenario. Escenario sintético. Persona ficticia creada para pruebas: ve poco, por lo que pidió letra grande y alto contraste, y solo puede acudir después de las 6 de la tarde entre semana. Sirve para probar la vista de alto contraste, las citas por la tarde y el cambio de un medicamento por otro en español. No es una persona real.",
+      "conditions": [
+        {"condition_id": "SYN-CND-007-A", "label_en_us": "Gastroesophageal reflux", "label_es_mx": "Reflujo gastroesofágico", "onset_date": "2022-07-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-007-B", "label_en_us": "High blood pressure", "label_es_mx": "Presión arterial alta", "onset_date": "2023-02-01", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [
+        {"allergy_id": "SYN-ALG-007-A", "substance_label": "shellfish", "allergy_category": "food", "reaction_label": "rash", "severity_label": "mild", "recorded_date": "2011-03-14", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "medications": [
+        {"medication_id": "SYN-MED-007-A", "label": "omeprazole", "dose_text_for_display_only": "20 mg once daily", "route": "oral", "start_date": "2025-05-06", "end_date": "2026-04-21", "status": "discontinued", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-007-B", "label": "famotidine", "dose_text_for_display_only": "20 mg once daily", "route": "oral", "start_date": "2026-04-21", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-007-C", "label": "amlodipine", "dose_text_for_display_only": "5 mg once daily", "route": "oral", "start_date": "2025-05-06", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-007-01", "type": "office_visit", "timestamp": "2025-05-06T18:30:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Consulta en horario vespertino; se abrieron dos registros de medicamento."},
+        {"event_id": "SYN-EVT-007-02", "type": "monitoring_document_filed", "timestamp": "2025-11-18T08:15:00-08:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Se archivó un documento de seguimiento (solo metadatos; sin valores ni rangos de referencia)."},
+        {"event_id": "SYN-EVT-007-03", "type": "adherence_event", "timestamp": "2026-01-15T19:05:00-08:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. El registro del portal muestra 25 de 31 tomas anotadas.", "adherence_signal": "self_tracked_25_of_31"},
+        {"event_id": "SYN-EVT-007-04", "type": "patient_reported_concern", "timestamp": "2026-04-14T19:40:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. La paciente escribe que sigue teniendo molestias después de cenar. Se guarda tal como lo dijo; el sistema no registra ninguna conclusión clínica."},
+        {"event_id": "SYN-EVT-007-05", "type": "medication_change", "timestamp": "2026-04-21T18:50:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Se cerró un registro de medicamento y se abrió otro distinto el mismo día. Solo es un aviso para revisión del personal clínico.", "review_cue": true},
+        {"event_id": "SYN-EVT-007-06", "type": "notification_sent", "timestamp": "2026-08-19T18:00:00-07:00", "channel": "sms", "locale": "es-MX", "summary_es_mx": "Synthetic scenario. Escenario sintético. Recordatorio de cita enviado por mensaje de texto en español."},
+        {"event_id": "SYN-EVT-007-07", "type": "appointment_scheduled", "timestamp": "2026-09-10T18:45:00-07:00", "summary_es_mx": "Synthetic scenario. Escenario sintético. Cita programada después de las 6 de la tarde, según la disponibilidad declarada."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-007-A", "title_es_mx": "Documento de seguimiento (sintético, solo metadatos)", "document_type": "lab_report_metadata", "created_at": "2025-11-18T08:15:00-08:00", "language": "es-MX", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "result_values": null, "reference_ranges": null, "requires_validation": true, "patient_viewed_at": "2025-11-19T20:22:00-08:00"},
+        {"document_id": "SYN-DOC-007-B", "title_es_mx": "Instantánea de la lista de medicamentos (sintético)", "document_type": "medication_list", "created_at": "2026-04-21T19:15:00-07:00", "language": "es-MX", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "high_contrast_variant": true, "patient_viewed_at": null}
+      ],
+      "test_journeys_supported": [
+        "patient_login_es_mx",
+        "high_contrast_and_large_text_rendering",
+        "evening_only_appointment_slot_filtering",
+        "es_mx_sms_notification_template",
+        "food_allergy_vs_drug_allergy_display_separation",
+        "medication_substitution_review_cue"
+      ],
+      "timeline_coherence_explanation": "The substitution boundary on 2026-04-21 closes one record and opens the other on the same date, so the earlier medication is never active afterward. The concern message precedes the change by one week without the data asserting a link, the visit and the appointment both fall after 18:00 to match declared availability, and adherence is tracked only against the daily medications."
+    },
+
+    {
+      "patient_id": "SYN-PT-008",
+      "display_label": "Demo Patient 008 (synthetic)",
+      "is_synthetic": true,
+      "clinical_review_required": true,
+      "age_band": "85+",
+      "sex_recorded_for_demo": "female",
+      "gender_identity_declared": "woman",
+      "clinic_id": "SYN-CLINIC-002",
+      "assigned_provider_id": "SYN-PROV-004",
+      "preferred_language": "en-US",
+      "declared_preferences": {
+        "source": "patient_self_declared_at_front_desk",
+        "accessibility_needs": ["hard of hearing (self-declared)", "requests written follow-up after any call", "requests slower-paced appointments"],
+        "contact_preference_primary": "sms",
+        "contact_preference_secondary": "printed_mail",
+        "quiet_hours_declared": "19:00-09:00",
+        "work_schedule_declared": "retired",
+        "transportation_declared": "paratransit service, requires advance booking",
+        "caregiving_responsibilities_declared": "none",
+        "cost_concerns_declared": "none declared",
+        "interpreter_requested": false,
+        "proxy_portal_access_declared": "none authorized"
+      },
+      "narrative_en_us": "Synthetic scenario. A fabricated adult portal user with declared hearing loss and a transportation service that requires advance booking. Used to exercise long-lead appointment reminders, written follow-up after calls, and a three-medication timeline with no discontinuations. Not a real person.",
+      "conditions": [
+        {"condition_id": "SYN-CND-008-A", "label_en_us": "Osteopenia", "label_es_mx": "Osteopenia", "onset_date": "2023-05-01", "status": "active", "code": null, "code_system": null, "requires_validation": true},
+        {"condition_id": "SYN-CND-008-B", "label_en_us": "High blood pressure", "label_es_mx": "Presión arterial alta", "onset_date": "2014-10-01", "status": "active", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "allergies": [
+        {"allergy_id": "SYN-ALG-008-A", "substance_label": "penicillin", "reaction_label": "rash", "severity_label": "mild", "recorded_date": "1998-01-01", "code": null, "code_system": null, "requires_validation": true},
+        {"allergy_id": "SYN-ALG-008-B", "substance_label": "adhesive tape", "allergy_category": "contact", "reaction_label": "skin irritation", "severity_label": "mild", "recorded_date": "2019-09-30", "code": null, "code_system": null, "requires_validation": true}
+      ],
+      "medications": [
+        {"medication_id": "SYN-MED-008-A", "label": "amlodipine", "dose_text_for_display_only": "5 mg once daily", "route": "oral", "start_date": "2025-02-25", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-008-B", "label": "alendronate", "dose_text_for_display_only": "70 mg once weekly", "route": "oral", "start_date": "2025-09-30", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true},
+        {"medication_id": "SYN-MED-008-C", "label": "cholecalciferol supplement", "dose_text_for_display_only": "daily supplement, as recorded", "route": "oral", "start_date": "2025-02-25", "end_date": null, "status": "active", "rxcui": null, "requires_validation": true}
+      ],
+      "timeline_events": [
+        {"event_id": "SYN-EVT-008-01", "type": "office_visit", "timestamp": "2025-02-25T10:45:00-08:00", "summary_en_us": "Synthetic scenario. Extended-duration outpatient visit; two medication records opened."},
+        {"event_id": "SYN-EVT-008-02", "type": "monitoring_document_filed", "timestamp": "2025-09-25T09:30:00-07:00", "summary_en_us": "Synthetic scenario. Imaging report filed as metadata only; no values, measurements, or reference ranges stored."},
+        {"event_id": "SYN-EVT-008-03", "type": "medication_start", "timestamp": "2025-09-30T11:20:00-07:00", "summary_en_us": "Synthetic scenario. Weekly medication record opened."},
+        {"event_id": "SYN-EVT-008-04", "type": "adherence_event", "timestamp": "2026-01-06T09:40:00-08:00", "summary_en_us": "Synthetic scenario. Weekly medication logged 11 of 14 expected weeks in the portal tracker.", "adherence_signal": "self_tracked_11_of_14_weeks"},
+        {"event_id": "SYN-EVT-008-05", "type": "patient_reported_concern", "timestamp": "2026-05-19T10:05:00-07:00", "summary_en_us": "Synthetic scenario. Front-desk note records that the patient finds the weekly dosing schedule hard to keep track of. Written follow-up sent per declared preference."},
+        {"event_id": "SYN-EVT-008-06", "type": "notification_sent", "timestamp": "2026-08-06T09:30:00-07:00", "channel": "sms", "locale": "en-US", "summary_en_us": "Synthetic scenario. Long-lead appointment reminder sent 30 days ahead to allow paratransit booking."},
+        {"event_id": "SYN-EVT-008-07", "type": "appointment_scheduled", "timestamp": "2026-09-05T11:30:00-07:00", "summary_en_us": "Synthetic scenario. Extended-duration follow-up appointment booked with a paratransit note attached."}
+      ],
+      "documents_metadata_only": [
+        {"document_id": "SYN-DOC-008-A", "title_en_us": "Imaging report (synthetic, metadata only)", "document_type": "imaging_report_metadata", "created_at": "2025-09-25T09:30:00-07:00", "language": "en-US", "page_count": 2, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "result_values": null, "reference_ranges": null, "requires_validation": true, "patient_viewed_at": null},
+        {"document_id": "SYN-DOC-008-B", "title_en_us": "Written follow-up letter (synthetic)", "document_type": "correspondence", "created_at": "2026-05-19T10:30:00-07:00", "language": "en-US", "page_count": 1, "mime_type": "application/pdf", "binary_content": null, "storage_reference": null, "patient_viewed_at": "2026-05-21T09:15:00-07:00"}
+      ],
+      "test_journeys_supported": [
+        "patient_login_en_us",
+        "two_allergy_entries_including_non_drug_contact_allergy",
+        "weekly_vs_daily_medication_adherence_calculation",
+        "long_lead_appointment_reminder_scheduling",
+        "written_followup_after_call_preference",
+        "no_proxy_authorized_denial_path"
+      ],
+      "timeline_coherence_explanation": "The imaging document is filed five days before the weekly medication record opens, giving the timeline a plausible order without asserting causation. All three medication records remain active with no end dates, so no discontinued dose can be re-used, and weekly adherence is scored over a 14-week window that falls entirely after the weekly record's start date."
+    }
+  ],
+
+  "care_team_assignments": [
+    {"assignment_id": "SYN-CTA-001", "patient_id": "SYN-PT-001", "staff_id": "SYN-PROV-001", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-001", "effective_start": "2025-03-14", "effective_end": null, "grants_record_access": true},
+    {"assignment_id": "SYN-CTA-002", "patient_id": "SYN-PT-002", "staff_id": "SYN-PROV-002", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-001", "effective_start": "2025-01-21", "effective_end": null, "grants_record_access": true},
+    {"assignment_id": "SYN-CTA-003", "patient_id": "SYN-PT-002", "staff_id": "SYN-NURSE-001", "role": "care_team_nurse", "clinic_id": "SYN-CLINIC-001", "effective_start": "2025-07-15", "effective_end": null, "grants_record_access": true, "note": "Only nurse in this fixture set with an explicit assignment; used for the positive nurse-access path."},
+    {"assignment_id": "SYN-CTA-004", "patient_id": "SYN-PT-003", "staff_id": "SYN-PROV-003", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-002", "effective_start": "2025-02-10", "effective_end": null, "grants_record_access": true},
+    {"assignment_id": "SYN-CTA-005", "patient_id": "SYN-PT-004", "staff_id": "SYN-PROV-004", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-002", "effective_start": "2025-04-08", "effective_end": null, "grants_record_access": true},
+    {"assignment_id": "SYN-CTA-006", "patient_id": "SYN-PT-004", "staff_id": "SYN-PROXY-004", "role": "authorized_patient_proxy", "clinic_id": "SYN-CLINIC-002", "effective_start": "2025-04-08", "effective_end": null, "grants_record_access": true, "note": "Non-staff proxy account authorized by the patient; scoped to this patient only."},
+    {"assignment_id": "SYN-CTA-007", "patient_id": "SYN-PT-005", "staff_id": "SYN-PROV-001", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-001", "effective_start": "2025-01-30", "effective_end": null, "grants_record_access": true},
+    {"assignment_id": "SYN-CTA-008", "patient_id": "SYN-PT-006", "staff_id": "SYN-PROV-003", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-002", "effective_start": "2025-08-21", "effective_end": null, "grants_record_access": true},
+    {"assignment_id": "SYN-CTA-009", "patient_id": "SYN-PT-007", "staff_id": "SYN-PROV-002", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-001", "effective_start": "2025-05-06", "effective_end": null, "grants_record_access": true},
+    {"assignment_id": "SYN-CTA-010", "patient_id": "SYN-PT-008", "staff_id": "SYN-PROV-004", "role": "assigned_provider", "clinic_id": "SYN-CLINIC-002", "effective_start": "2025-02-25", "effective_end": null, "grants_record_access": true}
+  ],
+
+  "negative_access_cases": [
+    {
+      "case_id": "SYN-NEG-001",
+      "case_type": "cross_clinic_clinician_denial",
+      "actor_staff_id": "SYN-PROV-003",
+      "actor_clinic_id": "SYN-CLINIC-002",
+      "target_patient_id": "SYN-PT-002",
+      "target_clinic_id": "SYN-CLINIC-001",
+      "attempted_action": "open_patient_chart",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "NO_CARE_TEAM_ASSIGNMENT_CROSS_CLINIC",
+      "expected_audit_entry": true,
+      "expected_patient_data_leaked": "none, including existence of the record"
+    },
+    {
+      "case_id": "SYN-NEG-002",
+      "case_type": "cross_clinic_clinician_denial",
+      "actor_staff_id": "SYN-PROV-001",
+      "actor_clinic_id": "SYN-CLINIC-001",
+      "target_patient_id": "SYN-PT-008",
+      "target_clinic_id": "SYN-CLINIC-002",
+      "attempted_action": "list_patient_documents",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "NO_CARE_TEAM_ASSIGNMENT_CROSS_CLINIC",
+      "expected_audit_entry": true
+    },
+    {
+      "case_id": "SYN-NEG-003",
+      "case_type": "same_clinic_nurse_without_assignment",
+      "actor_staff_id": "SYN-NURSE-002",
+      "actor_clinic_id": "SYN-CLINIC-002",
+      "target_patient_id": "SYN-PT-003",
+      "target_clinic_id": "SYN-CLINIC-002",
+      "attempted_action": "open_patient_chart",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "SAME_CLINIC_BUT_NO_CARE_TEAM_ASSIGNMENT",
+      "expected_audit_entry": true,
+      "note": "Shared clinic membership alone must never grant access."
+    },
+    {
+      "case_id": "SYN-NEG-004",
+      "case_type": "admin_role_clinical_data_denial",
+      "actor_staff_id": "SYN-ADMIN-001",
+      "actor_clinic_id": "SYN-CLINIC-001",
+      "target_patient_id": "SYN-PT-001",
+      "attempted_action": "view_medication_timeline",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "ROLE_LACKS_CLINICAL_SCOPE",
+      "expected_audit_entry": true
+    },
+    {
+      "case_id": "SYN-NEG-005",
+      "case_type": "records_admin_document_metadata_denial",
+      "actor_staff_id": "SYN-ADMIN-002",
+      "actor_clinic_id": "SYN-CLINIC-002",
+      "target_patient_id": "SYN-PT-006",
+      "attempted_action": "view_document_metadata",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "NO_CARE_TEAM_ASSIGNMENT",
+      "expected_audit_entry": true
+    },
+    {
+      "case_id": "SYN-NEG-006",
+      "case_type": "patient_to_patient_denial",
+      "actor_patient_id": "SYN-PT-005",
+      "target_patient_id": "SYN-PT-001",
+      "attempted_action": "open_patient_chart_by_direct_id",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "PATIENT_SCOPE_SELF_ONLY",
+      "expected_audit_entry": true
+    },
+    {
+      "case_id": "SYN-NEG-007",
+      "case_type": "proxy_scope_denial",
+      "actor_proxy_id": "SYN-PROXY-004",
+      "target_patient_id": "SYN-PT-008",
+      "attempted_action": "open_patient_chart",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "PROXY_SCOPED_TO_SINGLE_PATIENT",
+      "expected_audit_entry": true,
+      "note": "SYN-PT-008 has declared no authorized proxy; this also exercises the no-proxy path."
+    },
+    {
+      "case_id": "SYN-NEG-008",
+      "case_type": "expired_or_absent_assignment_after_transfer",
+      "actor_staff_id": "SYN-NURSE-001",
+      "actor_clinic_id": "SYN-CLINIC-001",
+      "target_patient_id": "SYN-PT-007",
+      "attempted_action": "open_patient_chart",
+      "expected_result": "deny",
+      "expected_http_status": 403,
+      "expected_reason_code": "ASSIGNMENT_EXISTS_FOR_DIFFERENT_PATIENT_ONLY",
+      "expected_audit_entry": true,
+      "note": "This nurse is assigned to SYN-PT-002 only; assignment must not generalize across the clinic panel."
+    }
+  ],
+
+  "validation_notes": {
+    "before_any_non_demo_use": [
+      "Every scenario carries clinical_review_required: true. A licensed clinician must review condition, allergy, medication, and timeline content before this dataset is used for anything beyond software demos and regression tests.",
+      "No ICD-10, SNOMED, LOINC, RxNorm/RxCUI, NPI, or license values are populated. All such fields are null with requires_validation: true and must be filled by a terminology owner, not inferred by a developer.",
+      "No lab values, measurements, reference ranges, or guideline citations appear anywhere. Document records carry metadata only; result_values and reference_ranges are explicitly null.",
+      "Dose strings are labelled dose_text_for_display_only. They exist to make timeline rendering realistic and must not be treated as clinical guidance or copied into any production template."
+    ],
+    "content_boundaries_observed": [
+      "No treatment recommendations, medical advice, testimonials, or patient stories are present.",
+      "Medication changes are recorded as review cues only. Where a patient-reported concern precedes a change, the data states the sequence and nothing more; no causal or diagnostic conclusion is asserted in any field.",
+      "Excluded by design: high-acuity emergencies, pregnancy, pediatrics, substance use, psychiatric crisis, and any autonomous treatment-decision flow.",
+      "Every narrative field begins with the literal marker 'Synthetic scenario.' in both locales."
+    ],
+    "identifier_and_privacy_checks": [
+      "No real people, clinics, street addresses, phone numbers, email addresses, NPIs, license numbers, insurance identifiers, or MRNs. Patient display labels are non-identifying ordinals rather than personal names, so no ethnicity or origin can be inferred from a name.",
+      "No race or ethnicity field exists in this dataset.",
+      "No clinical note text is copied from any source; all summary strings are original and written for this fixture set."
+    ],
+    "representation_checks": [
+      "Preference fields are populated only from a declared source, recorded in declared_preferences.source for every patient.",
+      "Coverage spread: age bands 19-24, 25-34, 35-44, 45-54, 55-64, 65-74, 75-84, 85+; genders include women, men, and a nonbinary patient; clinics split 4/4; locales split 5 en-US / 3 es-MX; contact channels cover SMS, email, portal message, voice call, and printed mail.",
+      "Accessibility coverage includes screen reader use, low vision, hearing loss with interpreter and captioning requests, large print, and reduced motion — each attached to a patient whose other attributes do not stereotypically pair with it.",
+      "Language preference is set independently of every other field. Spanish-preferring patients appear across both clinics, multiple age bands, and different accessibility profiles."
+    ],
+    "localization_notes": [
+      "Only en-US and es-MX are used. Spanish strings are written in plain, natural Mexican Spanish and avoid literal calques from English.",
+      "Spanish text in this fixture set requires review by a professional es-MX translator before it appears in any customer-facing demo; mark this item open until that review is signed off.",
+      "Document records carry an explicit language attribute so the portal can be tested for correct locale selection independent of the patient's UI language setting."
+    ],
+    "determinism_and_timezone_notes": [
+      "All timestamps are fixed literals in America/Los_Angeles with explicit UTC offsets: -08:00 during Pacific Standard Time and -07:00 during Pacific Daylight Time. Offsets were checked against 2025 and 2026 transition dates.",
+      "Only appointment rows are dated after 2026-08-22; all other events are in the past relative to that date, so 'upcoming appointment' assertions remain stable without any runtime date arithmetic.",
+      "Medication records that share a substance or a substitution use a single shared boundary date, with the prior record's end_date equal to the successor's start_date. No discontinued record ever returns to active status, and no two records for the same substance overlap.",
+      "SYN-PT-006 declares quiet hours that cross midnight (01:00-09:00), which should be used to test range logic that wraps past 00:00."
+    ],
+    "open_items": [
+      {"item": "Terminology code population", "owner_role": "terminology_owner", "status": "open"},
+      {"item": "Clinical review of all eight scenarios", "owner_role": "licensed_clinician", "status": "open"},
+      {"item": "Professional es-MX translation review", "owner_role": "translator", "status": "open"},
+      {"item": "Accessibility audit of rendered demo screens against the declared needs in this dataset", "owner_role": "accessibility_specialist", "status": "open"},
+      {"item": "Confirm no fixture value collides with a real identifier in any downstream environment", "owner_role": "privacy_reviewer", "status": "open"}
+    ]
+  }
+}

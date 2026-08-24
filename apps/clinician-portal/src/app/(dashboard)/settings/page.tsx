@@ -9,7 +9,7 @@ import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 import { ClinicianRole } from "@/types";
 
-const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Integrations (MCP)"] as const;
+const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Interoperability"] as const;
 type SettingsTab = (typeof settingsTabs)[number];
 
 const ROLE_OPTIONS = [
@@ -812,16 +812,16 @@ export default function SettingsPage() {
                 </div>
             ) : null}
 
-            {activeTab === "Integrations (MCP)" ? (
+            {activeTab === "Interoperability" ? (
                 <div className="max-w-3xl">
                     <Card className="space-y-4">
-                        <h3 className="text-xl font-bold text-slate-900">MCP Integrations</h3>
+                        <h3 className="text-xl font-bold text-slate-900">SMART on FHIR</h3>
                         <p className="text-sm text-slate-600">
-                            Configure external assistant and automation integrations for your clinic workspace.
+                            Import synthetic sandbox records into the clinician review queue with source-level lineage.
                         </p>
-                        <p className="text-sm text-slate-500">
-                            Integration setup is available through backend admin tooling. This panel is read-only for now.
-                        </p>
+                        <Link className="inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800" href="/smart-import">
+                            Open SMART import
+                        </Link>
                     </Card>
                 </div>
             ) : null}

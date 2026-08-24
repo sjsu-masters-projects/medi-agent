@@ -157,9 +157,9 @@ jobs:
           fetch-depth: 0
       - name: Analyze pytest impact with Acquit (canary)
         if: github.event_name == 'pull_request'
-        uses: rajeev-chaurasia/acquit@6f7a42f4822790e736b7ae33b1c8b610751e0b25 # v0.1.2
+        uses: rajeev-chaurasia/acquit@f9bf83118cb56e19a3714cecee84a5c5b404b7af # v0.1.3
         with:
-          acquit-version: "0.1.2"
+          acquit-version: "0.1.3"
           comment: "true"
           mode: canary
           working-directory: .
