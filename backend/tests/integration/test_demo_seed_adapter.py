@@ -211,6 +211,10 @@ def test_reset_deletes_only_exact_canonical_fixture_users(monkeypatch: pytest.Mo
         SimpleNamespace(
             id="fixture", email=seed_adapter.fixture_email(fixture.patients[0].source_id)
         ),
+        SimpleNamespace(
+            id="legacy-fixture",
+            email=f"{fixture.patients[1].source_id.lower()}@demo.mediagent.local",
+        ),
         SimpleNamespace(id="unrelated", email="other@demo.mediagent.local"),
     ]
 

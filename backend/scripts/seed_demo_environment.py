@@ -18,6 +18,7 @@ from typing import Any
 
 from app.db.seed.demo_data import (
     DEMO_EMAIL_DOMAIN,
+    LEGACY_DEMO_EMAIL_DOMAINS,
     CanonicalDemoFixture,
     DemoDocument,
     DemoMedication,
@@ -138,6 +139,12 @@ def assert_schema_ready(client: Any) -> None:
 def fixture_email(source_id: str) -> str:
     """Create a non-clinical Auth identifier from the canonical synthetic ID."""
     return f"{source_id.lower()}@{DEMO_EMAIL_DOMAIN}"
+
+
+def fixture_email_aliases(source_id: str) -> set[str]:
+    """Return the current fixture email and exact legacy reset aliases."""
+    local_part = source_id.lower()
+    return {f"{local_part}@{domain}" for domain in (DEMO_EMAIL_DOMAIN, *LEGACY_DEMO_EMAIL_DOMAINS)}
 
 
 def clinic_code(source_id: str) -> str:
@@ -421,8 +428,14 @@ def seed(client: Any, password: str) -> None:
 
 
 def _reserved_demo_user_ids(client: Any, fixture: CanonicalDemoFixture) -> list[str]:
-    expected_emails = {fixture_email(staff.source_id) for staff in fixture.staff}
-    expected_emails.update(fixture_email(patient.source_id) for patient in fixture.patients)
+    expected_emails = {
+        email
+        for source_id in (
+            *(staff.source_id for staff in fixture.staff),
+            *(patient.source_id for patient in fixture.patients),
+        )
+        for email in fixture_email_aliases(source_id)
+    }
     user_ids: list[str] = []
     page = 1
     while True:

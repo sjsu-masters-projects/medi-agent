@@ -29,7 +29,7 @@ Preview without connecting to Supabase:
 ## Synthetic accounts
 
 The adapter derives non-clinical Auth emails from canonical source IDs rather than
-inventing people: SYN-PT-001 becomes syn-pt-001@demo.mediagent.local. Staff use the
+inventing people: SYN-PT-001 becomes syn-pt-001@demo.mediagent.live. Staff use the
 same source-ID convention. These identifiers are adapter plumbing, not fixture
 demographics; source display labels remain the persisted name-like values.
 
@@ -37,7 +37,8 @@ demographics; source display labels remain the persisted name-like values.
 
 Reset is guarded: it refuses environments outside development, demo, or staging;
 requires --confirm-demo-reset; and deletes only exact canonical-fixture account
-emails plus the two canonical synthetic clinics.
+emails (including the previous `.local` fixture aliases) plus the two canonical
+synthetic clinics.
 
     export ENVIRONMENT=staging
     export DEMO_ACCOUNT_PASSWORD='choose-a-local-password'
