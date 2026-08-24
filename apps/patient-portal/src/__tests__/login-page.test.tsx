@@ -187,4 +187,14 @@ describe("Patient login page", () => {
         fireEvent.click(screen.getByRole("button", { name: /hide password/i }));
         expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("type", "password");
     });
+
+    it("declares login autofill semantics", () => {
+        render(<LoginPage />);
+
+        expect(screen.getByLabelText(/email address/i)).toHaveAttribute("autocomplete", "email");
+        expect(screen.getByLabelText(/^password$/i)).toHaveAttribute(
+            "autocomplete",
+            "current-password"
+        );
+    });
 });

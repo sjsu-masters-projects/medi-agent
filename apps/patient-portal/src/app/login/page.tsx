@@ -124,8 +124,15 @@ function LoginPageContent() {
                                 We&apos;ll keep you in the right patient workspace.
                             </p>
                         </div>
-                        <Input label="Email address" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
                         <Input
+                            autoComplete="email"
+                            label="Email address"
+                            onChange={(event) => setEmail(event.target.value)}
+                            type="email"
+                            value={email}
+                        />
+                        <Input
+                            autoComplete="current-password"
                             label="Password"
                             onChange={(event) => setPassword(event.target.value)}
                             trailingAction={
