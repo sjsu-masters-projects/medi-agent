@@ -427,14 +427,10 @@ def seed(client: Any, password: str) -> None:
         )
 
 
-def _reserved_demo_user_ids(client: Any, fixture: CanonicalDemoFixture) -> list[str]:
+def _reserved_demo_user_ids(client: Any, source_ids: Iterable[str]) -> list[str]:
+    """Return exact fixture Auth IDs for one profile type, never a broad domain match."""
     expected_emails = {
-        email
-        for source_id in (
-            *(staff.source_id for staff in fixture.staff),
-            *(patient.source_id for patient in fixture.patients),
-        )
-        for email in fixture_email_aliases(source_id)
+        email for source_id in source_ids for email in fixture_email_aliases(source_id)
     }
     user_ids: list[str] = []
     page = 1
@@ -456,7 +452,14 @@ def reset(client: Any) -> None:
     if environment not in SAFE_ENVIRONMENTS:
         raise RuntimeError("Demo reset is refused outside development, demo, or staging.")
     fixture = load_canonical_fixture()
-    for user_id in _reserved_demo_user_ids(client, fixture):
+    # Documents are retained by a clinician Auth foreign key but cascade from
+    # their patient. Remove fixture patients first so their dependent records
+    # disappear before the fixture clinicians are deleted.
+    patient_user_ids = _reserved_demo_user_ids(
+        client, (patient.source_id for patient in fixture.patients)
+    )
+    staff_user_ids = _reserved_demo_user_ids(client, (staff.source_id for staff in fixture.staff))
+    for user_id in [*patient_user_ids, *staff_user_ids]:
         client.auth.admin.delete_user(user_id)
     client.table("clinics").delete().in_(
         "code", [clinic_code(clinic.source_id) for clinic in fixture.clinics]

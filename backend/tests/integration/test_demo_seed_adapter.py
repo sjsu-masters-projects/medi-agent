@@ -79,6 +79,7 @@ class InMemoryQuery:
 class InMemoryAdmin:
     def __init__(self) -> None:
         self.users: list[SimpleNamespace] = []
+        self.deleted_user_ids: list[str] = []
 
     def create_user(self, payload: dict[str, Any]) -> SimpleNamespace:
         user = SimpleNamespace(id=f"auth-{len(self.users) + 1}", email=payload["email"])
@@ -90,6 +91,7 @@ class InMemoryAdmin:
         return self.users[start : start + per_page]
 
     def delete_user(self, user_id: str) -> None:
+        self.deleted_user_ids.append(user_id)
         self.users = [user for user in self.users if user.id != user_id]
 
 
@@ -221,6 +223,24 @@ def test_reset_deletes_only_exact_canonical_fixture_users(monkeypatch: pytest.Mo
     seed_adapter.reset(client)
 
     assert [user.id for user in client.auth.admin.users] == ["unrelated"]
+
+
+def test_reset_deletes_fixture_patients_before_fixture_staff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    fixture = load_canonical_fixture()
+    client = InMemorySupabase()
+    client.auth.admin.users = [
+        SimpleNamespace(id="staff", email=seed_adapter.fixture_email(fixture.staff[0].source_id)),
+        SimpleNamespace(
+            id="patient", email=seed_adapter.fixture_email(fixture.patients[0].source_id)
+        ),
+    ]
+
+    seed_adapter.reset(client)
+
+    assert client.auth.admin.deleted_user_ids == ["patient", "staff"]
 
 
 def test_schema_preflight_rejects_unsynchronized_ledger(monkeypatch: pytest.MonkeyPatch) -> None:
