@@ -7,7 +7,7 @@ Use this guide to recreate the project after an inactive instance is removed. It
 1. Create a new development project in the required region and record its URL, anon key, service-role key, and JWT secret in the team secret store.
 2. Copy `.env.example` to `.env` locally. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JWT_SECRET`; never commit that file.
 3. Configure clinician and patient portal environment variables with the new public URL and anon key.
-4. Enable email authentication and MFA for clinician accounts. Enable the custom access-token hook after the migrations complete.
+4. Enable email authentication and MFA for clinician accounts. After migrations complete, configure **Authentication → Auth Hooks → Customize Access Token (JWT) Claims hook** to use `public.custom_access_token_hook` and confirm it shows as enabled. This Auth control-plane setting is not recorded by a SQL migration.
 
 ## Apply migrations
 
@@ -23,7 +23,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This currently applies migrations `001` through `019`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), and clinical-action approval controls (`019`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
+This currently applies migrations `001` through `023`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), and the least-privilege server-only grants used by the synthetic fixture and A2A retry worker (`021`–`023`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
 
 ## Configure SMART staging
 
@@ -42,9 +42,12 @@ Register the exact `SMART_REDIRECT_URI` with the sandbox. Tokens and authorizati
 
 ## Verification checklist
 
-- [ ] All `001`–`019` migrations finish with `ON_ERROR_STOP=1`.
+- [ ] Every committed migration is recorded with its exact filename and SHA-256 checksum in `public.schema_migrations`.
 - [ ] Tables include `clinical_facts`, `source_provenances`, `fhir_imports`, `fhir_import_resources`, and SMART session/handoff tables.
 - [ ] RLS is enabled for clinical facts and FHIR import tables.
+- [ ] `public.custom_access_token_hook` is enabled in **Authentication → Auth Hooks**, not merely present in the database.
+- [ ] A fresh password sign-in for a synthetic patient produces a JWT with `user_role=patient`, and the backend accepts that JWT. Repeat for a clinician before a clinician demo.
+- [ ] Authentication → URL Configuration uses the intended portal site URL and includes the approved patient and clinician redirect URLs required for password-reset or email-link flows.
 - [ ] A clinician has an active care-team assignment to a synthetic patient.
 - [ ] Cloud Run staging callback is HTTPS and registered with the SMART sandbox.
 - [ ] A sandbox import creates raw resource envelopes and pending facts only.

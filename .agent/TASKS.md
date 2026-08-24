@@ -147,7 +147,7 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 - [x] Make seed/reset idempotent and guarded by environment, explicit confirmation, exact fixture-account deletion, and a migration-checksum preflight.
 - [x] Document deterministic fixture accounts without embedding secrets in the repository.
 - [x] Run the approved staging seed and verify table counts, source-specific mappings, ledger checksums, and idempotency.
-- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment.
+- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login and role-claim validation passed on 2026-08-24 after enabling the required Supabase Auth hook; clinician and RLS-isolation journeys remain.
 
 **Verification evidence — 2026-08-22**
 

@@ -26,6 +26,16 @@ Preview without connecting to Supabase:
 
     PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py --dry-run
 
+## Required Auth control-plane check
+
+The migrations create `public.custom_access_token_hook`, but they cannot enable it in
+Supabase Auth. After applying migrations, open **Authentication → Auth Hooks** and
+enable **Customize Access Token (JWT) Claims hook** with
+`public.custom_access_token_hook`. Then perform a new patient password sign-in through
+the backend and verify the returned role is `patient`. A successful password exchange
+alone is not sufficient: a missing `user_role` claim causes the portals to reject the
+session.
+
 ## Synthetic accounts
 
 The adapter derives non-clinical Auth emails from canonical source IDs rather than
