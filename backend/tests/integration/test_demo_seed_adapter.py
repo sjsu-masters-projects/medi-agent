@@ -205,6 +205,18 @@ def test_reseeding_is_idempotent_for_all_persisted_rows() -> None:
     assert {table: len(rows) for table, rows in client.rows.items()} == first_counts
 
 
+def test_clinic_codes_are_valid_for_the_clinician_login_contract() -> None:
+    fixture = load_canonical_fixture()
+
+    assert {seed_adapter.clinic_code(clinic.source_id) for clinic in fixture.clinics} == {
+        "CA-CLINIC-001",
+        "CA-CLINIC-002",
+    }
+    assert all(
+        6 <= len(seed_adapter.clinic_code(clinic.source_id)) <= 20 for clinic in fixture.clinics
+    )
+
+
 def test_reset_deletes_only_exact_canonical_fixture_users(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "staging")
     fixture = load_canonical_fixture()
@@ -241,6 +253,26 @@ def test_reset_deletes_fixture_patients_before_fixture_staff(
     seed_adapter.reset(client)
 
     assert client.auth.admin.deleted_user_ids == ["patient", "staff"]
+
+
+def test_reset_removes_only_current_and_legacy_fixture_clinic_codes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    fixture = load_canonical_fixture()
+    client = InMemorySupabase()
+    client.rows["clinics"] = [
+        {"id": "current", "code": seed_adapter.clinic_code(fixture.clinics[0].source_id)},
+        {
+            "id": "legacy",
+            "code": seed_adapter.legacy_clinic_code(fixture.clinics[1].source_id),
+        },
+        {"id": "unrelated", "code": "CA-CLINIC-999"},
+    ]
+
+    seed_adapter.reset(client)
+
+    assert client.rows["clinics"] == [{"id": "unrelated", "code": "CA-CLINIC-999"}]
 
 
 def test_schema_preflight_rejects_unsynchronized_ledger(monkeypatch: pytest.MonkeyPatch) -> None:

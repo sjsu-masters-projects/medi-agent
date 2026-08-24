@@ -69,6 +69,7 @@ STAFF_ROLE_MAP = {
     "records_admin": "admin",
 }
 DOSE_FREQUENCY = re.compile(r"^.+? ((?:once|twice) daily|once weekly)$")
+CLINIC_SOURCE_ID = re.compile(r"^SYN-CLINIC-(\d{3})$")
 # Reviewed, source-ID based decision: only these five fixed events explicitly say
 # "Portal message" in the canonical fixture. Other concern transports are not
 # represented by the current chat table and must remain unpersisted.
@@ -148,7 +149,21 @@ def fixture_email_aliases(source_id: str) -> set[str]:
 
 
 def clinic_code(source_id: str) -> str:
+    """Return the compact clinician-login code for a canonical clinic ID."""
+    match = CLINIC_SOURCE_ID.fullmatch(source_id)
+    if not match:
+        raise ValueError(f"Unsupported canonical clinic source ID: {source_id}")
+    return f"CA-CLINIC-{match.group(1)}"
+
+
+def legacy_clinic_code(source_id: str) -> str:
+    """Return the previous exact code so a guarded reset can remove it."""
     return f"DEMO-CA-{source_id}"
+
+
+def fixture_clinic_code_aliases(source_id: str) -> set[str]:
+    """Return the active code and the exact legacy value owned by this fixture."""
+    return {clinic_code(source_id), legacy_clinic_code(source_id)}
 
 
 def _label_parts(display_label: str) -> tuple[str, str]:
@@ -462,7 +477,12 @@ def reset(client: Any) -> None:
     for user_id in [*patient_user_ids, *staff_user_ids]:
         client.auth.admin.delete_user(user_id)
     client.table("clinics").delete().in_(
-        "code", [clinic_code(clinic.source_id) for clinic in fixture.clinics]
+        "code",
+        [
+            code
+            for clinic in fixture.clinics
+            for code in fixture_clinic_code_aliases(clinic.source_id)
+        ],
     ).execute()
 
 
