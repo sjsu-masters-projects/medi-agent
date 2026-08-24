@@ -1,264 +1,53 @@
-# Supabase Setup Guide
+# Supabase Recreation and Verification Guide
 
-> For any team member setting up MediAgent locally or reviewing the database.
+Use this guide to recreate the project after an inactive instance is removed. It is environment-neutral: do not copy credentials, project references, or synthetic seed data between environments.
 
-## Supabase Project
+## Create the project
 
-| Key | Value |
-|-----|-------|
-| Organization | `medi-agent` |
-| Project | `MediAgent` |
-| Region | Check dashboard |
-| Dashboard | [supabase.com/dashboard](https://supabase.com/dashboard) |
+1. Create a new development project in the required region and record its URL, anon key, service-role key, and JWT secret in the team secret store.
+2. Copy `.env.example` to `.env` locally. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JWT_SECRET`; never commit that file.
+3. Configure clinician and patient portal environment variables with the new public URL and anon key.
+4. Enable email authentication and MFA for clinician accounts. Enable the custom access-token hook after the migrations complete.
 
-## Connection
+## Apply migrations
 
-```
-postgresql://postgres:[PASSWORD]@db.tsbjrzlzrejzlfkmhxpz.supabase.co:5432/postgres
-```
-
-Get the password from the team lead or `.env` file (never commit it).
-
----
-
-## Running Migrations
-
-Migrations live in `backend/src/app/db/migrations/` and must be run in order:
+Apply every SQL file through the repository migration ledger against an empty development database. The ledger records the complete filename and SHA-256 checksum, so a rerun skips unchanged files and stops if an applied migration was edited. Do not run a reset, seed, or migration command against a production database.
 
 ```bash
-export DB_URL="postgresql://postgres:YOUR_PASSWORD@db.tsbjrzlzrejzlfkmhxpz.supabase.co:5432/postgres"
-
-# 1. Schema: enums, tables, indexes, triggers
-psql "$DB_URL" -f backend/src/app/db/migrations/001_initial_schema.sql
-
-# 2. RLS: row-level security policies
-psql "$DB_URL" -f backend/src/app/db/migrations/002_rls_policies.sql
-
-# 3. Storage: buckets + storage RLS
-psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
-
-# 4. JWT claims hook: adds user_role to every JWT
-psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
-
-# 5. Document parse tracking metadata
-psql "$DB_URL" -f backend/src/app/db/migrations/005_document_parse_tracking.sql
-
-# 6. Care-team invite compatibility (pending + invite codes)
-psql "$DB_URL" -f backend/src/app/db/migrations/006_care_team_invite_compat.sql
-
-# 7. Canonical clinic identity foundation
-psql "$DB_URL" -f backend/src/app/db/migrations/007_clinic_identity_foundation.sql
-
-# 8. SOAP notes table and indexes
-psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
-
-# 9. JWT hook hardening (safe re-apply + grants)
-psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
-
-# 10. Persistent chat state + A2A task lifecycle tables
-psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
-
-# 11. Locale contract hardening
-psql "$DB_URL" -f backend/src/app/db/migrations/011_locale_contract_upgrade.sql
-
-# 12. Realtime publication enablement for dashboards
-psql "$DB_URL" -f backend/src/app/db/migrations/011_enable_dashboard_realtime_publication.sql
-
-# 13. Document review queue storage
-psql "$DB_URL" -f backend/src/app/db/migrations/012_document_review_queue.sql
-
-# 14. Cron scheduler foundation
-psql "$DB_URL" -f backend/src/app/db/migrations/013_cron_scheduler_foundation.sql
-
-# 15. Patient timezones and structured reminder schedules
-psql "$DB_URL" -f backend/src/app/db/migrations/014_patient_timezones_and_reminder_schedules.sql
+# In Dashboard → Connect, copy the Session pooler URI (port 5432) to the
+# local secret store, then set MEDIAGENT_DB_URL from that value without
+# echoing, committing, or reconstructing the password-bearing URI.
+./scripts/apply-supabase-migrations.sh
+./scripts/verify-supabase-schema.sh
 ```
 
-> [!IMPORTANT]
-> These migrations are **idempotent-safe on first run only**. If re-running, you'll need to drop existing objects first or use the Supabase dashboard SQL editor to reset.
+Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-### Migration Index
+This currently applies migrations `001` through `019`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), and clinical-action approval controls (`019`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
 
-| File | What it does |
-|------|-------------|
-| `001_initial_schema.sql` | 20 PostgreSQL enum types, 16 tables, indexes, constraints, `updated_at` trigger |
-| `002_rls_policies.sql` | Enables RLS on all tables, creates 56 policies + 3 helper functions |
-| `003_storage_and_auth.sql` | 3 storage buckets (documents, avatars, voice-messages) + 9 storage RLS policies |
-| `004_jwt_claims_hook.sql` | Custom JWT hook — injects `user_role` claim into every token |
-| `005_document_parse_tracking.sql` | Adds document parse lifecycle tracking fields |
-| `006_care_team_invite_compat.sql` | Supports pending clinician invites and invite-code indexes |
-| `007_clinic_identity_foundation.sql` | Adds canonical `clinics` table and links clinicians to `clinic_id` |
-| `008_soap_notes.sql` | Adds SOAP note persistence table for clinician workflows |
-| `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT role-hook parsing and grant posture |
-| `010_chat_state_and_a2a_tasks.sql` | Adds persistent conversation state + A2A lifecycle persistence |
-| `011_locale_contract_upgrade.sql` | Hardens locale defaults and request validation contracts |
-| `011_enable_dashboard_realtime_publication.sql` | Publishes dashboard tables to Supabase realtime |
-| `012_document_review_queue.sql` | Adds clinician document review queue storage |
-| `013_cron_scheduler_foundation.sql` | Adds cron run tracking and notification dedupe metadata |
-| `014_patient_timezones_and_reminder_schedules.sql` | Adds patient timezone preferences, obligation notes, and structured reminder schedules |
+## Configure SMART staging
 
-### Adding New Migrations
-
-When you need to change the schema:
-1. Create a new file: `<next_number>_descriptive_name.sql`
-2. Always number sequentially — never reorder existing files
-3. If adding a new enum value: `ALTER TYPE my_enum ADD VALUE 'new_value';`
-4. If adding a new column: `ALTER TABLE my_table ADD COLUMN new_col type;`
-5. Update this guide's migration index table
-
----
-
-## Database Overview
-
-### Tables (16)
-
-| Table | Purpose | FK Parent |
-|-------|---------|-----------| 
-| `patients` | Patient profiles | `auth.users` |
-| `clinicians` | Clinician profiles | `auth.users` |
-| `care_teams` | Patient ↔ Clinician junction | patients, clinicians |
-| `documents` | Uploaded medical records | patients |
-| `medications` | Active/past medications | patients, care_teams |
-| `obligations` | Diet/exercise/custom tasks | patients, care_teams |
-| `adherence_logs` | Med taken / obligation done | patients |
-| `conditions` | Diagnoses (ICD-10) | patients |
-| `allergies` | Known allergies | patients |
-| `symptom_reports` | Patient-reported symptoms | patients, medications |
-| `adr_assessments` | Adverse drug reaction flags | patients, symptom_reports |
-| `medwatch_drafts` | FDA 3500A form drafts | adr_assessments |
-| `appointments` | Scheduled visits | patients, care_teams |
-| `chat_messages` | Chat history | patients |
-| `notifications` | Push/in-app alerts | patients |
-| `clinician_messages` | Clinician → Patient messages | clinicians, patients |
-
-### Enum Types (20)
-
-All PostgreSQL enum types mirror `backend/src/app/models/enums.py` 1:1. If you add a new value in Python, you must also run:
-
-```sql
-ALTER TYPE my_enum_name ADD VALUE 'new_value';
-```
-
-### RLS Model
-
-- **Patients** see only their own data (`patient_id = auth.uid()`)
-- **Clinicians** see only assigned patients (via `care_teams` junction where `status = 'active'`)
-- **Service role** bypasses RLS (used by backend agents and cron jobs)
-- Helper functions: `is_assigned_clinician(patient_id)`, `is_patient()`, `is_clinician()`
-
-### Storage Buckets
-
-| Bucket | Purpose | Max Size | Public |
-|--------|---------|----------|--------|
-| `documents` | Medical PDFs/images | 20MB | No |
-| `avatars` | Profile photos | 2MB | Yes |
-| `voice-messages` | Chat voice recordings | 10MB | No |
-
-Path convention: `{bucket}/{user_id}/{filename}`
-
----
-
-## Auth Configuration
-
-### Dashboard Settings
-
-Configure in Supabase Dashboard → **Authentication → Providers**:
-
-| Setting | Value | Why |
-|---------|-------|-----|
-| Email provider | Enabled | Primary sign-in method |
-| Confirm email | On | Verify email ownership |
-| Secure email change | On | Requires old + new email confirmation |
-| Secure password change | On | Forces re-auth before changing password |
-| Min password length | 8 | Healthcare app — stricter than default |
-| Password requirements | Letters and digits | Basic complexity |
-| Email OTP expiration | 900s (15 min) | Shorter window for PHI security |
-| MFA (TOTP) | Enabled | Optional for clinicians |
-
-### JWT Claims Hook
-
-Every JWT token includes a `user_role` claim (`"patient"` or `"clinician"`) so the frontend can determine which portal to show without an extra API call.
-
-**How it works:** Migration `004_jwt_claims_hook.sql` creates a function that checks whether the user ID exists in the `patients` or `clinicians` table and injects the result into the JWT.
-
-**Dashboard setup** (after running the migration):
-1. Go to **Auth → Hooks**
-2. Click **Add a new hook** → **Customize Access Token (JWT) Claims**
-3. Enable the hook
-4. Hook type: **Postgres**
-5. Schema: **public**
-6. Function: **custom_access_token_hook**
-7. Click **Create hook**
-
-The dashboard will automatically run the required permission grants (execute for `supabase_auth_admin`, revoke from `authenticated`/`anon`/`public`).
-
-### JWT Hook Verification (Required)
-
-Run these checks in SQL Editor after migrations:
-
-```sql
--- 1) Function exists in public schema
-select n.nspname as schema_name, p.proname as function_name
-from pg_proc p
-join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public'
-	and p.proname = 'custom_access_token_hook';
-
--- 2) Hook runtime role can execute it
-select has_function_privilege(
-	'supabase_auth_admin',
-	'public.custom_access_token_hook(jsonb)',
-	'EXECUTE'
-) as supabase_auth_admin_can_execute;
-```
-
-Then verify dashboard wiring:
-1. Auth → Hooks → Customize Access Token (JWT) Claims
-2. Hook is enabled
-3. Hook type is Postgres
-4. Schema is public
-5. Function is custom_access_token_hook
-
-End-to-end verification (local backend):
-1. Call `POST /api/v1/auth/signup/patient` or `POST /api/v1/auth/signup/clinic-admin`
-2. Confirm response status is `201`
-3. Confirm response `user.role` is exactly `patient` or `clinician`
-
-### Reading the Role in Code
-
-**Backend (Python):**
-```python
-# The JWT payload will include: {"user_role": "patient"} or {"user_role": "clinician"}
-role = jwt_payload.get("user_role")
-```
-
-**Frontend (TypeScript):**
-```typescript
-const { data: { session } } = await supabase.auth.getSession();
-const role = session?.user?.app_metadata?.user_role;
-// "patient" | "clinician" | "unknown"
-```
-
----
-
-## Environment Variables
-
-Add these to your `.env` file (see `.env.example`):
+Cloud Run staging must expose a stable HTTPS backend URL. Set these server-side values there:
 
 ```bash
-SUPABASE_URL=https://tsbjrzlzrejzlfkmhxpz.supabase.co
-SUPABASE_ANON_KEY=<from dashboard → Settings → API>
-SUPABASE_SERVICE_ROLE_KEY=<from dashboard → Settings → API>
+SMART_CLIENT_ID=<registered SMART sandbox client id>
+SMART_CLIENT_SECRET=<only if the sandbox registration requires one>
+SMART_REDIRECT_URI=https://YOUR_BACKEND/api/v1/smart/callback
+SMART_STATE_ENCRYPTION_KEY=<a Fernet-compatible key generated in the secret store>
+SMART_ALLOWED_ISSUERS=https://launch.smarthealthit.org/v/r4/fhir
+SMART_SCOPES="launch/patient launch/encounter patient/Patient.read patient/Encounter.read patient/Condition.read patient/AllergyIntolerance.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Observation.read patient/DiagnosticReport.read patient/Procedure.read patient/CarePlan.read patient/DocumentReference.read"
 ```
 
----
+Register the exact `SMART_REDIRECT_URI` with the sandbox. Tokens and authorization codes remain server-side; the browser receives only a short-lived, single-use review handoff.
 
-## Verification Checklist
+## Verification checklist
 
-After running all migrations:
+- [ ] All `001`–`019` migrations finish with `ON_ERROR_STOP=1`.
+- [ ] Tables include `clinical_facts`, `source_provenances`, `fhir_imports`, `fhir_import_resources`, and SMART session/handoff tables.
+- [ ] RLS is enabled for clinical facts and FHIR import tables.
+- [ ] A clinician has an active care-team assignment to a synthetic patient.
+- [ ] Cloud Run staging callback is HTTPS and registered with the SMART sandbox.
+- [ ] A sandbox import creates raw resource envelopes and pending facts only.
+- [ ] A clinician can inspect lineage and explicitly approve, reject, or correct each candidate.
 
-- [ ] **Table Editor** → all 16 tables visible
-- [ ] **Auth → Policies** → RLS enabled on all tables
-- [ ] **Storage** → 3 buckets (documents, avatars, voice-messages)
-- [ ] **Auth → Hooks** → JWT claims hook active
-- [ ] **SQL Editor** → `SELECT count(*) FROM pg_policies WHERE schemaname = 'public';` → **56**
+Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.

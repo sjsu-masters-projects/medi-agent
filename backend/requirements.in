@@ -53,4 +53,4 @@ presidio-anonymizer
 spacy
 
 # -- FHIR --
-fhir.resources
+fhir.resources==8.3.0

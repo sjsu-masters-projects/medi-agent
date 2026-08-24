@@ -1,55 +1,48 @@
 # Synthetic demonstration environment
 
 This environment is for local, demo, or staging use only. It contains no real patient
-data and must never be pointed at a production project.
-
-The precise personas, timeline content, coverage intent, and limitations are recorded
-in [`synthetic-data-catalog.md`](synthetic-data-catalog.md). Update that catalog with
-any fixture change.
+data and must never be pointed at a production project. The canonical source is
+[synthetic_ca_portal_demo_2026_08.json](../backend/src/app/db/seed/fixtures/synthetic_ca_portal_demo_2026_08.json);
+its source IDs and display labels replace the previous hand-authored demo personas.
 
 ## Provision
 
-Apply the database migrations, configure the local Supabase service credentials, and
-provide a password only in the shell that runs the seed:
+Apply migrations before changing fixture data. The adapter verifies every committed
+migration checksum before a real reset or seed:
 
-```bash
-export DEMO_ACCOUNT_PASSWORD='choose-a-local-password'
-PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py
-```
+    export MEDIAGENT_DB_URL='postgresql://…'
+    scripts/apply-supabase-migrations.sh
 
-The command is idempotent: it creates or updates the reserved clinics, accounts,
-care-team assignments, records, medications, allergies, adherence, symptoms,
-appointments, and notifications. Preview the content without connecting to Supabase:
+    export DEMO_ACCOUNT_PASSWORD='choose-a-local-password'
+    PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py
 
-```bash
-PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py --dry-run
-```
+The command is idempotent. It maps only canonical source content supported by current
+production tables: clinics, staff/patient accounts, care teams, conditions, allergies,
+medications, metadata-only documents, patient-reported concerns, appointments, and
+in-portal notifications. It never creates generic obligations or copies external
+notification delivery state.
 
-## Demo accounts
+Preview without connecting to Supabase:
 
-All accounts use the password supplied through `DEMO_ACCOUNT_PASSWORD`; no password is
-stored in the repository.
+    PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py --dry-run
 
-| Account | Role | Clinic |
-| --- | --- | --- |
-| `dr.avery@demo.mediagent.local` | Clinician | North Valley Chronic Care |
-| `nurse.taylor@demo.mediagent.local` | Nurse | North Valley Chronic Care |
-| `dr.rivera@demo.mediagent.local` | Clinician | South Bay Care Collaborative |
-| `staff.chen@demo.mediagent.local` | Clinic administrator | South Bay Care Collaborative |
-| `maria.garcia@demo.mediagent.local` | Patient, American English | North Valley Chronic Care |
-| `jose.martinez@demo.mediagent.local` | Patient, Mexican Spanish | South Bay Care Collaborative |
+## Synthetic accounts
+
+The adapter derives non-clinical Auth emails from canonical source IDs rather than
+inventing people: SYN-PT-001 becomes syn-pt-001@demo.mediagent.local. Staff use the
+same source-ID convention. These identifiers are adapter plumbing, not fixture
+demographics; source display labels remain the persisted name-like values.
 
 ## Reset
 
-Reset is intentionally guarded. It refuses production, requires
-`--confirm-demo-reset`, and deletes only accounts in the reserved
-`demo.mediagent.local` domain and the two `DEMO-CA-*` clinics.
+Reset is guarded: it refuses environments outside development, demo, or staging;
+requires --confirm-demo-reset; and deletes only exact canonical-fixture account
+emails plus the two canonical synthetic clinics.
 
-```bash
-export DEMO_ACCOUNT_PASSWORD='choose-a-local-password'
-PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py \
-  --reset --confirm-demo-reset
-```
+    export ENVIRONMENT=staging
+    export DEMO_ACCOUNT_PASSWORD='choose-a-local-password'
+    PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py \
+      --reset --confirm-demo-reset
 
-Use reset only for the synthetic local/demo environment. Do not use it as a general
-database cleanup tool.
+Use reset only for an approved synthetic environment. Do not use a production database
+URL or environment value.

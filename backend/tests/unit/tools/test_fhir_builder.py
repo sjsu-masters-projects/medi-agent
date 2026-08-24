@@ -33,6 +33,22 @@ def test_build_medication_request_valid():
     assert validated["route"] == "oral"
 
 
+def test_r4b_validator_accepts_r4_medication_request_fields():
+    """Guard against a silent fallback to R5's medication[x] representation."""
+    from fhir.resources.R4B.medicationrequest import MedicationRequest
+
+    resource = MedicationRequest(
+        status="active",
+        intent="order",
+        subject={"reference": f"Patient/{PATIENT_ID}"},
+        medicationCodeableConcept={"text": "Aspirin"},
+    )
+
+    assert (
+        resource.model_dump(by_alias=True, exclude_none=True)["resourceType"] == "MedicationRequest"
+    )
+
+
 def test_build_medication_request_missing_name():
     validated, error = build_medication_request({}, PATIENT_ID, DOCUMENT_ID)
 

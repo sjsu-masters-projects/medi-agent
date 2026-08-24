@@ -15,8 +15,10 @@ from uuid import UUID
 from postgrest.exceptions import APIError
 from supabase import Client
 
+from app.models.clinical_fact import ClinicalFactCreate
 from app.models.document_extraction import DocumentExtractionResult
 from app.models.enums import DocumentType, MedicationRoute, ObligationType
+from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_service import DocumentService
 from app.services.medication_service import MedicationService
 from app.services.obligation_service import ObligationService
@@ -140,6 +142,17 @@ class DocumentExtractionImportService:
             document_id,
             effective_extraction,
         )
+        clinical_fact_count = self._register_candidate_facts(
+            patient_id=patient_id,
+            actor_id=uploaded_by,
+            document_id=document_id,
+            document_title=document_payload.title,
+            extraction=effective_extraction,
+            medication_ids=medication_ids,
+            condition_ids=condition_ids,
+            allergy_ids=allergy_ids,
+            obligation_ids=obligation_ids,
+        )
 
         self.document_service.update_parse_result(
             document_id=document_id,
@@ -159,8 +172,65 @@ class DocumentExtractionImportService:
             "conditions_created": len(condition_ids),
             "allergies_created": len(allergy_ids),
             "obligations_created": len(obligation_ids),
+            "clinical_facts_created": clinical_fact_count,
             "summary": summary,
         }
+
+    def _register_candidate_facts(
+        self,
+        *,
+        patient_id: UUID,
+        actor_id: UUID,
+        document_id: UUID,
+        document_title: str,
+        extraction: DocumentExtractionResult,
+        medication_ids: list[str],
+        condition_ids: list[str],
+        allergy_ids: list[str],
+        obligation_ids: list[str],
+    ) -> int:
+        """Register extraction output as reviewable candidates, never approved facts."""
+        registry = ClinicalFactService(self.db)
+        pairs = (
+            ("medication", extraction.medications, medication_ids),
+            ("condition", extraction.conditions, condition_ids),
+            ("allergy", extraction.allergies, allergy_ids),
+            ("obligation", extraction.obligations, obligation_ids),
+        )
+        created = 0
+        for fact_type, extracted_rows, record_ids in pairs:
+            for extracted, record_id in zip(extracted_rows, record_ids, strict=False):
+                registry.create_candidate(
+                    ClinicalFactCreate.model_validate(
+                        {
+                            "patient_id": str(patient_id),
+                            "fact_type": fact_type,
+                            "subject_type": fact_type,
+                            "subject_id": record_id,
+                            "value": extracted.model_dump(mode="json"),
+                            "uncertainty": [
+                                "Structured extraction requires clinician review before use as clinical truth."
+                            ],
+                            "provenance": {
+                                "artifact_type": "document",
+                                "source_system": "document_extraction",
+                                "source_reference": f"document:{document_id}",
+                                "document_id": str(document_id),
+                                "document_location": {"scope": "document", "title": document_title},
+                                "extractor_version": "document-extraction-import/1",
+                            },
+                            "citations": [
+                                {
+                                    "excerpt": f"Structured {fact_type} extracted from {document_title}.",
+                                    "location": {"scope": "document"},
+                                }
+                            ],
+                        }
+                    ),
+                    actor_id=actor_id,
+                )
+                created += 1
+        return created
 
     async def _create_medications(
         self,

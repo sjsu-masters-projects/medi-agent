@@ -110,6 +110,7 @@ async def test_import_demo_extraction_creates_document_derived_feed_records() ->
     assert result["obligations_created"] == 1
     assert result["conditions_created"] == 1
     assert result["allergies_created"] == 1
+    assert result["clinical_facts_created"] == 5
 
     medication_names = {row["name"] for row in db.store["medications"]}
     assert {"Theophylline", "Ventolin Inhaler"} == medication_names
@@ -122,6 +123,8 @@ async def test_import_demo_extraction_creates_document_derived_feed_records() ->
     )
     assert db.store["obligations"][0]["source_document_id"] == result["document"]["id"]
     assert db.store["documents_updates"][0]["parse_status"] == "completed"
+    assert {row["review_state"] for row in db.store["clinical_facts"]} == {"pending_review"}
+    assert len(db.store["clinical_fact_audit_events"]) == 5
 
 
 @pytest.mark.asyncio

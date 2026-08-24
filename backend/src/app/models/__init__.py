@@ -11,6 +11,18 @@ from app.models.clinic import (
     ClinicCodeResolveResponse,
     ClinicRead,
 )
+from app.models.clinical_fact import (
+    ClinicalFactCreate,
+    ClinicalFactLineage,
+    ClinicalFactRead,
+    ClinicalFactReviewState,
+    ConfidenceBand,
+    EvidenceCitationCreate,
+    EvidenceCitationRead,
+    SourceArtifactType,
+    SourceProvenanceCreate,
+    SourceProvenanceRead,
+)
 from app.models.clinician import ClinicianCreate, ClinicianRead, ClinicianUpdate
 from app.models.clinician_message import (
     ClinicianMessageCreate,
@@ -121,6 +133,17 @@ __all__ = [
     "ClinicCodeResolveRequest",
     "ClinicCodeResolveResponse",
     "ClinicRead",
+    # Clinical facts and provenance
+    "ClinicalFactCreate",
+    "ClinicalFactLineage",
+    "ClinicalFactRead",
+    "ClinicalFactReviewState",
+    "ConfidenceBand",
+    "EvidenceCitationCreate",
+    "EvidenceCitationRead",
+    "SourceArtifactType",
+    "SourceProvenanceCreate",
+    "SourceProvenanceRead",
     # Care Team
     "CareTeamCreate",
     "CareTeamRead",

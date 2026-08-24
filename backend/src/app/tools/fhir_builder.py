@@ -1,4 +1,4 @@
-"""FHIR Resource Builder — converts extracted clinical data to validated FHIR R4 resources.
+"""FHIR R4-compatible resource builder using maintained FHIR R4B models.
 
 The FHIR objects are used for validation only. We still persist data in the
 project's relational schema, so each builder returns a cleaned dict shaped for
@@ -11,9 +11,9 @@ import logging
 from typing import Any, cast
 from uuid import UUID
 
-from fhir.resources.allergyintolerance import AllergyIntolerance
-from fhir.resources.condition import Condition
-from fhir.resources.medicationrequest import MedicationRequest
+from fhir.resources.R4B.allergyintolerance import AllergyIntolerance
+from fhir.resources.R4B.condition import Condition
+from fhir.resources.R4B.medicationrequest import MedicationRequest
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.v1 import ValidationError as PydanticV1ValidationError
 
@@ -72,7 +72,7 @@ def build_medication_request(
         "status": "active",
         "intent": "order",
         "subject": {"reference": f"Patient/{patient_id}"},
-        "medication": {"concept": {"text": name}},
+        "medicationCodeableConcept": {"text": name},
         "dosageInstruction": [
             {"text": instructions or f"{dosage}, {frequency}", "route": {"text": route}}
         ],
@@ -144,7 +144,7 @@ def build_allergy_intolerance(
         "code": {"text": substance},
     }
     if reaction:
-        payload["reaction"] = [{"manifestation": [{"concept": {"text": reaction}}]}]
+        payload["reaction"] = [{"manifestation": [{"text": reaction}]}]
 
     try:
         _validate_resource(AllergyIntolerance, payload)

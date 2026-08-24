@@ -77,6 +77,21 @@ class Settings(BaseSettings):
     patient_portal_url: str = "http://localhost:3000"
     clinician_portal_url: str = "http://localhost:3001"
 
+    # SMART on FHIR (empty values keep the integration disabled outside configured demos)
+    smart_client_id: str = ""
+    smart_client_secret: str = ""
+    smart_redirect_uri: str = ""
+    smart_state_encryption_key: str = ""
+    smart_allowed_issuers: str = "https://launch.smarthealthit.org/v/r4/fhir"
+    smart_scopes: str = (
+        "launch/patient launch/encounter patient/Patient.read patient/Encounter.read "
+        "patient/Condition.read patient/AllergyIntolerance.read patient/MedicationRequest.read "
+        "patient/MedicationStatement.read patient/Observation.read patient/DiagnosticReport.read "
+        "patient/Procedure.read patient/CarePlan.read patient/DocumentReference.read"
+    )
+    smart_launch_ttl_seconds: int = 600
+    smart_handoff_ttl_seconds: int = 300
+
     # Internal cron auth
     cron_auth_token: str = ""
 
