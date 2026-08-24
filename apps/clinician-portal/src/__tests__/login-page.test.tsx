@@ -96,10 +96,15 @@ describe("Clinician login page", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: /already have an account/i }));
 
-        fireEvent.change(screen.getByLabelText(/email/i), {
+        const emailInput = screen.getByLabelText(/email/i);
+        const passwordInput = screen.getByLabelText(/^password$/i);
+        expect(emailInput).toHaveAttribute("autocomplete", "email");
+        expect(passwordInput).toHaveAttribute("autocomplete", "current-password");
+
+        fireEvent.change(emailInput, {
             target: { value: "patient@example.com" },
         });
-        fireEvent.change(screen.getByLabelText(/^password$/i), {
+        fireEvent.change(passwordInput, {
             target: { value: "SecurePass123!" },
         });
         fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
