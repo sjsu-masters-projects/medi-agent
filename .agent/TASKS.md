@@ -207,10 +207,10 @@ records as pending candidates; `list_approved` is the clinical-display query. Se
 ### INT-002 — FHIR R4 validation and mapping
 
 - [x] Establish an R4-compatible validation boundary; the maintained dependency provides R4B while emitted payloads remain R4-compatible.
-- [/] Map Patient; Practitioner, Organization, and CareTeam remain deferred because the local clinician/care-team model is authoritative.
+- [x] Map Patient. Practitioner, Organization, and CareTeam are intentionally not mapped because the local clinician/care-team model remains authoritative.
 - [x] Map Condition, AllergyIntolerance, MedicationRequest, and MedicationStatement.
-- [/] Map Observation, DocumentReference, and CarePlan; Appointment and Communication remain deferred.
-- [ ] Generate Provenance and AuditEvent resources.
+- [x] Map Observation, DocumentReference, and CarePlan; Appointment and Communication are intentionally outside the committed import set.
+- [x] Generate validated, read-only Provenance and AuditEvent representations from local clinical-fact lineage and immutable audit records without external FHIR writes or private-reasoning disclosure.
 - [/] Validate supported resource shape before persistence; identifier-quality and export validation remain deferred.
 - [x] Handle missing, partial, duplicate, and unsupported resources safely.
 - [/] Add import fixture tests; FHIR export and round-trip fixtures remain deferred.
