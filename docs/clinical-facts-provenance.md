@@ -41,3 +41,16 @@ Row-level policies allow a patient to read only their approved facts and related
 evidence. An assigned clinician may read candidates and their audit trail for review.
 Direct client mutations are not granted; lifecycle changes go through the backend
 service so each transition is audited.
+
+## FHIR provenance and audit representation
+
+Assigned clinicians can request `GET /api/v1/smart/patients/{patient_id}/facts/{fact_id}/fhir-audit`.
+It generates, but does not persist or transmit, one validated FHIR R4B `Provenance`
+resource and ordered `AuditEvent` resources from the existing local lineage and audit
+trail. The response identifies the local fact with a stable identifier, preserves source
+artifact references, and represents lifecycle action and timestamp only. It deliberately
+excludes clinical-fact values, evidence excerpts, reviewer notes, and private reasoning.
+
+The route first verifies the requesting clinician's existing care-team assignment. It
+does not create a FHIR server endpoint, change local review state, or grant authority to
+an external SMART identity.

@@ -10,6 +10,7 @@ import pytest
 from app.core.exceptions import ValidationError
 from app.models.clinical_fact import ClinicalFactCreate
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.fhir_audit_export_service import FhirAuditExportService
 
 PATIENT_ID = UUID("00000000-0000-0000-0000-000000000111")
 ACTOR_ID = UUID("00000000-0000-0000-0000-000000000222")
@@ -198,3 +199,59 @@ def test_lineage_returns_the_source_artifact_and_evidence_excerpt() -> None:
     assert lineage["fact"]["id"] == fact["id"]
     assert lineage["provenances"][0]["document_location"]["page"] == 2
     assert lineage["citations"][0]["excerpt"] == "Continue metformin 500 mg."
+
+
+def test_fhir_provenance_and_audit_export_are_valid_and_minimally_disclose_lineage() -> None:
+    db = FakeDatabase()
+    facts = ClinicalFactService(db)  # type: ignore[arg-type]
+    fact = facts.create_candidate(candidate(), actor_id=ACTOR_ID)
+    facts.approve(UUID(fact["id"]), PATIENT_ID, reviewer_id=REVIEWER_ID, note="Reviewed")
+
+    exported = FhirAuditExportService(db).export_for_fact(  # type: ignore[arg-type]
+        fact_id=UUID(fact["id"]), patient_id=PATIENT_ID
+    )
+
+    provenance = exported["provenance"]
+    assert provenance["resourceType"] == "Provenance"
+    assert provenance["target"][0]["identifier"]["value"] == fact["id"]
+    assert provenance["entity"][0]["what"]["reference"] == f"DocumentReference/{DOCUMENT_ID}"
+    assert [event["subtype"][0]["code"] for event in exported["audit_events"]] == [
+        "created",
+        "approved",
+    ]
+    assert [event["action"] for event in exported["audit_events"]] == ["C", "U"]
+    assert all(
+        "event_data" not in event and "review_note" not in event
+        for event in exported["audit_events"]
+    )
+
+
+def test_fhir_provenance_prefers_the_versioned_imported_resource_reference() -> None:
+    db = FakeDatabase()
+    facts = ClinicalFactService(db)  # type: ignore[arg-type]
+    envelope_id = uuid4()
+    payload = candidate().model_dump(mode="json")
+    payload["provenance"] = {
+        "artifact_type": "fhir_resource",
+        "source_system": "https://sandbox.example/fhir",
+        "source_reference": f"fhir_import_resources/{envelope_id}",
+    }
+    db.store["fhir_import_resources"] = [
+        {
+            "id": str(envelope_id),
+            "resource_type": "MedicationRequest",
+            "external_resource_id": "med-123",
+            "version_id": "7",
+            "issuer": "https://sandbox.example/fhir",
+            "content_hash": "content-hash",
+        }
+    ]
+    fact = facts.create_candidate(ClinicalFactCreate.model_validate(payload), actor_id=ACTOR_ID)
+
+    exported = FhirAuditExportService(db).export_for_fact(  # type: ignore[arg-type]
+        fact_id=UUID(fact["id"]), patient_id=PATIENT_ID
+    )
+
+    assert exported["provenance"]["entity"][0]["what"]["reference"] == (
+        "MedicationRequest/med-123/_history/7"
+    )

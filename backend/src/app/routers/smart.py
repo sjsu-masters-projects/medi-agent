@@ -22,6 +22,7 @@ from app.models.fhir_import import (
     SmartLaunchResponse,
 )
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.fhir_audit_export_service import FhirAuditExportService
 from app.services.smart_launch_service import SmartLaunchService
 
 router = APIRouter()
@@ -30,6 +31,10 @@ _clinician_dep = require_role("clinician")
 
 def _service(db: Client = Depends(get_db)) -> SmartLaunchService:
     return SmartLaunchService(db)
+
+
+def _fhir_audit_export_service(db: Client = Depends(get_db)) -> FhirAuditExportService:
+    return FhirAuditExportService(db)
 
 
 @router.post(
@@ -110,6 +115,19 @@ async def fact_lineage(
 ) -> Any:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
     return ClinicalFactService(db).get_lineage(fact_id, patient_id)
+
+
+@router.get("/patients/{patient_id}/facts/{fact_id}/fhir-audit")
+async def fact_fhir_audit(
+    patient_id: UUID,
+    fact_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: SmartLaunchService = Depends(_service),
+    export_service: FhirAuditExportService = Depends(_fhir_audit_export_service),
+) -> Any:
+    """Generate validated FHIR provenance/audit resources without external writes."""
+    service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    return export_service.export_for_fact(fact_id=fact_id, patient_id=patient_id)
 
 
 @router.post("/patients/{patient_id}/facts/{fact_id}/approve")
