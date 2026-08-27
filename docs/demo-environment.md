@@ -42,7 +42,11 @@ The adapter uses named fictional accounts in the project-controlled
 `accounts.mediagent.live` namespace. The source IDs remain internal provenance
 identifiers; the account emails and persisted display labels are coherent fictional
 names. The reset recognizes the two prior source-ID email namespaces only so it can
-remove the exact old fixture accounts safely.
+remove the exact old fixture accounts safely. It also recognizes the six verified
+named accounts from the pre-canonical fixture; this remains an explicit allowlist,
+not a domain-wide deletion rule. After a reset, verify that the Auth user inventory
+and the `patients` and `clinicians` profiles contain only the sixteen current
+`accounts.mediagent.live` fixture addresses.
 
 ## Reset
 

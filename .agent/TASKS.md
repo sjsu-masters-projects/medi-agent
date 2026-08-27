@@ -145,6 +145,7 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 - [x] Map supported source content into two clinics, sixteen synthetic accounts, care teams, conditions, allergies, medications, metadata-only documents, appointments, five reviewed portal messages, and in-portal notifications.
 - [x] Keep unsupported preferences, proxies, accessibility data, non-portal concerns, adherence events, and care-team scopes unpersisted and documented rather than inventing schema or false records.
 - [x] Make seed/reset idempotent and guarded by environment, explicit confirmation, exact fixture-account deletion, and a migration-checksum preflight.
+- [x] Remove the six verified pre-canonical staging identities through the exact reset allowlist, then verify that only the sixteen current fixture accounts remain.
 - [x] Document deterministic fixture accounts without embedding secrets in the repository.
 - [x] Run the approved staging seed and verify table counts, source-specific mappings, ledger checksums, and idempotency.
 - [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, live feed, and live adherence statistics passed on 2026-08-27 after the guarded reset/reseed; clinician and RLS-isolation journeys remain.
@@ -179,6 +180,12 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
   `SELECT` on all three required tables while `anon` and `authenticated` do not gain
   access to `reminder_schedules`. A new patient login then returned `200` from both
   live endpoints, and Cloud Run had no fresh error log in the following five minutes.
+- On 2026-08-27, a follow-up staging audit found six older named fixture identities
+  under the invalid `.local` namespace. The reset allowlist now includes only those
+  six verified addresses (not a broad domain match). The authorized reset/reseed
+  completed successfully; Auth, patients, and clinicians now contain exactly 16,
+  8, and 8 project-controlled `accounts.mediagent.live` addresses respectively,
+  with no legacy address remaining.
 
 **R0 exit gate**
 
