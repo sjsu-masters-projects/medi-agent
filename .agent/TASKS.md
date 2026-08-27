@@ -234,7 +234,8 @@ uses the compatible R4B model.
 - [/] Validate PKCE, OAuth state, issuer, and expiry; token audience/scope conformance awaits a live sandbox registration.
 - [/] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection; standalone patient/encounter context handling is implemented, while live sandbox verification remains.
 - [/] Import the supported patient bundle; live public-sandbox verification awaits the replacement Supabase project and Cloud Run callback.
-- [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; lineage inspection is exposed by API.
+- [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. Lineage inspection is exposed by API.
+- [/] Repair the least-privilege backend read grant discovered by the live patient-review path; apply and verify it in staging.
 - [x] Document sandbox setup and reproducible conformance test.
 
 **Plan:** Build SMART authorization-code + PKCE handling after the INT-002 import

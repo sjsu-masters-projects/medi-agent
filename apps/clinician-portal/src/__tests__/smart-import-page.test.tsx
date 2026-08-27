@@ -91,4 +91,25 @@ describe("SMART import page", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent(/launch context is incomplete/i);
         expect(post).not.toHaveBeenCalled();
     });
+
+    it("makes an idempotent import outcome explicit", async () => {
+        setSearchParams("ticket=single-use-ticket-value-that-is-long-enough");
+        post.mockResolvedValue({
+            import_record: {
+                id: "import-1",
+                patient_id: "patient-1",
+                status: "completed_with_warnings",
+                resource_count: 0,
+                candidate_fact_count: 0,
+                warnings: ["No new source resources were imported because this sandbox record was already imported."],
+            },
+            resources: [],
+        });
+
+        render(<SmartImportPage />);
+
+        expect(await screen.findByText(/no new smart records to review/i)).toBeInTheDocument();
+        expect(screen.getByText(/repeat of a previously imported sandbox record/i)).toBeInTheDocument();
+        expect(screen.getByText(/already imported/i)).toBeInTheDocument();
+    });
 });

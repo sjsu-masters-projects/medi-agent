@@ -41,9 +41,13 @@ class Table:
             row = {"id": str(uuid4()), "created_at": "2026-08-20T00:00:00Z", **self.payload}
             rows.append(row)
             return Result([row])
-        return Result([
-            row for row in rows if all(str(row.get(column)) == value for column, value in self.filters)
-        ])
+        return Result(
+            [
+                row
+                for row in rows
+                if all(str(row.get(column)) == value for column, value in self.filters)
+            ]
+        )
 
 
 class Database:
@@ -110,6 +114,9 @@ def test_duplicate_resource_does_not_create_duplicate_candidate_facts() -> None:
 
     assert second["resources_persisted"] == 0
     assert second["candidate_facts_created"] == 0
+    assert second["warnings"] == [
+        "No new source resources were imported because this sandbox record was already imported."
+    ]
     assert len(db.store["clinical_facts"]) == 1
 
 
