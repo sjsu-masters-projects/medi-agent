@@ -84,8 +84,8 @@ class Settings(BaseSettings):
     smart_state_encryption_key: str = ""
     smart_allowed_issuers: str = "https://launch.smarthealthit.org/v/r4/fhir"
     smart_scopes: str = (
-        "launch/patient launch/encounter patient/Patient.read patient/Encounter.read "
-        "patient/Condition.read patient/AllergyIntolerance.read patient/MedicationRequest.read "
+        "patient/Patient.read patient/Encounter.read patient/Condition.read "
+        "patient/AllergyIntolerance.read patient/MedicationRequest.read "
         "patient/MedicationStatement.read patient/Observation.read patient/DiagnosticReport.read "
         "patient/Procedure.read patient/CarePlan.read patient/DocumentReference.read"
     )

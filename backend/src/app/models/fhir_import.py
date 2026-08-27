@@ -19,10 +19,16 @@ class FhirImportStatus(StrEnum):
 
 
 class SmartLaunchRequest(BaseModel):
-    """A locally authorized request to start a SMART launch for one patient."""
+    """A locally authorized request to start a SMART launch for one patient.
+
+    ``launch_context`` is the opaque EHR-launch handle.  It is accepted only
+    after local clinician and care-team authorization, and is never returned to
+    the browser by this API.
+    """
 
     patient_id: UUID
     issuer: HttpUrl
+    launch_context: str | None = Field(default=None, min_length=1, max_length=2048)
 
     @field_validator("issuer")
     @classmethod

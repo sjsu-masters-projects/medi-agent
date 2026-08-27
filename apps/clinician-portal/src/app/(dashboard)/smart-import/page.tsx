@@ -49,6 +49,10 @@ export default function SmartImportPage() {
     const [starting, setStarting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [handoff, setHandoff] = useState<HandoffResponse | null>(null);
+    const ehrIssuer = searchParams?.get("iss") ?? null;
+    const ehrLaunchContext = searchParams?.get("launch") ?? null;
+    const hasEhrLaunch = Boolean(ehrIssuer && ehrLaunchContext);
+    const hasIncompleteEhrLaunch = Boolean(ehrIssuer || ehrLaunchContext) && !hasEhrLaunch;
 
     const selectedPatient = useMemo(
         () => patients.find((patient) => patient.id === patientId),
@@ -73,6 +77,12 @@ export default function SmartImportPage() {
     }, [loadPatients]);
 
     useEffect(() => {
+        if (ehrIssuer) {
+            setIssuer(ehrIssuer);
+        }
+    }, [ehrIssuer]);
+
+    useEffect(() => {
         const ticket = searchParams?.get("ticket");
         if (!ticket || !token) return;
         void (async () => {
@@ -89,14 +99,26 @@ export default function SmartImportPage() {
 
     const startLaunch = async () => {
         if (!token || !patientId) return;
+        if (hasIncompleteEhrLaunch) {
+            setError("The EHR launch context is incomplete. Return to the EHR and launch again.");
+            return;
+        }
         setStarting(true);
         setError(null);
         try {
             const result = await api.post<{ authorization_url: string }>(
                 "/api/v1/smart/launch",
-                { patient_id: patientId, issuer },
+                {
+                    patient_id: patientId,
+                    issuer,
+                    ...(hasEhrLaunch ? { launch_context: ehrLaunchContext } : {}),
+                },
                 { token },
             );
+            if (hasEhrLaunch) {
+                // Do not retain the opaque EHR launch handle in local history.
+                window.history.replaceState({}, "", "/smart-import");
+            }
             window.location.assign(result.authorization_url);
         } catch (launchError) {
             setError(launchError instanceof Error ? launchError.message : "Unable to start SMART launch.");
@@ -137,13 +159,20 @@ export default function SmartImportPage() {
                         ))}
                     </select>
                 </div>
-                <Input
-                    id="smart-issuer"
-                    label="SMART issuer"
-                    value={issuer}
-                    onChange={(event) => setIssuer(event.target.value)}
-                    autoComplete="off"
-                />
+                {hasEhrLaunch ? (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                        EHR launch context received. Your local clinician session and selected patient still
+                        control whether this sandbox import can begin.
+                    </div>
+                ) : (
+                    <Input
+                        id="smart-issuer"
+                        label="SMART issuer"
+                        value={issuer}
+                        onChange={(event) => setIssuer(event.target.value)}
+                        autoComplete="off"
+                    />
+                )}
                 {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
                 <Button onClick={() => void startLaunch()} disabled={starting || !selectedPatient}>
                     {starting ? "Opening SMART launch…" : "Launch sandbox import"}

@@ -49,6 +49,7 @@ async def start_launch(
         clinician_id=user.id,
         patient_id=request.patient_id,
         issuer=str(request.issuer),
+        launch_context=request.launch_context,
     )
 
 
