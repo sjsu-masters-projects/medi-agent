@@ -49,7 +49,7 @@ remove the exact old fixture accounts safely.
 Reset is guarded: it refuses environments outside development, demo, or staging;
 requires --confirm-demo-reset; and deletes only exact canonical-fixture account
 emails (including the previous `.local` fixture aliases) plus the two canonical
-synthetic clinics.
+fixture clinics.
 
     export ENVIRONMENT=staging
     export DEMO_ACCOUNT_PASSWORD='choose-a-local-password'

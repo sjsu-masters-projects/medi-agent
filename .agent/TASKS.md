@@ -36,7 +36,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
 | CI | First PR run green; main confirmation pending | Run 32280310908 passed all required gates in 5m 46s; three green GitHub runs on `main` are still required |
 | Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
-| Demo data | Staging access verification pending | The canonical fixture is seeded and idempotency-verified in staging; RLS isolation and portal login journeys remain |
+| Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login and feed work, while clinician/RLS checks and the pending reminder-schedule grant remain |
 
 ## Active task
 
@@ -147,7 +147,7 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 - [x] Make seed/reset idempotent and guarded by environment, explicit confirmation, exact fixture-account deletion, and a migration-checksum preflight.
 - [x] Document deterministic fixture accounts without embedding secrets in the repository.
 - [x] Run the approved staging seed and verify table counts, source-specific mappings, ledger checksums, and idempotency.
-- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login and role-claim validation passed on 2026-08-24 after enabling the required Supabase Auth hook; clinician and RLS-isolation journeys remain.
+- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, and the live feed passed on 2026-08-27 after the guarded reset/reseed; clinician and RLS-isolation journeys remain. The live adherence-statistics path is blocked until the committed, least-privilege `reminder_schedules` service-role grant is applied to staging.
 
 **Verification evidence — 2026-08-22**
 
@@ -167,6 +167,16 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
   server-only service role the least privileges required for the guarded seed preflight
   and fixture adapter. RLS and portal-login acceptance checks remain before marking
   REV-005 complete.
+- On 2026-08-27, the authorized guarded staging reset/reseed completed with the eight
+  named fictional patient accounts and eight named fictional staff accounts under the
+  project-controlled `accounts.mediagent.live` namespace. The two fixture clinics are
+  Cedar Grove Community Health and Willow Terrace Family Medicine; no legacy fixture
+  patient account remained. Migration 024's service-role read grant and checksum were
+  present, and a new patient login returned a `200` from the live feed endpoint.
+- The same live verification discovered the next missing least-privilege dependency:
+  `reminder_schedules` is read by both the feed and adherence-statistics services.
+  Migration 025 records the server-only `SELECT` grant; it must be applied and the
+  live adherence path rerun before the related Sentry incident is resolved.
 
 **R0 exit gate**
 
