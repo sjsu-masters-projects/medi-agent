@@ -47,6 +47,7 @@ export default function SmartImportPage() {
     const [issuer, setIssuer] = useState(DEFAULT_ISSUER);
     const [loading, setLoading] = useState(true);
     const [starting, setStarting] = useState(false);
+    const [launchStatus, setLaunchStatus] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [handoff, setHandoff] = useState<HandoffResponse | null>(null);
     const ehrIssuer = searchParams?.get("iss") ?? null;
@@ -104,6 +105,7 @@ export default function SmartImportPage() {
             return;
         }
         setStarting(true);
+        setLaunchStatus("Preparing the secure SMART authorization session…");
         setError(null);
         try {
             const result = await api.post<{ authorization_url: string }>(
@@ -115,6 +117,10 @@ export default function SmartImportPage() {
                 },
                 { token },
             );
+            if (!result.authorization_url) {
+                throw new Error("The SMART sandbox did not provide an authorization address.");
+            }
+            setLaunchStatus("Redirecting to the SMART sandbox. Do not refresh this page.");
             if (hasEhrLaunch) {
                 // Do not retain the opaque EHR launch handle in local history.
                 window.history.replaceState({}, "", "/smart-import");
@@ -122,6 +128,7 @@ export default function SmartImportPage() {
             window.location.assign(result.authorization_url);
         } catch (launchError) {
             setError(launchError instanceof Error ? launchError.message : "Unable to start SMART launch.");
+            setLaunchStatus(null);
             setStarting(false);
         }
     };
@@ -174,6 +181,7 @@ export default function SmartImportPage() {
                     />
                 )}
                 {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+                {launchStatus && <p role="status" className="text-sm text-slate-600">{launchStatus}</p>}
                 <Button onClick={() => void startLaunch()} disabled={starting || !selectedPatient}>
                     {starting ? "Opening SMART launch…" : "Launch sandbox import"}
                 </Button>
@@ -182,10 +190,21 @@ export default function SmartImportPage() {
             {handoff && (
                 <Card className="space-y-4 p-5">
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Import ready for review</h2>
-                        <p className="text-sm text-slate-600">
-                            {handoff.import_record.resource_count} source resources created {handoff.import_record.candidate_fact_count} pending facts.
-                        </p>
+                        <h2 className="text-lg font-semibold text-slate-900">
+                            {handoff.import_record.resource_count === 0
+                                ? "No new SMART records to review"
+                                : "Import ready for review"}
+                        </h2>
+                        {handoff.import_record.resource_count === 0 ? (
+                            <p className="text-sm text-slate-600">
+                                This may be a repeat of a previously imported sandbox record, or the selected
+                                sandbox patient has no supported records. No local clinical truth was changed.
+                            </p>
+                        ) : (
+                            <p className="text-sm text-slate-600">
+                                {handoff.import_record.resource_count} source resources created {handoff.import_record.candidate_fact_count} pending facts.
+                            </p>
+                        )}
                     </div>
                     {handoff.import_record.warnings.length > 0 && (
                         <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800">

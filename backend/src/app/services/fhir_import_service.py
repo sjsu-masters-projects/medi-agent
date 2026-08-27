@@ -73,6 +73,7 @@ class FhirImportService:
         warnings: list[str] = []
         persisted_count = 0
         candidate_count = 0
+        duplicate_count = 0
         for resource in self.expand_bundles(resources):
             resource_type = str(resource.get("resourceType", ""))
             validation_errors = self.validate_resource(resource)
@@ -96,6 +97,7 @@ class FhirImportService:
                 mapping_warnings=mapping_warnings,
             )
             if not is_new:
+                duplicate_count += 1
                 continue
             persisted_count += 1
             if validation_errors or mapping_warnings:
@@ -108,6 +110,11 @@ class FhirImportService:
             ):
                 self.facts.create_candidate(candidate, actor_id=actor_id)
                 candidate_count += 1
+
+        if resources and persisted_count == 0 and duplicate_count:
+            warnings.append(
+                "No new source resources were imported because this sandbox record was already imported."
+            )
 
         return {
             "resources_persisted": persisted_count,

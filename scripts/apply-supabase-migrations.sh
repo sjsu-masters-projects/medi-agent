@@ -29,8 +29,12 @@ for migration_path in "$MIGRATIONS_DIR"/*.sql; do
   filename="$(basename "$migration_path")"
   checksum="$(shasum -a 256 "$migration_path" | awk '{print $1}')"
   recorded_checksum="$(psql "$MEDIAGENT_DB_URL" -At -v ON_ERROR_STOP=1 \
-    -v filename="$filename" \
-    -c "SELECT checksum FROM public.schema_migrations WHERE filename = :'filename';")"
+    -v filename="$filename" <<'SQL'
+SELECT checksum
+FROM public.schema_migrations
+WHERE filename = :'filename';
+SQL
+  )"
 
   if [[ -n "$recorded_checksum" ]]; then
     if [[ "$recorded_checksum" != "$checksum" ]]; then
