@@ -505,8 +505,15 @@ function ClinicianLoginPageContent() {
                                 Signing into clinic: <span className="font-semibold">{clinicContext.clinicName}</span>
                             </div>
                             <form className="space-y-4" onSubmit={handleSubmit}>
-                                <Input label="Email" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
                                 <Input
+                                    autoComplete="email"
+                                    label="Email"
+                                    onChange={(event) => setEmail(event.target.value)}
+                                    type="email"
+                                    value={email}
+                                />
+                                <Input
+                                    autoComplete="current-password"
                                     label="Password"
                                     onChange={(event) => setPassword(event.target.value)}
                                     trailingAction={

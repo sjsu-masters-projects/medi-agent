@@ -79,6 +79,7 @@ class InMemoryQuery:
 class InMemoryAdmin:
     def __init__(self) -> None:
         self.users: list[SimpleNamespace] = []
+        self.deleted_user_ids: list[str] = []
 
     def create_user(self, payload: dict[str, Any]) -> SimpleNamespace:
         user = SimpleNamespace(id=f"auth-{len(self.users) + 1}", email=payload["email"])
@@ -90,6 +91,7 @@ class InMemoryAdmin:
         return self.users[start : start + per_page]
 
     def delete_user(self, user_id: str) -> None:
+        self.deleted_user_ids.append(user_id)
         self.users = [user for user in self.users if user.id != user_id]
 
 
@@ -203,6 +205,28 @@ def test_reseeding_is_idempotent_for_all_persisted_rows() -> None:
     assert {table: len(rows) for table, rows in client.rows.items()} == first_counts
 
 
+def test_clinic_codes_are_valid_for_the_clinician_login_contract() -> None:
+    fixture = load_canonical_fixture()
+
+    assert {seed_adapter.clinic_code(clinic.source_id) for clinic in fixture.clinics} == {
+        "CA-CLINIC-001",
+        "CA-CLINIC-002",
+    }
+    assert all(
+        6 <= len(seed_adapter.clinic_code(clinic.source_id)) <= 20 for clinic in fixture.clinics
+    )
+
+
+def test_fixture_accounts_use_named_project_controlled_addresses() -> None:
+    assert seed_adapter.fixture_email("SYN-PT-001") == "maya.patel@accounts.mediagent.live"
+    assert seed_adapter.fixture_email("SYN-PROV-001") == "elena.park@accounts.mediagent.live"
+    assert seed_adapter.fixture_email_aliases("SYN-PT-001") == {
+        "maya.patel@accounts.mediagent.live",
+        "syn-pt-001@demo.mediagent.live",
+        "syn-pt-001@demo.mediagent.local",
+    }
+
+
 def test_reset_deletes_only_exact_canonical_fixture_users(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "staging")
     fixture = load_canonical_fixture()
@@ -211,12 +235,54 @@ def test_reset_deletes_only_exact_canonical_fixture_users(monkeypatch: pytest.Mo
         SimpleNamespace(
             id="fixture", email=seed_adapter.fixture_email(fixture.patients[0].source_id)
         ),
+        SimpleNamespace(
+            id="legacy-fixture",
+            email=f"{fixture.patients[1].source_id.lower()}@demo.mediagent.local",
+        ),
         SimpleNamespace(id="unrelated", email="other@demo.mediagent.local"),
     ]
 
     seed_adapter.reset(client)
 
     assert [user.id for user in client.auth.admin.users] == ["unrelated"]
+
+
+def test_reset_deletes_fixture_patients_before_fixture_staff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    fixture = load_canonical_fixture()
+    client = InMemorySupabase()
+    client.auth.admin.users = [
+        SimpleNamespace(id="staff", email=seed_adapter.fixture_email(fixture.staff[0].source_id)),
+        SimpleNamespace(
+            id="patient", email=seed_adapter.fixture_email(fixture.patients[0].source_id)
+        ),
+    ]
+
+    seed_adapter.reset(client)
+
+    assert client.auth.admin.deleted_user_ids == ["patient", "staff"]
+
+
+def test_reset_removes_only_current_and_legacy_fixture_clinic_codes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    fixture = load_canonical_fixture()
+    client = InMemorySupabase()
+    client.rows["clinics"] = [
+        {"id": "current", "code": seed_adapter.clinic_code(fixture.clinics[0].source_id)},
+        {
+            "id": "legacy",
+            "code": seed_adapter.legacy_clinic_code(fixture.clinics[1].source_id),
+        },
+        {"id": "unrelated", "code": "CA-CLINIC-999"},
+    ]
+
+    seed_adapter.reset(client)
+
+    assert client.rows["clinics"] == [{"id": "unrelated", "code": "CA-CLINIC-999"}]
 
 
 def test_schema_preflight_rejects_unsynchronized_ledger(monkeypatch: pytest.MonkeyPatch) -> None:

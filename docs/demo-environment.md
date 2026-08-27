@@ -26,18 +26,30 @@ Preview without connecting to Supabase:
 
     PYTHONPATH=backend/src backend/.venv/bin/python backend/scripts/seed_demo_environment.py --dry-run
 
+## Required Auth control-plane check
+
+The migrations create `public.custom_access_token_hook`, but they cannot enable it in
+Supabase Auth. After applying migrations, open **Authentication → Auth Hooks** and
+enable **Customize Access Token (JWT) Claims hook** with
+`public.custom_access_token_hook`. Then perform a new patient password sign-in through
+the backend and verify the returned role is `patient`. A successful password exchange
+alone is not sufficient: a missing `user_role` claim causes the portals to reject the
+session.
+
 ## Synthetic accounts
 
-The adapter derives non-clinical Auth emails from canonical source IDs rather than
-inventing people: SYN-PT-001 becomes syn-pt-001@demo.mediagent.local. Staff use the
-same source-ID convention. These identifiers are adapter plumbing, not fixture
-demographics; source display labels remain the persisted name-like values.
+The adapter uses named fictional accounts in the project-controlled
+`accounts.mediagent.live` namespace. The source IDs remain internal provenance
+identifiers; the account emails and persisted display labels are coherent fictional
+names. The reset recognizes the two prior source-ID email namespaces only so it can
+remove the exact old fixture accounts safely.
 
 ## Reset
 
 Reset is guarded: it refuses environments outside development, demo, or staging;
 requires --confirm-demo-reset; and deletes only exact canonical-fixture account
-emails plus the two canonical synthetic clinics.
+emails (including the previous `.local` fixture aliases) plus the two canonical
+fixture clinics.
 
     export ENVIRONMENT=staging
     export DEMO_ACCOUNT_PASSWORD='choose-a-local-password'

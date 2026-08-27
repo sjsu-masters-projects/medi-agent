@@ -18,6 +18,7 @@ from typing import Any
 
 from app.db.seed.demo_data import (
     DEMO_EMAIL_DOMAIN,
+    LEGACY_DEMO_EMAIL_DOMAINS,
     CanonicalDemoFixture,
     DemoDocument,
     DemoMedication,
@@ -68,6 +69,7 @@ STAFF_ROLE_MAP = {
     "records_admin": "admin",
 }
 DOSE_FREQUENCY = re.compile(r"^.+? ((?:once|twice) daily|once weekly)$")
+CLINIC_SOURCE_ID = re.compile(r"^SYN-CLINIC-(\d{3})$")
 # Reviewed, source-ID based decision: only these five fixed events explicitly say
 # "Portal message" in the canonical fixture. Other concern transports are not
 # represented by the current chat table and must remain unpersisted.
@@ -80,6 +82,24 @@ PORTAL_CONCERN_EVENT_IDS = frozenset(
         "SYN-EVT-007-04",
     }
 )
+FIXTURE_EMAIL_LOCAL_PARTS = {
+    "SYN-PT-001": "maya.patel",
+    "SYN-PT-002": "jose.ramirez",
+    "SYN-PT-003": "avery.chen",
+    "SYN-PT-004": "rafael.torres",
+    "SYN-PT-005": "hannah.brooks",
+    "SYN-PT-006": "daniel.kim",
+    "SYN-PT-007": "lucia.morales",
+    "SYN-PT-008": "evelyn.wright",
+    "SYN-PROV-001": "elena.park",
+    "SYN-PROV-002": "sofia.hernandez",
+    "SYN-PROV-003": "marcus.reed",
+    "SYN-PROV-004": "priya.nair",
+    "SYN-NURSE-001": "isabel.cruz",
+    "SYN-NURSE-002": "noah.williams",
+    "SYN-ADMIN-001": "carmen.ortiz",
+    "SYN-ADMIN-002": "jordan.lee",
+}
 
 
 def _rows(result: Any) -> list[dict[str, Any]]:
@@ -136,12 +156,39 @@ def assert_schema_ready(client: Any) -> None:
 
 
 def fixture_email(source_id: str) -> str:
-    """Create a non-clinical Auth identifier from the canonical synthetic ID."""
-    return f"{source_id.lower()}@{DEMO_EMAIL_DOMAIN}"
+    """Return the project-controlled fixture email for a named canonical account."""
+    try:
+        local_part = FIXTURE_EMAIL_LOCAL_PARTS[source_id]
+    except KeyError as error:
+        raise ValueError(f"Unsupported fixture account source ID: {source_id}") from error
+    return f"{local_part}@{DEMO_EMAIL_DOMAIN}"
+
+
+def fixture_email_aliases(source_id: str) -> set[str]:
+    """Return the current fixture email and exact legacy reset aliases."""
+    legacy_local_part = source_id.lower()
+    return {
+        fixture_email(source_id),
+        *(f"{legacy_local_part}@{domain}" for domain in LEGACY_DEMO_EMAIL_DOMAINS),
+    }
 
 
 def clinic_code(source_id: str) -> str:
+    """Return the compact clinician-login code for a canonical clinic ID."""
+    match = CLINIC_SOURCE_ID.fullmatch(source_id)
+    if not match:
+        raise ValueError(f"Unsupported canonical clinic source ID: {source_id}")
+    return f"CA-CLINIC-{match.group(1)}"
+
+
+def legacy_clinic_code(source_id: str) -> str:
+    """Return the previous exact code so a guarded reset can remove it."""
     return f"DEMO-CA-{source_id}"
+
+
+def fixture_clinic_code_aliases(source_id: str) -> set[str]:
+    """Return the active code and the exact legacy value owned by this fixture."""
+    return {clinic_code(source_id), legacy_clinic_code(source_id)}
 
 
 def _label_parts(display_label: str) -> tuple[str, str]:
@@ -420,9 +467,11 @@ def seed(client: Any, password: str) -> None:
         )
 
 
-def _reserved_demo_user_ids(client: Any, fixture: CanonicalDemoFixture) -> list[str]:
-    expected_emails = {fixture_email(staff.source_id) for staff in fixture.staff}
-    expected_emails.update(fixture_email(patient.source_id) for patient in fixture.patients)
+def _reserved_demo_user_ids(client: Any, source_ids: Iterable[str]) -> list[str]:
+    """Return exact fixture Auth IDs for one profile type, never a broad domain match."""
+    expected_emails = {
+        email for source_id in source_ids for email in fixture_email_aliases(source_id)
+    }
     user_ids: list[str] = []
     page = 1
     while True:
@@ -443,10 +492,22 @@ def reset(client: Any) -> None:
     if environment not in SAFE_ENVIRONMENTS:
         raise RuntimeError("Demo reset is refused outside development, demo, or staging.")
     fixture = load_canonical_fixture()
-    for user_id in _reserved_demo_user_ids(client, fixture):
+    # Documents are retained by a clinician Auth foreign key but cascade from
+    # their patient. Remove fixture patients first so their dependent records
+    # disappear before the fixture clinicians are deleted.
+    patient_user_ids = _reserved_demo_user_ids(
+        client, (patient.source_id for patient in fixture.patients)
+    )
+    staff_user_ids = _reserved_demo_user_ids(client, (staff.source_id for staff in fixture.staff))
+    for user_id in [*patient_user_ids, *staff_user_ids]:
         client.auth.admin.delete_user(user_id)
     client.table("clinics").delete().in_(
-        "code", [clinic_code(clinic.source_id) for clinic in fixture.clinics]
+        "code",
+        [
+            code
+            for clinic in fixture.clinics
+            for code in fixture_clinic_code_aliases(clinic.source_id)
+        ],
     ).execute()
 
 
