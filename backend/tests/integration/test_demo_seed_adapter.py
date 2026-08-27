@@ -239,12 +239,26 @@ def test_reset_deletes_only_exact_canonical_fixture_users(monkeypatch: pytest.Mo
             id="legacy-fixture",
             email=f"{fixture.patients[1].source_id.lower()}@demo.mediagent.local",
         ),
+        SimpleNamespace(
+            id="historical-patient",
+            email="maria.garcia@demo.mediagent.local",
+        ),
+        SimpleNamespace(
+            id="historical-staff",
+            email="dr.avery@demo.mediagent.local",
+        ),
         SimpleNamespace(id="unrelated", email="other@demo.mediagent.local"),
     ]
 
     seed_adapter.reset(client)
 
     assert [user.id for user in client.auth.admin.users] == ["unrelated"]
+    assert client.auth.admin.deleted_user_ids == [
+        "fixture",
+        "historical-patient",
+        "legacy-fixture",
+        "historical-staff",
+    ]
 
 
 def test_reset_deletes_fixture_patients_before_fixture_staff(

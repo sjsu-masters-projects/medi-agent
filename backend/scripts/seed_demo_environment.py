@@ -100,6 +100,24 @@ FIXTURE_EMAIL_LOCAL_PARTS = {
     "SYN-ADMIN-001": "carmen.ortiz",
     "SYN-ADMIN-002": "jordan.lee",
 }
+# These six names were used by the pre-canonical staging fixture. They are
+# exact, verified historical aliases rather than a domain-wide deletion rule.
+# Keep patients separate so reset continues to remove dependent patient records
+# before the clinicians that uploaded or managed them.
+HISTORICAL_FIXTURE_PATIENT_EMAILS = frozenset(
+    {
+        "maria.garcia@demo.mediagent.local",
+        "jose.martinez@demo.mediagent.local",
+    }
+)
+HISTORICAL_FIXTURE_STAFF_EMAILS = frozenset(
+    {
+        "dr.avery@demo.mediagent.local",
+        "dr.rivera@demo.mediagent.local",
+        "nurse.taylor@demo.mediagent.local",
+        "staff.chen@demo.mediagent.local",
+    }
+)
 
 
 def _rows(result: Any) -> list[dict[str, Any]]:
@@ -467,11 +485,14 @@ def seed(client: Any, password: str) -> None:
         )
 
 
-def _reserved_demo_user_ids(client: Any, source_ids: Iterable[str]) -> list[str]:
+def _reserved_demo_user_ids(
+    client: Any, source_ids: Iterable[str], *, historical_emails: Iterable[str] = ()
+) -> list[str]:
     """Return exact fixture Auth IDs for one profile type, never a broad domain match."""
     expected_emails = {
         email for source_id in source_ids for email in fixture_email_aliases(source_id)
     }
+    expected_emails.update(email.lower() for email in historical_emails)
     user_ids: list[str] = []
     page = 1
     while True:
@@ -496,9 +517,15 @@ def reset(client: Any) -> None:
     # their patient. Remove fixture patients first so their dependent records
     # disappear before the fixture clinicians are deleted.
     patient_user_ids = _reserved_demo_user_ids(
-        client, (patient.source_id for patient in fixture.patients)
+        client,
+        (patient.source_id for patient in fixture.patients),
+        historical_emails=HISTORICAL_FIXTURE_PATIENT_EMAILS,
     )
-    staff_user_ids = _reserved_demo_user_ids(client, (staff.source_id for staff in fixture.staff))
+    staff_user_ids = _reserved_demo_user_ids(
+        client,
+        (staff.source_id for staff in fixture.staff),
+        historical_emails=HISTORICAL_FIXTURE_STAFF_EMAILS,
+    )
     for user_id in [*patient_user_ids, *staff_user_ids]:
         client.auth.admin.delete_user(user_id)
     client.table("clinics").delete().in_(

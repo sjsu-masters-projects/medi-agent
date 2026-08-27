@@ -76,7 +76,7 @@ export function Sidebar() {
         };
     }, [token]);
 
-    const email = user?.email ?? "clinician@mediagent.local";
+    const email = user?.email ?? "Email unavailable";
     const displayName = profile ? `${profile.first_name} ${profile.last_name}` : "Clinician";
     const roleMeta = getRoleMeta(profile?.role ?? user?.role ?? PortalUserRole.CLINICIAN);
     const initials = displayName

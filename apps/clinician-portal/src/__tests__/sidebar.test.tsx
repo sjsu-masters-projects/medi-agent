@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "@/components/layouts/sidebar";
-import { hydrateSession } from "@/store/slices/auth-slice";
+import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import { store } from "@/store/store";
 
 const replaceMock = vi.fn();
@@ -70,5 +70,18 @@ describe("Sidebar", () => {
         expect(screen.getByText("Clinic Admin")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
         expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-blue-600");
+    });
+
+    it("does not invent an invalid fallback email when the session is unavailable", () => {
+        store.dispatch(logout());
+
+        render(
+            <Provider store={store}>
+                <Sidebar />
+            </Provider>,
+        );
+
+        expect(screen.getByText("Email unavailable")).toBeInTheDocument();
+        expect(screen.queryByText("clinician@mediagent.local")).not.toBeInTheDocument();
     });
 });
