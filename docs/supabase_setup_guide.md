@@ -35,10 +35,17 @@ SMART_CLIENT_SECRET=<only if the sandbox registration requires one>
 SMART_REDIRECT_URI=https://YOUR_BACKEND/api/v1/smart/callback
 SMART_STATE_ENCRYPTION_KEY=<a Fernet-compatible key generated in the secret store>
 SMART_ALLOWED_ISSUERS=https://launch.smarthealthit.org/v/r4/fhir
-SMART_SCOPES="launch/patient launch/encounter patient/Patient.read patient/Encounter.read patient/Condition.read patient/AllergyIntolerance.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Observation.read patient/DiagnosticReport.read patient/Procedure.read patient/CarePlan.read patient/DocumentReference.read"
+# The backend adds `launch` for EHR launch or `launch/patient launch/encounter`
+# for standalone launch. Keep this value to least-privilege resource reads.
+SMART_SCOPES="patient/Patient.read patient/Encounter.read patient/Condition.read patient/AllergyIntolerance.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Observation.read patient/DiagnosticReport.read patient/Procedure.read patient/CarePlan.read patient/DocumentReference.read"
 ```
 
-Register the exact `SMART_REDIRECT_URI` with the sandbox. Tokens and authorization codes remain server-side; the browser receives only a short-lived, single-use review handoff.
+Register the exact `SMART_REDIRECT_URI` with the sandbox. For an EHR launch, separately
+register the clinician portal's launch route (for example,
+`https://clinician.mediagent.live/smart-import`) as the app launch URL. The portal receives
+the EHR's `iss` and opaque `launch` handle, then requires local clinician sign-in and local
+care-team/patient selection before the backend begins authorization. Tokens and authorization
+codes remain server-side; the browser receives only a short-lived, single-use review handoff.
 
 ## Verification checklist
 

@@ -27,8 +27,20 @@ class SmartLaunchService:
         self.http = http_client or httpx.Client(timeout=15.0, follow_redirects=False)
         self.imports = FhirImportService(db)
 
-    def start_launch(self, *, clinician_id: UUID, patient_id: UUID, issuer: str) -> dict[str, Any]:
-        """Create a PKCE-bound session after confirming local care-team authority."""
+    def start_launch(
+        self,
+        *,
+        clinician_id: UUID,
+        patient_id: UUID,
+        issuer: str,
+        launch_context: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a PKCE-bound session after confirming local care-team authority.
+
+        An EHR may supply an opaque ``launch`` handle alongside ``iss``.  It is
+        echoed only to the authorization endpoint and stored encrypted for the
+        short lifetime of the session; it never substitutes for local authority.
+        """
         self._require_config()
         self._require_assignment(clinician_id, patient_id)
         issuer = self._validate_issuer(issuer)
@@ -37,15 +49,20 @@ class SmartLaunchService:
         verifier = secrets.token_urlsafe(64)
         nonce = secrets.token_urlsafe(24)
         expires_at = datetime.now(UTC) + timedelta(seconds=settings.smart_launch_ttl_seconds)
+        cipher = self._cipher()
+        requested_scopes = self._requested_scopes(launch_context)
         payload = {
             "state_hash": self._digest(state),
-            "pkce_verifier_ciphertext": self._cipher().encrypt(verifier.encode()).decode(),
+            "pkce_verifier_ciphertext": cipher.encrypt(verifier.encode()).decode(),
             "issuer": issuer,
             "authorization_endpoint": configuration["authorization_endpoint"],
             "token_endpoint": configuration["token_endpoint"],
+            "launch_context": (
+                cipher.encrypt(launch_context.encode()).decode() if launch_context else None
+            ),
             "clinician_id": str(clinician_id),
             "patient_id": str(patient_id),
-            "requested_scopes": settings.smart_scopes,
+            "requested_scopes": requested_scopes,
             "nonce": nonce,
             "expires_at": expires_at.isoformat(),
         }
@@ -56,13 +73,15 @@ class SmartLaunchService:
             "response_type": "code",
             "client_id": settings.smart_client_id,
             "redirect_uri": self._redirect_uri(),
-            "scope": settings.smart_scopes,
+            "scope": requested_scopes,
             "aud": issuer,
             "state": state,
             "nonce": nonce,
             "code_challenge": self._code_challenge(verifier),
             "code_challenge_method": "S256",
         }
+        if launch_context:
+            params["launch"] = launch_context
         return {
             "authorization_url": f"{configuration['authorization_endpoint']}?{urlencode(params)}",
             "expires_at": expires_at,
@@ -366,6 +385,23 @@ class SmartLaunchService:
             .rstrip(b"=")
             .decode()
         )
+
+    @staticmethod
+    def _requested_scopes(launch_context: str | None) -> str:
+        """Use the SMART scope appropriate to standalone or EHR launch.
+
+        ``launch/patient`` and ``launch/encounter`` request context for a
+        standalone launch.  An EHR launch instead requires the generic
+        ``launch`` scope and the opaque launch handle in the authorization
+        request.  Resource-read scopes remain configuration-owned.
+        """
+        configured = [
+            scope
+            for scope in settings.smart_scopes.split()
+            if scope not in {"launch", "launch/patient", "launch/encounter"}
+        ]
+        context_scopes = ["launch"] if launch_context else ["launch/patient", "launch/encounter"]
+        return " ".join([*context_scopes, *configured])
 
     @staticmethod
     def _expired(value: Any) -> bool:

@@ -87,10 +87,13 @@ are present. Do not reuse Supabase JWT configuration for SMART validation.
 
 ### Backend flow
 
-1. `GET /api/v1/smart/launch` accepts an EHR-launch `iss` and `launch` handle, or a
-   documented standalone sandbox mode. It validates the issuer, retrieves SMART
-   configuration, creates a short-lived launch session, generates PKCE values and state,
-   then redirects to the authorization endpoint.
+1. The clinician portal launch route accepts the EHR's `iss` and opaque `launch` handle.
+   It requires an existing local clinician session and a selected, locally assigned patient,
+   then sends them to protected `POST /api/v1/smart/launch`. The backend validates the
+   issuer, retrieves SMART configuration, creates a short-lived launch session, generates
+   PKCE values and state, encrypts the opaque handle at rest, and redirects to the
+   authorization endpoint. In standalone mode, the same protected endpoint omits the
+   opaque handle and requests patient/encounter launch context instead.
 2. `GET /api/v1/smart/callback` rejects provider errors, missing or mismatched state,
    expired/replayed sessions, an unexpected issuer/audience, and insufficient scopes.
    It exchanges the code server-side and captures patient and encounter context.
