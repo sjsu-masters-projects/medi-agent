@@ -8,11 +8,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-# `.local` is a special-use name that hosted Supabase Auth rejects for password
-# sign-in. This is a non-clinical fixture namespace within the project domain;
-# fixture accounts are email-confirmed on creation and never send mail.
-DEMO_EMAIL_DOMAIN = "demo.mediagent.live"
-LEGACY_DEMO_EMAIL_DOMAINS = ("demo.mediagent.local",)
+# Fixture accounts use a project-controlled, non-delivery namespace. Hosted
+# Supabase Auth rejects `.local`, so reset code also recognizes the two prior
+# fixture namespaces without retaining them as active login identifiers.
+DEMO_EMAIL_DOMAIN = "accounts.mediagent.live"
+LEGACY_DEMO_EMAIL_DOMAINS = ("demo.mediagent.live", "demo.mediagent.local")
 CANONICAL_FIXTURE_PATH = (
     Path(__file__).resolve().parent / "fixtures" / "synthetic_ca_portal_demo_2026_08.json"
 )

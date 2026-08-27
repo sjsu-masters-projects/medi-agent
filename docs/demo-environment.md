@@ -38,10 +38,11 @@ session.
 
 ## Synthetic accounts
 
-The adapter derives non-clinical Auth emails from canonical source IDs rather than
-inventing people: SYN-PT-001 becomes syn-pt-001@demo.mediagent.live. Staff use the
-same source-ID convention. These identifiers are adapter plumbing, not fixture
-demographics; source display labels remain the persisted name-like values.
+The adapter uses named fictional accounts in the project-controlled
+`accounts.mediagent.live` namespace. The source IDs remain internal provenance
+identifiers; the account emails and persisted display labels are coherent fictional
+names. The reset recognizes the two prior source-ID email namespaces only so it can
+remove the exact old fixture accounts safely.
 
 ## Reset
 

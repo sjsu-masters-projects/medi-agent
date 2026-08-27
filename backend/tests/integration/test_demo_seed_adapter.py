@@ -217,6 +217,16 @@ def test_clinic_codes_are_valid_for_the_clinician_login_contract() -> None:
     )
 
 
+def test_fixture_accounts_use_named_project_controlled_addresses() -> None:
+    assert seed_adapter.fixture_email("SYN-PT-001") == "maya.patel@accounts.mediagent.live"
+    assert seed_adapter.fixture_email("SYN-PROV-001") == "elena.park@accounts.mediagent.live"
+    assert seed_adapter.fixture_email_aliases("SYN-PT-001") == {
+        "maya.patel@accounts.mediagent.live",
+        "syn-pt-001@demo.mediagent.live",
+        "syn-pt-001@demo.mediagent.local",
+    }
+
+
 def test_reset_deletes_only_exact_canonical_fixture_users(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "staging")
     fixture = load_canonical_fixture()

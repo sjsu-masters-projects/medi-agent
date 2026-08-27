@@ -82,6 +82,24 @@ PORTAL_CONCERN_EVENT_IDS = frozenset(
         "SYN-EVT-007-04",
     }
 )
+FIXTURE_EMAIL_LOCAL_PARTS = {
+    "SYN-PT-001": "maya.patel",
+    "SYN-PT-002": "jose.ramirez",
+    "SYN-PT-003": "avery.chen",
+    "SYN-PT-004": "rafael.torres",
+    "SYN-PT-005": "hannah.brooks",
+    "SYN-PT-006": "daniel.kim",
+    "SYN-PT-007": "lucia.morales",
+    "SYN-PT-008": "evelyn.wright",
+    "SYN-PROV-001": "elena.park",
+    "SYN-PROV-002": "sofia.hernandez",
+    "SYN-PROV-003": "marcus.reed",
+    "SYN-PROV-004": "priya.nair",
+    "SYN-NURSE-001": "isabel.cruz",
+    "SYN-NURSE-002": "noah.williams",
+    "SYN-ADMIN-001": "carmen.ortiz",
+    "SYN-ADMIN-002": "jordan.lee",
+}
 
 
 def _rows(result: Any) -> list[dict[str, Any]]:
@@ -138,14 +156,21 @@ def assert_schema_ready(client: Any) -> None:
 
 
 def fixture_email(source_id: str) -> str:
-    """Create a non-clinical Auth identifier from the canonical synthetic ID."""
-    return f"{source_id.lower()}@{DEMO_EMAIL_DOMAIN}"
+    """Return the project-controlled fixture email for a named canonical account."""
+    try:
+        local_part = FIXTURE_EMAIL_LOCAL_PARTS[source_id]
+    except KeyError as error:
+        raise ValueError(f"Unsupported fixture account source ID: {source_id}") from error
+    return f"{local_part}@{DEMO_EMAIL_DOMAIN}"
 
 
 def fixture_email_aliases(source_id: str) -> set[str]:
     """Return the current fixture email and exact legacy reset aliases."""
-    local_part = source_id.lower()
-    return {f"{local_part}@{domain}" for domain in (DEMO_EMAIL_DOMAIN, *LEGACY_DEMO_EMAIL_DOMAINS)}
+    legacy_local_part = source_id.lower()
+    return {
+        fixture_email(source_id),
+        *(f"{legacy_local_part}@{domain}" for domain in LEGACY_DEMO_EMAIL_DOMAINS),
+    }
 
 
 def clinic_code(source_id: str) -> str:

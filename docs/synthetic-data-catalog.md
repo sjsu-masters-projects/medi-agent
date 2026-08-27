@@ -9,9 +9,9 @@ generate clinical facts, names, or timelines outside that source.
 
 | Source record | Existing production tables |
 | --- | --- |
-| Two synthetic clinics | clinics |
-| Eight source staff accounts | clinicians and their Supabase Auth users |
-| Eight patient scenarios | patients and their Supabase Auth users |
+| Two fictional named clinics | clinics |
+| Eight named fictional staff accounts | clinicians and their Supabase Auth users |
+| Eight named fictional patient scenarios | patients and their Supabase Auth users |
 | Source staff assignments with record access | care_teams; the proxy assignment is not persisted |
 | Conditions, allergies, and medication records | conditions, allergies, medications |
 | Metadata-only documents | documents with synthetic storage paths and no binary upload |
@@ -54,5 +54,5 @@ instructions. No obligations are seeded because the canonical source declares no
 
 The seed command performs a migration-checksum preflight before reset or seed. Reset
 requires explicit confirmation, is limited to development/demo/staging, and deletes
-only the exact Auth emails derived from canonical synthetic source IDs. Never run it
-against production.
+only the exact named fixture accounts and their documented legacy aliases. Never run
+it against production.
