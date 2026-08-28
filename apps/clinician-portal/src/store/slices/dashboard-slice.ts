@@ -78,7 +78,7 @@ export const dashboardSlice = createSlice({
     name: "dashboard",
     initialState,
     reducers: {
-        /** Manual override for mock data / SSR hydration. */
+        /** Manual override for SSR hydration or controlled state restoration. */
         setPatients: (state, action: PayloadAction<PatientRiskData[]>) => {
             state.patients = action.payload;
             state.loading = false;

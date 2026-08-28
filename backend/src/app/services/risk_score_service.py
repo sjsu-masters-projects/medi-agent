@@ -4,7 +4,7 @@ Calculates a patient's composite risk level (🟢 low / 🟡 medium / 🔴 high)
 from three independent signals:
 
 1. Adherence score (from adherence_logs over 30-day window)
-2. Open ADR assessments (adr_assessments where status='open' or 'draft')
+2. Draft ADR assessments (adr_assessments where status='draft')
 3. Recent symptom severity (max severity in last 7 days from symptom_reports)
 
 Algorithm:
@@ -24,6 +24,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.models.dashboard import PatientRiskData, RiskLevel
+from app.models.enums import ADRStatus
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ class RiskScoreService:
             self.db.table("adr_assessments")
             .select("id", count="exact")  # type: ignore[arg-type]
             .eq("patient_id", str(patient_id))
-            .in_("status", ["open", "draft"])
+            .in_("status", [ADRStatus.DRAFT.value])
         )
         return result.count or 0
 

@@ -92,6 +92,23 @@ describe("SMART import page", () => {
         expect(post).not.toHaveBeenCalled();
     });
 
+    it("shows a clear in-progress status while authorization starts", async () => {
+        let resolveLaunch: ((value: { authorization_url: string }) => void) | undefined;
+        post.mockReturnValue(new Promise((resolve) => { resolveLaunch = resolve; }));
+
+        render(<SmartImportPage />);
+
+        await screen.findByRole("button", { name: /launch sandbox import/i });
+        fireEvent.click(screen.getByRole("button", { name: /launch sandbox import/i }));
+
+        expect(await screen.findByRole("status")).toHaveTextContent(/preparing the secure smart authorization session/i);
+        expect(screen.getByRole("status")).toHaveTextContent(/keep this tab open/i);
+        expect(screen.getByRole("button", { name: /opening smart launch/i })).toBeDisabled();
+
+        resolveLaunch?.({ authorization_url: "https://sandbox.example/authorize" });
+        await waitFor(() => expect(assign).toHaveBeenCalledWith("https://sandbox.example/authorize"));
+    });
+
     it("makes an idempotent import outcome explicit", async () => {
         setSearchParams("ticket=single-use-ticket-value-that-is-long-enough");
         post.mockResolvedValue({

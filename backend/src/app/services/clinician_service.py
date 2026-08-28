@@ -32,7 +32,7 @@ from app.core.exceptions import (
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
-from app.models.enums import MessageChannel, NotificationType
+from app.models.enums import ADRStatus, MessageChannel, NotificationType
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
 from app.services.notification_service import NotificationService
 from app.services.reminder_schedule_service import ReminderScheduleService
@@ -731,14 +731,14 @@ class ClinicianService:
             raise AuthorizationError("You are not assigned to this patient")
 
     async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:
-        """Count draft/open MedWatch assessments across all assigned patients."""
+        """Count draft MedWatch assessments across all assigned patients."""
         if not patient_ids:
             return 0
         result = await self._execute(
             self.db.table("adr_assessments")
             .select("id", count="exact")  # type: ignore[arg-type]
             .in_("patient_id", [str(pid) for pid in patient_ids])
-            .in_("status", ["draft", "open"])
+            .in_("status", [ADRStatus.DRAFT.value])
         )
         return result.count or 0
 

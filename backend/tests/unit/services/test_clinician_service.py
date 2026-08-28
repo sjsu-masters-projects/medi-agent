@@ -125,6 +125,20 @@ async def test_get_patient_risk_snapshot_requires_assignment(service):
 
 
 @pytest.mark.asyncio
+async def test_pending_medwatch_count_queries_only_valid_draft_status(service, mock_db):
+    chain = MagicMock()
+    for method in ("select", "in_"):
+        getattr(chain, method).return_value = chain
+    mock_db.table.return_value = chain
+    service._execute = AsyncMock(return_value=_response(count=2))  # type: ignore[method-assign]
+
+    count = await service._get_pending_medwatch_count([uuid4()])
+
+    assert count == 2
+    chain.in_.assert_any_call("status", ["draft"])
+
+
+@pytest.mark.asyncio
 async def test_set_patient_obligation_inserts_care_team_scoped_row(service, mock_db):
     clinician_id = uuid4()
     patient_id = uuid4()

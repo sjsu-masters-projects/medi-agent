@@ -219,7 +219,7 @@ export default function DashboardPage() {
                     className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700"
                     role="alert"
                 >
-                    <span>⚠ {error} — showing cached data</span>
+                    <span>⚠ {error}{patients.length > 0 ? " — showing cached data" : ""}</span>
                     <button
                         className="rounded px-3 py-1 text-xs font-medium hover:bg-red-100"
                         onClick={reloadDashboard}
