@@ -54,3 +54,13 @@ excludes clinical-fact values, evidence excerpts, reviewer notes, and private re
 The route first verifies the requesting clinician's existing care-team assignment. It
 does not create a FHIR server endpoint, change local review state, or grant authority to
 an external SMART identity.
+
+## SMART candidate review
+
+The clinician portal exposes SMART-imported candidates in a separate patient-level
+review tab. It shows the mapped candidate, explicit review state, source issuer and
+resource version, and recorded mapping or validation warnings. The original FHIR JSON
+is available only through a separate, care-team-authorized source request; it is not
+included in the ordinary candidate list. See
+[`smart-fhir-review-mapping.md`](smart-fhir-review-mapping.md) for the resource-to-field
+contract and the EHR-initiated versus standalone launch behavior.

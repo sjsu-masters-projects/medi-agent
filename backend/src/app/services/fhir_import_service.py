@@ -221,7 +221,9 @@ class FhirImportService:
                 fact_type=mapped["fact_type"],
                 subject_type=resource_type,
                 value=mapped["value"],
-                confidence_band=ConfidenceBand.HIGH,
+                # Direct FHIR transport preserves the source faithfully, but it
+                # does not establish clinical certainty or approval locally.
+                confidence_band=ConfidenceBand.UNKNOWN,
                 uncertainty=["Imported data requires clinician review before clinical use."],
                 provenance=SourceProvenanceCreate(
                     artifact_type=SourceArtifactType.FHIR_RESOURCE,

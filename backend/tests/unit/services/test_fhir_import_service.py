@@ -93,6 +93,7 @@ def test_supported_resources_become_pending_provenance_backed_facts() -> None:
 
     assert result == {"resources_persisted": 2, "candidate_facts_created": 2, "warnings": []}
     assert {row["review_state"] for row in db.store["clinical_facts"]} == {"pending_review"}
+    assert {row["confidence_band"] for row in db.store["clinical_facts"]} == {"unknown"}
     assert len(db.store["source_provenances"]) == 2
     assert all(row["artifact_type"] == "fhir_resource" for row in db.store["source_provenances"])
     assert len(db.store["clinical_fact_audit_events"]) == 2

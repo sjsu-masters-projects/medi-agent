@@ -174,14 +174,20 @@ export default function SmartImportPage() {
                         control whether this sandbox import can begin.
                     </div>
                 ) : (
-                    <Input
-                        id="smart-issuer"
-                        label="SMART issuer"
-                        value={issuer}
-                        disabled={starting}
-                        onChange={(event) => setIssuer(event.target.value)}
-                        autoComplete="off"
-                    />
+                    <>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                            No EHR launch context is active. This starts a fresh SMART sandbox session and does
+                            not reuse a previously selected sandbox patient or encounter.
+                        </div>
+                        <Input
+                            id="smart-issuer"
+                            label="SMART issuer"
+                            value={issuer}
+                            disabled={starting}
+                            onChange={(event) => setIssuer(event.target.value)}
+                            autoComplete="off"
+                        />
+                    </>
                 )}
                 {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
                 {launchStatus && (
@@ -233,7 +239,7 @@ export default function SmartImportPage() {
                             </li>
                         ))}
                     </ul>
-                    <Button variant="secondary" onClick={() => router.push(`/patients/${handoff.import_record.patient_id}`)}>
+                    <Button variant="secondary" onClick={() => router.push(`/patients/${handoff.import_record.patient_id}?tab=imports`)}>
                         Open patient review
                     </Button>
                 </Card>
