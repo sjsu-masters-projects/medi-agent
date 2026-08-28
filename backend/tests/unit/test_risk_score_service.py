@@ -208,7 +208,9 @@ class TestRiskSignalFetching:
         assert score == pytest.approx(2 / 3)
 
     @pytest.mark.asyncio
-    async def test_fetch_recent_symptom_severity_uses_max_and_defaults_missing_values(self, service):
+    async def test_fetch_recent_symptom_severity_uses_max_and_defaults_missing_values(
+        self, service
+    ):
         service._execute = AsyncMock(  # type: ignore[method-assign]
             return_value=_response(
                 data=[
@@ -222,6 +224,15 @@ class TestRiskSignalFetching:
         severity = await service._fetch_recent_symptom_severity(uuid4())
 
         assert severity == 9
+
+    @pytest.mark.asyncio
+    async def test_fetch_open_adr_count_queries_only_valid_draft_status(self, service):
+        service._execute = AsyncMock(return_value=_response(count=3))  # type: ignore[method-assign]
+
+        count = await service._fetch_open_adr_count(uuid4())
+
+        assert count == 3
+        service.db.table.return_value.in_.assert_any_call("status", ["draft"])
 
     @pytest.mark.asyncio
     async def test_fetch_last_activity_prefers_newer_symptom_report(self, service, monkeypatch):

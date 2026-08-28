@@ -7,6 +7,9 @@ Use this guide to recreate the project after an inactive instance is removed. It
 1. Create a new development project in the required region and record its URL, anon key, service-role key, and JWT secret in the team secret store.
 2. Copy `.env.example` to `.env` locally. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JWT_SECRET`; never commit that file.
 3. Configure clinician and patient portal environment variables with the new public URL and anon key.
+   Leave `NEXT_PUBLIC_ENABLE_DASHBOARD_REALTIME=false` until the Realtime publication,
+   RLS behavior, and clinician JWT path have been verified end to end. The clinician
+   dashboard remains functional through its authenticated backend API while it is disabled.
 4. Enable email authentication and MFA for clinician accounts. After migrations complete, configure **Authentication → Auth Hooks → Customize Access Token (JWT) Claims hook** to use `public.custom_access_token_hook` and confirm it shows as enabled. This Auth control-plane setting is not recorded by a SQL migration.
 
 ## Apply migrations

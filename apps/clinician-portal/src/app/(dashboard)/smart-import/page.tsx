@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { HiOutlineArrowPath } from "react-icons/hi2";
 import { useSelector } from "react-redux";
 import { Button, Card, EmptyState, Input } from "@/components/ui";
 import { api } from "@/services/api";
@@ -156,6 +157,7 @@ export default function SmartImportPage() {
                     <select
                         id="smart-patient"
                         className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                        disabled={starting}
                         value={patientId}
                         onChange={(event) => setPatientId(event.target.value)}
                     >
@@ -176,12 +178,25 @@ export default function SmartImportPage() {
                         id="smart-issuer"
                         label="SMART issuer"
                         value={issuer}
+                        disabled={starting}
                         onChange={(event) => setIssuer(event.target.value)}
                         autoComplete="off"
                     />
                 )}
                 {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-                {launchStatus && <p role="status" className="text-sm text-slate-600">{launchStatus}</p>}
+                {launchStatus && (
+                    <div
+                        aria-live="polite"
+                        className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"
+                        role="status"
+                    >
+                        <HiOutlineArrowPath aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-blue-700" />
+                        <div>
+                            <p className="font-medium">{launchStatus}</p>
+                            <p className="mt-1 text-blue-900">This can take a few seconds. Keep this tab open; the SMART sandbox will open automatically.</p>
+                        </div>
+                    </div>
+                )}
                 <Button onClick={() => void startLaunch()} disabled={starting || !selectedPatient}>
                     {starting ? "Opening SMART launch…" : "Launch sandbox import"}
                 </Button>

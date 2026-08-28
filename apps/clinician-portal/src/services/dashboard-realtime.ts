@@ -32,6 +32,10 @@ function getAccessToken(): string {
 }
 
 function createRealtimeClient(): SupabaseClient | null {
+    if (process.env.NEXT_PUBLIC_ENABLE_DASHBOARD_REALTIME !== "true") {
+        return null;
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const token = getAccessToken();
