@@ -14,7 +14,12 @@ from app.core.exceptions import ValidationError
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
+from app.models.clinical_fact import ClinicalFactReviewState
 from app.models.fhir_import import (
+    ClinicalFactCorrectionRequest,
+    ClinicalFactReviewRequest,
+    FhirPatientReviewRead,
+    FhirReviewSourceDetailRead,
     SmartHandoffRedeemRequest,
     SmartHandoffRedeemResponse,
     SmartImportRead,
@@ -23,6 +28,7 @@ from app.models.fhir_import import (
 )
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.fhir_audit_export_service import FhirAuditExportService
+from app.services.fhir_import_review_service import FhirImportReviewService
 from app.services.smart_launch_service import SmartLaunchService
 
 router = APIRouter()
@@ -35,6 +41,10 @@ def _service(db: Client = Depends(get_db)) -> SmartLaunchService:
 
 def _fhir_audit_export_service(db: Client = Depends(get_db)) -> FhirAuditExportService:
     return FhirAuditExportService(db)
+
+
+def _fhir_import_review_service(db: Client = Depends(get_db)) -> FhirImportReviewService:
+    return FhirImportReviewService(db)
 
 
 @router.post(
@@ -87,23 +97,25 @@ async def list_imports(
     return service.list_imports(clinician_id=user.id, patient_id=patient_id)
 
 
-@router.get("/patients/{patient_id}/facts")
+@router.get("/patients/{patient_id}/facts", response_model=FhirPatientReviewRead)
 async def list_pending_facts(
     patient_id: UUID,
+    review_state: ClinicalFactReviewState = Query(default=ClinicalFactReviewState.PENDING_REVIEW),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=25, ge=1, le=50),
     user: CurrentUser = Depends(_clinician_dep),
     service: SmartLaunchService = Depends(_service),
-    db: Client = Depends(get_db),
-) -> Any:
+    review_service: FhirImportReviewService = Depends(_fhir_import_review_service),
+) -> FhirPatientReviewRead:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    response = (
-        db.table("clinical_facts")
-        .select("*")
-        .eq("patient_id", str(patient_id))
-        .eq("review_state", "pending_review")
-        .order("created_at", desc=True)
-        .execute()
+    return FhirPatientReviewRead.model_validate(
+        review_service.list_facts(
+            patient_id=patient_id,
+            review_state=review_state,
+            offset=offset,
+            limit=limit,
+        )
     )
-    return response.data or []
 
 
 @router.get("/patients/{patient_id}/facts/{fact_id}/lineage")
@@ -116,6 +128,23 @@ async def fact_lineage(
 ) -> Any:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
     return ClinicalFactService(db).get_lineage(fact_id, patient_id)
+
+
+@router.get(
+    "/patients/{patient_id}/facts/{fact_id}/source", response_model=FhirReviewSourceDetailRead
+)
+async def fact_source(
+    patient_id: UUID,
+    fact_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: SmartLaunchService = Depends(_service),
+    review_service: FhirImportReviewService = Depends(_fhir_import_review_service),
+) -> FhirReviewSourceDetailRead:
+    service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    source = review_service.get_source(fact_id=fact_id, patient_id=patient_id)
+    if source is None:
+        raise ValidationError("FHIR source is unavailable for this clinical fact")
+    return FhirReviewSourceDetailRead.model_validate(source)
 
 
 @router.get("/patients/{patient_id}/facts/{fact_id}/fhir-audit")
@@ -135,41 +164,44 @@ async def fact_fhir_audit(
 async def approve_fact(
     patient_id: UUID,
     fact_id: UUID,
-    note: str | None = Query(default=None, max_length=2000),
+    request: ClinicalFactReviewRequest,
     user: CurrentUser = Depends(_clinician_dep),
     service: SmartLaunchService = Depends(_service),
     db: Client = Depends(get_db),
 ) -> Any:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    return ClinicalFactService(db).approve(fact_id, patient_id, reviewer_id=user.id, note=note)
+    return ClinicalFactService(db).approve(
+        fact_id, patient_id, reviewer_id=user.id, note=request.note
+    )
 
 
 @router.post("/patients/{patient_id}/facts/{fact_id}/reject")
 async def reject_fact(
     patient_id: UUID,
     fact_id: UUID,
-    note: str = Query(min_length=1, max_length=2000),
+    request: ClinicalFactReviewRequest,
     user: CurrentUser = Depends(_clinician_dep),
     service: SmartLaunchService = Depends(_service),
     db: Client = Depends(get_db),
 ) -> Any:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    return ClinicalFactService(db).reject(fact_id, patient_id, reviewer_id=user.id, note=note)
+    return ClinicalFactService(db).reject(
+        fact_id, patient_id, reviewer_id=user.id, note=request.note or ""
+    )
 
 
 @router.post("/patients/{patient_id}/facts/{fact_id}/correct")
 async def correct_fact(
     patient_id: UUID,
     fact_id: UUID,
-    value: dict[str, Any],
-    note: str = Query(min_length=1, max_length=2000),
+    request: ClinicalFactCorrectionRequest,
     user: CurrentUser = Depends(_clinician_dep),
     service: SmartLaunchService = Depends(_service),
     db: Client = Depends(get_db),
 ) -> Any:
-    if not value:
+    if not request.value:
         raise ValidationError("Corrected fact value is required")
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
     return ClinicalFactService(db).correct(
-        fact_id, patient_id, actor_id=user.id, value=value, note=note
+        fact_id, patient_id, actor_id=user.id, value=request.value, note=request.note
     )

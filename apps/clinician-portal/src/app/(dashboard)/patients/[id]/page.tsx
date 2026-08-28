@@ -11,6 +11,7 @@ import {
     HiOutlineDocumentText,
     HiOutlineExclamationTriangle,
     HiOutlineIdentification,
+    HiOutlineLink,
     HiOutlineSparkles,
 } from "react-icons/hi2";
 import { Card, Skeleton } from "@/components/ui";
@@ -19,6 +20,7 @@ import { AdherenceChart } from "@/components/features/adherence-chart";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
+import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import {
     loadPatientDeepDive,
     triggerSoapNote,
@@ -28,10 +30,11 @@ import type { AppDispatch, RootState } from "@/store/store";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type TabId = "profile" | "adherence" | "symptoms" | "chat" | "soap" | "documents";
+type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents";
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentification }> = [
     { id: "profile", label: "Profile", icon: HiOutlineIdentification },
+    { id: "imports", label: "SMART imports", icon: HiOutlineLink },
     { id: "adherence", label: "Adherence", icon: HiOutlineBeaker },
     { id: "symptoms", label: "Symptoms", icon: HiOutlineExclamationTriangle },
     { id: "chat", label: "Chat Transcript", icon: HiOutlineChatBubbleLeftRight },
@@ -232,6 +235,8 @@ function PatientDeepDivePageContent() {
 
             {/* Tab panels */}
             <Card padding="lg">
+                {activeTab === "imports" && <SmartImportReviewPanel patientId={patientId} />}
+
                 {/* ── Profile ── */}
                 {activeTab === "profile" && (
                     <div

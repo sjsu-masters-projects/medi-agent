@@ -109,6 +109,13 @@ describe("SMART import page", () => {
         await waitFor(() => expect(assign).toHaveBeenCalledWith("https://sandbox.example/authorize"));
     });
 
+    it("explains that a direct portal visit starts a fresh standalone launch", async () => {
+        render(<SmartImportPage />);
+
+        expect(await screen.findByText(/no ehr launch context is active/i)).toBeInTheDocument();
+        expect(screen.getByText(/does not reuse a previously selected sandbox patient or encounter/i)).toBeInTheDocument();
+    });
+
     it("makes an idempotent import outcome explicit", async () => {
         setSearchParams("ticket=single-use-ticket-value-that-is-long-enough");
         post.mockResolvedValue({

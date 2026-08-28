@@ -26,7 +26,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This currently applies migrations `001` through `025`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), and the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, and adherence statistics (`021`–`025`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
+This currently applies migrations `001` through `028`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), and the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, and clinician review reads (`021`–`028`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
 
 ## Configure SMART staging
 
