@@ -12,7 +12,12 @@ import pytest
 from app.core.exceptions import ValidationError
 from app.main import app
 from app.models.auth import CurrentUser
-from app.routers.smart import _clinician_dep, _fhir_audit_export_service, _service
+from app.routers.smart import (
+    _clinician_dep,
+    _fhir_audit_export_service,
+    _fhir_import_review_service,
+    _service,
+)
 
 
 @pytest.fixture
@@ -35,6 +40,14 @@ def clinician() -> CurrentUser:
 def fhir_audit_export_service() -> MagicMock:
     service = MagicMock()
     app.dependency_overrides[_fhir_audit_export_service] = lambda: service
+    yield service
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fhir_import_review_service() -> MagicMock:
+    service = MagicMock()
+    app.dependency_overrides[_fhir_import_review_service] = lambda: service
     yield service
     app.dependency_overrides.clear()
 
@@ -140,5 +153,64 @@ def test_fact_fhir_audit_requires_assignment_and_returns_generated_resources(
         clinician_id=clinician.id, patient_id=patient_id
     )
     fhir_audit_export_service.export_for_fact.assert_called_once_with(
+        fact_id=fact_id, patient_id=patient_id
+    )
+
+
+def test_fact_review_and_source_routes_require_assignment_and_keep_raw_source_explicit(
+    client, smart_service, fhir_import_review_service, clinician
+) -> None:
+    patient_id = uuid4()
+    fact_id = uuid4()
+    fhir_import_review_service.list_facts.return_value = {
+        "patient_id": str(patient_id),
+        "review_state": "pending_review",
+        "facts": [
+            {
+                "id": str(fact_id),
+                "patient_id": str(patient_id),
+                "fact_type": "medication",
+                "subject_type": "medication",
+                "value": {"name": "Metformin"},
+                "confidence_band": "unknown",
+                "review_state": "pending_review",
+                "created_at": "2026-08-28T00:00:00Z",
+                "updated_at": "2026-08-28T00:00:00Z",
+                "source": {
+                    "issuer": "https://sandbox.example/fhir",
+                    "resource_type": "MedicationRequest",
+                    "mapping_warnings": [],
+                    "validation_errors": [],
+                },
+            }
+        ],
+        "total_count": 1,
+        "state_counts": {"pending_review": 1},
+        "fact_type_counts": {"medication": 1},
+        "offset": 0,
+        "limit": 25,
+    }
+    fhir_import_review_service.get_source.return_value = {
+        "issuer": "https://sandbox.example/fhir",
+        "resource_type": "MedicationRequest",
+        "mapping_warnings": [],
+        "validation_errors": [],
+        "raw_resource": {"resourceType": "MedicationRequest", "id": "med-1"},
+    }
+
+    review_response = client.get(f"/api/v1/smart/patients/{patient_id}/facts")
+
+    assert review_response.status_code == 200
+    assert "raw_resource" not in review_response.json()["facts"][0]["source"]
+    fhir_import_review_service.list_facts.assert_called_once()
+    smart_service.ensure_assignment.assert_called_once_with(
+        clinician_id=clinician.id, patient_id=patient_id
+    )
+
+    source_response = client.get(f"/api/v1/smart/patients/{patient_id}/facts/{fact_id}/source")
+
+    assert source_response.status_code == 200
+    assert source_response.json()["raw_resource"]["id"] == "med-1"
+    fhir_import_review_service.get_source.assert_called_once_with(
         fact_id=fact_id, patient_id=patient_id
     )

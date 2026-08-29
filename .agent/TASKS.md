@@ -221,6 +221,7 @@ records as pending candidates; `list_approved` is the clinical-display query. Se
 - [/] Validate supported resource shape before persistence; identifier-quality and export validation remain deferred.
 - [x] Handle missing, partial, duplicate, and unsupported resources safely.
 - [/] Add import fixture tests; FHIR export and round-trip fixtures remain deferred.
+- [x] Make SMART candidate review clinically legible: enrich mapped summaries, filter by mapped type, keep source-only candidates distinct from local facts, and replace whole-record JSON correction with field-level editing while preserving the review-only boundary.
 
 **Plan:** `.agent/specs/int-002-003-interoperability-plan.md` defines the mapping
 registry, import-envelope persistence, duplicate rules, and fixture evidence. Exact R4
@@ -234,7 +235,7 @@ uses the compatible R4B model.
 - [/] Validate PKCE, OAuth state, issuer, and expiry; token audience/scope conformance awaits a live sandbox registration.
 - [/] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection; direct testing uses the SMART Health IT simulator-specific standalone issuer, while live sandbox verification remains.
 - [/] Import the supported patient bundle; live public-sandbox verification awaits the replacement Supabase project and Cloud Run callback.
-- [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. Lineage inspection is exposed by API.
+- [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. The patient-level SMART imports tab now exposes mapped candidate fields, explicit original-resource inspection, and review actions; live acceptance remains.
 - [/] Repair and verify the least-privilege backend read set for live clinician dashboard and patient-review routes; staging application remains required.
 - [/] Replace the clinician portal's mock roster with live care-team-authorized dashboard data and make SMART authorization progress explicit.
 - [x] Document sandbox setup and reproducible conformance test.

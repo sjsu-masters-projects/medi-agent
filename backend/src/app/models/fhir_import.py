@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
+from app.models.clinical_fact import ClinicalFactRead, ClinicalFactReviewState
+
 
 class FhirImportStatus(StrEnum):
     PENDING = "pending"
@@ -70,6 +72,56 @@ class FhirImportResourceRead(BaseModel):
     validation_errors: list[str] = Field(default_factory=list)
     mapping_warnings: list[str] = Field(default_factory=list)
     created_at: datetime
+
+
+class FhirReviewSourceRead(BaseModel):
+    """Minimal, clinician-facing lineage for one imported candidate fact."""
+
+    issuer: str
+    resource_type: str
+    external_resource_id: str | None = None
+    version_id: str | None = None
+    mapping_warnings: list[str] = Field(default_factory=list)
+    validation_errors: list[str] = Field(default_factory=list)
+
+
+class FhirReviewSourceDetailRead(FhirReviewSourceRead):
+    """The original synthetic FHIR envelope for clinician source inspection."""
+
+    raw_resource: dict[str, Any]
+
+
+class FhirReviewFactRead(ClinicalFactRead):
+    """A pending or reviewed fact with the source envelope that produced it."""
+
+    source: FhirReviewSourceRead | None = None
+
+
+class FhirPatientReviewRead(BaseModel):
+    """A paginated, clinician-authorized SMART import review view."""
+
+    patient_id: UUID
+    review_state: ClinicalFactReviewState
+    fact_type: str | None = None
+    facts: list[FhirReviewFactRead] = Field(default_factory=list)
+    total_count: int = 0
+    state_counts: dict[str, int] = Field(default_factory=dict)
+    fact_type_counts: dict[str, int] = Field(default_factory=dict)
+    offset: int = 0
+    limit: int = 25
+
+
+class ClinicalFactReviewRequest(BaseModel):
+    """A clinician's explicit review decision without any clinical-value mutation."""
+
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class ClinicalFactCorrectionRequest(BaseModel):
+    """A corrected candidate value and the reason for the correction."""
+
+    value: dict[str, Any] = Field(default_factory=dict)
+    note: str = Field(min_length=1, max_length=2000)
 
 
 class SmartHandoffRedeemRequest(BaseModel):

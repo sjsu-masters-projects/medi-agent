@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -11,6 +11,7 @@ import {
     HiOutlineDocumentText,
     HiOutlineExclamationTriangle,
     HiOutlineIdentification,
+    HiOutlineLink,
     HiOutlineSparkles,
 } from "react-icons/hi2";
 import { Card, Skeleton } from "@/components/ui";
@@ -19,6 +20,7 @@ import { AdherenceChart } from "@/components/features/adherence-chart";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
+import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import {
     loadPatientDeepDive,
     triggerSoapNote,
@@ -28,10 +30,11 @@ import type { AppDispatch, RootState } from "@/store/store";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type TabId = "profile" | "adherence" | "symptoms" | "chat" | "soap" | "documents";
+type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents";
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentification }> = [
     { id: "profile", label: "Profile", icon: HiOutlineIdentification },
+    { id: "imports", label: "SMART imports", icon: HiOutlineLink },
     { id: "adherence", label: "Adherence", icon: HiOutlineBeaker },
     { id: "symptoms", label: "Symptoms", icon: HiOutlineExclamationTriangle },
     { id: "chat", label: "Chat Transcript", icon: HiOutlineChatBubbleLeftRight },
@@ -76,6 +79,11 @@ function PatientDeepDivePageContent() {
     const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
     const patientId = params["id"] as string;
+    const hasMounted = useSyncExternalStore(
+        () => () => undefined,
+        () => true,
+        () => false,
+    );
     const [activeTab, setActiveTab] = useState<TabId>(() => {
         const requestedTab = searchParams.get("tab");
         return isTabId(requestedTab) ? requestedTab : "profile";
@@ -98,7 +106,9 @@ function PatientDeepDivePageContent() {
         void dispatch(triggerSoapNote({ patientId, lookbackDays: 30 }));
     }
 
-    if (loadingProfile) {
+    // Patient detail includes charts and locale-aware dates. Keep the server and
+    // initial client render identical; render the interactive data only after mount.
+    if (!hasMounted || loadingProfile) {
         return (
             <div className="mx-auto max-w-6xl space-y-6">
                 <Skeleton className="h-10 w-48" />
@@ -232,6 +242,8 @@ function PatientDeepDivePageContent() {
 
             {/* Tab panels */}
             <Card padding="lg">
+                {activeTab === "imports" && <SmartImportReviewPanel patientId={patientId} />}
+
                 {/* ── Profile ── */}
                 {activeTab === "profile" && (
                     <div

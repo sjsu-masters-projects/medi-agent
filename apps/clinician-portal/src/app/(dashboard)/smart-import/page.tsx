@@ -186,8 +186,9 @@ export default function SmartImportPage() {
                     <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                         <p className="font-medium text-slate-900">SMART Health IT standalone sandbox</p>
                         <p className="mt-1">
-                            This opens the sandbox patient picker. Choose one external synthetic patient there;
-                            the selected local patient remains the review target.
+                            No EHR launch context is active. This starts a fresh session and does not reuse a
+                            previously selected sandbox patient or encounter. Choose one external synthetic
+                            patient in the sandbox; the selected local patient remains the review target.
                         </p>
                     </div>
                 )}
@@ -241,7 +242,7 @@ export default function SmartImportPage() {
                             </li>
                         ))}
                     </ul>
-                    <Button variant="secondary" onClick={() => router.push(`/patients/${handoff.import_record.patient_id}`)}>
+                    <Button variant="secondary" onClick={() => router.push(`/patients/${handoff.import_record.patient_id}?tab=imports`)}>
                         Open patient review
                     </Button>
                 </Card>
