@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from supabase import Client
 
 from app.config import settings
-from app.core.exceptions import ValidationError
+from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
@@ -62,7 +62,15 @@ async def smart_callback(
     error: str | None = Query(default=None, max_length=500),
     service: SmartLaunchService = Depends(_service),
 ) -> RedirectResponse:
-    result = service.handle_callback(state=state, code=code, error=error)
+    try:
+        result = service.handle_callback(state=state, code=code, error=error)
+    except (AuthorizationError, ExternalServiceError, ValidationError):
+        # Do not strand the clinician on an API JSON error or reflect a provider
+        # error description into the portal. The next attempt must start fresh.
+        return RedirectResponse(
+            url=f"{settings.clinician_portal_url.rstrip('/')}/smart-import?smart_error=authorization_failed",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
     redirect_url = (
         f"{settings.clinician_portal_url.rstrip('/')}/smart-import?ticket={result['ticket']}"
     )

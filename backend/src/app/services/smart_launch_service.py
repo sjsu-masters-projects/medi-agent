@@ -89,13 +89,15 @@ class SmartLaunchService:
 
     def handle_callback(self, *, state: str, code: str | None, error: str | None) -> dict[str, Any]:
         """Consume one callback, fetch contextual resources, and mint a local handoff."""
-        if error:
-            raise ValidationError(f"SMART authorization failed: {error}")
-        if not code:
-            raise ValidationError("SMART callback is missing authorization code")
         session = self._load_active_session(state)
-        verifier = self._decrypt_verifier(str(session["pkce_verifier_ciphertext"]))
         try:
+            # A provider error is still a callback for this state. Consume it so
+            # it cannot be replayed after a failed authorization attempt.
+            if error:
+                raise ValidationError(f"SMART authorization failed: {error}")
+            if not code:
+                raise ValidationError("SMART callback is missing authorization code")
+            verifier = self._decrypt_verifier(str(session["pkce_verifier_ciphertext"]))
             token = self._exchange_code(session=session, code=code, verifier=verifier)
             resources, context = self._fetch_contextual_resources(session=session, token=token)
             import_record = self._create_import(session=session, context=context)
@@ -423,6 +425,8 @@ class SmartLaunchService:
             for value in settings.smart_allowed_issuers.split(",")
             if value.strip()
         }
+        if settings.smart_standalone_issuer.strip():
+            allowed.add(settings.smart_standalone_issuer.strip().rstrip("/"))
         if normalized not in allowed:
             raise ValidationError("SMART issuer is not enabled for this environment")
         return normalized

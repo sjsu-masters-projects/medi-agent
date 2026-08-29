@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.exceptions import ValidationError
 from app.main import app
 from app.models.auth import CurrentUser
 from app.routers.smart import _clinician_dep, _fhir_audit_export_service, _service
@@ -104,6 +105,21 @@ def test_callback_redirects_with_one_time_handoff_only(client, smart_service) ->
     assert response.status_code == 303
     assert "ticket=" + "x" * 48 in response.headers["location"]
     assert "authorization-code" not in response.headers["location"]
+
+
+def test_callback_returns_a_safe_portal_error_for_provider_failure(client, smart_service) -> None:
+    smart_service.handle_callback.side_effect = ValidationError(
+        "SMART authorization failed: invalid_request"
+    )
+
+    response = client.get(
+        "/api/v1/smart/callback?state=" + "s" * 32 + "&error=invalid_request",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("/smart-import?smart_error=authorization_failed")
+    assert "invalid_request" not in response.headers["location"]
 
 
 def test_fact_fhir_audit_requires_assignment_and_returns_generated_resources(

@@ -232,7 +232,7 @@ uses the compatible R4B model.
 - [x] Implement `/api/v1/smart/launch` and `/api/v1/smart/callback`.
 - [/] Grant the trusted backend only the SMART session, import, provenance, and handoff operations it needs; apply and verify the migration in staging.
 - [/] Validate PKCE, OAuth state, issuer, and expiry; token audience/scope conformance awaits a live sandbox registration.
-- [/] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection; standalone patient/encounter context handling is implemented, while live sandbox verification remains.
+- [/] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection; direct testing uses the SMART Health IT simulator-specific standalone issuer, while live sandbox verification remains.
 - [/] Import the supported patient bundle; live public-sandbox verification awaits the replacement Supabase project and Cloud Run callback.
 - [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. Lineage inspection is exposed by API.
 - [/] Repair and verify the least-privilege backend read set for live clinician dashboard and patient-review routes; staging application remains required.
