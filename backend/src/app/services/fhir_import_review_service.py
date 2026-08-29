@@ -24,42 +24,72 @@ class FhirImportReviewService:
         *,
         patient_id: UUID,
         review_state: ClinicalFactReviewState,
+        fact_type: str | None,
         offset: int,
         limit: int,
     ) -> dict[str, Any]:
-        """Return one review-state page plus small, patient-scoped review counts."""
+        """Return one page of FHIR-backed candidates and their review counts.
+
+        ``clinical_facts`` is shared by document extraction and SMART import.
+        This projection deliberately includes only facts with a provenance link to
+        an imported FHIR envelope, so a clinician never mistakes another source
+        for the external record being reconciled.
+        """
         metadata_result = (
             self.db.table("clinical_facts")
-            .select("fact_type, review_state")
+            .select("id, fact_type, review_state")
             .eq("patient_id", str(patient_id))
             .execute()
         )
         metadata = cast(list[dict[str, Any]], metadata_result.data or [])
+        sources = self._sources_for_facts(metadata)
         visible_metadata = [
             row
             for row in metadata
             if row.get("review_state") != ClinicalFactReviewState.DELETED.value
+            and str(row.get("id")) in sources
         ]
         state_counts = Counter(str(row.get("review_state", "unknown")) for row in visible_metadata)
         fact_type_counts = Counter(str(row.get("fact_type", "unknown")) for row in visible_metadata)
+        eligible_ids = [
+            str(row["id"])
+            for row in visible_metadata
+            if row.get("review_state") == review_state.value
+            and (fact_type is None or row.get("fact_type") == fact_type)
+            and row.get("id")
+        ]
+
+        if not eligible_ids:
+            return {
+                "patient_id": str(patient_id),
+                "review_state": review_state.value,
+                "fact_type": fact_type,
+                "facts": [],
+                "total_count": 0,
+                "state_counts": dict(state_counts),
+                "fact_type_counts": dict(fact_type_counts),
+                "offset": offset,
+                "limit": limit,
+            }
 
         page_result = (
             self.db.table("clinical_facts")
             .select("*")
             .eq("patient_id", str(patient_id))
             .eq("review_state", review_state.value)
+            .in_("id", eligible_ids)
             .order("created_at", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
         )
         facts = cast(list[dict[str, Any]], page_result.data or [])
-        sources = self._sources_for_facts(facts)
 
         return {
             "patient_id": str(patient_id),
             "review_state": review_state.value,
+            "fact_type": fact_type,
             "facts": [{**fact, "source": sources.get(str(fact.get("id")))} for fact in facts],
-            "total_count": state_counts.get(review_state.value, 0),
+            "total_count": len(eligible_ids),
             "state_counts": dict(state_counts),
             "fact_type_counts": dict(fact_type_counts),
             "offset": offset,

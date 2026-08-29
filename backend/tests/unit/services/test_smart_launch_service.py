@@ -117,3 +117,29 @@ def test_standalone_launch_uses_patient_and_encounter_context_scopes(monkeypatch
     assert SmartLaunchService._requested_scopes(None) == (
         "launch/patient launch/encounter patient/Patient.read patient/Condition.read"
     )
+
+
+def test_standalone_sandbox_issuer_is_allowed_separately_from_ehr_issuers(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "smart_allowed_issuers", "https://ehr.example/fhir")
+    monkeypatch.setattr(
+        settings, "smart_standalone_issuer", "https://sandbox.example/standalone/fhir"
+    )
+
+    assert (
+        SmartLaunchService._validate_issuer("https://sandbox.example/standalone/fhir/")
+        == "https://sandbox.example/standalone/fhir"
+    )
+
+
+def test_provider_error_consumes_the_bound_launch_state(monkeypatch) -> None:
+    db = MagicMock()
+    service = SmartLaunchService(db)
+    session = {"id": str(uuid4()), "pkce_verifier_ciphertext": "not-used"}
+    monkeypatch.setattr(service, "_load_active_session", lambda _: session)
+
+    with pytest.raises(ValidationError, match="invalid_request"):
+        service.handle_callback(state="state", code=None, error="invalid_request")
+
+    db.table.assert_called_with("smart_launch_sessions")
+    update_payload = db.table.return_value.update.call_args.args[0]
+    assert isinstance(update_payload["consumed_at"], str)

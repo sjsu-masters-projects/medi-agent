@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiOutlineArrowPath } from "react-icons/hi2";
 import { useSelector } from "react-redux";
-import { Button, Card, EmptyState, Input } from "@/components/ui";
+import { Button, Card, EmptyState } from "@/components/ui";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 
@@ -37,7 +37,7 @@ interface HandoffResponse {
     resources: ImportResource[];
 }
 
-const DEFAULT_ISSUER = "https://launch.smarthealthit.org/v/r4/fhir";
+const STANDALONE_SANDBOX_ISSUER = "https://launch.smarthealthit.org/v/r4/sim/eyJsYXVuY2hfdHlwZSI6InBhdGllbnQtc3RhbmRhbG9uZSJ9/fhir";
 
 export default function SmartImportPage() {
     const router = useRouter();
@@ -45,7 +45,7 @@ export default function SmartImportPage() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [patients, setPatients] = useState<AssignedPatient[]>([]);
     const [patientId, setPatientId] = useState("");
-    const [issuer, setIssuer] = useState(DEFAULT_ISSUER);
+    const [issuer, setIssuer] = useState(STANDALONE_SANDBOX_ISSUER);
     const [loading, setLoading] = useState(true);
     const [starting, setStarting] = useState(false);
     const [launchStatus, setLaunchStatus] = useState<string | null>(null);
@@ -55,6 +55,7 @@ export default function SmartImportPage() {
     const ehrLaunchContext = searchParams?.get("launch") ?? null;
     const hasEhrLaunch = Boolean(ehrIssuer && ehrLaunchContext);
     const hasIncompleteEhrLaunch = Boolean(ehrIssuer || ehrLaunchContext) && !hasEhrLaunch;
+    const smartError = searchParams?.get("smart_error");
 
     const selectedPatient = useMemo(
         () => patients.find((patient) => patient.id === patientId),
@@ -81,8 +82,16 @@ export default function SmartImportPage() {
     useEffect(() => {
         if (ehrIssuer) {
             setIssuer(ehrIssuer);
+        } else {
+            setIssuer(STANDALONE_SANDBOX_ISSUER);
         }
     }, [ehrIssuer]);
+
+    useEffect(() => {
+        if (!smartError) return;
+        setError("The SMART sandbox did not authorize this import. Start a fresh launch and try again.");
+        router.replace("/smart-import");
+    }, [router, smartError]);
 
     useEffect(() => {
         const ticket = searchParams?.get("ticket");
@@ -174,20 +183,14 @@ export default function SmartImportPage() {
                         control whether this sandbox import can begin.
                     </div>
                 ) : (
-                    <>
-                        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                            No EHR launch context is active. This starts a fresh SMART sandbox session and does
-                            not reuse a previously selected sandbox patient or encounter.
-                        </div>
-                        <Input
-                            id="smart-issuer"
-                            label="SMART issuer"
-                            value={issuer}
-                            disabled={starting}
-                            onChange={(event) => setIssuer(event.target.value)}
-                            autoComplete="off"
-                        />
-                    </>
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        <p className="font-medium text-slate-900">SMART Health IT standalone sandbox</p>
+                        <p className="mt-1">
+                            No EHR launch context is active. This starts a fresh session and does not reuse a
+                            previously selected sandbox patient or encounter. Choose one external synthetic
+                            patient in the sandbox; the selected local patient remains the review target.
+                        </p>
+                    </div>
                 )}
                 {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
                 {launchStatus && (

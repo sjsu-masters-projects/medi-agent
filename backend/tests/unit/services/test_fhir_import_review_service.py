@@ -12,6 +12,7 @@ PATIENT_ID = UUID("00000000-0000-0000-0000-000000000111")
 PENDING_FACT_ID = "00000000-0000-0000-0000-000000000222"
 APPROVED_FACT_ID = "00000000-0000-0000-0000-000000000333"
 DELETED_FACT_ID = "00000000-0000-0000-0000-000000000444"
+NON_FHIR_FACT_ID = "00000000-0000-0000-0000-000000000777"
 PROVENANCE_ID = "00000000-0000-0000-0000-000000000555"
 RESOURCE_ID = "00000000-0000-0000-0000-000000000666"
 
@@ -96,9 +97,11 @@ def database() -> Database:
                 fact(PENDING_FACT_ID, "pending_review"),
                 fact(APPROVED_FACT_ID, "approved", "condition"),
                 fact(DELETED_FACT_ID, "deleted", "observation"),
+                fact(NON_FHIR_FACT_ID, "pending_review", "document_reference"),
             ],
             "evidence_citations": [
                 {"fact_id": PENDING_FACT_ID, "provenance_id": PROVENANCE_ID},
+                {"fact_id": APPROVED_FACT_ID, "provenance_id": PROVENANCE_ID},
             ],
             "source_provenances": [
                 {
@@ -131,6 +134,7 @@ def test_review_projection_shows_candidate_fields_and_source_metadata_without_ra
     review = service.list_facts(
         patient_id=PATIENT_ID,
         review_state=ClinicalFactReviewState.PENDING_REVIEW,
+        fact_type=None,
         offset=0,
         limit=25,
     )
@@ -150,6 +154,22 @@ def test_review_projection_shows_candidate_fields_and_source_metadata_without_ra
     assert "raw_resource" not in review["facts"][0]["source"]
 
 
+def test_review_projection_filters_by_mapped_type_and_excludes_non_fhir_candidates() -> None:
+    service = FhirImportReviewService(database())  # type: ignore[arg-type]
+
+    review = service.list_facts(
+        patient_id=PATIENT_ID,
+        review_state=ClinicalFactReviewState.PENDING_REVIEW,
+        fact_type="condition",
+        offset=0,
+        limit=25,
+    )
+
+    assert review["total_count"] == 0
+    assert review["state_counts"] == {"pending_review": 1, "approved": 1}
+    assert review["fact_type_counts"] == {"medication": 1, "condition": 1}
+
+
 def test_original_resource_is_available_only_from_the_explicit_source_read() -> None:
     service = FhirImportReviewService(database())  # type: ignore[arg-type]
 
@@ -157,5 +177,5 @@ def test_original_resource_is_available_only_from_the_explicit_source_read() -> 
 
     assert source is not None
     assert source["raw_resource"] == {"resourceType": "MedicationRequest", "id": "med-123"}
-    assert service.get_source(fact_id=UUID(APPROVED_FACT_ID), patient_id=PATIENT_ID) is None
+    assert service.get_source(fact_id=UUID(NON_FHIR_FACT_ID), patient_id=PATIENT_ID) is None
     assert service.get_source(fact_id=UUID(PENDING_FACT_ID), patient_id=UUID(int=999)) is None

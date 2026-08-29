@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
+import re
 from importlib import import_module
 from typing import Any, cast
 from uuid import UUID
@@ -253,7 +255,7 @@ class FhirImportService:
             return {
                 "fact_type": "patient_demographics",
                 "value": {
-                    "name": name,
+                    "name": FhirImportService._human_name(name),
                     "birthDate": resource.get("birthDate"),
                     "gender": resource.get("gender"),
                 },
@@ -262,8 +264,8 @@ class FhirImportService:
             return {
                 "fact_type": "encounter",
                 "value": {
-                    "class": resource.get("class"),
-                    "type": resource.get("type", []),
+                    "class": FhirImportService._code_text(resource.get("class")),
+                    "type": FhirImportService._code_texts(resource.get("type")),
                     "period": resource.get("period", {}),
                     "status": resource.get("status"),
                 },
@@ -273,8 +275,12 @@ class FhirImportService:
                 "fact_type": "condition",
                 "value": {
                     "name": code,
-                    "clinical_status": resource.get("clinicalStatus"),
+                    "clinical_status": FhirImportService._code_text(resource.get("clinicalStatus")),
+                    "verification_status": FhirImportService._code_text(
+                        resource.get("verificationStatus")
+                    ),
                     "onset": resource.get("onsetDateTime") or resource.get("onsetPeriod"),
+                    "recorded": resource.get("recordedDate"),
                 },
             }
         if resource_type == "AllergyIntolerance":
@@ -282,8 +288,9 @@ class FhirImportService:
                 "fact_type": "allergy",
                 "value": {
                     "allergen": code,
-                    "clinical_status": resource.get("clinicalStatus"),
-                    "reactions": resource.get("reaction", []),
+                    "clinical_status": FhirImportService._code_text(resource.get("clinicalStatus")),
+                    "criticality": resource.get("criticality"),
+                    "reactions": FhirImportService._reaction_summaries(resource.get("reaction")),
                 },
             }
         if resource_type in {"MedicationRequest", "MedicationStatement"}:
@@ -297,7 +304,14 @@ class FhirImportService:
                 "value": {
                     "name": FhirImportService._code_text(medication),
                     "status": resource.get("status"),
-                    "dosage": resource.get("dosageInstruction") or resource.get("dosage", []),
+                    "intent": resource.get("intent"),
+                    "dosage": FhirImportService._dosage_summary(
+                        resource.get("dosageInstruction") or resource.get("dosage")
+                    ),
+                    "authored": resource.get("authoredOn")
+                    or resource.get("dateAsserted")
+                    or resource.get("effectiveDateTime")
+                    or resource.get("effectivePeriod"),
                 },
             }
         if resource_type == "Observation":
@@ -309,6 +323,10 @@ class FhirImportService:
                     "effective": resource.get("effectiveDateTime")
                     or resource.get("effectivePeriod"),
                     "status": resource.get("status"),
+                    "interpretation": FhirImportService._code_texts(resource.get("interpretation")),
+                    "reference_range": FhirImportService._reference_range_summary(
+                        resource.get("referenceRange")
+                    ),
                 },
             }
         if resource_type == "DiagnosticReport":
@@ -318,6 +336,12 @@ class FhirImportService:
                     "code": code,
                     "conclusion": resource.get("conclusion"),
                     "status": resource.get("status"),
+                    "effective": resource.get("effectiveDateTime")
+                    or resource.get("effectivePeriod"),
+                    "issued": resource.get("issued"),
+                    "result_count": len(resource.get("result", []))
+                    if isinstance(resource.get("result"), list)
+                    else None,
                 },
             }
         if resource_type == "Procedure":
@@ -328,16 +352,23 @@ class FhirImportService:
                     "status": resource.get("status"),
                     "performed": resource.get("performedDateTime")
                     or resource.get("performedPeriod"),
+                    "reason": FhirImportService._code_texts(resource.get("reasonCode")),
+                    "body_site": FhirImportService._code_texts(resource.get("bodySite")),
                 },
             }
         if resource_type == "CarePlan":
             return {
                 "fact_type": "care_plan",
                 "value": {
-                    "title": resource.get("title"),
-                    "description": resource.get("description"),
+                    "title": resource.get("title")
+                    or FhirImportService._code_text((resource.get("category") or [{}])[0]),
+                    "description": resource.get("description")
+                    or FhirImportService._narrative_text(resource.get("text")),
                     "status": resource.get("status"),
                     "intent": resource.get("intent"),
+                    "period": resource.get("period"),
+                    "activities": FhirImportService._care_plan_activities(resource.get("activity")),
+                    "addresses": FhirImportService._references(resource.get("addresses")),
                 },
             }
         if resource_type == "DocumentReference":
@@ -348,6 +379,10 @@ class FhirImportService:
                     "description": resource.get("description"),
                     "status": resource.get("status"),
                     "date": resource.get("date"),
+                    "authors": FhirImportService._references(resource.get("author")),
+                    "content_types": FhirImportService._document_content_types(
+                        resource.get("content")
+                    ),
                 },
             }
         return None
@@ -357,19 +392,178 @@ class FhirImportService:
         if not isinstance(value, dict):
             return None
         text = value.get("text")
-        if isinstance(text, str):
+        if isinstance(text, str) and text.strip():
             return text
+        display = value.get("display")
+        if isinstance(display, str) and display.strip():
+            return display
+        code = value.get("code")
+        if isinstance(code, str) and code.strip():
+            return code
         coding = value.get("coding")
         if isinstance(coding, list) and coding and isinstance(coding[0], dict):
             return cast(str | None, coding[0].get("display") or coding[0].get("code"))
         return None
 
     @staticmethod
+    def _code_texts(value: Any) -> list[str]:
+        """Return readable text for one or more CodeableConcept/Coding values."""
+        values = value if isinstance(value, list) else [value]
+        return [text for item in values if (text := FhirImportService._code_text(item))]
+
+    @staticmethod
+    def _human_name(value: Any) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        parts = [
+            *value.get("prefix", []),
+            *value.get("given", []),
+            value.get("family"),
+            *value.get("suffix", []),
+        ]
+        readable = [part.strip() for part in parts if isinstance(part, str) and part.strip()]
+        if readable:
+            return " ".join(readable)
+        text = value.get("text")
+        return text if isinstance(text, str) and text.strip() else None
+
+    @staticmethod
+    def _references(value: Any) -> list[str]:
+        values = value if isinstance(value, list) else [value]
+        result: list[str] = []
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            reference = item.get("display") or item.get("reference")
+            if isinstance(reference, str) and reference:
+                result.append(reference)
+        return result
+
+    @staticmethod
+    def _reaction_summaries(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        summaries: list[str] = []
+        for reaction in value:
+            if not isinstance(reaction, dict):
+                continue
+            manifestations = FhirImportService._code_texts(reaction.get("manifestation"))
+            severity = reaction.get("severity")
+            label = ", ".join(manifestations) or "Reaction recorded"
+            summaries.append(f"{label} ({severity})" if isinstance(severity, str) else label)
+        return summaries
+
+    @staticmethod
+    def _dosage_summary(value: Any) -> list[str]:
+        values = value if isinstance(value, list) else [value]
+        summaries: list[str] = []
+        for dosage in values:
+            if not isinstance(dosage, dict):
+                continue
+            text = dosage.get("text")
+            if isinstance(text, str) and text.strip():
+                summaries.append(text.strip())
+                continue
+            timing = dosage.get("timing")
+            dose_and_rate = dosage.get("doseAndRate")
+            dose = None
+            if (
+                isinstance(dose_and_rate, list)
+                and dose_and_rate
+                and isinstance(dose_and_rate[0], dict)
+            ):
+                quantity = dose_and_rate[0].get("doseQuantity")
+                if isinstance(quantity, dict):
+                    dose = FhirImportService._quantity_text(quantity)
+            frequency = None
+            if isinstance(timing, dict) and isinstance(timing.get("code"), dict):
+                frequency = FhirImportService._code_text(timing.get("code"))
+            route = FhirImportService._code_text(dosage.get("route"))
+            summary = " ".join(part for part in [dose, frequency, route] if part)
+            if summary:
+                summaries.append(summary)
+        return summaries
+
+    @staticmethod
+    def _quantity_text(value: dict[str, Any]) -> str | None:
+        number = value.get("value")
+        unit = value.get("unit") or value.get("code")
+        if number is None:
+            return None
+        return " ".join(str(part) for part in (number, unit) if part not in (None, ""))
+
+    @staticmethod
     def _observation_value(resource: dict[str, Any]) -> Any:
         for key, value in resource.items():
             if key.startswith("value"):
+                if key == "valueQuantity" and isinstance(value, dict):
+                    return FhirImportService._quantity_text(value)
+                if key == "valueCodeableConcept":
+                    return FhirImportService._code_text(value)
                 return value
         return None
+
+    @staticmethod
+    def _reference_range_summary(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        ranges: list[str] = []
+        for reference_range in value:
+            if not isinstance(reference_range, dict):
+                continue
+            low = reference_range.get("low")
+            high = reference_range.get("high")
+            text = reference_range.get("text")
+            if isinstance(text, str) and text:
+                ranges.append(text)
+                continue
+            parts = [
+                FhirImportService._quantity_text(item)
+                for item in (low, high)
+                if isinstance(item, dict)
+            ]
+            readable_parts = [part for part in parts if part]
+            if readable_parts:
+                ranges.append(" to ".join(readable_parts))
+        return ranges
+
+    @staticmethod
+    def _narrative_text(value: Any) -> str | None:
+        if not isinstance(value, dict) or not isinstance(value.get("div"), str):
+            return None
+        text = re.sub(r"<[^>]+>", " ", value["div"])
+        normalized = " ".join(html.unescape(text).split())
+        return normalized or None
+
+    @staticmethod
+    def _care_plan_activities(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        activities: list[str] = []
+        for activity in value:
+            if not isinstance(activity, dict):
+                continue
+            detail = activity.get("detail")
+            if not isinstance(detail, dict):
+                continue
+            label = FhirImportService._code_text(detail.get("code")) or detail.get("description")
+            status = detail.get("status")
+            if isinstance(label, str) and label:
+                activities.append(f"{label} ({status})" if isinstance(status, str) else label)
+        return activities
+
+    @staticmethod
+    def _document_content_types(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        content_types: list[str] = []
+        for content in value:
+            if not isinstance(content, dict):
+                continue
+            attachment = content.get("attachment")
+            if isinstance(attachment, dict) and isinstance(attachment.get("contentType"), str):
+                content_types.append(attachment["contentType"])
+        return content_types
 
     @staticmethod
     def _citation_excerpt(resource: dict[str, Any]) -> str:

@@ -147,3 +147,57 @@ def test_bundle_envelopes_and_entries_are_preserved_for_validation_and_mapping()
 
     assert FhirImportService.expand_bundles([bundle]) == [bundle, medication()]
     assert FhirImportService.validate_resource(medication()) == []
+
+
+def test_care_plan_mapping_uses_category_narrative_and_activities_when_title_is_absent() -> None:
+    mapped = FhirImportService._map_resource(
+        {
+            "resourceType": "CarePlan",
+            "status": "completed",
+            "intent": "order",
+            "category": [{"coding": [{"display": "Fracture care"}]}],
+            "text": {"div": "<div>Care plan for fracture care.<br/>Activities: rest.</div>"},
+            "period": {"start": "2016-01-03", "end": "2016-02-02"},
+            "activity": [
+                {
+                    "detail": {
+                        "code": {"coding": [{"display": "Recommendation to rest"}]},
+                        "status": "completed",
+                    }
+                }
+            ],
+        }
+    )
+
+    assert mapped == {
+        "fact_type": "care_plan",
+        "value": {
+            "title": "Fracture care",
+            "description": "Care plan for fracture care. Activities: rest.",
+            "status": "completed",
+            "intent": "order",
+            "period": {"start": "2016-01-03", "end": "2016-02-02"},
+            "activities": ["Recommendation to rest (completed)"],
+            "addresses": [],
+        },
+    }
+
+
+def test_observation_mapping_keeps_quantity_interpretation_and_reference_range_readable() -> None:
+    mapped = FhirImportService._map_resource(
+        {
+            "resourceType": "Observation",
+            "status": "final",
+            "code": {"coding": [{"display": "Hemoglobin"}]},
+            "valueQuantity": {"value": 12.4, "unit": "g/dL"},
+            "interpretation": [{"coding": [{"display": "Normal"}]}],
+            "referenceRange": [
+                {"low": {"value": 12, "unit": "g/dL"}, "high": {"value": 16, "unit": "g/dL"}}
+            ],
+        }
+    )
+
+    assert mapped is not None
+    assert mapped["value"]["value"] == "12.4 g/dL"
+    assert mapped["value"]["interpretation"] == ["Normal"]
+    assert mapped["value"]["reference_range"] == ["12 g/dL to 16 g/dL"]

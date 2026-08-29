@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from supabase import Client
 
 from app.config import settings
-from app.core.exceptions import ValidationError
+from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
@@ -72,7 +72,15 @@ async def smart_callback(
     error: str | None = Query(default=None, max_length=500),
     service: SmartLaunchService = Depends(_service),
 ) -> RedirectResponse:
-    result = service.handle_callback(state=state, code=code, error=error)
+    try:
+        result = service.handle_callback(state=state, code=code, error=error)
+    except (AuthorizationError, ExternalServiceError, ValidationError):
+        # Do not strand the clinician on an API JSON error or reflect a provider
+        # error description into the portal. The next attempt must start fresh.
+        return RedirectResponse(
+            url=f"{settings.clinician_portal_url.rstrip('/')}/smart-import?smart_error=authorization_failed",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
     redirect_url = (
         f"{settings.clinician_portal_url.rstrip('/')}/smart-import?ticket={result['ticket']}"
     )
@@ -101,6 +109,7 @@ async def list_imports(
 async def list_pending_facts(
     patient_id: UUID,
     review_state: ClinicalFactReviewState = Query(default=ClinicalFactReviewState.PENDING_REVIEW),
+    fact_type: str | None = Query(default=None, min_length=1, max_length=64),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=50),
     user: CurrentUser = Depends(_clinician_dep),
@@ -112,6 +121,7 @@ async def list_pending_facts(
         review_service.list_facts(
             patient_id=patient_id,
             review_state=review_state,
+            fact_type=fact_type,
             offset=offset,
             limit=limit,
         )

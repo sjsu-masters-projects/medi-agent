@@ -17,8 +17,10 @@ from the existing local profile and shows the following for each candidate:
 
 Approval, correction, and rejection are recorded in the existing clinical-fact
 audit trail. Imported candidates begin with **unknown** clinical confidence:
-structured source fidelity is not a clinical assessment. Approval does not overwrite existing local medications,
-conditions, allergies, or demographics. A correction changes only the pending
+structured source fidelity is not a clinical assessment. Approval does not
+overwrite existing local medications, conditions, allergies, or demographics.
+It marks the external candidate as reviewed and preserves its resource-level
+provenance for later reconciliation. A correction changes only the pending
 candidate and preserves the original resource envelope.
 
 ## Supported R4-compatible resource mappings
@@ -27,18 +29,28 @@ candidate and preserves the original resource envelope.
 | --- | --- | --- | --- |
 | `Patient` | `patient_demographics` | name, birth date, administrative gender | identity match, account creation, local demographic overwrite |
 | `Encounter` | `encounter` | status, class, type, period | billing interpretation or care-team assignment |
-| `Condition` | `condition` | condition name, clinical status, onset | diagnostic certainty beyond the source |
-| `AllergyIntolerance` | `allergy` | allergen, clinical status, reactions | severity if the source does not state it |
-| `MedicationRequest`, `MedicationStatement` | `medication` | medication name, status, dosage instructions | medication reconciliation or an active local prescription |
-| `Observation` | `observation` | code, value, effective time, status | trend or clinical interpretation |
-| `DiagnosticReport` | `diagnostic_report` | report code, conclusion, status | a diagnosis based on report text |
-| `Procedure` | `procedure` | procedure code, status, performed time | outcome or follow-up plan |
-| `CarePlan` | `care_plan` | title, description, status, intent | acceptance as a local plan of care |
-| `DocumentReference` | `document_reference` | type, description, date, status | document download, OCR, or new local document storage |
+| `Condition` | `condition` | condition name, clinical and verification status, onset, recorded date | diagnostic certainty beyond the source |
+| `AllergyIntolerance` | `allergy` | allergen, clinical status, criticality, reactions | severity if the source does not state it |
+| `MedicationRequest`, `MedicationStatement` | `medication` | medication name, status, intent, dosage instructions, authored/effective date | medication reconciliation or an active local prescription |
+| `Observation` | `observation` | code, quantity or coded value, effective time, status, interpretation, reference range | trend or clinical interpretation |
+| `DiagnosticReport` | `diagnostic_report` | report code, conclusion, status, effective and issued times, result count | a diagnosis based on report text |
+| `Procedure` | `procedure` | procedure code, status, performed time, reason, body site | outcome or follow-up plan |
+| `CarePlan` | `care_plan` | title/category, narrative description, status, intent, period, activities, addressed conditions | acceptance as a local plan of care |
+| `DocumentReference` | `document_reference` | type, description, date, status, authors, content types | document download, OCR, or new local document storage |
 
 Unsupported resource types are preserved in the import envelope with a warning
 but do not create a candidate fact. Missing or partial source fields are shown
 as `Not supplied`; the review UI does not manufacture a value.
+
+The review screen can be filtered by mapped candidate type. It uses the
+candidate fields above for clinician-facing review; the **Source** action is
+the only place raw FHIR JSON is shown. Corrections use individual mapped fields
+where possible. Structured fields retain JSON only when preserving that source
+structure is necessary.
+
+FHIR instants in the review screen are rendered in the selected local patient's
+configured IANA timezone (falling back to UTC if it is unavailable). Date-only
+FHIR values stay date-only and are never shifted by timezone conversion.
 
 ## Two valid launch paths
 

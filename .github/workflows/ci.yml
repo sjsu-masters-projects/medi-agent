@@ -24,7 +24,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body = context.payload.pull_request?.body || "";
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const body = pullRequest.body || "";
             const requiredChecks = [
               "I have read `CONTRIBUTING.md` and `.agent/CODING_STANDARDS.md`.",
               "My code follows the architecture in `.agent/ARCHITECTURE.md`.",

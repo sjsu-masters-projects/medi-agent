@@ -38,6 +38,7 @@ SMART_CLIENT_SECRET=<only if the sandbox registration requires one>
 SMART_REDIRECT_URI=https://YOUR_BACKEND/api/v1/smart/callback
 SMART_STATE_ENCRYPTION_KEY=<a Fernet-compatible key generated in the secret store>
 SMART_ALLOWED_ISSUERS=https://launch.smarthealthit.org/v/r4/fhir
+SMART_STANDALONE_ISSUER=https://launch.smarthealthit.org/v/r4/sim/eyJsYXVuY2hfdHlwZSI6InBhdGllbnQtc3RhbmRhbG9uZSJ9/fhir
 # The backend adds `launch` for EHR launch or `launch/patient launch/encounter`
 # for standalone launch. Keep this value to least-privilege resource reads.
 SMART_SCOPES="patient/Patient.read patient/Encounter.read patient/Condition.read patient/AllergyIntolerance.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Observation.read patient/DiagnosticReport.read patient/Procedure.read patient/CarePlan.read patient/DocumentReference.read"
@@ -49,6 +50,11 @@ register the clinician portal's launch route (for example,
 the EHR's `iss` and opaque `launch` handle, then requires local clinician sign-in and local
 care-team/patient selection before the backend begins authorization. Tokens and authorization
 codes remain server-side; the browser receives only a short-lived, single-use review handoff.
+
+The SMART Health IT launcher has two distinct sandbox bases. EHR-initiated testing uses
+`https://launch.smarthealthit.org/v/r4/fhir`; direct portal testing uses the configured
+simulator issuer above. Do not replace the EHR issuer with the simulator issuer: the
+simulator base is what enables its standalone synthetic-patient picker.
 
 ## Verification checklist
 

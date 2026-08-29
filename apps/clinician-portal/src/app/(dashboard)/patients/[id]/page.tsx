@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -79,6 +79,11 @@ function PatientDeepDivePageContent() {
     const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
     const patientId = params["id"] as string;
+    const hasMounted = useSyncExternalStore(
+        () => () => undefined,
+        () => true,
+        () => false,
+    );
     const [activeTab, setActiveTab] = useState<TabId>(() => {
         const requestedTab = searchParams.get("tab");
         return isTabId(requestedTab) ? requestedTab : "profile";
@@ -101,7 +106,9 @@ function PatientDeepDivePageContent() {
         void dispatch(triggerSoapNote({ patientId, lookbackDays: 30 }));
     }
 
-    if (loadingProfile) {
+    // Patient detail includes charts and locale-aware dates. Keep the server and
+    // initial client render identical; render the interactive data only after mount.
+    if (!hasMounted || loadingProfile) {
         return (
             <div className="mx-auto max-w-6xl space-y-6">
                 <Skeleton className="h-10 w-48" />
@@ -235,7 +242,12 @@ function PatientDeepDivePageContent() {
 
             {/* Tab panels */}
             <Card padding="lg">
-                {activeTab === "imports" && <SmartImportReviewPanel patientId={patientId} />}
+                {activeTab === "imports" && (
+                    <SmartImportReviewPanel
+                        patientId={patientId}
+                        patientTimezone={patient.timezone}
+                    />
+                )}
 
                 {/* ── Profile ── */}
                 {activeTab === "profile" && (

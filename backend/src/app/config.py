@@ -83,6 +83,13 @@ class Settings(BaseSettings):
     smart_redirect_uri: str = ""
     smart_state_encryption_key: str = ""
     smart_allowed_issuers: str = "https://launch.smarthealthit.org/v/r4/fhir"
+    # SMART Health IT's launcher uses a simulator-specific issuer for a direct
+    # standalone launch. EHR-initiated launches continue to use the issuer
+    # received from the EHR launch context and must still match the allowlist.
+    smart_standalone_issuer: str = (
+        "https://launch.smarthealthit.org/v/r4/sim/"
+        "eyJsYXVuY2hfdHlwZSI6InBhdGllbnQtc3RhbmRhbG9uZSJ9/fhir"
+    )
     smart_scopes: str = (
         "patient/Patient.read patient/Encounter.read patient/Condition.read "
         "patient/AllergyIntolerance.read patient/MedicationRequest.read "

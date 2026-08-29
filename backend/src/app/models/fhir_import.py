@@ -102,6 +102,7 @@ class FhirPatientReviewRead(BaseModel):
 
     patient_id: UUID
     review_state: ClinicalFactReviewState
+    fact_type: str | None = None
     facts: list[FhirReviewFactRead] = Field(default_factory=list)
     total_count: int = 0
     state_counts: dict[str, int] = Field(default_factory=dict)

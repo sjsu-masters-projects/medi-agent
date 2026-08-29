@@ -104,9 +104,26 @@ describe("SMART import page", () => {
         expect(await screen.findByRole("status")).toHaveTextContent(/preparing the secure smart authorization session/i);
         expect(screen.getByRole("status")).toHaveTextContent(/keep this tab open/i);
         expect(screen.getByRole("button", { name: /opening smart launch/i })).toBeDisabled();
+        expect(post).toHaveBeenCalledWith(
+            "/api/v1/smart/launch",
+            expect.objectContaining({
+                patient_id: "patient-1",
+                issuer: expect.stringContaining("/v/r4/sim/"),
+            }),
+            { token: "local-clinician-token" },
+        );
 
         resolveLaunch?.({ authorization_url: "https://sandbox.example/authorize" });
         await waitFor(() => expect(assign).toHaveBeenCalledWith("https://sandbox.example/authorize"));
+    });
+
+    it("returns a safe portal error after a failed SMART callback", async () => {
+        setSearchParams("smart_error=authorization_failed");
+
+        render(<SmartImportPage />);
+
+        expect(await screen.findByRole("alert")).toHaveTextContent(/did not authorize this import/i);
+        expect(replace).toHaveBeenCalledWith("/smart-import");
     });
 
     it("explains that a direct portal visit starts a fresh standalone launch", async () => {
