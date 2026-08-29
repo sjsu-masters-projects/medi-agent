@@ -32,7 +32,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Chat and triage | Functional foundation | Needs provider abstraction, bilingual qualification, recovery, and full journey tests |
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
-| Interoperability | Not complete | FHIR-aligned only; no genuine SMART launch or CDS Hooks integration |
+| Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
 | CI | First PR run green; main confirmation pending | Run 32280310908 passed all required gates in 5m 46s; three green GitHub runs on `main` are still required |
 | Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
@@ -231,19 +231,30 @@ uses the compatible R4B model.
 ### INT-003 — SMART-on-FHIR sandbox launch
 
 - [x] Implement `/api/v1/smart/launch` and `/api/v1/smart/callback`.
-- [/] Grant the trusted backend only the SMART session, import, provenance, and handoff operations it needs; apply and verify the migration in staging.
+- [x] Grant the trusted backend only the SMART session, import, provenance, and handoff operations it needs; apply and verify the migration in staging.
 - [/] Validate PKCE, OAuth state, issuer, and expiry; token audience/scope conformance awaits a live sandbox registration.
-- [/] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection; direct testing uses the SMART Health IT simulator-specific standalone issuer, while live sandbox verification remains.
-- [/] Import the supported patient bundle; live public-sandbox verification awaits the replacement Supabase project and Cloud Run callback.
-- [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. The patient-level SMART imports tab now exposes mapped candidate fields, explicit original-resource inspection, and review actions; live acceptance remains.
-- [/] Repair and verify the least-privilege backend read set for live clinician dashboard and patient-review routes; staging application remains required.
-- [/] Replace the clinician portal's mock roster with live care-team-authorized dashboard data and make SMART authorization progress explicit.
+- [x] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection.
+- [x] Import the supported patient bundle through the public SMART Health IT sandbox and deployed Cloud Run callback.
+- [x] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. The patient-level SMART imports tab exposes mapped candidate fields, explicit original-resource inspection, and review actions.
+- [x] Repair and verify the least-privilege backend read set for live clinician dashboard and patient-review routes.
+- [x] Replace the clinician portal's mock roster with live care-team-authorized dashboard data and make SMART authorization progress explicit.
 - [x] Document sandbox setup and reproducible conformance test.
 
 **Plan:** Build SMART authorization-code + PKCE handling after the INT-002 import
 registry, then bind the resulting imported-record session to a locally authenticated
 clinician. The plan records sandbox, HTTPS callback, and replacement-Supabase
 prerequisites; none of them block fixture or route-test work.
+
+**Live verification — 2026-08-29:** An EHR-initiated SMART Health IT R4 sandbox
+flow completed against the deployed domains for a locally authorized synthetic clinician
+and Maya Patel. It persisted 214 provenance-backed pending candidates for the selected
+local patient. Mapped-type filtering, explicit raw-source inspection, patient-timezone
+rendering, and review-only messaging passed in the deployed clinician portal. GitHub
+Actions run `33263615712` deployed Cloud Run successfully; both portal deployments and
+all PR checks passed. Approval, rejection, and correction have route and UI test
+coverage but were not clicked live, so no review state was changed. Some standalone
+launcher runs still return the sandbox's `Invalid launch options` response and remain
+open for sandbox-specific diagnosis.
 
 ### SAFE-001 — Approval and audit infrastructure
 
@@ -265,8 +276,8 @@ prerequisites; none of them block fixture or route-test work.
 
 **R1 exit gate**
 
-- [ ] A synthetic patient launches through SMART and imports a validated FHIR bundle.
-- [ ] Every clinical fact can be traced to its source.
+- [x] A synthetic patient launches through SMART and imports a validated FHIR bundle.
+- [x] Every clinical fact can be traced to its source.
 - [ ] Clinical actions cannot bypass approval policy.
 
 ---
@@ -282,6 +293,8 @@ prerequisites; none of them block fixture or route-test work.
 - [ ] Support approve, correct, reject, retry, and safe deletion.
 - [ ] Reconcile derived data when a document is deleted.
 - [ ] Cover duplicate upload, corrupt file, unsupported type, timeout, and expired-session cases.
+- [ ] Reconcile approved FHIR candidates into existing authoritative records through explicit clinician choices to add, update, keep, defer, or reject; retain the candidate, source provenance, and audit history, and never mutate source data automatically.
+- [ ] Provide audited re-projection/backfill for pending imported candidates when mapper versions add useful fields; never overwrite a clinician correction or final review decision.
 
 ### MED-001 — Multi-source medication reconciliation
 

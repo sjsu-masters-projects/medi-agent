@@ -52,6 +52,20 @@ FHIR instants in the review screen are rendered in the selected local patient's
 configured IANA timezone (falling back to UTC if it is unavailable). Date-only
 FHIR values stay date-only and are never shifted by timezone conversion.
 
+## Deferred reconciliation into local records
+
+Approval makes an imported candidate a durable, clinician-reviewed reconciliation
+input. It does not automatically add or alter an authoritative local medication,
+condition, allergy, demographic record, care plan, or other clinical record. The
+approved candidate, its source envelope, provenance, and audit trail remain available
+to a future reconciliation workflow, where a clinician must explicitly choose whether
+to add, update, keep, defer, or reject the proposed change.
+
+Mappings are applied when a resource is imported. Existing candidates are not silently
+rewritten when a later mapper version exposes more source fields; that would risk
+overwriting a clinician correction or obscuring the value that was reviewed. An
+audited re-projection/backfill path for still-pending candidates is planned separately.
+
 ## Two valid launch paths
 
 ### EHR-initiated launch
