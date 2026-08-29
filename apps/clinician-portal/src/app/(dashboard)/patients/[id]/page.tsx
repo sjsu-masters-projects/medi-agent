@@ -242,7 +242,12 @@ function PatientDeepDivePageContent() {
 
             {/* Tab panels */}
             <Card padding="lg">
-                {activeTab === "imports" && <SmartImportReviewPanel patientId={patientId} />}
+                {activeTab === "imports" && (
+                    <SmartImportReviewPanel
+                        patientId={patientId}
+                        patientTimezone={patient.timezone}
+                    />
+                )}
 
                 {/* ── Profile ── */}
                 {activeTab === "profile" && (

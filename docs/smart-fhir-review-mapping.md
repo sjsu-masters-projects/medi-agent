@@ -48,6 +48,10 @@ the only place raw FHIR JSON is shown. Corrections use individual mapped fields
 where possible. Structured fields retain JSON only when preserving that source
 structure is necessary.
 
+FHIR instants in the review screen are rendered in the selected local patient's
+configured IANA timezone (falling back to UTC if it is unavailable). Date-only
+FHIR values stay date-only and are never shifted by timezone conversion.
+
 ## Two valid launch paths
 
 ### EHR-initiated launch

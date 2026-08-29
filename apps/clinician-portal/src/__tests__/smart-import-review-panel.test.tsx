@@ -147,4 +147,34 @@ describe("SMART import review panel", () => {
       screen.queryByText(/corrected value \(json\)/i),
     ).not.toBeInTheDocument();
   });
+
+  it("renders FHIR instants in the selected patient's timezone while preserving date-only values", async () => {
+    get.mockResolvedValueOnce({
+      ...reviewResponse,
+      facts: [
+        {
+          ...reviewResponse.facts[0],
+          fact_type: "procedure",
+          value: {
+            code: "Pelvis X-ray",
+            performed: {
+              start: "2012-10-02T11:40:58+00:00",
+              end: "2012-10-02T12:34:58+00:00",
+            },
+          },
+        },
+      ],
+    });
+
+    render(
+      <SmartImportReviewPanel
+        patientId="patient-1"
+        patientTimezone="America/Los_Angeles"
+      />,
+    );
+
+    expect(await screen.findByText("Pelvis X-ray")).toBeInTheDocument();
+    expect(screen.getByText(/Oct 2, 2012, 4:40 AM/)).toBeInTheDocument();
+    expect(screen.getByText(/Oct 2, 2012, 5:34 AM/)).toBeInTheDocument();
+  });
 });

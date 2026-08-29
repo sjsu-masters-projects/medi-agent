@@ -221,7 +221,7 @@ records as pending candidates; `list_approved` is the clinical-display query. Se
 - [/] Validate supported resource shape before persistence; identifier-quality and export validation remain deferred.
 - [x] Handle missing, partial, duplicate, and unsupported resources safely.
 - [/] Add import fixture tests; FHIR export and round-trip fixtures remain deferred.
-- [x] Make SMART candidate review clinically legible: enrich mapped summaries, filter by mapped type, keep source-only candidates distinct from local facts, and replace whole-record JSON correction with field-level editing while preserving the review-only boundary.
+- [x] Make SMART candidate review clinically legible: enrich mapped summaries, render FHIR instants in the selected patient's timezone, filter by mapped type, keep source-only candidates distinct from local facts, and replace whole-record JSON correction with field-level editing while preserving the review-only boundary.
 
 **Plan:** `.agent/specs/int-002-003-interoperability-plan.md` defines the mapping
 registry, import-envelope persistence, duplicate rules, and fixture evidence. Exact R4

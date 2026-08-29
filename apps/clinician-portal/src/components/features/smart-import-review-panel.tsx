@@ -143,7 +143,28 @@ const FACT_FIELDS: Record<string, Array<[string, string]>> = {
   ],
 };
 
-function formatValue(value: unknown): string {
+function formatFhirDateTime(value: string, timezone: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return value;
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(timestamp);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(timestamp);
+  }
+}
+
+function formatValue(value: unknown, timezone: string): string {
   if (value === null || value === undefined || value === "")
     return "Not supplied";
   if (
@@ -151,16 +172,23 @@ function formatValue(value: unknown): string {
     typeof value === "number" ||
     typeof value === "boolean"
   )
-    return String(value);
+    return typeof value === "string"
+      ? formatFhirDateTime(value, timezone)
+      : String(value);
   if (Array.isArray(value))
-    return value.length ? value.map(formatValue).join("; ") : "Not supplied";
+    return value.length
+      ? value.map((item) => formatValue(item, timezone)).join("; ")
+      : "Not supplied";
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
     if (typeof record.text === "string") return record.text;
     if (typeof record.display === "string") return record.display;
     if (typeof record.code === "string") return record.code;
     if (typeof record.start === "string" || typeof record.end === "string") {
-      return [record.start, record.end].filter(Boolean).join(" to ");
+      return [record.start, record.end]
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => formatFhirDateTime(item, timezone))
+        .join(" to ");
     }
     return JSON.stringify(record);
   }
@@ -181,7 +209,13 @@ function stateClass(state: ReviewState): string {
   return "bg-amber-100 text-amber-800";
 }
 
-function FactDetails({ fact }: { fact: ReviewFact }) {
+function FactDetails({
+  fact,
+  patientTimezone,
+}: {
+  fact: ReviewFact;
+  patientTimezone: string;
+}) {
   const fields =
     FACT_FIELDS[fact.fact_type] ??
     Object.keys(fact.value).map((key) => [key, key] as [string, string]);
@@ -193,7 +227,7 @@ function FactDetails({ fact }: { fact: ReviewFact }) {
             {label}
           </dt>
           <dd className="mt-0.5 break-words text-sm text-slate-800">
-            {formatValue(fact.value[key])}
+            {formatValue(fact.value[key], patientTimezone)}
           </dd>
         </div>
       ))}
@@ -242,7 +276,13 @@ function parseCorrection(
   );
 }
 
-export function SmartImportReviewPanel({ patientId }: { patientId: string }) {
+export function SmartImportReviewPanel({
+  patientId,
+  patientTimezone = "UTC",
+}: {
+  patientId: string;
+  patientTimezone?: string | null;
+}) {
   const token = useSelector((state: RootState) => state.auth.accessToken);
   const [reviewState, setReviewState] = useState<ReviewState>("pending_review");
   const [factType, setFactType] = useState("");
@@ -581,7 +621,10 @@ export function SmartImportReviewPanel({ patientId }: { patientId: string }) {
                     )}
                   </div>
                 </div>
-                <FactDetails fact={fact} />
+                <FactDetails
+                  fact={fact}
+                  patientTimezone={patientTimezone ?? "UTC"}
+                />
                 {fact.uncertainty.length > 0 && (
                   <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                     <HiOutlineExclamationCircle className="mr-1 inline h-4 w-4" />
