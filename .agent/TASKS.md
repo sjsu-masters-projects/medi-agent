@@ -23,8 +23,8 @@ A task is done only when its implementation, authorization, error handling, audi
 
 | Area | Status | Evidence / risk |
 |---|---|---|
-| Repository | Revival work committed locally | Local `main` contains reviewed revival commits atop `origin/main`; push is intentionally pending |
-| Historical work | Needs reconciliation | Two remote branches and one April stash remain |
+| Repository | Main synchronized | Local `main` matches `origin/main`; current tracker verification is recorded on a separate documentation branch |
+| Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
 | Patient portal | Partial | Major screens exist; several workflows require real end-to-end completion |
 | Clinician portal | Partial | Dashboard/deep dive exist; consolidated review and action lifecycle incomplete |
 | Backend foundation | Partial | Broad API and test base; empty modules and reachable placeholders remain |
@@ -34,7 +34,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
-| CI | First PR run green; main confirmation pending | Run 32280310908 passed all required gates in 5m 46s; three green GitHub runs on `main` are still required |
+| CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
 | Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
 | Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
 
@@ -60,7 +60,7 @@ A task is done only when its implementation, authorization, error handling, audi
 - [x] Add lock-keyed Python, uv, and npm dependency caching while verifying generated Python locks and installing JavaScript with `npm ci`.
 - [x] Integrate Acquit 0.1.2 in fail-closed PR canary mode with explicit monorepo import roots.
 - [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; verify the published 0.1.2 fix against the minimal reproduction and historical MediAgent commit `089303d`.
-- [ ] Validate Acquit across at least 10 selective PRs with zero canary alarms.
+- [/] Validate Acquit across at least 10 selective PRs with zero canary alarms. One of ten required selective observations is complete.
 - [x] Verify Acquit 0.1.2 ships regression coverage for nested `backend/src` discovery, replay safety, and release-version synchronization.
 - [ ] Promote Acquit from `canary` to `enforce` only after the validation gate passes.
 - [x] Create deterministic Python and JavaScript lock/install paths.
@@ -93,6 +93,7 @@ A task is done only when its implementation, authorization, error handling, audi
 - CI now uploads JUnit failure evidence, includes a required-check and duration summary, and runs TruffleHog 3.97.0 on each GitHub change. GitHub Actions run 32280310908 passed every required gate in 5m 46s; the three green `main` runs remain pending a reviewed merge.
 - GitHub Actions confirmed the third green main observation on 2026-08-20: the restored baseline succeeded twice (run 32283434650, attempts 1 and 2) and the next merged main change succeeded (run 32407010020).
 - Acquit remains in canary mode. PR #64 ran the full backend suite after CI, dependency, and test-configuration changes; PR #65 safely selected zero of 58 backend test files for a patient-portal-only change; PR #66 ran the full suite after workflow and resource changes. This is one selective observation, not the ten required before enforcement.
+- Acquit audit, 2026-08-29: PRs #64–#78 all completed the Acquit 0.1.3 canary job successfully. PR #65 is the single verified selective observation: all 58 backend test files were proven unaffected and safely skipped. The other 14 PRs correctly ran the full suite because they changed backend code, migrations, dependency/workflow/configuration files, or reached the full test graph. No canary job failed or reported an unsafe selection; nine additional selective observations are still required before `enforce` is considered.
 
 ---
 
@@ -148,7 +149,7 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 - [x] Remove the six verified pre-canonical staging identities through the exact reset allowlist, then verify that only the sixteen current fixture accounts remain.
 - [x] Document deterministic fixture accounts without embedding secrets in the repository.
 - [x] Run the approved staging seed and verify table counts, source-specific mappings, ledger checksums, and idempotency.
-- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, live feed, and live adherence statistics passed on 2026-08-27 after the guarded reset/reseed; clinician and RLS-isolation journeys remain.
+- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, live feed, and live adherence statistics passed on 2026-08-27 after the guarded reset/reseed; the clinician roster, patient review, and SMART import journey passed live on 2026-08-29. An explicit cross-clinic negative RLS test remains.
 
 **Verification evidence — 2026-08-22**
 
@@ -191,7 +192,7 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 
 - [ ] REV-001 through REV-005 acceptance paths are green.
 - [ ] Repository contains no ambiguous preserved work.
-- [ ] Documentation reflects the intended product and actual implementation.
+- [x] Documentation reflects the intended product and actual implementation.
 - [ ] A clean environment can be created and validated reproducibly.
 
 ---
