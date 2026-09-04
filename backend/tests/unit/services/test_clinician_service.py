@@ -125,6 +125,28 @@ async def test_get_patient_risk_snapshot_requires_assignment(service):
 
 
 @pytest.mark.asyncio
+async def test_cross_clinic_patient_detail_is_denied_before_patient_query(service, mock_db):
+    """A clinician cannot read a patient assigned only to another clinic's clinician."""
+    requesting_clinician_id = uuid4()
+    other_clinic_clinician_id = uuid4()
+    other_clinic_patient_id = uuid4()
+
+    async def find_assignment(clinician_id: str, patient_id: str):
+        assert clinician_id == str(requesting_clinician_id)
+        assert patient_id == str(other_clinic_patient_id)
+        # The foreign clinic has an active assignment, but not for this clinician.
+        assert clinician_id != str(other_clinic_clinician_id)
+        return []
+
+    service.care_team_repo.find_active_assignment = find_assignment  # type: ignore[method-assign]
+
+    with pytest.raises(AuthorizationError, match="not assigned"):
+        await service.get_patient_detail(requesting_clinician_id, other_clinic_patient_id)
+
+    mock_db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_pending_medwatch_count_queries_only_valid_draft_status(service, mock_db):
     chain = MagicMock()
     for method in ("select", "in_"):

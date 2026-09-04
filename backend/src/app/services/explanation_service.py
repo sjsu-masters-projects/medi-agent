@@ -53,7 +53,6 @@ class ExplanationService:
     async def _generate_summary(self, document_data: dict[str, Any]) -> str:
         """Generate an English summary from document data using Flash Lite."""
         router = get_router()
-        client = router.get_client_with_fallback(TaskType.PATIENT_EXPLANATION)
 
         follow_up_instructions = document_data.get("follow_up_instructions") or []
         if not follow_up_instructions:
@@ -70,7 +69,8 @@ class ExplanationService:
             conditions=json.dumps(document_data.get("conditions", []), default=str),
             follow_up_instructions=json.dumps(follow_up_instructions, default=str),
         )
-        response = await client.generate(
+        response = await router.generate_text(
+            TaskType.PATIENT_EXPLANATION,
             prompt=prompt,
             system_instruction=GENERATE_SUMMARY_SYSTEM,
             temperature=0.4,
@@ -84,9 +84,9 @@ class ExplanationService:
             return summary
 
         router = get_router()
-        client = router.get_client_with_fallback(TaskType.PATIENT_EXPLANATION)
         language_name = get_locale_display_name(target_language)
-        response = await client.generate(
+        response = await router.generate_text(
+            TaskType.PATIENT_EXPLANATION,
             prompt=TRANSLATE_SUMMARY_USER.format(
                 summary=summary,
                 target_language=language_name,

@@ -68,6 +68,16 @@ def test_token_response_rejects_invalid_expiry_scope_and_audience() -> None:
             {"access_token": "token", "expires_in": 300, "aud": "https://other.example"},
             issuer="https://sandbox.example",
         )
+    with pytest.raises(ExternalServiceError, match="scope is malformed"):
+        SmartLaunchService._validate_token_response(
+            {"access_token": "token", "expires_in": 300, "scope": ["patient/Patient.read"]},
+            issuer="https://sandbox.example",
+        )
+    with pytest.raises(ExternalServiceError, match="audience is malformed"):
+        SmartLaunchService._validate_token_response(
+            {"access_token": "token", "expires_in": 300, "aud": ["https://sandbox.example"]},
+            issuer="https://sandbox.example",
+        )
 
 
 def test_ehr_launch_encrypts_opaque_context_and_uses_ehr_scope(monkeypatch) -> None:

@@ -128,8 +128,8 @@ async def generate_response(state: SymptomState, router: ModelRouter) -> Symptom
     )
 
     try:
-        client = router.get_client(TaskType.CHAT_RESPONSE)
-        assistant_response = await client.generate(
+        assistant_response = await router.generate_text(
+            TaskType.CHAT_RESPONSE,
             prompt=prompt,
             system_instruction=SYMPTOM_RESPONSE_SYSTEM_INSTRUCTION,
             temperature=0.3,

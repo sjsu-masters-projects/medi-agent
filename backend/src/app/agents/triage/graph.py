@@ -471,8 +471,8 @@ async def _generate_response_with_llm(router: ModelRouter, request: _ResponseReq
     )
 
     try:
-        client = router.get_client(TaskType.CHAT_RESPONSE)
-        response = await client.generate(
+        response = await router.generate_text(
+            TaskType.CHAT_RESPONSE,
             prompt=prompt,
             system_instruction=CHAT_RESPONSE_SYSTEM_INSTRUCTION,
             temperature=0.35,

@@ -193,10 +193,8 @@ class TestExtractContentWithFixture:
         expected = _load_expected(fixture_json)
 
         with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
-            mock_client = AsyncMock()
-            mock_client.generate.return_value = json.dumps(expected)
             mock_router = MagicMock()
-            mock_router.get_client_with_fallback.return_value = mock_client
+            mock_router.generate_text = AsyncMock(return_value=json.dumps(expected))
             mock_get_router.return_value = mock_router
 
             state = {
@@ -224,10 +222,8 @@ class TestExtractThenValidate:
         expected = _load_expected("discharge_summary_expected.json")
 
         with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
-            mock_client = AsyncMock()
-            mock_client.generate.return_value = json.dumps(expected)
             mock_router = MagicMock()
-            mock_router.get_client_with_fallback.return_value = mock_client
+            mock_router.generate_text = AsyncMock(return_value=json.dumps(expected))
             mock_get_router.return_value = mock_router
 
             state = {

@@ -149,7 +149,7 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 - [x] Remove the six verified pre-canonical staging identities through the exact reset allowlist, then verify that only the sixteen current fixture accounts remain.
 - [x] Document deterministic fixture accounts without embedding secrets in the repository.
 - [x] Run the approved staging seed and verify table counts, source-specific mappings, ledger checksums, and idempotency.
-- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, live feed, and live adherence statistics passed on 2026-08-27 after the guarded reset/reseed; the clinician roster, patient review, and SMART import journey passed live on 2026-08-29. An explicit cross-clinic negative RLS test remains.
+- [x] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, live feed, and live adherence statistics passed on 2026-08-27 after the guarded reset/reseed; the clinician roster, patient review, and SMART import journey passed live on 2026-08-29. The active-care-team RLS helper contract and an explicit cross-clinic service denial test now prove that an unassigned clinician is rejected before the patient query runs.
 
 **Verification evidence — 2026-08-22**
 
@@ -233,7 +233,7 @@ uses the compatible R4B model.
 
 - [x] Implement `/api/v1/smart/launch` and `/api/v1/smart/callback`.
 - [x] Grant the trusted backend only the SMART session, import, provenance, and handoff operations it needs; apply and verify the migration in staging.
-- [/] Validate PKCE, OAuth state, issuer, and expiry; token audience/scope conformance awaits a live sandbox registration.
+- [x] Validate PKCE, OAuth state, issuer, expiry, and provider-supplied scope/audience metadata. Opaque sandbox tokens are not treated as JWTs; when scope or audience is supplied it must be a string and must match the requested patient access and issuer. The successful EHR-initiated sandbox flow is the live conformance evidence.
 - [x] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection.
 - [x] Import the supported patient bundle through the public SMART Health IT sandbox and deployed Cloud Run callback.
 - [x] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. The patient-level SMART imports tab exposes mapped candidate fields, explicit original-resource inspection, and review actions.
@@ -269,7 +269,7 @@ open for sandbox-specific diagnosis.
 ### AI-001 — Provider-neutral AI and voice interfaces
 
 - [x] Define model capabilities and structured error taxonomy.
-- [/] Wrap existing text clients behind the interface; concrete provider registry migration remains next.
+- [x] Wrap all non-streaming text generation paths behind the provider registry, with normalized telemetry and Flash fallback for runtime or primary-client initialization failure. Structured output and streaming intentionally retain their capability-specific client contracts.
 - [ ] Add optional MedGemma and NVIDIA NIM comparison adapters.
 - [/] Define the voice-provider interface; live voice transport migration remains next.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
