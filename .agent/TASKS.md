@@ -187,6 +187,11 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
   completed successfully; Auth, patients, and clinicians now contain exactly 16,
   8, and 8 project-controlled `accounts.mediagent.live` addresses respectively,
   with no legacy address remaining.
+- On 2026-09-04, a read-only staging probe selected a care-team assignment from a
+  different clinic, set the requesting clinician's authenticated JWT subject, and
+  verified that `private.is_assigned_clinician` returned false. Direct reads of the
+  foreign patient row were also denied because `authenticated` has no `SELECT` grant
+  on `patients`; the probe rolled back without changing staging data.
 
 **R0 exit gate**
 
