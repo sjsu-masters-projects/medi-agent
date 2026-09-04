@@ -102,10 +102,10 @@ async def test_extract_content_success():
     from app.agents.ingestion.graph import extract_content
 
     with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
-        mock_client = AsyncMock()
-        mock_client.generate.return_value = '```json\n{"medications": [], "conditions": []}\n```'
         mock_router = MagicMock()
-        mock_router.get_client_with_fallback.return_value = mock_client
+        mock_router.generate_text = AsyncMock(
+            return_value='```json\n{"medications": [], "conditions": []}\n```'
+        )
         mock_get_router.return_value = mock_router
 
         state = {"document_id": "123", "raw_content": "Some text"}
@@ -122,7 +122,7 @@ async def test_extract_content_failure():
 
     with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
         mock_router = MagicMock()
-        mock_router.get_client_with_fallback.side_effect = Exception("Router failed")
+        mock_router.generate_text.side_effect = Exception("Router failed")
         mock_get_router.return_value = mock_router
 
         state = {"document_id": "123", "raw_content": "Some text"}
@@ -183,10 +183,8 @@ async def test_generate_summary_success():
     from app.agents.ingestion.graph import generate_summary
 
     with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
-        mock_client = AsyncMock()
-        mock_client.generate.return_value = "Patient summary"
         mock_router = MagicMock()
-        mock_router.get_client_with_fallback.return_value = mock_client
+        mock_router.generate_text = AsyncMock(return_value="Patient summary")
         mock_get_router.return_value = mock_router
 
         state = {"document_id": "123", "validated_data": {"medications": []}}

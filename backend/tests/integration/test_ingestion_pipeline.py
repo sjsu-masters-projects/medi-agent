@@ -176,10 +176,8 @@ async def test_explain_cached_summary():
 @pytest.mark.asyncio
 async def test_explain_spanish_translation():
     service = ExplanationService()
-    mock_client = AsyncMock()
-    mock_client.generate = AsyncMock(return_value="Resumen en español")
     mock_router = MagicMock()
-    mock_router.get_client_with_fallback.return_value = mock_client
+    mock_router.generate_text = AsyncMock(return_value="Resumen en español")
 
     with patch(
         "app.services.explanation_service.get_router",

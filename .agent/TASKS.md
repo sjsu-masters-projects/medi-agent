@@ -23,8 +23,8 @@ A task is done only when its implementation, authorization, error handling, audi
 
 | Area | Status | Evidence / risk |
 |---|---|---|
-| Repository | Revival work committed locally | Local `main` contains reviewed revival commits atop `origin/main`; push is intentionally pending |
-| Historical work | Needs reconciliation | Two remote branches and one April stash remain |
+| Repository | Main synchronized | Local `main` matches `origin/main`; current tracker verification is recorded on a separate documentation branch |
+| Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
 | Patient portal | Partial | Major screens exist; several workflows require real end-to-end completion |
 | Clinician portal | Partial | Dashboard/deep dive exist; consolidated review and action lifecycle incomplete |
 | Backend foundation | Partial | Broad API and test base; empty modules and reachable placeholders remain |
@@ -32,9 +32,9 @@ A task is done only when its implementation, authorization, error handling, audi
 | Chat and triage | Functional foundation | Needs provider abstraction, bilingual qualification, recovery, and full journey tests |
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
-| Interoperability | Not complete | FHIR-aligned only; no genuine SMART launch or CDS Hooks integration |
+| Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
-| CI | First PR run green; main confirmation pending | Run 32280310908 passed all required gates in 5m 46s; three green GitHub runs on `main` are still required |
+| CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
 | Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
 | Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
 
@@ -60,7 +60,7 @@ A task is done only when its implementation, authorization, error handling, audi
 - [x] Add lock-keyed Python, uv, and npm dependency caching while verifying generated Python locks and installing JavaScript with `npm ci`.
 - [x] Integrate Acquit 0.1.2 in fail-closed PR canary mode with explicit monorepo import roots.
 - [x] Reproduce and document Acquit 0.1.1's unsafe nested-`src` selection; verify the published 0.1.2 fix against the minimal reproduction and historical MediAgent commit `089303d`.
-- [ ] Validate Acquit across at least 10 selective PRs with zero canary alarms.
+- [/] Validate Acquit across at least 10 selective PRs with zero canary alarms. One of ten required selective observations is complete.
 - [x] Verify Acquit 0.1.2 ships regression coverage for nested `backend/src` discovery, replay safety, and release-version synchronization.
 - [ ] Promote Acquit from `canary` to `enforce` only after the validation gate passes.
 - [x] Create deterministic Python and JavaScript lock/install paths.
@@ -93,6 +93,7 @@ A task is done only when its implementation, authorization, error handling, audi
 - CI now uploads JUnit failure evidence, includes a required-check and duration summary, and runs TruffleHog 3.97.0 on each GitHub change. GitHub Actions run 32280310908 passed every required gate in 5m 46s; the three green `main` runs remain pending a reviewed merge.
 - GitHub Actions confirmed the third green main observation on 2026-08-20: the restored baseline succeeded twice (run 32283434650, attempts 1 and 2) and the next merged main change succeeded (run 32407010020).
 - Acquit remains in canary mode. PR #64 ran the full backend suite after CI, dependency, and test-configuration changes; PR #65 safely selected zero of 58 backend test files for a patient-portal-only change; PR #66 ran the full suite after workflow and resource changes. This is one selective observation, not the ten required before enforcement.
+- Acquit audit, 2026-08-29: PRs #64–#78 all completed the Acquit 0.1.3 canary job successfully. PR #65 is the single verified selective observation: all 58 backend test files were proven unaffected and safely skipped. The other 14 PRs correctly ran the full suite because they changed backend code, migrations, dependency/workflow/configuration files, or reached the full test graph. No canary job failed or reported an unsafe selection; nine additional selective observations are still required before `enforce` is considered.
 
 ---
 
@@ -148,7 +149,7 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
 - [x] Remove the six verified pre-canonical staging identities through the exact reset allowlist, then verify that only the sixteen current fixture accounts remain.
 - [x] Document deterministic fixture accounts without embedding secrets in the repository.
 - [x] Run the approved staging seed and verify table counts, source-specific mappings, ledger checksums, and idempotency.
-- [/] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, live feed, and live adherence statistics passed on 2026-08-27 after the guarded reset/reseed; clinician and RLS-isolation journeys remain.
+- [x] Verify RLS isolation and clinician/patient login journeys against the seeded staging environment. Patient password login, role-claim validation, live feed, and live adherence statistics passed on 2026-08-27 after the guarded reset/reseed; the clinician roster, patient review, and SMART import journey passed live on 2026-08-29. The active-care-team RLS helper contract and an explicit cross-clinic service denial test now prove that an unassigned clinician is rejected before the patient query runs.
 
 **Verification evidence — 2026-08-22**
 
@@ -186,12 +187,17 @@ The two obsolete audit branches and the April 29 stash were deleted on 2026-08-2
   completed successfully; Auth, patients, and clinicians now contain exactly 16,
   8, and 8 project-controlled `accounts.mediagent.live` addresses respectively,
   with no legacy address remaining.
+- On 2026-09-04, a read-only staging probe selected a care-team assignment from a
+  different clinic, set the requesting clinician's authenticated JWT subject, and
+  verified that `private.is_assigned_clinician` returned false. Direct reads of the
+  foreign patient row were also denied because `authenticated` has no `SELECT` grant
+  on `patients`; the probe rolled back without changing staging data.
 
 **R0 exit gate**
 
 - [ ] REV-001 through REV-005 acceptance paths are green.
 - [ ] Repository contains no ambiguous preserved work.
-- [ ] Documentation reflects the intended product and actual implementation.
+- [x] Documentation reflects the intended product and actual implementation.
 - [ ] A clean environment can be created and validated reproducibly.
 
 ---
@@ -231,19 +237,30 @@ uses the compatible R4B model.
 ### INT-003 — SMART-on-FHIR sandbox launch
 
 - [x] Implement `/api/v1/smart/launch` and `/api/v1/smart/callback`.
-- [/] Grant the trusted backend only the SMART session, import, provenance, and handoff operations it needs; apply and verify the migration in staging.
-- [/] Validate PKCE, OAuth state, issuer, and expiry; token audience/scope conformance awaits a live sandbox registration.
-- [/] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection; direct testing uses the SMART Health IT simulator-specific standalone issuer, while live sandbox verification remains.
-- [/] Import the supported patient bundle; live public-sandbox verification awaits the replacement Supabase project and Cloud Run callback.
-- [/] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. The patient-level SMART imports tab now exposes mapped candidate fields, explicit original-resource inspection, and review actions; live acceptance remains.
-- [/] Repair and verify the least-privilege backend read set for live clinician dashboard and patient-review routes; staging application remains required.
-- [/] Replace the clinician portal's mock roster with live care-team-authorized dashboard data and make SMART authorization progress explicit.
+- [x] Grant the trusted backend only the SMART session, import, provenance, and handoff operations it needs; apply and verify the migration in staging.
+- [x] Validate PKCE, OAuth state, issuer, expiry, and provider-supplied scope/audience metadata. Opaque sandbox tokens are not treated as JWTs; when scope or audience is supplied it must be a string and must match the requested patient access and issuer. The successful EHR-initiated sandbox flow is the live conformance evidence.
+- [x] Bind EHR `iss` and opaque `launch` context to a locally authenticated, care-team-authorized clinician/patient selection.
+- [x] Import the supported patient bundle through the public SMART Health IT sandbox and deployed Cloud Run callback.
+- [x] Show import status, raw-resource warnings, and review handoff in the clinician portal; make idempotent no-new-resource outcomes and in-progress authorization status explicit. The patient-level SMART imports tab exposes mapped candidate fields, explicit original-resource inspection, and review actions.
+- [x] Repair and verify the least-privilege backend read set for live clinician dashboard and patient-review routes.
+- [x] Replace the clinician portal's mock roster with live care-team-authorized dashboard data and make SMART authorization progress explicit.
 - [x] Document sandbox setup and reproducible conformance test.
 
 **Plan:** Build SMART authorization-code + PKCE handling after the INT-002 import
 registry, then bind the resulting imported-record session to a locally authenticated
 clinician. The plan records sandbox, HTTPS callback, and replacement-Supabase
 prerequisites; none of them block fixture or route-test work.
+
+**Live verification — 2026-08-29:** An EHR-initiated SMART Health IT R4 sandbox
+flow completed against the deployed domains for a locally authorized synthetic clinician
+and Maya Patel. It persisted 214 provenance-backed pending candidates for the selected
+local patient. Mapped-type filtering, explicit raw-source inspection, patient-timezone
+rendering, and review-only messaging passed in the deployed clinician portal. GitHub
+Actions run `33263615712` deployed Cloud Run successfully; both portal deployments and
+all PR checks passed. Approval, rejection, and correction have route and UI test
+coverage but were not clicked live, so no review state was changed. Some standalone
+launcher runs still return the sandbox's `Invalid launch options` response and remain
+open for sandbox-specific diagnosis.
 
 ### SAFE-001 — Approval and audit infrastructure
 
@@ -257,7 +274,7 @@ prerequisites; none of them block fixture or route-test work.
 ### AI-001 — Provider-neutral AI and voice interfaces
 
 - [x] Define model capabilities and structured error taxonomy.
-- [/] Wrap existing text clients behind the interface; concrete provider registry migration remains next.
+- [x] Wrap all non-streaming text generation paths behind the provider registry, with normalized telemetry and Flash fallback for runtime or primary-client initialization failure. Structured output and streaming intentionally retain their capability-specific client contracts.
 - [ ] Add optional MedGemma and NVIDIA NIM comparison adapters.
 - [/] Define the voice-provider interface; live voice transport migration remains next.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
@@ -265,8 +282,8 @@ prerequisites; none of them block fixture or route-test work.
 
 **R1 exit gate**
 
-- [ ] A synthetic patient launches through SMART and imports a validated FHIR bundle.
-- [ ] Every clinical fact can be traced to its source.
+- [x] A synthetic patient launches through SMART and imports a validated FHIR bundle.
+- [x] Every clinical fact can be traced to its source.
 - [ ] Clinical actions cannot bypass approval policy.
 
 ---
@@ -282,6 +299,8 @@ prerequisites; none of them block fixture or route-test work.
 - [ ] Support approve, correct, reject, retry, and safe deletion.
 - [ ] Reconcile derived data when a document is deleted.
 - [ ] Cover duplicate upload, corrupt file, unsupported type, timeout, and expired-session cases.
+- [ ] Reconcile approved FHIR candidates into existing authoritative records through explicit clinician choices to add, update, keep, defer, or reject; retain the candidate, source provenance, and audit history, and never mutate source data automatically.
+- [ ] Provide audited re-projection/backfill for pending imported candidates when mapper versions add useful fields; never overwrite a clinician correction or final review decision.
 
 ### MED-001 — Multi-source medication reconciliation
 

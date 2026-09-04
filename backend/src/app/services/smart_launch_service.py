@@ -438,7 +438,9 @@ class SmartLaunchService:
         if not isinstance(expires_in, int | float) or expires_in <= 0:
             raise ExternalServiceError("SMART token exchange", "Token expiry is missing or invalid")
         granted_scope = payload.get("scope")
-        if isinstance(granted_scope, str):
+        if granted_scope is not None:
+            if not isinstance(granted_scope, str):
+                raise ExternalServiceError("SMART token exchange", "Token scope is malformed")
             grants = set(granted_scope.split())
             required = {"patient/Patient.read"}
             if not required.issubset(grants):
@@ -446,6 +448,8 @@ class SmartLaunchService:
                     "SMART token exchange", "Required patient read scope was not granted"
                 )
         audience = payload.get("aud")
+        if audience is not None and not isinstance(audience, str):
+            raise ExternalServiceError("SMART token exchange", "Token audience is malformed")
         if isinstance(audience, str) and audience.rstrip("/") != issuer.rstrip("/"):
             raise ExternalServiceError(
                 "SMART token exchange", "Token audience does not match issuer"

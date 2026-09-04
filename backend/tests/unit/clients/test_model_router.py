@@ -1,8 +1,9 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.clients.model_router import ModelRouter, TaskType, get_router
+from app.models.generation import GenerationRequest
 
 
 @pytest.fixture
@@ -91,3 +92,54 @@ def test_get_client_with_fallback(mock_flash, mock_get_client):
     # Primary fails, fallback to flash
     mock_get_client.side_effect = Exception("Initialization failed")
     assert router.get_client_with_fallback(TaskType.DOCUMENT_PARSING) == mock_flash
+
+
+@pytest.mark.asyncio
+async def test_text_provider_wraps_existing_client_with_normalized_response():
+    router = ModelRouter()
+    client = MagicMock(model_name="medgemma-test")
+    client.generate = AsyncMock(return_value="Extracted record")
+    router.get_client = MagicMock(return_value=client)  # type: ignore[method-assign]
+
+    response = await router.get_text_provider(TaskType.DOCUMENT_PARSING).generate(
+        GenerationRequest(prompt="Extract")
+    )
+
+    assert response.text == "Extracted record"
+    assert response.telemetry.provider == "medgemma"
+    assert response.telemetry.model == "medgemma-test"
+
+
+@pytest.mark.asyncio
+async def test_generate_text_falls_back_to_flash_provider():
+    router = ModelRouter()
+    primary = MagicMock(model_name="medgemma-test")
+    primary.generate = AsyncMock(side_effect=RuntimeError("primary unavailable"))
+    flash = MagicMock(model_name="flash-test")
+    flash.generate = AsyncMock(return_value="Fallback response")
+
+    def get_client(task_type):
+        return flash if task_type == TaskType.CHAT_RESPONSE else primary
+
+    router.get_client = MagicMock(side_effect=get_client)  # type: ignore[method-assign]
+
+    assert (
+        await router.generate_text(TaskType.DOCUMENT_PARSING, prompt="Extract")
+        == "Fallback response"
+    )
+
+
+def test_text_provider_falls_back_to_flash_when_primary_cannot_initialize():
+    router = ModelRouter()
+    flash = MagicMock(model_name="flash-test")
+
+    def get_client(task_type):
+        if task_type == TaskType.CHAT_RESPONSE:
+            return flash
+        raise RuntimeError("primary unavailable")
+
+    router.get_client = MagicMock(side_effect=get_client)  # type: ignore[method-assign]
+
+    provider = router.get_text_provider_with_fallback(TaskType.DOCUMENT_PARSING)
+
+    assert provider.name == "flash"

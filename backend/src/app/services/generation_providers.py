@@ -40,7 +40,9 @@ class VoiceProvider(Protocol):
 class ClientTextProvider:
     """Wrap an existing text client while recording a uniform response envelope."""
 
-    capabilities = frozenset({GenerationCapability.TEXT, GenerationCapability.STRUCTURED_OUTPUT})
+    # This adapter normalizes plain-text responses. Structured output keeps using
+    # the capability-specific client path until it has its own provider contract.
+    capabilities = frozenset({GenerationCapability.TEXT})
 
     def __init__(self, *, name: str, model: str, generate: Callable[..., Awaitable[str]]) -> None:
         self.name = name
@@ -76,6 +78,10 @@ class ClientTextProvider:
 
 class TextFallbackProvider:
     """Try providers in order and make fallback selection visible to callers."""
+
+    name = "fallback"
+    model = "multiple"
+    capabilities = frozenset({GenerationCapability.TEXT})
 
     def __init__(self, providers: list[TextProvider]) -> None:
         if not providers:

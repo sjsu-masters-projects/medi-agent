@@ -152,10 +152,10 @@ async def extract_content(state: IngestionState) -> IngestionState:
 
     try:
         router = get_router()
-        client = router.get_client_with_fallback(TaskType.DOCUMENT_PARSING)
         prompt = EXTRACT_CONTENT_USER.format(raw_content=state["raw_content"] or "")
 
-        response = await client.generate(
+        response = await router.generate_text(
+            TaskType.DOCUMENT_PARSING,
             prompt=prompt,
             system_instruction=EXTRACT_CONTENT_SYSTEM,
             temperature=0.3,
@@ -313,7 +313,6 @@ async def generate_summary(state: IngestionState) -> IngestionState:
 
     try:
         router = get_router()
-        client = router.get_client_with_fallback(TaskType.PATIENT_EXPLANATION)
         summary_data = state.get("validated_data") or state.get("extracted_data") or {}
         prompt = GENERATE_SUMMARY_USER.format(
             medications=json.dumps(summary_data.get("medications", []), default=str),
@@ -324,7 +323,8 @@ async def generate_summary(state: IngestionState) -> IngestionState:
             ),
         )
 
-        response = await client.generate(
+        response = await router.generate_text(
+            TaskType.PATIENT_EXPLANATION,
             prompt=prompt,
             system_instruction=GENERATE_SUMMARY_SYSTEM,
             temperature=0.7,
