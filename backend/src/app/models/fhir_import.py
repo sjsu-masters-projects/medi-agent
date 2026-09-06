@@ -60,6 +60,9 @@ class SmartImportRead(BaseModel):
     resource_count: int = 0
     candidate_fact_count: int = 0
     warnings: list[str] = Field(default_factory=list)
+    external_identity: dict[str, Any] = Field(default_factory=dict)
+    external_patient_binding_id: UUID | None = None
+    identity_confirmed_at: datetime | None = None
     created_at: datetime
     completed_at: datetime | None = None
 
@@ -83,6 +86,8 @@ class FhirReviewSourceRead(BaseModel):
     version_id: str | None = None
     mapping_warnings: list[str] = Field(default_factory=list)
     validation_errors: list[str] = Field(default_factory=list)
+    source_kind: str | None = None
+    import_id: UUID | None = None
 
 
 class FhirReviewSourceDetailRead(FhirReviewSourceRead):
@@ -122,6 +127,24 @@ class ClinicalFactCorrectionRequest(BaseModel):
 
     value: dict[str, Any] = Field(default_factory=dict)
     note: str = Field(min_length=1, max_length=2000)
+
+
+class FhirIdentityBindingRequest(BaseModel):
+    """Explicitly bind a sandbox patient to the selected local patient."""
+
+    confirmation_note: str | None = Field(default=None, max_length=2000)
+
+
+class FhirIdentityBindingRead(BaseModel):
+    import_id: UUID
+    patient_id: UUID
+    issuer: str
+    external_patient_id: str
+    external_identity: dict[str, Any] = Field(default_factory=dict)
+    local_identity: dict[str, Any] = Field(default_factory=dict)
+    identity_matches: bool
+    binding_id: UUID | None = None
+    confirmed_at: datetime | None = None
 
 
 class SmartHandoffRedeemRequest(BaseModel):

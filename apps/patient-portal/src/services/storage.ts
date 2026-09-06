@@ -1,55 +1,68 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 interface UploadDocumentParams {
-    file: File;
-    patientId: string;
-    token: string;
+  file: File;
+  patientId: string;
+  token: string;
+}
+
+/** Hash source bytes before upload so duplicate-document detection is stable. */
+export async function hashDocumentFile(file: File): Promise<string> {
+  const bytes = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function sanitizeFileName(fileName: string) {
-    return fileName
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9._-]/g, "");
+  return fileName
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "");
 }
 
 function createStorageClient(token: string): SupabaseClient {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error("Supabase Storage is not configured for the patient portal.");
-    }
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "Supabase Storage is not configured for the patient portal.",
+    );
+  }
 
-    return createClient(supabaseUrl, supabaseAnonKey, {
-        accessToken: async () => token,
-        auth: {
-            autoRefreshToken: false,
-            detectSessionInUrl: false,
-            persistSession: false,
-        },
-    });
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    accessToken: async () => token,
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
 }
 
 export async function uploadDocumentToStorage({
-    file,
-    patientId,
-    token,
+  file,
+  patientId,
+  token,
 }: UploadDocumentParams): Promise<string> {
-    const supabase = createStorageClient(token);
-    const safeName = sanitizeFileName(file.name) || `document-${Date.now()}`;
-    const filePath = `${patientId}/${Date.now()}-${safeName}`;
+  const supabase = createStorageClient(token);
+  const safeName = sanitizeFileName(file.name) || `document-${Date.now()}`;
+  const filePath = `${patientId}/${Date.now()}-${safeName}`;
 
-    const { data, error } = await supabase.storage.from("documents").upload(filePath, file, {
-        cacheControl: "3600",
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
+  const { data, error } = await supabase.storage
+    .from("documents")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      contentType: file.type || "application/octet-stream",
+      upsert: false,
     });
 
-    if (error) {
-        throw new Error(error.message);
-    }
+  if (error) {
+    throw new Error(error.message);
+  }
 
-    return data.path;
+  return data.path;
 }

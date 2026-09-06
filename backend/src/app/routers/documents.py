@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from supabase import Client
 
 from app.clients.supabase import get_admin_client
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
 from app.models.document import DocumentRead
@@ -28,9 +28,11 @@ from app.services.document_extraction_import_service import DocumentExtractionIm
 from app.services.document_service import DocumentService
 from app.services.explanation_service import ExplanationService
 from app.services.ingestion_service import IngestionService
+from app.services.smart_launch_service import SmartLaunchService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_clinician_dep = require_role("clinician")
 
 
 def _get_service(db: Client = Depends(get_db)) -> DocumentService:
@@ -53,6 +55,7 @@ class DocumentCreateRequest(BaseModel):
     document_type: DocumentType
     source_clinic: str | None = None
     notes: str | None = None
+    content_hash: str | None = Field(default=None, pattern=r"^[A-Fa-f0-9]{64}$")
     start_ingestion: bool = True
 
 
@@ -109,12 +112,53 @@ async def create_document(
         document_type=body.document_type.value,
         source_clinic=body.source_clinic,
         notes=body.notes,
+        content_hash=body.content_hash,
     )
     if body.start_ingestion:
         background_tasks.add_task(
             _run_ingestion_safe,
             document_id=str(document["id"]),
             patient_id=user.id,
+            file_path=body.file_path,
+            document_type=body.document_type.value,
+        )
+    return document
+
+
+@router.post(
+    "/patients/{patient_id}",
+    response_model=DocumentRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a clinician-uploaded document for an assigned patient",
+)
+async def create_clinician_document(
+    patient_id: UUID,
+    body: DocumentCreateRequest,
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: DocumentService = Depends(_get_service),
+    db: Client = Depends(get_db),
+) -> Any:
+    """Require an active care-team assignment before attaching a document to a chart."""
+    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    document = await service.create_document(
+        patient_id=patient_id,
+        uploaded_by=user.id,
+        uploaded_by_role=user.role,
+        file_name=body.file_name,
+        file_path=body.file_path,
+        file_size_bytes=body.file_size_bytes,
+        mime_type=body.mime_type,
+        document_type=body.document_type.value,
+        source_clinic=body.source_clinic,
+        notes=body.notes,
+        content_hash=body.content_hash,
+    )
+    if body.start_ingestion:
+        background_tasks.add_task(
+            _run_ingestion_safe,
+            document_id=str(document["id"]),
+            patient_id=patient_id,
             file_path=body.file_path,
             document_type=body.document_type.value,
         )
@@ -138,13 +182,13 @@ async def list_documents(
     status_code=status.HTTP_201_CREATED,
     summary="Import extracted document data",
     description=(
-        "Imports a normalized document extraction result into document, medication, "
-        "allergy, condition, and feed-backed obligation records. If no extraction is "
-        "provided, a bundled demo discharge summary extraction is used."
+        "Registers a normalized extraction as pending, provenance-backed review "
+        "candidates. It never creates medication, allergy, condition, or obligation "
+        "records directly, and an explicit extraction is required."
     ),
 )
 async def import_document_extraction(
-    body: DocumentExtractionImportRequest | None = None,
+    body: DocumentExtractionImportRequest,
     user: CurrentUser = Depends(get_current_user),
     db: Client = Depends(get_db),
 ) -> Any:
@@ -161,8 +205,8 @@ async def import_document_extraction(
         patient_id=user.id,
         uploaded_by=user.id,
         uploaded_by_role=user.role,
-        document_id=body.document_id if body else None,
-        extraction=body.extraction if body else None,
+        document_id=body.document_id,
+        extraction=body.extraction,
     )
 
 

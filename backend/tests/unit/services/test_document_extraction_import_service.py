@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-from postgrest.exceptions import APIError
 
+from app.core.exceptions import ValidationError
 from app.models.document_extraction import DocumentExtractionResult
 from app.services.document_extraction_import_service import DocumentExtractionImportService
 
@@ -57,20 +56,15 @@ class FakeTable:
             self.store.setdefault(self.name, []).append(row)
             self.pending_insert = None
             return FakeResult([row])
-
         if self.pending_update is not None:
             self.store.setdefault(f"{self.name}_updates", []).append(self.pending_update)
             payload = self.pending_update
             self.pending_update = None
             return FakeResult([payload])
-
         rows = self.store.get(self.name, [])
         for column, value in self.filters:
             rows = [row for row in rows if str(row.get(column)) == value]
-
-        if self.return_single:
-            return FakeResult(rows[0] if rows else None)
-        return FakeResult(rows)
+        return FakeResult(rows[0] if self.return_single and rows else (None if self.return_single else rows))
 
 
 class FakeStorageBucket:
@@ -92,82 +86,80 @@ class FakeSupabase:
         return FakeTable(name, self.store)
 
 
-@pytest.mark.asyncio
-async def test_import_demo_extraction_creates_document_derived_feed_records() -> None:
-    db = FakeSupabase()
-    service = DocumentExtractionImportService(db)  # type: ignore[arg-type]
-
-    result = await service.import_extraction(
-        patient_id=PATIENT_ID,
-        uploaded_by=PATIENT_ID,
-        uploaded_by_role="patient",
-    )
-
-    assert result["document"]["document_type"] == "discharge_summary"
-    assert result["document"]["mime_type"] == "application/json"
-    assert result["document"]["parse_status"] == "completed"
-    assert result["medications_created"] == 2
-    assert result["obligations_created"] == 1
-    assert result["conditions_created"] == 1
-    assert result["allergies_created"] == 1
-    assert result["clinical_facts_created"] == 5
-
-    medication_names = {row["name"] for row in db.store["medications"]}
-    assert {"Theophylline", "Ventolin Inhaler"} == medication_names
-    assert all(
-        row["source_document_id"] == result["document"]["id"] for row in db.store["medications"]
-    )
-    assert (
-        db.store["obligations"][0]["description"]
-        == "Review discharge instructions from Discharge Summary"
-    )
-    assert db.store["obligations"][0]["source_document_id"] == result["document"]["id"]
-    assert db.store["documents_updates"][0]["parse_status"] == "completed"
-    assert {row["review_state"] for row in db.store["clinical_facts"]} == {"pending_review"}
-    assert len(db.store["clinical_fact_audit_events"]) == 5
-
-
-@pytest.mark.asyncio
-async def test_import_custom_extraction_uses_project_owned_schema() -> None:
-    db = FakeSupabase()
-    service = DocumentExtractionImportService(db)  # type: ignore[arg-type]
-    extraction = DocumentExtractionResult.model_validate(
+def _extraction() -> DocumentExtractionResult:
+    return DocumentExtractionResult.model_validate(
         {
-            "document": {
-                "title": "Clinic Instructions",
-                "document_type": "other",
-                "source_name": "City Health",
-            },
-            "summary": "Patient should hydrate and check blood pressure daily.",
-            "medications": [],
-            "conditions": [],
-            "allergies": [],
-            "obligations": [
+            "document": {"title": "Clinic Instructions", "document_type": "other"},
+            "medications": [
                 {
-                    "description": "Check blood pressure",
+                    "name": "Aspirin",
+                    "dosage": "81 mg",
                     "frequency": "daily",
-                    "obligation_type": "custom",
+                    "route": "oral",
                 }
             ],
+            "conditions": [{"name": "Hypertension"}],
+            "allergies": [{"allergen": "Penicillin", "severity": "mild"}],
+            "obligations": [{"description": "Walk daily"}],
         }
     )
 
+
+@pytest.mark.asyncio
+async def test_import_requires_a_verified_extraction() -> None:
+    service = DocumentExtractionImportService(FakeSupabase())  # type: ignore[arg-type]
+
+    with pytest.raises(ValidationError, match="verified extraction"):
+        await service.import_extraction(
+            patient_id=PATIENT_ID,
+            uploaded_by=PATIENT_ID,
+            uploaded_by_role="patient",
+        )
+
+
+@pytest.mark.asyncio
+async def test_import_creates_pending_candidates_not_canonical_rows() -> None:
+    db = FakeSupabase()
+    service = DocumentExtractionImportService(db)  # type: ignore[arg-type]
+
     result = await service.import_extraction(
         patient_id=PATIENT_ID,
         uploaded_by=PATIENT_ID,
         uploaded_by_role="patient",
-        extraction=extraction,
+        extraction=_extraction(),
     )
 
-    assert result["document"]["file_name"] == "Clinic Instructions.json"
-    assert result["document"]["source_clinic"] == "City Health"
-    assert result["summary"] == "Patient should hydrate and check blood pressure daily."
-    assert db.store["obligations"][0]["frequency"] == "daily"
-    assert db.store["obligations"][0]["source_document_id"] == result["document"]["id"]
+    assert result["clinical_facts_created"] == 4
+    assert result["medications_created"] == 0
+    assert result["conditions_created"] == 0
+    assert result["allergies_created"] == 0
+    assert result["obligations_created"] == 0
+    assert {fact["fact_type"] for fact in db.store["clinical_facts"]} == {
+        "medication",
+        "condition",
+        "allergy",
+        "obligation",
+    }
+    assert {fact["review_state"] for fact in db.store["clinical_facts"]} == {"pending_review"}
+    assert all(
+        fact["external_source_key"].startswith(f"document/{result['document']['id']}/")
+        and fact["external_source_version"] == result["document"]["id"]
+        for fact in db.store["clinical_facts"]
+    )
+    assert "medications" not in db.store
+    assert "conditions" not in db.store
+    assert "allergies" not in db.store
+    assert "obligations" not in db.store
+    assert db.store["document_ingestion_runs"][0]["status"] == "processing"
+    assert db.store["document_ingestion_runs_updates"][-1] == {
+        "status": "completed",
+        "candidate_fact_count": 4,
+        "error_message": None,
+    }
 
 
 @pytest.mark.asyncio
-async def test_import_extraction_can_attach_to_existing_uploaded_document() -> None:
+async def test_import_can_attach_candidates_to_the_explicit_patient_document() -> None:
     db = FakeSupabase()
     document_id = uuid4()
     db.store["documents"] = [
@@ -175,21 +167,7 @@ async def test_import_extraction_can_attach_to_existing_uploaded_document() -> N
             "id": str(document_id),
             "patient_id": str(PATIENT_ID),
             "uploaded_by": str(PATIENT_ID),
-            "uploaded_by_role": "patient",
-            "file_name": "vatsal-discharge-summary.pdf",
-            "file_url": "https://storage.example.test/document.pdf",
-            "file_path": f"{PATIENT_ID}/vatsal-discharge-summary.pdf",
-            "file_size_bytes": 1200,
-            "mime_type": "application/pdf",
-            "document_type": "discharge_summary",
-            "source_clinic": "Patient uploaded document",
-            "parsed": False,
-            "ai_summary": None,
-            "parse_status": "pending",
-            "parse_error": None,
-            "parse_attempts": 0,
-            "visibility": "all_providers",
-            "created_at": "2026-05-01T00:00:00Z",
+            "file_name": "uploaded.pdf",
         }
     ]
     service = DocumentExtractionImportService(db)  # type: ignore[arg-type]
@@ -199,40 +177,10 @@ async def test_import_extraction_can_attach_to_existing_uploaded_document() -> N
         uploaded_by=PATIENT_ID,
         uploaded_by_role="patient",
         document_id=document_id,
+        extraction=_extraction(),
     )
 
     assert result["document"]["id"] == str(document_id)
-    assert result["document"]["file_name"] == "vatsal-discharge-summary.pdf"
-    assert len(db.store["documents"]) == 1
-    assert db.store["documents_updates"][0]["parse_status"] == "completed"
-    assert all(row["source_document_id"] == str(document_id) for row in db.store["medications"])
-    assert all(row["source_document_id"] == str(document_id) for row in db.store["obligations"])
-
-
-@pytest.mark.asyncio
-async def test_import_extraction_skips_obligations_when_source_document_column_is_missing() -> None:
-    db = FakeSupabase()
-    service = DocumentExtractionImportService(db)  # type: ignore[arg-type]
-    service.obligation_service.create_obligation = AsyncMock(  # type: ignore[method-assign]
-        side_effect=APIError(
-            {
-                "message": (
-                    "Could not find the 'source_document_id' column of 'obligations' "
-                    "in the schema cache"
-                ),
-                "code": "PGRST204",
-                "hint": None,
-                "details": None,
-            }
-        )
+    assert all(
+        item["document_id"] == str(document_id) for item in db.store["source_provenances"]
     )
-
-    result = await service.import_extraction(
-        patient_id=PATIENT_ID,
-        uploaded_by=PATIENT_ID,
-        uploaded_by_role="patient",
-    )
-
-    assert result["medications_created"] == 2
-    assert result["obligations_created"] == 0
-    assert db.store["documents_updates"][0]["parse_status"] == "completed"

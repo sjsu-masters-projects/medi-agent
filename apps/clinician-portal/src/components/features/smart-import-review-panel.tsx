@@ -25,6 +25,8 @@ interface ReviewSource {
   version_id?: string | null;
   mapping_warnings: string[];
   validation_errors: string[];
+  source_kind?: "smart" | "document";
+  import_id?: string | null;
 }
 
 interface ReviewFact {
@@ -34,8 +36,39 @@ interface ReviewFact {
   value: Record<string, unknown>;
   uncertainty: string[];
   review_state: ReviewState;
+  reconciliation_state?: string;
+  reconciliation_target_type?: string | null;
+  reconciliation_target_id?: string | null;
   created_at: string;
   source?: ReviewSource | null;
+}
+
+interface ReconciliationMatch {
+  target_type: "medication" | "condition" | "allergy";
+  target_id: string;
+  match_reason: string;
+  record: Record<string, unknown>;
+}
+
+interface ReconciliationPreview {
+  fact_id: string;
+  fact_type: string;
+  projectable: boolean;
+  candidate_fields: Record<string, unknown>;
+  available_fields: string[];
+  matches: ReconciliationMatch[];
+}
+
+interface IdentityBindingPreview {
+  import_id: string;
+  patient_id: string;
+  issuer: string;
+  external_patient_id: string;
+  external_identity: Record<string, unknown>;
+  local_identity: Record<string, unknown>;
+  identity_matches: boolean;
+  binding_id?: string | null;
+  confirmed_at?: string | null;
 }
 
 interface ReviewResponse {
@@ -55,6 +88,7 @@ interface SourceDetail extends ReviewSource {
 }
 
 const PAGE_SIZE = 25;
+const PROJECTABLE_TYPES = new Set(["medication", "condition", "allergy"]);
 
 const FACT_LABELS: Record<string, string> = {
   patient_demographics: "Patient demographics",
@@ -130,6 +164,7 @@ const FACT_FIELDS: Record<string, Array<[string, string]>> = {
     ["status", "Status"],
     ["intent", "Intent"],
     ["period", "Period"],
+    ["category", "Category"],
     ["activities", "Activities"],
     ["addresses", "Addresses"],
   ],
@@ -286,6 +321,10 @@ export function SmartImportReviewPanel({
   const token = useSelector((state: RootState) => state.auth.accessToken);
   const [reviewState, setReviewState] = useState<ReviewState>("pending_review");
   const [factType, setFactType] = useState("");
+  const [sourceKind, setSourceKind] = useState("");
+  const [reconciliationState, setReconciliationState] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [offset, setOffset] = useState(0);
   const [review, setReview] = useState<ReviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -293,6 +332,14 @@ export function SmartImportReviewPanel({
   const [busyFactId, setBusyFactId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<ReviewFact | null>(null);
   const [correcting, setCorrecting] = useState<ReviewFact | null>(null);
+  const [reconciling, setReconciling] = useState<{
+    fact: ReviewFact;
+    preview: ReconciliationPreview;
+  } | null>(null);
+  const [selectedFields, setSelectedFields] = useState<string[]>([]);
+  const [selectedTargetId, setSelectedTargetId] = useState("");
+  const [binding, setBinding] = useState<IdentityBindingPreview | null>(null);
+  const [bindingNote, setBindingNote] = useState("");
   const [note, setNote] = useState("");
   const [correctionDraft, setCorrectionDraft] = useState<
     Record<string, string>
@@ -307,11 +354,19 @@ export function SmartImportReviewPanel({
     setLoading(true);
     setError(null);
     try {
-      const factTypeQuery = factType
-        ? `&fact_type=${encodeURIComponent(factType)}`
-        : "";
+      const filters = new URLSearchParams({
+        review_state: reviewState,
+        offset: String(offset),
+        limit: String(PAGE_SIZE),
+      });
+      if (factType) filters.set("fact_type", factType);
+      if (sourceKind) filters.set("source_kind", sourceKind);
+      if (reconciliationState)
+        filters.set("reconciliation_state", reconciliationState);
+      if (fromDate) filters.set("from_date", fromDate);
+      if (toDate) filters.set("to_date", toDate);
       const response = await api.get<ReviewResponse>(
-        `/api/v1/smart/patients/${patientId}/facts?review_state=${reviewState}&offset=${offset}&limit=${PAGE_SIZE}${factTypeQuery}`,
+        `/api/v1/smart/patients/${patientId}/facts?${filters.toString()}`,
         { token },
       );
       setReview(response);
@@ -324,7 +379,17 @@ export function SmartImportReviewPanel({
     } finally {
       setLoading(false);
     }
-  }, [factType, offset, patientId, reviewState, token]);
+  }, [
+    factType,
+    fromDate,
+    offset,
+    patientId,
+    reconciliationState,
+    reviewState,
+    sourceKind,
+    toDate,
+    token,
+  ]);
 
   useEffect(() => {
     void load();
@@ -346,6 +411,143 @@ export function SmartImportReviewPanel({
         reviewError instanceof Error
           ? reviewError.message
           : "Unable to approve imported fact.",
+      );
+    } finally {
+      setBusyFactId(null);
+    }
+  }
+
+  async function openReconciliation(fact: ReviewFact) {
+    if (!token) return;
+    setBusyFactId(fact.id);
+    setError(null);
+    try {
+      if (fact.source?.source_kind === "smart" && fact.source.import_id) {
+        const identityBinding = await api.get<IdentityBindingPreview>(
+          `/api/v1/smart/patients/${patientId}/imports/${fact.source.import_id}/identity-binding`,
+          { token },
+        );
+        if (!identityBinding.confirmed_at) {
+          setBinding(identityBinding);
+          setBindingNote("");
+          return;
+        }
+      }
+      const preview = await api.get<ReconciliationPreview>(
+        `/api/v1/smart/patients/${patientId}/facts/${fact.id}/reconciliation-preview`,
+        { token },
+      );
+      setReconciling({ fact, preview });
+      setSelectedFields(preview.available_fields);
+      setSelectedTargetId(
+        preview.matches.length === 1 ? preview.matches[0].target_id : "",
+      );
+      setNote("");
+    } catch (reviewError) {
+      setError(
+        reviewError instanceof Error
+          ? reviewError.message
+          : "Unable to prepare record reconciliation.",
+      );
+    } finally {
+      setBusyFactId(null);
+    }
+  }
+
+  async function openIdentityBinding(importId: string) {
+    if (!token) return;
+    setBusyFactId(importId);
+    setError(null);
+    try {
+      const preview = await api.get<IdentityBindingPreview>(
+        `/api/v1/smart/patients/${patientId}/imports/${importId}/identity-binding`,
+        { token },
+      );
+      setBinding(preview);
+      setBindingNote("");
+    } catch (bindingError) {
+      setError(
+        bindingError instanceof Error
+          ? bindingError.message
+          : "Unable to load the external-patient comparison.",
+      );
+    } finally {
+      setBusyFactId(null);
+    }
+  }
+
+  async function confirmIdentityBinding() {
+    if (!token || !binding) return;
+    if (!binding.identity_matches && !bindingNote.trim()) {
+      setError(
+        "Provide a reason before confirming a synthetic identity mismatch.",
+      );
+      return;
+    }
+    setBusyFactId(binding.import_id);
+    setError(null);
+    try {
+      await api.post(
+        `/api/v1/smart/patients/${patientId}/imports/${binding.import_id}/identity-binding`,
+        { confirmation_note: bindingNote.trim() || undefined },
+        { token },
+      );
+      setBinding(null);
+      setBindingNote("");
+    } catch (bindingError) {
+      setError(
+        bindingError instanceof Error
+          ? bindingError.message
+          : "Unable to confirm the external patient binding.",
+      );
+    } finally {
+      setBusyFactId(null);
+    }
+  }
+
+  async function reconcile(
+    decision:
+      | "add"
+      | "update"
+      | "keep_existing"
+      | "defer"
+      | "reject"
+      | "mark_reviewed",
+  ) {
+    if (!token || !reconciling) return;
+    if (decision === "update" && !selectedTargetId) {
+      setError("Choose the local record to update.");
+      return;
+    }
+    if ((decision === "defer" || decision === "reject") && !note.trim()) {
+      setError("A note is required for this decision.");
+      return;
+    }
+    setBusyFactId(reconciling.fact.id);
+    setError(null);
+    try {
+      await api.post(
+        `/api/v1/smart/patients/${patientId}/facts/${reconciling.fact.id}/reconcile`,
+        {
+          decision,
+          target_id: decision === "update" ? selectedTargetId : undefined,
+          selected_fields:
+            decision === "add" || decision === "update" ? selectedFields : [],
+          note: note.trim() || undefined,
+          idempotency_key: crypto.randomUUID(),
+        },
+        { token },
+      );
+      setReconciling(null);
+      setSelectedFields([]);
+      setSelectedTargetId("");
+      setNote("");
+      await load();
+    } catch (reviewError) {
+      setError(
+        reviewError instanceof Error
+          ? reviewError.message
+          : "Unable to record reconciliation decision.",
       );
     } finally {
       setBusyFactId(null);
@@ -447,12 +649,13 @@ export function SmartImportReviewPanel({
             className="mt-1 text-xl font-bold text-slate-900"
             id="smart-import-review-heading"
           >
-            SMART import review
+            External records review
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Review mapped sandbox facts with resource-level provenance. Approval
-            records a clinician decision; it does not overwrite the local record
-            or active medication list.
+            Review SMART and document candidates with source-level provenance.
+            Only a field-by-field reconciliation decision can change an existing
+            medication, condition, or allergy; evidence-only records remain
+            read-only.
           </p>
         </div>
         <button
@@ -506,33 +709,98 @@ export function SmartImportReviewPanel({
               and read-only.
             </p>
           </div>
-          {review && Object.keys(review.fact_type_counts).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {review && Object.keys(review.fact_type_counts).length > 0 && (
+              <label className="text-sm font-medium text-slate-700">
+                Mapped type
+                <select
+                  aria-label="Filter imported facts by mapped type"
+                  className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800"
+                  onChange={(event) => {
+                    setFactType(event.target.value);
+                    setOffset(0);
+                  }}
+                  value={factType}
+                >
+                  <option value="">All mapped types</option>
+                  {Object.entries(review.fact_type_counts)
+                    .sort(([left], [right]) =>
+                      (FACT_LABELS[left] ?? left).localeCompare(
+                        FACT_LABELS[right] ?? right,
+                      ),
+                    )
+                    .map(([value, count]) => (
+                      <option key={value} value={value}>
+                        {FACT_LABELS[value] ?? value} ({count})
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
             <label className="text-sm font-medium text-slate-700">
-              Mapped type
+              Source
               <select
-                aria-label="Filter imported facts by mapped type"
+                aria-label="Filter imported facts by source"
                 className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800"
                 onChange={(event) => {
-                  setFactType(event.target.value);
+                  setSourceKind(event.target.value);
                   setOffset(0);
                 }}
-                value={factType}
+                value={sourceKind}
               >
-                <option value="">All mapped types</option>
-                {Object.entries(review.fact_type_counts)
-                  .sort(([left], [right]) =>
-                    (FACT_LABELS[left] ?? left).localeCompare(
-                      FACT_LABELS[right] ?? right,
-                    ),
-                  )
-                  .map(([value, count]) => (
-                    <option key={value} value={value}>
-                      {FACT_LABELS[value] ?? value} ({count})
-                    </option>
-                  ))}
+                <option value="">All sources</option>
+                <option value="smart">SMART</option>
+                <option value="document">Document</option>
               </select>
             </label>
-          )}
+            <label className="text-sm font-medium text-slate-700">
+              Reconciliation
+              <select
+                aria-label="Filter imported facts by reconciliation state"
+                className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800"
+                onChange={(event) => {
+                  setReconciliationState(event.target.value);
+                  setOffset(0);
+                }}
+                value={reconciliationState}
+              >
+                <option value="">All states</option>
+                <option value="not_started">Not started</option>
+                <option value="applied">Applied</option>
+                <option value="kept_existing">Kept existing</option>
+                <option value="deferred">Deferred</option>
+                <option value="rejected">Rejected</option>
+                <option value="reviewed_evidence">Reviewed evidence</option>
+                <option value="source_withdrawn">Source withdrawn</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              From
+              <input
+                aria-label="Filter imported facts from date"
+                className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-normal"
+                onChange={(event) => {
+                  setFromDate(event.target.value);
+                  setOffset(0);
+                }}
+                type="date"
+                value={fromDate}
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              To
+              <input
+                aria-label="Filter imported facts to date"
+                className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-normal"
+                onChange={(event) => {
+                  setToDate(event.target.value);
+                  setOffset(0);
+                }}
+                type="date"
+                value={toDate}
+              />
+            </label>
+          </div>
         </div>
 
         {loading ? (
@@ -548,7 +816,7 @@ export function SmartImportReviewPanel({
               No {stateLabel(reviewState).toLowerCase()} imported facts
             </p>
             <p className="mt-1 text-sm text-slate-600">
-              A new SMART import will appear here as clinician-review
+              New SMART and document imports appear here as clinician-review
               candidates.
             </p>
           </div>
@@ -567,6 +835,12 @@ export function SmartImportReviewPanel({
                       >
                         {stateLabel(fact.review_state)}
                       </span>
+                      {fact.reconciliation_state &&
+                        fact.reconciliation_state !== "not_started" && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                            {fact.reconciliation_state.replaceAll("_", " ")}
+                          </span>
+                        )}
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
                       {fact.source
@@ -586,14 +860,43 @@ export function SmartImportReviewPanel({
                     </button>
                     {fact.review_state === "pending_review" && (
                       <>
-                        <button
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                          disabled={busyFactId === fact.id}
-                          onClick={() => void approve(fact)}
-                          type="button"
-                        >
-                          <HiOutlineCheckCircle className="h-4 w-4" /> Approve
-                        </button>
+                        {PROJECTABLE_TYPES.has(fact.fact_type) ? (
+                          <button
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            disabled={busyFactId === fact.id}
+                            onClick={() => void openReconciliation(fact)}
+                            type="button"
+                          >
+                            <HiOutlineCheckCircle className="h-4 w-4" /> Review
+                            changes
+                          </button>
+                        ) : (
+                          <button
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            disabled={busyFactId === fact.id}
+                            onClick={() => void approve(fact)}
+                            type="button"
+                          >
+                            <HiOutlineCheckCircle className="h-4 w-4" /> Mark
+                            reviewed
+                          </button>
+                        )}
+                        {PROJECTABLE_TYPES.has(fact.fact_type) &&
+                          fact.source?.source_kind === "smart" &&
+                          fact.source.import_id && (
+                            <button
+                              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                              disabled={busyFactId === fact.id}
+                              onClick={() =>
+                                void openIdentityBinding(
+                                  String(fact.source?.import_id),
+                                )
+                              }
+                              type="button"
+                            >
+                              Confirm patient
+                            </button>
+                          )}
                         <button
                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                           disabled={busyFactId === fact.id}
@@ -631,6 +934,24 @@ export function SmartImportReviewPanel({
                     {fact.uncertainty.join(" ")}
                   </div>
                 )}
+                {fact.reconciliation_state === "source_withdrawn" && (
+                  <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                    <HiOutlineExclamationCircle className="mr-1 inline h-4 w-4" />
+                    The supporting source was withdrawn after local
+                    reconciliation. Review the preserved local record and audit
+                    history before further use.
+                  </div>
+                )}
+                {fact.reconciliation_state === "applied" &&
+                  fact.reconciliation_target_id && (
+                    <a
+                      className="inline-flex text-sm font-medium text-blue-700 underline hover:text-blue-800"
+                      href={`/patients/${patientId}`}
+                    >
+                      View applied local{" "}
+                      {fact.reconciliation_target_type ?? "record"}
+                    </a>
+                  )}
                 {fact.source &&
                   (fact.source.mapping_warnings.length > 0 ||
                     fact.source.validation_errors.length > 0) && (
@@ -673,6 +994,334 @@ export function SmartImportReviewPanel({
           </div>
         )}
       </Card>
+
+      <Modal
+        onClose={() => {
+          if (!busyFactId) {
+            setReconciling(null);
+            setSelectedFields([]);
+            setSelectedTargetId("");
+            setNote("");
+          }
+        }}
+        open={Boolean(reconciling)}
+        title="Reconcile imported record"
+      >
+        {reconciling && (
+          <div className="space-y-5">
+            <p className="text-sm text-slate-600">
+              Select exactly which imported values may be applied. Missing
+              values never clear the local chart; this action is recorded with
+              the original source version.
+            </p>
+            <div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Imported candidate
+                </h3>
+                <dl className="mt-2 space-y-2 text-sm">
+                  {Object.entries(reconciling.preview.candidate_fields).map(
+                    ([field, value]) => (
+                      <div key={field}>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          {field.replaceAll("_", " ")}
+                        </dt>
+                        <dd className="break-words text-slate-800">
+                          {formatValue(value, patientTimezone ?? "UTC")}
+                        </dd>
+                      </div>
+                    ),
+                  )}
+                </dl>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Matched local record
+                </h3>
+                {reconciling.preview.matches.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-600">
+                    No conservative match was found. You may add a new local
+                    record after checking the candidate fields.
+                  </p>
+                ) : (
+                  <>
+                    <label className="mt-2 block text-sm font-medium text-slate-700">
+                      {reconciling.preview.matches.length > 1
+                        ? "Choose a local record"
+                        : "Matched local record"}
+                      <select
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                        onChange={(event) =>
+                          setSelectedTargetId(event.target.value)
+                        }
+                        value={selectedTargetId}
+                      >
+                        <option value="">Choose a record</option>
+                        {reconciling.preview.matches.map((match) => (
+                          <option key={match.target_id} value={match.target_id}>
+                            {match.match_reason}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedTargetId &&
+                      (() => {
+                        const match = reconciling.preview.matches.find(
+                          (item) => item.target_id === selectedTargetId,
+                        );
+                        return match ? (
+                          <>
+                            <dl className="mt-3 space-y-2 text-sm">
+                              {Object.entries(match.record)
+                                .filter(([field]) =>
+                                  reconciling.preview.available_fields.includes(
+                                    field,
+                                  ),
+                                )
+                                .map(([field, value]) => (
+                                  <div key={field}>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                      {field.replaceAll("_", " ")}
+                                    </dt>
+                                    <dd className="break-words text-slate-800">
+                                      {formatValue(
+                                        value,
+                                        patientTimezone ?? "UTC",
+                                      )}
+                                    </dd>
+                                  </div>
+                                ))}
+                            </dl>
+                            <div className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-slate-800">
+                              <h4 className="font-semibold">
+                                Selected-field preview
+                              </h4>
+                              <dl className="mt-2 space-y-2">
+                                {reconciling.preview.available_fields
+                                  .filter((field) =>
+                                    selectedFields.includes(field),
+                                  )
+                                  .map((field) => (
+                                    <div key={field}>
+                                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                        {field.replaceAll("_", " ")}
+                                      </dt>
+                                      <dd>
+                                        <span className="text-slate-500">
+                                          {formatValue(
+                                            match.record[field],
+                                            patientTimezone ?? "UTC",
+                                          )}
+                                        </span>{" "}
+                                        <span aria-hidden="true">→</span>{" "}
+                                        <span className="font-medium">
+                                          {formatValue(
+                                            reconciling.preview
+                                              .candidate_fields[field],
+                                            patientTimezone ?? "UTC",
+                                          )}
+                                        </span>
+                                      </dd>
+                                    </div>
+                                  ))}
+                              </dl>
+                            </div>
+                          </>
+                        ) : null;
+                      })()}
+                  </>
+                )}
+              </div>
+            </div>
+            <fieldset>
+              <legend className="text-sm font-semibold text-slate-900">
+                Fields to apply
+              </legend>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {reconciling.preview.available_fields.map((field) => (
+                  <label
+                    className="flex items-center gap-2 text-sm text-slate-700"
+                    key={field}
+                  >
+                    <input
+                      checked={selectedFields.includes(field)}
+                      onChange={(event) =>
+                        setSelectedFields((current) =>
+                          event.target.checked
+                            ? [...current, field]
+                            : current.filter((item) => item !== field),
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    {field.replaceAll("_", " ")}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <label className="block text-sm font-medium text-slate-700">
+              Decision note (required for defer or reject)
+              <textarea
+                className="mt-2 min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                onChange={(event) => setNote(event.target.value)}
+                value={note}
+              />
+            </label>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+                onClick={() => setReconciling(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                disabled={busyFactId !== null}
+                onClick={() => void reconcile("defer")}
+                type="button"
+              >
+                Defer
+              </button>
+              {reconciling.preview.matches.length > 0 && (
+                <>
+                  <button
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                    disabled={busyFactId !== null}
+                    onClick={() => void reconcile("keep_existing")}
+                    type="button"
+                  >
+                    Keep existing
+                  </button>
+                  <button
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    disabled={
+                      busyFactId !== null ||
+                      !selectedTargetId ||
+                      selectedFields.length === 0
+                    }
+                    onClick={() => void reconcile("update")}
+                    type="button"
+                  >
+                    Update selected fields
+                  </button>
+                </>
+              )}
+              {reconciling.preview.matches.length === 0 && (
+                <button
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={busyFactId !== null || selectedFields.length === 0}
+                  onClick={() => void reconcile("add")}
+                  type="button"
+                >
+                  Add local record
+                </button>
+              )}
+              <button
+                className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700"
+                disabled={busyFactId !== null}
+                onClick={() => void reconcile("reject")}
+                type="button"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        onClose={() => {
+          if (!busyFactId) {
+            setBinding(null);
+            setBindingNote("");
+          }
+        }}
+        open={Boolean(binding)}
+        title="Confirm external patient binding"
+      >
+        {binding && (
+          <div className="space-y-5">
+            <p className="text-sm text-slate-600">
+              This comparison confirms that this external SMART patient belongs
+              to this local chart. It never updates local demographics.
+            </p>
+            <div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  External SMART patient
+                </h3>
+                <dl className="mt-2 space-y-2 text-sm text-slate-700">
+                  {Object.entries(binding.external_identity).map(
+                    ([field, value]) => (
+                      <div key={field}>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          {field.replaceAll("_", " ")}
+                        </dt>
+                        <dd>{formatValue(value, patientTimezone ?? "UTC")}</dd>
+                      </div>
+                    ),
+                  )}
+                </dl>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Local chart
+                </h3>
+                <dl className="mt-2 space-y-2 text-sm text-slate-700">
+                  {Object.entries(binding.local_identity).map(
+                    ([field, value]) => (
+                      <div key={field}>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          {field.replaceAll("_", " ")}
+                        </dt>
+                        <dd>{formatValue(value, patientTimezone ?? "UTC")}</dd>
+                      </div>
+                    ),
+                  )}
+                </dl>
+              </div>
+            </div>
+            <div
+              className={`rounded-lg px-3 py-2 text-sm ${binding.identity_matches ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}
+            >
+              {binding.identity_matches
+                ? "The available identity details match."
+                : "The available identity details differ or are incomplete. A clinician reason is required before binding synthetic records."}
+            </div>
+            {!binding.identity_matches && (
+              <label className="block text-sm font-medium text-slate-700">
+                Confirmation reason
+                <textarea
+                  className="mt-2 min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  onChange={(event) => setBindingNote(event.target.value)}
+                  value={bindingNote}
+                />
+              </label>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+                onClick={() => setBinding(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                disabled={
+                  busyFactId !== null ||
+                  (!binding.identity_matches && !bindingNote.trim())
+                }
+                onClick={() => void confirmIdentityBinding()}
+                type="button"
+              >
+                {busyFactId ? "Confirming…" : "Confirm binding"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         onClose={() => {
@@ -803,7 +1452,11 @@ export function SmartImportReviewPanel({
       <Modal
         onClose={() => setSource(null)}
         open={Boolean(source)}
-        title="Original SMART FHIR source"
+        title={
+          source?.detail.source_kind === "document"
+            ? "Original document evidence"
+            : "Original SMART FHIR source"
+        }
       >
         {source && (
           <div className="space-y-3">

@@ -217,6 +217,8 @@ class FhirImportService:
             return []
         resource_id = str(stored_resource["id"])
         resource_type = str(resource["resourceType"])
+        external_id = stored_resource.get("external_resource_id")
+        version_id = stored_resource.get("version_id") or stored_resource.get("content_hash")
         return [
             ClinicalFactCreate(
                 patient_id=patient_id,
@@ -227,6 +229,10 @@ class FhirImportService:
                 # does not establish clinical certainty or approval locally.
                 confidence_band=ConfidenceBand.UNKNOWN,
                 uncertainty=["Imported data requires clinician review before clinical use."],
+                external_source_key=(
+                    f"{issuer.rstrip('/')}/{resource_type}/{external_id}" if external_id else None
+                ),
+                external_source_version=str(version_id) if version_id else None,
                 provenance=SourceProvenanceCreate(
                     artifact_type=SourceArtifactType.FHIR_RESOURCE,
                     source_system=issuer.rstrip("/"),
@@ -275,6 +281,7 @@ class FhirImportService:
                 "fact_type": "condition",
                 "value": {
                     "name": code,
+                    "icd10_code": FhirImportService._icd10_code(resource.get("code")),
                     "clinical_status": FhirImportService._code_text(resource.get("clinicalStatus")),
                     "verification_status": FhirImportService._code_text(
                         resource.get("verificationStatus")
@@ -291,6 +298,8 @@ class FhirImportService:
                     "clinical_status": FhirImportService._code_text(resource.get("clinicalStatus")),
                     "criticality": resource.get("criticality"),
                     "reactions": FhirImportService._reaction_summaries(resource.get("reaction")),
+                    "reaction": FhirImportService._first_reaction(resource.get("reaction")),
+                    "severity": FhirImportService._reaction_severity(resource.get("reaction")),
                 },
             }
         if resource_type in {"MedicationRequest", "MedicationStatement"}:
@@ -303,11 +312,31 @@ class FhirImportService:
                 "fact_type": "medication",
                 "value": {
                     "name": FhirImportService._code_text(medication),
+                    "rxcui": FhirImportService._rxcui(medication),
                     "status": resource.get("status"),
                     "intent": resource.get("intent"),
                     "dosage": FhirImportService._dosage_summary(
                         resource.get("dosageInstruction") or resource.get("dosage")
                     ),
+                    "frequency": FhirImportService._dosage_frequency(
+                        resource.get("dosageInstruction") or resource.get("dosage")
+                    ),
+                    "route": FhirImportService._dosage_route(
+                        resource.get("dosageInstruction") or resource.get("dosage")
+                    ),
+                    "instructions": FhirImportService._dosage_instruction(
+                        resource.get("dosageInstruction") or resource.get("dosage")
+                    ),
+                    "start_date": FhirImportService._fhir_date(
+                        resource.get("authoredOn")
+                        or resource.get("dateAsserted")
+                        or resource.get("effectiveDateTime")
+                        or FhirImportService._period_part(resource.get("effectivePeriod"), "start")
+                    ),
+                    "end_date": FhirImportService._fhir_date(
+                        FhirImportService._period_part(resource.get("effectivePeriod"), "end")
+                    ),
+                    "is_active": FhirImportService._medication_active(resource.get("status")),
                     "authored": resource.get("authoredOn")
                     or resource.get("dateAsserted")
                     or resource.get("effectiveDateTime")
@@ -367,6 +396,7 @@ class FhirImportService:
                     "status": resource.get("status"),
                     "intent": resource.get("intent"),
                     "period": resource.get("period"),
+                    "category": FhirImportService._code_texts(resource.get("category")),
                     "activities": FhirImportService._care_plan_activities(resource.get("activity")),
                     "addresses": FhirImportService._references(resource.get("addresses")),
                 },
@@ -404,6 +434,45 @@ class FhirImportService:
         if isinstance(coding, list) and coding and isinstance(coding[0], dict):
             return cast(str | None, coding[0].get("display") or coding[0].get("code"))
         return None
+
+    @staticmethod
+    def _icd10_code(value: Any) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        codings = value.get("coding")
+        if not isinstance(codings, list):
+            return None
+        for coding in codings:
+            if not isinstance(coding, dict):
+                continue
+            system = str(coding.get("system") or "").lower()
+            code = coding.get("code")
+            if isinstance(code, str) and code and "icd-10" in system:
+                return code
+        return None
+
+    @staticmethod
+    def _rxcui(value: Any) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        codings = value.get("coding")
+        if not isinstance(codings, list):
+            return None
+        for coding in codings:
+            if not isinstance(coding, dict):
+                continue
+            system = str(coding.get("system") or "").lower()
+            code = coding.get("code")
+            if isinstance(code, str) and code and ("rxnorm" in system or "rxcui" in system):
+                return code
+        return None
+
+    @staticmethod
+    def _period_part(value: Any, part: str) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        candidate = value.get(part)
+        return candidate if isinstance(candidate, str) else None
 
     @staticmethod
     def _code_texts(value: Any) -> list[str]:
@@ -454,6 +523,30 @@ class FhirImportService:
         return summaries
 
     @staticmethod
+    def _first_reaction(value: Any) -> str | None:
+        if not isinstance(value, list):
+            return None
+        for reaction in value:
+            if not isinstance(reaction, dict):
+                continue
+            manifestations = FhirImportService._code_texts(reaction.get("manifestation"))
+            if manifestations:
+                return "; ".join(manifestations)
+        return None
+
+    @staticmethod
+    def _reaction_severity(value: Any) -> str | None:
+        if not isinstance(value, list):
+            return None
+        for reaction in value:
+            if not isinstance(reaction, dict):
+                continue
+            severity = reaction.get("severity")
+            if severity in {"mild", "moderate", "severe"}:
+                return str(severity)
+        return None
+
+    @staticmethod
     def _dosage_summary(value: Any) -> list[str]:
         values = value if isinstance(value, list) else [value]
         summaries: list[str] = []
@@ -483,6 +576,67 @@ class FhirImportService:
             if summary:
                 summaries.append(summary)
         return summaries
+
+    @staticmethod
+    def _first_dosage(value: Any) -> dict[str, Any] | None:
+        values = value if isinstance(value, list) else [value]
+        return next((item for item in values if isinstance(item, dict)), None)
+
+    @staticmethod
+    def _dosage_frequency(value: Any) -> str | None:
+        dosage = FhirImportService._first_dosage(value)
+        if not dosage:
+            return None
+        timing = dosage.get("timing")
+        if not isinstance(timing, dict):
+            return None
+        repeat = timing.get("repeat")
+        if isinstance(repeat, dict) and isinstance(repeat.get("frequency"), int | float):
+            period = repeat.get("period")
+            unit = repeat.get("periodUnit")
+            if period and unit:
+                return f"{repeat['frequency']} per {period} {unit}"
+            return str(repeat["frequency"])
+        return FhirImportService._code_text(timing.get("code"))
+
+    @staticmethod
+    def _dosage_route(value: Any) -> str | None:
+        dosage = FhirImportService._first_dosage(value)
+        if not dosage:
+            return None
+        route = FhirImportService._code_text(dosage.get("route"))
+        if not route:
+            return None
+        normalized = route.strip().lower()
+        return (
+            normalized
+            if normalized in {"oral", "topical", "iv", "im", "subcutaneous", "inhaled", "other"}
+            else "other"
+        )
+
+    @staticmethod
+    def _dosage_instruction(value: Any) -> str | None:
+        dosage = FhirImportService._first_dosage(value)
+        if not dosage:
+            return None
+        text = dosage.get("text")
+        return text.strip() if isinstance(text, str) and text.strip() else None
+
+    @staticmethod
+    def _fhir_date(value: Any) -> str | None:
+        if not isinstance(value, str) or not re.match(r"^\d{4}-\d{2}-\d{2}", value):
+            return None
+        return value[:10]
+
+    @staticmethod
+    def _medication_active(value: Any) -> bool | None:
+        if not isinstance(value, str):
+            return None
+        if value in {"active", "intended", "on-hold"}:
+            return True
+        if value in {"completed", "stopped", "cancelled", "entered-in-error"}:
+            return False
+        return None
 
     @staticmethod
     def _quantity_text(value: dict[str, Any]) -> str | None:

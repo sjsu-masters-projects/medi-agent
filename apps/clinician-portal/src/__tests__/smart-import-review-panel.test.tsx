@@ -71,7 +71,7 @@ describe("SMART import review panel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/frequency was not supplied/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/does not overwrite the local record/i),
+      screen.getByText(/field-by-field reconciliation decision/i),
     ).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith(
       "/api/v1/smart/patients/patient-1/facts?review_state=pending_review&offset=0&limit=25",
@@ -101,17 +101,31 @@ describe("SMART import review panel", () => {
     ).toBeInTheDocument();
   });
 
-  it("submits explicit review actions as JSON request bodies", async () => {
+  it("submits a clinician-selected reconciliation decision as JSON", async () => {
     render(<SmartImportReviewPanel patientId="patient-1" />);
 
     await screen.findByText("Metformin");
+    get.mockResolvedValueOnce({
+      fact_id: "fact-1",
+      fact_type: "medication",
+      projectable: true,
+      candidate_fields: { name: "Metformin", dosage: "500 mg daily" },
+      available_fields: ["name", "dosage"],
+      matches: [],
+    });
     post.mockResolvedValue({});
-    fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /review changes/i }));
+
+    await screen.findByText(/no conservative match was found/i);
+    fireEvent.click(screen.getByRole("button", { name: /add local record/i }));
 
     await waitFor(() => {
       expect(post).toHaveBeenCalledWith(
-        "/api/v1/smart/patients/patient-1/facts/fact-1/approve",
-        {},
+        "/api/v1/smart/patients/patient-1/facts/fact-1/reconcile",
+        expect.objectContaining({
+          decision: "add",
+          selected_fields: ["name", "dosage"],
+        }),
         { token: "local-clinician-token" },
       );
     });

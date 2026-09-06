@@ -1,318 +1,414 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { HiOutlineCloudArrowUp, HiOutlineDocumentText, HiOutlineXMark } from "react-icons/hi2";
-import { DocumentType, UploaderRole } from "@/types";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  HiOutlineCloudArrowUp,
+  HiOutlineDocumentText,
+  HiOutlineXMark,
+} from "react-icons/hi2";
+import { DocumentType } from "@/types";
+import { readStoredSession } from "@/services/auth-session";
 
 const UploadStatus = {
-    PENDING: "pending",
-    UPLOADING: "uploading",
-    DONE: "done",
-    ERROR: "error",
+  PENDING: "pending",
+  UPLOADING: "uploading",
+  DONE: "done",
+  ERROR: "error",
 } as const;
 type UploadStatus = (typeof UploadStatus)[keyof typeof UploadStatus];
 
 interface QueuedFile {
-    id: string;
-    file: File;
-    status: UploadStatus;
-    error?: string;
+  id: string;
+  file: File;
+  status: UploadStatus;
+  error?: string;
 }
 
 interface DocumentUploadZoneProps {
-    patientId: string;
-    /** Called with the registered document IDs after successful upload */
-    onComplete?: (documentIds: string[]) => void;
+  patientId: string;
+  /** Called with the registered document IDs after successful upload */
+  onComplete?: (documentIds: string[]) => void;
 }
 
 const ALLOWED_TYPES = new Set([
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "text/plain",
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "text/plain",
 ]);
 const MAX_SIZE_MB = 20;
 const DOCUMENT_TYPES = [
-    { label: "Clinical Note", value: DocumentType.OTHER },
-    { label: "Lab Report", value: DocumentType.LAB_REPORT },
-    { label: "Prescription", value: DocumentType.PRESCRIPTION },
-    { label: "Discharge Summary", value: DocumentType.DISCHARGE_SUMMARY },
-    { label: "Diagnostic Report", value: DocumentType.DIAGNOSTIC_REPORT },
-    { label: "Referral", value: DocumentType.REFERRAL },
+  { label: "Clinical Note", value: DocumentType.OTHER },
+  { label: "Lab Report", value: DocumentType.LAB_REPORT },
+  { label: "Prescription", value: DocumentType.PRESCRIPTION },
+  { label: "Discharge Summary", value: DocumentType.DISCHARGE_SUMMARY },
+  { label: "Diagnostic Report", value: DocumentType.DIAGNOSTIC_REPORT },
+  { label: "Referral", value: DocumentType.REFERRAL },
 ] as const;
 
 function parseDocumentType(value: string): DocumentType {
-    return DOCUMENT_TYPES.find((type) => type.value === value)?.value ?? DocumentType.OTHER;
+  return (
+    DOCUMENT_TYPES.find((type) => type.value === value)?.value ??
+    DocumentType.OTHER
+  );
 }
 
 function makeId(): string {
-    return Math.random().toString(36).slice(2, 10);
+  return Math.random().toString(36).slice(2, 10);
 }
 
-export function DocumentUploadZone({ patientId, onComplete }: DocumentUploadZoneProps) {
-    const [queue, setQueue] = useState<QueuedFile[]>([]);
-    const [dragging, setDragging] = useState(false);
-    const [uploading, setUploading] = useState(false);
-    const [documentType, setDocumentType] = useState<DocumentType>(DocumentType.OTHER);
+function sanitizeFileName(fileName: string) {
+  return fileName
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "");
+}
 
-    // ── File validation ──────────────────────────────────────────────────────
-
-    const validateFiles = useCallback((files: File[]): File[] => {
-        return files.filter((file) => {
-            if (!ALLOWED_TYPES.has(file.type)) return false;
-            if (file.size > MAX_SIZE_MB * 1024 * 1024) return false;
-            return true;
-        });
-    }, []);
-
-    const addToQueue = useCallback((files: File[]) => {
-        const valid = validateFiles(files);
-        const newItems: QueuedFile[] = valid.map((f) => ({
-            id: makeId(),
-            file: f,
-            status: UploadStatus.PENDING,
-        }));
-        setQueue((prev) => [...prev, ...newItems]);
-    }, [validateFiles]);
-
-    // ── Drag-and-drop handlers ───────────────────────────────────────────────
-
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        setDragging(true);
-    }, []);
-
-    const handleDragLeave = useCallback(() => setDragging(false), []);
-
-    const handleDrop = useCallback(
-        (e: React.DragEvent) => {
-            e.preventDefault();
-            setDragging(false);
-            const files = Array.from(e.dataTransfer.files);
-            addToQueue(files);
-        },
-        [addToQueue],
+function createStorageClient(token: string): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new Error(
+      "Supabase Storage is not configured for the clinician portal.",
     );
+  }
+  return createClient(url, anonKey, {
+    accessToken: async () => token,
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+}
 
-    const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files ?? []);
-        addToQueue(files);
-        // Reset input so re-selecting same file triggers onChange
-        e.target.value = "";
-    };
+async function hashFile(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    await file.arrayBuffer(),
+  );
+  return Array.from(new Uint8Array(digest), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
-    function removeFromQueue(id: string) {
-        setQueue((prev) => prev.filter((item) => item.id !== id));
-    }
+async function uploadToStorage(
+  file: File,
+  patientId: string,
+  token: string,
+): Promise<string> {
+  const safeName = sanitizeFileName(file.name) || `document-${Date.now()}`;
+  const path = `${patientId}/${Date.now()}-${safeName}`;
+  const { data, error } = await createStorageClient(token)
+    .storage.from("documents")
+    .upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type || "application/octet-stream",
+      upsert: false,
+    });
+  if (error) throw new Error(error.message);
+  return data.path;
+}
 
-    // ── Upload handler ───────────────────────────────────────────────────────
+export function DocumentUploadZone({
+  patientId,
+  onComplete,
+}: DocumentUploadZoneProps) {
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [documentType, setDocumentType] = useState<DocumentType>(
+    DocumentType.OTHER,
+  );
 
-    async function handleUpload() {
-        const pendingItems = queue.filter((item) => item.status === UploadStatus.PENDING);
-        if (pendingItems.length === 0) return;
+  // ── File validation ──────────────────────────────────────────────────────
 
-        setUploading(true);
-        const completedIds: string[] = [];
-        const token =
-            typeof window !== "undefined" ? (localStorage.getItem("access_token") ?? "") : "";
-        const apiBase = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+  const validateFiles = useCallback((files: File[]): File[] => {
+    return files.filter((file) => {
+      if (!ALLOWED_TYPES.has(file.type)) return false;
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) return false;
+      return true;
+    });
+  }, []);
 
-        for (const item of pendingItems) {
-            // Mark as uploading
-            setQueue((prev) =>
-                prev.map((q) =>
-                    q.id === item.id ? { ...q, status: UploadStatus.UPLOADING } : q,
-                ),
-            );
+  const addToQueue = useCallback(
+    (files: File[]) => {
+      const valid = validateFiles(files);
+      const newItems: QueuedFile[] = valid.map((f) => ({
+        id: makeId(),
+        file: f,
+        status: UploadStatus.PENDING,
+      }));
+      setQueue((prev) => [...prev, ...newItems]);
+    },
+    [validateFiles],
+  );
 
-            try {
-                const formData = new FormData();
-                formData.append("file", item.file);
-                formData.append("patient_id", patientId);
-                formData.append("document_type", documentType);
-                formData.append("uploaded_by_role", UploaderRole.CLINICIAN);
+  // ── Drag-and-drop handlers ───────────────────────────────────────────────
 
-                const response = await fetch(`${apiBase}/api/v1/documents/`, {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${token}` },
-                    body: formData,
-                });
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(true);
+  }, []);
 
-                if (!response.ok) {
-                    throw new Error(`Upload failed: ${response.status}`);
+  const handleDragLeave = useCallback(() => setDragging(false), []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      const files = Array.from(e.dataTransfer.files);
+      addToQueue(files);
+    },
+    [addToQueue],
+  );
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    addToQueue(files);
+    // Reset input so re-selecting same file triggers onChange
+    e.target.value = "";
+  };
+
+  function removeFromQueue(id: string) {
+    setQueue((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  // ── Upload handler ───────────────────────────────────────────────────────
+
+  async function handleUpload() {
+    const pendingItems = queue.filter(
+      (item) => item.status === UploadStatus.PENDING,
+    );
+    if (pendingItems.length === 0) return;
+
+    setUploading(true);
+    const completedIds: string[] = [];
+    const token =
+      typeof window !== "undefined"
+        ? (readStoredSession()?.accessToken ??
+          localStorage.getItem("access_token") ??
+          "")
+        : "";
+    const apiBase =
+      process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+
+    for (const item of pendingItems) {
+      // Mark as uploading
+      setQueue((prev) =>
+        prev.map((q) =>
+          q.id === item.id ? { ...q, status: UploadStatus.UPLOADING } : q,
+        ),
+      );
+
+      try {
+        if (!token)
+          throw new Error("Your session has expired. Please sign in again.");
+        const [filePath, contentHash] = await Promise.all([
+          uploadToStorage(item.file, patientId, token),
+          hashFile(item.file),
+        ]);
+
+        const response = await fetch(
+          `${apiBase}/api/v1/documents/patients/${patientId}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              document_type: documentType,
+              file_name: item.file.name,
+              file_path: filePath,
+              file_size_bytes: item.file.size,
+              mime_type: item.file.type || "application/octet-stream",
+              source_clinic: "Clinician uploaded document",
+              content_hash: contentHash,
+              start_ingestion: true,
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`Upload failed: ${response.status}`);
+        }
+
+        const data = (await response.json()) as { id?: string };
+        if (data.id) completedIds.push(data.id);
+
+        setQueue((prev) =>
+          prev.map((q) =>
+            q.id === item.id ? { ...q, status: UploadStatus.DONE } : q,
+          ),
+        );
+      } catch (err) {
+        setQueue((prev) =>
+          prev.map((q) =>
+            q.id === item.id
+              ? {
+                  ...q,
+                  status: UploadStatus.ERROR,
+                  error: err instanceof Error ? err.message : "Upload failed",
                 }
-
-                const data = (await response.json()) as { id?: string };
-                if (data.id) completedIds.push(data.id);
-
-                setQueue((prev) =>
-                    prev.map((q) =>
-                        q.id === item.id ? { ...q, status: UploadStatus.DONE } : q,
-                    ),
-                );
-            } catch (err) {
-                setQueue((prev) =>
-                    prev.map((q) =>
-                        q.id === item.id
-                            ? {
-                                  ...q,
-                                  status: UploadStatus.ERROR,
-                                  error: err instanceof Error ? err.message : "Upload failed",
-                              }
-                            : q,
-                    ),
-                );
-            }
-        }
-
-        setUploading(false);
-        if (completedIds.length > 0) {
-            onComplete?.(completedIds);
-        }
+              : q,
+          ),
+        );
+      }
     }
 
-    // ── Render ───────────────────────────────────────────────────────────────
+    setUploading(false);
+    if (completedIds.length > 0) {
+      onComplete?.(completedIds);
+    }
+  }
 
-    return (
-        <div className="space-y-4">
-            <label className="block" htmlFor="upload-document-type">
-                <span className="mb-1 block text-sm font-medium text-gray-700">Document type</span>
-                <select
-                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    id="upload-document-type"
-                    onChange={(e) => setDocumentType(parseDocumentType(e.target.value))}
-                    value={documentType}
-                >
-                    {DOCUMENT_TYPES.map((type) => (
-                        <option key={type.value} value={type.value}>
-                            {type.label}
-                        </option>
-                    ))}
-                </select>
-            </label>
+  // ── Render ───────────────────────────────────────────────────────────────
 
-            {/* Drop zone */}
-            <div
-                className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 transition-colors ${
-                    dragging
-                        ? "border-blue-400 bg-blue-50"
-                        : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/30"
-                }`}
-                id="clinician-upload-zone"
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                onClick={() => document.getElementById("clinician-file-input")?.click()}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
-                        document.getElementById("clinician-file-input")?.click();
-                }}
-                aria-label="Upload patient documents"
-            >
-                <HiOutlineCloudArrowUp
-                    aria-hidden="true"
-                    className={`h-10 w-10 ${dragging ? "text-blue-500" : "text-gray-400"}`}
-                />
-                <div className="text-center">
-                    <p className="text-sm font-medium text-gray-700">
-                        Drop files here or{" "}
-                        <span className="text-blue-600 underline">browse</span>
-                    </p>
-                    <p className="mt-1 text-xs text-gray-400">
-                        PDF, JPG, PNG, TXT — max {MAX_SIZE_MB}MB per file
-                    </p>
-                </div>
+  return (
+    <div className="space-y-4">
+      <label className="block" htmlFor="upload-document-type">
+        <span className="mb-1 block text-sm font-medium text-gray-700">
+          Document type
+        </span>
+        <select
+          className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          id="upload-document-type"
+          onChange={(e) => setDocumentType(parseDocumentType(e.target.value))}
+          value={documentType}
+        >
+          {DOCUMENT_TYPES.map((type) => (
+            <option key={type.value} value={type.value}>
+              {type.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
-                <input
-                    accept=".pdf,.jpg,.jpeg,.png,.webp,.txt"
-                    aria-hidden="true"
-                    className="hidden"
-                    id="clinician-file-input"
-                    multiple
-                    onChange={handleFileInput}
-                    tabIndex={-1}
-                    type="file"
-                />
-            </div>
-
-            {/* File queue */}
-            {queue.length > 0 && (
-                <ul aria-label="Files queued for upload" className="space-y-2">
-                    {queue.map((item) => (
-                        <li
-                            className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3"
-                            key={item.id}
-                        >
-                            <div className="flex items-center gap-3">
-                                <HiOutlineDocumentText
-                                    aria-hidden="true"
-                                    className="h-5 w-5 shrink-0 text-blue-500"
-                                />
-                                <div>
-                                    <p className="text-sm font-medium text-gray-800">
-                                        {item.file.name}
-                                    </p>
-                                    <p className="text-xs text-gray-400">
-                                        {(item.file.size / 1024).toFixed(1)} KB
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                {/* Status pill */}
-                                {item.status === UploadStatus.UPLOADING && (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                                        <span className="animate-pulse">●</span> Uploading
-                                    </span>
-                                )}
-                                {item.status === UploadStatus.DONE && (
-                                    <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                                        ✓ Done
-                                    </span>
-                                )}
-                                {item.status === UploadStatus.ERROR && (
-                                    <span
-                                        className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-                                        title={item.error}
-                                    >
-                                        ✕ Failed
-                                    </span>
-                                )}
-
-                                {/* Remove button */}
-                                {item.status !== UploadStatus.UPLOADING && (
-                                    <button
-                                        aria-label={`Remove ${item.file.name}`}
-                                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                                        onClick={() => removeFromQueue(item.id)}
-                                        type="button"
-                                    >
-                                        <HiOutlineXMark aria-hidden="true" className="h-4 w-4" />
-                                    </button>
-                                )}
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            )}
-
-            {/* Upload button */}
-            {queue.some((item) => item.status === UploadStatus.PENDING) && (
-                <button
-                    className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={uploading}
-                    id="clinician-upload-submit"
-                    onClick={handleUpload}
-                    type="button"
-                >
-                    {uploading
-                        ? "Uploading..."
-                        : `Upload ${queue.filter((q) => q.status === UploadStatus.PENDING).length} file(s)`}
-                </button>
-            )}
+      {/* Drop zone */}
+      <div
+        className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 transition-colors ${
+          dragging
+            ? "border-blue-400 bg-blue-50"
+            : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/30"
+        }`}
+        id="clinician-upload-zone"
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onClick={() => document.getElementById("clinician-file-input")?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ")
+            document.getElementById("clinician-file-input")?.click();
+        }}
+        aria-label="Upload patient documents"
+      >
+        <HiOutlineCloudArrowUp
+          aria-hidden="true"
+          className={`h-10 w-10 ${dragging ? "text-blue-500" : "text-gray-400"}`}
+        />
+        <div className="text-center">
+          <p className="text-sm font-medium text-gray-700">
+            Drop files here or{" "}
+            <span className="text-blue-600 underline">browse</span>
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            PDF, JPG, PNG, TXT — max {MAX_SIZE_MB}MB per file
+          </p>
         </div>
-    );
+
+        <input
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.txt"
+          aria-hidden="true"
+          className="hidden"
+          id="clinician-file-input"
+          multiple
+          onChange={handleFileInput}
+          tabIndex={-1}
+          type="file"
+        />
+      </div>
+
+      {/* File queue */}
+      {queue.length > 0 && (
+        <ul aria-label="Files queued for upload" className="space-y-2">
+          {queue.map((item) => (
+            <li
+              className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3"
+              key={item.id}
+            >
+              <div className="flex items-center gap-3">
+                <HiOutlineDocumentText
+                  aria-hidden="true"
+                  className="h-5 w-5 shrink-0 text-blue-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">
+                    {item.file.name}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {(item.file.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Status pill */}
+                {item.status === UploadStatus.UPLOADING && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                    <span className="animate-pulse">●</span> Uploading
+                  </span>
+                )}
+                {item.status === UploadStatus.DONE && (
+                  <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                    ✓ Done
+                  </span>
+                )}
+                {item.status === UploadStatus.ERROR && (
+                  <span
+                    className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+                    title={item.error}
+                  >
+                    ✕ Failed
+                  </span>
+                )}
+
+                {/* Remove button */}
+                {item.status !== UploadStatus.UPLOADING && (
+                  <button
+                    aria-label={`Remove ${item.file.name}`}
+                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    onClick={() => removeFromQueue(item.id)}
+                    type="button"
+                  >
+                    <HiOutlineXMark aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Upload button */}
+      {queue.some((item) => item.status === UploadStatus.PENDING) && (
+        <button
+          className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={uploading}
+          id="clinician-upload-submit"
+          onClick={handleUpload}
+          type="button"
+        >
+          {uploading
+            ? "Uploading..."
+            : `Upload ${queue.filter((q) => q.status === UploadStatus.PENDING).length} file(s)`}
+        </button>
+      )}
+    </div>
+  );
 }

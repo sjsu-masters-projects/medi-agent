@@ -80,6 +80,8 @@ class ClinicalFactCreate(BaseModel):
     confidence_score: float | None = Field(default=None, ge=0, le=1)
     confidence_band: ConfidenceBand = ConfidenceBand.UNKNOWN
     uncertainty: list[str] = Field(default_factory=list)
+    external_source_key: str | None = Field(default=None, max_length=500)
+    external_source_version: str | None = Field(default=None, max_length=200)
     provenance: SourceProvenanceCreate
     citations: list[EvidenceCitationCreate] = Field(default_factory=list)
 
@@ -107,6 +109,11 @@ class ClinicalFactRead(BaseModel):
     confidence_score: float | None = None
     confidence_band: ConfidenceBand
     uncertainty: list[str] = Field(default_factory=list)
+    reconciliation_state: str = "not_started"
+    reconciliation_target_type: str | None = None
+    reconciliation_target_id: UUID | None = None
+    external_source_key: str | None = None
+    external_source_version: str | None = None
     review_state: ClinicalFactReviewState
     reviewed_by: UUID | None = None
     reviewed_at: datetime | None = None

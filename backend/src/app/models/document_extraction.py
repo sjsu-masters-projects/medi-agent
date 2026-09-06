@@ -1,9 +1,9 @@
 """Project-owned document extraction schema.
 
 This is the normalized handoff between document parsing adapters and the app's
-relational clinical records. Inputs may come from PDF OCR, clinician entry, a
-future FHIR adapter, or local demo data, but persistence should flow through
-this shape.
+pending clinical-fact candidates. Inputs may come from PDF OCR, clinician
+entry, or a future FHIR adapter; persistence never creates canonical clinical
+records directly.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ class ExtractedAllergy(BaseModel):
 
     allergen: str = Field(..., min_length=1)
     reaction: str | None = None
-    severity: str = Field(default="moderate", pattern="^(mild|moderate|severe)$")
+    severity: str = Field(default="unknown", pattern="^(unknown|mild|moderate|severe)$")
 
 
 class ExtractedObligation(BaseModel):
@@ -72,7 +72,7 @@ class DocumentExtractionResult(BaseModel):
 
 
 class DocumentExtractionImportRequest(BaseModel):
-    """Optional extraction payload for local/demo import flows."""
+    """Explicit, verified extraction payload for candidate registration."""
 
     document_id: UUID | None = None
-    extraction: DocumentExtractionResult | None = None
+    extraction: DocumentExtractionResult

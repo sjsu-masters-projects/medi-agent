@@ -12,7 +12,7 @@ from app.models.clinical_fact import ClinicalFactReviewState
 
 
 class FhirImportReviewService:
-    """Read mapped FHIR candidates without changing their clinical review state."""
+    """Read external candidates without changing their clinical review state."""
 
     _FHIR_ENVELOPE_PREFIX = "fhir_import_resources/"
 
@@ -25,30 +25,37 @@ class FhirImportReviewService:
         patient_id: UUID,
         review_state: ClinicalFactReviewState,
         fact_type: str | None,
+        source_kind: str | None = None,
+        reconciliation_state: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
         offset: int,
         limit: int,
     ) -> dict[str, Any]:
-        """Return one page of FHIR-backed candidates and their review counts.
-
-        ``clinical_facts`` is shared by document extraction and SMART import.
-        This projection deliberately includes only facts with a provenance link to
-        an imported FHIR envelope, so a clinician never mistakes another source
-        for the external record being reconciled.
-        """
+        """Return one page of SMART and document candidates with source labels."""
         metadata_result = (
             self.db.table("clinical_facts")
-            .select("id, fact_type, review_state")
+            .select("id, fact_type, review_state, reconciliation_state, created_at")
             .eq("patient_id", str(patient_id))
             .execute()
         )
         metadata = cast(list[dict[str, Any]], metadata_result.data or [])
         sources = self._sources_for_facts(metadata)
-        visible_metadata = [
-            row
-            for row in metadata
-            if row.get("review_state") != ClinicalFactReviewState.DELETED.value
-            and str(row.get("id")) in sources
-        ]
+        visible_metadata = []
+        for row in metadata:
+            source = sources.get(str(row.get("id")))
+            if row.get("review_state") == ClinicalFactReviewState.DELETED.value or not source:
+                continue
+            if source_kind and source.get("source_kind") != source_kind:
+                continue
+            if reconciliation_state and row.get("reconciliation_state") != reconciliation_state:
+                continue
+            created_at = str(row.get("created_at") or "")
+            if from_date and created_at[:10] < from_date:
+                continue
+            if to_date and created_at[:10] > to_date:
+                continue
+            visible_metadata.append(row)
         state_counts = Counter(str(row.get("review_state", "unknown")) for row in visible_metadata)
         fact_type_counts = Counter(str(row.get("fact_type", "unknown")) for row in visible_metadata)
         eligible_ids = [
@@ -117,7 +124,9 @@ class FhirImportReviewService:
             return {}
         provenance_result = (
             self.db.table("source_provenances")
-            .select("id, source_system, source_reference")
+            .select(
+                "id, source_system, source_reference, document_id, document_location, extractor_version"
+            )
             .in_("id", provenance_ids)
             .execute()
         )
@@ -131,17 +140,17 @@ class FhirImportReviewService:
                 and str(row["source_reference"]).startswith(self._FHIR_ENVELOPE_PREFIX)
             }
         )
-        if not envelope_ids:
-            return {}
-        envelope_result = (
-            self.db.table("fhir_import_resources")
-            .select(
-                "id, issuer, resource_type, external_resource_id, version_id, mapping_warnings, validation_errors"
+        envelopes: list[dict[str, Any]] = []
+        if envelope_ids:
+            envelope_result = (
+                self.db.table("fhir_import_resources")
+                .select(
+                    "id, import_id, issuer, resource_type, external_resource_id, version_id, mapping_warnings, validation_errors"
+                )
+                .in_("id", envelope_ids)
+                .execute()
             )
-            .in_("id", envelope_ids)
-            .execute()
-        )
-        envelopes = cast(list[dict[str, Any]], envelope_result.data or [])
+            envelopes = cast(list[dict[str, Any]], envelope_result.data or [])
         envelope_by_id = {str(row["id"]): row for row in envelopes if row.get("id")}
 
         result: dict[str, dict[str, Any]] = {}
@@ -150,25 +159,36 @@ class FhirImportReviewService:
             if not provenance:
                 continue
             source_reference = provenance.get("source_reference")
-            if not isinstance(source_reference, str) or not source_reference.startswith(
+            if isinstance(source_reference, str) and source_reference.startswith(
                 self._FHIR_ENVELOPE_PREFIX
             ):
+                envelope = envelope_by_id.get(source_reference[len(self._FHIR_ENVELOPE_PREFIX) :])
+                if envelope:
+                    result[fact_id] = {
+                        "issuer": envelope.get("issuer") or provenance.get("source_system"),
+                        "resource_type": envelope.get("resource_type") or "FHIR resource",
+                        "external_resource_id": envelope.get("external_resource_id"),
+                        "version_id": envelope.get("version_id"),
+                        "mapping_warnings": envelope.get("mapping_warnings") or [],
+                        "validation_errors": envelope.get("validation_errors") or [],
+                        "source_kind": "smart",
+                        "import_id": envelope.get("import_id"),
+                    }
                 continue
-            envelope = envelope_by_id.get(source_reference[len(self._FHIR_ENVELOPE_PREFIX) :])
-            if not envelope:
-                continue
-            result[fact_id] = {
-                "issuer": envelope.get("issuer") or provenance.get("source_system"),
-                "resource_type": envelope.get("resource_type") or "FHIR resource",
-                "external_resource_id": envelope.get("external_resource_id"),
-                "version_id": envelope.get("version_id"),
-                "mapping_warnings": envelope.get("mapping_warnings") or [],
-                "validation_errors": envelope.get("validation_errors") or [],
-            }
+            if provenance.get("document_id"):
+                result[fact_id] = {
+                    "issuer": provenance.get("source_system") or "document ingestion",
+                    "resource_type": "Document evidence",
+                    "external_resource_id": provenance.get("document_id"),
+                    "version_id": provenance.get("extractor_version"),
+                    "mapping_warnings": [],
+                    "validation_errors": [],
+                    "source_kind": "document",
+                }
         return result
 
     def get_source(self, *, fact_id: UUID, patient_id: UUID) -> dict[str, Any] | None:
-        """Return one original FHIR envelope only after the caller authorizes the fact."""
+        """Return the authorized original FHIR envelope or document evidence descriptor."""
         fact_result = (
             self.db.table("clinical_facts")
             .select("id")
@@ -193,7 +213,9 @@ class FhirImportReviewService:
             return None
         provenance_result = (
             self.db.table("source_provenances")
-            .select("source_system, source_reference")
+            .select(
+                "source_system, source_reference, document_id, document_location, extractor_version"
+            )
             .eq("id", provenance_id)
             .single()
             .execute()
@@ -205,11 +227,24 @@ class FhirImportReviewService:
         if not isinstance(source_reference, str) or not source_reference.startswith(
             self._FHIR_ENVELOPE_PREFIX
         ):
-            return None
+            return {
+                "issuer": provenance.get("source_system") or "document ingestion",
+                "resource_type": "Document evidence",
+                "external_resource_id": provenance.get("document_id"),
+                "version_id": provenance.get("extractor_version"),
+                "mapping_warnings": [],
+                "validation_errors": [],
+                "source_kind": "document",
+                "raw_resource": {
+                    "resourceType": "DocumentEvidence",
+                    "source_reference": source_reference,
+                    "location": provenance.get("document_location") or {},
+                },
+            }
         envelope_result = (
             self.db.table("fhir_import_resources")
             .select(
-                "issuer, resource_type, external_resource_id, version_id, mapping_warnings, validation_errors, raw_resource"
+                "import_id, issuer, resource_type, external_resource_id, version_id, mapping_warnings, validation_errors, raw_resource"
             )
             .eq("id", source_reference[len(self._FHIR_ENVELOPE_PREFIX) :])
             .single()
@@ -225,5 +260,7 @@ class FhirImportReviewService:
             "version_id": envelope.get("version_id"),
             "mapping_warnings": envelope.get("mapping_warnings") or [],
             "validation_errors": envelope.get("validation_errors") or [],
+            "source_kind": "smart",
+            "import_id": envelope.get("import_id"),
             "raw_resource": envelope.get("raw_resource") or {},
         }

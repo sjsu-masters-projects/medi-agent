@@ -177,6 +177,7 @@ def test_care_plan_mapping_uses_category_narrative_and_activities_when_title_is_
             "status": "completed",
             "intent": "order",
             "period": {"start": "2016-01-03", "end": "2016-02-02"},
+            "category": ["Fracture care"],
             "activities": ["Recommendation to rest (completed)"],
             "addresses": [],
         },
