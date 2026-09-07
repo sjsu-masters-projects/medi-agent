@@ -34,6 +34,8 @@ class ClinicalFactService:
             "confidence_band": candidate.confidence_band.value,
             "uncertainty": candidate.uncertainty,
             "review_state": ClinicalFactReviewState.PENDING_REVIEW.value,
+            "external_source_key": candidate.external_source_key,
+            "external_source_version": candidate.external_source_version,
         }
         fact = self._insert_one("clinical_facts", fact_payload, "clinical fact")
         fact_id = UUID(str(fact["id"]))
@@ -101,8 +103,10 @@ class ClinicalFactService:
         if not note.strip():
             raise ValidationError("A correction note is required")
         fact = self._get_fact(fact_id, patient_id)
-        if fact.get("review_state") == ClinicalFactReviewState.DELETED.value:
-            raise ValidationError("Deleted clinical facts cannot be corrected")
+        if fact.get("review_state") != ClinicalFactReviewState.PENDING_REVIEW.value:
+            raise ValidationError("Only pending clinical facts can be corrected")
+        if fact.get("reconciliation_state") not in {None, "not_started", "deferred"}:
+            raise ValidationError("Reconciled clinical facts are immutable evidence")
 
         updated = self._update_one(
             "clinical_facts",
@@ -159,6 +163,10 @@ class ClinicalFactService:
             .execute()
         )
         return cast(list[dict[str, Any]], result.data or [])
+
+    def get_fact(self, fact_id: UUID, patient_id: UUID) -> dict[str, Any]:
+        """Return one patient-scoped candidate for an authorized backend caller."""
+        return self._get_fact(fact_id, patient_id)
 
     def get_lineage(self, fact_id: UUID, patient_id: UUID) -> dict[str, Any]:
         """Trace a candidate from the fact through citations to its original artifact."""

@@ -150,6 +150,8 @@ def test_review_projection_shows_candidate_fields_and_source_metadata_without_ra
         "version_id": "7",
         "mapping_warnings": ["Dose frequency was not supplied."],
         "validation_errors": [],
+        "source_kind": "smart",
+        "import_id": None,
     }
     assert "raw_resource" not in review["facts"][0]["source"]
 

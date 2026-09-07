@@ -34,7 +34,7 @@ type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" 
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentification }> = [
     { id: "profile", label: "Profile", icon: HiOutlineIdentification },
-    { id: "imports", label: "SMART imports", icon: HiOutlineLink },
+    { id: "imports", label: "External records", icon: HiOutlineLink },
     { id: "adherence", label: "Adherence", icon: HiOutlineBeaker },
     { id: "symptoms", label: "Symptoms", icon: HiOutlineExclamationTriangle },
     { id: "chat", label: "Chat Transcript", icon: HiOutlineChatBubbleLeftRight },

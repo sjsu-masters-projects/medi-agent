@@ -39,7 +39,12 @@ demonstration only; it does not claim production EHR connectivity or real-PHI su
    or broad wildcard scopes for the demonstration.
 6. Persist the original synthetic FHIR resource JSON, source URL, version/last-updated
    data, import timestamp, and validation outcome. Derived local records remain
-   `pending_review` clinical-fact candidates until explicitly approved.
+   `pending_review` clinical-fact candidates. An issuer plus external patient ID must
+   be explicitly bound to one local patient before a candidate can affect local truth.
+   Imported demographics never update the local profile. Only selected fields of a
+   medication, condition, or allergy can be added or patched through the append-only,
+   transactional reconciliation decision; CarePlans and all other supported resources
+   remain evidence-only in R2.
 
 ## Phase A — FHIR mapping and validation boundary (INT-002)
 

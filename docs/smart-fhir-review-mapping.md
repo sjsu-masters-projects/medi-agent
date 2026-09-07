@@ -2,12 +2,13 @@
 
 MediAgent uses the SMART Health IT public R4 sandbox only with synthetic data.
 An external resource is imported as a provenance-backed **candidate**, never as
-an automatic update to the local patient record. Clinician review is required
-before a candidate can be approved.
+an automatic update to the local patient record. An assigned clinician must
+explicitly select fields and record an audited reconciliation decision before
+an imported medication, condition, or allergy can change local truth.
 
 ## What clinicians see
 
-The patient detail page has a **SMART imports** tab. It separates candidates
+The patient detail page has an **External records** tab. It separates candidates
 from the existing local profile and shows the following for each candidate:
 
 - mapped fields that can be reviewed without interpreting the original payload;
@@ -15,34 +16,37 @@ from the existing local profile and shows the following for each candidate:
 - source issuer, FHIR resource type, external resource identifier, and version;
 - the original FHIR JSON only after the clinician explicitly chooses **Source**.
 
-Approval, correction, and rejection are recorded in the existing clinical-fact
-audit trail. Imported candidates begin with **unknown** clinical confidence:
-structured source fidelity is not a clinical assessment. Approval does not
-overwrite existing local medications, conditions, allergies, or demographics.
-It marks the external candidate as reviewed and preserves its resource-level
-provenance for later reconciliation. A correction changes only the pending
+Approval, correction, and rejection are recorded in the clinical-fact audit
+trail. Imported candidates begin with **unknown** clinical confidence:
+structured source fidelity is not a clinical assessment. A clinician may add a
+new medication, condition, or allergy, or update selected non-empty fields on
+a conservatively matched local record. No imported value clears a local field;
+medication updates retain the existing medication ID and therefore preserve
+reminders, adherence, and ADR links. Imported demographics and every other
+resource type remain evidence-only. A correction changes only the pending
 candidate and preserves the original resource envelope.
 
 ## Supported R4-compatible resource mappings
 
-| FHIR resource | Candidate type | Clinician-visible mapped fields | Deliberately not inferred |
-| --- | --- | --- | --- |
-| `Patient` | `patient_demographics` | name, birth date, administrative gender | identity match, account creation, local demographic overwrite |
-| `Encounter` | `encounter` | status, class, type, period | billing interpretation or care-team assignment |
-| `Condition` | `condition` | condition name, clinical and verification status, onset, recorded date | diagnostic certainty beyond the source |
-| `AllergyIntolerance` | `allergy` | allergen, clinical status, criticality, reactions | severity if the source does not state it |
-| `MedicationRequest`, `MedicationStatement` | `medication` | medication name, status, intent, dosage instructions, authored/effective date | medication reconciliation or an active local prescription |
-| `Observation` | `observation` | code, quantity or coded value, effective time, status, interpretation, reference range | trend or clinical interpretation |
-| `DiagnosticReport` | `diagnostic_report` | report code, conclusion, status, effective and issued times, result count | a diagnosis based on report text |
-| `Procedure` | `procedure` | procedure code, status, performed time, reason, body site | outcome or follow-up plan |
-| `CarePlan` | `care_plan` | title/category, narrative description, status, intent, period, activities, addressed conditions | acceptance as a local plan of care |
-| `DocumentReference` | `document_reference` | type, description, date, status, authors, content types | document download, OCR, or new local document storage |
+| FHIR resource | Candidate type | Clinician-visible mapped fields | R2 canonical destination | Deliberately not inferred |
+| --- | --- | --- | --- | --- |
+| `Patient` | `patient_demographics` | name, birth date, administrative gender | None — comparison-only identity confirmation | identity match, account creation, local demographic overwrite |
+| `Encounter` | `encounter` | status, class, type, period | None — evidence-only | billing interpretation or care-team assignment |
+| `Condition` | `condition` | name, recognized ICD-10, clinical status | `conditions.name`, `icd10_code`, `status`, `notes` — selected fields only | diagnostic certainty beyond the source |
+| `AllergyIntolerance` | `allergy` | allergen, clinical status, criticality, reactions, reaction severity | `allergies.allergen`, `reaction`, `severity` — selected fields only | severity from FHIR criticality; a missing severity becomes `unknown` |
+| `MedicationRequest`, `MedicationStatement` | `medication` | name, RxCUI, dosage, frequency, route, instructions, dates, status | `medications` selected fields; source status can become `is_active` only when known | automatic prescription reconciliation or reminder creation |
+| `Observation` | `observation` | code, quantity or coded value, effective time, status, interpretation, reference range | None — evidence-only | trend or clinical interpretation |
+| `DiagnosticReport` | `diagnostic_report` | report code, conclusion, status, effective and issued times, result count | None — evidence-only | a diagnosis based on report text |
+| `Procedure` | `procedure` | procedure code, status, performed time, reason, body site | None — evidence-only | outcome or follow-up plan |
+| `CarePlan` | `care_plan` | title/category, narrative description, status, intent, period, activities, addressed conditions | None — evidence-only | acceptance as a local plan of care or an obligation |
+| `DocumentReference` | `document_reference` | type, description, date, status, authors, content types | None — evidence-only | document download, OCR, or new local document storage |
 
 Unsupported resource types are preserved in the import envelope with a warning
 but do not create a candidate fact. Missing or partial source fields are shown
 as `Not supplied`; the review UI does not manufacture a value.
 
-The review screen can be filtered by mapped candidate type. It uses the
+The review screen can be filtered by source, mapped candidate type, review
+state, reconciliation state, and import date. It uses the
 candidate fields above for clinician-facing review; the **Source** action is
 the only place raw FHIR JSON is shown. Corrections use individual mapped fields
 where possible. Structured fields retain JSON only when preserving that source
@@ -52,19 +56,26 @@ FHIR instants in the review screen are rendered in the selected local patient's
 configured IANA timezone (falling back to UTC if it is unavailable). Date-only
 FHIR values stay date-only and are never shifted by timezone conversion.
 
-## Deferred reconciliation into local records
+## Reconciliation lifecycle
 
-Approval makes an imported candidate a durable, clinician-reviewed reconciliation
-input. It does not automatically add or alter an authoritative local medication,
-condition, allergy, demographic record, care plan, or other clinical record. The
-approved candidate, its source envelope, provenance, and audit trail remain available
-to a future reconciliation workflow, where a clinician must explicitly choose whether
-to add, update, keep, defer, or reject the proposed change.
+Importing only creates a candidate. An assigned clinician must explicitly choose
+whether to add a new medication, condition, or allergy; update selected non-empty
+fields on a matched local record; keep the existing local record; defer; or reject.
+Evidence-only resources can be marked reviewed but cannot create or alter local truth.
+The decision records the candidate snapshot, selected fields, target, before/after
+snapshots, actor, source version, and note atomically. A reconciled candidate becomes
+immutable evidence; a later source version creates a separate pending candidate.
 
-Mappings are applied when a resource is imported. Existing candidates are not silently
-rewritten when a later mapper version exposes more source fields; that would risk
-overwriting a clinician correction or obscuring the value that was reviewed. An
-audited re-projection/backfill path for still-pending candidates is planned separately.
+Mappings are applied only when a resource is imported. Existing candidates are not
+silently rewritten when a later mapper version exposes more source fields, because that
+could overwrite a clinician correction or obscure what was reviewed.
+
+## Source withdrawal
+
+An untouched pending import can be removed. Once any candidate has a clinician
+decision, its source and immutable audit history are retained instead and marked
+withdrawn. A withdrawn candidate cannot be reconciled again; clinicians can still
+inspect its provenance and the affected local record.
 
 ## Two valid launch paths
 

@@ -67,6 +67,7 @@ class DocumentService:
         source_clinic: str | None = None,
         notes: str | None = None,
         sign_file_url: bool = True,
+        content_hash: str | None = None,
     ) -> Any:
         """Store document metadata after the frontend has uploaded the file.
 
@@ -89,6 +90,7 @@ class DocumentService:
             "document_type": document_type,
             "source_clinic": source_clinic,
             "notes": notes,
+            "content_hash": content_hash.lower() if content_hash else None,
             "parse_status": "pending",
             "parse_error": None,
             "parse_attempts": 0,
@@ -152,9 +154,13 @@ class DocumentService:
         return cast(dict[str, Any], result.data)
 
     async def delete_document(self, document_id: UUID, patient_id: UUID) -> None:
-        """Delete a patient-owned document metadata row and its storage object."""
+        """Remove only unapplied source evidence; never delete canonical truth."""
         document = self._get_document_row(document_id, patient_id)
-        self._delete_document_derived_records(document_id, patient_id)
+        self._remove_unapplied_candidates(
+            document_id,
+            patient_id,
+            UUID(str(document["uploaded_by"])),
+        )
 
         file_path = str(document.get("file_path") or "").strip()
         if file_path:
@@ -168,23 +174,32 @@ class DocumentService:
             .execute()
         )
 
-    def _delete_document_derived_records(self, document_id: UUID, patient_id: UUID) -> None:
-        """Delete Today-feed records that were created from this document."""
-        medication_ids = self._get_document_derived_record_ids(
-            "medications",
-            document_id,
-            patient_id,
-        )
-        obligation_ids = self._get_document_derived_record_ids(
-            "obligations",
-            document_id,
-            patient_id,
-        )
+    def _remove_unapplied_candidates(
+        self,
+        document_id: UUID,
+        patient_id: UUID,
+        actor_id: UUID,
+    ) -> None:
+        """Delete a source only before any candidate is applied to local truth.
 
-        self._delete_feed_target_records("medication", medication_ids, patient_id)
-        self._delete_feed_target_records("obligation", obligation_ids, patient_id)
-        self._delete_document_derived_rows("medications", medication_ids, patient_id)
-        self._delete_document_derived_rows("obligations", obligation_ids, patient_id)
+        Legacy canonical rows are intentionally untouched. For an applied fact,
+        the source remains auditable and is marked withdrawn instead of deleting
+        the document or altering the reconciled medication/condition/allergy.
+        """
+        result = self.db.rpc(
+            "withdraw_unapplied_document_source",
+            {
+                "p_document_id": str(document_id),
+                "p_patient_id": str(patient_id),
+                "p_actor_id": str(actor_id),
+            },
+        ).execute()
+        outcome = cast(dict[str, Any], result.data or {})
+        if not outcome.get("can_delete", False):
+            raise ValidationError(
+                "This document has clinician-reviewed candidates. Its source was marked withdrawn; "
+                "the document and clinical audit history were retained for clinician review."
+            )
 
     def _get_document_derived_record_ids(
         self,

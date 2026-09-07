@@ -290,6 +290,23 @@ open for sandbox-specific diagnosis.
 
 ## Milestone R2 — Records and medication safety · Weeks 5–6
 
+### REC-002 — Safe external-record reconciliation
+
+**Status:** `[/]` In progress
+
+**Acceptance path:** A locally assigned clinician imports synthetic SMART or document
+data, reviews an evidence-backed candidate, selects individual fields, and explicitly
+adds or updates only a medication, condition, or allergy. The decision, source version,
+before/after state, and destination record remain auditable. Unsupported external
+resources remain evidence-only and do not create local truth.
+
+- [/] Make document and SMART ingestion candidate-only; remove implicit demo extraction.
+- [/] Bind an external FHIR patient to one local patient after clinician confirmation.
+- [/] Add conservative matching and transactional, field-level reconciliation.
+- [/] Show candidate-versus-local comparison, evidence, filters, and applied provenance.
+- [/] Inventory legacy document-derived rows without silently rewriting or deleting them.
+- [ ] Verify the synthetic end-to-end SMART/document reconciliation journeys in staging.
+
 ### REC-001 — Complete record ingestion lifecycle
 
 - [ ] Support patient and clinician PDF/image upload.

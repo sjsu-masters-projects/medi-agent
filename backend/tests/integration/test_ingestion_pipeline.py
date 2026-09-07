@@ -1,4 +1,4 @@
-"""Integration-style tests for ingestion orchestration and explanation flow."""
+"""Integration-style tests for candidate-only ingestion and explanations."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
@@ -13,7 +13,7 @@ DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000111")
 PATIENT_ID = UUID("00000000-0000-0000-0000-000000000222")
 
 
-def _make_table(result_data):
+def _make_table(result_data: object) -> MagicMock:
     table = MagicMock()
     for method in ["select", "eq", "single", "update", "insert"]:
         getattr(table, method).return_value = table
@@ -21,24 +21,17 @@ def _make_table(result_data):
     return table
 
 
-def _make_db(parse_attempts: int = 0):
-    documents_table = _make_table({"parse_attempts": parse_attempts})
-    conditions_table = _make_table([{"id": "condition-1"}])
-    allergies_table = _make_table([{"id": "allergy-1"}])
-
-    tables = {
-        "documents": documents_table,
-        "conditions": conditions_table,
-        "allergies": allergies_table,
-    }
-
+def _make_db(parse_attempts: int = 0) -> MagicMock:
+    document_table = _make_table({"parse_attempts": parse_attempts})
+    run_table = _make_table([{"id": "00000000-0000-0000-0000-000000000333"}])
+    tables = {"documents": document_table, "document_ingestion_runs": run_table}
     db = MagicMock()
-    db.table.side_effect = lambda name: tables[name]
+    db.table.side_effect = lambda name: tables.get(name, _make_table([{"id": "fact-1"}]))
     return db
 
 
 @pytest.mark.asyncio
-async def test_full_ingestion_pipeline():
+async def test_full_ingestion_pipeline_creates_candidates_not_canonical_records() -> None:
     db = _make_db()
     service = IngestionService(db)
     service._graph.ainvoke = AsyncMock(
@@ -46,17 +39,13 @@ async def test_full_ingestion_pipeline():
             "error": None,
             "validated_data": {
                 "conditions": [{"name": "Hypertension", "status": "active"}],
-                "allergies": [{"allergen": "Penicillin", "severity": "moderate"}],
+                "allergies": [{"allergen": "Penicillin", "severity": "mild"}],
             },
-            "extracted_data": {
-                "follow_up_instructions": [{"description": "Walk daily", "timing": "daily"}]
-            },
+            "extracted_data": {"follow_up_instructions": [{"description": "Walk daily"}]},
             "normalized_medications": [
                 {
                     "name": "Aspirin",
-                    "generic_name": "aspirin",
-                    "rxcui": "1191",
-                    "dosage": "81mg",
+                    "dosage": "81 mg",
                     "frequency": "daily",
                     "route": "oral",
                 }
@@ -64,8 +53,7 @@ async def test_full_ingestion_pipeline():
             "patient_summary": "Take aspirin daily and walk every day.",
         }
     )
-    service._med_service.create_medication = AsyncMock(return_value={"id": "med-1"})
-    service._obligation_service.create_obligation = AsyncMock(return_value={"id": "obl-1"})
+    service._register_candidates = MagicMock(return_value=4)  # type: ignore[method-assign]
 
     result = await service.ingest_document(
         document_id=DOCUMENT_ID,
@@ -75,26 +63,20 @@ async def test_full_ingestion_pipeline():
     )
 
     assert result["status"] == "completed"
-    assert result["medications_created"] == 1
-    assert result["obligations_created"] == 1
-    service._med_service.create_medication.assert_awaited()
-    service._obligation_service.create_obligation.assert_awaited_once_with(
-        PATIENT_ID,
-        {
-            "description": "Walk daily",
-            "frequency": "daily",
-            "obligation_type": "exercise",
-            "source_document_id": str(DOCUMENT_ID),
-        },
-    )
-    assert db.table("documents").update.call_count >= 2
+    assert result["candidate_facts_created"] == 4
+    assert result["medications_created"] == 0
+    assert result["conditions_created"] == 0
+    assert result["allergies_created"] == 0
+    assert result["obligations_created"] == 0
+    service._register_candidates.assert_called_once()
+    assert db.table.call_args_list
 
 
 @pytest.mark.asyncio
-async def test_ingestion_pipeline_llm_failure():
+async def test_ingestion_pipeline_records_failed_run() -> None:
     db = _make_db()
     service = IngestionService(db)
-    service._graph.ainvoke = AsyncMock(return_value={"error": "LLM crashed"})
+    service._graph.ainvoke = AsyncMock(return_value={"error": "Parser failed"})
 
     result = await service.ingest_document(
         document_id=DOCUMENT_ID,
@@ -104,48 +86,11 @@ async def test_ingestion_pipeline_llm_failure():
     )
 
     assert result["status"] == "failed"
-    assert "LLM crashed" in result["error"]
+    assert "Parser failed" in result["error"]
 
 
 @pytest.mark.asyncio
-async def test_ingestion_pipeline_rxnorm_failure():
-    db = _make_db()
-    service = IngestionService(db)
-    service._graph.ainvoke = AsyncMock(
-        return_value={
-            "error": None,
-            "validated_data": {"conditions": [], "allergies": []},
-            "extracted_data": {"follow_up_instructions": []},
-            "normalized_medications": [
-                {
-                    "name": "Aspirin",
-                    "generic_name": "Aspirin",
-                    "rxcui": None,
-                    "dosage": "81mg",
-                    "frequency": "daily",
-                    "route": "oral",
-                }
-            ],
-            "patient_summary": "Take aspirin daily.",
-        }
-    )
-    service._med_service.create_medication = AsyncMock(return_value={"id": "med-1"})
-    service._obligation_service.create_obligation = AsyncMock(return_value={"id": "obl-1"})
-
-    result = await service.ingest_document(
-        document_id=DOCUMENT_ID,
-        patient_id=PATIENT_ID,
-        file_path="patient/doc.pdf",
-        document_type="prescription",
-    )
-
-    assert result["status"] == "completed"
-    payload = service._med_service.create_medication.await_args_list[0].args[1]
-    assert payload["rxcui"] is None
-
-
-@pytest.mark.asyncio
-async def test_ingestion_max_retries():
+async def test_ingestion_max_retries() -> None:
     db = _make_db(parse_attempts=3)
     service = IngestionService(db)
     service._graph.ainvoke = AsyncMock()
@@ -162,7 +107,7 @@ async def test_ingestion_max_retries():
 
 
 @pytest.mark.asyncio
-async def test_explain_cached_summary():
+async def test_explain_cached_summary() -> None:
     service = ExplanationService()
     document = {"id": str(DOCUMENT_ID), "ai_summary": "Already cached"}
 
@@ -174,15 +119,12 @@ async def test_explain_cached_summary():
 
 
 @pytest.mark.asyncio
-async def test_explain_spanish_translation():
+async def test_explain_spanish_translation() -> None:
     service = ExplanationService()
     mock_router = MagicMock()
     mock_router.generate_text = AsyncMock(return_value="Resumen en español")
 
-    with patch(
-        "app.services.explanation_service.get_router",
-        return_value=mock_router,
-    ):
+    with patch("app.services.explanation_service.get_router", return_value=mock_router):
         summary = await service.explain(
             document_data={"id": str(DOCUMENT_ID), "ai_summary": "English summary"},
             language="es-MX",

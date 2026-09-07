@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -11,8 +11,13 @@ from supabase import Client
 
 from app.agents.ingestion.graph import IngestionState, create_ingestion_graph
 from app.core.exceptions import DocumentParseError
-from app.services.medication_service import MedicationService
-from app.services.obligation_service import ObligationService
+from app.models.clinical_fact import (
+    ClinicalFactCreate,
+    EvidenceCitationCreate,
+    SourceArtifactType,
+    SourceProvenanceCreate,
+)
+from app.services.clinical_fact_service import ClinicalFactService
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +30,6 @@ class IngestionService:
     def __init__(self, db: Client) -> None:
         self.db = db
         self._graph = create_ingestion_graph()
-        self._med_service = MedicationService(db)
-        self._obligation_service = ObligationService(db)
 
     async def ingest_document(
         self,
@@ -53,6 +56,39 @@ class IngestionService:
             parse_error=None,
             parsed=False,
             parse_attempts=attempts + 1,
+        )
+        source_hash = self._document_content_hash(document_id)
+        if source_hash and self._has_completed_source_hash(
+            patient_id=patient_id, source_hash=source_hash
+        ):
+            run_id = self._start_run(
+                document_id=document_id,
+                patient_id=patient_id,
+                attempt=attempts + 1,
+                source_hash=source_hash,
+                status="duplicate",
+            )
+            self._finish_run(run_id, status="duplicate")
+            self._update_document_status(
+                document_id,
+                parse_status="completed",
+                parse_error=None,
+                parsed=True,
+            )
+            return {
+                "status": "duplicate",
+                "medications_created": 0,
+                "conditions_created": 0,
+                "allergies_created": 0,
+                "obligations_created": 0,
+                "candidate_facts_created": 0,
+                "summary_length": 0,
+            }
+        ingestion_run_id = self._start_run(
+            document_id=document_id,
+            patient_id=patient_id,
+            attempt=attempts + 1,
+            source_hash=source_hash,
         )
 
         initial_state: IngestionState = {
@@ -82,6 +118,7 @@ class IngestionService:
                 parse_error=error,
                 parsed=False,
             )
+            self._finish_run(ingestion_run_id, status="failed", error=error)
             latest_attempts = attempts + 1
             if latest_attempts >= MAX_PARSE_ATTEMPTS:
                 raise DocumentParseError(str(document_id), error)
@@ -97,31 +134,14 @@ class IngestionService:
         extracted_data = final_state.get("extracted_data") or {}
         normalized_medications = final_state.get("normalized_medications") or []
 
-        medication_ids = await self._save_medications(
-            patient_id,
-            document_id,
-            normalized_medications,
+        candidate_count = self._register_candidates(
+            document_id=document_id,
+            patient_id=patient_id,
+            normalized_medications=normalized_medications,
+            conditions=validated_data.get("conditions", []),
+            allergies=validated_data.get("allergies", []),
+            follow_up_instructions=extracted_data.get("follow_up_instructions", []),
         )
-        condition_ids = await self._save_conditions(
-            patient_id,
-            validated_data.get("conditions", []),
-        )
-        allergy_ids = await self._save_allergies(
-            patient_id,
-            validated_data.get("allergies", []),
-        )
-        obligation_ids = await self._save_obligations(
-            patient_id,
-            document_id,
-            extracted_data.get("follow_up_instructions", []),
-        )
-
-        final_state["saved_ids"] = {
-            "medications": medication_ids,
-            "conditions": condition_ids,
-            "allergies": allergy_ids,
-            "obligations": obligation_ids,
-        }
 
         summary = str(final_state.get("patient_summary") or "")
         self._update_document_status(
@@ -131,13 +151,15 @@ class IngestionService:
             parsed=True,
             ai_summary=summary or None,
         )
+        self._finish_run(ingestion_run_id, status="completed", candidate_fact_count=candidate_count)
 
         return {
             "status": "completed",
-            "medications_created": len(medication_ids),
-            "conditions_created": len(condition_ids),
-            "allergies_created": len(allergy_ids),
-            "obligations_created": len(obligation_ids),
+            "medications_created": 0,
+            "conditions_created": 0,
+            "allergies_created": 0,
+            "obligations_created": 0,
+            "candidate_facts_created": candidate_count,
             "summary_length": len(summary),
         }
 
@@ -177,132 +199,136 @@ class IngestionService:
 
         self.db.table("documents").update(payload).eq("id", str(document_id)).execute()
 
-    async def _save_medications(
+    def _register_candidates(
         self,
-        patient_id: UUID,
+        *,
         document_id: UUID,
+        patient_id: UUID,
         normalized_medications: list[dict[str, Any]],
-    ) -> list[str]:
-        """Save normalized medications to DB via MedicationService."""
-        created_ids: list[str] = []
-        for medication in normalized_medications:
-            payload = {
-                "name": medication.get("name")
-                or medication.get("generic_name")
-                or "Unknown medication",
-                "generic_name": medication.get("generic_name"),
-                "rxcui": medication.get("rxcui"),
-                "dosage": medication.get("dosage")
-                or medication.get("parsed_dosage", {}).get("raw")
-                or "unspecified",
-                "frequency": medication.get("frequency")
-                or medication.get("normalized_frequency")
-                or "as directed",
-                "route": medication.get("route") or "oral",
-                "instructions": medication.get("instructions"),
-                "source_document_id": str(document_id),
-            }
-            created = await self._med_service.create_medication(patient_id, payload)
-            created_ids.append(str(created["id"]))
-        return created_ids
-
-    async def _save_obligations(
-        self,
-        patient_id: UUID,
-        document_id: UUID,
+        conditions: list[dict[str, Any]],
+        allergies: list[dict[str, Any]],
         follow_up_instructions: list[dict[str, Any]],
-    ) -> list[str]:
-        """Save follow-up instructions as obligations via ObligationService."""
-        created_ids: list[str] = []
-        for instruction in follow_up_instructions:
-            description = str(instruction.get("description") or "").strip()
-            if not description:
-                continue
-            payload = {
-                "obligation_type": self._detect_obligation_type(description),
-                "description": description,
-                "frequency": instruction.get("timing")
-                or instruction.get("frequency")
-                or "as directed",
-                "source_document_id": str(document_id),
+    ) -> int:
+        """Save extraction output only as pending, source-cited candidates."""
+        document = cast(
+            dict[str, Any],
+            self.db.table("documents")
+            .select("uploaded_by, file_name")
+            .eq("id", str(document_id))
+            .single()
+            .execute()
+            .data
+            or {},
+        )
+        actor_id = UUID(str(document.get("uploaded_by") or patient_id))
+        rows = (
+            ("medication", normalized_medications),
+            ("condition", conditions),
+            ("allergy", allergies),
+            ("obligation", follow_up_instructions),
+        )
+        facts = ClinicalFactService(self.db)
+        created = 0
+        for fact_type, values in rows:
+            for index, value in enumerate(values):
+                if not isinstance(value, dict) or not value:
+                    continue
+                facts.create_candidate(
+                    ClinicalFactCreate(
+                        patient_id=patient_id,
+                        fact_type=fact_type,
+                        subject_type=fact_type,
+                        value=value,
+                        uncertainty=[
+                            "Document extraction requires clinician review before clinical use."
+                        ],
+                        external_source_key=f"document/{document_id}/{fact_type}/{index}",
+                        external_source_version=str(document_id),
+                        provenance=SourceProvenanceCreate(
+                            artifact_type=SourceArtifactType.DOCUMENT,
+                            source_system="document_ingestion",
+                            source_reference=f"document:{document_id}",
+                            document_id=document_id,
+                            document_location={"scope": "document", "index": index},
+                            extractor_version="ingestion-graph/1",
+                        ),
+                        citations=[
+                            EvidenceCitationCreate(
+                                excerpt=f"Extracted {fact_type} candidate from "
+                                f"{document.get('file_name') or 'clinical document'}.",
+                                location={"scope": "document", "index": index},
+                            )
+                        ],
+                    ),
+                    actor_id=actor_id,
+                )
+                created += 1
+        return created
+
+    def _document_content_hash(self, document_id: UUID) -> str | None:
+        result = (
+            self.db.table("documents")
+            .select("content_hash")
+            .eq("id", str(document_id))
+            .single()
+            .execute()
+        )
+        data = cast(dict[str, Any], result.data or {})
+        source_hash = data.get("content_hash")
+        return source_hash if isinstance(source_hash, str) and source_hash else None
+
+    def _has_completed_source_hash(self, *, patient_id: UUID, source_hash: str) -> bool:
+        result = (
+            self.db.table("document_ingestion_runs")
+            .select("id")
+            .eq("patient_id", str(patient_id))
+            .eq("source_hash", source_hash)
+            .eq("status", "completed")
+            .execute()
+        )
+        return bool(result.data)
+
+    def _start_run(
+        self,
+        *,
+        document_id: UUID,
+        patient_id: UUID,
+        attempt: int,
+        source_hash: str | None = None,
+        status: str = "processing",
+    ) -> str:
+        result = (
+            self.db.table("document_ingestion_runs")
+            .insert(
+                {
+                    "document_id": str(document_id),
+                    "patient_id": str(patient_id),
+                    "status": status,
+                    "attempt": attempt,
+                    "source_hash": source_hash,
+                    "extractor_version": "ingestion-graph/1",
+                }
+            )
+            .execute()
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows:
+            raise DocumentParseError(str(document_id), "Could not create ingestion run")
+        return str(rows[0]["id"])
+
+    def _finish_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        candidate_fact_count: int = 0,
+        error: str | None = None,
+    ) -> None:
+        self.db.table("document_ingestion_runs").update(
+            {
+                "status": status,
+                "candidate_fact_count": candidate_fact_count,
+                "error_message": error,
+                "completed_at": datetime.now(UTC).isoformat(),
             }
-            created = await self._obligation_service.create_obligation(patient_id, payload)
-            created_ids.append(str(created["id"]))
-        return created_ids
-
-    async def _save_conditions(
-        self,
-        patient_id: UUID,
-        conditions: list[dict[str, Any]],
-    ) -> list[str]:
-        """Persist validated conditions directly to the conditions table."""
-        return await asyncio.to_thread(self._insert_conditions, patient_id, conditions)
-
-    def _insert_conditions(
-        self,
-        patient_id: UUID,
-        conditions: list[dict[str, Any]],
-    ) -> list[str]:
-        """Persist validated conditions directly to the conditions table."""
-        created_ids: list[str] = []
-        for condition in conditions:
-            result = (
-                self.db.table("conditions")
-                .insert(
-                    {
-                        "patient_id": str(patient_id),
-                        "name": condition.get("name"),
-                        "status": condition.get("status") or "active",
-                        "notes": condition.get("notes"),
-                    }
-                )
-                .execute()
-            )
-            data = cast(list[dict[str, Any]], result.data or [])
-            if data:
-                created_ids.append(str(data[0]["id"]))
-        return created_ids
-
-    async def _save_allergies(
-        self,
-        patient_id: UUID,
-        allergies: list[dict[str, Any]],
-    ) -> list[str]:
-        """Persist validated allergies directly to the allergies table."""
-        return await asyncio.to_thread(self._insert_allergies, patient_id, allergies)
-
-    def _insert_allergies(
-        self,
-        patient_id: UUID,
-        allergies: list[dict[str, Any]],
-    ) -> list[str]:
-        """Persist validated allergies directly to the allergies table."""
-        created_ids: list[str] = []
-        for allergy in allergies:
-            result = (
-                self.db.table("allergies")
-                .insert(
-                    {
-                        "patient_id": str(patient_id),
-                        "allergen": allergy.get("allergen"),
-                        "reaction": allergy.get("reaction"),
-                        "severity": allergy.get("severity") or "moderate",
-                    }
-                )
-                .execute()
-            )
-            data = cast(list[dict[str, Any]], result.data or [])
-            if data:
-                created_ids.append(str(data[0]["id"]))
-        return created_ids
-
-    def _detect_obligation_type(self, description: str) -> str:
-        """Infer obligation type from the free-text follow-up instruction."""
-        normalized = description.lower()
-        if any(token in normalized for token in ("diet", "sodium", "nutrition", "eat", "meal")):
-            return "diet"
-        if any(
-            token in normalized for token in ("walk", "exercise", "activity", "stretch", "physical")
-        ):
-            return "exercise"
-        return "custom"
+        ).eq("id", run_id).execute()

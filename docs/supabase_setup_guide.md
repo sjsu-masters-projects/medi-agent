@@ -26,7 +26,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This currently applies migrations `001` through `028`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), and the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, and clinician review reads (`021`–`028`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
+This currently applies migrations `001` through `029`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, and clinician review reads (`021`–`028`), and safe external-record reconciliation (`029`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
 
 ## Configure SMART staging
 
@@ -56,10 +56,24 @@ The SMART Health IT launcher has two distinct sandbox bases. EHR-initiated testi
 simulator issuer above. Do not replace the EHR issuer with the simulator issuer: the
 simulator base is what enables its standalone synthetic-patient picker.
 
+## Reconciliation and legacy-data review
+
+Migration `029` keeps imported SMART and document data as candidates until a clinician
+selects permitted medication, condition, or allergy fields in the reconciliation
+workspace. Before any staging cleanup, produce and review the read-only legacy inventory:
+
+```bash
+./scripts/inventory-legacy-document-derived-records.sh
+```
+
+The script only reports rows created by the old document-derived canonical path. It never
+deletes or rewrites records. A separately reviewed, explicitly authorized staging repair
+is required before attaching those rows to legacy provenance or changing their status.
+
 ## Verification checklist
 
 - [ ] Every committed migration is recorded with its exact filename and SHA-256 checksum in `public.schema_migrations`.
-- [ ] Tables include `clinical_facts`, `source_provenances`, `fhir_imports`, `fhir_import_resources`, and SMART session/handoff tables.
+- [ ] Tables include `clinical_facts`, `source_provenances`, `fhir_imports`, `fhir_import_resources`, `external_patient_bindings`, `document_ingestion_runs`, and reconciliation-event tables.
 - [ ] RLS is enabled for clinical facts and FHIR import tables.
 - [ ] `public.custom_access_token_hook` is enabled in **Authentication → Auth Hooks**, not merely present in the database.
 - [ ] A fresh password sign-in for a synthetic patient produces a JWT with `user_role=patient`, and the backend accepts that JWT. Repeat for a clinician before a clinician demo.
@@ -67,6 +81,6 @@ simulator base is what enables its standalone synthetic-patient picker.
 - [ ] A clinician has an active care-team assignment to a synthetic patient.
 - [ ] Cloud Run staging callback is HTTPS and registered with the SMART sandbox.
 - [ ] A sandbox import creates raw resource envelopes and pending facts only.
-- [ ] A clinician can inspect lineage and explicitly approve, reject, or correct each candidate.
+- [ ] A clinician can inspect lineage, confirm an external-patient binding, and reconcile selected medication, condition, or allergy fields without altering demographics.
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.

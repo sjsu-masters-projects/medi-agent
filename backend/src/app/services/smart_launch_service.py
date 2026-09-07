@@ -101,6 +101,11 @@ class SmartLaunchService:
             token = self._exchange_code(session=session, code=code, verifier=verifier)
             resources, context = self._fetch_contextual_resources(session=session, token=token)
             import_record = self._create_import(session=session, context=context)
+            self._record_external_identity(
+                import_record=import_record,
+                patient_id=UUID(str(session["patient_id"])),
+                resources=resources,
+            )
             result = self.imports.import_resources(
                 import_id=UUID(str(import_record["id"])),
                 patient_id=UUID(str(session["patient_id"])),
@@ -201,6 +206,31 @@ class SmartLaunchService:
             .execute()
         )
         return cast(list[dict[str, Any]], result.data or [])
+
+    def remove_import(
+        self,
+        *,
+        clinician_id: UUID,
+        patient_id: UUID,
+        import_id: UUID,
+    ) -> dict[str, Any]:
+        """Withdraw an import only if it has not affected canonical local truth."""
+        self._require_assignment(clinician_id, patient_id)
+        result = self.db.rpc(
+            "withdraw_unapplied_fhir_import",
+            {
+                "p_import_id": str(import_id),
+                "p_patient_id": str(patient_id),
+                "p_actor_id": str(clinician_id),
+            },
+        ).execute()
+        outcome = cast(dict[str, Any], result.data or {})
+        if not outcome.get("can_delete", False):
+            raise ValidationError(
+                "This SMART import supports applied local records. Its provenance was marked "
+                "withdrawn and retained for clinician review."
+            )
+        return outcome
 
     def ensure_assignment(self, *, clinician_id: UUID, patient_id: UUID) -> None:
         """Expose the same care-team gate for read/review routes."""
@@ -350,6 +380,75 @@ class SmartLaunchService:
         if not rows:
             raise ValidationError("Could not create FHIR import")
         return rows[0]
+
+    def _record_external_identity(
+        self,
+        *,
+        import_record: dict[str, Any],
+        patient_id: UUID,
+        resources: list[dict[str, Any]],
+    ) -> None:
+        """Persist comparison-only identity and reuse only an established binding.
+
+        A fresh import is intentionally *not* bound automatically. A clinician
+        confirms any new external-to-local relationship in the review workspace
+        before candidate facts can change canonical clinical records.
+        """
+        external_identity = self._external_identity(
+            resources=resources,
+            external_patient_id=str(import_record.get("external_patient_id") or ""),
+        )
+        issuer = str(import_record["issuer"]).rstrip("/")
+        existing = (
+            self.db.table("external_patient_bindings")
+            .select("id, patient_id")
+            .eq("issuer", issuer)
+            .eq("external_patient_id", str(import_record["external_patient_id"]))
+            .execute()
+        )
+        bindings = cast(list[dict[str, Any]], existing.data or [])
+        if bindings and str(bindings[0].get("patient_id")) != str(patient_id):
+            raise AuthorizationError(
+                "This external patient is already bound to another local patient"
+            )
+
+        payload: dict[str, Any] = {"external_identity": external_identity}
+        if bindings:
+            payload.update(
+                {
+                    "external_patient_binding_id": str(bindings[0]["id"]),
+                    "identity_confirmed_at": datetime.now(UTC).isoformat(),
+                }
+            )
+        self.db.table("fhir_imports").update(payload).eq("id", str(import_record["id"])).execute()
+
+    @staticmethod
+    def _external_identity(
+        *, resources: list[dict[str, Any]], external_patient_id: str
+    ) -> dict[str, str | None]:
+        for resource in resources:
+            if resource.get("resourceType") != "Patient":
+                continue
+            if external_patient_id and str(resource.get("id") or "") != external_patient_id:
+                continue
+            name = (resource.get("name") or [{}])[0]
+            if not isinstance(name, dict):
+                name = {}
+            name_parts = [
+                *[part for part in name.get("given", []) if isinstance(part, str)],
+                name.get("family"),
+            ]
+            return {
+                "name": " ".join(str(part).strip() for part in name_parts if str(part).strip())
+                or None,
+                "birthDate": resource.get("birthDate")
+                if isinstance(resource.get("birthDate"), str)
+                else None,
+                "gender": resource.get("gender")
+                if isinstance(resource.get("gender"), str)
+                else None,
+            }
+        return {}
 
     def _load_active_session(self, state: str) -> dict[str, Any]:
         response = (

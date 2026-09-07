@@ -1,102 +1,32 @@
-"""Document extraction import service.
+"""Document extraction candidate registration.
 
-Persists a project-owned extraction result into the same document, medication,
-condition, allergy, and obligation tables that power the Today feed.
+Extraction output is evidence, not clinical truth. This service stores only
+pending, provenance-backed candidates; reconciliation owns any later canonical
+medication, condition, or allergy change.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 import re
 from typing import Any, cast
 from uuid import UUID
 
-from postgrest.exceptions import APIError
 from supabase import Client
 
+from app.core.exceptions import ValidationError
 from app.models.clinical_fact import ClinicalFactCreate
 from app.models.document_extraction import DocumentExtractionResult
-from app.models.enums import DocumentType, MedicationRoute, ObligationType
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_service import DocumentService
-from app.services.medication_service import MedicationService
-from app.services.obligation_service import ObligationService
-
-logger = logging.getLogger(__name__)
-
-
-def _is_missing_source_document_column_error(error: APIError, table_name: str) -> bool:
-    message = str(getattr(error, "message", error))
-    code = str(getattr(error, "code", ""))
-    return (
-        code in {"PGRST204", "42703"} and "source_document_id" in message and table_name in message
-    )
-
-
-DEMO_DOCUMENT_EXTRACTION = DocumentExtractionResult.model_validate(
-    {
-        "document": {
-            "title": "Discharge Summary",
-            "document_type": DocumentType.DISCHARGE_SUMMARY.value,
-            "source_name": "Dr Adam Careful",
-            "notes": "Imported from a normalized document extraction demo.",
-        },
-        "summary": (
-            "Discharge Summary extracted from a clinical document. "
-            "Author: Dr Adam Careful. Reason for admission: Acute Asthmatic attack. "
-            "Was wheezing for days prior to admission. Discharge medications: "
-            "Theophylline 200mg, Ventolin Inhaler. Known allergies: Doxycycline (Hives)."
-        ),
-        "medications": [
-            {
-                "name": "Theophylline",
-                "dosage": "200mg",
-                "frequency": "twice daily",
-                "route": MedicationRoute.ORAL.value,
-                "instructions": "Take with Food",
-            },
-            {
-                "name": "Ventolin Inhaler",
-                "dosage": "as directed",
-                "frequency": "as directed",
-                "route": MedicationRoute.INHALED.value,
-                "instructions": "Management of Asthma",
-            },
-        ],
-        "conditions": [
-            {
-                "name": "Asthma exacerbation",
-                "status": "active",
-                "notes": "Acute Asthmatic attack. Was wheezing for days prior to admission.",
-            }
-        ],
-        "allergies": [
-            {
-                "allergen": "Doxycycline",
-                "reaction": "Hives",
-                "severity": "severe",
-            }
-        ],
-        "obligations": [
-            {
-                "description": "Review discharge instructions from Discharge Summary",
-                "frequency": "today",
-                "obligation_type": ObligationType.CUSTOM.value,
-            }
-        ],
-    }
-)
 
 
 class DocumentExtractionImportService:
-    """Imports normalized document extraction results into patient-scoped records."""
+    """Registers normalized document extraction results as patient-scoped candidates."""
 
     def __init__(self, db: Client) -> None:
         self.db = db
         self.document_service = DocumentService(db)
-        self.medication_service = MedicationService(db)
-        self.obligation_service = ObligationService(db)
 
     async def import_extraction(
         self,
@@ -107,7 +37,11 @@ class DocumentExtractionImportService:
         document_id: UUID | None = None,
         extraction: DocumentExtractionResult | None = None,
     ) -> dict[str, Any]:
-        effective_extraction = extraction or DEMO_DOCUMENT_EXTRACTION
+        if extraction is None:
+            raise ValidationError(
+                "A verified extraction result is required; demo data is not imported"
+            )
+        effective_extraction = extraction
         document_payload = effective_extraction.document
         serialized_extraction = effective_extraction.model_dump(mode="json")
         summary = effective_extraction.summary or self._summary(effective_extraction)
@@ -122,7 +56,7 @@ class DocumentExtractionImportService:
                 file_size_bytes=len(json.dumps(serialized_extraction).encode("utf-8")),
                 mime_type="application/json",
                 document_type=document_payload.document_type.value,
-                source_clinic=document_payload.source_name or "Document extraction demo",
+                source_clinic=document_payload.source_name or "Document extraction import",
                 notes=document_payload.notes,
                 sign_file_url=False,
             )
@@ -130,29 +64,19 @@ class DocumentExtractionImportService:
         else:
             document = await self.document_service.get_document(document_id, patient_id)
 
-        medication_ids = await self._create_medications(
-            patient_id,
-            document_id,
-            effective_extraction,
-        )
-        condition_ids = self._create_conditions(patient_id, effective_extraction)
-        allergy_ids = self._create_allergies(patient_id, effective_extraction)
-        obligation_ids = await self._create_obligations(
-            patient_id,
-            document_id,
-            effective_extraction,
-        )
-        clinical_fact_count = self._register_candidate_facts(
-            patient_id=patient_id,
-            actor_id=uploaded_by,
-            document_id=document_id,
-            document_title=document_payload.title,
-            extraction=effective_extraction,
-            medication_ids=medication_ids,
-            condition_ids=condition_ids,
-            allergy_ids=allergy_ids,
-            obligation_ids=obligation_ids,
-        )
+        run_id = self._start_run(document_id=document_id, patient_id=patient_id)
+        try:
+            clinical_fact_count = self._register_candidate_facts(
+                patient_id=patient_id,
+                actor_id=uploaded_by,
+                document_id=document_id,
+                document_title=document_payload.title,
+                extraction=effective_extraction,
+            )
+        except Exception as exc:
+            self._finish_run(run_id, status="failed", error=str(exc))
+            raise
+        self._finish_run(run_id, status="completed", candidate_fact_count=clinical_fact_count)
 
         self.document_service.update_parse_result(
             document_id=document_id,
@@ -168,13 +92,48 @@ class DocumentExtractionImportService:
 
         return {
             "document": document,
-            "medications_created": len(medication_ids),
-            "conditions_created": len(condition_ids),
-            "allergies_created": len(allergy_ids),
-            "obligations_created": len(obligation_ids),
+            "medications_created": 0,
+            "conditions_created": 0,
+            "allergies_created": 0,
+            "obligations_created": 0,
             "clinical_facts_created": clinical_fact_count,
             "summary": summary,
         }
+
+    def _start_run(self, *, document_id: UUID, patient_id: UUID) -> str:
+        result = (
+            self.db.table("document_ingestion_runs")
+            .insert(
+                {
+                    "document_id": str(document_id),
+                    "patient_id": str(patient_id),
+                    "status": "processing",
+                    "attempt": 1,
+                    "extractor_version": "document-extraction-import/1",
+                }
+            )
+            .execute()
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows or not rows[0].get("id"):
+            raise ValidationError("Could not create document ingestion run")
+        return str(rows[0]["id"])
+
+    def _finish_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        candidate_fact_count: int = 0,
+        error: str | None = None,
+    ) -> None:
+        self.db.table("document_ingestion_runs").update(
+            {
+                "status": status,
+                "candidate_fact_count": candidate_fact_count,
+                "error_message": error,
+            }
+        ).eq("id", run_id).execute()
 
     def _register_candidate_facts(
         self,
@@ -184,30 +143,27 @@ class DocumentExtractionImportService:
         document_id: UUID,
         document_title: str,
         extraction: DocumentExtractionResult,
-        medication_ids: list[str],
-        condition_ids: list[str],
-        allergy_ids: list[str],
-        obligation_ids: list[str],
     ) -> int:
         """Register extraction output as reviewable candidates, never approved facts."""
         registry = ClinicalFactService(self.db)
         pairs = (
-            ("medication", extraction.medications, medication_ids),
-            ("condition", extraction.conditions, condition_ids),
-            ("allergy", extraction.allergies, allergy_ids),
-            ("obligation", extraction.obligations, obligation_ids),
+            ("medication", extraction.medications),
+            ("condition", extraction.conditions),
+            ("allergy", extraction.allergies),
+            ("obligation", extraction.obligations),
         )
         created = 0
-        for fact_type, extracted_rows, record_ids in pairs:
-            for extracted, record_id in zip(extracted_rows, record_ids, strict=False):
+        for fact_type, extracted_rows in pairs:
+            for index, extracted in enumerate(extracted_rows):
                 registry.create_candidate(
                     ClinicalFactCreate.model_validate(
                         {
                             "patient_id": str(patient_id),
                             "fact_type": fact_type,
                             "subject_type": fact_type,
-                            "subject_id": record_id,
                             "value": extracted.model_dump(mode="json"),
+                            "external_source_key": f"document/{document_id}/{fact_type}/{index}",
+                            "external_source_version": str(document_id),
                             "uncertainty": [
                                 "Structured extraction requires clinician review before use as clinical truth."
                             ],
@@ -231,116 +187,6 @@ class DocumentExtractionImportService:
                 )
                 created += 1
         return created
-
-    async def _create_medications(
-        self,
-        patient_id: UUID,
-        document_id: UUID,
-        extraction: DocumentExtractionResult,
-    ) -> list[str]:
-        created_ids: list[str] = []
-        seen_names: set[str] = set()
-
-        for medication in extraction.medications:
-            dedupe_key = medication.name.strip().lower()
-            if dedupe_key in seen_names:
-                continue
-            seen_names.add(dedupe_key)
-            payload = {
-                "name": medication.name,
-                "generic_name": medication.generic_name,
-                "rxcui": medication.rxcui,
-                "dosage": medication.dosage,
-                "frequency": medication.frequency,
-                "route": medication.route.value,
-                "instructions": medication.instructions,
-                "source_document_id": str(document_id),
-            }
-            created = await self.medication_service.create_medication(patient_id, payload)
-            created_ids.append(str(created["id"]))
-
-        return created_ids
-
-    def _create_conditions(
-        self,
-        patient_id: UUID,
-        extraction: DocumentExtractionResult,
-    ) -> list[str]:
-        created_ids: list[str] = []
-
-        for condition in extraction.conditions:
-            result = (
-                self.db.table("conditions")
-                .insert(
-                    {
-                        "patient_id": str(patient_id),
-                        "name": condition.name,
-                        "status": condition.status,
-                        "notes": condition.notes,
-                    }
-                )
-                .execute()
-            )
-            data = cast(list[dict[str, Any]], result.data or [])
-            if data:
-                created_ids.append(str(data[0]["id"]))
-
-        return created_ids
-
-    def _create_allergies(
-        self,
-        patient_id: UUID,
-        extraction: DocumentExtractionResult,
-    ) -> list[str]:
-        created_ids: list[str] = []
-
-        for allergy in extraction.allergies:
-            result = (
-                self.db.table("allergies")
-                .insert(
-                    {
-                        "patient_id": str(patient_id),
-                        "allergen": allergy.allergen,
-                        "reaction": allergy.reaction,
-                        "severity": allergy.severity,
-                    }
-                )
-                .execute()
-            )
-            data = cast(list[dict[str, Any]], result.data or [])
-            if data:
-                created_ids.append(str(data[0]["id"]))
-
-        return created_ids
-
-    async def _create_obligations(
-        self,
-        patient_id: UUID,
-        document_id: UUID,
-        extraction: DocumentExtractionResult,
-    ) -> list[str]:
-        created_ids: list[str] = []
-
-        for obligation in extraction.obligations:
-            payload = {
-                "obligation_type": obligation.obligation_type.value,
-                "description": obligation.description,
-                "frequency": obligation.frequency,
-                "source_document_id": str(document_id),
-            }
-            try:
-                created = await self.obligation_service.create_obligation(patient_id, payload)
-            except APIError as exc:
-                if _is_missing_source_document_column_error(exc, "obligations"):
-                    logger.warning(
-                        "Skipping document-derived obligations because obligations.source_document_id "
-                        "is missing from the database schema"
-                    )
-                    return created_ids
-                raise
-            created_ids.append(str(created["id"]))
-
-        return created_ids
 
     def _summary(self, extraction: DocumentExtractionResult) -> str:
         title = extraction.document.title

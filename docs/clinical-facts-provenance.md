@@ -7,20 +7,23 @@ records. It separates extracted or entered information from approved clinical tr
 insertion always starts as `pending_review`; only an explicit clinician review can set
 the state to `approved`.
 
-The initial integration registers document-extraction imports. Existing product tables
-such as `medications`, `conditions`, `allergies`, and `obligations` remain their own
-workflow records while the registry supplies reviewable provenance for records derived
-from a document.
+Document and SMART imports register candidates only. Existing product tables such as
+`medications`, `conditions`, and `allergies` remain canonical local truth until an
+assigned clinician makes an explicit, audited reconciliation decision. Imported
+demographics never update the local profile. Care plans, encounters, observations,
+diagnostic reports, procedures, document references, and extracted follow-up text are
+evidence-only in R2; they do not create obligations or new canonical record types.
 
 ## Stored evidence
 
 Each candidate stores a structured value, confidence score/band, and uncertainty. Its
 supporting artifact is stored in `source_provenances` with the original source system,
 source reference, document identifier and location, extractor version, optional model
-version, and capture timestamp. `evidence_citations` connects the candidate to precise
-excerpts and locations within that artifact.
+version, capture timestamp, and (when withdrawn) the withdrawal timestamp and reason.
+`evidence_citations` connects the candidate to precise excerpts and locations within
+that artifact.
 
-## Lifecycle and audit
+## Lifecycle, reconciliation, and audit
 
 The permitted states are `pending_review`, `approved`, `rejected`, and `deleted`.
 Corrections return a fact to `pending_review`, clearing the old reviewer decision.
@@ -30,6 +33,26 @@ the actor, timestamp, event type, and structured decision context.
 
 `ClinicalFactService.list_approved(patient_id)` is the safe query for clinical-display
 consumers. It intentionally excludes pending, rejected, and deleted candidates.
+
+For an imported medication, condition, or allergy, the reconciliation workspace may
+record one of `add`, `update selected fields`, `keep existing`, `defer`, or `reject`.
+Evidence-only records may instead be marked reviewed. The service-role-only database
+operation locks the candidate and requested local target, verifies the active care-team
+assignment, applies only clinician-selected non-empty fields, then records the
+before/after snapshots and immutable reconciliation event in the same transaction.
+Medication updates retain the existing local medication ID, so reminders, adherence,
+and ADR references remain attached. Imports never create reminders. Allergy severity is
+`unknown` unless the source supplies a reaction severity; FHIR criticality is retained
+as evidence and is not treated as severity.
+
+An external FHIR patient is bound to one local patient by issuer and external patient
+ID only after a clinician confirms the comparison identity. A mismatch requires a
+reason and a binding already attached to another local patient is blocked. A later
+external resource version becomes a new candidate; a reconciled candidate is immutable
+evidence. An import with only untouched pending candidates may be removed. Once a
+clinician has made any reconciliation decision, its source and immutable audit history
+are retained and marked withdrawn rather than deleted. If an applied source is
+withdrawn, the local record and audit trail remain for clinician follow-up.
 
 ## Lineage and access
 
@@ -55,12 +78,13 @@ The route first verifies the requesting clinician's existing care-team assignmen
 does not create a FHIR server endpoint, change local review state, or grant authority to
 an external SMART identity.
 
-## SMART candidate review
+## External-record review
 
-The clinician portal exposes SMART-imported candidates in a separate patient-level
-review tab. It shows the mapped candidate, explicit review state, source issuer and
-resource version, and recorded mapping or validation warnings. The original FHIR JSON
-is available only through a separate, care-team-authorized source request; it is not
-included in the ordinary candidate list. See
+The clinician portal exposes SMART and document candidates in a patient-level external
+records workspace. It supports source, mapped-type, review-state, reconciliation-state,
+and date filters; paginates large imports; and shows a candidate beside its
+conservative local match with field-level selection and before/after preview. The
+ordinary list is clinical-language-first; original FHIR JSON or document evidence is
+available only through a separate, care-team-authorized source request. See
 [`smart-fhir-review-mapping.md`](smart-fhir-review-mapping.md) for the resource-to-field
 contract and the EHR-initiated versus standalone launch behavior.

@@ -5,7 +5,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import status
-from postgrest.exceptions import APIError
 
 from app.core.security import get_current_user
 from app.db.connection import get_db
@@ -126,10 +125,10 @@ class TestCreateDocument:
         assert data["parse_status"] == "pending"
         mock_ingest.assert_awaited_once()
 
-    def test_can_skip_background_ingestion_for_mock_import(
+    def test_can_defer_background_ingestion_for_verified_extraction(
         self, client, override_auth, override_db, mock_supabase_db, patient_id
     ):
-        """Create document metadata without starting parser when mock import will attach."""
+        """Allow a separately verified extraction to defer background parsing."""
         document_id = uuid4()
         document_data = {
             "id": str(document_id),
@@ -359,12 +358,10 @@ class TestGetDocument:
 class TestDeleteDocument:
     """DELETE /api/v1/documents/{document_id} - Delete a document."""
 
-    def test_success_removes_document_and_storage_object(
+    def test_success_removes_only_unapplied_source_and_storage_object(
         self, client, override_auth, override_db, mock_supabase_db, patient_id
     ):
         document_id = uuid4()
-        medication_id = uuid4()
-        obligation_id = uuid4()
         file_path = f"{patient_id}/lab-results.pdf"
         document_data = {
             "id": str(document_id),
@@ -388,33 +385,31 @@ class TestDeleteDocument:
         }
         mock_supabase_db.table().execute.side_effect = [
             MagicMock(data=document_data),
-            MagicMock(data=[{"id": str(medication_id)}]),
-            MagicMock(data=[{"id": str(obligation_id)}]),
-            MagicMock(data=[]),
-            MagicMock(data=[]),
-            MagicMock(data=[]),
-            MagicMock(data=[]),
-            MagicMock(data=[]),
-            MagicMock(data=[]),
             MagicMock(data=[document_data]),
         ]
+        mock_supabase_db.rpc().execute.return_value = MagicMock(
+            data={"can_delete": True, "removed_candidate_count": 2}
+        )
 
         response = client.delete(f"/api/v1/documents/{document_id}")
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        mock_supabase_db.table.assert_any_call("adherence_logs")
-        mock_supabase_db.table.assert_any_call("reminder_schedules")
-        mock_supabase_db.table.assert_any_call("medications")
-        mock_supabase_db.table.assert_any_call("obligations")
+        mock_supabase_db.rpc.assert_any_call(
+            "withdraw_unapplied_document_source",
+            {
+                "p_document_id": str(document_id),
+                "p_patient_id": str(patient_id),
+                "p_actor_id": str(patient_id),
+            },
+        )
         mock_supabase_db.storage.from_.assert_called_with("documents")
         mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
-        assert mock_supabase_db.table().delete.call_count == 7
+        assert mock_supabase_db.table().delete.call_count == 1
 
-    def test_delete_skips_obligation_lookup_when_source_document_column_is_missing(
+    def test_delete_retains_applied_source_after_marking_it_withdrawn(
         self, client, override_auth, override_db, mock_supabase_db, patient_id
     ):
         document_id = uuid4()
-        medication_id = uuid4()
         file_path = f"{patient_id}/lab-results.pdf"
         document_data = {
             "id": str(document_id),
@@ -436,29 +431,18 @@ class TestDeleteDocument:
             "visibility": "all_providers",
             "created_at": "2025-01-15T00:00:00Z",
         }
-        missing_column_error = APIError(
-            {
-                "message": "column obligations.source_document_id does not exist",
-                "code": "42703",
-                "hint": None,
-                "details": None,
-            }
-        )
         mock_supabase_db.table().execute.side_effect = [
             MagicMock(data=document_data),
-            MagicMock(data=[{"id": str(medication_id)}]),
-            missing_column_error,
-            MagicMock(data=[]),
-            MagicMock(data=[]),
-            MagicMock(data=[]),
-            MagicMock(data=[document_data]),
         ]
+        mock_supabase_db.rpc().execute.return_value = MagicMock(
+            data={"can_delete": False, "source_withdrawn_fact_ids": [str(uuid4())]}
+        )
 
         response = client.delete(f"/api/v1/documents/{document_id}")
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
-        assert mock_supabase_db.table().delete.call_count == 4
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        mock_supabase_db.storage.from_().remove.assert_not_called()
+        mock_supabase_db.table().delete.assert_not_called()
 
     def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
         document_id = uuid4()
