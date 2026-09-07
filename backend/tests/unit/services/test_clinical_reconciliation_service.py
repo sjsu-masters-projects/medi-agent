@@ -68,9 +68,10 @@ def test_candidate_fields_exclude_missing_values_and_never_map_criticality_to_se
 
 
 def test_evidence_only_resource_has_no_projectable_fields() -> None:
-    assert _service()._candidate_fields(
-        {"fact_type": "care_plan", "value": {"title": "Exercise"}}
-    ) == {}
+    assert (
+        _service()._candidate_fields({"fact_type": "care_plan", "value": {"title": "Exercise"}})
+        == {}
+    )
 
 
 def test_reconciliation_request_requires_explicit_safe_shape() -> None:
@@ -117,3 +118,89 @@ def test_withdrawn_or_applied_candidate_cannot_be_reconciled_again() -> None:
                 "idempotency_key": "00000000-0000-0000-0000-000000000001",
             }
         )
+
+
+def test_add_reconciles_all_present_medication_fields_with_an_audit_key() -> None:
+    """An add projects only supplied candidate values through the transaction."""
+    db = MagicMock()
+    db.rpc.return_value.execute.return_value.data = {
+        "fact_id": "00000000-0000-0000-0000-000000000001",
+        "decision": "add",
+    }
+    service = ClinicalReconciliationService(db)
+    service._fact = MagicMock(  # type: ignore[method-assign]
+        return_value={
+            "id": "00000000-0000-0000-0000-000000000001",
+            "fact_type": "medication",
+            "review_state": "pending_review",
+            "reconciliation_state": "not_started",
+            "value": {
+                "name": "Metformin",
+                "dosage": ["500 mg", "with food"],
+                "frequency": "twice daily",
+                "is_active": True,
+            },
+        }
+    )
+    service._require_external_binding_if_fhir = MagicMock()  # type: ignore[method-assign]
+    request = ReconciliationDecisionRequest.model_validate(
+        {
+            "decision": "add",
+            "idempotency_key": "00000000-0000-0000-0000-000000000002",
+        }
+    )
+
+    result = service.decide(
+        fact_id=UUID("00000000-0000-0000-0000-000000000001"),
+        patient_id=UUID("00000000-0000-0000-0000-000000000003"),
+        actor_id=UUID("00000000-0000-0000-0000-000000000004"),
+        request=request,
+    )
+
+    assert result["decision"] == "add"
+    service._require_external_binding_if_fhir.assert_called_once()
+    db.rpc.assert_called_once_with(
+        "apply_clinical_fact_reconciliation",
+        {
+            "p_fact_id": "00000000-0000-0000-0000-000000000001",
+            "p_actor_id": "00000000-0000-0000-0000-000000000004",
+            "p_decision": "add",
+            "p_target_id": None,
+            "p_patch": {
+                "name": "Metformin",
+                "dosage": "500 mg; with food",
+                "frequency": "twice daily",
+                "is_active": True,
+            },
+            "p_selected_fields": ["dosage", "frequency", "is_active", "name"],
+            "p_note": None,
+            "p_idempotency_key": "00000000-0000-0000-0000-000000000002",
+        },
+    )
+
+
+def test_preview_exposes_candidate_fields_and_match_context() -> None:
+    service = _service()
+    service._fact = MagicMock(  # type: ignore[method-assign]
+        return_value={
+            "fact_type": "condition",
+            "value": {"name": "Diabetes", "icd10_code": "E11.9"},
+        }
+    )
+    service._matches = MagicMock(  # type: ignore[method-assign]
+        return_value=[{"target_id": "local-condition", "match_reason": "Exact ICD-10 code"}]
+    )
+
+    preview = service.preview(
+        fact_id=UUID("00000000-0000-0000-0000-000000000001"),
+        patient_id=UUID("00000000-0000-0000-0000-000000000003"),
+    )
+
+    assert preview == {
+        "fact_id": "00000000-0000-0000-0000-000000000001",
+        "fact_type": "condition",
+        "projectable": True,
+        "candidate_fields": {"name": "Diabetes", "icd10_code": "E11.9"},
+        "available_fields": ["icd10_code", "name"],
+        "matches": [{"target_id": "local-condition", "match_reason": "Exact ICD-10 code"}],
+    }
