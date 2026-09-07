@@ -42,3 +42,20 @@ def test_reconciliation_never_projects_evidence_only_types_or_demographics() -> 
     assert "patient_demographics" not in migration
     assert "new medications require name, dosage, and frequency" in migration
     assert "'unknown'::public.allergy_severity_enum" in migration
+
+
+def test_candidate_reprojection_is_append_only_and_service_role_only() -> None:
+    migration = (MIGRATION_PATH.parent / "030_audited_fhir_candidate_reprojection.sql").read_text()
+
+    assert "CREATE TABLE IF NOT EXISTS clinical_fact_mapping_revisions" in migration
+    assert "clinical_fact_mapping_revisions are append-only" in migration
+    assert "only untouched pending candidates can be reprojected" in migration
+    assert "clinician-touched candidates cannot be reprojected" in migration
+    assert "candidate source version changed since the dry run" in migration
+    assert "FOR UPDATE" in migration
+    assert "REVOKE ALL ON FUNCTION" in migration
+    assert "apply_pending_fhir_candidate_reprojection" in migration
+    assert "FROM PUBLIC, anon, authenticated" in migration
+    assert "TO service_role" in migration
+    assert "mapping revision is audit history" in migration
+    assert "withdraw_unapplied_fhir_import" in migration

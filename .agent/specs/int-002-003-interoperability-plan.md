@@ -45,6 +45,12 @@ demonstration only; it does not claim production EHR connectivity or real-PHI su
    medication, condition, or allergy can be added or patched through the append-only,
    transactional reconciliation decision; CarePlans and all other supported resources
    remain evidence-only in R2.
+7. Mapper improvements may re-project only untouched, pending candidates from their
+   preserved source envelopes. The operation requires a reviewed dry-run report, exact
+   source-version match, active care-team clinician, service-role-only transaction, and
+   an append-only before/after mapping revision. It never alters canonical truth or the
+   original FHIR JSON; a reprojected source is retained as withdrawn evidence if later
+   removed.
 
 ## Phase A — FHIR mapping and validation boundary (INT-002)
 

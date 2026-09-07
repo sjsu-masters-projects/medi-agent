@@ -70,12 +70,25 @@ Mappings are applied only when a resource is imported. Existing candidates are n
 silently rewritten when a later mapper version exposes more source fields, because that
 could overwrite a clinician correction or obscure what was reviewed.
 
+### Mapper re-projection for untouched candidates
+
+When a mapper gains clinically useful display fields, an operator may run
+`backend/scripts/reproject_fhir_candidates.py --dry-run` to produce a deterministic
+report from the stored FHIR envelopes. Applying a report requires its reviewed SHA-256
+value and an actively assigned clinician ID. The service-role-only database transaction
+locks the candidate and re-checks that it is still pending, unreconciled, source-version
+matched, and has no audit event beyond creation. It then records an append-only mapping
+revision containing both candidate snapshots before refreshing the candidate display
+value. This never changes a canonical clinical record or an external source envelope.
+After re-projection, a later source withdrawal retains the candidate and mapping revision
+as withdrawn evidence rather than deleting that audit history.
+
 ## Source withdrawal
 
 An untouched pending import can be removed. Once any candidate has a clinician
-decision, its source and immutable audit history are retained instead and marked
-withdrawn. A withdrawn candidate cannot be reconciled again; clinicians can still
-inspect its provenance and the affected local record.
+decision or mapper re-projection, its source and immutable audit history are retained
+instead and marked withdrawn. A withdrawn candidate cannot be reconciled again;
+clinicians can still inspect its provenance and the affected local record.
 
 ## Two valid launch paths
 

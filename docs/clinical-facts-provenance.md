@@ -54,6 +54,16 @@ clinician has made any reconciliation decision, its source and immutable audit h
 are retained and marked withdrawn rather than deleted. If an applied source is
 withdrawn, the local record and audit trail remain for clinician follow-up.
 
+Mapper improvements do not silently rewrite existing candidates. A reviewed staging
+report may re-project an untouched pending FHIR candidate from its preserved resource
+envelope only through the service-role-only reprojection transaction. Every refresh has
+an append-only mapping revision with mapper and source versions plus before/after
+candidate snapshots. Candidates with a correction, review decision, reconciliation, or
+source-version mismatch are excluded.
+If a reprojected candidate's SMART source is later withdrawn, the mapping revision is
+retained as audit history and the source is marked withdrawn; neither the source envelope
+nor the candidate is deleted.
+
 ## Lineage and access
 
 `ClinicalFactService.get_lineage(fact_id, patient_id)` resolves a fact to its
