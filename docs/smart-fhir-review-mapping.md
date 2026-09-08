@@ -80,6 +80,8 @@ locks the candidate and re-checks that it is still pending, unreconciled, source
 matched, and has no audit event beyond creation. It then records an append-only mapping
 revision containing both candidate snapshots before refreshing the candidate display
 value. This never changes a canonical clinical record or an external source envelope.
+For envelopes without `meta.versionId`, the stored resource-content hash is the exact
+source version used for the same comparison, matching import-time version semantics.
 After re-projection, a later source withdrawal retains the candidate and mapping revision
 as withdrawn evidence rather than deleting that audit history.
 

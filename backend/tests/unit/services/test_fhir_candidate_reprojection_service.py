@@ -14,6 +14,7 @@ PATIENT_ID = "00000000-0000-0000-0000-000000000111"
 FACT_ID = "00000000-0000-0000-0000-000000000222"
 RESOURCE_ID = "00000000-0000-0000-0000-000000000333"
 PROVENANCE_ID = "00000000-0000-0000-0000-000000000444"
+CONTENT_HASH = "a" * 64
 
 
 class Result:
@@ -92,7 +93,9 @@ def _care_plan() -> dict[str, Any]:
     }
 
 
-def _database(*, touched: bool = False) -> Database:
+def _database(*, touched: bool = False, use_content_hash_version: bool = False) -> Database:
+    source_version = None if use_content_hash_version else "4"
+    candidate_version = CONTENT_HASH if use_content_hash_version else "4"
     return Database(
         {
             "clinical_facts": [
@@ -101,7 +104,7 @@ def _database(*, touched: bool = False) -> Database:
                     "patient_id": PATIENT_ID,
                     "fact_type": "care_plan",
                     "value": {"title": None, "status": "completed", "intent": "order"},
-                    "external_source_version": "4",
+                    "external_source_version": candidate_version,
                     "review_state": "pending_review",
                     "reconciliation_state": "not_started",
                 }
@@ -121,7 +124,8 @@ def _database(*, touched: bool = False) -> Database:
                 {
                     "id": RESOURCE_ID,
                     "resource_type": "CarePlan",
-                    "version_id": "4",
+                    "version_id": source_version,
+                    "content_hash": CONTENT_HASH,
                     "raw_resource": _care_plan(),
                 }
             ],
@@ -147,6 +151,15 @@ def test_skips_a_candidate_with_any_clinician_touch() -> None:
     proposals = FhirCandidateReprojectionService(_database(touched=True)).list_proposals()  # type: ignore[arg-type]
 
     assert proposals == []
+
+
+def test_uses_stored_content_hash_when_the_resource_has_no_version_id() -> None:
+    proposals = FhirCandidateReprojectionService(
+        _database(use_content_hash_version=True)
+    ).list_proposals()  # type: ignore[arg-type]
+
+    assert len(proposals) == 1
+    assert proposals[0].source_version == CONTENT_HASH
 
 
 def test_apply_uses_guarded_database_rpc_with_exact_source_version() -> None:
