@@ -154,6 +154,13 @@ def test_lists_only_untouched_pending_fhir_candidate_differences() -> None:
     )
 
 
+def test_limits_proposals_to_the_requested_fact_type() -> None:
+    service = FhirCandidateReprojectionService(_database())  # type: ignore[arg-type]
+
+    assert len(service.list_proposals(fact_type="care_plan")) == 1
+    assert service.list_proposals(fact_type="encounter") == []
+
+
 def test_skips_a_candidate_with_any_clinician_touch() -> None:
     proposals = FhirCandidateReprojectionService(_database(touched=True)).list_proposals()  # type: ignore[arg-type]
 
