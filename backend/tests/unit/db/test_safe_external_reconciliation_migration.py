@@ -69,3 +69,16 @@ def test_candidate_reprojection_uses_import_time_content_hash_fallback() -> None
     assert "coalesce(resource.version_id, resource.content_hash)" in migration
     assert "SECURITY INVOKER" in migration
     assert "FROM PUBLIC, anon, authenticated" in migration
+
+
+def test_legacy_provenance_reprojection_requires_the_exact_cited_envelope() -> None:
+    migration = (
+        MIGRATION_PATH.parent / "032_allow_audited_legacy_fhir_provenance_reprojection.sql"
+    ).read_text()
+
+    assert "apply_pending_fhir_candidate_reprojection_v2" in migration
+    assert "resource.id = p_source_resource_id" in migration
+    assert "stored FHIR source changed since the dry run" in migration
+    assert "candidate_source_version" in migration
+    assert "FOR KEY SHARE OF resource" in migration
+    assert "FROM PUBLIC, anon, authenticated, service_role" in migration

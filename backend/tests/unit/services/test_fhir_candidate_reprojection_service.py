@@ -93,9 +93,16 @@ def _care_plan() -> dict[str, Any]:
     }
 
 
-def _database(*, touched: bool = False, use_content_hash_version: bool = False) -> Database:
+def _database(
+    *,
+    touched: bool = False,
+    use_content_hash_version: bool = False,
+    candidate_version_override: str | None = None,
+) -> Database:
     source_version = None if use_content_hash_version else "4"
-    candidate_version = CONTENT_HASH if use_content_hash_version else "4"
+    candidate_version = candidate_version_override or (
+        CONTENT_HASH if use_content_hash_version else "4"
+    )
     return Database(
         {
             "clinical_facts": [
@@ -162,6 +169,17 @@ def test_uses_stored_content_hash_when_the_resource_has_no_version_id() -> None:
     assert proposals[0].source_version == CONTENT_HASH
 
 
+def test_uses_directly_cited_envelope_for_a_legacy_version_mismatch() -> None:
+    proposals = FhirCandidateReprojectionService(
+        _database(candidate_version_override="legacy-version-marker")
+    ).list_proposals()  # type: ignore[arg-type]
+
+    assert len(proposals) == 1
+    assert proposals[0].candidate_source_version == "legacy-version-marker"
+    assert proposals[0].source_version == "4"
+    assert proposals[0].source_version_relation == "legacy_mismatch"
+
+
 def test_apply_uses_guarded_database_rpc_with_exact_source_version() -> None:
     db = _database()
     service = FhirCandidateReprojectionService(db)  # type: ignore[arg-type]
@@ -176,12 +194,15 @@ def test_apply_uses_guarded_database_rpc_with_exact_source_version() -> None:
     assert result["fact_id"] == FACT_ID
     assert db.rpc_calls == [
         (
-            "apply_pending_fhir_candidate_reprojection",
+            "apply_pending_fhir_candidate_reprojection_v2",
             {
                 "p_fact_id": FACT_ID,
                 "p_actor_id": "00000000-0000-0000-0000-000000000555",
                 "p_mapper_version": MAPPER_VERSION,
+                "p_candidate_source_version": "4",
+                "p_source_resource_id": RESOURCE_ID,
                 "p_source_version": "4",
+                "p_source_content_hash": CONTENT_HASH,
                 "p_projected_value": proposal.projected_value,
                 "p_idempotency_key": "00000000-0000-0000-0000-000000000666",
             },

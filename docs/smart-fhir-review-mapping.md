@@ -82,6 +82,10 @@ revision containing both candidate snapshots before refreshing the candidate dis
 value. This never changes a canonical clinical record or an external source envelope.
 For envelopes without `meta.versionId`, the stored resource-content hash is the exact
 source version used for the same comparison, matching import-time version semantics.
+Some pre-R2 candidates have a legacy version marker that does not match their directly
+cited stored envelope. They are eligible only when that citation resolves to the exact
+resource ID and its content hash still matches the dry-run snapshot; the mapping audit
+records both the legacy marker and the envelope's actual version.
 After re-projection, a later source withdrawal retains the candidate and mapping revision
 as withdrawn evidence rather than deleting that audit history.
 

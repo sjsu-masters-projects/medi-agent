@@ -23,6 +23,9 @@ class FhirCandidateReprojectionProposal:
     fact_type: str
     source_resource_id: str
     source_version: str | None
+    source_content_hash: str
+    candidate_source_version: str | None
+    source_version_relation: str
     mapper_version: str
     prior_value: dict[str, Any]
     projected_value: dict[str, Any]
@@ -64,12 +67,15 @@ class FhirCandidateReprojectionService:
     ) -> dict[str, Any]:
         """Apply one previously reviewed proposal through the guarded database transaction."""
         result = self.db.rpc(
-            "apply_pending_fhir_candidate_reprojection",
+            "apply_pending_fhir_candidate_reprojection_v2",
             {
                 "p_fact_id": proposal.fact_id,
                 "p_actor_id": str(actor_id),
                 "p_mapper_version": proposal.mapper_version,
+                "p_candidate_source_version": proposal.candidate_source_version,
+                "p_source_resource_id": proposal.source_resource_id,
                 "p_source_version": proposal.source_version,
+                "p_source_content_hash": proposal.source_content_hash,
                 "p_projected_value": proposal.projected_value,
                 "p_idempotency_key": str(idempotency_key or uuid4()),
             },
@@ -165,8 +171,6 @@ class FhirCandidateReprojectionService:
             return None
         for source in sources:
             source_version = FhirCandidateReprojectionService._source_version(source)
-            if fact.get("external_source_version") != source_version:
-                continue
             if not isinstance(source.get("raw_resource"), dict):
                 continue
             mapped = FhirImportService._map_resource(cast(dict[str, Any], source["raw_resource"]))
@@ -181,6 +185,17 @@ class FhirCandidateReprojectionService:
                 fact_type=str(fact["fact_type"]),
                 source_resource_id=str(source["id"]),
                 source_version=str(source_version) if source_version is not None else None,
+                source_content_hash=str(source["content_hash"]),
+                candidate_source_version=(
+                    str(fact["external_source_version"])
+                    if fact.get("external_source_version") is not None
+                    else None
+                ),
+                source_version_relation=(
+                    "matched"
+                    if fact.get("external_source_version") == source_version
+                    else "legacy_mismatch"
+                ),
                 mapper_version=MAPPER_VERSION,
                 prior_value=prior,
                 projected_value=projected,
