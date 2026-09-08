@@ -141,7 +141,7 @@ class FhirCandidateReprojectionService:
         resources = cast(
             list[dict[str, Any]],
             self.db.table("fhir_import_resources")
-            .select("id, resource_type, version_id, raw_resource")
+            .select("id, resource_type, version_id, content_hash, raw_resource")
             .in_("id", resource_ids)
             .execute()
             .data
@@ -164,7 +164,7 @@ class FhirCandidateReprojectionService:
         if not isinstance(prior, dict):
             return None
         for source in sources:
-            source_version = source.get("version_id")
+            source_version = FhirCandidateReprojectionService._source_version(source)
             if fact.get("external_source_version") != source_version:
                 continue
             if not isinstance(source.get("raw_resource"), dict):
@@ -187,6 +187,15 @@ class FhirCandidateReprojectionService:
                 changed_fields=FhirCandidateReprojectionService._changed_fields(prior, projected),
             )
         return None
+
+    @staticmethod
+    def _source_version(source: dict[str, Any]) -> str | None:
+        """Mirror import-time version semantics for resources without meta.versionId."""
+        version_id = source.get("version_id")
+        content_hash = source.get("content_hash")
+        if version_id is not None:
+            return str(version_id)
+        return str(content_hash) if content_hash is not None else None
 
     @staticmethod
     def _changed_fields(prior: dict[str, Any], projected: dict[str, Any]) -> list[str]:

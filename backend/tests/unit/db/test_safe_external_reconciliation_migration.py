@@ -59,3 +59,13 @@ def test_candidate_reprojection_is_append_only_and_service_role_only() -> None:
     assert "TO service_role" in migration
     assert "mapping revision is audit history" in migration
     assert "withdraw_unapplied_fhir_import" in migration
+
+
+def test_candidate_reprojection_uses_import_time_content_hash_fallback() -> None:
+    migration = (
+        MIGRATION_PATH.parent / "031_fix_fhir_candidate_reprojection_source_version.sql"
+    ).read_text()
+
+    assert "coalesce(resource.version_id, resource.content_hash)" in migration
+    assert "SECURITY INVOKER" in migration
+    assert "FROM PUBLIC, anon, authenticated" in migration
