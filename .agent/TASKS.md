@@ -317,7 +317,7 @@ resources remain evidence-only and do not create local truth.
 - [ ] Reconcile derived data when a document is deleted.
 - [ ] Cover duplicate upload, corrupt file, unsupported type, timeout, and expired-session cases.
 - [ ] Reconcile approved FHIR candidates into existing authoritative records through explicit clinician choices to add, update, keep, defer, or reject; retain the candidate, source provenance, and audit history, and never mutate source data automatically.
-- [/] Provide audited re-projection/backfill for pending imported candidates when mapper versions add useful fields; never overwrite a clinician correction or final review decision. Dry-run and guarded staging application are implemented; production execution requires a reviewed report and explicit authorization.
+- [/] Provide audited re-projection/backfill for pending imported candidates when mapper versions add useful fields; never overwrite a clinician correction or final review decision. Dry-run and guarded staging application are implemented; production execution requires a reviewed report, an explicit candidate-type scope, and authorization. Legacy CarePlan display repair remains pending a scoped reviewed report.
 
 ### MED-001 — Multi-source medication reconciliation
 

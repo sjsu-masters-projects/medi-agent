@@ -4,7 +4,10 @@
 Examples:
     PYTHONPATH=src .venv/bin/python scripts/reproject_fhir_candidates.py --dry-run
     PYTHONPATH=src .venv/bin/python scripts/reproject_fhir_candidates.py \
-      --apply --actor-id <assigned-clinician-id> --report-sha256 <dry-run-sha>
+      --dry-run --fact-type care_plan
+    PYTHONPATH=src .venv/bin/python scripts/reproject_fhir_candidates.py \
+      --apply --fact-type care_plan --actor-id <assigned-clinician-id> \
+      --report-sha256 <dry-run-sha>
 """
 
 from __future__ import annotations
@@ -18,10 +21,31 @@ from uuid import UUID
 from app.clients.supabase import get_admin_client
 from app.services.fhir_candidate_reprojection_service import FhirCandidateReprojectionService
 
+REPROJECTABLE_FACT_TYPES = (
+    "allergy",
+    "care_plan",
+    "condition",
+    "diagnostic_report",
+    "document_reference",
+    "encounter",
+    "medication",
+    "observation",
+    "patient_demographics",
+    "procedure",
+)
 
-def parse_args() -> argparse.Namespace:
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--patient-id", type=UUID, help="Limit the report to one local patient.")
+    parser.add_argument(
+        "--fact-type",
+        choices=REPROJECTABLE_FACT_TYPES,
+        help=(
+            "Limit the report to one candidate type. Required for --apply so a reviewed "
+            "display repair cannot change unrelated candidate types."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print only the proposal report.")
     parser.add_argument(
         "--apply", action="store_true", help="Apply the exact freshly generated report."
@@ -33,7 +57,10 @@ def parse_args() -> argparse.Namespace:
         "--report-sha256",
         help="SHA-256 from a reviewed dry-run report; required with --apply.",
     )
-    return parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.apply and args.fact_type is None:
+        parser.error("--apply requires --fact-type from the reviewed dry-run report.")
+    return args
 
 
 def report_payload(proposals: list[dict[str, Any]]) -> str:
@@ -48,7 +75,7 @@ def main() -> int:
         raise SystemExit("--apply requires --actor-id and --report-sha256 from a reviewed dry run.")
 
     service = FhirCandidateReprojectionService(get_admin_client())
-    proposals = service.list_proposals(patient_id=args.patient_id)
+    proposals = service.list_proposals(patient_id=args.patient_id, fact_type=args.fact_type)
     payload = [proposal.to_dict() for proposal in proposals]
     digest = hashlib.sha256(report_payload(payload).encode()).hexdigest()
     report = {"proposal_count": len(payload), "sha256": digest, "proposals": payload}

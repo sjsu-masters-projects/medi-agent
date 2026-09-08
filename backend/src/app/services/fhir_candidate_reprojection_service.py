@@ -42,10 +42,10 @@ class FhirCandidateReprojectionService:
         self.db = db
 
     def list_proposals(
-        self, *, patient_id: UUID | None = None
+        self, *, patient_id: UUID | None = None, fact_type: str | None = None
     ) -> list[FhirCandidateReprojectionProposal]:
         """Return candidate diffs without writing any data."""
-        facts = self._untouched_pending_facts(patient_id=patient_id)
+        facts = self._untouched_pending_facts(patient_id=patient_id, fact_type=fact_type)
         if not facts:
             return []
         sources_by_fact = self._sources_by_fact([str(fact["id"]) for fact in facts])
@@ -87,7 +87,9 @@ class FhirCandidateReprojectionService:
             raise ValidationError("Could not apply FHIR candidate reprojection")
         return data
 
-    def _untouched_pending_facts(self, *, patient_id: UUID | None) -> list[dict[str, Any]]:
+    def _untouched_pending_facts(
+        self, *, patient_id: UUID | None, fact_type: str | None
+    ) -> list[dict[str, Any]]:
         query = (
             self.db.table("clinical_facts")
             .select("id, patient_id, fact_type, value, external_source_version")
@@ -96,6 +98,8 @@ class FhirCandidateReprojectionService:
         )
         if patient_id is not None:
             query = query.eq("patient_id", str(patient_id))
+        if fact_type is not None:
+            query = query.eq("fact_type", fact_type)
         facts = cast(list[dict[str, Any]], query.execute().data or [])
         audit_rows = cast(
             list[dict[str, Any]],

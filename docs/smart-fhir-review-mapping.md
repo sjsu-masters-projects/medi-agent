@@ -74,12 +74,14 @@ could overwrite a clinician correction or obscure what was reviewed.
 
 When a mapper gains clinically useful display fields, an operator may run
 `backend/scripts/reproject_fhir_candidates.py --dry-run` to produce a deterministic
-report from the stored FHIR envelopes. Applying a report requires its reviewed SHA-256
-value and an actively assigned clinician ID. The service-role-only database transaction
-locks the candidate and re-checks that it is still pending, unreconciled, source-version
-matched, and has no audit event beyond creation. It then records an append-only mapping
-revision containing both candidate snapshots before refreshing the candidate display
-value. This never changes a canonical clinical record or an external source envelope.
+report from the stored FHIR envelopes. A dry run may be scoped to one candidate type with
+`--fact-type`. Applying a report requires that explicit one-type scope, its reviewed
+SHA-256 value, and an actively assigned clinician ID. The service-role-only database
+transaction locks the candidate and re-checks that it is still pending, unreconciled,
+source-version matched, and has no audit event beyond creation. It then records an
+append-only mapping revision containing both candidate snapshots before refreshing the
+candidate display value. This never changes a canonical clinical record or an external
+source envelope.
 For envelopes without `meta.versionId`, the stored resource-content hash is the exact
 source version used for the same comparison, matching import-time version semantics.
 Some pre-R2 candidates have a legacy version marker that does not match their directly
