@@ -60,3 +60,39 @@ class VoiceResponse(BaseModel):
     audio: bytes | None = None
     mime_type: str | None = None
     telemetry: GenerationTelemetry
+
+
+class ProviderTrial(BaseModel):
+    """One provider's answer to a shared request.
+
+    A failed trial is recorded, not discarded. Reliability is one of the axes the
+    evaluation compares providers on, so "this provider was unavailable" is a result
+    worth keeping rather than an error to propagate.
+    """
+
+    provider: str
+    model: str
+    ok: bool
+    text: str | None = None
+    error_code: GenerationErrorCode | None = None
+    latency_ms: int = Field(default=0, ge=0)
+    telemetry: GenerationTelemetry | None = None
+
+
+class ProviderComparison(BaseModel):
+    """Every provider's answer to one request, for side-by-side evaluation.
+
+    The prompt is deliberately absent. Comparisons run over clinical scenario text,
+    and this object is meant to be logged, stored, and attached to evaluation records;
+    carrying the prompt through all of that would spread the scenario content further
+    than it needs to go. `prompt_digest` is enough to prove two trials answered the
+    same input.
+    """
+
+    task: str
+    prompt_digest: str = Field(min_length=1, max_length=64)
+    trials: list[ProviderTrial]
+
+    @property
+    def succeeded(self) -> list[ProviderTrial]:
+        return [trial for trial in self.trials if trial.ok]
