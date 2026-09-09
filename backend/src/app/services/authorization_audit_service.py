@@ -121,22 +121,26 @@ async def record_denial(
     try:
         await asyncio.wait_for(_refine_then_write(), timeout=_AUDIT_TIMEOUT_SECONDS)
         return True
+    # Neither branch logs an actor or target identifier. These lines fire exactly when
+    # the row did not reach the database, which is the moment it is most tempting to put
+    # the IDs somewhere — but a log store has weaker access control than the audited
+    # table, and clear-text patient or clinician identifiers do not belong in it. The
+    # actionable signal is that auditing is failing at all; `reason_code` and
+    # `target_type` classify it without naming anyone.
     except TimeoutError:
         logger.error(
-            "Timed out auditing authorization denial after %ss (reason=%s actor=%s)",
+            "Timed out auditing authorization denial after %ss (reason=%s target_type=%s)",
             _AUDIT_TIMEOUT_SECONDS,
             payload["reason_code"],
-            payload["actor_id"],
+            payload["target_type"],
         )
         return False
     except Exception:
         # Deliberately broad: the caller is an exception handler already returning 403.
         logger.error(
-            "Failed to audit authorization denial (reason=%s actor=%s target=%s/%s)",
+            "Failed to audit authorization denial (reason=%s target_type=%s)",
             payload["reason_code"],
-            payload["actor_id"],
             payload["target_type"],
-            payload["target_id"],
             exc_info=True,
         )
         return False

@@ -56,12 +56,11 @@ async def classify_care_team_denial(
 
         return NO_CARE_TEAM_ASSIGNMENT
     except Exception:
-        logger.warning(
-            "Could not classify care-team denial for clinician=%s patient=%s",
-            clinician_id,
-            patient_id,
-            exc_info=True,
-        )
+        # The identifiers are deliberately absent. A patient or clinician ID in a log
+        # line is clear-text identifying data in a store with weaker access control
+        # than the database, and it buys nothing here: the denial is still recorded in
+        # `authorization_denial_events` with both IDs, only with the generic reason.
+        logger.warning("Could not classify care-team denial", exc_info=True)
         return NO_CARE_TEAM_ASSIGNMENT
 
 
