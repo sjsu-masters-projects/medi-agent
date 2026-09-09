@@ -35,7 +35,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | Critical advisories outstanding on `main` | `main` still pins `next` 16.3.1, which two critical unauthenticated-RCE advisories cover (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4); the 2026-08-19 "zero vulnerabilities" evidence no longer holds. The pending upgrade to 16.3.4 returns both portal lockfiles to zero. Re-run `npm audit` at the start of each session |
+| Dependency security | Clear as of 2026-09-09 | `next` 16.3.4 is on `main` and deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4) that were live on both portals; a fresh `npm ci` reports zero vulnerabilities on both lockfiles. Advisories published after the 2026-08-19 evidence invalidated it, so re-run `npm audit` at the start of each session rather than trusting this row |
 | Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
 
 ## Active task
@@ -265,7 +265,11 @@ open for sandbox-specific diagnosis.
 ### SAFE-001 — Approval and audit infrastructure
 
 - [x] Define `ClinicalRecommendation`, `ApprovalDecision`, `ActionEnvelope`, and `AuditRecord`.
-- [/] Enforce tiered action authority server-side; feature-specific action executors will adopt the gate as they are implemented.
+- [/] Enforce tiered action authority server-side. `app/core/action_tiers.py` classifies each
+      action type and `propose` enforces it; the applied tier is recorded on the audit
+      trail. Tiers only tighten — none waives review. Feature-specific executors will
+      classify their actions as they are implemented, and an unclassified action fails
+      closed to the most restricted tier rather than inheriting the default.
 - [x] Require idempotency keys for action envelopes.
 - [x] Record proposer, evidence, reviewer, edits, decision, executor, and outcome.
 - [x] Prevent approval by an unauthorized, unassigned, or proposing clinician.
@@ -303,7 +307,14 @@ open for sandbox-specific diagnosis.
 
 - [x] Define model capabilities and structured error taxonomy.
 - [x] Wrap all non-streaming text generation paths behind the provider registry, with normalized telemetry and Flash fallback for runtime or primary-client initialization failure. Structured output and streaming intentionally retain their capability-specific client contracts.
-- [ ] Add optional MedGemma and NVIDIA NIM comparison adapters.
+- [x] Add optional MedGemma and NVIDIA NIM comparison adapters. MedGemma needed none: the
+      client is complete and already reaches the provider-neutral interface through
+      `ClientTextProvider`. What was missing was the comparison itself, since
+      `TASK_MODEL_MAP` binds each task to one model and cannot express "run this prompt on
+      all three". `ModelRouter.get_text_provider_for_model`, `compare_text_providers`, and
+      `scripts/compare_providers.py` close that across MedGemma, Flash, and Pro. NVIDIA NIM
+      is out of scope per the 2026-09-09 decision; the comparison accepts any
+      `TextProvider`, so adding it later needs no rework here.
 - [/] Define the voice-provider interface; live voice transport migration remains next.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
 - [x] Guarantee deterministic text fallback when audio is unavailable.
@@ -389,11 +400,23 @@ resources remain evidence-only and do not create local truth.
 
 ### SAFE-002 — Deterministic triage overrides
 
-- [ ] Finalize emergency, self-harm, severe allergy, and urgent medication rules in English and Spanish.
-- [ ] Execute safety rules before model routing.
-- [ ] Prevent model output from weakening required escalation language.
-- [ ] Store the triggered rule and escalation result.
-- [ ] Add adversarial and multilingual regression coverage.
+- [/] Finalize emergency, self-harm, severe allergy, and urgent medication rules in English and
+      Spanish. The keyword sets cover both locales including unaccented spellings, and carry
+      anaphylaxis and the adverse-effect signal. "Finalize" still needs clinical sign-off on
+      the wording and coverage, which is not an engineering step.
+- [x] Execute safety rules before model routing. `_deterministic_safety_floor` decides self-harm
+      and medical emergencies before the model is called and short-circuits the turn. These
+      rules previously lived only inside the LLM-failure fallback, so a healthy model that
+      misclassified an emergency had nothing behind it.
+- [x] Prevent model output from weakening required escalation language. An emergency
+      classification skips response generation entirely and returns the localized emergency
+      template with escalation forced, so no model output can soften it.
+- [/] Store the triggered rule and escalation result. The rule id is carried on the
+      classification and in triage state and logged at WARNING; persisting it alongside the
+      conversation turn remains open.
+- [x] Add adversarial and multilingual regression coverage. 31 cases across English and Mexican
+      Spanish, including a confidently wrong model, co-occurring self-harm and cardiac
+      keywords, casing, and unaccented spellings.
 
 ### PAT-003 — English and Spanish product parity
 
@@ -610,3 +633,4 @@ resources remain evidence-only and do not create local truth.
 | 2026-08-18 | Clinical actions use tiered approval | Clinicians retain authority over clinical conclusions and actions |
 | 2026-08-18 | Product delivery outranks research publication | Evaluation supports engineering and safety decisions |
 | 2026-08-18 | REV-001 is the first engineering task | Trustworthy, bounded CI is required before feature delivery |
+| 2026-09-09 | NVIDIA NIM is out of scope for provider comparison | No endpoint or credential is available to the team, and an adapter that cannot be run produces no evaluation evidence. Comparison runs across MedGemma, Flash, and Pro. `compare_text_providers` accepts any `TextProvider`, so NIM can be added later without reworking the comparison |

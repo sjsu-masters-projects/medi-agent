@@ -90,6 +90,7 @@ class ModelRouter:
         self._flash_client: GeminiClientType | None = None
         self._pro_client: GeminiClientType | None = None
         self._text_providers: dict[TaskType, TextProvider] = {}
+        self._text_providers_by_model: dict[str, TextProvider] = {}
 
     @property
     def medgemma_client(self) -> MedGemmaClientType:
@@ -189,6 +190,41 @@ class ModelRouter:
             generate=cast(Any, client.generate),
         )
         self._text_providers[task_type] = provider
+        return provider
+
+    def client_for_model(self, model_name: str) -> MedGemmaClientType | GeminiClientType:
+        """Return a client by model name, independent of task routing.
+
+        `get_client` answers "what should run this task", which is the right question
+        in production and the wrong one for evaluation: TASK_MODEL_MAP binds each task
+        to exactly one model, so it cannot express "run this same prompt on all three".
+        """
+        if model_name == "medgemma":
+            return self.medgemma_client
+        if model_name == "flash":
+            return self.flash_client
+        if model_name == "pro":
+            return self.pro_client
+        raise ValueError(f"Unknown model name: {model_name}")
+
+    def get_text_provider_for_model(self, model_name: str) -> TextProvider:
+        """Return the provider-neutral adapter for a named model.
+
+        Comparison needs to address a model directly. Initialization failure is left to
+        the caller rather than falling back to Flash: silently substituting a provider
+        would put another model's output under this one's name and quietly corrupt the
+        comparison.
+        """
+        if model_name in self._text_providers_by_model:
+            return self._text_providers_by_model[model_name]
+
+        client = self.client_for_model(model_name)
+        provider = ClientTextProvider(
+            name=model_name,
+            model=str(getattr(client, "model_name", model_name)),
+            generate=cast(Any, client.generate),
+        )
+        self._text_providers_by_model[model_name] = provider
         return provider
 
     def get_text_provider_with_fallback(self, task_type: TaskType) -> TextProvider:
