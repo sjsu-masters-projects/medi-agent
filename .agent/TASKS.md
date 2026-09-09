@@ -33,9 +33,9 @@ A task is done only when its implementation, authorization, error handling, audi
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
-| MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
+| MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
+| Dependency security | Critical advisories outstanding on `main` | `main` still pins `next` 16.3.1, which two critical unauthenticated-RCE advisories cover (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4); the 2026-08-19 "zero vulnerabilities" evidence no longer holds. The pending upgrade to 16.3.4 returns both portal lockfiles to zero. Re-run `npm audit` at the start of each session |
 | Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
 
 ## Active task
