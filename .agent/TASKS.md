@@ -270,6 +270,34 @@ open for sandbox-specific diagnosis.
 - [x] Record proposer, evidence, reviewer, edits, decision, executor, and outcome.
 - [x] Prevent approval by an unauthorized, unassigned, or proposing clinician.
 - [x] Add replay and duplicate-action tests.
+- [x] Record every authorization denial with a classified reason code, audited from the
+      403 handler so every raise site is covered.
+- [/] Verify the fixture's declared denial expectations against a live environment. Four
+      of eight cases are verified; the remaining four are blocked on decisions below.
+
+**Verification evidence — 2026-09-09**
+
+- `backend/scripts/verify_authorization_denials.py` drives `negative_access_cases`
+  against a running API and reads `authorization_denial_events` with the service-role
+  key, which is the only way to see the table: the API never exposes it and RLS grants
+  no browser role access. Against staging: 4 passed, 0 failed, 4 skipped.
+- Verified end to end, each returning HTTP 403 with no target disclosure and the exact
+  reason code the fixture declares: SYN-NEG-001 `NO_CARE_TEAM_ASSIGNMENT_CROSS_CLINIC`,
+  SYN-NEG-003 `SAME_CLINIC_BUT_NO_CARE_TEAM_ASSIGNMENT`, SYN-NEG-006
+  `PATIENT_SCOPE_SELF_ONLY`, SYN-NEG-008 `ASSIGNMENT_EXISTS_FOR_DIFFERENT_PATIENT_ONLY`.
+  The two care-team variants are produced by the classifier from live care-team rows.
+- Four cases are unverified, not verified. Three declare an action no route owns:
+  `list_patient_documents` (`/documents/patients/{id}` is POST and registers a clinician
+  upload; `GET /documents/` is self-only and the review queue is not per-patient),
+  `view_medication_timeline`, and `view_document_metadata`. SYN-NEG-007 declares a proxy
+  actor, which is intentionally not persisted. Assigning those three actions to routes is
+  an open product decision, not a test gap.
+- Role-gate denials are raised from a dependency that never learns which patient was
+  addressed, so they record the actor and `request_path` with a null `target_id` and are
+  not reachable through `idx_authorization_denial_events_target`. Counting what an actor
+  attempted requires reading `request_path` for that class.
+- Migration `033_authorization_denial_audit.sql` applied to staging on 2026-09-09; the
+  table carries its three indexes and RLS enabled with no policy.
 
 ### AI-001 — Provider-neutral AI and voice interfaces
 
