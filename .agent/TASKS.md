@@ -303,7 +303,13 @@ open for sandbox-specific diagnosis.
 
 - [x] Define model capabilities and structured error taxonomy.
 - [x] Wrap all non-streaming text generation paths behind the provider registry, with normalized telemetry and Flash fallback for runtime or primary-client initialization failure. Structured output and streaming intentionally retain their capability-specific client contracts.
-- [ ] Add optional MedGemma and NVIDIA NIM comparison adapters.
+- [/] Add optional MedGemma and NVIDIA NIM comparison adapters. MedGemma needed none: the
+      client is complete and already reaches the provider-neutral interface through
+      `ClientTextProvider`. What was missing was the comparison itself, since
+      `TASK_MODEL_MAP` binds each task to one model and cannot express "run this prompt on
+      all three". `ModelRouter.get_text_provider_for_model` and
+      `compare_text_providers` close that; an NVIDIA NIM adapter slots in as one more
+      `TextProvider` and remains open pending endpoint access.
 - [/] Define the voice-provider interface; live voice transport migration remains next.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
 - [x] Guarantee deterministic text fallback when audio is unavailable.
