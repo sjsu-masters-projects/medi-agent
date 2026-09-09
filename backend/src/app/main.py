@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.clients.supabase import get_admin_client
 from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.routers import (
     adherence,
     appointments,
@@ -85,18 +86,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
 
+    # The interactive docs enumerate every route and request shape, including the
+    # clinician and SMART import surface. That is a map for anyone probing the API, and
+    # it is of no use to a browser client, so production serves none of it.
+    expose_docs = not settings.is_production
+
     application = FastAPI(
         title="MediAgent API",
         description=(
             "Multi-Agent Healthcare AI Platform — Patient Portal + Clinician Portal backend."
         ),
         version="0.1.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
+        openapi_url="/openapi.json" if expose_docs else None,
         lifespan=lifespan,
     )
 
     # ── Middleware ───────────────────────────────────────
+    application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
