@@ -47,6 +47,7 @@ sys.path.insert(0, str(_SCRIPTS_DIR.parent / "src"))
 
 from seed_demo_environment import clinic_code, fixture_email  # noqa: E402
 
+from app.core.authorization_reasons import MFA_REQUIRED  # noqa: E402
 from app.db.seed.demo_data import CANONICAL_FIXTURE_PATH  # noqa: E402
 
 # Each declared action resolves to exactly one route. A case whose action is absent
@@ -114,17 +115,23 @@ def _patient_ids_by_email(supabase_url: str, service_key: str) -> dict[str, str]
     return {row["email"]: row["id"] for row in response.json()}
 
 
-def _login(api_base: str, email: str, password: str, clinic: str | None) -> str:
+def _login(api_base: str, email: str, password: str, clinic: str | None) -> tuple[str, bool]:
+    """Return the access token and whether the session still owes a second factor.
+
+    `mfa_required` matters to the result: `require_role("clinician")` refuses an
+    unverified session before it ever reaches the care-team check, so a case run on
+    such a session exercises the MFA gate rather than the boundary it declares.
+    """
     payload: dict[str, Any] = {"email": email, "password": password}
     if clinic:
         payload["clinic_code"] = clinic
     response = httpx.post(f"{api_base}/api/v1/auth/login", json=payload, timeout=30)
     response.raise_for_status()
     body = response.json()
-    token = body.get("access_token") or body.get("session", {}).get("access_token")
+    token = body.get("tokens", {}).get("access_token")
     if not token:
         raise RuntimeError(f"login for {email} returned no access token")
-    return str(token)
+    return str(token), bool(body.get("mfa_required", False))
 
 
 def _actor(case: dict[str, Any]) -> tuple[str, str | None] | None:
@@ -202,7 +209,7 @@ def _run_case(
         return Result(case_id, "FAIL", f"target {case['target_patient_id']} not seeded")
 
     try:
-        token = _login(api_base, fixture_email(actor_source_id), password, clinic)
+        token, mfa_required = _login(api_base, fixture_email(actor_source_id), password, clinic)
     except Exception as error:  # noqa: BLE001 - report, do not abort the sweep
         return Result(case_id, "FAIL", f"login failed for {actor_source_id}: {error}")
 
@@ -235,6 +242,17 @@ def _run_case(
 
     actual_reason = row.get("reason_code")
     if expected_reason and actual_reason != expected_reason:
+        if actual_reason == MFA_REQUIRED and mfa_required:
+            # The role guard refuses an unverified session before the care-team check,
+            # so this case never reached the boundary it declares. Report the cause
+            # rather than the symptom: the environment owes a second factor.
+            return Result(
+                case_id,
+                "FAIL",
+                f"actor {actor_source_id} has an unverified MFA session, so the request "
+                f"was stopped by the MFA gate before reaching the "
+                f"'{expected_reason}' boundary this case tests",
+            )
         return Result(
             case_id,
             "FAIL",
