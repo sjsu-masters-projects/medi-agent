@@ -322,6 +322,9 @@ class TriageClassificationResult(BaseModel):
     intent: IntentType
     urgency: UrgencyType
     reason: str = Field(default="")
+    # Set only by the deterministic safety floor, never by the model. It names which
+    # rule forced the classification so an escalation can be traced to its cause.
+    safety_rule: str | None = Field(default=None)
 
 
 class TriageState(TypedDict, total=False):
@@ -340,6 +343,7 @@ class TriageState(TypedDict, total=False):
     urgency: str
     route: str
     classification_reason: str
+    safety_rule: str | None
     escalation_required: bool
 
     assistant_response: str
@@ -368,6 +372,18 @@ async def classify_intent(state: TriageState, router: ModelRouter) -> TriageStat
     context = _build_context(state)
     if not context.message:
         return _empty_message_state(state)
+
+    # The safety floor runs before the model, not after it. These rules previously lived
+    # only inside `_classify_with_rules`, which is the fallback for a failed LLM call, so
+    # a healthy model that misread "crushing chest pain" as small talk had nothing behind
+    # it. Deciding first also skips a network round trip on the messages that can least
+    # afford one.
+    floor = _deterministic_safety_floor(context.message)
+    if floor is not None:
+        logger.warning(
+            "Triage safety floor forced an emergency classification: %s", floor.safety_rule
+        )
+        return _merge_classification(state, floor)
 
     llm_result = await _classify_with_llm(router, context)
     rule_result = llm_result or _classify_with_rules(context)
@@ -505,13 +521,24 @@ async def _generate_response_with_llm(router: ModelRouter, request: _ResponseReq
     return cleaned
 
 
-def _classify_with_rules(context: _MessageContext) -> TriageClassificationResult:
-    normalized = context.message.lower()
+def _deterministic_safety_floor(message: str) -> TriageClassificationResult | None:
+    """Classify the messages that must never depend on a model, or return None.
+
+    Self-harm and medical emergencies are decided by keyword because the cost of a
+    model getting one wrong is not recoverable later in the turn. Both keyword sets
+    cover English and Mexican Spanish, including unaccented spellings, since a patient
+    in distress is not going to type carefully.
+
+    Returning None means "no rule applies", which is the ordinary case and hands the
+    message to the model.
+    """
+    normalized = message.lower()
     if _matches_any(normalized, MENTAL_HEALTH_EMERGENCY_KEYWORDS):
         return TriageClassificationResult(
             intent="mental_health",
             urgency="emergency",
             reason="Mental-health emergency keyword match",
+            safety_rule="emergency_mental_health_keyword",
         )
 
     if _matches_any(normalized, EMERGENCY_KEYWORDS):
@@ -519,7 +546,17 @@ def _classify_with_rules(context: _MessageContext) -> TriageClassificationResult
             intent="symptom",
             urgency="emergency",
             reason="Emergency symptom keyword match",
+            safety_rule="emergency_symptom_keyword",
         )
+
+    return None
+
+
+def _classify_with_rules(context: _MessageContext) -> TriageClassificationResult:
+    normalized = context.message.lower()
+    floor = _deterministic_safety_floor(context.message)
+    if floor is not None:
+        return floor
 
     if _matches_any(normalized, SCHEDULE_KEYWORDS):
         return TriageClassificationResult(
@@ -652,6 +689,7 @@ def _merge_classification(
         "urgency": result.urgency,
         "route": route,
         "classification_reason": result.reason,
+        "safety_rule": result.safety_rule,
         "escalation_required": result.urgency in {"urgent", "emergency"},
     }
 

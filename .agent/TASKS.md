@@ -400,11 +400,23 @@ resources remain evidence-only and do not create local truth.
 
 ### SAFE-002 — Deterministic triage overrides
 
-- [ ] Finalize emergency, self-harm, severe allergy, and urgent medication rules in English and Spanish.
-- [ ] Execute safety rules before model routing.
-- [ ] Prevent model output from weakening required escalation language.
-- [ ] Store the triggered rule and escalation result.
-- [ ] Add adversarial and multilingual regression coverage.
+- [/] Finalize emergency, self-harm, severe allergy, and urgent medication rules in English and
+      Spanish. The keyword sets cover both locales including unaccented spellings, and carry
+      anaphylaxis and the adverse-effect signal. "Finalize" still needs clinical sign-off on
+      the wording and coverage, which is not an engineering step.
+- [x] Execute safety rules before model routing. `_deterministic_safety_floor` decides self-harm
+      and medical emergencies before the model is called and short-circuits the turn. These
+      rules previously lived only inside the LLM-failure fallback, so a healthy model that
+      misclassified an emergency had nothing behind it.
+- [x] Prevent model output from weakening required escalation language. An emergency
+      classification skips response generation entirely and returns the localized emergency
+      template with escalation forced, so no model output can soften it.
+- [/] Store the triggered rule and escalation result. The rule id is carried on the
+      classification and in triage state and logged at WARNING; persisting it alongside the
+      conversation turn remains open.
+- [x] Add adversarial and multilingual regression coverage. 31 cases across English and Mexican
+      Spanish, including a confidently wrong model, co-occurring self-harm and cardiac
+      keywords, casing, and unaccented spellings.
 
 ### PAT-003 — English and Spanish product parity
 
