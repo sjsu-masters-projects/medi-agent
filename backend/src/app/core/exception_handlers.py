@@ -33,6 +33,7 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.services.authorization_audit_service import record_denial
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,25 @@ async def _auth_error_handler(_: Request, exc: AuthenticationError) -> JSONRespo
     return _error_response(401, exc.code, exc.message)
 
 
-async def _forbidden_handler(_: Request, exc: AuthorizationError) -> JSONResponse:
+async def _forbidden_handler(request: Request, exc: AuthorizationError) -> JSONResponse:
+    """Refuse the request and record the refusal.
+
+    Auditing happens here rather than at each raise site so that every denial in the
+    application is covered, including ones added later. `record_denial` never raises, so
+    an audit outage cannot turn a correct 403 into a 500.
+    """
+    await record_denial(
+        reason_code=exc.reason_code,
+        actor_id=exc.actor_id,
+        actor_role=exc.actor_role,
+        target_type=exc.target_type,
+        target_id=exc.target_id,
+        request_method=getattr(request, "method", None),
+        request_path=getattr(getattr(request, "url", None), "path", None),
+    )
+    # The reason code is deliberately not returned. Telling a caller that a denial was
+    # "cross-clinic" confirms the patient exists somewhere else, which is exactly the
+    # disclosure the negative-access cases forbid. It belongs in the audit trail only.
     return _error_response(403, exc.code, exc.message)
 
 

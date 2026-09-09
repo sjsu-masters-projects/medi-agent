@@ -29,8 +29,30 @@ class AuthenticationError(MediAgentError):
 
 
 class AuthorizationError(MediAgentError):
-    def __init__(self, message: str = "Insufficient permissions"):
+    """A refused access attempt.
+
+    Carries the context needed to audit the refusal. The response `code` stays
+    `AUTHORIZATION_ERROR` for every denial; `reason_code` classifies it for the audit
+    trail (see `app.core.authorization_reasons`). Actor and target are optional so a
+    denial raised without them still produces a record, just a less specific one.
+    """
+
+    def __init__(
+        self,
+        message: str = "Insufficient permissions",
+        *,
+        reason_code: str = "UNSPECIFIED",
+        actor_id: str | None = None,
+        actor_role: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+    ):
         super().__init__(message=message, code="AUTHORIZATION_ERROR")
+        self.reason_code = reason_code
+        self.actor_id = actor_id
+        self.actor_role = actor_role
+        self.target_type = target_type
+        self.target_id = target_id
 
 
 class ValidationError(MediAgentError):

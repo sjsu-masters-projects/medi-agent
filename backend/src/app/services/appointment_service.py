@@ -8,6 +8,7 @@ from uuid import UUID
 
 from supabase import Client
 
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ExternalServiceError, NotFoundError
 from app.models.enums import AppointmentStatus
 
@@ -40,7 +41,10 @@ class AppointmentService:
             )
             return [row for row in (result.data or []) if isinstance(row, dict)]
 
-        raise AuthorizationError("Unsupported role for appointments")
+        raise AuthorizationError(
+            "Unsupported role for appointments",
+            reason_code=reasons.UNSUPPORTED_ROLE,
+        )
 
     async def create_for_user(
         self,
@@ -55,14 +59,19 @@ class AppointmentService:
 
         if role == "patient" and patient_id != str(user_id):
             raise AuthorizationError(
-                "Patients can only create appointments for their own care team"
+                "Patients can only create appointments for their own care team",
+                reason_code=reasons.PATIENT_SCOPE_SELF_ONLY,
             )
         if role == "clinician" and clinician_id != str(user_id):
             raise AuthorizationError(
-                "Clinicians can only create appointments for assigned patients"
+                "Clinicians can only create appointments for assigned patients",
+                reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
             )
         if role not in {"patient", "clinician"}:
-            raise AuthorizationError("Unsupported role for appointments")
+            raise AuthorizationError(
+                "Unsupported role for appointments",
+                reason_code=reasons.UNSUPPORTED_ROLE,
+            )
 
         clinician_name = await self._get_clinician_name(clinician_id)
         payload = {
@@ -124,7 +133,10 @@ class AppointmentService:
             )
             if assignment.data:
                 return
-        raise AuthorizationError("You are not authorized to manage this appointment")
+        raise AuthorizationError(
+            "You are not authorized to manage this appointment",
+            reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+        )
 
     async def _assigned_patient_ids(self, clinician_id: UUID) -> list[str]:
         result = await self._execute(

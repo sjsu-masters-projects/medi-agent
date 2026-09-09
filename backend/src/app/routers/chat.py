@@ -16,6 +16,7 @@ from app.agents.symptom import SymptomAgent, SymptomInput
 from app.agents.triage import TriageAgent, TriageInput
 from app.agents.triage.graph import categorize_llm_failure
 from app.config import settings
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
@@ -223,7 +224,14 @@ async def _persist_conversation_state_with_retry(
 async def _ensure_chat_access(user: CurrentUser, patient_id: UUID, db: Client) -> None:
     if user.role == "patient":
         if user.id != patient_id:
-            raise AuthorizationError("Patients can only view their own chat history")
+            raise AuthorizationError(
+                "Patients can only view their own chat history",
+                reason_code=reasons.PATIENT_SCOPE_SELF_ONLY,
+                actor_id=str(user.id),
+                actor_role=user.role,
+                target_type="patient",
+                target_id=str(patient_id),
+            )
         return
 
     if user.role == "clinician":
@@ -237,10 +245,24 @@ async def _ensure_chat_access(user: CurrentUser, patient_id: UUID, db: Client) -
             .execute
         )
         if not assignment.data:
-            raise AuthorizationError("You are not assigned to this patient")
+            raise AuthorizationError(
+                "You are not assigned to this patient",
+                reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+                actor_id=str(user.id),
+                actor_role=user.role,
+                target_type="patient",
+                target_id=str(patient_id),
+            )
         return
 
-    raise AuthorizationError("Unsupported role for chat access")
+    raise AuthorizationError(
+        "Unsupported role for chat access",
+        reason_code=reasons.UNSUPPORTED_ROLE,
+        actor_id=str(user.id),
+        actor_role=user.role,
+        target_type="patient",
+        target_id=str(patient_id),
+    )
 
 
 def _is_allowed_origin(origin: str | None) -> bool:

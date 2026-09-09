@@ -15,6 +15,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from supabase import Client
 
 from app.config import settings
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.services.fhir_import_service import FhirImportService
 
@@ -168,9 +169,15 @@ class SmartLaunchService:
         )
         handoff = cast(dict[str, Any] | None, result.data)
         if not handoff or handoff.get("consumed_at") or self._expired(handoff.get("expires_at")):
-            raise AuthorizationError("SMART handoff is invalid or expired")
+            raise AuthorizationError(
+                "SMART handoff is invalid or expired",
+                reason_code=reasons.SMART_HANDOFF_INVALID,
+            )
         if str(handoff.get("clinician_id")) != str(clinician_id):
-            raise AuthorizationError("SMART handoff belongs to another clinician")
+            raise AuthorizationError(
+                "SMART handoff belongs to another clinician",
+                reason_code=reasons.SMART_HANDOFF_OTHER_CLINICIAN,
+            )
         import_result = (
             self.db.table("fhir_imports")
             .select("*")
@@ -460,7 +467,10 @@ class SmartLaunchService:
         )
         session = cast(dict[str, Any] | None, response.data)
         if not session or session.get("consumed_at") or self._expired(session.get("expires_at")):
-            raise AuthorizationError("SMART launch state is invalid or expired")
+            raise AuthorizationError(
+                "SMART launch state is invalid or expired",
+                reason_code=reasons.SMART_HANDOFF_INVALID,
+            )
         return session
 
     def _require_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
@@ -473,7 +483,10 @@ class SmartLaunchService:
             .execute()
         )
         if not response.data:
-            raise AuthorizationError("You are not assigned to this patient")
+            raise AuthorizationError(
+                "You are not assigned to this patient",
+                reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+            )
 
     @staticmethod
     def _digest(value: str) -> str:
@@ -578,7 +591,10 @@ class SmartLaunchService:
         try:
             return self._cipher().decrypt(ciphertext.encode()).decode()
         except (InvalidToken, UnicodeDecodeError) as exc:
-            raise AuthorizationError("SMART launch verifier is invalid") from exc
+            raise AuthorizationError(
+                "SMART launch verifier is invalid",
+                reason_code=reasons.SMART_HANDOFF_INVALID,
+            ) from exc
 
     @staticmethod
     def _require_config() -> None:

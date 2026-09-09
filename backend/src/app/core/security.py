@@ -35,6 +35,7 @@ from jwt import PyJWTError as JWTError
 
 from app.clients.supabase import create_anon_client
 from app.config import settings
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.models.auth import CurrentUser
 
@@ -216,14 +217,24 @@ def require_role(role: str, *, allow_unverified_mfa: bool = False) -> Callable[.
     ) -> CurrentUser:
         if user.role != role:
             raise AuthorizationError(
-                f"This endpoint requires '{role}' role, but you are '{user.role}'"
+                f"This endpoint requires '{role}' role, but you are '{user.role}'",
+                reason_code=(
+                    reasons.PATIENT_SCOPE_SELF_ONLY
+                    if user.role == "patient"
+                    else reasons.ROLE_LACKS_CLINICAL_SCOPE
+                ),
+                actor_id=str(user.id),
+                actor_role=user.role,
             )
         if role == "clinician" and not allow_unverified_mfa and user.aal != "aal2":
             if credentials is None:
                 raise AuthenticationError("Missing authorization header")
             if await _has_verified_mfa_factor(credentials.credentials):
                 raise AuthorizationError(
-                    "MFA verification required before accessing clinician resources"
+                    "MFA verification required before accessing clinician resources",
+                    reason_code=reasons.MFA_REQUIRED,
+                    actor_id=str(user.id),
+                    actor_role=user.role,
                 )
         return user
 
@@ -236,7 +247,13 @@ async def require_cron_auth_token(
     """Require a shared token for internal cron endpoints."""
     configured_token = settings.cron_auth_token.strip()
     if not configured_token:
-        raise AuthorizationError("Cron endpoints are disabled")
+        raise AuthorizationError(
+            "Cron endpoints are disabled",
+            reason_code=reasons.CRON_AUTH_INVALID,
+        )
 
     if token is None or not hmac.compare_digest(token, configured_token):
-        raise AuthorizationError("Invalid cron auth token")
+        raise AuthorizationError(
+            "Invalid cron auth token",
+            reason_code=reasons.CRON_AUTH_INVALID,
+        )
