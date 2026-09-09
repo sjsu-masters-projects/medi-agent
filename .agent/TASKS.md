@@ -33,9 +33,9 @@ A task is done only when its implementation, authorization, error handling, audi
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
-| MCP/A2A | Not complete | Existing MCP is custom; A2A implementation files are empty |
+| MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | Local gate green; GitHub refresh pending | Exact Python locks and all three npm lockfiles report zero known vulnerabilities on 2026-08-19 |
+| Dependency security | Critical advisories outstanding on `main` | `main` still pins `next` 16.3.1, which two critical unauthenticated-RCE advisories cover (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4); the 2026-08-19 "zero vulnerabilities" evidence no longer holds. The pending upgrade to 16.3.4 returns both portal lockfiles to zero. Re-run `npm audit` at the start of each session |
 | Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
 
 ## Active task
@@ -270,6 +270,34 @@ open for sandbox-specific diagnosis.
 - [x] Record proposer, evidence, reviewer, edits, decision, executor, and outcome.
 - [x] Prevent approval by an unauthorized, unassigned, or proposing clinician.
 - [x] Add replay and duplicate-action tests.
+- [x] Record every authorization denial with a classified reason code, audited from the
+      403 handler so every raise site is covered.
+- [/] Verify the fixture's declared denial expectations against a live environment. Four
+      of eight cases are verified; the remaining four are blocked on decisions below.
+
+**Verification evidence — 2026-09-09**
+
+- `backend/scripts/verify_authorization_denials.py` drives `negative_access_cases`
+  against a running API and reads `authorization_denial_events` with the service-role
+  key, which is the only way to see the table: the API never exposes it and RLS grants
+  no browser role access. Against staging: 4 passed, 0 failed, 4 skipped.
+- Verified end to end, each returning HTTP 403 with no target disclosure and the exact
+  reason code the fixture declares: SYN-NEG-001 `NO_CARE_TEAM_ASSIGNMENT_CROSS_CLINIC`,
+  SYN-NEG-003 `SAME_CLINIC_BUT_NO_CARE_TEAM_ASSIGNMENT`, SYN-NEG-006
+  `PATIENT_SCOPE_SELF_ONLY`, SYN-NEG-008 `ASSIGNMENT_EXISTS_FOR_DIFFERENT_PATIENT_ONLY`.
+  The two care-team variants are produced by the classifier from live care-team rows.
+- Four cases are unverified, not verified. Three declare an action no route owns:
+  `list_patient_documents` (`/documents/patients/{id}` is POST and registers a clinician
+  upload; `GET /documents/` is self-only and the review queue is not per-patient),
+  `view_medication_timeline`, and `view_document_metadata`. SYN-NEG-007 declares a proxy
+  actor, which is intentionally not persisted. Assigning those three actions to routes is
+  an open product decision, not a test gap.
+- Role-gate denials are raised from a dependency that never learns which patient was
+  addressed, so they record the actor and `request_path` with a null `target_id` and are
+  not reachable through `idx_authorization_denial_events_target`. Counting what an actor
+  attempted requires reading `request_path` for that class.
+- Migration `033_authorization_denial_audit.sql` applied to staging on 2026-09-09; the
+  table carries its three indexes and RLS enabled with no policy.
 
 ### AI-001 — Provider-neutral AI and voice interfaces
 
@@ -551,14 +579,19 @@ resources remain evidence-only and do not create local truth.
 
 ## Team allocation
 
-| Role | Primary lane | Required secondary review |
-|---|---|---|
-| Engineer 1 | Platform, Supabase, security, FHIR, SMART, deployment | Clinician authorization |
-| Engineer 2 | Agent runtime, model adapters, evidence, safety, evaluation | Voice and ADR |
-| Engineer 3 | Patient portal, bilingual companion, adherence, voice | Scheduling |
-| Engineer 4 | Clinician portal, review queues, PV, messaging, continuity | FHIR workflow UX |
+`.agent/TEAM.md` is the authoritative roster. This table mirrors it; update both together.
 
-- [ ] Replace Engineer 1–4 with team-member names.
+| Member | Primary lane | Required secondary review |
+|---|---|---|
+| Rajeev Chaurasia | Platform, Supabase, security, FHIR, SMART, deployment | Clinician authorization |
+| Ganesh Thampi | Worker runtime, provider adapters, evidence, safety, evaluation | Voice and ADR |
+| Tushar Singh | Patient portal, bilingual companion, adherence, voice | Scheduling |
+| Jeevan Kurian | Clinician portal, review queues, messaging, continuity | FHIR workflow UX |
+
+- [x] Replace Engineer 1–4 with team-member names.
+- [ ] Assign an owner for pharmacovigilance (PV-001, PV-002). The superseded
+      placeholder table listed PV under the clinician-portal lane; `TEAM.md` does not,
+      so the whole R4 pharmacovigilance milestone is currently unowned.
 - [ ] Assign the first integration owner.
 - [ ] Assign a clinician/pharmacist review schedule.
 - [ ] Require one peer review for every PR.

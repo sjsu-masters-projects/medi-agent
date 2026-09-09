@@ -13,6 +13,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.clients.resend import ResendClient
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.db.repositories import ClinicianRepository, ClinicRepository
 
@@ -161,7 +162,10 @@ class StaffService:
         if not data:
             raise NotFoundError("Clinician", str(clinician_id))
         if data["role"] != "admin":
-            raise AuthorizationError("Only clinic admins can manage staff")
+            raise AuthorizationError(
+                "Only clinic admins can manage staff",
+                reason_code=reasons.ADMIN_SCOPE_ONLY,
+            )
 
         clinic_id = str(data.get("clinic_id")) if data.get("clinic_id") else None
         clinic_name = data.get("clinic_name") or ""

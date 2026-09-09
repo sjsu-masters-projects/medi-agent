@@ -23,6 +23,7 @@ from uuid import UUID
 
 from supabase import Client
 
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import (
     AuthorizationError,
     ExternalServiceError,
@@ -126,7 +127,7 @@ class ClinicianService:
             str(patient_id),
         )
         if not assignment_rows:
-            raise AuthorizationError("You are not assigned to this patient")
+            await self._raise_unassigned(clinician_id, patient_id)
 
         result = await self._execute(
             self.db.table("patients").select("*").eq("id", str(patient_id)).single()
@@ -459,7 +460,7 @@ class ClinicianService:
             str(patient_id),
         )
         if not assignment_rows:
-            raise AuthorizationError("You are not assigned to this patient")
+            await self._raise_unassigned(clinician_id, patient_id)
 
         from app.services.risk_score_service import RiskScoreService
 
@@ -646,7 +647,7 @@ class ClinicianService:
             str(patient_id),
         )
         if not assignment_rows:
-            raise AuthorizationError("You are not assigned to this patient")
+            await self._raise_unassigned(clinician_id, patient_id)
 
         care_team_id = assignment_rows[0]["id"]
 
@@ -721,6 +722,24 @@ class ClinicianService:
         rows = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
         return [UUID(row["patient_id"]) for row in rows if row.get("patient_id")]
 
+    async def _raise_unassigned(self, clinician_id: UUID, patient_id: UUID) -> None:
+        """Raise the care-team denial, classified for the audit trail.
+
+        The message is identical for every care-team denial so the response reveals
+        nothing about the patient, including whether the record exists. The audit writer
+        refines `NO_CARE_TEAM_ASSIGNMENT` into the cross-clinic, same-clinic or
+        other-assignments variant; that refinement never reaches the caller, and it costs
+        no queries on the request path.
+        """
+        raise AuthorizationError(
+            "You are not assigned to this patient",
+            reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+            actor_id=str(clinician_id),
+            actor_role="clinician",
+            target_type="patient",
+            target_id=str(patient_id),
+        )
+
     async def _assert_patient_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
         """Require an active care-team assignment before clinician access."""
         assignment_rows = await self.care_team_repo.find_active_assignment(
@@ -728,7 +747,7 @@ class ClinicianService:
             str(patient_id),
         )
         if not assignment_rows:
-            raise AuthorizationError("You are not assigned to this patient")
+            await self._raise_unassigned(clinician_id, patient_id)
 
     async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:
         """Count draft MedWatch assessments across all assigned patients."""

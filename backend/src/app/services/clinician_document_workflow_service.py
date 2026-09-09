@@ -13,6 +13,7 @@ from uuid import UUID
 
 from supabase import Client
 
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus, UploaderRole
@@ -155,7 +156,14 @@ class ClinicianDocumentWorkflowService:
             str(patient_id),
         )
         if not assignment_rows:
-            raise AuthorizationError("You are not assigned to this patient")
+            raise AuthorizationError(
+                "You are not assigned to this patient",
+                reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+                actor_id=str(clinician_id),
+                actor_role="clinician",
+                target_type="patient",
+                target_id=str(patient_id),
+            )
 
     async def _get_document_row(
         self,

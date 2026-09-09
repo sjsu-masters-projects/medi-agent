@@ -8,6 +8,7 @@ from uuid import UUID
 
 from supabase import Client
 
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.models.clinical_action import (
     ActionEnvelopeCreate,
@@ -59,7 +60,14 @@ class ClinicalActionService:
         if recommendation.get("state") != ClinicalActionState.PENDING_APPROVAL.value:
             raise ValidationError("Only pending recommendations can be decided")
         if str(recommendation.get("proposed_by") or "") == str(reviewer_id):
-            raise AuthorizationError("A clinician cannot approve their own recommendation")
+            raise AuthorizationError(
+                "A clinician cannot approve their own recommendation",
+                reason_code=reasons.SELF_APPROVAL_FORBIDDEN,
+                actor_id=str(reviewer_id),
+                actor_role="clinician",
+                target_type="clinical_recommendation",
+                target_id=str(recommendation_id),
+            )
 
         state = (
             ClinicalActionState.APPROVED
@@ -178,7 +186,10 @@ class ClinicalActionService:
             .execute()
         )
         if not response.data:
-            raise AuthorizationError("You are not assigned to this patient")
+            raise AuthorizationError(
+                "You are not assigned to this patient",
+                reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+            )
 
     def _get_recommendation(self, recommendation_id: UUID) -> dict[str, Any]:
         response = (
