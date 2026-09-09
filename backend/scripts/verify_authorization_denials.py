@@ -56,12 +56,16 @@ from app.db.seed.demo_data import CANONICAL_FIXTURE_PATH  # noqa: E402
 ACTION_ROUTES: dict[str, tuple[str, str]] = {
     "open_patient_chart": ("GET", "/api/v1/clinicians/me/patients/{patient_id}"),
     "open_patient_chart_by_direct_id": ("GET", "/api/v1/clinicians/me/patients/{patient_id}"),
-    "list_patient_documents": ("GET", "/api/v1/documents/patients/{patient_id}"),
 }
 
 # Actions with no unambiguous route today, and why. Resolving these needs a product
 # decision about which endpoint owns the action, not a guess from this script.
 UNMAPPED_ACTIONS: dict[str, str] = {
+    "list_patient_documents": (
+        "/documents/patients/{id} is POST — it registers a clinician upload. No route "
+        "lists a named patient's documents for a clinician: GET /documents/ is self-only "
+        "and the review queue is not per-patient"
+    ),
     "view_medication_timeline": (
         "no route owns a per-patient medication timeline for a clinician actor; "
         "candidates (deep-dive, medications) each cover more or less than the action"
@@ -160,12 +164,18 @@ def _audit_row(
     target_id: str,
     since: datetime,
 ) -> dict[str, Any] | None:
+    """Find the denial this request produced.
+
+    Matching on `target_id` alone is not enough. A role-gate denial is raised from a
+    dependency that never learns which patient was addressed, so `require_role` records
+    the actor and the request path with a null target. The path still carries the
+    target's UUID, so match on either and let the caller see which one hit.
+    """
     params = {
         "select": "reason_code,actor_id,actor_role,target_type,target_id,request_path,created_at",
-        "target_id": f"eq.{target_id}",
         "created_at": f"gte.{since.isoformat()}",
         "order": "created_at.desc",
-        "limit": "5",
+        "limit": "50",
     }
     if actor_id:
         params["actor_id"] = f"eq.{actor_id}"
@@ -176,8 +186,13 @@ def _audit_row(
         timeout=30,
     )
     response.raise_for_status()
-    rows = response.json()
-    return rows[0] if rows else None
+    needle = target_id.lower()
+    for row in response.json():
+        if str(row.get("target_id") or "").lower() == needle:
+            return dict(row)
+        if needle in str(row.get("request_path") or "").lower():
+            return dict(row)
+    return None
 
 
 def _run_case(
