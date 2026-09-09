@@ -39,7 +39,11 @@ from typing import Any
 
 import httpx
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# `app` is not installed into the virtualenv — only pytest puts `src` on the path —
+# so resolve both import roots here and let the script be run directly.
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPTS_DIR))
+sys.path.insert(0, str(_SCRIPTS_DIR.parent / "src"))
 
 from seed_demo_environment import clinic_code, fixture_email  # noqa: E402
 
