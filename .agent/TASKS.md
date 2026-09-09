@@ -265,7 +265,11 @@ open for sandbox-specific diagnosis.
 ### SAFE-001 — Approval and audit infrastructure
 
 - [x] Define `ClinicalRecommendation`, `ApprovalDecision`, `ActionEnvelope`, and `AuditRecord`.
-- [/] Enforce tiered action authority server-side; feature-specific action executors will adopt the gate as they are implemented.
+- [/] Enforce tiered action authority server-side. `app/core/action_tiers.py` classifies each
+      action type and `propose` enforces it; the applied tier is recorded on the audit
+      trail. Tiers only tighten — none waives review. Feature-specific executors will
+      classify their actions as they are implemented, and an unclassified action fails
+      closed to the most restricted tier rather than inheriting the default.
 - [x] Require idempotency keys for action envelopes.
 - [x] Record proposer, evidence, reviewer, edits, decision, executor, and outcome.
 - [x] Prevent approval by an unauthorized, unassigned, or proposing clinician.

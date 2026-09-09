@@ -110,3 +110,54 @@ def test_unassigned_clinician_and_unapproved_execution_are_rejected() -> None:
         service.decide(UUID(proposed["id"]), reviewer_id=uuid4(), decision=ApprovalDecisionCreate(decision="approve", note="No access"))
     with pytest.raises(ValidationError, match="approved"):
         service.get_or_create_envelope(UUID(proposed["id"]), clinician_id=REVIEWER, envelope=ActionEnvelopeCreate(idempotency_key="request-00000002"))
+
+
+def unclassified_recommendation() -> ClinicalRecommendationCreate:
+    """An action type nobody has assigned a tier, which fails closed to the top tier."""
+    return ClinicalRecommendationCreate(patient_id=PATIENT, action_type="adjust_anticoagulant_dose", proposed_payload={"dose": "5mg"}, evidence=[{"source": "fact-2"}], rationale="INR is out of range.")
+
+
+def test_a_model_may_not_propose_an_unclassified_action() -> None:
+    """No actor means no clinician originated it; review must not launder that."""
+    service = ClinicalActionService(Database())  # type: ignore[arg-type]
+
+    with pytest.raises(AuthorizationError, match="proposed by a clinician"):
+        service.propose(unclassified_recommendation(), actor_id=None)
+
+
+def test_a_clinician_may_propose_the_same_action() -> None:
+    service = ClinicalActionService(Database())  # type: ignore[arg-type]
+
+    proposed = service.propose(unclassified_recommendation(), actor_id=PROPOSER)
+
+    assert proposed["state"] == "pending_approval"
+
+
+def test_a_model_may_still_propose_a_classified_ordinary_action() -> None:
+    """The restriction is targeted, not a blanket ban on model proposals."""
+    service = ClinicalActionService(Database())  # type: ignore[arg-type]
+
+    proposed = service.propose(recommendation(), actor_id=None)
+
+    assert proposed["state"] == "pending_approval"
+
+
+def test_the_applied_tier_is_recorded_on_the_audit_trail() -> None:
+    """Which authority a decision required must survive later registry changes."""
+    db = Database()
+    service = ClinicalActionService(db)  # type: ignore[arg-type]
+
+    service.propose(recommendation(), actor_id=PROPOSER)
+
+    audits = db.store["clinical_action_audit_records"]
+    assert audits[0]["event_data"]["action_tier"] == "clinician_review"
+
+
+def test_a_refused_proposal_is_not_persisted() -> None:
+    db = Database()
+    service = ClinicalActionService(db)  # type: ignore[arg-type]
+
+    with pytest.raises(AuthorizationError):
+        service.propose(unclassified_recommendation(), actor_id=None)
+
+    assert db.store.get("clinical_recommendations", []) == []

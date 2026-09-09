@@ -9,6 +9,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.core import authorization_reasons as reasons
+from app.core.action_tiers import ActionTier, tier_for
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.models.clinical_action import (
     ActionEnvelopeCreate,
@@ -28,8 +29,18 @@ class ClinicalActionService:
     def propose(
         self, recommendation: ClinicalRecommendationCreate, *, actor_id: UUID | None = None
     ) -> dict[str, Any]:
+        tier = tier_for(recommendation.action_type)
         if actor_id is not None:
             self._require_assignment(actor_id, recommendation.patient_id)
+        elif tier is ActionTier.CLINICIAN_ORIGINATED:
+            # No actor means the proposal did not come from a clinician. Review is meant
+            # to check a clinician's judgment, not to launder a model's, so this action
+            # never reaches a reviewer rather than arriving as something to approve.
+            raise AuthorizationError(
+                "This action must be proposed by a clinician",
+                reason_code=reasons.MODEL_PROPOSER_FORBIDDEN,
+                target_type="clinical_recommendation",
+            )
         created = self._insert(
             "clinical_recommendations",
             {
@@ -39,11 +50,14 @@ class ClinicalActionService:
             },
             "clinical recommendation",
         )
+        # The tier is recorded rather than only applied. Which authority a decision
+        # required must stay answerable from the audit trail even after the registry
+        # changes, and `event_data` already carries this without a schema change.
         self._audit(
             UUID(str(created["id"])),
             actor_id,
             "proposed",
-            {"action_type": recommendation.action_type},
+            {"action_type": recommendation.action_type, "action_tier": tier.value},
         )
         return created
 
