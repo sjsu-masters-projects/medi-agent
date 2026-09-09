@@ -551,14 +551,19 @@ resources remain evidence-only and do not create local truth.
 
 ## Team allocation
 
-| Role | Primary lane | Required secondary review |
-|---|---|---|
-| Engineer 1 | Platform, Supabase, security, FHIR, SMART, deployment | Clinician authorization |
-| Engineer 2 | Agent runtime, model adapters, evidence, safety, evaluation | Voice and ADR |
-| Engineer 3 | Patient portal, bilingual companion, adherence, voice | Scheduling |
-| Engineer 4 | Clinician portal, review queues, PV, messaging, continuity | FHIR workflow UX |
+`.agent/TEAM.md` is the authoritative roster. This table mirrors it; update both together.
 
-- [ ] Replace Engineer 1–4 with team-member names.
+| Member | Primary lane | Required secondary review |
+|---|---|---|
+| Rajeev Chaurasia | Platform, Supabase, security, FHIR, SMART, deployment | Clinician authorization |
+| Ganesh Thampi | Worker runtime, provider adapters, evidence, safety, evaluation | Voice and ADR |
+| Tushar Singh | Patient portal, bilingual companion, adherence, voice | Scheduling |
+| Jeevan Kurian | Clinician portal, review queues, messaging, continuity | FHIR workflow UX |
+
+- [x] Replace Engineer 1–4 with team-member names.
+- [ ] Assign an owner for pharmacovigilance (PV-001, PV-002). The superseded
+      placeholder table listed PV under the clinician-portal lane; `TEAM.md` does not,
+      so the whole R4 pharmacovigilance milestone is currently unowned.
 - [ ] Assign the first integration owner.
 - [ ] Assign a clinician/pharmacist review schedule.
 - [ ] Require one peer review for every PR.
