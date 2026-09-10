@@ -36,9 +36,13 @@ const ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
-  "text/plain",
+  "image/tiff",
 ]);
 const MAX_SIZE_MB = 20;
+const MAX_FILE_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+const ACCEPTED_FILE_EXTENSIONS = ".pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff";
+const ACCEPTED_FILE_MESSAGE =
+  "Choose a PDF, JPG, PNG, WebP, or TIFF file up to 20 MB.";
 const DOCUMENT_TYPES = [
   { label: "Clinical Note", value: DocumentType.OTHER },
   { label: "Lab Report", value: DocumentType.LAB_REPORT },
@@ -57,6 +61,16 @@ function parseDocumentType(value: string): DocumentType {
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function getFileValidationError(file: File): string | null {
+  if (!ALLOWED_TYPES.has(file.type)) {
+    return ACCEPTED_FILE_MESSAGE;
+  }
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return `Each file must be ${MAX_SIZE_MB} MB or smaller.`;
+  }
+  return null;
 }
 
 function sanitizeFileName(fileName: string) {
@@ -120,6 +134,7 @@ export function DocumentUploadZone({
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType>(
     DocumentType.OTHER,
   );
@@ -127,16 +142,16 @@ export function DocumentUploadZone({
   // ── File validation ──────────────────────────────────────────────────────
 
   const validateFiles = useCallback((files: File[]): File[] => {
-    return files.filter((file) => {
-      if (!ALLOWED_TYPES.has(file.type)) return false;
-      if (file.size > MAX_SIZE_MB * 1024 * 1024) return false;
-      return true;
-    });
+    return files.filter((file) => !getFileValidationError(file));
   }, []);
 
   const addToQueue = useCallback(
     (files: File[]) => {
       const valid = validateFiles(files);
+      const firstInvalid = files.find((file) => getFileValidationError(file));
+      setValidationError(
+        firstInvalid ? getFileValidationError(firstInvalid) : null,
+      );
       const newItems: QueuedFile[] = valid.map((f) => ({
         id: makeId(),
         file: f,
@@ -318,12 +333,12 @@ export function DocumentUploadZone({
             <span className="text-blue-600 underline">browse</span>
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            PDF, JPG, PNG, TXT — max {MAX_SIZE_MB}MB per file
+            PDF, JPG, PNG, WebP, or TIFF — max {MAX_SIZE_MB}MB per file
           </p>
         </div>
 
         <input
-          accept=".pdf,.jpg,.jpeg,.png,.webp,.txt"
+          accept={ACCEPTED_FILE_EXTENSIONS}
           aria-hidden="true"
           className="hidden"
           id="clinician-file-input"
@@ -333,6 +348,12 @@ export function DocumentUploadZone({
           type="file"
         />
       </div>
+
+      {validationError && (
+        <p className="text-sm text-red-700" role="alert">
+          {validationError}
+        </p>
+      )}
 
       {/* File queue */}
       {queue.length > 0 && (
@@ -370,12 +391,14 @@ export function DocumentUploadZone({
                   </span>
                 )}
                 {item.status === UploadStatus.ERROR && (
-                  <span
-                    className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-                    title={item.error}
-                  >
-                    ✕ Failed
-                  </span>
+                  <div className="text-right">
+                    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                      ✕ Failed
+                    </span>
+                    <p className="mt-1 max-w-56 text-xs text-red-700" role="alert">
+                      {item.error ?? "Upload failed. Please try again."}
+                    </p>
+                  </div>
                 )}
 
                 {/* Remove button */}

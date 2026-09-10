@@ -349,6 +349,7 @@ resources remain evidence-only and do not create local truth.
 ### REC-001 — Complete record ingestion lifecycle
 
 - [ ] Support patient and clinician PDF/image upload.
+- [x] Constrain both upload entry points to the private `documents` bucket's supported clinical formats (PDF, JPEG, PNG, WebP, TIFF), reject unsupported files locally before storage/API calls, and surface the validation error.
 - [ ] Persist upload, extraction, review, correction, and failure states.
 - [ ] Show field-level provenance and confidence.
 - [ ] Route low-confidence and contradictory fields to review.
