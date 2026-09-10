@@ -248,7 +248,7 @@ async def run_gemini_flash(scenario: dict) -> dict:
     """Run scenario through Gemini Flash."""
     from app.clients.gemini import GeminiClient
 
-    client = GeminiClient(model="gemini-3.1-flash-lite-preview", use_vertex_ai=True)
+    client = GeminiClient(model="gemini-3.1-flash-lite", use_vertex_ai=True)
 
     start = time.time()
     try:

@@ -347,14 +347,15 @@ def test_client_initialization_vertex_ai_sdk(mock_settings_vertex):
     mock_model.assert_called_once_with("gemini-1.5-pro")
 
 
-def test_client_initialization_genai_sdk(mock_settings_vertex):
-    """Test client initialization using Gen AI SDK for preview models."""
+@pytest.mark.parametrize("model", ["gemini-3.1-pro-preview", "gemini-3.1-flash-lite"])
+def test_client_initialization_genai_sdk_for_gemini_3_1_models(mock_settings_vertex, model):
+    """Test Gemini 3.1 models use Gen AI SDK and Vertex AI's global endpoint."""
     with patch("google.genai.Client") as mock_client:
         from app.clients.gemini import GeminiClient
 
-        client = GeminiClient(model="gemini-3.1-pro-preview", use_vertex_ai=True)
+        client = GeminiClient(model=model, use_vertex_ai=True)
 
-    assert client.model_name == "gemini-3.1-pro-preview"
+    assert client.model_name == model
     assert client.use_vertex_ai is True
     assert client.is_genai_sdk is True
     mock_client.assert_called_once_with(vertexai=True, project="test-project", location="global")

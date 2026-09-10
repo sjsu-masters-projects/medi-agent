@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     google_project_id: str = ""
 
     # Model routing
-    gemini_flash_model: str = "gemini-3.1-flash-lite-preview"
+    # The preview model was retired by Google on 2026-05-25. Keep the stable
+    # replacement as the default so document-processing fallbacks remain live.
+    gemini_flash_model: str = "gemini-3.1-flash-lite"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
     medgemma_model: str = "google/medgemma-27b-it"
     google_embedding_model: str = "gemini-embedding-001"
