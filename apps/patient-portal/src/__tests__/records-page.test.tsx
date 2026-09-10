@@ -241,6 +241,33 @@ describe("RecordsPage", () => {
     });
   });
 
+  it("rejects unsupported files before storage or document registration", async () => {
+    get.mockResolvedValue([]);
+
+    const { container } = render(<RecordsPage />);
+    const input = container.querySelector<HTMLInputElement>(
+      'input[type="file"]',
+    );
+    const textFile = new File(["synthetic QA"], "prescription.txt", {
+      type: "text/plain",
+    });
+
+    await screen.findByText(/No records yet/i);
+    fireEvent.change(input!, { target: { files: [textFile] } });
+
+    expect(
+      await screen.findByText(
+        "Choose a PDF, JPG, PNG, WebP, or TIFF file up to 20 MB.",
+      ),
+    ).toBeInTheDocument();
+    expect(input).toHaveAttribute(
+      "accept",
+      ".pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff",
+    );
+    expect(uploadDocumentToStorage).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("starts candidate-only ingestion after uploading the file", async () => {
     get.mockResolvedValue([]);
     uploadDocumentToStorage.mockResolvedValue("patient-1/lab-results.pdf");

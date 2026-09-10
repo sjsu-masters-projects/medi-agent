@@ -58,6 +58,27 @@ const PARSING_IN_PROGRESS_MESSAGE =
 const PARSING_FAILED_FALLBACK_MESSAGE = "This document could not be processed.";
 const PARSING_TIMEOUT_MESSAGE =
   "Timed out while waiting for document processing to finish.";
+const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
+const SUPPORTED_UPLOAD_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/tiff",
+]);
+const UPLOAD_ACCEPT_ATTRIBUTE = ".pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff";
+const UNSUPPORTED_UPLOAD_MESSAGE =
+  "Choose a PDF, JPG, PNG, WebP, or TIFF file up to 20 MB.";
+
+function getUploadValidationError(file: File): string | null {
+  if (!SUPPORTED_UPLOAD_MIME_TYPES.has(file.type)) {
+    return UNSUPPORTED_UPLOAD_MESSAGE;
+  }
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    return "Each file must be 20 MB or smaller.";
+  }
+  return null;
+}
 
 function addTrackedDocumentId(current: Set<string>, documentId: string) {
   const next = new Set(current);
@@ -316,6 +337,13 @@ export default function RecordsPage() {
       return;
     }
 
+    const validationError = getUploadValidationError(file);
+    if (validationError) {
+      setPageError(validationError);
+      event.target.value = "";
+      return;
+    }
+
     setPageError(null);
     setParseError(null);
     setUploading(true);
@@ -499,7 +527,7 @@ export default function RecordsPage() {
         title="My Records"
       />
       <input
-        accept="application/pdf,image/*,text/plain,text/csv,application/json"
+        accept={UPLOAD_ACCEPT_ATTRIBUTE}
         className="hidden"
         onChange={handleFileChange}
         ref={fileInputRef}
