@@ -112,11 +112,18 @@ class NvidiaNimClient:
         if not text:
             text = cls._content_to_text(choice.get("text"))
         if not text:
-            # Reasoning models sometimes return only their trace. Better a usable answer
-            # than a failed trial, though the trace is not what the model would serve.
-            text = cls._content_to_text(message.get("reasoning_content"))
-            if text:
-                logger.info("NIM reply carried only reasoning_content; using it as the answer")
+            # Reasoning models sometimes return only their trace, which happens when the
+            # token budget runs out mid-thought. Better a usable answer than a failed
+            # trial, though a trace is not what the model would actually serve.
+            #
+            # Both spellings are read: a live gpt-oss-20b reply carries `reasoning` and
+            # `reasoning_content` with identical text, so a model returning only the
+            # former is entirely plausible.
+            for key in ("reasoning_content", "reasoning"):
+                text = cls._content_to_text(message.get(key))
+                if text:
+                    logger.info("NIM reply carried only %s; using it as the answer", key)
+                    break
 
         if not text:
             raise LLMError(f"Unexpected NIM response format: {payload}")

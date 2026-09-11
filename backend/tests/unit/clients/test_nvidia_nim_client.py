@@ -240,3 +240,57 @@ async def test_parts_with_no_text_at_all_still_raise(monkeypatch: pytest.MonkeyP
 
     with pytest.raises(LLMError):
         await _client().generate(PROMPT)
+
+
+@pytest.mark.asyncio
+async def test_a_real_gpt_oss_20b_reply_is_extracted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pinned to a live openai/gpt-oss-20b response captured on 2026-09-11.
+
+    The fields around the answer are what make this worth keeping: `refusal`,
+    `annotations`, `audio`, `tool_calls`, and two separate reasoning keys all sit
+    beside `content`. The extractor must take the answer and ignore the rest.
+    """
+    _stub_post(
+        monkeypatch,
+        httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-9f6c65cc46fe1c1f",
+                "object": "chat.completion",
+                "model": "openai/gpt-oss-20b",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "9.8 is larger.",
+                            "refusal": None,
+                            "annotations": None,
+                            "audio": None,
+                            "function_call": None,
+                            "tool_calls": [],
+                            "reasoning": "We need to answer the question...",
+                            "reasoning_content": "We need to answer the question...",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 80, "total_tokens": 361, "completion_tokens": 281},
+            },
+        ),
+    )
+
+    assert await _client().generate(PROMPT, max_tokens=4096) == "9.8 is larger."
+
+
+@pytest.mark.asyncio
+async def test_the_older_reasoning_spelling_is_also_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A live reply carries both spellings, so one alone is plausible."""
+    _stub_post(
+        monkeypatch,
+        httpx.Response(
+            200, json={"choices": [{"message": {"content": "", "reasoning": "only this"}}]}
+        ),
+    )
+
+    assert await _client().generate(PROMPT) == "only this"
