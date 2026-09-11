@@ -71,13 +71,35 @@ class NvidiaNimClient:
         }
 
     @staticmethod
-    def _extract_text(payload: dict[str, Any]) -> str:
+    def _content_to_text(content: Any) -> str | None:
+        """Flatten a content field that may be a string or a list of parts.
+
+        Multimodal models on this catalog use the parts form even when the reply is
+        entirely text. Only text parts are joined; an image part in a reply has no
+        place in a text comparison.
+        """
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            pieces = [
+                part["text"]
+                for part in content
+                if isinstance(part, dict) and isinstance(part.get("text"), str)
+            ]
+            return "".join(pieces) if pieces else None
+        return None
+
+    @classmethod
+    def _extract_text(cls, payload: dict[str, Any]) -> str:
         """Pull the reply out of an OpenAI-shaped response.
 
-        Both message and text shapes are accepted because NIM hosts many models and the
-        older completion form still appears. An unrecognized shape raises rather than
-        returning an empty string, which would otherwise read downstream as a model that
-        answered with nothing.
+        Four shapes are accepted, because the catalog hosts models of very different
+        generations: a plain string, a list of content parts, the older completion
+        `text` field, and a reasoning model that puts its answer in `reasoning_content`
+        when `content` comes back empty.
+
+        An unrecognized shape raises rather than returning an empty string, which
+        downstream would read as a model that answered with nothing.
         """
         choices = payload.get("choices") or []
         if not choices:
@@ -85,8 +107,18 @@ class NvidiaNimClient:
 
         choice = choices[0]
         message = choice.get("message") or {}
-        text = message.get("content") or choice.get("text")
-        if not isinstance(text, str):
+
+        text = cls._content_to_text(message.get("content"))
+        if not text:
+            text = cls._content_to_text(choice.get("text"))
+        if not text:
+            # Reasoning models sometimes return only their trace. Better a usable answer
+            # than a failed trial, though the trace is not what the model would serve.
+            text = cls._content_to_text(message.get("reasoning_content"))
+            if text:
+                logger.info("NIM reply carried only reasoning_content; using it as the answer")
+
+        if not text:
             raise LLMError(f"Unexpected NIM response format: {payload}")
         return text.strip()
 

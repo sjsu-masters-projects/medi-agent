@@ -140,3 +140,103 @@ async def test_an_image_is_ignored_rather_than_rejected(monkeypatch: pytest.Monk
     _stub_post(monkeypatch, _ok("answer"))
 
     assert await _client().generate(PROMPT, image=b"\x89PNG") == "answer"
+
+
+@pytest.mark.asyncio
+async def test_multimodal_content_parts_are_joined(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multimodal models use the parts form even for an all-text reply."""
+    _stub_post(
+        monkeypatch,
+        httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": [
+                                {"type": "text", "text": "Consider "},
+                                {"type": "text", "text": "an INR check."},
+                            ]
+                        }
+                    }
+                ]
+            },
+        ),
+    )
+
+    assert await _client().generate(PROMPT) == "Consider an INR check."
+
+
+@pytest.mark.asyncio
+async def test_an_image_part_in_a_reply_is_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An image has no place in a text comparison; the text around it still counts."""
+    _stub_post(
+        monkeypatch,
+        httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": [
+                                {"type": "image_url", "image_url": {"url": "data:..."}},
+                                {"type": "text", "text": "see above"},
+                            ]
+                        }
+                    }
+                ]
+            },
+        ),
+    )
+
+    assert await _client().generate(PROMPT) == "see above"
+
+
+@pytest.mark.asyncio
+async def test_a_reasoning_only_reply_falls_back_to_the_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Better a usable answer than a failed trial when content comes back empty."""
+    _stub_post(
+        monkeypatch,
+        httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": "", "reasoning_content": "  weighing options  "}}
+                ]
+            },
+        ),
+    )
+
+    assert await _client().generate(PROMPT) == "weighing options"
+
+
+@pytest.mark.asyncio
+async def test_content_is_preferred_over_the_reasoning_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_post(
+        monkeypatch,
+        httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": "the answer", "reasoning_content": "the trace"}}
+                ]
+            },
+        ),
+    )
+
+    assert await _client().generate(PROMPT) == "the answer"
+
+
+@pytest.mark.asyncio
+async def test_parts_with_no_text_at_all_still_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_post(
+        monkeypatch,
+        httpx.Response(200, json={"choices": [{"message": {"content": [{"type": "image_url"}]}}]}),
+    )
+
+    with pytest.raises(LLMError):
+        await _client().generate(PROMPT)
