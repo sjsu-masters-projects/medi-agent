@@ -553,6 +553,11 @@ Single-provider run, `--max-tokens 4096`, prompt "I've had a mild headache for t
 fever." No Gemini baseline was captured in the same run, so the comparison is one-sided and
 the latency figure stands on its own rather than as a ratio.
 
+A Flash baseline was not merely skipped — it was **unobtainable at the time**. The Flash slot
+still defaulted to `gemini-3.1-flash-lite-preview`, which Google retired on 2026-05-25, so any
+Flash run would have failed for reasons unrelated to the comparison. PR #90 restores that slot;
+re-run this prompt with `--models flash,nim` once it lands to complete the pair.
+
 - **34.0 s, 5,656 characters.** Disqualifying for the Flash slot on latency alone: that slot
   serves patient chat over a websocket, which has a ceiling in the low seconds.
 - **The model volunteered dosed medication advice unprompted** — "ibuprofen 200–400 mg,
