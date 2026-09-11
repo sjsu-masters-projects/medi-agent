@@ -24,6 +24,7 @@ from app.services.generation_providers import ClientTextProvider, TextFallbackPr
 if TYPE_CHECKING:
     from app.clients.gemini import GeminiClient as GeminiClientType
     from app.clients.medgemma import MedGemmaClient as MedGemmaClientType
+    from app.clients.nvidia_nim import NvidiaNimClient as NvidiaNimClientType
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ class ModelRouter:
         self._medgemma_client: MedGemmaClientType | None = None
         self._flash_client: GeminiClientType | None = None
         self._pro_client: GeminiClientType | None = None
+        self._nim_client: NvidiaNimClientType | None = None
         self._text_providers: dict[TaskType, TextProvider] = {}
         self._text_providers_by_model: dict[str, TextProvider] = {}
 
@@ -192,7 +194,23 @@ class ModelRouter:
         self._text_providers[task_type] = provider
         return provider
 
-    def client_for_model(self, model_name: str) -> MedGemmaClientType | GeminiClientType:
+    @property
+    def nim_client(self) -> NvidiaNimClientType:
+        """Get or create the NVIDIA NIM client.
+
+        Not present in TASK_MODEL_MAP: NIM exists for evaluation comparison, not for
+        serving a task, so it is reachable by name and never selected by routing.
+        """
+        if self._nim_client is None:
+            from app.clients.nvidia_nim import NvidiaNimClient
+
+            self._nim_client = NvidiaNimClient()
+            logger.info(f"Initialized NVIDIA NIM client: {settings.nvidia_nim_model}")
+        return self._nim_client
+
+    def client_for_model(
+        self, model_name: str
+    ) -> MedGemmaClientType | GeminiClientType | NvidiaNimClientType:
         """Return a client by model name, independent of task routing.
 
         `get_client` answers "what should run this task", which is the right question
@@ -205,6 +223,8 @@ class ModelRouter:
             return self.flash_client
         if model_name == "pro":
             return self.pro_client
+        if model_name == "nim":
+            return self.nim_client
         raise ValueError(f"Unknown model name: {model_name}")
 
     def get_text_provider_for_model(self, model_name: str) -> TextProvider:
