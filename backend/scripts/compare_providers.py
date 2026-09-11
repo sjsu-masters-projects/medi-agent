@@ -99,7 +99,12 @@ async def _run(args: argparse.Namespace) -> int:
         return 2
 
     comparison = await compare_text_providers(
-        GenerationRequest(prompt=prompt, task=args.task, temperature=args.temperature),
+        GenerationRequest(
+            prompt=prompt,
+            task=args.task,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+        ),
         providers,
     )
 
@@ -130,6 +135,15 @@ def main() -> int:
     )
     parser.add_argument("--task", default="comparison", help="Task label recorded in telemetry")
     parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=1024,
+        help=(
+            "Output token budget per provider. Raise it for reasoning models: a trace "
+            "can consume the whole budget and leave the answer empty (default: 1024)"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit the full result as JSON")
     parser.add_argument(
         "--show-output", action="store_true", help="Print each provider's text after the table"

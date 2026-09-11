@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # NVIDIA NIM (independent provider for evaluation comparison)
     nvidia_nim_api_key: str = ""
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nvidia_nim_model: str = "moonshotai/kimi-k3"
+    nvidia_nim_model: str = "openai/gpt-oss-20b"
 
     # Hugging Face (for MedGemma benchmarking)
     huggingface_api_token: str = ""
