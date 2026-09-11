@@ -33,6 +33,9 @@ if TYPE_CHECKING:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 DEFAULT_MODELS = ("medgemma", "flash", "pro")
+# "nim" is comparable too, but stays out of the default set: it needs
+# NVIDIA_NIM_API_KEY, and a skipped provider on every run would be noise.
+AVAILABLE_MODELS = (*DEFAULT_MODELS, "nim")
 
 # Importing `app` constructs Settings, which requires the full service environment.
 # Doing that at module scope would make `--help` and argument errors depend on
@@ -120,7 +123,10 @@ def main() -> int:
     parser.add_argument(
         "--models",
         default=",".join(DEFAULT_MODELS),
-        help=f"Comma-separated model names (default: {','.join(DEFAULT_MODELS)})",
+        help=(
+            f"Comma-separated model names from {','.join(AVAILABLE_MODELS)} "
+            f"(default: {','.join(DEFAULT_MODELS)})"
+        ),
     )
     parser.add_argument("--task", default="comparison", help="Task label recorded in telemetry")
     parser.add_argument("--temperature", type=float, default=0.2)

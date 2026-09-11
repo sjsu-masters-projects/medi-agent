@@ -312,9 +312,10 @@ open for sandbox-specific diagnosis.
       `ClientTextProvider`. What was missing was the comparison itself, since
       `TASK_MODEL_MAP` binds each task to one model and cannot express "run this prompt on
       all three". `ModelRouter.get_text_provider_for_model`, `compare_text_providers`, and
-      `scripts/compare_providers.py` close that across MedGemma, Flash, and Pro. NVIDIA NIM
-      is out of scope per the 2026-09-09 decision; the comparison accepts any
-      `TextProvider`, so adding it later needs no rework here.
+      `scripts/compare_providers.py` close that. `NvidiaNimClient` adds NIM as a fourth
+      comparable provider, reachable by model name and deliberately absent from
+      `TASK_MODEL_MAP` because it exists to be evaluated, not to serve a task. It needs
+      `NVIDIA_NIM_API_KEY` and is therefore opt-in on the comparison CLI.
 - [/] Define the voice-provider interface; live voice transport migration remains next.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
 - [x] Guarantee deterministic text fallback when audio is unavailable.
@@ -633,4 +634,5 @@ resources remain evidence-only and do not create local truth.
 | 2026-08-18 | Clinical actions use tiered approval | Clinicians retain authority over clinical conclusions and actions |
 | 2026-08-18 | Product delivery outranks research publication | Evaluation supports engineering and safety decisions |
 | 2026-08-18 | REV-001 is the first engineering task | Trustworthy, bounded CI is required before feature delivery |
-| 2026-09-09 | NVIDIA NIM is out of scope for provider comparison | No endpoint or credential is available to the team, and an adapter that cannot be run produces no evaluation evidence. Comparison runs across MedGemma, Flash, and Pro. `compare_text_providers` accepts any `TextProvider`, so NIM can be added later without reworking the comparison |
+| 2026-09-09 | ~~NVIDIA NIM is out of scope for provider comparison~~ | Superseded on 2026-09-11. The entry assumed no endpoint was reachable; NIM's cloud API is, and the premise was wrong |
+| 2026-09-11 | NVIDIA NIM is the third comparison provider | It is reachable through NVIDIA's hosted catalog over an OpenAI-compatible API. It is also the only candidate not hosted by Google, so its failures are the least likely to correlate with MedGemma's and Gemini's — which is what makes a reliability comparison mean anything |
