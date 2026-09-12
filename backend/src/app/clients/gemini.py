@@ -78,11 +78,14 @@ class GeminiClient:
         if self.use_vertex_ai:
             # Initialize Vertex AI
             try:
-                # Gemini 3.x preview models require Google Gen AI SDK with location="global"
-                is_preview_model = "3." in model and "preview" in model
+                # Gemini 3.1 models use the Google Gen AI SDK with Vertex AI's
+                # global endpoint. This applies to stable and preview aliases;
+                # routing the stable Flash Lite replacement through the legacy
+                # Vertex SDK would otherwise use the wrong client path.
+                uses_genai_sdk = model.startswith("gemini-3.1-")
 
-                if is_preview_model:
-                    # Use Google Gen AI SDK for preview models
+                if uses_genai_sdk:
+                    # Use Google Gen AI SDK for Gemini 3.1 models.
                     from google import genai
 
                     logger.info(
@@ -266,7 +269,7 @@ class GeminiClient:
         temperature: float,
         max_tokens: int,
     ) -> str:
-        """Generate using Google Gen AI SDK (for Gemini 3.1 preview models)."""
+        """Generate using Google Gen AI SDK (for Gemini 3.1 models)."""
         from google.genai import types
 
         # Gen AI SDK seems to have a lower default max_output_tokens

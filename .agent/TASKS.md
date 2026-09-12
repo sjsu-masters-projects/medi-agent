@@ -319,6 +319,17 @@ open for sandbox-specific diagnosis.
 - [/] Define the voice-provider interface; live voice transport migration remains next.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
 - [x] Guarantee deterministic text fallback when audio is unavailable.
+- [x] Replace the retired `gemini-3.1-flash-lite-preview` fallback default with
+      `gemini-3.1-flash-lite`, and route all Gemini 3.1 aliases through the Google Gen AI
+      SDK's Vertex `global` endpoint. This restores the document-ingestion fallback without
+      changing candidate-only reconciliation behavior.
+- [/] Run a 2026 model-routing decision spike before changing any clinical AI workflow:
+      benchmark synthetic, gold-labeled document extraction, structured candidate mapping,
+      bilingual patient communication, and deterministic-safety escalation across current
+      provider candidates. Compare quality, abstention, schema validity, latency, cost,
+      data controls, SDK lifecycle, and failover behavior; record the selected providers and
+      version-pinning policy in an ADR. The retired-model incident is the trigger, not proof
+      that a provider should be replaced without this evaluation.
 
 **R1 exit gate**
 
