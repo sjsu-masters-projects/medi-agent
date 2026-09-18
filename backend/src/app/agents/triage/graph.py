@@ -19,173 +19,10 @@ from app.agents.triage.prompts import (
 from app.clients.model_router import ModelRouter, TaskType
 from app.core.observability import record_chat_fallback
 from app.models.enums import Language, coerce_locale
+from app.safety import TRIAGE_COPY, apply_safety_override, deterministic_safety_floor
 from app.utils.localization import resolve_locale_resource
 
 logger = logging.getLogger(__name__)
-
-EMERGENCY_KEYWORDS = frozenset(
-    {
-        # English
-        "chest pain",
-        "cannot breathe",
-        "can't breathe",
-        "shortness of breath",
-        "passed out",
-        "unconscious",
-        "stroke",
-        "seizure",
-        "severe bleeding",
-        "anaphylaxis",
-        "heart attack",
-        # Spanish
-        "dolor de pecho",
-        "no puedo respirar",
-        "falta de aire",
-        "infarto",
-        "ataque cardiaco",
-        "ataque al corazon",
-        "ataque al corazón",
-        "derrame cerebral",
-        "embolia",
-        "convulsion",
-        "convulsión",
-        "sangrado severo",
-        "anafilaxia",
-        "perdi el conocimiento",
-        "perdí el conocimiento",
-        "me desmaye",
-        "me desmayé",
-    }
-)
-MENTAL_HEALTH_EMERGENCY_KEYWORDS = frozenset(
-    {
-        # English
-        "suicidal",
-        "suicide",
-        "kill myself",
-        "want to die",
-        "end my life",
-        "harm myself",
-        # Spanish
-        "suicidio",
-        "suicidarme",
-        "matarme",
-        "quitarme la vida",
-        "hacerme dano",
-        "hacerme daño",
-        "quiero morir",
-    }
-)
-DOCUMENT_KEYWORDS = frozenset(
-    {
-        "document",
-        "record",
-        "report",
-        "result",
-        "results",
-        "lab",
-        "labs",
-        "prescription",
-        "discharge",
-        "informe",
-        "resultado",
-        "resultados",
-        "laboratorio",
-        "receta",
-        "alta",
-    }
-)
-DOCUMENT_CONTEXT_REFERENCES = frozenset(
-    {"this", "that", "it", "these", "those", "esto", "eso", "este", "esta", "estos", "estas"}
-)
-SCHEDULE_KEYWORDS = frozenset(
-    {"appointment", "reschedule", "book", "visit", "cita", "agendar", "reagendar", "visita"}
-)
-MEDICATION_KEYWORDS = frozenset(
-    {
-        "medication",
-        "medicine",
-        "medicina",
-        "medicamento",
-        "dose",
-        "dosis",
-        "pill",
-        "pastilla",
-        "tablet",
-        "drug",
-        "refill",
-        "side effect",
-        "reaction",
-        "aspirin",
-        "ibuprofen",
-        "acetaminophen",
-        "tylenol",
-        "advil",
-    }
-)
-MEDICATION_NAME_HINTS = frozenset(
-    {
-        "amoxicillin",
-        "atorvastatin",
-        "insulin",
-        "lisinopril",
-        "metformin",
-        "omeprazole",
-        "prednisone",
-    }
-)
-MENTAL_HEALTH_KEYWORDS = frozenset(
-    {
-        # English
-        "panic",
-        "anxious",
-        "anxiety",
-        "depressed",
-        "depression",
-        "hopeless",
-        "overwhelmed",
-        # Spanish
-        "panico",
-        "pánico",
-        "ansioso",
-        "ansiosa",
-        "ansiedad",
-        "deprimido",
-        "deprimida",
-        "depresion",
-        "depresión",
-        "sin esperanza",
-        "abrumado",
-        "abrumada",
-    }
-)
-SYMPTOM_KEYWORDS = frozenset(
-    {
-        "pain",
-        "dizzy",
-        "dizziness",
-        "nausea",
-        "vomit",
-        "fever",
-        "rash",
-        "swelling",
-        "headache",
-        "cough",
-    }
-)
-ADVERSE_EFFECT_KEYWORDS = frozenset(
-    {
-        "side effect",
-        "allergic",
-        "rash",
-        "swelling",
-        "dizzy",
-        "faint",
-        "vomit",
-        "nausea",
-        "reaction",
-    }
-)
 
 IntentType = Literal[
     "symptom",
@@ -196,124 +33,6 @@ IntentType = Literal[
     "general",
 ]
 UrgencyType = Literal["routine", "urgent", "emergency"]
-
-TRIAGE_COPY = {
-    "default": {
-        "emergency_response": (
-            "This may be an emergency. Please call 911 now or go to the nearest emergency "
-            "department immediately. If possible, notify your care team as well."
-        ),
-        "mental_health_emergency_response": (
-            "If you are in immediate danger, call 911 now. If you are thinking about hurting "
-            "yourself or feeling unsafe, call or text 988 (Suicide and Crisis Lifeline) right "
-            "away — they are available 24/7. You are not alone, and help is available."
-        ),
-        "fallback_general": (
-            "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
-        ),
-        "fallback_medication_question": (
-            "I can help track your medication-related concerns. If symptoms worsen, please "
-            "contact your care team right away."
-        ),
-        "fallback_document_question": (
-            "I can help explain the attached record in plain language. I will stick to what is "
-            "available in your record and suggest questions for your care team when details are unclear."
-        ),
-        "fallback_schedule": (
-            "I can help you prepare scheduling questions. For appointment changes, please confirm "
-            "directly with your clinic."
-        ),
-        "fallback_mental_health": (
-            "I am sorry you are feeling this way. If you might hurt yourself or feel unsafe, call "
-            "988 or emergency services now. Otherwise, contact your care team today for support."
-        ),
-        "fallback_urgent": (
-            "Thank you for sharing this. Please contact your care team today for timely "
-            "clinical guidance."
-        ),
-        "fallback_non_clinical": (
-            "I am focused on health support. For medication, symptoms, records, or appointments, "
-            "I can give more specific help."
-        ),
-    },
-    Language.EN.value: {
-        "emergency_response": (
-            "This may be an emergency. Please call 911 now or go to the nearest emergency "
-            "department immediately. If possible, notify your care team as well."
-        ),
-        "mental_health_emergency_response": (
-            "If you are in immediate danger, call 911 now. If you are thinking about hurting "
-            "yourself or feeling unsafe, call or text 988 (Suicide and Crisis Lifeline) right "
-            "away — they are available 24/7. You are not alone, and help is available."
-        ),
-        "fallback_general": (
-            "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
-        ),
-        "fallback_medication_question": (
-            "I can help track your medication-related concerns. If symptoms worsen, please "
-            "contact your care team right away."
-        ),
-        "fallback_document_question": (
-            "I can help explain the attached record in plain language. I will stick to what is "
-            "available in your record and suggest questions for your care team when details are unclear."
-        ),
-        "fallback_schedule": (
-            "I can help you prepare scheduling questions. For appointment changes, please confirm "
-            "directly with your clinic."
-        ),
-        "fallback_mental_health": (
-            "I am sorry you are feeling this way. If you might hurt yourself or feel unsafe, call "
-            "988 or emergency services now. Otherwise, contact your care team today for support."
-        ),
-        "fallback_urgent": (
-            "Thank you for sharing this. Please contact your care team today for timely "
-            "clinical guidance."
-        ),
-        "fallback_non_clinical": (
-            "I am focused on health support. For medication, symptoms, records, or appointments, "
-            "I can give more specific help."
-        ),
-    },
-    Language.ES.value: {
-        "emergency_response": (
-            "Esto podría ser una emergencia. Llama al 911 ahora o acude al servicio de "
-            "urgencias más cercano de inmediato. Si puedes, avisa también a tu equipo clínico."
-        ),
-        "mental_health_emergency_response": (
-            "Si estás en peligro inmediato, llama al 911 ahora. Si tienes pensamientos de "
-            "hacerte daño o no te sientes a salvo, llama o envía un mensaje al 988 (Línea de "
-            "Prevención del Suicidio y Crisis) de inmediato — están disponibles 24/7. No estás "
-            "solo y hay ayuda disponible."
-        ),
-        "fallback_general": (
-            "Gracias por el mensaje. Estoy aquí para ayudarte y puedo seguir dando seguimiento a tus síntomas."
-        ),
-        "fallback_medication_question": (
-            "Puedo ayudarte a revisar tus síntomas relacionados con medicamentos. Si notas "
-            "empeoramiento, contacta a tu equipo clínico de inmediato."
-        ),
-        "fallback_document_question": (
-            "Puedo ayudarte a explicar el documento adjunto en lenguaje sencillo. Me basaré en "
-            "la información disponible y sugeriré preguntas para tu equipo clínico si algo no queda claro."
-        ),
-        "fallback_schedule": (
-            "Puedo ayudarte a preparar preguntas sobre citas. Para cambiar una cita, confirma "
-            "directamente con tu clínica."
-        ),
-        "fallback_mental_health": (
-            "Siento que te estés sintiendo así. Si podrías hacerte daño o no te sientes a salvo, "
-            "llama al 988 o a emergencias ahora. Si no, contacta a tu equipo clínico hoy para recibir apoyo."
-        ),
-        "fallback_urgent": (
-            "Gracias por compartir esto. Es importante que hables con tu equipo clínico hoy "
-            "mismo para una evaluación oportuna."
-        ),
-        "fallback_non_clinical": (
-            "Estoy enfocada en apoyo de salud. Si tienes preguntas sobre medicamentos, síntomas, "
-            "documentos o citas, puedo ayudarte mejor."
-        ),
-    },
-}
 
 
 class TriageClassificationResult(BaseModel):
@@ -330,6 +49,10 @@ class TriageClassificationResult(BaseModel):
 class TriageState(TypedDict, total=False):
     """State passed across triage graph nodes."""
 
+    # Set when the model could not classify the message. It is not an intent — it is the
+    # absence of one, kept distinct so no downstream node reads a placeholder
+    # classification as though it were a finding.
+    classification_unavailable: bool
     patient_id: str
     user_id: str
     language: str
@@ -373,11 +96,10 @@ async def classify_intent(state: TriageState, router: ModelRouter) -> TriageStat
     if not context.message:
         return _empty_message_state(state)
 
-    # The safety floor runs before the model, not after it. These rules previously lived
-    # only inside `_classify_with_rules`, which is the fallback for a failed LLM call, so
-    # a healthy model that misread "crushing chest pain" as small talk had nothing behind
-    # it. Deciding first also skips a network round trip on the messages that can least
-    # afford one.
+    # The safety floor runs before the model, not after it. These rules previously ran
+    # only in the fallback for a failed LLM call, so a healthy model that misread
+    # "crushing chest pain" as small talk had nothing behind it. Deciding first also skips
+    # a network round trip on the messages that can least afford one.
     floor = _deterministic_safety_floor(context.message)
     if floor is not None:
         logger.warning(
@@ -386,8 +108,15 @@ async def classify_intent(state: TriageState, router: ModelRouter) -> TriageStat
         return _merge_classification(state, floor)
 
     llm_result = await _classify_with_llm(router, context)
-    rule_result = llm_result or _classify_with_rules(context)
-    result = _apply_safety_override(rule_result, context.message)
+    if llm_result is None:
+        # No guess. This previously fell back to a keyword cascade that would decide
+        # "medication question" from a list of seven drug names, producing a confident
+        # answer to a question nobody had understood. For clinical content that is worse
+        # than saying nothing, so the patient is told the service is unavailable instead.
+        # The emergency floor has already run above and is unaffected.
+        return _unavailable_classification_state(state)
+
+    result = _apply_safety_override(llm_result, context.message)
     return _merge_classification(state, result)
 
 
@@ -402,6 +131,12 @@ async def generate_response(state: TriageState, router: ModelRouter) -> TriageSt
             _emergency_response(context.language, intent=intent),
             escalation_required=True,
         )
+
+    if state.get("classification_unavailable"):
+        # Nothing was understood, so nothing is generated. Calling the model here would
+        # be a second doomed round trip on a path that has already failed once, and any
+        # answer it produced would be addressing a question we never classified.
+        return _merge_response(state, service_unavailable_response(context.language))
 
     response = await _generate_response_with_llm(
         router,
@@ -524,92 +259,20 @@ async def _generate_response_with_llm(router: ModelRouter, request: _ResponseReq
 def _deterministic_safety_floor(message: str) -> TriageClassificationResult | None:
     """Classify the messages that must never depend on a model, or return None.
 
-    Self-harm and medical emergencies are decided by keyword because the cost of a
-    model getting one wrong is not recoverable later in the turn. Both keyword sets
-    cover English and Mexican Spanish, including unaccented spellings, since a patient
-    in distress is not going to type carefully.
-
-    Returning None means "no rule applies", which is the ordinary case and hands the
-    message to the model.
+    The rules themselves live in `app.safety.triage_floor`, which has no framework
+    imports, so replacing the agent runtime cannot disturb them. This wrapper only
+    adapts the verdict to the classification model this graph passes around.
     """
-    normalized = message.lower()
-    if _matches_any(normalized, MENTAL_HEALTH_EMERGENCY_KEYWORDS):
-        return TriageClassificationResult(
-            intent="mental_health",
-            urgency="emergency",
-            reason="Mental-health emergency keyword match",
-            safety_rule="emergency_mental_health_keyword",
-        )
-
-    if _matches_any(normalized, EMERGENCY_KEYWORDS):
-        return TriageClassificationResult(
-            intent="symptom",
-            urgency="emergency",
-            reason="Emergency symptom keyword match",
-            safety_rule="emergency_symptom_keyword",
-        )
-
-    return None
-
-
-def _classify_with_rules(context: _MessageContext) -> TriageClassificationResult:
-    normalized = context.message.lower()
-    floor = _deterministic_safety_floor(context.message)
-    if floor is not None:
-        return floor
-
-    if _matches_any(normalized, SCHEDULE_KEYWORDS):
-        return TriageClassificationResult(
-            intent="schedule",
-            urgency="routine",
-            reason="Scheduling keyword match",
-        )
-
-    if _matches_any(normalized, MEDICATION_KEYWORDS):
-        return TriageClassificationResult(
-            intent="medication_question",
-            urgency="urgent" if _contains_adverse_effect_signal(normalized) else "routine",
-            reason="Medication keyword match",
-        )
-
-    if _matches_any(normalized, MEDICATION_NAME_HINTS):
-        return TriageClassificationResult(
-            intent="medication_question",
-            urgency="routine",
-            reason="Medication name hint match",
-        )
-
-    if _matches_any(normalized, MENTAL_HEALTH_KEYWORDS):
-        return TriageClassificationResult(
-            intent="mental_health",
-            urgency="urgent",
-            reason="Mental-health distress keyword match",
-        )
-
-    if _matches_any(normalized, SYMPTOM_KEYWORDS):
-        return TriageClassificationResult(
-            intent="symptom",
-            urgency="urgent",
-            reason="Symptom keyword match",
-        )
-
-    if _has_document_signal(normalized, has_document_context=bool(context.document_context)):
-        return TriageClassificationResult(
-            intent="document_question",
-            urgency="routine",
-            reason="Document context or document keyword match",
-        )
+    verdict = deterministic_safety_floor(message)
+    if verdict is None:
+        return None
 
     return TriageClassificationResult(
-        intent="general",
-        urgency="routine",
-        reason="No high-signal keywords matched",
+        intent=verdict.intent,
+        urgency=verdict.urgency,
+        reason=verdict.reason,
+        safety_rule=verdict.safety_rule,
     )
-
-
-def _contains_adverse_effect_signal(text: str) -> bool:
-    normalized = text.lower()
-    return _matches_any(normalized, ADVERSE_EFFECT_KEYWORDS)
 
 
 def categorize_llm_failure(exc: BaseException) -> str:
@@ -721,44 +384,62 @@ def _empty_message_state(state: TriageState) -> TriageState:
     }
 
 
+UNAVAILABLE_REASON = "Model unavailable; no classification was made"
+
+
+def service_unavailable_response(language: str) -> str:
+    """What a patient is told when the model could not answer.
+
+    It admits the failure, avoids implying anything clinical was understood, and still
+    names where to go — because "we are having trouble" on its own is unsafe for someone
+    who is actually unwell and whose wording did not trip the emergency floor.
+    """
+    return str(resolve_locale_resource(language, TRIAGE_COPY)["service_unavailable"])
+
+
+def _unavailable_classification_state(state: TriageState) -> TriageState:
+    """The shape of "we did not classify this", following `_empty_message_state`.
+
+    `general` and `routine` are carried only because the wire contract requires an intent
+    and an urgency on every turn. `classification_unavailable` is what downstream nodes
+    actually read, so neither value is ever mistaken for something the model decided.
+    """
+    return {
+        **state,
+        "classification_unavailable": True,
+        "intent": "general",
+        "urgency": "routine",
+        "route": "triage",
+        "classification_reason": UNAVAILABLE_REASON,
+        "escalation_required": False,
+    }
+
+
 def _apply_safety_override(
     result: TriageClassificationResult,
     message: str,
 ) -> TriageClassificationResult:
-    if result.urgency == "emergency":
+    """Escalate a classification when a deterministic signal outranks it.
+
+    Delegates to `app.safety.escalation`, which is monotonic: it may raise urgency and
+    never lower it, and unlike the previous implementation it can reach `emergency`
+    rather than stopping at `urgent`.
+    """
+    intent, urgency, reason = apply_safety_override(
+        intent=result.intent,
+        urgency=result.urgency,
+        reason=result.reason,
+        message=message,
+    )
+    if (intent, urgency, reason) == (result.intent, result.urgency, result.reason):
         return result
 
-    if not _contains_adverse_effect_signal(message):
-        return result
-
-    if result.intent == "medication_question":
-        return TriageClassificationResult(
-            intent="medication_question",
-            urgency="urgent",
-            reason="Potential medication side-effect pattern detected",
-        )
-
-    if result.urgency == "routine":
-        return TriageClassificationResult(
-            intent=result.intent,
-            urgency="urgent",
-            reason=f"{result.reason} + adverse-effect signal forced urgent",
-        )
-
-    return result
-
-
-def _matches_any(text: str, keywords: frozenset[str]) -> bool:
-    return any(keyword in text for keyword in keywords)
-
-
-def _has_document_signal(text: str, *, has_document_context: bool) -> bool:
-    if _matches_any(text, DOCUMENT_KEYWORDS):
-        return True
-    if not has_document_context or not _matches_any(text, DOCUMENT_CONTEXT_REFERENCES):
-        return False
-    document_verbs = ("explain", "mean", "understand", "review", "explica", "significa", "entender")
-    return any(verb in text for verb in document_verbs)
+    return TriageClassificationResult(
+        intent=intent,  # type: ignore[arg-type]
+        urgency=urgency,
+        reason=reason,
+        safety_rule=result.safety_rule,
+    )
 
 
 def _route_for_intent(intent: str) -> str:

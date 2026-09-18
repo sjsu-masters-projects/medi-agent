@@ -11,16 +11,18 @@ from pydantic import Field
 
 from app.agents.base import AgentInput, AgentOutput, BaseAgent
 from app.agents.triage.graph import (
+    UNAVAILABLE_REASON,
+    TriageClassificationResult,
     TriageState,
     _apply_safety_override,
     _build_context,
     _classify_with_llm,
-    _classify_with_rules,
     _emergency_response,
     _fallback_response,
     _route_for_intent,
     build_triage_graph,
     categorize_llm_failure,
+    service_unavailable_response,
 )
 from app.agents.triage.prompts import (
     CHAT_RESPONSE_SYSTEM_INSTRUCTION,
@@ -30,6 +32,7 @@ from app.clients.model_router import ModelRouter, TaskType, get_router
 from app.core.exceptions import AgentError
 from app.core.observability import record_chat_fallback
 from app.models.enums import Language
+from app.safety import deterministic_safety_floor
 
 logger = logging.getLogger(__name__)
 
@@ -149,10 +152,46 @@ class TriageAgent(BaseAgent[TriageInput, TriageOutput]):
             yield {"type": "complete", "response_text": "", "fallback_used": True}
             return
 
-        # Classification — same logic as the non-streaming graph node.
-        llm_result = await _classify_with_llm(self.router, context)
-        rule_result = llm_result or _classify_with_rules(context)
-        result = _apply_safety_override(rule_result, context.message)
+        # The safety floor runs before the model, exactly as it does in the graph node.
+        # It previously did not: this path reached the floor only through the rule
+        # cascade that ran when the LLM *failed*, so a healthy model that misread
+        # "crushing chest pain" as small talk had nothing behind it. The websocket is
+        # the only production chat path and it uses this method.
+        floor = deterministic_safety_floor(context.message)
+        if floor is not None:
+            logger.warning(
+                "Triage safety floor forced an emergency classification: %s", floor.safety_rule
+            )
+            result = TriageClassificationResult(
+                intent=floor.intent,
+                urgency=floor.urgency,
+                reason=floor.reason,
+                safety_rule=floor.safety_rule,
+            )
+        else:
+            llm_result = await _classify_with_llm(self.router, context)
+            if llm_result is None:
+                # No guess — see `classify_intent`. The floor above has already had its
+                # say, so anything reaching here is a message we did not understand and
+                # must not pretend to have understood.
+                unavailable = service_unavailable_response(context.language)
+                yield {
+                    "type": "classification",
+                    "intent": "general",
+                    "urgency": "routine",
+                    "route": "triage",
+                    "escalation_required": False,
+                    "classification_reason": UNAVAILABLE_REASON,
+                }
+                yield {"type": "chunk", "content": unavailable}
+                yield {
+                    "type": "complete",
+                    "response_text": unavailable,
+                    "fallback_used": True,
+                }
+                return
+
+            result = _apply_safety_override(llm_result, context.message)
 
         intent = result.intent
         urgency = result.urgency
