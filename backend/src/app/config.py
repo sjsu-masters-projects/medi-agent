@@ -34,22 +34,32 @@ class Settings(BaseSettings):
     google_project_id: str = ""
 
     # Model routing
-    # The preview model was retired by Google on 2026-05-25. Keep the stable
-    # replacement as the default so document-processing fallbacks remain live.
-    gemini_flash_model: str = "gemini-3.1-flash-lite"
+    # 3.8 Flash is the model measured under the rebuilt evaluation protocol, so it is what
+    # production runs. Google classifies it as short-term availability, meaning it can be
+    # retired 45 days after a replacement ships — an accepted trade, because the model id
+    # is configuration and switching is a one-line change here plus a redeploy. Watch the
+    # release notes: a retired id fails as a 404 at call time, which is how
+    # `gemini-3.1-flash-lite-preview` once broke chat in production.
+    gemini_flash_model: str = "gemini-3.8-flash"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
-    medgemma_model: str = "google/medgemma-27b-it"
     google_embedding_model: str = "gemini-embedding-001"
     rag_embedding_dimensions: int = 768
     rag_min_similarity: float = 0.72
 
-    # Vertex AI (for MedGemma deployment)
+    # Vertex AI
     vertex_ai_location: str = "us-central1"
-    vertex_ai_medgemma_endpoint: str = ""
-    vertex_ai_endpoint_type: str = "auto"  # auto, standard, vllm
 
-    # Hugging Face (for MedGemma benchmarking)
-    huggingface_api_token: str = ""
+    # Per-workload kill switches. Turning one off routes that workload to the
+    # deterministic path recorded beside it in `app/adk/registry.py`, which is why every
+    # workload is required to have one. The registry checks these names at import, so a
+    # switch renamed here without being renamed there fails loudly rather than reading
+    # as "disabled".
+    triage_ai_enabled: bool = True
+    reply_ai_enabled: bool = True
+    extraction_ai_enabled: bool = True
+    discrepancy_ai_enabled: bool = True
+    adr_extraction_ai_enabled: bool = True
+    explanation_ai_enabled: bool = True
 
     # Deepgram
     deepgram_api_key: str = ""
