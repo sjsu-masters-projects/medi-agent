@@ -965,7 +965,29 @@ model does not fix any of those. This task rebuilds the runtime around them.
 - [ ] **WS7 — Medication safety**: a deterministic discrepancy engine over RxNorm
       ingredients and a real ten-question Naranjo score, replacing a severity threshold
       currently mislabelled as a Naranjo pre-screen.
-- [ ] **WS8 — Remove the graph framework** once WS3–WS7 default on.
+- [/] **WS8 — Remove the graph framework.** Measured rather than assumed before starting:
+      only four modules ever imported it, and all four used the identical shape —
+      `StateGraph`, `add_node`, `add_edge`, `compile`. They were linear pipelines, about
+      1,231 lines of ceremony around what is plainly a sequence of awaits. No checkpointer
+      existed and `add_messages` was used on a field nothing read, so nothing was lost by
+      writing the sequences out. Removing it therefore did **not** require the OCR
+      workstream, which is what the original ordering assumed.
+      Triage, symptom and summarization are gone; **document ingestion is the last one**.
+      A note on sequencing rather than a technical blocker: `services/ingestion_service.py`
+      and `agents/ingestion/graph.py` are both being actively edited in another session
+      (420 changed lines between them), and rewiring them mid-edit risks clobbering work
+      that is not mine. It is a two-line change when that settles.
+      **Deleting the triage tests needed a coverage comparison first, and it found two
+      real gaps.** `categorize_llm_failure` was covered *only* by
+      `test_triage_safety_overrides.py`, and the function had already moved to
+      `app/core/llm_failures.py` — deleting that file would have dropped its coverage
+      entirely. And Spanish self-harm reaching the 988 line was asserted nowhere: the
+      runtime tests covered English self-harm and Spanish chest pain, which between them
+      leave that exact combination untested, and it is the one where a missing translation
+      costs the most. Both are now covered before anything was removed.
+      Everything else mapped cleanly onto `tests/unit/safety/test_triage_floor.py` and
+      `tests/unit/adk/test_chat_runtime.py`, which assert the same properties without a
+      runtime behind them.
 - [ ] **WS9–WS10 — Persistent sessions and full-flow testing**, including browser
       end-to-end coverage of the three demo journeys.
 

@@ -7,12 +7,15 @@ without requiring live model calls.
 EXTRACT_CONTENT_SYSTEM = """You are a medical document parser. Extract structured data from clinical documents.
 
 Extract the following information as a JSON object:
-- medications: list of objects with keys: name, dosage, frequency, instructions, route
-- conditions: list of objects with keys: name, clinical_status (default "active"), onset_date (if mentioned)
-- allergies: list of objects with keys: substance, reaction, severity
-- procedures: list of objects with keys: name, date (if mentioned)
-- follow_up_instructions: list of objects with keys: description, timing, provider (if mentioned)
-- appointments: list of objects with keys: description, date, provider
+- medications: list of objects with keys: name, dosage, frequency, instructions, route, evidence
+- conditions: list of objects with keys: name, status (default "active"), notes, evidence
+- allergies: list of objects with keys: allergen, reaction, severity, evidence
+- follow_up_instructions: list of objects with keys: description, frequency, evidence
+
+Every extracted item MUST include an `evidence` array with at least one object:
+`{"page": 1, "excerpt": "exact copied source text", "confidence": 0.0}`.
+The page number and excerpt must come directly from the provided document. Do not infer,
+summarize, or fabricate evidence. Do not include procedures or appointments.
 
 Be precise. Only extract information that is explicitly stated in the document.
 If a field is not mentioned, omit it from the object.

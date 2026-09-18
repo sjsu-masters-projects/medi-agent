@@ -1,5 +1,6 @@
 """Load and stability tests for chat websocket event processing."""
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -7,10 +8,27 @@ from uuid import uuid4
 import pytest
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
-from app.agents.triage.agent import TriageOutput
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
+
+
+@dataclass(frozen=True)
+class TriageOutput:
+    """The turn fields the stream mock reads.
+
+    This was imported from the triage agent, which has been removed. Kept as a local
+    stand-in so these tests describe the websocket contract rather than whichever runtime
+    happens to be producing it.
+    """
+
+    agent_id: str = "test"
+    status: str = "success"
+    intent: str | None = None
+    urgency: str | None = None
+    route: str | None = None
+    response_text: str | None = None
+    escalation_required: bool = False
 
 
 def _make_stream_mock(output: TriageOutput):

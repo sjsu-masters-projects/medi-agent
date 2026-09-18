@@ -1,5 +1,6 @@
 """Integration tests for chat history API and websocket endpoint."""
 
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -9,13 +10,30 @@ from fastapi import status
 from starlette.websockets import WebSocketDisconnect
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
-from app.agents.triage.agent import TriageOutput
 from app.core.exceptions import ValidationError
 from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.followup import SymptomAnalysis
 from app.main import app
 from app.models.auth import CurrentUser
+
+
+@dataclass(frozen=True)
+class TriageOutput:
+    """The turn fields the stream mock reads.
+
+    This was imported from the triage agent, which has been removed. Kept as a local
+    stand-in so these tests describe the websocket contract rather than whichever runtime
+    happens to be producing it.
+    """
+
+    agent_id: str = "test"
+    status: str = "success"
+    intent: str | None = None
+    urgency: str | None = None
+    route: str | None = None
+    response_text: str | None = None
+    escalation_required: bool = False
 
 
 def _make_stream_mock(output: TriageOutput):

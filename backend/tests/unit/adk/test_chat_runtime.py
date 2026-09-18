@@ -266,6 +266,27 @@ async def test_self_harm_is_routed_for_the_crisis_line() -> None:
     assert "988" in _first(events, "complete")["response_text"]
 
 
+@pytest.mark.asyncio
+async def test_spanish_self_harm_also_reaches_the_crisis_line() -> None:
+    """Covered separately from the English case and from the Spanish emergency case.
+
+    Those two between them would leave this exact combination — Spanish *and* self-harm —
+    asserted nowhere, and it is the one where a missing translation costs the most.
+    """
+    events = await _turn(
+        _runtime(must_not_run=True), "quiero quitarme la vida", language=Language.ES.value
+    )
+
+    classification = _first(events, "classification")
+    text = _first(events, "complete")["response_text"]
+
+    assert classification["intent"] == "mental_health"
+    assert classification["urgency"] == "emergency"
+    assert "988" in text
+    assert "911" in text
+    assert "suicidio" in text.lower()
+
+
 # ---------------------------------------------------------------------------
 # Streaming
 # ---------------------------------------------------------------------------
