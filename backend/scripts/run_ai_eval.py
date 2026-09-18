@@ -166,6 +166,16 @@ def _select(scenarios: list[EvalScenario], args: argparse.Namespace) -> list[Eva
 ADC_CREDENTIALS = "ADC"
 
 
+def _error_type(error: BaseException) -> str:
+    """Return a diagnostic that is safe to put in a terminal report or artifact.
+
+    Provider and credential libraries can include request headers, tokens, or prompt
+    fragments in exception text. The evaluation report needs to say that a provider
+    could not run, but it must never persist or print that untrusted text.
+    """
+    return type(error).__name__
+
+
 def _google_adc_bearer() -> Callable[[], str]:
     """Return a callable that yields a current Google access token.
 
@@ -202,7 +212,7 @@ def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], li
             try:
                 providers.append(router.get_text_provider_for_model(name))
             except Exception as error:  # noqa: BLE001 - report and continue
-                unavailable.append(f"{name} ({error})")
+                unavailable.append(f"{name} ({_error_type(error)})")
 
     from app.clients.openai_compatible import OpenAICompatibleTextProvider
 
@@ -214,7 +224,9 @@ def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], li
             try:
                 adc_bearer = adc_bearer or _google_adc_bearer()
             except Exception as error:  # noqa: BLE001 - report and continue
-                unavailable.append(f"{spec.name} (application default credentials: {error})")
+                unavailable.append(
+                    f"{spec.name} (application default credentials: {_error_type(error)})"
+                )
                 continue
             bearer_token = adc_bearer
         else:
@@ -377,9 +389,12 @@ async def _run(args: argparse.Namespace) -> int:
                     # A scorer that tripped must not leave the attempt looking answered.
                     disposition=_disposition_for(trial),
                     output_text=trial.text,
-                    details={"scoring_error": f"{type(error).__name__}: {error}"},
+                    details={"scoring_error": _error_type(error)},
                 )
-                print(f"    scoring failed for {scenario.scenario_id}/{trial.provider}: {error}")
+                print(
+                    "    scoring failed for "
+                    f"{scenario.scenario_id}/{trial.provider}: {_error_type(error)}"
+                )
             scores.append(score)
             marker = "ok " if trial.ok else "ERR"
             print(

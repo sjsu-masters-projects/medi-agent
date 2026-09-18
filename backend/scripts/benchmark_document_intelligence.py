@@ -406,7 +406,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"{report['corpus']['seed']} with {report['corpus']['case_count']} synthetic cases.",
         "",
         "All content is synthetic and fictional. Engines are the locally runnable "
-        "candidates; managed and deep-learning candidates are listed under *Not run*.",
+        + "candidates; managed and deep-learning candidates are listed under *Not run*.",
         "",
         "## Engines",
         "",

@@ -15,6 +15,7 @@ import pytest
 from scripts.run_ai_eval import (
     DEFAULT_SCENARIOS,
     ProviderSpec,
+    _error_type,
     _select,
     parse_args,
     parse_provider_spec,
@@ -41,6 +42,12 @@ def test_provider_spec_parses_with_and_without_a_key() -> None:
         "gemma4", "https://models.test/v1", "gemma-4-26b-a4b-it", "GOOGLE_API_KEY"
     )
     assert without_key.api_key_env is None
+
+
+def test_error_type_does_not_expose_exception_text() -> None:
+    error = RuntimeError("Bearer secret-token and prompt content")
+
+    assert _error_type(error) == "RuntimeError"
 
 
 def test_provider_spec_accepts_an_optional_reasoning_effort() -> None:
