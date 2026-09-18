@@ -9,11 +9,11 @@ from fastapi import status
 from starlette.websockets import WebSocketDisconnect
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
-from app.agents.symptom.agent import SymptomOutput
 from app.agents.triage.agent import TriageOutput
 from app.core.exceptions import ValidationError
 from app.core.security import get_current_user
 from app.db.connection import get_db
+from app.followup import SymptomAnalysis
 from app.main import app
 from app.models.auth import CurrentUser
 
@@ -452,9 +452,9 @@ class TestChatWebSocket:
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
-        # Intent=symptom but route forced to triage so SymptomAgent (unmocked
-        # in this test) is not invoked. The escalation flow only depends on
-        # urgency/escalation_required, not on the symptom branch.
+        # Intent=symptom but the route is forced to triage, so the follow-up worker
+        # (unstubbed in this test) is never reached. The escalation flow depends only on
+        # urgency and escalation_required, not on the symptom branch.
         triage_output = TriageOutput(
             agent_id="triage-test",
             status="success",
@@ -659,17 +659,16 @@ class TestChatWebSocket:
             route="symptom",
         )
 
-        async def _mock_symptom_process(_self, _agent_input):
-            return SymptomOutput(
-                agent_id="symptom-test",
+        async def _mock_symptom_process(**_kwargs):
+            return SymptomAnalysis(
                 status="success",
+                response_text="I logged this urgently for your care team.",
                 symptom_report={
                     "symptom": "dizziness",
                     "severity": 8,
                     "flagged_for_adr": True,
                     "ai_assessment": "Potential medication-related symptom.",
                 },
-                response_text="I logged this urgently for your care team.",
                 follow_up_question="When did this start?",
                 flagged_for_adr=True,
             )
@@ -682,7 +681,7 @@ class TestChatWebSocket:
             "process_stream",
             _make_stream_mock(triage_output),
         )
-        monkeypatch.setattr("app.routers.chat.SymptomAgent.process", _mock_symptom_process)
+        monkeypatch.setattr("app.routers.chat.analyse_symptom", _mock_symptom_process)
         symptom_event_id = str(uuid4())
 
         async def _mock_a2a(_self, patient_id, payload):

@@ -1,4 +1,9 @@
-"""Prompt templates for the Symptom Analysis Agent."""
+"""Prompt templates for symptom follow-up.
+
+Moved verbatim from the symptom agent's package. The wording is deliberately unchanged:
+the evaluation harness scores against these exact strings, so editing one here would move
+a benchmark without anyone deciding to.
+"""
 
 from __future__ import annotations
 
@@ -42,10 +47,15 @@ Latest patient message:
 {_sanitize_text(message)}
 </PATIENT_MESSAGE>
 
+Rate severity from 1 to 10 as the patient describes it, not as you would judge it:
+1-3 mild and not limiting, 4-6 moderate or interfering with daily activity, 7-8 severe
+or frightening, 9-10 worst imaginable or accompanied by a danger sign such as chest
+pain, trouble breathing, dark urine, fainting or swelling of the face or throat.
+
 Return JSON with:
 {{
   "symptom": "string",
-  "severity": 1,
+  "severity": <integer from 1 to 10, chosen with the scale above>,
   "onset": "string | null",
   "duration": "string | null",
   "body_area": "string | null",

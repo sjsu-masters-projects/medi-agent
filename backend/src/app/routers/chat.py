@@ -13,7 +13,6 @@ from starlette import status
 from supabase import Client
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
-from app.agents.symptom import SymptomAgent, SymptomInput
 from app.config import settings
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ValidationError
@@ -21,6 +20,7 @@ from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
 from app.db.connection import get_db
+from app.followup import analyse_symptom
 from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
@@ -405,7 +405,6 @@ async def chat_websocket_endpoint(
     a2a_service = A2ATaskService(db)
     drug_knowledge_service = DrugKnowledgeService(db)
     care_coordinator = CareCoordinatorRuntime()
-    symptom_agent = SymptomAgent()
 
     try:
         history = await service.get_history(str(patient_id), limit=50)
@@ -600,9 +599,10 @@ async def chat_websocket_endpoint(
                         )
                         assistant_start_sent = True
 
-                        # Symptom path needs the SymptomAgent response, not the
-                        # triage response. Abort the LLM stream and fall back to
-                        # buffered triage + symptom orchestration below.
+                        # The symptom route is answered by the follow-up worker below, not
+                        # by the coordinator. Closing the stream here is what keeps the
+                        # patient from watching one reply arrive and then be replaced by
+                        # a different one.
                         if route == "symptom":
                             await stream_iter.aclose()
                             break
@@ -652,16 +652,11 @@ async def chat_websocket_endpoint(
                         "service_unavailable"
                     ]
                 try:
-                    symptom_result = await symptom_agent(
-                        SymptomInput(
-                            user_id=current_user.id,
-                            patient_id=patient_id,
-                            session_id=session_id,
-                            language=incoming.language,
-                            message=incoming.content,
-                            history=conversation_history[-12:],
-                            patient_context=patient_context,
-                        )
+                    symptom_result = await analyse_symptom(
+                        message=incoming.content,
+                        language=incoming.language,
+                        history=conversation_history[-12:],
+                        patient_context=patient_context,
                     )
                     # An emergency has already been answered with reviewed 911 copy by the
                     # deterministic floor, and that answer is not the symptom worker's to
@@ -672,7 +667,11 @@ async def chat_websocket_endpoint(
                     # classifies as `mental_health` and never reaches here. The report is
                     # still captured and the delegation still runs; only the words the
                     # patient reads are protected.
-                    if symptom_result.status == "success" and symptom_result.response_text:
+                    # Keyed on the text rather than on `status`, because a degraded result
+                    # still carries something the patient needs to read: that the symptom
+                    # could not be recorded. Requiring success would swallow exactly the
+                    # message that admits the failure.
+                    if symptom_result.response_text:
                         if assistant_urgency != "emergency":
                             assistant_content = symptom_result.response_text
                         else:

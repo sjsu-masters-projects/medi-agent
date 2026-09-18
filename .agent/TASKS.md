@@ -915,8 +915,30 @@ model does not fix any of those. This task rebuilds the runtime around them.
       safety floor each read one), preserving the websocket event contract exactly.
       Also outstanding for WS8: `services/ai_evaluation.py:36` imports the **private**
       `_deterministic_safety_floor`, `IntentType` and `UrgencyType` from the doomed module.
-- [ ] **WS3–WS4 — Care Coordinator and Follow-up worker**, behind a flag, with the
-      websocket event contract unchanged in both flag states.
+- [/] **WS3–WS4 — Care Coordinator and Follow-up worker.** Both now serve the live
+      websocket turn, and the event contract is unchanged — `chat.py` still emits a
+      classification, its chunks and a completion in the same order, which is what the
+      portal renders and what the integration tests pin.
+      There is **no rollout flag**, on the product owner's challenge that chat is not an
+      optional feature: a runtime toggle is only worth carrying while two runtimes exist,
+      and this work removes the second one. The operational valve is the per-workload kill
+      switches, which route to a deterministic path without needing a second runtime.
+      **The follow-up worker stopped inventing symptoms.** Its rule-based extractor ran
+      whenever the model was unavailable, inferring the symptom from substrings and making
+      up a severity: "worst headache pain today" was recorded as severity 8, and "tengo
+      dolor fuerte en el pecho" — severe chest pain — as `symptom="reported symptom"`,
+      severity 4, unflagged. Unlike the triage cascade, those values did not merely shape a
+      reply: they were written to `symptom_reports`, counted toward the adverse-event
+      signal, and read afterwards by a clinician as the patient's own account. A guess that
+      persists is worse than one that does not, so a failed extraction now writes no report
+      at all and tells the patient so. `registry.py` no longer claims "rule-based symptom
+      extraction" as the deterministic path for that workload.
+      A reply the model could not write is still composed locally, because by that point
+      the fields have been read from the patient's actual words — stating those back
+      asserts nothing that was not extracted.
+      `app/followup/` is framework-free for the same reason `app/safety/` is. The old
+      `agents/symptom/` package is deleted; three modules still import the graph framework
+      (ingestion, summarization, triage).
 - [ ] **WS5 — Document pipeline**: OCR with page and bounding-box anchoring, moved to a
       durable claimed job. The portal's fixed-attempt polling must be fixed *before* OCR
       lands, or the first scanned upload exhausts the poll and looks permanently stuck.

@@ -208,7 +208,13 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         primary=FLASH,
         fallback=GPT_OSS,
         budget_seconds=15.0,
-        deterministic="rule-based symptom extraction",
+        # There used to be a rule-based extractor here, inferring the symptom from
+        # substrings and inventing a severity when the model was unavailable — "worst
+        # headache pain today" became severity 8, and severe chest pain in Spanish became
+        # an unflagged severity 4. Those values were written to `symptom_reports` and read
+        # later by a clinician as the patient's own account. A guess that persists is
+        # worse than one that does not, so nothing is recorded now and the patient is told.
+        deterministic="no symptom report is written and the patient is told so",
         enabled_setting="adr_extraction_ai_enabled",
         max_output_tokens=2048,
         thinking_level="LOW",

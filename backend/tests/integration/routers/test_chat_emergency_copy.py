@@ -34,8 +34,8 @@ from app.adk.agents.care_coordinator import (
 )
 from app.adk.chat_runtime import APP_NAME, CareCoordinatorRuntime
 from app.adk.runner import build_runner
-from app.agents.symptom.agent import SymptomOutput
 from app.db.connection import get_db
+from app.followup import SymptomAnalysis
 from app.main import app
 from app.models.auth import CurrentUser
 
@@ -159,16 +159,15 @@ def _patch_chat_runtime(monkeypatch: pytest.MonkeyPatch, patient_id: Any) -> Non
 def _bland_symptom_worker(monkeypatch: pytest.MonkeyPatch) -> None:
     """A symptom worker that answers safely for a routine symptom and fatally for an emergency."""
 
-    async def _process(_self, _agent_input):
-        return SymptomOutput(
-            agent_id="symptom-test",
+    async def _analyse(**_kwargs):
+        return SymptomAnalysis(
             status="success",
-            symptom_report={"symptom": "chest pain", "severity": 9, "flagged_for_adr": False},
             response_text="Thanks, I logged your symptom for follow-up.",
+            symptom_report={"symptom": "chest pain", "severity": 9, "flagged_for_adr": False},
             flagged_for_adr=False,
         )
 
-    monkeypatch.setattr("app.routers.chat.SymptomAgent.process", _process)
+    monkeypatch.setattr("app.routers.chat.analyse_symptom", _analyse)
 
 
 def _routine_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
