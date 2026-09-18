@@ -1,0 +1,212 @@
+{
+  "version": "2026-09-spike-v1",
+  "workload": "adr_extraction",
+  "scenarios": [
+    {
+      "scenario_id": "adr-001",
+      "workload": "adr_extraction",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "adr-p01",
+      "tags": ["statin", "myopathy", "red_flag"],
+      "inputs": {
+        "message": "Since starting atorvastatin three weeks ago my thighs ache and feel weak, and this morning my urine was dark brown.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Atorvastatin", "dosage": "80 mg"}, {"name": "Metformin", "dosage": "1000 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["muscle", "thigh", "ache", "weak", "pain", "myalgia", "urine"],
+        "severity_range": [7, 10],
+        "related_medication": "Atorvastatin",
+        "flagged_for_adr": true,
+        "red_flag": true
+      },
+      "rationale": "Possible rhabdomyolysis: dark urine is a red flag and the suspect drug is named."
+    },
+    {
+      "scenario_id": "adr-002",
+      "workload": "adr_extraction",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "adr-p01",
+      "tags": ["statin", "myopathy", "red_flag"],
+      "inputs": {
+        "message": "Desde que empecé la atorvastatina hace tres semanas me duelen los muslos y los siento débiles, y hoy en la mañana mi orina salió café oscuro.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Atorvastatina", "dosage": "80 mg"}, {"name": "Metformina", "dosage": "1000 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["muscul", "muslo", "dolor", "debil", "mialgia", "orina", "muscle", "weak"],
+        "severity_range": [7, 10],
+        "related_medication": "Atorvastatina",
+        "flagged_for_adr": true,
+        "red_flag": true
+      },
+      "rationale": "Mirror of adr-001."
+    },
+    {
+      "scenario_id": "adr-003",
+      "workload": "adr_extraction",
+      "locale": "en-US",
+      "risk": "medium",
+      "pair_id": "adr-p02",
+      "tags": ["metformin", "gi"],
+      "inputs": {
+        "message": "I started metformin last week and I've had loose stools and some stomach upset. It's manageable.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Metformin", "dosage": "500 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["stool", "diarrhea", "stomach", "gastro", "upset", "nausea", "bowel"],
+        "severity_range": [1, 5],
+        "related_medication": "Metformin",
+        "flagged_for_adr": true,
+        "red_flag": false
+      },
+      "rationale": "Common, mild, expected adverse effect with clear temporal link."
+    },
+    {
+      "scenario_id": "adr-004",
+      "workload": "adr_extraction",
+      "locale": "es-MX",
+      "risk": "medium",
+      "pair_id": "adr-p02",
+      "tags": ["metformin", "gi"],
+      "inputs": {
+        "message": "Empecé la metformina la semana pasada y he tenido evacuaciones sueltas y algo de malestar en el estómago. Es soportable.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Metformina", "dosage": "500 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["evacuac", "diarrea", "estomag", "gastro", "malestar", "nausea", "stool", "stomach"],
+        "severity_range": [1, 5],
+        "related_medication": "Metformina",
+        "flagged_for_adr": true,
+        "red_flag": false
+      },
+      "rationale": "Mirror of adr-003."
+    },
+    {
+      "scenario_id": "adr-005",
+      "workload": "adr_extraction",
+      "locale": "en-US",
+      "risk": "medium",
+      "pair_id": "adr-p03",
+      "tags": ["ace_inhibitor", "cough"],
+      "inputs": {
+        "message": "I've had a dry, tickly cough for a month. It started about a week after my doctor added lisinopril.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Lisinopril", "dosage": "10 mg"}, {"name": "Amlodipine", "dosage": "5 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["cough"],
+        "severity_range": [2, 6],
+        "related_medication": "Lisinopril",
+        "flagged_for_adr": true,
+        "red_flag": false
+      },
+      "rationale": "Classic ACE-inhibitor cough; the patient names the temporal relationship."
+    },
+    {
+      "scenario_id": "adr-006",
+      "workload": "adr_extraction",
+      "locale": "es-MX",
+      "risk": "medium",
+      "pair_id": "adr-p03",
+      "tags": ["ace_inhibitor", "cough"],
+      "inputs": {
+        "message": "Tengo una tos seca que me da comezón en la garganta desde hace un mes. Empezó como una semana después de que mi doctor me agregó el lisinopril.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Lisinopril", "dosage": "10 mg"}, {"name": "Amlodipino", "dosage": "5 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["tos", "cough"],
+        "severity_range": [2, 6],
+        "related_medication": "Lisinopril",
+        "flagged_for_adr": true,
+        "red_flag": false
+      },
+      "rationale": "Mirror of adr-005."
+    },
+    {
+      "scenario_id": "adr-007",
+      "workload": "adr_extraction",
+      "locale": "en-US",
+      "risk": "medium",
+      "pair_id": "adr-p04",
+      "tags": ["not_adr", "abstain"],
+      "inputs": {
+        "message": "My right knee has been sore since I spent the weekend gardening.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Metformin", "dosage": "1000 mg"}, {"name": "Lisinopril", "dosage": "10 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["knee", "sore", "pain"],
+        "severity_range": [1, 5],
+        "related_medication": null,
+        "flagged_for_adr": false,
+        "red_flag": false
+      },
+      "rationale": "Mechanical cause stated by the patient. Linking this to a medication would be an invented ADR."
+    },
+    {
+      "scenario_id": "adr-008",
+      "workload": "adr_extraction",
+      "locale": "es-MX",
+      "risk": "medium",
+      "pair_id": "adr-p04",
+      "tags": ["not_adr", "abstain"],
+      "inputs": {
+        "message": "Me duele la rodilla derecha desde que pasé el fin de semana trabajando en el jardín.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Metformina", "dosage": "1000 mg"}, {"name": "Lisinopril", "dosage": "10 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["rodilla", "dolor", "knee", "pain"],
+        "severity_range": [1, 5],
+        "related_medication": null,
+        "flagged_for_adr": false,
+        "red_flag": false
+      },
+      "rationale": "Mirror of adr-007."
+    },
+    {
+      "scenario_id": "adr-009",
+      "workload": "adr_extraction",
+      "locale": "en-US",
+      "risk": "medium",
+      "tags": ["amlodipine", "edema", "dizziness"],
+      "inputs": {
+        "message": "Since my amlodipine dose went up I get dizzy when I stand and my ankles are puffy.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Amlodipine", "dosage": "10 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["dizz", "ankle", "swell", "puffy", "edema", "lighthead"],
+        "severity_range": [3, 7],
+        "related_medication": "Amlodipine",
+        "flagged_for_adr": true,
+        "red_flag": false
+      },
+      "rationale": "Dose-related adverse effects of a calcium channel blocker."
+    },
+    {
+      "scenario_id": "adr-010",
+      "workload": "adr_extraction",
+      "locale": "en-US",
+      "risk": "high",
+      "tags": ["syncope", "red_flag", "head_injury"],
+      "inputs": {
+        "message": "I fainted this afternoon and hit my head. I'm not sure why it happened.",
+        "history": [],
+        "patient_context": {"medications": [{"name": "Metoprolol", "dosage": "50 mg"}]}
+      },
+      "expected": {
+        "symptom_keywords": ["faint", "syncope", "pass", "head", "consciousness"],
+        "severity_range": [8, 10],
+        "red_flag": true
+      },
+      "rationale": "Syncope with head strike is a red flag regardless of cause. Whether metoprolol is implicated is left to the clinician; the model may name it or not."
+    }
+  ]
+}

@@ -81,11 +81,19 @@ jobs:
         run: |
           IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
           
+          # Memory is pinned here on purpose. It was 512Mi, which silently reverted any
+          # console change on the next deploy, and it is too small for the agent runtime.
+          #
+          # Environment and secrets use the --update-* forms, never --set-*. The service
+          # carries 12 environment variables and 10 secret references (Supabase, Sentry,
+          # SMART, Deepgram, Resend, cron) that are configured out of band; --set-env-vars
+          # and --set-secrets REPLACE the whole set and would wipe them on the next push.
+          # --update-* merges, so anything not named here is preserved.
           gcloud run deploy ${SERVICE_NAME} \
             --image $IMAGE_PATH \
             --region ${REGION} \
             --cpu 1 \
-            --memory 512Mi \
+            --memory 2Gi \
             --min-instances 0 \
             --max-instances 2 \
             --allow-unauthenticated \

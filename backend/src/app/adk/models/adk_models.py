@@ -34,10 +34,6 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# The same location the Gen AI client and the OpenAI-compatible base URL already use, so
-# one project setting continues to describe both transports rather than two that drift.
-_VERTEX_LOCATION = "global"
-
 
 class BearerLiteLlm(LiteLlm):
     """A LiteLLM model whose bearer token is refreshed on every request.
@@ -87,7 +83,7 @@ def _vertex_genai_client() -> Any:
     return genai.Client(
         vertexai=True,
         project=settings.google_project_id,
-        location=_VERTEX_LOCATION,
+        location=settings.vertex_ai_location,
     )
 
 
@@ -110,7 +106,9 @@ def adk_model_for(
             # id that would otherwise arrive.
             model=litellm_model_id(spec),
             bearer=bearer,
-            api_base=vertex_openapi_base_url(settings.google_project_id, _VERTEX_LOCATION),
+            api_base=vertex_openapi_base_url(
+                settings.google_project_id, settings.vertex_ai_location
+            ),
             # Seeded so the object is coherent on its own; every call replaces it.
             api_key=bearer(),
         )

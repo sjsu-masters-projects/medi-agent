@@ -26,7 +26,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This currently applies migrations `001` through `029`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, and clinician review reads (`021`–`028`), and safe external-record reconciliation (`029`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
+This currently applies migrations `001` through `036`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, clinician review reads (`021`–`028`), safe external-record reconciliation (`029`), guarded document ingestion (`034`), model-invocation telemetry (`035`), and the durable document-ingestion worker boundary (`036`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
 
 ## Configure SMART staging
 
@@ -70,6 +70,19 @@ The script only reports rows created by the old document-derived canonical path.
 deletes or rewrites records. A separately reviewed, explicitly authorized staging repair
 is required before attaching those rows to legacy provenance or changing their status.
 
+Migration `034_document_ingestion_safety.sql` adds `needs_ocr` and
+`needs_evidence_review` document states. Its `claim_document_ingestion` RPC is
+service-role-only: it locks one document, creates one ingestion run, and caps the
+initial attempt plus clinician-requested retries at three total attempts. Do not expose
+this RPC to browser roles. Provider diagnostics remain on the service-role run record;
+clinician responses expose only stable failure codes and retry state.
+
+Migration `035_model_invocation_telemetry.sql` records operational model metadata only;
+it stores no patient identifier, prompt, or model response. Migration
+`036_document_ingestion_worker.sql` adds the service-role-only batch claim RPC and the
+care-team-authorized retry RPC used by the Cloud Run Job. The migration ledger, not an
+individual SQL file, records applied filenames and checksums.
+
 ## Verification checklist
 
 - [ ] Every committed migration is recorded with its exact filename and SHA-256 checksum in `public.schema_migrations`.
@@ -82,5 +95,7 @@ is required before attaching those rows to legacy provenance or changing their s
 - [ ] Cloud Run staging callback is HTTPS and registered with the SMART sandbox.
 - [ ] A sandbox import creates raw resource envelopes and pending facts only.
 - [ ] A clinician can inspect lineage, confirm an external-patient binding, and reconcile selected medication, condition, or allergy fields without altering demographics.
+- [ ] A synthetic text PDF produces only page-cited pending candidates; a scanned/image upload reaches `needs_ocr` without a model call or candidate.
+- [ ] An assigned clinician can retry a retryable failed document, while a concurrent retry and a fourth total attempt are denied.
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.

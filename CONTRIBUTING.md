@@ -43,7 +43,7 @@ Validate:
 | Variable | Purpose |
 |----------|---------|
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` | Supabase DB, Auth, RLS |
-| `GOOGLE_API_KEY` | Gemini / AI Studio paths |
+| `GOOGLE_PROJECT_ID` | Vertex AI model and embedding paths |
 | `GOOGLE_PROJECT_ID` | Vertex AI when using project-backed models |
 | `VERTEX_AI_*` | MedGemma / Vertex endpoints |
 | `DEEPGRAM_API_KEY` | Voice STT/TTS |

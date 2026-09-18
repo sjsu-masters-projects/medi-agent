@@ -80,17 +80,28 @@ async def _run_trial(provider: TextProvider, request: GenerationRequest) -> Prov
 async def compare_text_providers(
     request: GenerationRequest,
     providers: Sequence[TextProvider],
+    *,
+    sequential: bool = False,
 ) -> ProviderComparison:
     """Ask every provider the same question and return all the answers.
 
-    Providers run concurrently. Sequentially would make each one's latency depend on
-    how slow the previous one was, which is exactly the measurement being taken; these
-    are independent backends, so overlapping them does not distort it.
+    Providers run concurrently by default, which is right when the backends really are
+    independent: each one's latency then does not depend on how slow the previous one was.
+
+    Pass `sequential=True` when they are not independent. Every model in the September
+    comparison was served from one Google project, so firing eight at once made them
+    compete for the very capacity being measured, and a large share of the rate limits
+    recorded as provider unreliability were caused by the harness itself.
     """
     if not providers:
         raise ValueError("At least one provider is required for a comparison")
 
-    trials = await asyncio.gather(*(_run_trial(provider, request) for provider in providers))
+    if sequential:
+        trials = [await _run_trial(provider, request) for provider in providers]
+    else:
+        trials = list(
+            await asyncio.gather(*(_run_trial(provider, request) for provider in providers))
+        )
     return ProviderComparison(
         task=request.task,
         prompt_digest=_digest(request.prompt),

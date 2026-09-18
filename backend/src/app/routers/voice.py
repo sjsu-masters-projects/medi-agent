@@ -14,7 +14,7 @@ from app.clients.deepgram_client import transcribe_audio_bytes_async
 from app.config import settings
 from app.core.exceptions import ValidationError
 from app.models.enums import Language, coerce_locale
-from app.routers.chat import _authenticate_ws_patient
+from app.routers.chat import _authenticate_ws_patient, negotiated_subprotocol
 from app.services.voice_service import VoiceService, VoiceStreamTranscript
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ async def voice_websocket_endpoint(
             reason=str(exc),
         ) from None
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=negotiated_subprotocol(websocket))
     service = VoiceService()
     await websocket.send_json(
         {

@@ -10,7 +10,7 @@ Extract the following information as a JSON object:
 - medications: list of objects with keys: name, dosage, frequency, instructions, route, evidence
 - conditions: list of objects with keys: name, status (default "active"), notes, evidence
 - allergies: list of objects with keys: allergen, reaction, severity, evidence
-- follow_up_instructions: list of objects with keys: description, frequency, evidence
+- obligations: list of objects with keys: description, frequency, obligation_type, evidence
 
 Every extracted item MUST include an `evidence` array with at least one object:
 `{"page": 1, "excerpt": "exact copied source text", "confidence": 0.0}`.

@@ -1,23 +1,41 @@
-"""Ingestion service — orchestrates document ingestion via LangGraph."""
+"""Durable, candidate-only document ingestion.
+
+The request path only records a pending document. A worker claims that row and
+uses deterministic document intelligence before a model sees any text. Clinical
+candidates are created only through the grounding service, which requires page
+text and coordinates for the extracted value.
+"""
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
+from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
-from app.agents.ingestion.graph import IngestionState, create_ingestion_graph
-from app.core.exceptions import DocumentParseError
-from app.models.clinical_fact import (
-    ClinicalFactCreate,
-    EvidenceCitationCreate,
-    SourceArtifactType,
-    SourceProvenanceCreate,
+from app.agents.ingestion.prompts import (
+    EXTRACT_CONTENT_SYSTEM,
+    EXTRACT_CONTENT_USER,
+    GENERATE_SUMMARY_SYSTEM,
+    GENERATE_SUMMARY_USER,
 )
-from app.services.clinical_fact_service import ClinicalFactService
+from app.clients.model_router import TaskType, get_router
+from app.core.exceptions import DocumentParseError
+from app.models.document_extraction import DocumentExtractionResult
+from app.services.document_intelligence.grounding import (
+    DocumentEvidenceCandidateService,
+    items_from_extraction_result,
+)
+from app.services.document_intelligence.models import (
+    DocumentExtraction,
+    ExtractionMethod,
+    ExtractionRoute,
+)
+from app.services.document_intelligence.pipeline import DocumentIntelligenceService
 
 logger = logging.getLogger(__name__)
 
@@ -25,257 +43,250 @@ MAX_PARSE_ATTEMPTS = 3
 
 
 class IngestionService:
-    """Runs the ingestion pipeline for a document."""
+    """Process one claimed document outside the API request lifecycle."""
 
-    def __init__(self, db: Client) -> None:
+    def __init__(
+        self,
+        db: Client,
+        *,
+        intelligence: DocumentIntelligenceService | None = None,
+    ) -> None:
         self.db = db
-        self._graph = create_ingestion_graph()
+        self._intelligence = intelligence or DocumentIntelligenceService()
 
     async def ingest_document(
         self,
         document_id: UUID,
         patient_id: UUID,
-        file_path: str,
-        document_type: str,
+        file_path: str | None = None,
+        document_type: str | None = None,
+        *,
+        actor_id: UUID | None = None,
+        is_retry: bool = False,
+        claim: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Run the full ingestion pipeline for a document."""
-        attempts = self._get_parse_attempts(document_id)
-        if attempts >= MAX_PARSE_ATTEMPTS:
-            message = f"Maximum parse attempts ({MAX_PARSE_ATTEMPTS}) exceeded"
-            self._update_document_status(
-                document_id,
-                parse_status="failed",
-                parse_error=message,
-                parsed=False,
-            )
-            raise DocumentParseError(str(document_id), message)
+        """Claim (when needed), process, and record one terminal ingestion result."""
+        claim = claim or self._claim(document_id, patient_id, actor_id=actor_id, is_retry=is_retry)
+        run_id = str(claim["run_id"])
+        attempt = int(claim["attempt"])
+        file_path = str(claim.get("file_path") or file_path or "")
+        mime_type = str(claim.get("mime_type") or "application/octet-stream")
+        source_hash = claim.get("content_hash")
 
-        self._update_document_status(
-            document_id,
-            parse_status="processing",
-            parse_error=None,
-            parsed=False,
-            parse_attempts=attempts + 1,
-        )
-        source_hash = self._document_content_hash(document_id)
         if source_hash and self._has_completed_source_hash(
-            patient_id=patient_id, source_hash=source_hash
+            patient_id=patient_id, source_hash=str(source_hash)
         ):
-            run_id = self._start_run(
-                document_id=document_id,
-                patient_id=patient_id,
-                attempt=attempts + 1,
-                source_hash=source_hash,
-                status="duplicate",
-            )
-            self._finish_run(run_id, status="duplicate")
-            self._update_document_status(
-                document_id,
-                parse_status="completed",
-                parse_error=None,
-                parsed=True,
-            )
-            return {
-                "status": "duplicate",
-                "medications_created": 0,
-                "conditions_created": 0,
-                "allergies_created": 0,
-                "obligations_created": 0,
-                "candidate_facts_created": 0,
-                "summary_length": 0,
-            }
-        ingestion_run_id = self._start_run(
-            document_id=document_id,
-            patient_id=patient_id,
-            attempt=attempts + 1,
-            source_hash=source_hash,
-        )
+            self._finish(run_id, status="duplicate")
+            self._set_document(document_id, parse_status="completed", parsed=True)
+            return self._outcome("duplicate")
 
-        initial_state: IngestionState = {
-            "document_id": str(document_id),
-            "file_url": file_path,
-            "document_type": document_type,
-            "patient_id": str(patient_id),
-            "raw_content": None,
-            "extracted_data": None,
-            "validated_data": None,
-            "validation_errors": None,
-            "normalized_medications": None,
-            "saved_ids": None,
-            "patient_summary": None,
-            "created_tasks": None,
-            "error": None,
-            "retry_count": attempts,
-            "messages": [],
-        }
-
-        final_state = cast(IngestionState, await self._graph.ainvoke(initial_state))
-        if final_state.get("error"):
-            error = str(final_state["error"])
-            self._update_document_status(
+        try:
+            content = self.db.storage.from_("documents").download(file_path)
+            extraction = self._intelligence.extract(
+                content, mime_type=mime_type, file_name=str(claim.get("file_name") or "")
+            )
+        except Exception as exc:  # noqa: BLE001 - details stay server-side
+            logger.exception("Could not read document %s", document_id)
+            return self._finish_failed(
                 document_id,
-                parse_status="failed",
-                parse_error=error,
+                run_id,
+                attempt,
+                detail=str(exc),
+                warnings=[],
+                page_count=0,
+                text_chars=0,
+                extraction_method=None,
+            )
+
+        warnings = self._warnings(extraction)
+        page_count = extraction.page_count
+        model_text = extraction.text_for_model()
+        text_chars = len(model_text)
+        method = self._extraction_method(extraction)
+
+        terminal_status = self._route_terminal_status(extraction)
+        if terminal_status is not None:
+            failure_code = "needs_ocr" if terminal_status == "needs_ocr" else "source_unreadable"
+            if terminal_status == "needs_evidence_review":
+                failure_code = "evidence_not_grounded"
+            self._set_document(
+                document_id,
+                parse_status=terminal_status,
+                parse_failure_code=failure_code,
                 parsed=False,
             )
-            self._finish_run(ingestion_run_id, status="failed", error=error)
-            latest_attempts = attempts + 1
-            if latest_attempts >= MAX_PARSE_ATTEMPTS:
-                raise DocumentParseError(str(document_id), error)
-            return {
-                "status": "failed",
-                "medications_created": 0,
-                "obligations_created": 0,
-                "summary_length": 0,
-                "error": error,
-            }
+            self._finish(
+                run_id,
+                status=terminal_status,
+                failure_code=failure_code,
+                warnings=warnings,
+                page_count=page_count,
+                text_chars=text_chars,
+                extraction_method=method,
+            )
+            return self._outcome(terminal_status, error_code=failure_code)
 
-        validated_data = final_state.get("validated_data") or {}
-        extracted_data = final_state.get("extracted_data") or {}
-        normalized_medications = final_state.get("normalized_medications") or []
+        try:
+            extraction_result, model_version = await self._extract_structured(model_text)
+        except Exception as exc:  # noqa: BLE001 - classified before becoming client-visible
+            logger.exception("Document model extraction failed for %s", document_id)
+            return self._finish_failed(
+                document_id,
+                run_id,
+                attempt,
+                detail=str(exc),
+                warnings=warnings,
+                page_count=page_count,
+                text_chars=text_chars,
+                extraction_method=method,
+            )
 
-        candidate_count = self._register_candidates(
-            document_id=document_id,
-            patient_id=patient_id,
-            normalized_medications=normalized_medications,
-            conditions=validated_data.get("conditions", []),
-            allergies=validated_data.get("allergies", []),
-            follow_up_instructions=extracted_data.get("follow_up_instructions", []),
-        )
+        items = items_from_extraction_result(extraction_result)
+        try:
+            registered = DocumentEvidenceCandidateService(self.db).register(
+                patient_id=patient_id,
+                actor_id=self._document_actor(document_id, patient_id),
+                document_id=document_id,
+                extraction=extraction,
+                items=items,
+                model_version=model_version,
+            )
+        except Exception as exc:  # noqa: BLE001 - do not strand a claimed row in processing
+            logger.exception("Could not register document candidates for %s", document_id)
+            return self._finish_failed(
+                document_id,
+                run_id,
+                attempt,
+                detail=str(exc),
+                warnings=warnings,
+                page_count=page_count,
+                text_chars=text_chars,
+                extraction_method=method,
+            )
+        if items and not registered.created:
+            warnings.append("No proposed value had a verifiable source anchor.")
+            self._set_document(
+                document_id,
+                parse_status="needs_evidence_review",
+                parse_failure_code="evidence_not_grounded",
+                parsed=False,
+            )
+            self._finish(
+                run_id,
+                status="needs_evidence_review",
+                failure_code="evidence_not_grounded",
+                warnings=warnings,
+                page_count=page_count,
+                text_chars=text_chars,
+                extraction_method=method,
+            )
+            return self._outcome("needs_evidence_review", error_code="evidence_not_grounded")
 
-        summary = str(final_state.get("patient_summary") or "")
-        self._update_document_status(
+        summary = await self._optional_summary(extraction_result)
+        if summary is None:
+            warnings.append("Optional patient summary was unavailable.")
+        self._set_document(
             document_id,
             parse_status="completed",
-            parse_error=None,
             parsed=True,
-            ai_summary=summary or None,
+            ai_summary=summary,
         )
-        self._finish_run(ingestion_run_id, status="completed", candidate_fact_count=candidate_count)
+        self._finish(
+            run_id,
+            status="completed",
+            candidate_fact_count=registered.created,
+            warnings=warnings,
+            page_count=page_count,
+            text_chars=text_chars,
+            extraction_method=method,
+        )
+        return self._outcome(
+            "completed",
+            candidate_count=registered.created,
+            summary_length=len(summary or ""),
+        )
 
-        return {
-            "status": "completed",
-            "medications_created": 0,
-            "conditions_created": 0,
-            "allergies_created": 0,
-            "obligations_created": 0,
-            "candidate_facts_created": candidate_count,
-            "summary_length": len(summary),
-        }
+    async def _extract_structured(
+        self, model_text: str
+    ) -> tuple[DocumentExtractionResult, str | None]:
+        response, telemetry = await get_router().generate_text_with_telemetry(
+            TaskType.DOCUMENT_PARSING,
+            prompt=EXTRACT_CONTENT_USER.format(raw_content=model_text),
+            system_instruction=EXTRACT_CONTENT_SYSTEM,
+            temperature=0.1,
+            max_tokens=2048,
+        )
+        return DocumentExtractionResult.model_validate(self._parse_json(response)), telemetry.model
 
-    def _get_parse_attempts(self, document_id: UUID) -> int:
-        """Read the current parse attempt count for a document."""
+    async def _optional_summary(self, extraction: DocumentExtractionResult) -> str | None:
+        try:
+            return await get_router().generate_text(
+                TaskType.PATIENT_EXPLANATION,
+                prompt=GENERATE_SUMMARY_USER.format(
+                    medications=json.dumps(
+                        [item.model_dump(exclude={"evidence"}) for item in extraction.medications]
+                    ),
+                    conditions=json.dumps(
+                        [item.model_dump(exclude={"evidence"}) for item in extraction.conditions]
+                    ),
+                    follow_up_instructions=json.dumps(
+                        [item.model_dump(exclude={"evidence"}) for item in extraction.obligations]
+                    ),
+                ),
+                system_instruction=GENERATE_SUMMARY_SYSTEM,
+                temperature=0.3,
+                max_tokens=512,
+            )
+        except Exception as exc:  # noqa: BLE001 - summary is never a safety boundary
+            logger.warning("Optional document summary failed: %s", type(exc).__name__)
+            return None
+
+    def _claim(
+        self, document_id: UUID, patient_id: UUID, *, actor_id: UUID | None, is_retry: bool
+    ) -> dict[str, Any]:
+        result = self.db.rpc(
+            "claim_document_ingestion",
+            {
+                "p_document_id": str(document_id),
+                "p_patient_id": str(patient_id),
+                "p_actor_id": str(actor_id) if actor_id else None,
+                "p_is_retry": is_retry,
+            },
+        ).execute()
+        data = cast(dict[str, Any], result.data or {})
+        if not data.get("run_id"):
+            raise DocumentParseError(str(document_id), "Could not claim document ingestion")
+        return data
+
+    def _document_actor(self, document_id: UUID, patient_id: UUID) -> UUID:
         result = (
             self.db.table("documents")
-            .select("parse_attempts")
+            .select("uploaded_by")
             .eq("id", str(document_id))
             .single()
             .execute()
         )
-        data = cast(dict[str, Any], result.data or {})
-        return int(data.get("parse_attempts") or 0)
+        row = cast(dict[str, Any], result.data or {})
+        return UUID(str(row.get("uploaded_by") or patient_id))
 
-    def _update_document_status(
+    def _set_document(
         self,
         document_id: UUID,
         *,
         parse_status: str,
-        parse_error: str | None = None,
-        parsed: bool | None = None,
+        parse_failure_code: str | None = None,
+        parsed: bool,
         ai_summary: str | None = None,
-        parse_attempts: int | None = None,
     ) -> None:
-        """Update document parsing status in DB."""
         payload: dict[str, Any] = {
             "parse_status": parse_status,
-            "parse_error": parse_error,
+            "parse_error": None,
+            "parse_failure_code": parse_failure_code,
+            "parsed": parsed,
         }
-        if parsed is not None:
-            payload["parsed"] = parsed
         if ai_summary is not None:
             payload["ai_summary"] = ai_summary
-        if parse_attempts is not None:
-            payload["parse_attempts"] = parse_attempts
-
         self.db.table("documents").update(payload).eq("id", str(document_id)).execute()
-
-    def _register_candidates(
-        self,
-        *,
-        document_id: UUID,
-        patient_id: UUID,
-        normalized_medications: list[dict[str, Any]],
-        conditions: list[dict[str, Any]],
-        allergies: list[dict[str, Any]],
-        follow_up_instructions: list[dict[str, Any]],
-    ) -> int:
-        """Save extraction output only as pending, source-cited candidates."""
-        document = cast(
-            dict[str, Any],
-            self.db.table("documents")
-            .select("uploaded_by, file_name")
-            .eq("id", str(document_id))
-            .single()
-            .execute()
-            .data
-            or {},
-        )
-        actor_id = UUID(str(document.get("uploaded_by") or patient_id))
-        rows = (
-            ("medication", normalized_medications),
-            ("condition", conditions),
-            ("allergy", allergies),
-            ("obligation", follow_up_instructions),
-        )
-        facts = ClinicalFactService(self.db)
-        created = 0
-        for fact_type, values in rows:
-            for index, value in enumerate(values):
-                if not isinstance(value, dict) or not value:
-                    continue
-                facts.create_candidate(
-                    ClinicalFactCreate(
-                        patient_id=patient_id,
-                        fact_type=fact_type,
-                        subject_type=fact_type,
-                        value=value,
-                        uncertainty=[
-                            "Document extraction requires clinician review before clinical use."
-                        ],
-                        external_source_key=f"document/{document_id}/{fact_type}/{index}",
-                        external_source_version=str(document_id),
-                        provenance=SourceProvenanceCreate(
-                            artifact_type=SourceArtifactType.DOCUMENT,
-                            source_system="document_ingestion",
-                            source_reference=f"document:{document_id}",
-                            document_id=document_id,
-                            document_location={"scope": "document", "index": index},
-                            extractor_version="ingestion-graph/1",
-                        ),
-                        citations=[
-                            EvidenceCitationCreate(
-                                excerpt=f"Extracted {fact_type} candidate from "
-                                f"{document.get('file_name') or 'clinical document'}.",
-                                location={"scope": "document", "index": index},
-                            )
-                        ],
-                    ),
-                    actor_id=actor_id,
-                )
-                created += 1
-        return created
-
-    def _document_content_hash(self, document_id: UUID) -> str | None:
-        result = (
-            self.db.table("documents")
-            .select("content_hash")
-            .eq("id", str(document_id))
-            .single()
-            .execute()
-        )
-        data = cast(dict[str, Any], result.data or {})
-        source_hash = data.get("content_hash")
-        return source_hash if isinstance(source_hash, str) and source_hash else None
 
     def _has_completed_source_hash(self, *, patient_id: UUID, source_hash: str) -> bool:
         result = (
@@ -288,47 +299,131 @@ class IngestionService:
         )
         return bool(result.data)
 
-    def _start_run(
-        self,
-        *,
-        document_id: UUID,
-        patient_id: UUID,
-        attempt: int,
-        source_hash: str | None = None,
-        status: str = "processing",
-    ) -> str:
-        result = (
-            self.db.table("document_ingestion_runs")
-            .insert(
-                {
-                    "document_id": str(document_id),
-                    "patient_id": str(patient_id),
-                    "status": status,
-                    "attempt": attempt,
-                    "source_hash": source_hash,
-                    "extractor_version": "ingestion-graph/1",
-                }
-            )
-            .execute()
-        )
-        rows = cast(list[dict[str, Any]], result.data or [])
-        if not rows:
-            raise DocumentParseError(str(document_id), "Could not create ingestion run")
-        return str(rows[0]["id"])
-
-    def _finish_run(
+    def _finish(
         self,
         run_id: str,
         *,
         status: str,
         candidate_fact_count: int = 0,
+        failure_code: str | None = None,
         error: str | None = None,
+        warnings: list[str] | None = None,
+        page_count: int = 0,
+        text_chars: int = 0,
+        extraction_method: str | None = None,
     ) -> None:
         self.db.table("document_ingestion_runs").update(
             {
                 "status": status,
                 "candidate_fact_count": candidate_fact_count,
+                "failure_code": failure_code,
                 "error_message": error,
+                "warnings": warnings or [],
+                "page_count": page_count,
+                "extracted_text_char_count": text_chars,
+                "extraction_method": extraction_method,
                 "completed_at": datetime.now(UTC).isoformat(),
             }
         ).eq("id", run_id).execute()
+
+    def _finish_failed(
+        self,
+        document_id: UUID,
+        run_id: str,
+        attempt: int,
+        *,
+        detail: str,
+        warnings: list[str],
+        page_count: int,
+        text_chars: int,
+        extraction_method: str | None,
+    ) -> dict[str, Any]:
+        code = self._failure_code(detail, attempt)
+        self._set_document(
+            document_id, parse_status="failed", parse_failure_code=code, parsed=False
+        )
+        self._finish(
+            run_id,
+            status="failed",
+            failure_code=code,
+            error=detail,
+            warnings=warnings,
+            page_count=page_count,
+            text_chars=text_chars,
+            extraction_method=extraction_method,
+        )
+        return self._outcome("failed", error_code=code)
+
+    @staticmethod
+    def _parse_json(response: str) -> dict[str, Any]:
+        candidate = response.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        payload = json.loads(candidate)
+        if not isinstance(payload, dict):
+            raise ValueError("Document extractor response must be a JSON object")
+        return payload
+
+    @staticmethod
+    def _warnings(extraction: DocumentExtraction) -> list[str]:
+        return [
+            *extraction.warnings,
+            *(warning for page in extraction.pages for warning in page.warnings),
+        ]
+
+    @staticmethod
+    def _extraction_method(extraction: DocumentExtraction) -> str | None:
+        methods = {
+            page.method for page in extraction.pages if page.method is not ExtractionMethod.NONE
+        }
+        if not methods:
+            return None
+        if len(methods) == 1:
+            return next(iter(methods)).value
+        return "mixed"
+
+    @staticmethod
+    def _route_terminal_status(extraction: DocumentExtraction) -> str | None:
+        if (
+            extraction.route
+            in (
+                ExtractionRoute.AUTOMATED_CANDIDATES,
+                ExtractionRoute.REVIEW_WITH_CAUTION,
+            )
+            and extraction.text_for_model()
+        ):
+            return None
+        if extraction.route is ExtractionRoute.CLINICIAN_ONLY:
+            return "needs_ocr"
+        if extraction.route is ExtractionRoute.REJECTED:
+            return "failed"
+        return "needs_evidence_review"
+
+    @staticmethod
+    def _failure_code(detail: str, attempt: int) -> str:
+        if attempt >= MAX_PARSE_ATTEMPTS:
+            return "attempt_limit_reached"
+        if isinstance(detail, PydanticValidationError) or "json" in detail.lower():
+            return "invalid_model_response"
+        if any(word in detail.lower() for word in ("pdf", "decode", "read", "source")):
+            return "source_unreadable"
+        return "provider_unavailable"
+
+    @staticmethod
+    def _outcome(
+        status: str,
+        *,
+        candidate_count: int = 0,
+        summary_length: int = 0,
+        error_code: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "status": status,
+            "candidate_facts_created": candidate_count,
+            "medications_created": 0,
+            "conditions_created": 0,
+            "allergies_created": 0,
+            "obligations_created": 0,
+            "summary_length": summary_length,
+            "error_code": error_code,
+        }

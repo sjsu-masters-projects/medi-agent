@@ -5,12 +5,9 @@ speaks the OpenAI dialect but authenticates with a Google bearer token. That com
 is why this goes through `OpenAICompatibleTextProvider` with an ADC token callable rather
 than through the Gen AI SDK, which does not front these models.
 
-Verified live on 2026-09-17 against `openai/gpt-oss-120b-maas`: both the global and the
-regional endpoint form answer correctly. The global form is used here because it is the
-form the run behind our routing decision used, it answers most consistently (0.34-0.46 s
-against 0.56-10.18 s regional over alternating probes, the outlier being a cold start),
-and it matches the `location=global` the Gemini client already uses — so one project
-setting describes both transports instead of two that can drift apart.
+Both the global and regional forms are supported, but the production transport uses the
+single `VERTEX_AI_LOCATION` setting. That makes the endpoint selected in Cloud Run
+auditable and prevents the Gen AI and MaaS paths from silently serving different regions.
 """
 
 from __future__ import annotations
@@ -90,7 +87,7 @@ def build_maas_provider(
     timeout_seconds: float = 90.0,
     max_retries: int = 2,
     reasoning_effort: str | None = _DEFAULT_REASONING_EFFORT,
-    location: str = "global",
+    location: str | None = None,
     bearer_token: Callable[[], str] | None = None,
 ) -> OpenAICompatibleTextProvider:
     """Build a text provider for a managed open-weight model on Vertex.
@@ -107,10 +104,14 @@ def build_maas_provider(
             "OpenAI-compatible surface"
         )
 
+    # Resolve at construction rather than at import time so tests and long-lived workers
+    # observe the same configured endpoint as the Cloud Run revision that created them.
+    resolved_location = location or settings.vertex_ai_location
+
     return OpenAICompatibleTextProvider(
         name=spec.key,
         model=spec.model_id,
-        base_url=vertex_openapi_base_url(settings.google_project_id, location),
+        base_url=vertex_openapi_base_url(settings.google_project_id, resolved_location),
         timeout_seconds=timeout_seconds,
         native_structured_output=True,
         reasoning_effort=reasoning_effort,

@@ -167,9 +167,14 @@ export interface ChatWebSocketOptions {
     sessionId?: string | null;
 }
 
+/**
+ * Build the chat socket URL. The access token is deliberately not a parameter here:
+ * it travels as a subprotocol (see `socketAuthProtocols`), because a URL is logged by the
+ * server and a session token in the access log is a credential anyone with log access can
+ * reuse.
+ */
 export function buildChatWebSocketUrl(
     patientId: string,
-    token: string,
     options: ChatWebSocketOptions = {},
 ): string {
     const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -177,7 +182,6 @@ export function buildChatWebSocketUrl(
     parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
     parsed.pathname = `/ws/chat/${patientId}`;
     parsed.search = "";
-    parsed.searchParams.set("token", token);
 
     const documentId = options.documentId?.trim();
     if (documentId) {

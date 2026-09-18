@@ -26,6 +26,7 @@ from app.config import settings
 @pytest.fixture(autouse=True)
 def project(monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setattr(settings, "google_project_id", "test-project")
+    monkeypatch.setattr(settings, "vertex_ai_location", "us-central1")
     return "test-project"
 
 
@@ -84,7 +85,7 @@ def test_gemini_is_built_against_vertex_explicitly() -> None:
     assert model.model == "gemini-3.8-flash"
     assert constructor.call_args.kwargs["vertexai"] is True
     assert constructor.call_args.kwargs["project"] == "test-project"
-    assert constructor.call_args.kwargs["location"] == "global"
+    assert constructor.call_args.kwargs["location"] == "us-central1"
 
 
 def test_the_explicit_client_is_the_one_the_model_uses() -> None:
@@ -130,8 +131,8 @@ def test_the_managed_model_targets_the_openai_compatible_endpoint() -> None:
     model = adk_model_for(GPT_OSS, bearer_token=_bearer)
 
     assert model._additional_args["api_base"] == (
-        "https://aiplatform.googleapis.com"
-        "/v1/projects/test-project/locations/global/endpoints/openapi"
+        "https://us-central1-aiplatform.googleapis.com"
+        "/v1/projects/test-project/locations/us-central1/endpoints/openapi"
     )
 
 

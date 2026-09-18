@@ -38,7 +38,7 @@ class ClinicianDocumentWorkflowService:
         docs = await self._execute(
             self.db.table("documents")
             .select(
-                "id, file_name, document_type, parse_status, ai_summary, "
+                "id, file_name, document_type, parse_status, parse_failure_code, parse_attempts, ai_summary, "
                 "created_at, uploaded_by_role, clinician_annotation, "
                 "review_status, reviewed_by, reviewed_at, review_note"
             )
@@ -70,7 +70,7 @@ class ClinicianDocumentWorkflowService:
         docs = await self._execute(
             self.db.table("documents")
             .select(
-                "id, patient_id, file_name, document_type, parse_status, ai_summary, "
+                "id, patient_id, file_name, document_type, parse_status, parse_failure_code, parse_attempts, ai_summary, "
                 "source_clinic, created_at, uploaded_by_role, review_status"
             )
             .in_("patient_id", patient_id_values)

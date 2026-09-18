@@ -180,6 +180,8 @@ interface PatientDeepDiveResponse
         file_name: string;
         document_type: DocumentType;
         parse_status: string;
+        parse_failure_code?: string;
+        parse_attempts?: number;
         ai_summary?: string;
         created_at: string;
         uploaded_by_role: UploaderRole;
@@ -204,6 +206,8 @@ interface DocumentReviewQueueItemResponse {
     file_name: string;
     document_type: DocumentType;
     parse_status: string;
+    parse_failure_code?: string;
+    parse_attempts?: number;
     ai_summary?: string;
     source_clinic?: string;
     created_at: string;
@@ -354,6 +358,8 @@ function normalizePatientDocument(
         fileName: document.file_name,
         documentType: document.document_type,
         parseStatus: document.parse_status,
+        parseFailureCode: document.parse_failure_code,
+        parseAttempts: document.parse_attempts,
         aiSummary: document.ai_summary,
         createdAt: document.created_at,
         uploadedByRole: document.uploaded_by_role,
@@ -377,6 +383,8 @@ function normalizeDocumentReviewQueueItem(
         fileName: item.file_name,
         documentType: item.document_type,
         parseStatus: item.parse_status,
+        parseFailureCode: item.parse_failure_code,
+        parseAttempts: item.parse_attempts,
         aiSummary: item.ai_summary,
         sourceClinic: item.source_clinic,
         createdAt: item.created_at,
@@ -467,6 +475,17 @@ export async function rejectDocumentReview(
             body: JSON.stringify({ review_note: reviewNote ?? null }),
         },
     );
+}
+
+export async function retryClinicianDocumentIngestion(
+    patientId: string,
+    documentId: string,
+): Promise<ClinicianPatientDocument> {
+    const document = await apiFetch<PatientDeepDiveResponse["documents"][number]>(
+        `/api/v1/documents/patients/${patientId}/${documentId}/ingestion/retry`,
+        { method: "POST" },
+    );
+    return normalizePatientDocument(document);
 }
 
 /** Trigger Summarization Agent to generate a SOAP note. */

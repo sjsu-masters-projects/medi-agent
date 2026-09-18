@@ -954,9 +954,14 @@ model does not fix any of those. This task rebuilds the runtime around them.
       have been measured for this model on this task, so it keeps the configured Pro model
       it has always used. Adding a routed workload here should follow a measurement rather
       than precede one — recorded so the omission is a decision and not an oversight.
-- [ ] **WS5 — Document pipeline**: OCR with page and bounding-box anchoring, moved to a
-      durable claimed job. The portal's fixed-attempt polling must be fixed *before* OCR
-      lands, or the first scanned upload exhausts the poll and looks permanently stuck.
+- [/] **WS5 — Document pipeline**: wired the deterministic OCR/page/bounding-box extractor
+      into the live candidate path; candidate creation now rejects values whose primary
+      anchor is absent, direct JSON extraction import is disabled, and upload requests only
+      queue a document. Migration `036_document_ingestion_worker.sql` atomically claims a
+      bounded batch with `FOR UPDATE SKIP LOCKED`; `app.workers.document_ingestion` is the
+      Cloud Run Job entry point. The remaining completion gate is operational: apply
+      migrations 034–036, deploy and schedule that job with the backend runtime settings,
+      then run the synthetic acceptance check in `docs/document-ingestion-worker.md`.
 - [ ] **WS6 — Patient-document retrieval in chat.** A new patient-scoped table, not
       `drug_knowledge_chunks`, which has no patient or document column and a blanket
       authenticated-read policy. The search tool takes a query only; the patient is

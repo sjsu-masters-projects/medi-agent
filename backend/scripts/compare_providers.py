@@ -1,4 +1,4 @@
-"""Ask MedGemma, Flash, and Pro the same question and print what each one said.
+"""Ask several providers the same question and print what each one said.
 
 `EVA-001` selects a default and fallback provider from measured results rather than
 assumption. This is the tool that produces those measurements: it sends one prompt to
@@ -7,9 +7,9 @@ several providers and reports latency, success, and output side by side.
 Production routing cannot do this. `TASK_MODEL_MAP` binds each task to exactly one
 model, so the serving path can never show you what the alternatives would have said.
 
-    export GOOGLE_PROJECT_ID=... VERTEX_AI_MEDGEMMA_ENDPOINT=...
+    export GOOGLE_PROJECT_ID=...
     python backend/scripts/compare_providers.py --prompt "Summarize this medication list."
-    python backend/scripts/compare_providers.py --prompt-file scenario.txt --models medgemma,flash
+    python backend/scripts/compare_providers.py --prompt-file scenario.txt --models flash,pro
     python backend/scripts/compare_providers.py --prompt "..." --json > run.json
 
 Needs real provider credentials and network access; it calls the live endpoints. Exits
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 # `app` is not installed into the virtualenv, so resolve the source root directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-DEFAULT_MODELS = ("medgemma", "flash", "pro")
+DEFAULT_MODELS = ("flash", "pro")
 
 # Importing `app` constructs Settings, which requires the full service environment.
 # Doing that at module scope would make `--help` and argument errors depend on

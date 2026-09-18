@@ -31,12 +31,24 @@ describe("chat API helpers", () => {
         });
     });
 
-    it("builds websocket URL using backend origin and token", () => {
+    it("builds websocket URL using backend origin, without the token", () => {
         vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.com");
 
-        const url = buildChatWebSocketUrl("patient-1", "abc123==");
+        const url = buildChatWebSocketUrl("patient-1");
 
-        expect(url).toBe("wss://api.example.com/ws/chat/patient-1?token=abc123%3D%3D");
+        expect(url).toBe("wss://api.example.com/ws/chat/patient-1");
+
+        vi.unstubAllEnvs();
+    });
+
+    it("never puts the access token in the URL", () => {
+        // The backend logs full request paths, so a token in the query string lands in the
+        // access log as a replayable credential.
+        vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.com");
+
+        const url = buildChatWebSocketUrl("patient-1", { documentId: "doc-1" });
+
+        expect(url).not.toContain("token");
 
         vi.unstubAllEnvs();
     });
@@ -65,13 +77,13 @@ describe("chat API helpers", () => {
     it("adds document context and session parameters to websocket URLs", () => {
         vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.com");
 
-        const url = buildChatWebSocketUrl("patient-1", "abc123==", {
+        const url = buildChatWebSocketUrl("patient-1", {
             documentId: "doc-1",
             sessionId: "records",
         });
 
         expect(url).toBe(
-            "wss://api.example.com/ws/chat/patient-1?token=abc123%3D%3D&context=doc%3Adoc-1&session_id=records",
+            "wss://api.example.com/ws/chat/patient-1?context=doc%3Adoc-1&session_id=records",
         );
 
         vi.unstubAllEnvs();

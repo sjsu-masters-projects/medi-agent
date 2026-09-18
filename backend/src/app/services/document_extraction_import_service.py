@@ -37,6 +37,15 @@ class DocumentExtractionImportService:
         document_id: UUID | None = None,
         extraction: DocumentExtractionResult | None = None,
     ) -> dict[str, Any]:
+        # JSON supplied by a client has no independently verified source bytes or
+        # page geometry. Keeping this compatibility method writable would let a
+        # caller manufacture a clinical candidate with an arbitrary citation.
+        # Worker ingestion is the only supported route because it derives evidence
+        # from the stored document before model output is considered.
+        raise ValidationError(
+            "Direct extraction import is disabled; upload the source document for worker ingestion"
+        )
+
         if extraction is None:
             raise ValidationError(
                 "A verified extraction result is required; demo data is not imported"
@@ -88,7 +97,7 @@ class DocumentExtractionImportService:
         document["ai_summary"] = summary
         document["parsed"] = True
         document["parse_status"] = "completed"
-        document["parse_error"] = None
+        document["parse_failure_code"] = None
 
         return {
             "document": document,

@@ -22,6 +22,7 @@ from app.config import settings
 @pytest.fixture
 def project(monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setattr(settings, "google_project_id", "test-project")
+    monkeypatch.setattr(settings, "vertex_ai_location", "us-central1")
     return "test-project"
 
 
@@ -56,12 +57,12 @@ def test_the_provider_keeps_the_publisher_prefixed_model_id(project: str) -> Non
     assert provider.name == "gpt_oss"
 
 
-def test_the_provider_targets_the_verified_endpoint(project: str) -> None:
+def test_the_provider_targets_the_configured_endpoint(project: str) -> None:
     provider = build_maas_provider(GPT_OSS, bearer_token=_bearer)
 
     assert provider.base_url == (
-        "https://aiplatform.googleapis.com"
-        "/v1/projects/test-project/locations/global/endpoints/openapi"
+        "https://us-central1-aiplatform.googleapis.com"
+        "/v1/projects/test-project/locations/us-central1/endpoints/openapi"
     )
 
 

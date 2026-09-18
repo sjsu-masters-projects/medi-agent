@@ -122,6 +122,10 @@ class Settings(BaseSettings):
     a2a_retry_poll_seconds: int = 15
     a2a_retry_batch_size: int = 25
 
+    # Cloud Run Job worker. Upload requests leave documents pending; this bounded
+    # batch process owns OCR and model extraction outside request CPU lifetimes.
+    document_ingestion_batch_size: int = 10
+
     @property
     def allowed_origins(self) -> Any:
         origins = {self.patient_portal_url, self.clinician_portal_url}

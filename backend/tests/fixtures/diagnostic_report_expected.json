@@ -3,23 +3,18 @@
     {
       "name": "Aspirin",
       "dosage": "81mg",
-      "frequency": "daily",
-      "instructions": "Continue dual antiplatelet therapy",
-      "route": "oral"
+      "instructions": "Continue dual antiplatelet therapy"
     },
     {
       "name": "Clopidogrel",
       "dosage": "75mg",
-      "frequency": "daily",
-      "instructions": "Continue dual antiplatelet therapy",
-      "route": "oral"
+      "instructions": "Continue dual antiplatelet therapy"
     },
     {
       "name": "Atorvastatin",
       "dosage": "80mg",
       "frequency": "daily",
-      "instructions": "Continue Atorvastatin 80mg daily",
-      "route": "oral"
+      "instructions": "Continue Atorvastatin 80mg daily"
     }
   ],
   "conditions": [

@@ -88,7 +88,10 @@ FLASH: Final = ModelSpec(
     # Unprefixed, because this reaches Gemini through the Gen AI SDK rather than the
     # OpenAI-compatible surface, which wants `google/gemini-3.8-flash` instead. The id
     # therefore cannot be read without knowing the transport beside it.
-    model_id="gemini-3.8-flash",
+    # This remains deployment configuration rather than a source edit: promotion to a
+    # replacement model is a reviewed Cloud Run setting change, not a code change that
+    # can leave the legacy router and the agent runtime on different Flash versions.
+    model_id=settings.gemini_flash_model,
     transport=Transport.VERTEX_GENAI,
     honours_response_schema=True,
 )

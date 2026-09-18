@@ -194,7 +194,9 @@ class TestExtractContentWithFixture:
 
         with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
             mock_router = MagicMock()
-            mock_router.generate_text = AsyncMock(return_value=json.dumps(expected))
+            mock_router.generate_text_with_telemetry = AsyncMock(
+                return_value=(json.dumps(expected), MagicMock(model="gemini-3.8-flash"))
+            )
             mock_get_router.return_value = mock_router
 
             state = {
@@ -223,7 +225,9 @@ class TestExtractThenValidate:
 
         with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
             mock_router = MagicMock()
-            mock_router.generate_text = AsyncMock(return_value=json.dumps(expected))
+            mock_router.generate_text_with_telemetry = AsyncMock(
+                return_value=(json.dumps(expected), MagicMock(model="gemini-3.8-flash"))
+            )
             mock_get_router.return_value = mock_router
 
             state = {

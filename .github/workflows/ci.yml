@@ -183,7 +183,7 @@ jobs:
           - name: integration-workflows
             args: tests/integration --ignore=tests/integration/routers
           - name: unit-foundation
-            args: tests/unit/agents tests/unit/clients tests/unit/core tests/unit/db tests/unit/middleware tests/unit/tools tests/unit/test_adherence_service.py tests/unit/test_app_boot.py tests/unit/test_document_service.py tests/unit/test_mcp_servers.py tests/unit/test_models.py tests/unit/test_risk_score_service.py tests/unit/test_security.py
+            args: tests/unit/adk tests/unit/agents tests/unit/clients tests/unit/core tests/unit/db tests/unit/middleware tests/unit/safety tests/unit/tools tests/unit/test_adherence_service.py tests/unit/test_app_boot.py tests/unit/test_document_service.py tests/unit/test_mcp_servers.py tests/unit/test_models.py tests/unit/test_risk_score_service.py tests/unit/test_security.py
           - name: unit-services
             args: tests/unit/services
     defaults:

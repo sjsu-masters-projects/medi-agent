@@ -100,22 +100,18 @@ class TestCreateDocument:
 
         mock_supabase_db.table().insert().execute.return_value = MagicMock(data=[document_data])
 
-        with patch(
-            "app.routers.documents._run_ingestion_safe",
-            new=AsyncMock(),
-        ) as mock_ingest:
-            response = client.post(
-                "/api/v1/documents/",
-                json={
-                    "file_name": "lab-results.pdf",
-                    "file_path": f"{patient_id}/lab-results.pdf",
-                    "file_size_bytes": 1024000,
-                    "mime_type": "application/pdf",
-                    "document_type": "lab_report",
-                    "source_clinic": "Test Clinic",
-                    "notes": "Annual checkup results",
-                },
-            )
+        response = client.post(
+            "/api/v1/documents/",
+            json={
+                "file_name": "lab-results.pdf",
+                "file_path": f"{patient_id}/lab-results.pdf",
+                "file_size_bytes": 1024000,
+                "mime_type": "application/pdf",
+                "document_type": "lab_report",
+                "source_clinic": "Test Clinic",
+                "notes": "Annual checkup results",
+            },
+        )
 
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
@@ -123,7 +119,7 @@ class TestCreateDocument:
         assert data["document_type"] == "lab_report"
         assert "file_url" in data
         assert data["parse_status"] == "pending"
-        mock_ingest.assert_awaited_once()
+        # Registration is request-only; the Cloud Run Job claims this pending row.
 
     def test_can_defer_background_ingestion_for_verified_extraction(
         self, client, override_auth, override_db, mock_supabase_db, patient_id
@@ -154,26 +150,22 @@ class TestCreateDocument:
 
         mock_supabase_db.table().insert().execute.return_value = MagicMock(data=[document_data])
 
-        with patch(
-            "app.routers.documents._run_ingestion_safe",
-            new=AsyncMock(),
-        ) as mock_ingest:
-            response = client.post(
-                "/api/v1/documents/",
-                json={
-                    "document_type": "discharge_summary",
-                    "file_name": "discharge-summary.pdf",
-                    "file_path": f"{patient_id}/discharge-summary.pdf",
-                    "file_size_bytes": 1024000,
-                    "mime_type": "application/pdf",
-                    "source_clinic": "Patient uploaded document",
-                    "start_ingestion": False,
-                },
-            )
+        response = client.post(
+            "/api/v1/documents/",
+            json={
+                "document_type": "discharge_summary",
+                "file_name": "discharge-summary.pdf",
+                "file_path": f"{patient_id}/discharge-summary.pdf",
+                "file_size_bytes": 1024000,
+                "mime_type": "application/pdf",
+                "source_clinic": "Patient uploaded document",
+                "start_ingestion": False,
+            },
+        )
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.json()["file_name"] == "discharge-summary.pdf"
-        mock_ingest.assert_not_awaited()
+        assert mock_supabase_db.table().insert.call_args.args[0]["parse_status"] == "none"
 
     def test_invalid_mime_type(self, client, override_auth, override_db):
         """Reject unsupported file type."""

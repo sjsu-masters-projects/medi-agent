@@ -23,6 +23,14 @@ version, capture timestamp, and (when withdrawn) the withdrawal timestamp and re
 `evidence_citations` connects the candidate to precise excerpts and locations within
 that artifact.
 
+For document extraction, a candidate is registered only when its source evidence names
+one source page, preserves an exact excerpt found on that page, and carries a bounded
+extractor confidence. Generic document-level citations are not sufficient. A scanned
+image or PDF without at least 32 non-whitespace embedded characters is retained as a
+`needs_ocr` document with no candidate. An extraction whose proposed values cannot be
+grounded is retained as `needs_evidence_review`, also with no ungrounded candidate.
+Neither status changes canonical clinical truth.
+
 ## Lifecycle, reconciliation, and audit
 
 The permitted states are `pending_review`, `approved`, `rejected`, and `deleted`.

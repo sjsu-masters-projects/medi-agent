@@ -317,7 +317,9 @@ def test_vertex_always_uses_the_genai_sdk_regardless_of_model_name(mock_settings
 
     assert client.model_name == model
     assert client.use_vertex_ai is True
-    mock_client.assert_called_once_with(vertexai=True, project="test-project", location="global")
+    mock_client.assert_called_once_with(
+        vertexai=True, project="test-project", location="us-central1"
+    )
 
 
 def test_a_failed_vertex_init_raises_instead_of_downgrading_to_ai_studio(mock_settings_vertex):

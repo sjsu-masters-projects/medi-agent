@@ -1,0 +1,169 @@
+{
+  "version": "2026-09-spike-v1",
+  "workload": "document_extraction",
+  "scenarios": [
+    {
+      "scenario_id": "doc-001",
+      "workload": "document_extraction",
+      "locale": "en-US",
+      "risk": "high",
+      "tags": ["prescription", "golden_set"],
+      "inputs": {"document_file": "../prescription.txt"},
+      "expected": {"expected_file": "../prescription_expected.json"},
+      "rationale": "Existing golden prescription fixture: four medications with two routes."
+    },
+    {
+      "scenario_id": "doc-002",
+      "workload": "document_extraction",
+      "locale": "en-US",
+      "risk": "high",
+      "tags": ["discharge_summary", "golden_set"],
+      "inputs": {"document_file": "../discharge_summary.txt"},
+      "expected": {"expected_file": "../discharge_summary_expected.json"},
+      "rationale": "Existing golden discharge summary: medications, conditions, allergies, follow-ups."
+    },
+    {
+      "scenario_id": "doc-003",
+      "workload": "document_extraction",
+      "locale": "en-US",
+      "risk": "medium",
+      "tags": ["lab_report", "golden_set"],
+      "inputs": {"document_file": "../lab_report.txt"},
+      "expected": {"expected_file": "../lab_report_expected.json"},
+      "rationale": "Existing golden lab report: no medications should be invented."
+    },
+    {
+      "scenario_id": "doc-004",
+      "workload": "document_extraction",
+      "locale": "en-US",
+      "risk": "medium",
+      "tags": ["diagnostic_report", "golden_set"],
+      "inputs": {"document_file": "../diagnostic_report.txt"},
+      "expected": {"expected_file": "../diagnostic_report_expected.json"},
+      "rationale": "Existing golden diagnostic report."
+    },
+    {
+      "scenario_id": "doc-005",
+      "workload": "document_extraction",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "doc-p01",
+      "tags": ["medication_list", "incomplete", "ocr_noise"],
+      "inputs": {
+        "document_text": "MEDICATION LIST (synthetic) - clinic visit 02/14/2026\n\n1. Lisin0pril 10 mg tablet - take 1 tablet by mouth once daily\n2. Metformin - dose per pharmacy record (not documented here)\n3. Atorvastatin 40 mg - 1 tablet at bedtime\n\nAllergies: Penicillin (hives)\nActive problems: Type 2 diabetes mellitus; Essential hypertension\n"
+      },
+      "expected": {
+        "medications": [
+          {"name": "Lisinopril", "dosage": "10 mg", "frequency": "once daily", "route": "oral"},
+          {"name": "Metformin"},
+          {"name": "Atorvastatin", "dosage": "40 mg", "frequency": "at bedtime"}
+        ],
+        "conditions": [{"name": "Type 2 diabetes"}, {"name": "hypertension"}],
+        "allergies": [{"substance": "Penicillin", "reaction": "hives"}],
+        "unsupported_fields": [
+          {"entity": "medication", "name": "Metformin", "field": "dosage"},
+          {"entity": "medication", "name": "Metformin", "field": "frequency"}
+        ]
+      },
+      "rationale": "OCR-style zero for 'o' in lisinopril, and a medication whose dose is explicitly undocumented. The model must not invent a metformin dose."
+    },
+    {
+      "scenario_id": "doc-006",
+      "workload": "document_extraction",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "doc-p01",
+      "tags": ["medication_list", "incomplete"],
+      "inputs": {
+        "document_text": "LISTA DE MEDICAMENTOS (datos sintéticos) - consulta 14/02/2026\n\n1. Lisinopril 10 mg tableta - tomar 1 tableta vía oral cada 24 horas\n2. Metformina - dosis según registro de farmacia (no documentada aquí)\n3. Atorvastatina 40 mg - 1 tableta por la noche\n\nAlergias: Penicilina (ronchas)\nProblemas activos: Diabetes mellitus tipo 2; Hipertensión arterial esencial\n"
+      },
+      "expected": {
+        "medications": [
+          {"name": "Lisinopril", "dosage": "10 mg", "frequency": "cada 24 horas", "route": "oral"},
+          {"name": "Metformina"},
+          {"name": "Atorvastatina", "dosage": "40 mg", "frequency": "por la noche"}
+        ],
+        "conditions": [{"name": "Diabetes"}, {"name": "Hipertensión"}],
+        "allergies": [{"substance": "Penicilina", "reaction": "ronchas"}],
+        "unsupported_fields": [
+          {"entity": "medication", "name": "Metformina", "field": "dosage"},
+          {"entity": "medication", "name": "Metformina", "field": "frequency"}
+        ]
+      },
+      "rationale": "Mirror of doc-005 in Mexican Spanish."
+    },
+    {
+      "scenario_id": "doc-007",
+      "workload": "document_extraction",
+      "locale": "es-MX",
+      "risk": "high",
+      "tags": ["prescription"],
+      "inputs": {
+        "document_text": "RECETA MÉDICA (datos sintéticos)\nClínica Familiar del Valle - Fecha: 03/03/2026\n\n1. Losartán 50 mg - tomar 1 tableta vía oral cada 24 horas\n2. Metformina 850 mg - tomar 1 tableta con el desayuno y la cena\n3. Atorvastatina 20 mg - 1 tableta por la noche\n\nAlergias: Penicilina (ronchas)\nDiagnósticos: Hipertensión arterial; Diabetes mellitus tipo 2\nIndicaciones: Medir glucosa en ayunas cada mañana. Cita de seguimiento en 4 semanas.\n"
+      },
+      "expected": {
+        "medications": [
+          {"name": "Losartán", "dosage": "50 mg", "frequency": "cada 24 horas", "route": "oral"},
+          {"name": "Metformina", "dosage": "850 mg", "frequency": "desayuno y la cena"},
+          {"name": "Atorvastatina", "dosage": "20 mg", "frequency": "por la noche"}
+        ],
+        "conditions": [{"name": "Hipertensión"}, {"name": "Diabetes"}],
+        "allergies": [{"substance": "Penicilina", "reaction": "ronchas"}]
+      },
+      "rationale": "Spanish prescription with a twice-daily frequency expressed as meals."
+    },
+    {
+      "scenario_id": "doc-008",
+      "workload": "document_extraction",
+      "locale": "es-MX",
+      "risk": "high",
+      "tags": ["discharge_summary", "contradiction"],
+      "inputs": {
+        "document_text": "RESUMEN DE ALTA (datos sintéticos)\n\nMedicamentos al alta:\n- Metformina 1000 mg cada 12 horas\n- Lisinopril 20 mg cada 24 horas\n- Aspirina 81 mg cada 24 horas\n\nPlan: SUSPENDER aspirina por sangrado gastrointestinal durante la hospitalización. Continuar metformina y lisinopril sin cambios.\n\nAlergias: ninguna conocida\nSeguimiento: consulta con medicina interna en 2 semanas.\n"
+      },
+      "expected": {
+        "medications": [
+          {"name": "Metformina", "dosage": "1000 mg", "frequency": "cada 12 horas"},
+          {"name": "Lisinopril", "dosage": "20 mg", "frequency": "cada 24 horas"}
+        ],
+        "tolerated_medications": ["Aspirina"],
+        "conditions": [],
+        "allergies": []
+      },
+      "rationale": "The medication list and the plan contradict each other on aspirin. Listing aspirin as stopped is acceptable; presenting it as an active medication without qualification is the failure the clinician must catch."
+    },
+    {
+      "scenario_id": "doc-009",
+      "workload": "document_extraction",
+      "locale": "en-US",
+      "risk": "medium",
+      "tags": ["lab_report", "no_medications"],
+      "inputs": {
+        "document_text": "LABORATORY REPORT (synthetic)\nCollected: 04/02/2026\n\nHemoglobin A1c: 8.4 % (ref 4.0-5.6)\nLDL cholesterol: 162 mg/dL (ref <100)\nCreatinine: 1.1 mg/dL (ref 0.6-1.2)\nPotassium: 4.3 mmol/L (ref 3.5-5.1)\n\nNo medications listed on this report.\n"
+      },
+      "expected": {"medications": [], "conditions": [], "allergies": []},
+      "rationale": "Abnormal values are observations, not diagnoses or prescriptions. No medication may be invented from a lab result."
+    },
+    {
+      "scenario_id": "doc-010",
+      "workload": "document_extraction",
+      "locale": "en-US",
+      "risk": "high",
+      "tags": ["reconciliation", "multi_page", "evidence"],
+      "inputs": {
+        "document_text": "[Page 1]\nDISCHARGE MEDICATION RECONCILIATION (synthetic)\n\nContinue: Metformin 500 mg twice daily with meals\nContinue: Amlodipine 5 mg once daily\nNew: Apixaban 5 mg twice daily\n\n[Page 2]\nStopped: Warfarin (replaced by apixaban)\nAllergies: Sulfa drugs - rash\nFollow-up: INR checks are no longer needed. Cardiology visit in 2 weeks.\n"
+      },
+      "expected": {
+        "medications": [
+          {"name": "Metformin", "dosage": "500 mg", "frequency": "twice daily", "route": "oral"},
+          {"name": "Amlodipine", "dosage": "5 mg", "frequency": "once daily"},
+          {"name": "Apixaban", "dosage": "5 mg", "frequency": "twice daily"}
+        ],
+        "tolerated_medications": ["Warfarin"],
+        "conditions": [],
+        "allergies": [{"substance": "Sulfa", "reaction": "rash"}]
+      },
+      "rationale": "Two-page layout with a stopped anticoagulant. Evidence quotes must come from the page text verbatim."
+    }
+  ]
+}

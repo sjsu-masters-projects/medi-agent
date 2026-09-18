@@ -129,8 +129,9 @@ class GeminiClient:
             from google import genai
 
             logger.info(
-                "Initializing Gemini on Vertex: project=%s, location=global, model=%s",
+                "Initializing Gemini on Vertex: project=%s, location=%s, model=%s",
                 settings.google_project_id,
+                settings.vertex_ai_location,
                 model,
             )
 
@@ -141,7 +142,7 @@ class GeminiClient:
             self.genai_client = genai.Client(
                 vertexai=True,
                 project=settings.google_project_id,
-                location="global",
+                location=settings.vertex_ai_location,
             )
             self.model_name = model
             logger.info("Initialized GeminiClient on Vertex: %s", model)

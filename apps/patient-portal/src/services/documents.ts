@@ -13,7 +13,7 @@ export interface DocumentApiRecord {
     parsed: boolean;
     ai_summary?: string | null;
     parse_status?: Document["parseStatus"];
-    parse_error?: string | null;
+    parse_failure_code?: string | null;
     parse_attempts?: number;
     source_clinic?: string | null;
     visibility: Document["visibility"];

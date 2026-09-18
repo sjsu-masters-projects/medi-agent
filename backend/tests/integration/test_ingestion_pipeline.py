@@ -1,4 +1,4 @@
-"""Integration-style tests for candidate-only ingestion and explanations."""
+"""Integration-style tests for durable candidate-only document ingestion."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
@@ -6,6 +6,9 @@ from uuid import UUID
 import pytest
 
 from app.core.exceptions import DocumentParseError
+from app.models.document_extraction import DocumentExtractionResult
+from app.services.document_intelligence.grounding import CandidateRegistrationSummary
+from app.services.document_intelligence.models import ExtractionRoute
 from app.services.explanation_service import ExplanationService
 from app.services.ingestion_service import IngestionService
 
@@ -27,56 +30,78 @@ def _make_db(parse_attempts: int = 0) -> MagicMock:
     tables = {"documents": document_table, "document_ingestion_runs": run_table}
     db = MagicMock()
     db.table.side_effect = lambda name: tables.get(name, _make_table([{"id": "fact-1"}]))
+    if parse_attempts >= 3:
+        db.rpc.side_effect = DocumentParseError(str(DOCUMENT_ID), "attempt limit reached")
+    else:
+        db.rpc().execute.return_value = MagicMock(
+            data={
+                "run_id": "00000000-0000-0000-0000-000000000333",
+                "attempt": parse_attempts + 1,
+                "file_path": "patient/doc.pdf",
+                "document_type": "lab_report",
+                "mime_type": "application/pdf",
+                "content_hash": None,
+            }
+        )
     return db
 
 
-@pytest.mark.asyncio
-async def test_full_ingestion_pipeline_creates_candidates_not_canonical_records() -> None:
-    db = _make_db()
-    service = IngestionService(db)
-    service._graph.ainvoke = AsyncMock(
-        return_value={
-            "error": None,
-            "validated_data": {
-                "conditions": [{"name": "Hypertension", "status": "active"}],
-                "allergies": [{"allergen": "Penicillin", "severity": "mild"}],
-            },
-            "extracted_data": {"follow_up_instructions": [{"description": "Walk daily"}]},
-            "normalized_medications": [
+def _model_extraction() -> DocumentExtractionResult:
+    return DocumentExtractionResult.model_validate(
+        {
+            "medications": [
                 {
                     "name": "Aspirin",
                     "dosage": "81 mg",
                     "frequency": "daily",
                     "route": "oral",
+                    "evidence": [{"page": 1, "excerpt": "Aspirin 81 mg", "confidence": 0.9}],
                 }
-            ],
-            "patient_summary": "Take aspirin daily and walk every day.",
+            ]
         }
     )
-    service._register_candidates = MagicMock(return_value=4)  # type: ignore[method-assign]
 
-    result = await service.ingest_document(
-        document_id=DOCUMENT_ID,
-        patient_id=PATIENT_ID,
-        file_path="patient/doc.pdf",
-        document_type="lab_report",
-    )
+
+def _source_extraction() -> MagicMock:
+    extraction = MagicMock()
+    extraction.route = ExtractionRoute.AUTOMATED_CANDIDATES
+    extraction.page_count = 1
+    extraction.pages = []
+    extraction.warnings = []
+    extraction.text_for_model.return_value = "[[page 1]]\nAspirin 81 mg daily"
+    return extraction
+
+
+@pytest.mark.asyncio
+async def test_full_ingestion_pipeline_creates_only_grounded_candidates() -> None:
+    db = _make_db()
+    intelligence = MagicMock()
+    intelligence.extract.return_value = _source_extraction()
+    service = IngestionService(db, intelligence=intelligence)
+    service._extract_structured = AsyncMock(return_value=(_model_extraction(), "gemini-test"))
+    service._optional_summary = AsyncMock(return_value="Take aspirin daily.")
+
+    with patch("app.services.ingestion_service.DocumentEvidenceCandidateService") as registry:
+        registry.return_value.register.return_value = CandidateRegistrationSummary(created=1)
+        result = await service.ingest_document(
+            document_id=DOCUMENT_ID,
+            patient_id=PATIENT_ID,
+            file_path="patient/doc.pdf",
+            document_type="lab_report",
+        )
 
     assert result["status"] == "completed"
-    assert result["candidate_facts_created"] == 4
-    assert result["medications_created"] == 0
-    assert result["conditions_created"] == 0
-    assert result["allergies_created"] == 0
-    assert result["obligations_created"] == 0
-    service._register_candidates.assert_called_once()
+    assert result["candidate_facts_created"] == 1
+    registry.return_value.register.assert_called_once()
     assert db.table.call_args_list
 
 
 @pytest.mark.asyncio
-async def test_ingestion_pipeline_records_failed_run() -> None:
+async def test_ingestion_records_source_failure() -> None:
     db = _make_db()
-    service = IngestionService(db)
-    service._graph.ainvoke = AsyncMock(return_value={"error": "Parser failed"})
+    intelligence = MagicMock()
+    intelligence.extract.side_effect = ValueError("source could not be read")
+    service = IngestionService(db, intelligence=intelligence)
 
     result = await service.ingest_document(
         document_id=DOCUMENT_ID,
@@ -86,14 +111,14 @@ async def test_ingestion_pipeline_records_failed_run() -> None:
     )
 
     assert result["status"] == "failed"
-    assert "Parser failed" in result["error"]
+    assert result["error_code"] == "source_unreadable"
 
 
 @pytest.mark.asyncio
-async def test_ingestion_max_retries() -> None:
+async def test_ingestion_max_retries_stops_before_source_read() -> None:
     db = _make_db(parse_attempts=3)
-    service = IngestionService(db)
-    service._graph.ainvoke = AsyncMock()
+    intelligence = MagicMock()
+    service = IngestionService(db, intelligence=intelligence)
 
     with pytest.raises(DocumentParseError):
         await service.ingest_document(
@@ -103,7 +128,7 @@ async def test_ingestion_max_retries() -> None:
             document_type="lab_report",
         )
 
-    service._graph.ainvoke.assert_not_called()
+    intelligence.extract.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -58,13 +58,16 @@ export type VoiceSocketEvent =
     | VoiceReadyEvent
     | { type: "pong" };
 
-export function buildVoiceWebSocketUrl(patientId: string, token: string): string {
+/**
+ * Build the voice socket URL. As with chat, the access token is not in the URL — it
+ * travels as a subprotocol, so it never reaches the server's access log.
+ */
+export function buildVoiceWebSocketUrl(patientId: string): string {
     const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
     const parsed = new URL(backendBaseUrl);
     parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
     parsed.pathname = `/ws/voice/${patientId}`;
     parsed.search = "";
-    parsed.searchParams.set("token", token);
     return parsed.toString();
 }
 

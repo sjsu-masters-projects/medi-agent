@@ -11,4 +11,4 @@ def test_stable_flash_lite_is_the_default_model() -> None:
         supabase_jwt_secret="jwt-secret",
     )
 
-    assert settings.gemini_flash_model == "gemini-3.1-flash-lite"
+    assert settings.gemini_flash_model == "gemini-3.8-flash"

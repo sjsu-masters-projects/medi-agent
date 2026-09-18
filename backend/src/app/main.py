@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.clients.supabase import get_admin_client
 from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
+from app.core.log_redaction import install_credential_redaction
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.routers import (
     adherence,
@@ -85,6 +86,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
+
+    # Installed before anything can serve a request. The access log writes whole request
+    # paths, so a credential that reaches a query string is published to the log the first
+    # time it is used. Credentials belong in headers; this is the net under that rule.
+    install_credential_redaction()
 
     # The interactive docs enumerate every route and request shape, including the
     # clinician and SMART import surface. That is a map for anyone probing the API, and
