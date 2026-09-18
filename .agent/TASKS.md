@@ -937,8 +937,23 @@ model does not fix any of those. This task rebuilds the runtime around them.
       the fields have been read from the patient's actual words — stating those back
       asserts nothing that was not extracted.
       `app/followup/` is framework-free for the same reason `app/safety/` is. The old
-      `agents/symptom/` package is deleted; three modules still import the graph framework
-      (ingestion, summarization, triage).
+      `agents/symptom/` package is deleted.
+- [/] **SOAP summarization demoted from an agent to a service**, as the plan requires:
+      four database reads, one structured call and one insert, which is what the four-node
+      graph and its conditional edge always were. `services/soap_note_service.py` plus
+      `soap_note_prompts.py`, with the prompt text moved verbatim because it decides what a
+      reviewed clinical note contains.
+      Worth stating because the two workers before it needed correcting for the opposite:
+      **this path never fabricated anything.** A failed generation already returned no note
+      and stored no row, and it still does — the endpoint now answers 503 rather than
+      surfacing an agent error, which is the honest code for "the model is unavailable".
+      A note that was generated but could not be *stored* is now also reported as a
+      failure rather than returned: a clinician shown a note assumes it was filed.
+      **SOAP has no entry in the routing table.** The registry records a primary, a
+      fallback, a measured budget and a deterministic path per workload, and none of those
+      have been measured for this model on this task, so it keeps the configured Pro model
+      it has always used. Adding a routed workload here should follow a measurement rather
+      than precede one — recorded so the omission is a decision and not an oversight.
 - [ ] **WS5 — Document pipeline**: OCR with page and bounding-box anchoring, moved to a
       durable claimed job. The portal's fixed-attempt polling must be fixed *before* OCR
       lands, or the first scanned upload exhausts the poll and looks permanently stuck.

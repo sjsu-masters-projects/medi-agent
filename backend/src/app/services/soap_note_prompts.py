@@ -1,7 +1,9 @@
-"""SOAP note prompt templates for the Summarization Agent.
+"""SOAP note prompt templates.
 
-Model: Gemini 3.1 Pro Preview (deep reasoning required for clinical documentation).
-All prompts are module-level constants — change here, applies everywhere.
+Moved verbatim from the summarization agent's package so it survives that package's
+removal. The wording is deliberately unchanged: it is the clinician-facing documentation
+prompt, and editing it here would change what a reviewed note contains without anyone
+deciding to.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ def build_soap_prompt(patient_context: dict[str, Any]) -> str:
                          symptom_reports, chat_messages, conditions, allergies, adr_assessments
 
     Returns:
-        Formatted prompt string ready for GeminiClient.generate_structured()
+        Formatted prompt string ready for a structured generation call.
     """
     patient = patient_context.get("patient_info", {})
     medications = patient_context.get("medications", [])
