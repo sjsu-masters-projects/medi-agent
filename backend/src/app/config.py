@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     adr_extraction_ai_enabled: bool = True
     explanation_ai_enabled: bool = True
 
+    # NVIDIA NIM (independent provider for evaluation comparison)
+    nvidia_nim_api_key: str = ""
+    nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_nim_model: str = "openai/gpt-oss-20b"
+
     # Deepgram
     deepgram_api_key: str = ""
     deepgram_stt_model: str = "nova-3"

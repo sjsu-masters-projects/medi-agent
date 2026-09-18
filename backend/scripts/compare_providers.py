@@ -33,6 +33,9 @@ if TYPE_CHECKING:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 DEFAULT_MODELS = ("flash", "pro")
+# "nim" is comparable too, but stays out of the default set: it needs
+# NVIDIA_NIM_API_KEY, and a skipped provider on every run would be noise.
+AVAILABLE_MODELS = (*DEFAULT_MODELS, "nim")
 
 # Importing `app` constructs Settings, which requires the full service environment.
 # Doing that at module scope would make `--help` and argument errors depend on
@@ -55,7 +58,9 @@ def _resolve_providers(names: list[str]) -> tuple[list[TextProvider], list[str]]
         try:
             providers.append(router.get_text_provider_for_model(name))
         except Exception as error:  # noqa: BLE001 - report and continue
-            unavailable.append(f"{name} ({error})")
+            # Provider exceptions can include response bodies or credentials. The
+            # comparison only needs to name the failure category.
+            unavailable.append(f"{name} ({type(error).__name__})")
     return providers, unavailable
 
 
@@ -96,7 +101,12 @@ async def _run(args: argparse.Namespace) -> int:
         return 2
 
     comparison = await compare_text_providers(
-        GenerationRequest(prompt=prompt, task=args.task, temperature=args.temperature),
+        GenerationRequest(
+            prompt=prompt,
+            task=args.task,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+        ),
         providers,
     )
 
@@ -120,10 +130,22 @@ def main() -> int:
     parser.add_argument(
         "--models",
         default=",".join(DEFAULT_MODELS),
-        help=f"Comma-separated model names (default: {','.join(DEFAULT_MODELS)})",
+        help=(
+            f"Comma-separated model names from {','.join(AVAILABLE_MODELS)} "
+            f"(default: {','.join(DEFAULT_MODELS)})"
+        ),
     )
     parser.add_argument("--task", default="comparison", help="Task label recorded in telemetry")
     parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=1024,
+        help=(
+            "Output token budget per provider. Raise it for reasoning models: a trace "
+            "can consume the whole budget and leave the answer empty (default: 1024)"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit the full result as JSON")
     parser.add_argument(
         "--show-output", action="store_true", help="Print each provider's text after the table"
