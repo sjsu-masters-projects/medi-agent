@@ -22,6 +22,13 @@ google-cloud-aiplatform
 langgraph
 langchain-google-genai
 
+# -- Agent runtime --
+# `litellm` is floored well above the 1.82.7/1.82.8 releases carrying the unauthorized-code
+# advisory; `pip-audit` is a blocking CI gate, so a regression below that floor fails the
+# build rather than shipping.
+google-adk
+litellm>=1.84
+
 # -- Voice --
 deepgram-sdk
 

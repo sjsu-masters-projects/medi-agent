@@ -246,42 +246,10 @@ async def test_generate_stream(gemini_client):
     assert chunks == ["Hello ", "world"]
 
 
-# ============================================================
-# Thinking Mode Tests
-# ============================================================
-
-
-@pytest.mark.asyncio
-async def test_thinking_mode_requires_thinking_model(mock_settings):
-    """Test that thinking mode requires a thinking model."""
-    with patch.dict("sys.modules", {"google.generativeai": MagicMock()}):
-        from app.clients.gemini import GeminiClient
-
-        client = GeminiClient(model="gemini-2.0-flash-exp")
-
-    with pytest.raises(ValueError, match="Thinking mode requires"):
-        await client.generate(prompt="Test", thinking_mode=True)
-
-
-@pytest.mark.asyncio
-async def test_thinking_mode_with_thinking_model(mock_settings):
-    """Test thinking mode with a thinking model."""
-    mock_genai = MagicMock()
-    mock_model = AsyncMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-
-    with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
-        from app.clients.gemini import GeminiClient
-
-        client = GeminiClient(model="gemini-2.0-flash-thinking-exp-01-21")
-
-    mock_response = MagicMock()
-    mock_response.text = "Thinking response"
-    client.model.generate_content_async = AsyncMock(return_value=mock_response)
-
-    result = await client.generate(prompt="Test", thinking_mode=True)
-
-    assert result == "Thinking response"
+# `thinking_mode` was removed with the model it gated. It required
+# `gemini-2.0-flash-thinking-exp`, retired long ago, and no caller ever passed it. Thinking
+# on Gemini 3.x is always on and is shaped by `thinking_level` instead; see
+# tests/unit/clients/test_gemini_token_budget.py.
 
 
 # ============================================================
@@ -310,7 +278,6 @@ def test_client_initialization(mock_settings):
     assert client.max_retries == 5
     assert client.timeout == 120
     assert client.use_vertex_ai is False
-    assert client.is_genai_sdk is False
     # Verify genai module reference was stored on client
     assert hasattr(client, "genai")
 
@@ -330,26 +297,19 @@ def mock_settings_vertex():
         yield mock
 
 
-def test_client_initialization_vertex_ai_sdk(mock_settings_vertex):
-    """Test client initialization using Vertex AI SDK for non-preview models."""
-    with (
-        patch("vertexai.init") as mock_init,
-        patch("vertexai.generative_models.GenerativeModel") as mock_model,
-    ):
-        from app.clients.gemini import GeminiClient
-
-        client = GeminiClient(model="gemini-1.5-pro", use_vertex_ai=True)
-
-    assert client.model_name == "gemini-1.5-pro"
-    assert client.use_vertex_ai is True
-    assert client.is_genai_sdk is False
-    mock_init.assert_called_once_with(project="test-project", location="us-central1")
-    mock_model.assert_called_once_with("gemini-1.5-pro")
-
-
-@pytest.mark.parametrize("model", ["gemini-3.1-pro-preview", "gemini-3.1-flash-lite"])
-def test_client_initialization_genai_sdk_for_gemini_3_1_models(mock_settings_vertex, model):
-    """Test Gemini 3.1 models use Gen AI SDK and Vertex AI's global endpoint."""
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-flash-lite",
+        # The regression this parametrization exists for: these do not start with
+        # "gemini-3.1-", and the old implementation sent them down the legacy Vertex SDK.
+        "gemini-3.8-flash",
+        "gemini-1.5-pro",
+    ],
+)
+def test_vertex_always_uses_the_genai_sdk_regardless_of_model_name(mock_settings_vertex, model):
+    """Which SDK runs must depend on the provider, never on how the model is named."""
     with patch("google.genai.Client") as mock_client:
         from app.clients.gemini import GeminiClient
 
@@ -357,54 +317,21 @@ def test_client_initialization_genai_sdk_for_gemini_3_1_models(mock_settings_ver
 
     assert client.model_name == model
     assert client.use_vertex_ai is True
-    assert client.is_genai_sdk is True
     mock_client.assert_called_once_with(vertexai=True, project="test-project", location="global")
 
 
-def test_client_initialization_vertex_ai_fallback(mock_settings_vertex):
-    """Test fallback to AI Studio if Vertex AI init fails."""
-    with (
-        patch("vertexai.init", side_effect=Exception("Failed")),
-        patch("google.generativeai.configure") as mock_genai_configure,
-        patch("google.generativeai.GenerativeModel"),
-    ):
+def test_a_failed_vertex_init_raises_instead_of_downgrading_to_ai_studio(mock_settings_vertex):
+    """A misconfigured project must not silently become a consumer API-key call.
+
+    The old behaviour swallowed the failure and reconfigured onto AI Studio, which is a
+    different quota, different data handling and a deprecated SDK — and is how production
+    ended up there without anyone choosing it.
+    """
+    with patch("google.genai.Client", side_effect=RuntimeError("bad project")):
         from app.clients.gemini import GeminiClient
 
-        client = GeminiClient(model="gemini-1.5-pro", use_vertex_ai=True)
-
-    assert client.use_vertex_ai is False
-    assert client.is_genai_sdk is False
-    mock_genai_configure.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_generate_vertex_ai_success(mock_settings_vertex):
-    """Test generation via Vertex AI SDK."""
-    with (
-        patch("vertexai.init"),
-        patch("vertexai.generative_models.GenerativeModel") as mock_model_cls,
-    ):
-        mock_model = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = "Vertex response"
-
-        async def mock_gen(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_gen
-        mock_model_cls.return_value = mock_model
-
-        from app.clients.gemini import GeminiClient
-
-        client = GeminiClient(model="gemini-1.5-pro", use_vertex_ai=True)
-
-        # Patch Vertex abstractions to avoid importing them in test setup
-        with (
-            patch("vertexai.generative_models.GenerationConfig"),
-            patch("vertexai.generative_models.Part"),
-        ):
-            result = await client.generate("Test prompt")
-            assert result == "Vertex response"
+        with pytest.raises(RuntimeError, match="bad project"):
+            GeminiClient(model="gemini-3.8-flash", use_vertex_ai=True)
 
 
 @pytest.mark.asyncio
