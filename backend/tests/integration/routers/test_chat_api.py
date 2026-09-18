@@ -8,6 +8,7 @@ import pytest
 from fastapi import status
 from starlette.websockets import WebSocketDisconnect
 
+from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.agents.symptom.agent import SymptomOutput
 from app.agents.triage.agent import TriageOutput
 from app.core.exceptions import ValidationError
@@ -18,9 +19,13 @@ from app.models.auth import CurrentUser
 
 
 def _make_stream_mock(output: TriageOutput):
-    """Build a TriageAgent.process_stream mock that yields events matching `output`."""
+    """Build a turn-stream mock that yields events matching `output`.
 
-    async def _mock_process_stream(_self, _agent_input):
+    The runtime behind chat changed; the event contract it yields did not, which is why
+    this patches at that seam rather than at whatever happens to sit behind it.
+    """
+
+    async def _mock_process_stream(_self, **_kwargs):
         intent = output.intent or "general"
         urgency = output.urgency or "routine"
         route = output.route or ("symptom" if intent == "symptom" else "triage")
@@ -125,7 +130,9 @@ class TestGetChatHistory:
         assert response.status_code == status.HTTP_403_FORBIDDEN
         app.dependency_overrides.clear()
 
-    def test_assigned_clinician_can_read_history(self, client, override_db, mock_supabase_db, patient_id):
+    def test_assigned_clinician_can_read_history(
+        self, client, override_db, mock_supabase_db, patient_id
+    ):
         clinician_id = uuid4()
         app.dependency_overrides[get_current_user] = lambda: CurrentUser(
             id=clinician_id,
@@ -203,8 +210,28 @@ class TestChatWebSocket:
         token_user = CurrentUser(id=uuid4(), email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
-        with pytest.raises(WebSocketDisconnect), client.websocket_connect(
-            f"/ws/chat/{uuid4()}?token=test-token"
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(f"/ws/chat/{uuid4()}", subprotocols=["bearer", "test-token"]),
+        ):
+            pass
+
+    def test_refuses_a_token_supplied_in_the_query_string(
+        self, client, override_db, patient_id, monkeypatch
+    ):
+        """The query parameter is gone on purpose, and must not quietly come back.
+
+        This is the accepted case in every respect except where the credential travels:
+        same patient, same token value. It must still be refused, because a URL is written
+        to the access log and a session token there is replayable by anyone who can read
+        logs.
+        """
+        token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
+        monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token"),
         ):
             pass
 
@@ -229,8 +256,8 @@ class TestChatWebSocket:
             escalation_required=False,
         )
 
-        async def _mock_process_stream(_self, agent_input):
-            captured_context["patient_context"] = agent_input.patient_context
+        async def _mock_process_stream(_self, **kwargs):
+            captured_context["kwargs"] = kwargs
             yield {
                 "type": "classification",
                 "intent": "general",
@@ -246,9 +273,7 @@ class TestChatWebSocket:
                 "fallback_used": False,
             }
 
-        monkeypatch.setattr(
-            "app.routers.chat.TriageAgent.process_stream", _mock_process_stream
-        )
+        monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _mock_process_stream)
 
         user_row = {
             "id": str(uuid4()),
@@ -280,11 +305,15 @@ class TestChatWebSocket:
             [assistant_row],
         )
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             history_event = websocket.receive_json()
             assert history_event["type"] == "chat_history"
 
-            websocket.send_json({"type": "user_message", "content": "I feel dizzy", "language": "en"})
+            websocket.send_json(
+                {"type": "user_message", "content": "I feel dizzy", "language": "en"}
+            )
 
             user_saved = websocket.receive_json()
             assert user_saved["type"] == "user_message_saved"
@@ -305,7 +334,13 @@ class TestChatWebSocket:
             assert assistant_complete is not None
             assert assistant_complete["type"] == "assistant_complete"
             assert assistant_complete["message"]["role"] == "assistant"
-            assert captured_context["patient_context"]["medications"]
+            # The patient's record no longer travels through this call: the coordinator
+            # reads it through a tool scoped to the session, so the identifier goes and
+            # the record does not. What must still hold here is that the right patient and
+            # the right message reach the runtime. That the tool filters by exactly this
+            # patient is covered in `tests/unit/adk/test_tools.py`.
+            assert captured_context["kwargs"]["patient_id"] == str(patient_id)
+            assert captured_context["kwargs"]["message"] == "I feel dizzy"
 
     def test_websocket_returns_error_for_unsupported_event(
         self,
@@ -319,7 +354,9 @@ class TestChatWebSocket:
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
         mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             history_event = websocket.receive_json()
             assert history_event["type"] == "chat_history"
 
@@ -341,7 +378,9 @@ class TestChatWebSocket:
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
         mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             history_event = websocket.receive_json()
             assert history_event["type"] == "chat_history"
 
@@ -363,7 +402,9 @@ class TestChatWebSocket:
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
         mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             history_event = websocket.receive_json()
             assert history_event["type"] == "chat_history"
 
@@ -388,7 +429,9 @@ class TestChatWebSocket:
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
         mock_supabase_db.table().execute.side_effect = _response_rows([], [], [], [])
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
 
             websocket.send_json(["user_message", "hi"])
@@ -423,7 +466,8 @@ class TestChatWebSocket:
         )
 
         monkeypatch.setattr(
-            "app.routers.chat.TriageAgent.process_stream",
+            CareCoordinatorRuntime,
+            "process_stream",
             _make_stream_mock(triage_output),
         )
 
@@ -458,7 +502,9 @@ class TestChatWebSocket:
             [{"id": str(uuid4())}],
         )
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             history_event = websocket.receive_json()
             assert history_event["type"] == "chat_history"
 
@@ -509,7 +555,9 @@ class TestChatWebSocket:
 
         monkeypatch.setattr("app.routers.chat.ChatService.save_message", _raise_validation)
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
 
             websocket.send_json({"type": "user_message", "content": "hello", "language": "en"})
@@ -536,7 +584,9 @@ class TestChatWebSocket:
 
         monkeypatch.setattr("app.routers.chat.ChatService.save_message", _raise_runtime)
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
 
             websocket.send_json({"type": "user_message", "content": "hello", "language": "en"})
@@ -579,7 +629,8 @@ class TestChatWebSocket:
         )
 
         with client.websocket_connect(
-            f"/ws/chat/{patient_id}?token=test-token&context=doc:{document_id}"
+            f"/ws/chat/{patient_id}?context=doc:{document_id}",
+            subprotocols=["bearer", "test-token"],
         ) as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
             context_event = websocket.receive_json()
@@ -608,9 +659,6 @@ class TestChatWebSocket:
             route="symptom",
         )
 
-        async def _mock_triage_process(_self, _agent_input):
-            return triage_output
-
         async def _mock_symptom_process(_self, _agent_input):
             return SymptomOutput(
                 agent_id="symptom-test",
@@ -626,14 +674,14 @@ class TestChatWebSocket:
                 flagged_for_adr=True,
             )
 
-        # Streaming path runs first (route=symptom → aborts after classification),
-        # then chat.py invokes the buffered triage_agent + symptom_agent. Both
-        # mocks are needed.
+        # The stream is aborted once the route is known to be `symptom`, and the second,
+        # buffered call to the same model that used to follow it is gone — so only the
+        # stream and the symptom worker need stubbing now.
         monkeypatch.setattr(
-            "app.routers.chat.TriageAgent.process_stream",
+            CareCoordinatorRuntime,
+            "process_stream",
             _make_stream_mock(triage_output),
         )
-        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
         monkeypatch.setattr("app.routers.chat.SymptomAgent.process", _mock_symptom_process)
         symptom_event_id = str(uuid4())
 
@@ -696,7 +744,9 @@ class TestChatWebSocket:
             [{"id": str(uuid4())}],
         )
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
 
             websocket.send_json(
@@ -724,4 +774,8 @@ class TestChatWebSocket:
                 if len(status_events) == 3:
                     break
 
-            assert [item["status"] for item in status_events] == ["submitted", "working", "completed"]
+            assert [item["status"] for item in status_events] == [
+                "submitted",
+                "working",
+                "completed",
+            ]

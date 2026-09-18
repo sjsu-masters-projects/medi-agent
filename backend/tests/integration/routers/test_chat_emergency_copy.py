@@ -24,9 +24,17 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from google.adk.agents import LlmAgent, SequentialAgent
+from google.adk.models import BaseLlm
 
+from app.adk.agents.care_coordinator import (
+    COORDINATOR_AGENT_NAME,
+    RESPONDER_AGENT_NAME,
+    TOOL_ALLOWLIST,
+)
+from app.adk.chat_runtime import APP_NAME, CareCoordinatorRuntime
+from app.adk.runner import build_runner
 from app.agents.symptom.agent import SymptomOutput
-from app.agents.triage.agent import TriageOutput
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
@@ -51,7 +59,39 @@ def override_db():
     app.dependency_overrides.clear()
 
 
+class _NeverCalled(BaseLlm):
+    """Any use of this is a failure: the floor must answer without a model."""
+
+    async def generate_content_async(self, llm_request: Any, stream: bool = False) -> Any:
+        raise AssertionError("The safety floor must decide without consulting a model")
+        yield  # pragma: no cover - unreachable, but makes this an async generator
+
+
+def _stub_agent_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give the runtime a runner built from stub models.
+
+    The real one resolves Application Default Credentials and builds a Vertex client the
+    moment it is first used. A test that reaches for those passes or fails on whether the
+    machine running it happens to be logged in, which is not a property of this code. The
+    emergency plugin still runs for real; only the models behind it are stubs, and they
+    raise if anything reaches them.
+    """
+    runner = build_runner(
+        app_name=APP_NAME,
+        agent=SequentialAgent(
+            name="pipeline",
+            sub_agents=[
+                LlmAgent(name=COORDINATOR_AGENT_NAME, model=_NeverCalled(model="stub-a")),
+                LlmAgent(name=RESPONDER_AGENT_NAME, model=_NeverCalled(model="stub-b")),
+            ],
+        ),
+        tool_allowlist=TOOL_ALLOWLIST,
+    )
+    monkeypatch.setattr("app.adk.chat_runtime.get_chat_runner", lambda: runner)
+
+
 def _patch_chat_runtime(monkeypatch: pytest.MonkeyPatch, patient_id: Any) -> None:
+    _stub_agent_runtime(monkeypatch)
     monkeypatch.setattr(
         "app.routers.chat.decode_access_token",
         lambda _token: CurrentUser(id=patient_id, email="patient@test.com", role="patient"),
@@ -134,17 +174,14 @@ def _bland_symptom_worker(monkeypatch: pytest.MonkeyPatch) -> None:
 def _routine_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
     """Classify a non-emergency onto the symptom route without consulting a model.
 
-    The emergency cases in this module need no stub: the deterministic floor answers them
-    before any model is reached, which is the property they exist to prove. A message that
-    does *not* trip the floor has no such shortcut, so leaving it unstubbed sends the test
-    at a live endpoint — which hangs the suite and makes the result depend on whether the
-    machine running it happens to hold credentials.
-
-    Both entry points are stubbed because the router uses both: it aborts the stream once
-    the route is known to be `symptom`, then calls the buffered path for the text.
+    The emergency cases in this module reach the floor, which answers before any model is
+    consulted — the property they exist to prove. A message that does *not* trip the floor
+    has no such shortcut, so leaving it unstubbed would send the test at a live endpoint,
+    which hangs the suite and makes the result depend on whether the machine running it
+    happens to hold credentials.
     """
 
-    async def _process_stream(_self, _agent_input):
+    async def _process_stream(_self, **_kwargs):
         yield {
             "type": "classification",
             "intent": "symptom",
@@ -155,19 +192,7 @@ def _routine_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
         }
         yield {"type": "complete", "response_text": "", "fallback_used": False}
 
-    async def _process(_self, _agent_input):
-        return TriageOutput(
-            agent_id="triage-test",
-            status="success",
-            intent="symptom",
-            urgency="urgent",
-            response_text="",
-            escalation_required=False,
-            route="symptom",
-        )
-
-    monkeypatch.setattr("app.routers.chat.TriageAgent.process_stream", _process_stream)
-    monkeypatch.setattr("app.routers.chat.TriageAgent.process", _process)
+    monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
 
 
 def _run_turn(client, patient_id, message: str) -> dict[str, Any]:

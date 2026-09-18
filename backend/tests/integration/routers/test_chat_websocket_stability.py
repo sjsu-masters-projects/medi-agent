@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.agents.triage.agent import TriageOutput
 from app.db.connection import get_db
 from app.main import app
@@ -13,9 +14,13 @@ from app.models.auth import CurrentUser
 
 
 def _make_stream_mock(output: TriageOutput):
-    """Build a TriageAgent.process_stream mock that yields events matching `output`."""
+    """Build a turn-stream mock that yields events matching `output`.
 
-    async def _mock_process_stream(_self, _agent_input):
+    The runtime behind chat changed; the event contract it yields did not, which is the
+    point of patching at this seam rather than deeper.
+    """
+
+    async def _mock_process_stream(_self, **_kwargs):
         intent = output.intent or "general"
         urgency = output.urgency or "routine"
         route = output.route or ("symptom" if intent == "symptom" else "triage")
@@ -136,16 +141,15 @@ class TestChatWebSocketStability:
             route="triage",
         )
 
-        async def _mock_triage_process(_self, _agent_input):
-            return triage_output
-
-        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
         monkeypatch.setattr(
-            "app.routers.chat.TriageAgent.process_stream",
+            CareCoordinatorRuntime,
+            "process_stream",
             _make_stream_mock(triage_output),
         )
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             history = websocket.receive_json()
             assert history["type"] == "chat_history"
 
@@ -189,16 +193,15 @@ class TestChatWebSocketStability:
             route="triage",
         )
 
-        async def _mock_triage_process(_self, _agent_input):
-            return triage_output
-
-        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
         monkeypatch.setattr(
-            "app.routers.chat.TriageAgent.process_stream",
+            CareCoordinatorRuntime,
+            "process_stream",
             _make_stream_mock(triage_output),
         )
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
 
             for _ in range(120):

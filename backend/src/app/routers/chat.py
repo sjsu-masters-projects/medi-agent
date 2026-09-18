@@ -12,18 +12,19 @@ from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, W
 from starlette import status
 from supabase import Client
 
+from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.agents.symptom import SymptomAgent, SymptomInput
-from app.agents.triage import TriageAgent, TriageInput
-from app.agents.triage.graph import categorize_llm_failure
 from app.config import settings
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ValidationError
+from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
 from app.db.connection import get_db
 from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
+from app.safety import TRIAGE_COPY
 from app.services.a2a_task_service import A2ATaskService
 from app.services.chat_service import ChatService, ConversationStateConflictError
 from app.services.drug_knowledge_service import DrugKnowledgeService
@@ -403,7 +404,7 @@ async def chat_websocket_endpoint(
     service = ChatService(db)
     a2a_service = A2ATaskService(db)
     drug_knowledge_service = DrugKnowledgeService(db)
-    triage_agent = TriageAgent()
+    care_coordinator = CareCoordinatorRuntime()
     symptom_agent = SymptomAgent()
 
     try:
@@ -561,18 +562,6 @@ async def chat_websocket_endpoint(
                     },
                 )
 
-            triage_input = TriageInput(
-                user_id=current_user.id,
-                patient_id=patient_id,
-                session_id=session_id,
-                message=incoming.content,
-                language=incoming.language,
-                history=conversation_history[-12:],
-                patient_context=patient_context,
-                document_context=document_context,
-                conversation_state=conversation_state,
-            )
-
             assistant_content = ""
             assistant_intent = "general"
             assistant_urgency = "routine"
@@ -583,7 +572,17 @@ async def chat_websocket_endpoint(
             outer_fallback = False
 
             try:
-                stream_iter = triage_agent.process_stream(triage_input)
+                # The patient's own record is read by the coordinator through a tool
+                # rather than pushed in here, so the identifier travels and the record
+                # does not. Conversation history is carried by the runtime's session,
+                # keyed on this same session id.
+                stream_iter = care_coordinator.process_stream(
+                    patient_id=str(patient_id),
+                    user_id=str(current_user.id),
+                    session_id=session_id,
+                    message=incoming.content,
+                    language=incoming.language.value,
+                )
                 async for event in stream_iter:
                     ev_type = event.get("type")
                     if ev_type == "classification":
@@ -642,24 +641,16 @@ async def chat_websocket_endpoint(
             if route == "symptom":
                 delegation_events: list[dict[str, Any]] = []
                 saved_report: dict[str, Any] | None = None
-                # Buffered triage response (we aborted the stream after
-                # classification). Symptom agent may override below.
+                # The stream is aborted once the route is known, so the patient is never
+                # shown a reply the symptom worker is about to replace. That used to be
+                # followed by a second, buffered call to the same model for text that is
+                # discarded in the common case. This seeds the honest answer instead: if
+                # the worker below produces nothing, we say we could not reply rather than
+                # making a second attempt at the failure that just happened.
                 if not assistant_content and not outer_fallback:
-                    try:
-                        triage_result = await triage_agent(triage_input)
-                        if triage_result.status == "success":
-                            assistant_content = str(triage_result.response_text or "").strip()
-                    except Exception as exc:
-                        fallback_reason = categorize_llm_failure(exc)
-                        record_chat_fallback(layer="L3_outer", reason=fallback_reason)
-                        logger.warning(
-                            "Buffered triage call failed in symptom branch: %s",
-                            exc,
-                            extra={
-                                "chat_fallback_layer": "L3_outer",
-                                "chat_fallback_reason": fallback_reason,
-                            },
-                        )
+                    assistant_content = resolve_locale_resource(incoming.language, TRIAGE_COPY)[
+                        "service_unavailable"
+                    ]
                 try:
                     symptom_result = await symptom_agent(
                         SymptomInput(
