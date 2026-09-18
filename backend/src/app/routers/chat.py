@@ -27,9 +27,37 @@ from app.models.enums import ChatRole, Language
 from app.services.a2a_task_service import A2ATaskService
 from app.services.chat_service import ChatService, ConversationStateConflictError
 from app.services.drug_knowledge_service import DrugKnowledgeService
+from app.utils.localization import resolve_locale_resource
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# The outermost fallback: triage itself could not be reached. Every other tier is
+# localized through TRIAGE_COPY, so this one is too — a patient who wrote in Spanish
+# should not be answered in English at the moment the assistant is least useful.
+OUTER_FALLBACK_COPY: dict[str, dict[str, str]] = {
+    "default": {
+        "outer_fallback": (
+            "I'm having trouble reaching my care assistant right now. Your message is "
+            "saved. Please try again in a moment, and contact your care team directly "
+            "if this is urgent."
+        )
+    },
+    Language.EN.value: {
+        "outer_fallback": (
+            "I'm having trouble reaching my care assistant right now. Your message is "
+            "saved. Please try again in a moment, and contact your care team directly "
+            "if this is urgent."
+        )
+    },
+    Language.ES.value: {
+        "outer_fallback": (
+            "Estoy teniendo problemas para comunicarme con mi asistente de salud en este "
+            "momento. Tu mensaje quedó guardado. Vuelve a intentarlo en un momento y "
+            "contacta directamente a tu equipo clínico si esto es urgente."
+        )
+    },
+}
 
 
 def _get_service(db: Client = Depends(get_db)) -> ChatService:
@@ -275,16 +303,51 @@ def _is_allowed_origin(origin: str | None) -> bool:
     return origin in settings.allowed_origins
 
 
-def _extract_ws_token(websocket: WebSocket) -> str:
-    query_token = websocket.query_params.get("token")
-    if query_token:
-        return query_token
+WS_AUTH_SUBPROTOCOL = "bearer"
+"""Subprotocol the client offers alongside its token.
 
+Browsers cannot set an `Authorization` header on a WebSocket, which is why the token used
+to travel in the query string. A URL is the one place a credential must never go: the
+server writes the full request path to its access log, so every connection published a
+usable session token to anyone who could read logs, and query strings also reach proxies,
+browser history and `Referer` headers. `Sec-WebSocket-Protocol` is the standard way out —
+the browser sends it as a header, and headers are not logged.
+"""
+
+
+def _offered_subprotocols(websocket: WebSocket) -> list[str]:
+    header = websocket.headers.get("sec-websocket-protocol", "")
+    return [value.strip() for value in header.split(",") if value.strip()]
+
+
+def negotiated_subprotocol(websocket: WebSocket) -> str | None:
+    """The subprotocol to echo on `accept`, or None when the client offered none.
+
+    A WebSocket handshake that offers subprotocols expects one back, and browsers abort
+    the connection when the server selects none. Only the scheme name is ever returned:
+    echoing the token would move the credential into a response header and straight back
+    into the logs this change exists to keep it out of.
+    """
+    offered = _offered_subprotocols(websocket)
+    if offered and offered[0].lower() == WS_AUTH_SUBPROTOCOL:
+        return WS_AUTH_SUBPROTOCOL
+    return None
+
+
+def _extract_ws_token(websocket: WebSocket) -> str:
+    # `Sec-WebSocket-Protocol: bearer, <token>` — the browser path.
+    offered = _offered_subprotocols(websocket)
+    if len(offered) >= 2 and offered[0].lower() == WS_AUTH_SUBPROTOCOL:
+        return offered[1]
+
+    # Non-browser clients can send a real header, so keep it.
     auth_header = websocket.headers.get("authorization", "")
     prefix = "bearer "
     if auth_header.lower().startswith(prefix):
         return auth_header[len(prefix) :].strip()
 
+    # The `?token=` query parameter is deliberately not accepted. Reinstating it would
+    # reintroduce the log leak for every client at once.
     raise WebSocketException(
         code=status.WS_1008_POLICY_VIOLATION,
         reason="Missing websocket token",
@@ -336,7 +399,7 @@ async def chat_websocket_endpoint(
             reason=str(exc),
         ) from None
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=negotiated_subprotocol(websocket))
     service = ChatService(db)
     a2a_service = A2ATaskService(db)
     drug_knowledge_service = DrugKnowledgeService(db)
@@ -566,11 +629,11 @@ async def chat_websocket_endpoint(
                     },
                 )
                 outer_fallback = True
-                assistant_content = (
-                    "I'm having trouble reaching my care assistant right now. Your message is "
-                    "saved. Please try again in a moment, and contact your care team directly "
-                    "if this is urgent."
-                )
+                # Every other fallback tier is localized through TRIAGE_COPY; this one
+                # answered a Spanish-speaking patient in English.
+                assistant_content = resolve_locale_resource(incoming.language, OUTER_FALLBACK_COPY)[
+                    "outer_fallback"
+                ]
                 assistant_intent = "general"
                 assistant_urgency = "routine"
                 escalation_required = False
@@ -609,8 +672,22 @@ async def chat_websocket_endpoint(
                             patient_context=patient_context,
                         )
                     )
+                    # An emergency has already been answered with reviewed 911 copy by the
+                    # deterministic floor, and that answer is not the symptom worker's to
+                    # replace. The floor classifies a medical emergency as `symptom`, which
+                    # routes into this branch, so without this guard a patient reporting
+                    # crushing chest pain was shown "I logged your symptom for follow-up"
+                    # and never told to call 911. Self-harm escaped it only because it
+                    # classifies as `mental_health` and never reaches here. The report is
+                    # still captured and the delegation still runs; only the words the
+                    # patient reads are protected.
                     if symptom_result.status == "success" and symptom_result.response_text:
-                        assistant_content = symptom_result.response_text
+                        if assistant_urgency != "emergency":
+                            assistant_content = symptom_result.response_text
+                        else:
+                            logger.warning(
+                                "Withheld the symptom worker's reply: the emergency answer stands"
+                            )
 
                     if symptom_result.symptom_report:
                         saved_report = await service.save_symptom_report(
