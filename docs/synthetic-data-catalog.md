@@ -22,6 +22,15 @@ generate clinical facts, names, or timelines outside that source.
 The source contains 5 en-US and 3 es-MX patient scenarios. The adapter verifies
 that exact split when loading the file.
 
+## Document-evaluation fixtures
+
+`backend/tests/fixtures/document_evaluation/` contains only short synthetic source
+text and gold candidate JSON for offline extraction evaluation. It is not seed data and
+must never be uploaded to a shared environment. The scorer accepts recorded output
+only; it never calls a model or uses credentials. OCR vendor selection remains deferred,
+so scanned/image fixtures are expected to stop in `needs_ocr` until a reviewed OCR
+capability is approved.
+
 ## Intentionally unpersisted product gaps
 
 The canonical source remains authoritative for these values, but the adapter does not

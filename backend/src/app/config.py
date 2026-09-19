@@ -34,25 +34,37 @@ class Settings(BaseSettings):
     google_project_id: str = ""
 
     # Model routing
-    gemini_flash_model: str = "gemini-3.1-flash-lite-preview"
+    # 3.8 Flash is the model measured under the rebuilt evaluation protocol, so it is what
+    # production runs. Google classifies it as short-term availability, meaning it can be
+    # retired 45 days after a replacement ships — an accepted trade, because the model id
+    # is configuration and switching is a one-line change here plus a redeploy. Watch the
+    # release notes: a retired id fails as a 404 at call time, which is how
+    # `gemini-3.1-flash-lite-preview` once broke chat in production.
+    gemini_flash_model: str = "gemini-3.8-flash"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
-    medgemma_model: str = "google/medgemma-27b-it"
     google_embedding_model: str = "gemini-embedding-001"
     rag_embedding_dimensions: int = 768
     rag_min_similarity: float = 0.72
 
-    # Vertex AI (for MedGemma deployment)
+    # Vertex AI
     vertex_ai_location: str = "us-central1"
-    vertex_ai_medgemma_endpoint: str = ""
-    vertex_ai_endpoint_type: str = "auto"  # auto, standard, vllm
+
+    # Per-workload kill switches. Turning one off routes that workload to the
+    # deterministic path recorded beside it in `app/adk/registry.py`, which is why every
+    # workload is required to have one. The registry checks these names at import, so a
+    # switch renamed here without being renamed there fails loudly rather than reading
+    # as "disabled".
+    triage_ai_enabled: bool = True
+    reply_ai_enabled: bool = True
+    extraction_ai_enabled: bool = True
+    discrepancy_ai_enabled: bool = True
+    adr_extraction_ai_enabled: bool = True
+    explanation_ai_enabled: bool = True
 
     # NVIDIA NIM (independent provider for evaluation comparison)
     nvidia_nim_api_key: str = ""
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_nim_model: str = "openai/gpt-oss-20b"
-
-    # Hugging Face (for MedGemma benchmarking)
-    huggingface_api_token: str = ""
 
     # Deepgram
     deepgram_api_key: str = ""
@@ -114,6 +126,10 @@ class Settings(BaseSettings):
     a2a_retry_worker_enabled: bool = True
     a2a_retry_poll_seconds: int = 15
     a2a_retry_batch_size: int = 25
+
+    # Cloud Run Job worker. Upload requests leave documents pending; this bounded
+    # batch process owns OCR and model extraction outside request CPU lifetimes.
+    document_ingestion_batch_size: int = 10
 
     @property
     def allowed_origins(self) -> Any:

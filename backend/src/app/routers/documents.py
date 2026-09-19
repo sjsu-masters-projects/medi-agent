@@ -9,29 +9,23 @@ Upload flow:
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 from supabase import Client
 
-from app.clients.supabase import get_admin_client
 from app.core.security import get_current_user, require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
 from app.models.document import DocumentRead
-from app.models.document_extraction import DocumentExtractionImportRequest
 from app.models.enums import DocumentType, Language, coerce_locale
-from app.services.document_extraction_import_service import DocumentExtractionImportService
 from app.services.document_service import DocumentService
 from app.services.explanation_service import ExplanationService
-from app.services.ingestion_service import IngestionService
 from app.services.smart_launch_service import SmartLaunchService
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 _clinician_dep = require_role("clinician")
 
 
@@ -65,26 +59,6 @@ class ExplainRequest(BaseModel):
     language: Language = Language.EN
 
 
-async def _run_ingestion_safe(
-    document_id: str,
-    patient_id: UUID,
-    file_path: str,
-    document_type: str,
-) -> None:
-    """Background task wrapper — catches all exceptions to prevent crash."""
-    try:
-        db = get_admin_client()
-        service = IngestionService(db)
-        await service.ingest_document(
-            document_id=UUID(document_id),
-            patient_id=patient_id,
-            file_path=file_path,
-            document_type=document_type,
-        )
-    except Exception:
-        logger.exception("Ingestion background task failed for document %s", document_id)
-
-
 # ── Endpoints ───────────────────────────────────────────
 
 
@@ -97,7 +71,6 @@ async def _run_ingestion_safe(
 )
 async def create_document(
     body: DocumentCreateRequest,
-    background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
     service: DocumentService = Depends(_get_service),
 ) -> Any:
@@ -113,15 +86,8 @@ async def create_document(
         source_clinic=body.source_clinic,
         notes=body.notes,
         content_hash=body.content_hash,
+        queue_ingestion=body.start_ingestion,
     )
-    if body.start_ingestion:
-        background_tasks.add_task(
-            _run_ingestion_safe,
-            document_id=str(document["id"]),
-            patient_id=user.id,
-            file_path=body.file_path,
-            document_type=body.document_type.value,
-        )
     return document
 
 
@@ -134,7 +100,6 @@ async def create_document(
 async def create_clinician_document(
     patient_id: UUID,
     body: DocumentCreateRequest,
-    background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(_clinician_dep),
     service: DocumentService = Depends(_get_service),
     db: Client = Depends(get_db),
@@ -153,16 +118,35 @@ async def create_clinician_document(
         source_clinic=body.source_clinic,
         notes=body.notes,
         content_hash=body.content_hash,
+        queue_ingestion=body.start_ingestion,
     )
-    if body.start_ingestion:
-        background_tasks.add_task(
-            _run_ingestion_safe,
-            document_id=str(document["id"]),
-            patient_id=patient_id,
-            file_path=body.file_path,
-            document_type=body.document_type.value,
-        )
     return document
+
+
+@router.post(
+    "/patients/{patient_id}/{document_id}/ingestion/retry",
+    response_model=DocumentRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Retry a failed clinician document ingestion",
+)
+async def retry_clinician_document_ingestion(
+    patient_id: UUID,
+    document_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: DocumentService = Depends(_get_service),
+    db: Client = Depends(get_db),
+) -> Any:
+    """Atomically requeue a failed document for the durable worker."""
+    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    db.rpc(
+        "enqueue_document_ingestion_retry",
+        {
+            "p_document_id": str(document_id),
+            "p_patient_id": str(patient_id),
+            "p_actor_id": str(user.id),
+        },
+    ).execute()
+    return await service.get_document(document_id, patient_id)
 
 
 @router.get(
@@ -175,39 +159,6 @@ async def list_documents(
     service: DocumentService = Depends(_get_service),
 ) -> Any:
     return await service.list_documents(user.id)
-
-
-@router.post(
-    "/extractions/import",
-    status_code=status.HTTP_201_CREATED,
-    summary="Import extracted document data",
-    description=(
-        "Registers a normalized extraction as pending, provenance-backed review "
-        "candidates. It never creates medication, allergy, condition, or obligation "
-        "records directly, and an explicit extraction is required."
-    ),
-)
-async def import_document_extraction(
-    body: DocumentExtractionImportRequest,
-    user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db),
-) -> Any:
-    if user.role != "patient":
-        from fastapi import HTTPException
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only patients can import document extraction results",
-        )
-
-    service = DocumentExtractionImportService(db)
-    return await service.import_extraction(
-        patient_id=user.id,
-        uploaded_by=user.id,
-        uploaded_by_role=user.role,
-        document_id=body.document_id,
-        extraction=body.extraction,
-    )
 
 
 @router.get(

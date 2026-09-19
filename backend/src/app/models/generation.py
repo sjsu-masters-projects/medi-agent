@@ -24,6 +24,12 @@ class GenerationErrorCode(StrEnum):
     TIMEOUT = "timeout"
     UNAVAILABLE = "unavailable"
     INVALID_RESPONSE = "invalid_response"
+    # The request itself was refused, typically a schema the endpoint will not accept.
+    # Distinct from UNAVAILABLE so a dialect problem is never read as a capacity problem.
+    INVALID_REQUEST = "invalid_request"
+    # The answer ran out of token budget. A budget we chose is not a model's mistake,
+    # so evaluation reports this separately instead of scoring it as a wrong answer.
+    TRUNCATED = "truncated"
     UNSUPPORTED = "unsupported"
 
 
@@ -33,12 +39,27 @@ class GenerationProviderError(Exception):
         super().__init__(message)
 
 
+MAX_OUTPUT_TOKENS = 32_768
+"""Ceiling for one response, sized for a reasoning model rather than a plain one.
+
+Vertex counts thought tokens against the same budget as the answer, so a limit chosen for
+a model that does not think truncates one that does — sometimes before it has emitted a
+single visible character.
+"""
+
+
 class GenerationRequest(BaseModel):
     prompt: str = Field(min_length=1)
     system_instruction: str | None = None
     temperature: float = Field(default=0.2, ge=0, le=1)
-    max_tokens: int = Field(default=1024, ge=1, le=8192)
+    # The ceiling has to clear a reasoning model's thinking plus its answer: Vertex counts
+    # thought tokens against the same budget, so a cap sized for a plain model truncates a
+    # thinking one before it writes anything.
+    max_tokens: int = Field(default=1024, ge=1, le=MAX_OUTPUT_TOKENS)
     task: str = Field(default="general", min_length=1, max_length=100)
+    # JSON Schema the caller wants the answer to satisfy. Providers with native
+    # structured output enforce it; the others leave validation to the caller.
+    response_schema: dict[str, Any] | None = None
 
 
 class GenerationTelemetry(BaseModel):
@@ -46,6 +67,13 @@ class GenerationTelemetry(BaseModel):
     model: str
     latency_ms: int = Field(ge=0)
     usage: dict[str, int] = Field(default_factory=dict)
+    # Attempts beyond the first. Latency already includes the waits, so a retried call
+    # is slow in the numbers the way it is slow for the person waiting on it.
+    retries: int = Field(default=0, ge=0)
+    # The provider's own word for why generation stopped, kept verbatim. Truncation has
+    # to be read from here: inferring it from unparseable output charges a token budget
+    # we set to the model as if it were a content mistake.
+    finish_reason: str | None = None
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     fallback_path: list[str] = Field(default_factory=list)
 

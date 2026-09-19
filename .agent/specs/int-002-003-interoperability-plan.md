@@ -45,6 +45,10 @@ demonstration only; it does not claim production EHR connectivity or real-PHI su
    medication, condition, or allergy can be added or patched through the append-only,
    transactional reconciliation decision; CarePlans and all other supported resources
    remain evidence-only in R2.
+7. Document-origin candidates require page-level, exact-excerpt evidence and bounded
+   extraction confidence. Scanned/image sources without usable embedded text remain
+   stored provenance in `needs_ocr`; no OCR provider is implied or selected by this
+   contract, and neither document state can create local truth.
 7. Mapper improvements may re-project only untouched, pending candidates from their
    preserved source envelopes. The operation requires a reviewed dry-run report, exact
    source-version match, active care-team clinician, service-role-only transaction, and

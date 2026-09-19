@@ -1,4 +1,4 @@
-"""Ask MedGemma, Flash, and Pro the same question and print what each one said.
+"""Ask several providers the same question and print what each one said.
 
 `EVA-001` selects a default and fallback provider from measured results rather than
 assumption. This is the tool that produces those measurements: it sends one prompt to
@@ -7,9 +7,9 @@ several providers and reports latency, success, and output side by side.
 Production routing cannot do this. `TASK_MODEL_MAP` binds each task to exactly one
 model, so the serving path can never show you what the alternatives would have said.
 
-    export GOOGLE_PROJECT_ID=... VERTEX_AI_MEDGEMMA_ENDPOINT=...
+    export GOOGLE_PROJECT_ID=...
     python backend/scripts/compare_providers.py --prompt "Summarize this medication list."
-    python backend/scripts/compare_providers.py --prompt-file scenario.txt --models medgemma,flash
+    python backend/scripts/compare_providers.py --prompt-file scenario.txt --models flash,pro
     python backend/scripts/compare_providers.py --prompt "..." --json > run.json
 
 Needs real provider credentials and network access; it calls the live endpoints. Exits
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 # `app` is not installed into the virtualenv, so resolve the source root directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-DEFAULT_MODELS = ("medgemma", "flash", "pro")
+DEFAULT_MODELS = ("flash", "pro")
 # "nim" is comparable too, but stays out of the default set: it needs
 # NVIDIA_NIM_API_KEY, and a skipped provider on every run would be noise.
 AVAILABLE_MODELS = (*DEFAULT_MODELS, "nim")
@@ -43,8 +43,8 @@ AVAILABLE_MODELS = (*DEFAULT_MODELS, "nim")
 # below happens inside the function that needs it.
 
 
-def _resolve_providers(names: list[str]) -> tuple[list[TextProvider], list[str]]:
-    """Build a provider per requested model, reporting the ones that could not start.
+def _resolve_providers(names: list[str]) -> tuple[list[TextProvider], int]:
+    """Build a provider per requested model and count the ones that cannot start.
 
     A model that fails to initialize is reported and skipped rather than aborting the
     run: comparing the two that did start is more useful than comparing none.
@@ -53,13 +53,13 @@ def _resolve_providers(names: list[str]) -> tuple[list[TextProvider], list[str]]
 
     router = ModelRouter()
     providers: list[TextProvider] = []
-    unavailable: list[str] = []
+    unavailable_count = 0
     for name in names:
         try:
             providers.append(router.get_text_provider_for_model(name))
-        except Exception as error:  # noqa: BLE001 - report and continue
-            unavailable.append(f"{name} ({error})")
-    return providers, unavailable
+        except Exception:  # noqa: BLE001 - report and continue
+            unavailable_count += 1
+    return providers, unavailable_count
 
 
 def _render(comparison: ProviderComparison) -> str:
@@ -91,9 +91,12 @@ async def _run(args: argparse.Namespace) -> int:
     from app.services.provider_comparison import compare_text_providers
 
     names = [name.strip() for name in args.models.split(",") if name.strip()]
-    providers, unavailable = _resolve_providers(names)
-    for entry in unavailable:
-        print(f"skipped: {entry}", file=sys.stderr)
+    providers, unavailable_count = _resolve_providers(names)
+    if unavailable_count:
+        print(
+            f"skipped {unavailable_count} provider(s) that could not initialize",
+            file=sys.stderr,
+        )
     if not providers:
         print("error: no requested provider could be initialized", file=sys.stderr)
         return 2

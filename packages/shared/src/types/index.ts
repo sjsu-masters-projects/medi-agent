@@ -128,6 +128,8 @@ export const DocumentParseStatus = {
     PROCESSING: "processing",
     COMPLETED: "completed",
     FAILED: "failed",
+    NEEDS_OCR: "needs_ocr",
+    NEEDS_EVIDENCE_REVIEW: "needs_evidence_review",
 } as const;
 export type DocumentParseStatus = (typeof DocumentParseStatus)[keyof typeof DocumentParseStatus];
 
@@ -403,7 +405,7 @@ export interface Document {
     parsed: boolean;
     aiSummary?: string;
     parseStatus: DocumentParseStatus;
-    parseError?: string;
+    parseFailureCode?: string;
     parseAttempts: number;
     sourceClinic?: string;
     visibility: DocumentVisibility;
@@ -425,6 +427,8 @@ export interface ClinicianPatientDocument {
     fileName: string;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
+    parseFailureCode?: string;
+    parseAttempts?: number;
     aiSummary?: string;
     createdAt: string;
     uploadedByRole: UploaderRole;
@@ -444,6 +448,8 @@ export interface DocumentReviewQueueItem {
     fileName: string;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
+    parseFailureCode?: string;
+    parseAttempts?: number;
     aiSummary?: string;
     sourceClinic?: string;
     createdAt: string;

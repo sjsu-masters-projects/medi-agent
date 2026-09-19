@@ -6,22 +6,36 @@ import {
     isVoiceSocketEvent,
     normalizeVoiceEventLanguage,
 } from "@/services/voice-api";
+import { socketAuthProtocols } from "@/services/ws-auth";
 
 describe("voice-api", () => {
     it("builds secure websocket URLs from the backend URL", () => {
         vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.mediagent.live");
 
-        expect(buildVoiceWebSocketUrl("patient-1", "token-1")).toBe(
-            "wss://api.mediagent.live/ws/voice/patient-1?token=token-1",
+        expect(buildVoiceWebSocketUrl("patient-1")).toBe(
+            "wss://api.mediagent.live/ws/voice/patient-1",
         );
     });
 
     it("builds local websocket URLs from localhost backend URL", () => {
         vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "http://localhost:8000");
 
-        expect(buildVoiceWebSocketUrl("patient-1", "token-1")).toBe(
-            "ws://localhost:8000/ws/voice/patient-1?token=token-1",
-        );
+        expect(buildVoiceWebSocketUrl("patient-1")).toBe("ws://localhost:8000/ws/voice/patient-1");
+    });
+
+    it("never puts the access token in the URL", () => {
+        // The server logs full request paths, so a token here becomes a credential in the
+        // access log that anyone with log access can replay.
+        vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.mediagent.live");
+
+        const url = buildVoiceWebSocketUrl("patient-1");
+
+        expect(url).not.toContain("token");
+        expect(new URL(url).search).toBe("");
+    });
+
+    it("carries the token as a subprotocol instead", () => {
+        expect(socketAuthProtocols("token-1")).toEqual(["bearer", "token-1"]);
     });
 
     it("recognizes supported voice socket events only", () => {

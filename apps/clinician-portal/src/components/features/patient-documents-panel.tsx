@@ -11,6 +11,7 @@ import {
 import {
     approveDocumentReview,
     rejectDocumentReview,
+    retryClinicianDocumentIngestion,
 } from "@/services/clinicians";
 import {
     type ClinicianPatientDocument,
@@ -46,6 +47,7 @@ export function PatientDocumentsPanel({
 }: PatientDocumentsPanelProps) {
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [reviewingDocumentId, setReviewingDocumentId] = useState<string | null>(null);
+    const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
     const [rejectingDocumentId, setRejectingDocumentId] = useState<string | null>(null);
     const [rejectNote, setRejectNote] = useState("");
 
@@ -83,6 +85,34 @@ export function PatientDocumentsPanel({
         } finally {
             setReviewingDocumentId(null);
         }
+    }
+
+    async function handleRetryDocument(documentId: string) {
+        setReviewError(null);
+        setRetryingDocumentId(documentId);
+        try {
+            await retryClinicianDocumentIngestion(patientId, documentId);
+            onRefresh();
+        } catch (error) {
+            setReviewError(
+                error instanceof Error ? error.message : "Unable to retry document processing.",
+            );
+        } finally {
+            setRetryingDocumentId(null);
+        }
+    }
+
+    function parseMessage(document: ClinicianPatientDocument): string | null {
+        if (document.parseStatus === "needs_ocr") {
+            return "This document has no usable embedded text. It is stored safely; OCR review is required and no candidate was generated.";
+        }
+        if (document.parseStatus === "needs_evidence_review") {
+            return "Extraction did not provide verifiable source evidence. No unverified candidate was generated.";
+        }
+        if (document.parseStatus === "failed") {
+            return "Processing could not be completed. You can retry while attempts remain.";
+        }
+        return null;
     }
 
     return (
@@ -166,6 +196,31 @@ export function PatientDocumentsPanel({
                                 </div>
                                 <ParseStatusBadge parseStatus={doc.parseStatus} />
                             </div>
+
+                            {parseMessage(doc) && (
+                                <div className="border-b border-gray-100 px-5 py-3 text-sm text-slate-600">
+                                    <p>{parseMessage(doc)}</p>
+                                    {doc.parseStatus === "failed" && (
+                                        <div className="mt-2 flex items-center gap-3">
+                                            <span className="text-xs text-gray-500">
+                                                Attempt {doc.parseAttempts ?? 0} of 3
+                                            </span>
+                                            {(doc.parseAttempts ?? 0) < 3 && (
+                                                <button
+                                                    className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                    disabled={retryingDocumentId === doc.id}
+                                                    onClick={() => void handleRetryDocument(doc.id)}
+                                                    type="button"
+                                                >
+                                                    {retryingDocumentId === doc.id
+                                                        ? "Retrying..."
+                                                        : "Retry processing"}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {doc.uploadedByRole === UploaderRole.PATIENT &&
                                 doc.reviewStatus === DocumentReviewStatus.PENDING && (

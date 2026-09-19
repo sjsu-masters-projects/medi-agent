@@ -15,6 +15,14 @@ from pydantic import BaseModel, Field
 from app.models.enums import DocumentType, MedicationRoute, ObligationType
 
 
+class ExtractionEvidence(BaseModel):
+    """Verifiable source support for one extracted candidate."""
+
+    page: int = Field(ge=1)
+    excerpt: str = Field(min_length=1, max_length=2000)
+    confidence: float = Field(ge=0, le=1)
+
+
 class ExtractedDocumentMetadata(BaseModel):
     """Metadata for the source document that produced extracted records."""
 
@@ -34,6 +42,7 @@ class ExtractedMedication(BaseModel):
     instructions: str | None = None
     generic_name: str | None = None
     rxcui: str | None = None
+    evidence: list[ExtractionEvidence] = Field(min_length=1)
 
 
 class ExtractedCondition(BaseModel):
@@ -42,6 +51,7 @@ class ExtractedCondition(BaseModel):
     name: str = Field(..., min_length=1)
     status: str = Field(default="active", min_length=1)
     notes: str | None = None
+    evidence: list[ExtractionEvidence] = Field(min_length=1)
 
 
 class ExtractedAllergy(BaseModel):
@@ -50,6 +60,7 @@ class ExtractedAllergy(BaseModel):
     allergen: str = Field(..., min_length=1)
     reaction: str | None = None
     severity: str = Field(default="unknown", pattern="^(unknown|mild|moderate|severe)$")
+    evidence: list[ExtractionEvidence] = Field(min_length=1)
 
 
 class ExtractedObligation(BaseModel):
@@ -58,6 +69,7 @@ class ExtractedObligation(BaseModel):
     description: str = Field(..., min_length=1, max_length=500)
     frequency: str = Field(default="as directed", min_length=1)
     obligation_type: ObligationType = ObligationType.CUSTOM
+    evidence: list[ExtractionEvidence] = Field(min_length=1)
 
 
 class DocumentExtractionResult(BaseModel):

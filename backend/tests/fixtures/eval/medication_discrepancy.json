@@ -1,0 +1,286 @@
+{
+  "version": "2026-09-spike-v1",
+  "workload": "medication_discrepancy",
+  "scenarios": [
+    {
+      "scenario_id": "med-001",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "high",
+      "tags": ["duplicate_therapy", "ace_inhibitor", "missing_medication"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Lisinopril", "dose": "10 mg", "frequency": "once daily", "status": "active"}],
+          "fhir": [
+            {"name": "Enalapril", "dose": "10 mg", "frequency": "twice daily", "status": "active"},
+            {"name": "Lisinopril", "dose": "10 mg", "frequency": "once daily", "status": "active"}
+          ]
+        },
+        "allergies": []
+      },
+      "expected": {
+        "discrepancies": [
+          {"type": "duplicate_therapy", "medications": ["Lisinopril", "Enalapril"]},
+          {"type": "missing_medication", "medications": ["Enalapril"]}
+        ],
+        "abstain": false
+      },
+      "rationale": "Two ACE inhibitors active at once, one of them absent locally."
+    },
+    {
+      "scenario_id": "med-002",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "med-p01",
+      "tags": ["dose_mismatch"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Metformin", "dose": "500 mg", "frequency": "twice daily", "status": "active"}],
+          "document": [{"name": "Metformin", "dose": "1000 mg", "frequency": "twice daily", "status": "active"}]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [{"type": "dose_mismatch", "medications": ["Metformin"]}], "abstain": false},
+      "rationale": "Same drug, doubled dose in the document."
+    },
+    {
+      "scenario_id": "med-003",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "medium",
+      "tags": ["status_mismatch"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Atorvastatin", "dose": "40 mg", "frequency": "at bedtime", "status": "active"}],
+          "fhir": [{"name": "Atorvastatin", "dose": "40 mg", "frequency": "at bedtime", "status": "stopped"}]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [{"type": "status_mismatch", "medications": ["Atorvastatin"]}], "abstain": false},
+      "rationale": "Locally active, externally stopped."
+    },
+    {
+      "scenario_id": "med-004",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "medium",
+      "tags": ["missing_medication"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Metformin", "dose": "1000 mg", "frequency": "twice daily", "status": "active"}],
+          "fhir": [
+            {"name": "Metformin", "dose": "1000 mg", "frequency": "twice daily", "status": "active"},
+            {"name": "Levothyroxine", "dose": "50 mcg", "frequency": "once daily", "status": "active"}
+          ]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [{"type": "missing_medication", "medications": ["Levothyroxine"]}], "abstain": false},
+      "rationale": "An active external medication absent from the local list."
+    },
+    {
+      "scenario_id": "med-005",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "med-p02",
+      "tags": ["allergy_conflict", "missing_medication"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Lisinopril", "dose": "10 mg", "frequency": "once daily", "status": "active"}],
+          "document": [
+            {"name": "Lisinopril", "dose": "10 mg", "frequency": "once daily", "status": "active"},
+            {"name": "Amoxicillin", "dose": "500 mg", "frequency": "three times daily", "status": "active"}
+          ]
+        },
+        "allergies": ["Penicillin - anaphylaxis"]
+      },
+      "expected": {
+        "discrepancies": [
+          {"type": "allergy_conflict", "medications": ["Amoxicillin"]},
+          {"type": "missing_medication", "medications": ["Amoxicillin"]}
+        ],
+        "abstain": false
+      },
+      "rationale": "A penicillin-class antibiotic prescribed against a documented penicillin anaphylaxis. Missing this is a safety failure."
+    },
+    {
+      "scenario_id": "med-006",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "medium",
+      "tags": ["brand_generic", "control"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Metformin", "dose": "1000 mg", "frequency": "twice daily", "status": "active"}],
+          "patient_reported": [{"name": "Glucophage", "dose": "1000 mg", "frequency": "twice a day", "status": "active"}]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [], "abstain": false},
+      "rationale": "Brand and generic of the same drug at the same dose: no discrepancy."
+    },
+    {
+      "scenario_id": "med-007",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "low",
+      "tags": ["control"],
+      "inputs": {
+        "sources": {
+          "local": [
+            {"name": "Metformin", "dose": "1000 mg", "frequency": "twice daily", "status": "active"},
+            {"name": "Lisinopril", "dose": "10 mg", "frequency": "once daily", "status": "active"}
+          ],
+          "fhir": [
+            {"name": "Metformin", "dose": "1000 mg", "frequency": "twice daily", "status": "active"},
+            {"name": "Lisinopril", "dose": "10 mg", "frequency": "once daily", "status": "active"}
+          ]
+        },
+        "allergies": ["Sulfa - rash"]
+      },
+      "expected": {"discrepancies": [], "abstain": false},
+      "rationale": "Identical lists. Any reported discrepancy is a false positive."
+    },
+    {
+      "scenario_id": "med-008",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "med-p03",
+      "tags": ["duplicate_therapy", "statin", "missing_medication"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Atorvastatin", "dose": "40 mg", "frequency": "at bedtime", "status": "active"}],
+          "patient_reported": [{"name": "Rosuvastatin", "dose": "10 mg", "frequency": "once daily", "status": "active", "note": "my other doctor started this last month"}]
+        },
+        "allergies": []
+      },
+      "expected": {
+        "discrepancies": [
+          {"type": "duplicate_therapy", "medications": ["Atorvastatin", "Rosuvastatin"]},
+          {"type": "missing_medication", "medications": ["Rosuvastatin"]}
+        ],
+        "abstain": false
+      },
+      "rationale": "Two statins from two prescribers."
+    },
+    {
+      "scenario_id": "med-009",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "high",
+      "tags": ["incomplete", "abstain"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Insulin glargine", "dose": "20 units", "frequency": "at bedtime", "status": "active"}],
+          "document": [{"name": "Insulin", "dose": "illegible", "frequency": "illegible", "status": "active"}]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [], "abstain": true},
+      "rationale": "The document cannot be read well enough to compare doses. The correct answer is to abstain, not to guess a mismatch."
+    },
+    {
+      "scenario_id": "med-010",
+      "workload": "medication_discrepancy",
+      "locale": "en-US",
+      "risk": "medium",
+      "pair_id": "med-p04",
+      "tags": ["status_mismatch", "patient_reported"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Lisinopril", "dose": "10 mg", "frequency": "once daily", "status": "active"}],
+          "patient_reported": [{"name": "Lisinopril", "status": "stopped", "note": "I stopped it two weeks ago because of the cough"}]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [{"type": "status_mismatch", "medications": ["Lisinopril"]}], "abstain": false},
+      "rationale": "Patient self-discontinued; the chart still says active."
+    },
+    {
+      "scenario_id": "med-011",
+      "workload": "medication_discrepancy",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "med-p01",
+      "tags": ["dose_mismatch"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Metformina", "dose": "500 mg", "frequency": "cada 12 horas", "status": "activo"}],
+          "document": [{"name": "Metformina", "dose": "1000 mg", "frequency": "cada 12 horas", "status": "activo"}]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [{"type": "dose_mismatch", "medications": ["Metformina"]}], "abstain": false},
+      "rationale": "Mirror of med-002."
+    },
+    {
+      "scenario_id": "med-012",
+      "workload": "medication_discrepancy",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "med-p02",
+      "tags": ["allergy_conflict", "missing_medication"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Lisinopril", "dose": "10 mg", "frequency": "cada 24 horas", "status": "activo"}],
+          "document": [
+            {"name": "Lisinopril", "dose": "10 mg", "frequency": "cada 24 horas", "status": "activo"},
+            {"name": "Amoxicilina", "dose": "500 mg", "frequency": "cada 8 horas", "status": "activo"}
+          ]
+        },
+        "allergies": ["Penicilina - anafilaxia"]
+      },
+      "expected": {
+        "discrepancies": [
+          {"type": "allergy_conflict", "medications": ["Amoxicilina"]},
+          {"type": "missing_medication", "medications": ["Amoxicilina"]}
+        ],
+        "abstain": false
+      },
+      "rationale": "Mirror of med-005."
+    },
+    {
+      "scenario_id": "med-013",
+      "workload": "medication_discrepancy",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "med-p03",
+      "tags": ["duplicate_therapy", "statin", "missing_medication"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Atorvastatina", "dose": "40 mg", "frequency": "por la noche", "status": "activo"}],
+          "patient_reported": [{"name": "Rosuvastatina", "dose": "10 mg", "frequency": "cada 24 horas", "status": "activo", "note": "me la recetó mi otro doctor el mes pasado"}]
+        },
+        "allergies": []
+      },
+      "expected": {
+        "discrepancies": [
+          {"type": "duplicate_therapy", "medications": ["Atorvastatina", "Rosuvastatina"]},
+          {"type": "missing_medication", "medications": ["Rosuvastatina"]}
+        ],
+        "abstain": false
+      },
+      "rationale": "Mirror of med-008."
+    },
+    {
+      "scenario_id": "med-014",
+      "workload": "medication_discrepancy",
+      "locale": "es-MX",
+      "risk": "medium",
+      "pair_id": "med-p04",
+      "tags": ["status_mismatch", "patient_reported"],
+      "inputs": {
+        "sources": {
+          "local": [{"name": "Lisinopril", "dose": "10 mg", "frequency": "cada 24 horas", "status": "activo"}],
+          "patient_reported": [{"name": "Lisinopril", "status": "suspendido", "note": "lo dejé hace dos semanas por la tos"}]
+        },
+        "allergies": []
+      },
+      "expected": {"discrepancies": [{"type": "status_mismatch", "medications": ["Lisinopril"]}], "abstain": false},
+      "rationale": "Mirror of med-010."
+    }
+  ]
+}

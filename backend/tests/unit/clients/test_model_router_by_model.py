@@ -22,7 +22,6 @@ def router(monkeypatch: pytest.MonkeyPatch) -> ModelRouter:
         async def generate(self, **_kwargs: object) -> str:
             return "stub"
 
-    monkeypatch.setattr(type(instance), "medgemma_client", property(lambda _: _Client("medgemma-27b")))
     monkeypatch.setattr(type(instance), "flash_client", property(lambda _: _Client("flash-lite")))
     monkeypatch.setattr(type(instance), "pro_client", property(lambda _: _Client("pro")))
     return instance
@@ -30,7 +29,7 @@ def router(monkeypatch: pytest.MonkeyPatch) -> ModelRouter:
 
 @pytest.mark.parametrize(
     ("model_name", "expected_model"),
-    [("medgemma", "medgemma-27b"), ("flash", "flash-lite"), ("pro", "pro")],
+    [("flash", "flash-lite"), ("pro", "pro")],
 )
 def test_each_model_name_resolves_to_its_own_provider(
     router: ModelRouter, model_name: str, expected_model: str
@@ -47,9 +46,19 @@ def test_an_unknown_model_is_refused_rather_than_substituted(router: ModelRouter
         router.get_text_provider_for_model("mystery-model")
 
 
+def test_a_retired_model_is_refused_rather_than_silently_served(router: ModelRouter) -> None:
+    """MedGemma was measured and dropped; asking for it must fail loudly.
+
+    Returning Flash under the name `medgemma` would put one model's output in a report
+    attributed to another, which is exactly the corruption this method exists to avoid.
+    """
+    with pytest.raises(ValueError):
+        router.get_text_provider_for_model("medgemma")
+
+
 def test_the_provider_is_reused_across_calls(router: ModelRouter) -> None:
-    first = router.get_text_provider_for_model("medgemma")
-    second = router.get_text_provider_for_model("medgemma")
+    first = router.get_text_provider_for_model("flash")
+    second = router.get_text_provider_for_model("flash")
 
     assert first is second
 
@@ -58,7 +67,7 @@ def test_model_lookup_is_independent_of_task_routing(router: ModelRouter) -> Non
     """The point of the method: reach a model the task map would never select."""
     from app.clients.model_router import TASK_MODEL_MAP, TaskType
 
-    assert TASK_MODEL_MAP[TaskType.DOCUMENT_PARSING] == "medgemma"
+    assert TASK_MODEL_MAP[TaskType.DOCUMENT_PARSING] == "flash"
 
     provider = router.get_text_provider_for_model("pro")
 

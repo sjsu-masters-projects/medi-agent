@@ -365,9 +365,9 @@ async def generate_soap_note(
 
     Triggers the Summarization Agent. Returns the generated SOAP note.
     """
-    from app.agents.summarization.agent import SummarizationAgent, SummarizationInput
+    from app.services.soap_note_service import SoapNoteService
 
-    # Verify care team assignment before running the expensive agent
+    # Verify care team assignment before running the expensive generation
     service = ClinicianService(db)
     await service.get_patient_detail(user.id, patient_id)
 
@@ -383,19 +383,22 @@ async def generate_soap_note(
             headers={"Retry-After": str(retry_after)},
         )
 
-    agent = SummarizationAgent(db=db)
-    output = await agent(
-        SummarizationInput(
-            user_id=user.id,
-            patient_id=patient_id,
-            lookback_days=request.lookback_days,
-        )
+    result = await SoapNoteService(db).generate(
+        patient_id=patient_id,
+        clinician_id=user.id,
+        lookback_days=request.lookback_days,
     )
 
+    if result.status != "success":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=result.error or "SOAP note generation is unavailable right now.",
+        )
+
     return {
-        "status": output.status,
-        "soap_note_id": output.soap_note_id,
-        "soap_note": output.soap_note,
+        "status": result.status,
+        "soap_note_id": result.soap_note_id,
+        "soap_note": result.soap_note,
     }
 
 

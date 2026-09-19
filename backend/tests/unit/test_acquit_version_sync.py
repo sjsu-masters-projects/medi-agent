@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ACQUIT_VERSION = "0.2.0"
 ACQUIT_ACTION_SHA = "b992c5820a0fd059ec8f8ef640f30cec7be29c55"

@@ -33,6 +33,7 @@ import {
     isVoiceSocketEvent,
     normalizeVoiceEventLanguage,
 } from "@/services/voice-api";
+import { socketAuthProtocols } from "@/services/ws-auth";
 import {
     addMessage,
     clearChatState,
@@ -371,7 +372,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             return existingSocket;
         }
 
-        const socket = new WebSocket(buildVoiceWebSocketUrl(user.id, accessToken));
+        const socket = new WebSocket(
+            buildVoiceWebSocketUrl(user.id),
+            socketAuthProtocols(accessToken),
+        );
         voiceSocketRef.current = socket;
 
         socket.onopen = () => {
@@ -660,9 +664,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         dispatch(setChatError(null));
 
         const socket = new WebSocket(
-            buildChatWebSocketUrl(user.id, accessToken, {
+            buildChatWebSocketUrl(user.id, {
                 documentId: activeDocumentId,
             }),
+            socketAuthProtocols(accessToken),
         );
         socketRef.current = socket;
 

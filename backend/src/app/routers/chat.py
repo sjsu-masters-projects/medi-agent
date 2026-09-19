@@ -12,24 +12,53 @@ from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, W
 from starlette import status
 from supabase import Client
 
-from app.agents.symptom import SymptomAgent, SymptomInput
-from app.agents.triage import TriageAgent, TriageInput
-from app.agents.triage.graph import categorize_llm_failure
+from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.config import settings
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ValidationError
+from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
 from app.db.connection import get_db
+from app.followup import analyse_symptom
 from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
+from app.safety import TRIAGE_COPY
 from app.services.a2a_task_service import A2ATaskService
 from app.services.chat_service import ChatService, ConversationStateConflictError
 from app.services.drug_knowledge_service import DrugKnowledgeService
+from app.utils.localization import resolve_locale_resource
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# The outermost fallback: triage itself could not be reached. Every other tier is
+# localized through TRIAGE_COPY, so this one is too — a patient who wrote in Spanish
+# should not be answered in English at the moment the assistant is least useful.
+OUTER_FALLBACK_COPY: dict[str, dict[str, str]] = {
+    "default": {
+        "outer_fallback": (
+            "I'm having trouble reaching my care assistant right now. Your message is "
+            "saved. Please try again in a moment, and contact your care team directly "
+            "if this is urgent."
+        )
+    },
+    Language.EN.value: {
+        "outer_fallback": (
+            "I'm having trouble reaching my care assistant right now. Your message is "
+            "saved. Please try again in a moment, and contact your care team directly "
+            "if this is urgent."
+        )
+    },
+    Language.ES.value: {
+        "outer_fallback": (
+            "Estoy teniendo problemas para comunicarme con mi asistente de salud en este "
+            "momento. Tu mensaje quedó guardado. Vuelve a intentarlo en un momento y "
+            "contacta directamente a tu equipo clínico si esto es urgente."
+        )
+    },
+}
 
 
 def _get_service(db: Client = Depends(get_db)) -> ChatService:
@@ -275,16 +304,51 @@ def _is_allowed_origin(origin: str | None) -> bool:
     return origin in settings.allowed_origins
 
 
-def _extract_ws_token(websocket: WebSocket) -> str:
-    query_token = websocket.query_params.get("token")
-    if query_token:
-        return query_token
+WS_AUTH_SUBPROTOCOL = "bearer"
+"""Subprotocol the client offers alongside its token.
 
+Browsers cannot set an `Authorization` header on a WebSocket, which is why the token used
+to travel in the query string. A URL is the one place a credential must never go: the
+server writes the full request path to its access log, so every connection published a
+usable session token to anyone who could read logs, and query strings also reach proxies,
+browser history and `Referer` headers. `Sec-WebSocket-Protocol` is the standard way out —
+the browser sends it as a header, and headers are not logged.
+"""
+
+
+def _offered_subprotocols(websocket: WebSocket) -> list[str]:
+    header = websocket.headers.get("sec-websocket-protocol", "")
+    return [value.strip() for value in header.split(",") if value.strip()]
+
+
+def negotiated_subprotocol(websocket: WebSocket) -> str | None:
+    """The subprotocol to echo on `accept`, or None when the client offered none.
+
+    A WebSocket handshake that offers subprotocols expects one back, and browsers abort
+    the connection when the server selects none. Only the scheme name is ever returned:
+    echoing the token would move the credential into a response header and straight back
+    into the logs this change exists to keep it out of.
+    """
+    offered = _offered_subprotocols(websocket)
+    if offered and offered[0].lower() == WS_AUTH_SUBPROTOCOL:
+        return WS_AUTH_SUBPROTOCOL
+    return None
+
+
+def _extract_ws_token(websocket: WebSocket) -> str:
+    # `Sec-WebSocket-Protocol: bearer, <token>` — the browser path.
+    offered = _offered_subprotocols(websocket)
+    if len(offered) >= 2 and offered[0].lower() == WS_AUTH_SUBPROTOCOL:
+        return offered[1]
+
+    # Non-browser clients can send a real header, so keep it.
     auth_header = websocket.headers.get("authorization", "")
     prefix = "bearer "
     if auth_header.lower().startswith(prefix):
         return auth_header[len(prefix) :].strip()
 
+    # The `?token=` query parameter is deliberately not accepted. Reinstating it would
+    # reintroduce the log leak for every client at once.
     raise WebSocketException(
         code=status.WS_1008_POLICY_VIOLATION,
         reason="Missing websocket token",
@@ -336,12 +400,11 @@ async def chat_websocket_endpoint(
             reason=str(exc),
         ) from None
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=negotiated_subprotocol(websocket))
     service = ChatService(db)
     a2a_service = A2ATaskService(db)
     drug_knowledge_service = DrugKnowledgeService(db)
-    triage_agent = TriageAgent()
-    symptom_agent = SymptomAgent()
+    care_coordinator = CareCoordinatorRuntime()
 
     try:
         history = await service.get_history(str(patient_id), limit=50)
@@ -498,18 +561,6 @@ async def chat_websocket_endpoint(
                     },
                 )
 
-            triage_input = TriageInput(
-                user_id=current_user.id,
-                patient_id=patient_id,
-                session_id=session_id,
-                message=incoming.content,
-                language=incoming.language,
-                history=conversation_history[-12:],
-                patient_context=patient_context,
-                document_context=document_context,
-                conversation_state=conversation_state,
-            )
-
             assistant_content = ""
             assistant_intent = "general"
             assistant_urgency = "routine"
@@ -520,7 +571,17 @@ async def chat_websocket_endpoint(
             outer_fallback = False
 
             try:
-                stream_iter = triage_agent.process_stream(triage_input)
+                # The patient's own record is read by the coordinator through a tool
+                # rather than pushed in here, so the identifier travels and the record
+                # does not. Conversation history is carried by the runtime's session,
+                # keyed on this same session id.
+                stream_iter = care_coordinator.process_stream(
+                    patient_id=str(patient_id),
+                    user_id=str(current_user.id),
+                    session_id=session_id,
+                    message=incoming.content,
+                    language=incoming.language.value,
+                )
                 async for event in stream_iter:
                     ev_type = event.get("type")
                     if ev_type == "classification":
@@ -538,9 +599,10 @@ async def chat_websocket_endpoint(
                         )
                         assistant_start_sent = True
 
-                        # Symptom path needs the SymptomAgent response, not the
-                        # triage response. Abort the LLM stream and fall back to
-                        # buffered triage + symptom orchestration below.
+                        # The symptom route is answered by the follow-up worker below, not
+                        # by the coordinator. Closing the stream here is what keeps the
+                        # patient from watching one reply arrive and then be replaced by
+                        # a different one.
                         if route == "symptom":
                             await stream_iter.aclose()
                             break
@@ -566,11 +628,11 @@ async def chat_websocket_endpoint(
                     },
                 )
                 outer_fallback = True
-                assistant_content = (
-                    "I'm having trouble reaching my care assistant right now. Your message is "
-                    "saved. Please try again in a moment, and contact your care team directly "
-                    "if this is urgent."
-                )
+                # Every other fallback tier is localized through TRIAGE_COPY; this one
+                # answered a Spanish-speaking patient in English.
+                assistant_content = resolve_locale_resource(incoming.language, OUTER_FALLBACK_COPY)[
+                    "outer_fallback"
+                ]
                 assistant_intent = "general"
                 assistant_urgency = "routine"
                 escalation_required = False
@@ -579,38 +641,43 @@ async def chat_websocket_endpoint(
             if route == "symptom":
                 delegation_events: list[dict[str, Any]] = []
                 saved_report: dict[str, Any] | None = None
-                # Buffered triage response (we aborted the stream after
-                # classification). Symptom agent may override below.
+                # The stream is aborted once the route is known, so the patient is never
+                # shown a reply the symptom worker is about to replace. That used to be
+                # followed by a second, buffered call to the same model for text that is
+                # discarded in the common case. This seeds the honest answer instead: if
+                # the worker below produces nothing, we say we could not reply rather than
+                # making a second attempt at the failure that just happened.
                 if not assistant_content and not outer_fallback:
-                    try:
-                        triage_result = await triage_agent(triage_input)
-                        if triage_result.status == "success":
-                            assistant_content = str(triage_result.response_text or "").strip()
-                    except Exception as exc:
-                        fallback_reason = categorize_llm_failure(exc)
-                        record_chat_fallback(layer="L3_outer", reason=fallback_reason)
-                        logger.warning(
-                            "Buffered triage call failed in symptom branch: %s",
-                            exc,
-                            extra={
-                                "chat_fallback_layer": "L3_outer",
-                                "chat_fallback_reason": fallback_reason,
-                            },
-                        )
+                    assistant_content = resolve_locale_resource(incoming.language, TRIAGE_COPY)[
+                        "service_unavailable"
+                    ]
                 try:
-                    symptom_result = await symptom_agent(
-                        SymptomInput(
-                            user_id=current_user.id,
-                            patient_id=patient_id,
-                            session_id=session_id,
-                            language=incoming.language,
-                            message=incoming.content,
-                            history=conversation_history[-12:],
-                            patient_context=patient_context,
-                        )
+                    symptom_result = await analyse_symptom(
+                        message=incoming.content,
+                        language=incoming.language,
+                        history=conversation_history[-12:],
+                        patient_context=patient_context,
                     )
-                    if symptom_result.status == "success" and symptom_result.response_text:
-                        assistant_content = symptom_result.response_text
+                    # An emergency has already been answered with reviewed 911 copy by the
+                    # deterministic floor, and that answer is not the symptom worker's to
+                    # replace. The floor classifies a medical emergency as `symptom`, which
+                    # routes into this branch, so without this guard a patient reporting
+                    # crushing chest pain was shown "I logged your symptom for follow-up"
+                    # and never told to call 911. Self-harm escaped it only because it
+                    # classifies as `mental_health` and never reaches here. The report is
+                    # still captured and the delegation still runs; only the words the
+                    # patient reads are protected.
+                    # Keyed on the text rather than on `status`, because a degraded result
+                    # still carries something the patient needs to read: that the symptom
+                    # could not be recorded. Requiring success would swallow exactly the
+                    # message that admits the failure.
+                    if symptom_result.response_text:
+                        if assistant_urgency != "emergency":
+                            assistant_content = symptom_result.response_text
+                        else:
+                            logger.warning(
+                                "Withheld the symptom worker's reply: the emergency answer stands"
+                            )
 
                     if symptom_result.symptom_report:
                         saved_report = await service.save_symptom_report(

@@ -56,8 +56,36 @@ const EXPLANATION_UNAVAILABLE_MESSAGE =
 const PARSING_IN_PROGRESS_MESSAGE =
   "Processing this document. AI summary will appear when parsing completes.";
 const PARSING_FAILED_FALLBACK_MESSAGE = "This document could not be processed.";
-const PARSING_TIMEOUT_MESSAGE =
-  "Timed out while waiting for document processing to finish.";
+
+/**
+ * Why a document failed, in words a patient can act on.
+ *
+ * The backend stores a short code (migration 034 constrains it to this set), not a
+ * sentence. Rendering the code itself would show a patient "source_unreadable", so each
+ * one is mapped here. An unknown code falls back rather than leaking through: the set is
+ * constrained in the database, but a newer backend may add one before this list catches
+ * up, and a raw enum is never an acceptable thing to put in front of a patient.
+ */
+const PARSE_FAILURE_MESSAGES: Record<string, string> = {
+  attempt_limit_reached:
+    "We tried several times and could not process this document. Someone on your care team can review it.",
+  evidence_not_grounded:
+    "We could not match what we found back to the document, so nothing was saved. Someone on your care team can review it.",
+  invalid_model_response:
+    "We could not read the details from this document. Someone on your care team can review it.",
+  needs_ocr:
+    "We could not read this scan reliably, so nothing was saved. Someone on your care team can review it.",
+  provider_unavailable:
+    "The document service was briefly unavailable. Please try again in a moment.",
+  source_unreadable:
+    "This file could not be opened. It may be damaged, or password protected.",
+};
+
+function describeParseFailure(code?: string): string {
+  return (code && PARSE_FAILURE_MESSAGES[code]) || PARSING_FAILED_FALLBACK_MESSAGE;
+}
+const INITIAL_POLL_DELAY_MS = 3_000;
+const MAX_POLL_DELAY_MS = 30_000;
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
 const SUPPORTED_UPLOAD_MIME_TYPES = new Set([
   "application/pdf",
@@ -92,6 +120,20 @@ function removeTrackedDocumentId(current: Set<string>, documentId: string) {
   return next;
 }
 
+function isDocumentProcessing(status: string) {
+  return (
+    status === DocumentParseStatus.PENDING ||
+    status === DocumentParseStatus.PROCESSING
+  );
+}
+
+function needsHumanDocumentReview(status: string) {
+  return (
+    status === DocumentParseStatus.NEEDS_OCR ||
+    status === DocumentParseStatus.NEEDS_EVIDENCE_REVIEW
+  );
+}
+
 function getDocumentIcon(documentType: DocumentType) {
   switch (documentType) {
     case DocumentType.LAB_REPORT:
@@ -119,7 +161,7 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
     id: record.id,
     mimeType: record.mime_type,
     parseAttempts: record.parse_attempts ?? 0,
-    parseError: record.parse_error ?? undefined,
+    parseFailureCode: record.parse_failure_code ?? undefined,
     parseStatus:
       record.parse_status ??
       (record.parsed
@@ -136,11 +178,11 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
 }
 
 function getDocumentStatus(document: PortalDocument) {
-  if (
-    document.parseStatus === "processing" ||
-    document.parseStatus === "pending"
-  ) {
+  if (isDocumentProcessing(document.parseStatus)) {
     return { label: "Processing...", variant: "warning" as const };
+  }
+  if (needsHumanDocumentReview(document.parseStatus)) {
+    return { label: "Needs care-team review", variant: "warning" as const };
   }
   if (document.parseStatus === "failed") {
     return { label: "Parse failed", variant: "danger" as const };
@@ -174,6 +216,7 @@ export default function RecordsPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const activePollsRef = useRef(new Set<string>());
   const { accessToken, expiresAt, refreshToken, user } = useSelector(
     (state: RootState) => state.auth,
   );
@@ -207,16 +250,16 @@ export default function RecordsPage() {
       setExplanationLang(DEFAULT_LOCALE);
       setExplanationLoading(false);
 
-      if (document.parseStatus === "failed") {
-        setExplanationText(
-          document.parseError ?? PARSING_FAILED_FALLBACK_MESSAGE,
-        );
+      if (
+        document.parseStatus === "failed" ||
+        needsHumanDocumentReview(document.parseStatus)
+      ) {
+        setExplanationText(describeParseFailure(document.parseFailureCode));
         return;
       }
 
       if (
-        document.parseStatus === "pending" ||
-        document.parseStatus === "processing" ||
+        isDocumentProcessing(document.parseStatus) ||
         parsingDocIds.has(document.id)
       ) {
         setExplanationText(PARSING_IN_PROGRESS_MESSAGE);
@@ -242,50 +285,49 @@ export default function RecordsPage() {
     void loadDocuments();
   }, [accessToken, loadDocuments]);
 
+  useEffect(() => {
+    const activePolls = activePollsRef.current;
+    return () => activePolls.clear();
+  }, []);
+
   async function pollForParsedStatus(docId: string) {
+    if (activePollsRef.current.has(docId)) return;
+    activePollsRef.current.add(docId);
     setParsingDocIds((current) => addTrackedDocumentId(current, docId));
 
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 3000));
-
-      try {
-        const record = await api.get<DocumentApiRecord>(
-          `/api/v1/documents/${docId}`,
-          { token: accessToken ?? undefined },
-        );
-        const nextDocument = mapDocument(record);
-
-        setDocuments((current) =>
-          current.map((document) =>
-            document.id === docId ? nextDocument : document,
-          ),
-        );
-
-        if (nextDocument.parsed || nextDocument.parseStatus === "completed") {
-          setParsingDocIds((current) =>
-            removeTrackedDocumentId(current, docId),
+    let delayMs = INITIAL_POLL_DELAY_MS;
+    try {
+      while (activePollsRef.current.has(docId)) {
+        await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+        if (!activePollsRef.current.has(docId)) return;
+        try {
+          const record = await api.get<DocumentApiRecord>(
+            `/api/v1/documents/${docId}`,
+            { token: accessToken ?? undefined },
           );
-          return;
+          const nextDocument = mapDocument(record);
+          setDocuments((current) =>
+            current.map((document) =>
+              document.id === docId ? nextDocument : document,
+            ),
+          );
+          if (nextDocument.parsed || nextDocument.parseStatus === "completed") return;
+          if (
+            nextDocument.parseStatus === "failed" ||
+            needsHumanDocumentReview(nextDocument.parseStatus)
+          ) {
+            setParseError(describeParseFailure(nextDocument.parseFailureCode));
+            return;
+          }
+        } catch {
+          // A queue-backed worker can outlive a short network failure.
         }
-
-        if (nextDocument.parseStatus === "failed") {
-          setParseError(
-            nextDocument.parseError
-              ? `Failed to process document: ${nextDocument.parseError}`
-              : "Failed to process document.",
-          );
-          setParsingDocIds((current) =>
-            removeTrackedDocumentId(current, docId),
-          );
-          return;
-        }
-      } catch {
-        // Keep polling until attempts are exhausted.
+        delayMs = Math.min(delayMs * 2, MAX_POLL_DELAY_MS);
       }
+    } finally {
+      activePollsRef.current.delete(docId);
+      setParsingDocIds((current) => removeTrackedDocumentId(current, docId));
     }
-
-    setParsingDocIds((current) => removeTrackedDocumentId(current, docId));
-    setParseError(PARSING_TIMEOUT_MESSAGE);
   }
 
   async function getUploadSession() {
@@ -506,8 +548,7 @@ export default function RecordsPage() {
   const processingCount = documents.filter(
     (document) =>
       parsingDocIds.has(document.id) ||
-      document.parseStatus === "pending" ||
-      document.parseStatus === "processing",
+      isDocumentProcessing(document.parseStatus),
   ).length;
   const isDeletingSelectedDocument =
     deletingDocumentId === selectedDocument?.id;

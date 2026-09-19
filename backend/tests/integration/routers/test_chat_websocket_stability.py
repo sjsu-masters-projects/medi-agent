@@ -1,21 +1,44 @@
 """Load and stability tests for chat websocket event processing."""
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
-from app.agents.triage.agent import TriageOutput
+from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
 
 
-def _make_stream_mock(output: TriageOutput):
-    """Build a TriageAgent.process_stream mock that yields events matching `output`."""
+@dataclass(frozen=True)
+class TriageOutput:
+    """The turn fields the stream mock reads.
 
-    async def _mock_process_stream(_self, _agent_input):
+    This was imported from the triage agent, which has been removed. Kept as a local
+    stand-in so these tests describe the websocket contract rather than whichever runtime
+    happens to be producing it.
+    """
+
+    agent_id: str = "test"
+    status: str = "success"
+    intent: str | None = None
+    urgency: str | None = None
+    route: str | None = None
+    response_text: str | None = None
+    escalation_required: bool = False
+
+
+def _make_stream_mock(output: TriageOutput):
+    """Build a turn-stream mock that yields events matching `output`.
+
+    The runtime behind chat changed; the event contract it yields did not, which is the
+    point of patching at this seam rather than deeper.
+    """
+
+    async def _mock_process_stream(_self, **_kwargs):
         intent = output.intent or "general"
         urgency = output.urgency or "routine"
         route = output.route or ("symptom" if intent == "symptom" else "triage")
@@ -136,16 +159,15 @@ class TestChatWebSocketStability:
             route="triage",
         )
 
-        async def _mock_triage_process(_self, _agent_input):
-            return triage_output
-
-        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
         monkeypatch.setattr(
-            "app.routers.chat.TriageAgent.process_stream",
+            CareCoordinatorRuntime,
+            "process_stream",
             _make_stream_mock(triage_output),
         )
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             history = websocket.receive_json()
             assert history["type"] == "chat_history"
 
@@ -189,16 +211,15 @@ class TestChatWebSocketStability:
             route="triage",
         )
 
-        async def _mock_triage_process(_self, _agent_input):
-            return triage_output
-
-        monkeypatch.setattr("app.routers.chat.TriageAgent.process", _mock_triage_process)
         monkeypatch.setattr(
-            "app.routers.chat.TriageAgent.process_stream",
+            CareCoordinatorRuntime,
+            "process_stream",
             _make_stream_mock(triage_output),
         )
 
-        with client.websocket_connect(f"/ws/chat/{patient_id}?token=test-token") as websocket:
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
             assert websocket.receive_json()["type"] == "chat_history"
 
             for _ in range(120):

@@ -128,6 +128,8 @@ class PatientDocumentRead(BaseModel):
     file_name: str
     document_type: DocumentType
     parse_status: str
+    parse_failure_code: str | None = None
+    parse_attempts: int = 0
     ai_summary: str | None = None
     created_at: str
     uploaded_by_role: UploaderRole
@@ -149,6 +151,8 @@ class DocumentReviewQueueItem(BaseModel):
     file_name: str
     document_type: DocumentType
     parse_status: str
+    parse_failure_code: str | None = None
+    parse_attempts: int = 0
     ai_summary: str | None = None
     source_clinic: str | None = None
     created_at: str

@@ -1,0 +1,7 @@
+{
+  "document": {"title": "Synthetic prescription", "document_type": "prescription"},
+  "medications": [{"name": "Aspirin", "dosage": "81 mg", "frequency": "once daily", "route": "oral", "evidence": [{"page": 1, "excerpt": "Medication: Aspirin 81 mg by mouth once daily.", "confidence": 0.95}]}],
+  "conditions": [{"name": "Hypertension", "evidence": [{"page": 1, "excerpt": "Condition: Hypertension.", "confidence": 0.95}]}],
+  "allergies": [{"allergen": "Penicillin", "reaction": "rash", "severity": "unknown", "evidence": [{"page": 1, "excerpt": "Allergy: Penicillin — rash.", "confidence": 0.95}]}],
+  "obligations": []
+}

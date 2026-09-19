@@ -271,7 +271,6 @@ describe("Patient chat page", () => {
         );
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            "access-token",
             { documentId: "doc-1" },
         );
         expect(replace).toHaveBeenCalledWith("/chat");
@@ -303,7 +302,6 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/Discharge Summary\.pdf/i)).toBeInTheDocument();
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            "access-token",
             { documentId: "doc-2" },
         );
         expect(replace).toHaveBeenCalledWith("/chat");
@@ -330,7 +328,6 @@ describe("Patient chat page", () => {
         await waitFor(() => {
             expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
                 "patient-1",
-                "access-token",
                 { documentId: null },
             );
         });

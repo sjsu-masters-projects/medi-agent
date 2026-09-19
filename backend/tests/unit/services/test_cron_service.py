@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -16,7 +16,7 @@ def cron_service():
 
 @pytest.mark.asyncio
 async def test_dispatch_reminders_summarizes_created_notifications(monkeypatch, cron_service):
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
 
     async def _noop(*args, **kwargs):
         return None
@@ -47,7 +47,7 @@ async def test_dispatch_reminders_summarizes_created_notifications(monkeypatch, 
 
 @pytest.mark.asyncio
 async def test_run_nightly_adr_scan_flags_candidates(monkeypatch, cron_service):
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     symptom_rows = [
         {
             "id": "symptom-1",

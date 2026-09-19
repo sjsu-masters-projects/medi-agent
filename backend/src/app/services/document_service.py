@@ -68,12 +68,14 @@ class DocumentService:
         notes: str | None = None,
         sign_file_url: bool = True,
         content_hash: str | None = None,
+        queue_ingestion: bool = True,
     ) -> Any:
         """Store document metadata after the frontend has uploaded the file.
 
         Validates file type and size before inserting.
         """
         self._validate_file(mime_type, file_size_bytes)
+        self._validate_file_path(patient_id, file_path)
 
         # Generate a signed URL for immediate access
         file_url = self._generate_signed_url(file_path) if sign_file_url else ""
@@ -91,8 +93,8 @@ class DocumentService:
             "source_clinic": source_clinic,
             "notes": notes,
             "content_hash": content_hash.lower() if content_hash else None,
-            "parse_status": "pending",
-            "parse_error": None,
+            "parse_status": "pending" if queue_ingestion else "none",
+            "parse_failure_code": None,
             "parse_attempts": 0,
             "review_status": (
                 DocumentReviewStatus.PENDING.value
@@ -292,15 +294,21 @@ class DocumentService:
         ai_summary: str | None,
         parse_status: str,
         parsed: bool,
-        parse_error: str | None = None,
+        parse_failure_code: str | None = None,
     ) -> None:
-        """Persist a completed or failed parse result for a patient document."""
+        """Persist a completed or failed parse result for a patient document.
+
+        `parse_failure_code` is one of the codes migration 034 constrains the column to,
+        not free text — the database rejects anything else. This used to write the legacy
+        `parse_error` column, which migration 034 superseded but did not drop, so anything
+        written there is now invisible to both portals.
+        """
         (
             self.db.table("documents")
             .update(
                 {
                     "ai_summary": ai_summary,
-                    "parse_error": parse_error,
+                    "parse_failure_code": parse_failure_code,
                     "parse_status": parse_status,
                     "parsed": parsed,
                 }
@@ -323,6 +331,16 @@ class DocumentService:
             raise ValidationError(
                 f"File too large ({file_size_bytes / 1024 / 1024:.1f}MB). "
                 f"Maximum: {MAX_FILE_SIZE_BYTES / 1024 / 1024:.0f}MB"
+            )
+
+    @staticmethod
+    def _validate_file_path(patient_id: UUID, file_path: str) -> None:
+        """Only process the patient's own object namespace with the service role."""
+        normalized = file_path.strip().lstrip("/")
+        expected_prefix = f"{patient_id}/"
+        if not normalized.startswith(expected_prefix) or ".." in normalized.split("/"):
+            raise ValidationError(
+                "Document storage path must be inside the patient's upload namespace"
             )
 
     def _generate_signed_url(self, file_path: str) -> str:

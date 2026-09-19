@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.agents.triage.prompts import build_triage_response_prompt
+from app.services.triage_prompts import build_triage_response_prompt
 from app.services.drug_knowledge_service import (
     DrugKnowledgeService,
     format_drug_knowledge_for_prompt,

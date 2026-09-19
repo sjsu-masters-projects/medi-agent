@@ -1,12 +1,16 @@
-"""Model Router — routes LLM tasks to the optimal model.
+"""Model Router — routes LLM tasks to a model client.
 
-Based on MedGemma 27B vs Gemini Flash Lite vs Gemini Pro benchmarks
-(2026-03-21, 4 runs, 5 clinical scenarios, Gemma chat template).
+This is the legacy routing path, kept working while the agent runtime in `app.adk`
+replaces it. New routing decisions belong in `app.adk.registry`, which records a
+fallback, a latency budget, and a deterministic path for each workload; this map can
+express none of those.
 
-Routing Decision (data-backed):
-- MedGemma 27B: Document parsing, ADR detection, drug interactions, triage classification
-- Gemini Flash Lite: Patient-facing chat, voice pipeline, lab explanations
-- Gemini Pro: SOAP notes, MedWatch forms, nightly pharmacovigilance batch
+Every task that once routed to MedGemma now routes to Flash. That model was measured and
+dropped (`.agent/specs/eval-harness-protocol-2026-09.md` §14), and in practice it had
+already stopped running: its client raised unless a Vertex endpoint was configured, and
+the default was empty. Document parsing was therefore already served by Flash through the
+fallback path, while triage classification raised on every call and degraded to keyword
+rules without ever recording that it had.
 """
 
 from __future__ import annotations
@@ -16,14 +20,13 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
 
 from app.clients.gemini import GeminiClient
-from app.clients.medgemma import MedGemmaClient
 from app.config import settings
-from app.models.generation import GenerationRequest
+from app.models.generation import GenerationRequest, GenerationTelemetry
 from app.services.generation_providers import ClientTextProvider, TextFallbackProvider, TextProvider
+from app.services.model_telemetry_service import schedule_generation_record
 
 if TYPE_CHECKING:
     from app.clients.gemini import GeminiClient as GeminiClientType
-    from app.clients.medgemma import MedGemmaClient as MedGemmaClientType
     from app.clients.nvidia_nim import NvidiaNimClient as NvidiaNimClientType
 
 logger = logging.getLogger(__name__)
@@ -32,20 +35,20 @@ logger = logging.getLogger(__name__)
 class TaskType(Enum):
     """Task types for model routing."""
 
-    # MedGemma 27B tasks (clinical extraction, high correctness)
+    # Clinical extraction and classification
     DOCUMENT_PARSING = "document_parsing"
     ADR_DETECTION = "adr_detection"
     DRUG_INTERACTION = "drug_interaction"
     TRIAGE_CLASSIFICATION = "triage_classification"
     LAB_INTERPRETATION = "lab_interpretation"
 
-    # Flash Lite tasks (patient-facing, speed + warmth)
+    # Patient-facing, speed and warmth
     CHAT_RESPONSE = "chat_response"
     VOICE_RESPONSE = "voice_response"
     PATIENT_EXPLANATION = "patient_explanation"
     GENERAL_QA = "general_qa"
 
-    # Pro tasks (deep reasoning, batch/background)
+    # Deep reasoning, batch/background
     SOAP_NOTE = "soap_note"
     MEDWATCH_DRAFT = "medwatch_draft"
     PHARMACOVIGILANCE_SCAN = "pharmacovigilance_scan"
@@ -54,13 +57,13 @@ class TaskType(Enum):
 
 # Route mapping: TaskType → model name
 TASK_MODEL_MAP = {
-    # MedGemma 27B
-    TaskType.DOCUMENT_PARSING: "medgemma",
-    TaskType.ADR_DETECTION: "medgemma",
-    TaskType.DRUG_INTERACTION: "medgemma",
-    TaskType.TRIAGE_CLASSIFICATION: "medgemma",
-    TaskType.LAB_INTERPRETATION: "medgemma",
-    # Flash Lite
+    # Clinical tasks. These named MedGemma until it was measured and dropped.
+    TaskType.DOCUMENT_PARSING: "flash",
+    TaskType.ADR_DETECTION: "flash",
+    TaskType.DRUG_INTERACTION: "flash",
+    TaskType.TRIAGE_CLASSIFICATION: "flash",
+    TaskType.LAB_INTERPRETATION: "flash",
+    # Patient-facing
     TaskType.CHAT_RESPONSE: "flash",
     TaskType.VOICE_RESPONSE: "flash",
     TaskType.PATIENT_EXPLANATION: "flash",
@@ -74,10 +77,10 @@ TASK_MODEL_MAP = {
 
 
 class ModelRouter:
-    """Routes LLM tasks to the optimal model based on task type.
+    """Routes LLM tasks to a model client based on task type.
 
     Maintains singleton instances of each client for connection pooling.
-    Includes fallback logic: if primary model fails, try Flash as default.
+    Includes fallback logic: if the primary model fails, try Flash as default.
 
     Example:
         router = ModelRouter()
@@ -87,7 +90,6 @@ class ModelRouter:
 
     def __init__(self) -> None:
         """Initialize model router with lazy client instantiation."""
-        self._medgemma_client: MedGemmaClientType | None = None
         self._flash_client: GeminiClientType | None = None
         self._pro_client: GeminiClientType | None = None
         self._nim_client: NvidiaNimClientType | None = None
@@ -95,18 +97,8 @@ class ModelRouter:
         self._text_providers_by_model: dict[str, TextProvider] = {}
 
     @property
-    def medgemma_client(self) -> MedGemmaClientType:
-        """Get or create MedGemma 27B client."""
-        if self._medgemma_client is None:
-            self._medgemma_client = MedGemmaClient(
-                model=settings.medgemma_model,
-            )
-            logger.info(f"Initialized MedGemma client: {settings.medgemma_model}")
-        return self._medgemma_client
-
-    @property
     def flash_client(self) -> GeminiClientType:
-        """Get or create Gemini Flash Lite client."""
+        """Get or create the Gemini Flash client."""
         if self._flash_client is None:
             self._flash_client = GeminiClient(
                 model=settings.gemini_flash_model,
@@ -118,7 +110,7 @@ class ModelRouter:
 
     @property
     def pro_client(self) -> GeminiClientType:
-        """Get or create Gemini Pro client."""
+        """Get or create the Gemini Pro client."""
         if self._pro_client is None:
             self._pro_client = GeminiClient(
                 model=settings.gemini_pro_model,
@@ -128,14 +120,14 @@ class ModelRouter:
             logger.info(f"Initialized Gemini Pro client: {settings.gemini_pro_model}")
         return self._pro_client
 
-    def get_client(self, task_type: TaskType) -> MedGemmaClientType | GeminiClientType:
+    def get_client(self, task_type: TaskType) -> GeminiClientType:
         """Get the appropriate LLM client for the given task type.
 
         Args:
             task_type: The type of task to route
 
         Returns:
-            The appropriate client instance (MedGemma, Flash, or Pro)
+            The appropriate client instance (Flash or Pro)
 
         Raises:
             ValueError: If task_type is not recognized
@@ -145,18 +137,14 @@ class ModelRouter:
         if model_name is None:
             raise ValueError(f"Unknown task type: {task_type}")
 
-        if model_name == "medgemma":
-            return self.medgemma_client
-        elif model_name == "flash":
+        if model_name == "flash":
             return self.flash_client
         elif model_name == "pro":
             return self.pro_client
         else:
             raise ValueError(f"Unknown model name: {model_name}")
 
-    def get_client_with_fallback(
-        self, task_type: TaskType
-    ) -> MedGemmaClientType | GeminiClientType:
+    def get_client_with_fallback(self, task_type: TaskType) -> GeminiClientType:
         """Get client with fallback to Flash if primary fails.
 
         Args:
@@ -169,7 +157,7 @@ class ModelRouter:
             return self.get_client(task_type)
         except Exception as e:
             logger.error(
-                f"Failed to get primary client for {task_type}: {e}. Falling back to Flash Lite."
+                f"Failed to get primary client for {task_type}: {e}. Falling back to Flash."
             )
             return self.flash_client
 
@@ -208,17 +196,13 @@ class ModelRouter:
             logger.info(f"Initialized NVIDIA NIM client: {settings.nvidia_nim_model}")
         return self._nim_client
 
-    def client_for_model(
-        self, model_name: str
-    ) -> MedGemmaClientType | GeminiClientType | NvidiaNimClientType:
+    def client_for_model(self, model_name: str) -> GeminiClientType | NvidiaNimClientType:
         """Return a client by model name, independent of task routing.
 
         `get_client` answers "what should run this task", which is the right question
         in production and the wrong one for evaluation: TASK_MODEL_MAP binds each task
-        to exactly one model, so it cannot express "run this same prompt on all three".
+        to exactly one model, so it cannot express "run this same prompt on both".
         """
-        if model_name == "medgemma":
-            return self.medgemma_client
         if model_name == "flash":
             return self.flash_client
         if model_name == "pro":
@@ -279,6 +263,36 @@ class ModelRouter:
         max_tokens: int = 1024,
     ) -> str:
         """Generate plain text through the provider contract and return text only."""
+        text, _telemetry = await self.generate_text_with_telemetry(
+            task_type,
+            prompt=prompt,
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return text
+
+    async def generate_text_with_telemetry(
+        self,
+        task_type: TaskType,
+        *,
+        prompt: str,
+        system_instruction: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> tuple[str, GenerationTelemetry]:
+        """Generate text and return which model produced it, alongside the text.
+
+        `generate_text` throws the envelope away, which is right for a caller that only
+        needs prose. It is wrong for a caller that then writes a durable record: document
+        ingestion stores extraction candidates with no note of which model produced them,
+        so after a model swap there is no way to tell which candidates came from which
+        model, and therefore no way to re-review or retire them selectively.
+
+        Reading the configured model name at the write site instead would be a guess: the
+        router falls back, so the configured model is not necessarily the one that
+        answered. A confidently wrong provenance stamp is worse than an absent one.
+        """
         response = await self.get_text_provider_with_fallback(task_type).generate(
             GenerationRequest(
                 prompt=prompt,
@@ -288,7 +302,16 @@ class ModelRouter:
                 task=task_type.value,
             )
         )
-        return response.text
+        # The envelope beside the text used to be discarded here, which is why nothing
+        # could say what a workload costs or how often it is truncated. Scheduled rather
+        # than awaited: this runs on every turn, and a stalled database must not spend a
+        # patient's latency budget on bookkeeping.
+        #
+        # `task_type.value` is the legacy routing key, not a `Workload`. The column records
+        # whichever key the caller routed on, and this call site goes away with the rest of
+        # the legacy router — the service is the part the agent runtime will reuse.
+        schedule_generation_record(workload=task_type.value, telemetry=response.telemetry)
+        return response.text, response.telemetry
 
 
 # Global singleton instance

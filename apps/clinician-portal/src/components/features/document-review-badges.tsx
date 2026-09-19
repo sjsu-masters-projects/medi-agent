@@ -8,6 +8,9 @@ function getParseStatusBadgeClass(parseStatus: string): string {
             return "bg-green-100 text-green-700";
         case "failed":
             return "bg-red-100 text-red-700";
+        case "needs_ocr":
+        case "needs_evidence_review":
+            return "bg-slate-100 text-slate-700";
         default:
             return "bg-amber-100 text-amber-700";
     }
@@ -35,7 +38,11 @@ export function ParseStatusBadge({ parseStatus }: ParseStatusBadgeProps) {
         <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getParseStatusBadgeClass(parseStatus)}`}
         >
-            Parse {parseStatus}
+            {parseStatus === "needs_ocr"
+                ? "OCR review needed"
+                : parseStatus === "needs_evidence_review"
+                  ? "Evidence review needed"
+                  : `Parse ${parseStatus}`}
         </span>
     );
 }
