@@ -350,8 +350,8 @@ async def get_patient_a2a_timeline(
     response_model=SoapNoteGenerationResponse,
     summary="Generate AI SOAP note",
     description=(
-        "Triggers the LangGraph Summarization Agent (Gemini 3.1 Pro Preview) "
-        "to generate a SOAP note from patient data. Stores result in soap_notes table. "
+        "Triggers the configured SOAP-note generation service for patient data. "
+        "Stores the resulting draft in soap_notes. "
         "Note: this may take 15-30 seconds."
     ),
 )

@@ -128,7 +128,7 @@ The system must not diagnose, prescribe, autonomously change medication, or dire
 - Next.js/React patient and clinician portals
 - FastAPI/Python backend
 - Supabase/Postgres/pgvector/Auth/Storage/Realtime
-- LangGraph for stateful clinical workflows
+- ADK runtime for model-backed workflows, with deterministic services for authority and state
 - DailyMed and RxNorm evidence
 - Vercel and Cloud Run deployment structure
 

@@ -16,8 +16,9 @@ OCR, call extraction, and write candidate facts.
    `python -m app.workers.document_ingestion`, at least 2 GiB memory, a 300-second
    task timeout, one task, and no more than one concurrent execution.
 4. Give the job the same runtime configuration and service account access as the
-   backend service: Supabase URL/keys/JWT secret, Vertex project/location and
-   credentials, and the configured model settings. Do not copy credential values
+   backend service: Supabase URL/keys/JWT secret, Vertex project and credentials,
+   `VERTEX_AI_LOCATION` for MaaS, `GEMINI_VERTEX_AI_LOCATION` for Gemini, and the
+   configured model settings. Do not copy credential values
    into source control or Cloud Scheduler payloads.
 5. Schedule executions at a cadence that keeps the expected queue delay visible
    to patients (five minutes is the initial operating target). Use Cloud Scheduler

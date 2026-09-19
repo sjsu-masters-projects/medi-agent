@@ -49,8 +49,9 @@ store or present private chain-of-thought.
 
 ## Operating decisions
 
-1. Evolve the current Next.js, FastAPI, Supabase, LangGraph, DailyMed, RxNorm, Vercel,
-   and Cloud Run foundation rather than rewriting it.
+1. Evolve the current Next.js, FastAPI, Supabase, DailyMed, RxNorm, Vercel, and Cloud Run
+   foundation rather than rewriting it. New model-backed work uses the ADK runtime; legacy
+   graph modules are compatibility code, not an architectural target.
 2. Use four meaningful worker boundaries: Care Coordinator, Document and Evidence,
    Medication Safety, and Follow-up. Scheduling, notifications, authentication,
    authorization, and database operations are deterministic services.
@@ -74,7 +75,7 @@ they conflict with the August 2026 revival plan**, not deleted.
 | D5 | Supabase platform | Retained |
 | D6 | Syncfusion viewer | Retained only where licensed and actually used |
 | D7 | Next.js, Redux, Tailwind | Retained foundation |
-| D8 | LangGraph orchestration | Retained only for the four approved worker boundaries |
+| D8 | LangGraph orchestration | Superseded by the ADK runtime for new model-backed work; legacy graph modules remain only while callers depend on them |
 | D9 | Monorepo | Retained |
 | D10 | FHIR-aligned model | Strengthened to validated FHIR R4 import/export and provenance |
 | D11 | In-app and email messaging | Retained; clinical content requires approval |

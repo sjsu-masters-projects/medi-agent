@@ -332,6 +332,21 @@ open for sandbox-specific diagnosis.
       version-pinning policy in an ADR. The retired-model incident is the trigger, not proof
       that a provider should be replaced without this evaluation. Tracked as `AI-002`.
 
+### REV-006 — Consolidate durable documentation
+
+**Status:** `[/]` In review in PR #91
+
+**Owner:** Rajeev Chaurasia
+
+- [x] Preserve the active execution plan, task tracker, product/architecture records, and
+      operational guides as the sources contributors need to work safely.
+- [x] Replace superseded phase plans, provider surveys, pricing snapshots, and preliminary
+      evaluation narratives with concise AI and document-intelligence decision records.
+- [x] Correct stale agent-runtime, MCP, workflow, and package-map guidance that still named
+      retired implementation patterns.
+- [x] Remove generated local evaluation reports from version control eligibility.
+- [ ] Merge and verify that internal documentation links resolve on `main`.
+
 ### AI-002 — Model-routing decision spike (September 2026)
 
 **Status:** `[/]` Spike delivered; team decisions and follow-up PRs pending
@@ -340,7 +355,7 @@ open for sandbox-specific diagnosis.
 
 **Owner:** Ganesh Thampi (provider adapters, evaluation); safety review required
 
-**Spec:** [`specs/ai-model-routing-spike-2026-09.md`](specs/ai-model-routing-spike-2026-09.md)
+**Decision record:** [`../docs/decisions/ai-runtime-2026-09.md`](../docs/decisions/ai-runtime-2026-09.md)
 
 - [x] Map every model call site, prompt, schema, fallback, telemetry field, and persisted
       version field for the nine AI workloads against the spike requirements (spec §3).
@@ -373,21 +388,20 @@ open for sandbox-specific diagnosis.
       clinical NER and SNOMED linking incl. Spanish resources, medical speech, medical
       embeddings, safety classifiers, drug-knowledge data sources after the NLM interaction
       API retirement, and the physician-rubric benchmarks) and record the eight decisions in
-      [`specs/medical-models-landscape-2026-09.md`](specs/medical-models-landscape-2026-09.md).
+      the AI runtime decision record.
       Finding: no medical fine-tune outranks current general models on MedHELM or HealthBench;
       the medical-specific investments that pay off are terminology, Spanish clinical NLP,
       medical STT, and a self-harm classifier layer.
 - [x] Consolidate solution, measured quality, and cost per use case, including an assessment
       of the OCR and document-intelligence document, in
-      [`specs/ai-use-case-decision-sheet-2026-09.md`](specs/ai-use-case-decision-sheet-2026-09.md).
+      the AI runtime decision record.
       Key point: reading quality (97.8% fields found, assessment) and structuring quality
       (87% fields, 100% evidence, spike) are different steps; end to end is unmeasured.
 - [x] Broad inference and hosting research (NVIDIA hosted and self-hosted NIM, token-priced
       open-model providers, GPU-hour and serverless GPU hosting, hyperscaler managed APIs
       with BAA, startup and education credit programs, speech providers), with monthly costs
       for the expo, one-clinic, and ten-clinic scenarios. Decision document:
-      [`specs/inference-hosting-options-2026-09.md`](specs/inference-hosting-options-2026-09.md);
-      five sourced reports under `docs/research/hosting-2026-09/`. Finding: managed per-token
+      the AI runtime decision record. Finding: managed per-token
       APIs are 5–100× cheaper than owned GPUs below ten-clinic scale; only a scale-to-zero L4
       (≈ $46/month) breaks even at one clinic; NVIDIA's hosted catalogue has no price, SLA, or
       BAA and prohibits personal data, so it is an evaluation source only; the cheaper managed
@@ -404,19 +418,18 @@ open for sandbox-specific diagnosis.
       per-provider reasoning-effort option and bounded exponential backoff for 429 and
       transient 5xx responses, with retries recorded in telemetry.
       Report `backend/reports/ai_eval_20260915_194824` (560 of 560 scored); decision in
-      `.agent/specs/inference-hosting-options-2026-09.md` §10: 3.5 Flash-Lite for triage,
-      explanations, and documents; 3.7 Flash at low effort for discrepancy and symptom
-      extraction; 3.5 Flash-Lite or 3.1 Flash-Lite as fallbacks; about $3.90 for expo volume.
-- [ ] Switch the model routing to the §10 expo decision with a per-workload fallback, and
-      replace the retired `gemini-3.1-flash-lite-preview` in local and Cloud Run configuration.
+      a now-superseded proposed routing. The production routing was subsequently rebuilt in
+      AI-003 from the paired re-run rather than applying this preliminary recommendation.
+- [x] Replace the retired preview routing with the reviewed per-workload registry, explicit
+      fallback, and deterministic outcome. Current configuration is in the AI runtime decision
+      record; deployment acceptance remains tracked under AI-003 WS1.
 - [ ] Document reading is an OCR decision, not a model decision: the OCR spike
       (`docs/document-intelligence-assessment.md`) recommends pypdfium2 plus PaddleOCR
       PP-OCRv5 through RapidOCR with deterministic anchoring, and its prototype already
       exists uncommitted under `backend/src/app/services/document_intelligence/`. The
       routing evaluation only measures structuring of page-marked text; it must not be
       used to pick a reader.
-- [x] Rebuild the evaluation harness so it measures models rather than the harness
-      (protocol: `.agent/specs/eval-harness-protocol-2026-09.md`). Every call now ends in
+- [x] Rebuild the evaluation harness so it measures models rather than the harness. Every call now ends in
       one recorded disposition (answered / infra_error / truncated / unparseable /
       refused); `finish_reason` and reasoning tokens are captured, so truncation is no
       longer read as a wrong answer; HTTP 400 is `invalid_request`, not an outage;
@@ -446,7 +459,8 @@ open for sandbox-specific diagnosis.
       confident ordering of nine models was noise plus harness defects. What does separate
       them: gpt-oss costs roughly a tenth as much and answers triage in 2.2 s against
       6.2 s, but breaks the output schema occasionally where Gemini never did. Details in
-      `.agent/specs/eval-harness-protocol-2026-09.md` §12. MedGemma's leg is outstanding.
+      the historic evaluation record. The medical-model leg was subsequently completed and
+      ruled out below.
 - [x] Re-ran the expo comparison under the new protocol on all three finalists
       (`ai_eval_20260917_172344`, `_183906`, `_192522`; 70 scenarios each, sequential).
       Verdict: **MedGemma is out**, though not for the reason first written here. It
@@ -462,7 +476,7 @@ open for sandbox-specific diagnosis.
       choose on deployment properties: gpt-oss is ~10x cheaper, faster on triage, and
       occasionally violates the output schema; 3.8 Flash never violated it, passes the 90%
       recall bar on reconciliation where gpt-oss fails at 71%, and loses more calls to
-      shared capacity. Full detail in `.agent/specs/eval-harness-protocol-2026-09.md` §14.
+      shared capacity. The durable deployment choice is recorded in the AI runtime decision.
 - [ ] Re-run the expo comparison under the new protocol on the three finalists
       with the rigour still missing: three trials per scenario for run-to-run variance,
       the no-document and example-perturbation controls in protocol §5, per-class safety
@@ -473,9 +487,9 @@ open for sandbox-specific diagnosis.
       one on a real scenario that never asked for a different shape. If it is chosen for a
       workload the caller must validate and retry. An earlier claim that `minLength` caused
       this was written up after a single trial and is wrong; the repeat test refuted it.
-- [ ] Every number in `inference-hosting-options-2026-09.md` §10 and
-      `ai-model-routing-spike-2026-09.md` §7 predates these fixes and must not be quoted
-      until the re-run replaces it.
+- [x] Treat historic price, availability, and benchmark figures as dated research, not current
+      decision evidence. The retired reports remain in Git history; the current decision record
+      records only the controls and limits that still govern the runtime.
 - [x] MedGemma 1.5 4B measurement on a temporary Vertex endpoint (two L4 GPUs, us-central1,
       authorized 2026-09-15 as test-then-undeploy; report `backend/reports/ai_eval_20260915_201947`).
       Endpoint existed about 17 minutes, about $0.60 of GPU time at the estimated rate; undeployed
@@ -486,8 +500,8 @@ open for sandbox-specific diagnosis.
       `backend/scripts/model_garden_endpoint.py` adds `up`, `status`, and `down` so self-hosted
       models are deployed only for a working session; `down` removes only endpoints the script
       created unless an endpoint ID is given.
-- [ ] Team decision on the five open items in spec §11 (budget lane, non-Google evaluation
-      credentials, GPU host for the self-hosted lane, adjudication schedule, P0 ordering).
+- [ ] Team decision on the remaining budget, comparison-credential, GPU-host, and clinical
+      adjudication questions recorded in the AI runtime decision.
 - [ ] Execute migration steps 1–6 as separate PRs after the SAFE-002 P0 fix ships.
 - [ ] Hand the harness and seed set to `EVA-001` for the remaining 50 scenarios and the 40
       adjudications.
@@ -654,7 +668,8 @@ model does not fix any of those. This task rebuilds the runtime around them.
       stalled database would spend a patient's latency budget on bookkeeping. No patient
       identifiers, prompts or response text are written, pinned by a test.
 - [/] **WS1 remaining.** The production Cloud Run revision is configured with
-      `GOOGLE_PROJECT_ID=medi-agent-490106`, `VERTEX_AI_LOCATION=us-central1`, and
+      `GOOGLE_PROJECT_ID=medi-agent-490106`, `VERTEX_AI_LOCATION=us-central1` for MaaS,
+      `GEMINI_VERTEX_AI_LOCATION=global` for Gemini 3.8 Flash, and
       `GEMINI_FLASH_MODEL=gemini-3.8-flash`; its runtime identity has Vertex AI User and
       a direct regional `openai/gpt-oss-120b-maas` request succeeded. The application
       keeps the AI Studio path only as an explicit local/evaluation compatibility path;
@@ -1457,6 +1472,6 @@ would still have to be constrained and verified first.
 | 2026-08-18 | Product delivery outranks research publication | Evaluation supports engineering and safety decisions |
 | 2026-08-18 | REV-001 is the first engineering task | Trustworthy, bounded CI is required before feature delivery |
 | 2026-09-09 | ~~NVIDIA NIM is out of scope for provider comparison~~ | Superseded on 2026-09-11. The entry assumed no endpoint was reachable; NIM's cloud API is, and the premise was wrong |
-| 2026-09-10 | Provider routing is decided per workload from harness evidence, with a deterministic layer first and GA model IDs only in production defaults | The AI-002 spike found the routing evidence stale (measured Gemini 2.5, configured 3.1), the MedGemma 27B endpoint unreachable, both legacy Google SDK paths past end of support, and no telemetry or kill switch. Details and the proposed pins are in `specs/ai-model-routing-spike-2026-09.md` §9; the pins stay proposed until the team resolves §11 |
+| 2026-09-10 | Provider routing is decided per workload from harness evidence, with a deterministic layer first and GA model IDs only in production defaults | The AI-002 spike found stale routing evidence, an unreachable medical-model endpoint, unsupported SDK paths, and missing telemetry/kill switches. The current implementation and its remaining limits are in `docs/decisions/ai-runtime-2026-09.md`. |
 | 2026-09-10 | Free-tier endpoints are for synthetic evaluation only and are not a deployment lane | AI Studio free-tier terms allow training and human review of inputs and carry no BAA; the project's key is also on depleted prepaid billing. Zero-cost serving means self-hosted open weights, which need a GPU host for anything beyond 4B-class models |
 | 2026-09-11 | NVIDIA NIM is the third comparison provider | It is reachable through NVIDIA's hosted catalog over an OpenAI-compatible API. It is also the only candidate not hosted by Google, so its failures are the least likely to correlate with MedGemma's and Gemini's — which is what makes a reliability comparison mean anything |

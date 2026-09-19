@@ -27,6 +27,7 @@ from app.config import settings
 def project(monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setattr(settings, "google_project_id", "test-project")
     monkeypatch.setattr(settings, "vertex_ai_location", "us-central1")
+    monkeypatch.setattr(settings, "gemini_vertex_ai_location", "global")
     return "test-project"
 
 
@@ -85,7 +86,7 @@ def test_gemini_is_built_against_vertex_explicitly() -> None:
     assert model.model == "gemini-3.8-flash"
     assert constructor.call_args.kwargs["vertexai"] is True
     assert constructor.call_args.kwargs["project"] == "test-project"
-    assert constructor.call_args.kwargs["location"] == "us-central1"
+    assert constructor.call_args.kwargs["location"] == "global"
 
 
 def test_the_explicit_client_is_the_one_the_model_uses() -> None:

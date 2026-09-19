@@ -44,8 +44,9 @@ Validate:
 |----------|---------|
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` | Supabase DB, Auth, RLS |
 | `GOOGLE_PROJECT_ID` | Vertex AI model and embedding paths |
-| `GOOGLE_PROJECT_ID` | Vertex AI when using project-backed models |
-| `VERTEX_AI_*` | MedGemma / Vertex endpoints |
+| `VERTEX_AI_LOCATION` | Regional MaaS endpoint location; production uses `us-central1` for GPT OSS |
+| `GEMINI_VERTEX_AI_LOCATION` | Gemini Vertex endpoint location; Gemini 3.8 Flash uses `global` |
+| `GEMINI_FLASH_MODEL` | Gemini Flash model ID used by the agent runtime |
 | `DEEPGRAM_API_KEY` | Voice STT/TTS |
 | `RESEND_API_KEY` | Transactional email (clinician invites; extend for other mail later) |
 | `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL` | From address for clinician invite mail (use a verified-domain sender in production) |
@@ -124,21 +125,23 @@ See [TEAM.md](.agent/TEAM.md) for sprint and review expectations.
 
 ### Starting a feature
 
-1. Pick or create a task in [TASKS.md](.agent/TASKS.md) or a GitHub issue.  
-2. Branch: `feature/short-description`, `fix/...`, or `hotfix/...`.  
-3. Follow [.agent/workflows/new-feature.md](.agent/workflows/new-feature.md) for larger work.  
-4. Implement per [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md).  
-5. Add or update tests.  
-6. Run checks below.  
+1. Pick or create a task in [TASKS.md](.agent/TASKS.md) or a GitHub issue.
+2. Branch: `feature/short-description`, `fix/...`, or `hotfix/...`.
+3. Follow [.agent/workflows/create-pr.md](.agent/workflows/create-pr.md) when a PR workflow is needed.
+4. Implement per [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md).
+5. Add or update tests.
+6. Run checks below.
 7. Open a PR using the repo template.
 
 ### Adding a product worker
 
-Follow [.agent/workflows/new-agent.md](.agent/workflows/new-agent.md). Typical layout under `backend/src/app/agents/<name>/`:
+Follow [.agent/workflows/new-agent.md](.agent/workflows/new-agent.md). New model-backed work
+belongs under `backend/src/app/adk/`; retain `backend/src/app/agents/` only for legacy
+compatibility while it is still referenced.
 
-- `agent.py` — agent entry  
-- `graph.py` — LangGraph workflow  
-- `prompts.py` — prompt templates  
+- `agents/<name>/agent.py` — ADK agent entry
+- `agents/<name>/prompts.py` — prompt templates
+- `registry.py` — reviewed model route, fallback, budget, and kill switch
 
 ### Commit messages
 
@@ -206,7 +209,8 @@ Request → Router → Service → DB / external client / Agent → Response
 |-------|----------------|
 | `routers/` | HTTP validation, call services, map responses |
 | `services/` | Business rules (avoid FastAPI imports here) |
-| `agents/` | LangGraph flows, LLM/tool orchestration |
+| `adk/` | Current model runtime, safety plugins, routes, and ADK agents |
+| `agents/` | Legacy compatibility paths; do not start new work here |
 | `models/` | Pydantic request/response schemas |
 | `clients/` | Third-party SDKs (Gemini, Deepgram, Resend, …) |
 | `db/` | Migrations; repositories where used |
@@ -228,7 +232,8 @@ Request → Router → Service → DB / external client / Agent → Response
 | `models/` | API schemas |
 | `routers/` | Routes |
 | `services/` | Domain logic |
-| `agents/` | LangGraph agents |
+| `adk/` | Current agent runtime and plugins |
+| `agents/` | Legacy compatibility paths |
 | `tools/` | Reusable agent tools |
 | `mcp/` | MCP server adapters |
 | `a2a/` | Agent-to-agent protocol pieces |

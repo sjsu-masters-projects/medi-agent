@@ -1,6 +1,6 @@
 # MediAgent — Architecture Truth Record
 
-> **Updated:** 2026-08-20. This distinguishes code that exists today from the
+> **Updated:** 2026-09-18. This distinguishes code that exists today from the
 > approved delivery target. Do not present a planned interface as deployed.
 
 ## Current implementation
@@ -40,10 +40,11 @@ Only these four work boundaries are supported by the product direction:
 | Medication Safety Worker | Rule-based symptom-to-ADR task lifecycle and clinician-review candidate | Produces review candidate; cannot submit or alter medication |
 | Follow-up Worker | Symptom capture, adherence, reminders, and care-gap follow-up | Collects and schedules follow-up only |
 
-The existing `triage`, `ingestion`, `symptom`, and clinician summarization modules
-are implementation components of those boundaries, not a claim of additional
-autonomous workers. The empty pre-visit, scheduling, pharmacovigilance, and A2A
-shells were removed in REV-004.
+The current chat runtime is implemented under `backend/src/app/adk/`: a Care Coordinator
+uses a registry with explicit model transports, budgets, fallback, deterministic outcomes,
+and safety/tool-policy plugins. The older `app/agents` modules are compatibility paths,
+not the starting point for new agent work. The empty pre-visit, scheduling,
+pharmacovigilance, and A2A shells were removed in REV-004.
 
 Scheduling, notification delivery, authentication/authorization, database access,
 retry/idempotency, and approval enforcement are deterministic services. Model output
@@ -66,6 +67,9 @@ Safety rules are deterministic before probabilistic routing for emergency signal
 authorization, malformed data, retries, and idempotency. The user-facing result must
 include concise evidence and uncertainty; private model reasoning is neither exposed
 nor relied on as an audit record.
+
+The current model decision is recorded in
+[`docs/decisions/ai-runtime-2026-09.md`](../docs/decisions/ai-runtime-2026-09.md).
 
 ## MCP and A2A status
 

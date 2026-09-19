@@ -198,10 +198,11 @@ backend/app/
 │   ├── document_service.py
 │   ├── adherence_service.py
 │   └── ...
-├── agents/              # LangGraph agent definitions
-│   ├── base.py          # BaseAgent abstract class
-│   ├── ingestion.py
-│   └── ...
+├── adk/                 # Current agent runtime, registry, and safety plugins
+│   ├── agents/
+│   ├── registry.py
+│   └── plugins/
+├── agents/              # Legacy compatibility paths; no new product work
 ├── tools/               # Tools agents call (DailyMed, RxNorm, etc.)
 ├── clients/             # External API clients (Gemini, Deepgram, etc.)
 ├── db/                  # Supabase queries, migrations, seeds
