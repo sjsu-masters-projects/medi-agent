@@ -98,5 +98,6 @@ jobs:
             --max-instances 2 \
             --allow-unauthenticated \
             --service-account github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com \
+            --update-env-vars GEMINI_VERTEX_AI_LOCATION=global \
             --port 8080 \
             --timeout 300

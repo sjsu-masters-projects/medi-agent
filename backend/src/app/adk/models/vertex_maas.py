@@ -5,9 +5,10 @@ speaks the OpenAI dialect but authenticates with a Google bearer token. That com
 is why this goes through `OpenAICompatibleTextProvider` with an ADC token callable rather
 than through the Gen AI SDK, which does not front these models.
 
-Both the global and regional forms are supported, but the production transport uses the
-single `VERTEX_AI_LOCATION` setting. That makes the endpoint selected in Cloud Run
-auditable and prevents the Gen AI and MaaS paths from silently serving different regions.
+Both the global and regional forms are supported, but the production MaaS transport uses
+the regional `VERTEX_AI_LOCATION` setting. Gemini has its own location setting because
+its serving availability differs; keeping the two explicit prevents either transport from
+being moved by an unrelated model configuration change.
 """
 
 from __future__ import annotations

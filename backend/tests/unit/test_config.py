@@ -12,3 +12,4 @@ def test_stable_flash_lite_is_the_default_model() -> None:
     )
 
     assert settings.gemini_flash_model == "gemini-3.8-flash"
+    assert settings.gemini_vertex_ai_location == "global"

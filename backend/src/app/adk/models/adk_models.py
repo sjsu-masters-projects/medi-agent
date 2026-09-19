@@ -83,7 +83,7 @@ def _vertex_genai_client() -> Any:
     return genai.Client(
         vertexai=True,
         project=settings.google_project_id,
-        location=settings.vertex_ai_location,
+        location=settings.gemini_vertex_ai_location,
     )
 
 

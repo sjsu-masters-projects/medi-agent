@@ -654,7 +654,8 @@ model does not fix any of those. This task rebuilds the runtime around them.
       stalled database would spend a patient's latency budget on bookkeeping. No patient
       identifiers, prompts or response text are written, pinned by a test.
 - [/] **WS1 remaining.** The production Cloud Run revision is configured with
-      `GOOGLE_PROJECT_ID=medi-agent-490106`, `VERTEX_AI_LOCATION=us-central1`, and
+      `GOOGLE_PROJECT_ID=medi-agent-490106`, `VERTEX_AI_LOCATION=us-central1` for MaaS,
+      `GEMINI_VERTEX_AI_LOCATION=global` for Gemini 3.8 Flash, and
       `GEMINI_FLASH_MODEL=gemini-3.8-flash`; its runtime identity has Vertex AI User and
       a direct regional `openai/gpt-oss-120b-maas` request succeeded. The application
       keeps the AI Studio path only as an explicit local/evaluation compatibility path;

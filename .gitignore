@@ -55,3 +55,8 @@ docker-compose.override.yml
 # ========================
 *.log
 tmp/
+
+# Generated local evaluation and benchmark output. Keep reviewed fixture inputs and
+# implementation in version control; reports are reproducible, may contain provider
+# diagnostics, and must not be committed by accident.
+backend/reports/
