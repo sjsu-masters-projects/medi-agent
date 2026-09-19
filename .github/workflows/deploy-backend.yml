@@ -6,12 +6,15 @@ on:
       - main
     paths:
       - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PROJECT_ID: medi-agent-490106
   REGION: us-central1
   SERVICE_NAME: mediagent-backend
+  INGESTION_JOB_NAME: mediagent-document-ingestion
+  RUNTIME_SERVICE_ACCOUNT: github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com
 
 permissions:
   contents: read
@@ -97,7 +100,32 @@ jobs:
             --min-instances 0 \
             --max-instances 2 \
             --allow-unauthenticated \
-            --service-account github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com \
+            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
             --update-env-vars GEMINI_VERTEX_AI_LOCATION=global \
             --port 8080 \
             --timeout 300
+
+      - name: Deploy document-ingestion job
+        run: |
+          IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
+
+          # A Cloud Run Job resolves an image tag to a digest at deploy time. Updating
+          # it beside the backend service prevents its OCR/extraction code from drifting
+          # behind the request path after a later backend release. This command is also
+          # safe as the initial creation path: it declares the whole worker runtime
+          # contract without ever placing secret values in source control.
+          gcloud run jobs deploy ${INGESTION_JOB_NAME} \
+            --project ${PROJECT_ID} \
+            --image ${IMAGE_PATH} \
+            --region ${REGION} \
+            --command python \
+            --args=-m,app.workers.document_ingestion \
+            --cpu 1 \
+            --memory 2Gi \
+            --tasks 1 \
+            --parallelism 1 \
+            --task-timeout 300s \
+            --max-retries 0 \
+            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
+            --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=us-central1,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_FLASH_MODEL=gemini-3.8-flash,DOCUMENT_INGESTION_BATCH_SIZE=1 \
+            --set-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest
