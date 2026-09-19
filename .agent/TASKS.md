@@ -979,9 +979,10 @@ model does not fix any of those. This task rebuilds the runtime around them.
       anchor is absent, direct JSON extraction import is disabled, and upload requests only
       queue a document. Migration `036_document_ingestion_worker.sql` atomically claims a
       bounded batch with `FOR UPDATE SKIP LOCKED`; `app.workers.document_ingestion` is the
-      Cloud Run Job entry point. The operator reports migrations 034–036, the backend
-      deploy, and the scheduled Job configured. WS5 stays in progress until the synthetic
-      acceptance check in `docs/document-ingestion-worker.md` is captured: one queued
+      Cloud Run Job entry point. The deployment workflow now declares and updates the Job
+      beside every backend release so its image digest cannot drift from the request path.
+      The operator reports migrations 034–036 and the backend deploy. WS5 stays in progress
+      until the synthetic acceptance check in `docs/document-ingestion-worker.md` is captured: one queued
       synthetic upload must be claimed by the Job and yield candidates with a page and
       bounding-box anchor, without an unreviewed fact becoming approved clinical truth.
 - [ ] **WS6 — Patient-document retrieval in chat.** A new patient-scoped table, not

@@ -12,18 +12,23 @@ OCR, call extraction, and write candidate facts.
    Do not apply them from a developer machine against a shared environment.
 2. Build the normal backend image. It now includes Tesseract plus `eng` and
    `spa` language data; the worker uses the same image with a different command.
-3. Create a Cloud Run Job in `us-central1` from that image with command
-   `python -m app.workers.document_ingestion`, at least 2 GiB memory, a 300-second
-   task timeout, one task, and no more than one concurrent execution.
-4. Give the job the same runtime configuration and service account access as the
-   backend service: Supabase URL/keys/JWT secret, Vertex project and credentials,
-   `VERTEX_AI_LOCATION` for MaaS, `GEMINI_VERTEX_AI_LOCATION` for Gemini, and the
-   configured model settings. Do not copy credential values
-   into source control or Cloud Scheduler payloads.
+3. The `Deploy Backend to Cloud Run` workflow declares and updates the Job in
+   `us-central1` from that image. It pins 2 GiB memory, a 300-second task timeout,
+   one task, parallelism one, no platform retries, and the command
+   `python -m app.workers.document_ingestion`. It also supplies only the worker's
+   required Supabase secret references and Vertex settings; never copy credential
+   values into source control or Cloud Scheduler payloads.
+4. Run one execution manually before creating a schedule. Start at
+   `DOCUMENT_INGESTION_BATCH_SIZE=1`; raise it only after observed execution
+   durations show the chosen schedule will not overlap.
 5. Schedule executions at a cadence that keeps the expected queue delay visible
    to patients (five minutes is the initial operating target). Use Cloud Scheduler
    or an equivalent job scheduler to execute the Job; it must not call the public
    upload API or the application process directly.
+
+The workflow includes the Job because Cloud Run resolves an image tag to an
+immutable digest at deployment. A Job created manually from `:latest` would
+otherwise remain on its old digest after a later backend release.
 
 ## Acceptance check in a synthetic environment
 
