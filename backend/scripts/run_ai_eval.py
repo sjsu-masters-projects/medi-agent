@@ -198,10 +198,10 @@ def _google_adc_bearer() -> Callable[[], str]:
     return token
 
 
-def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], list[str]]:
-    """Router models plus OpenAI-compatible endpoints; report the ones that cannot start."""
+def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], int]:
+    """Return the providers that can start and a safe count of the ones that cannot."""
     providers: list[TextProvider] = []
-    unavailable: list[str] = []
+    unavailable_count = 0
 
     router_names = [name.strip() for name in args.models.split(",") if name.strip()]
     if router_names:
@@ -211,8 +211,8 @@ def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], li
         for name in router_names:
             try:
                 providers.append(router.get_text_provider_for_model(name))
-            except Exception as error:  # noqa: BLE001 - report and continue
-                unavailable.append(f"{name} ({_error_type(error)})")
+            except Exception:  # noqa: BLE001 - report and continue
+                unavailable_count += 1
 
     from app.clients.openai_compatible import OpenAICompatibleTextProvider
 
@@ -223,10 +223,8 @@ def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], li
         if spec.api_key_env == ADC_CREDENTIALS:
             try:
                 adc_bearer = adc_bearer or _google_adc_bearer()
-            except Exception as error:  # noqa: BLE001 - report and continue
-                unavailable.append(
-                    f"{spec.name} (application default credentials: {_error_type(error)})"
-                )
+            except Exception:  # noqa: BLE001 - report and continue
+                unavailable_count += 1
                 continue
             bearer_token = adc_bearer
         else:
@@ -237,7 +235,7 @@ def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], li
 
                 api_key = str(getattr(settings, spec.api_key_env.lower(), "") or "")
             if spec.api_key_env and not api_key:
-                unavailable.append(f"{spec.name} ({spec.api_key_env} is not set)")
+                unavailable_count += 1
                 continue
         providers.append(
             OpenAICompatibleTextProvider(
@@ -252,7 +250,7 @@ def _resolve_providers(args: argparse.Namespace) -> tuple[list[TextProvider], li
                 bearer_token=bearer_token,
             )
         )
-    return providers, unavailable
+    return providers, unavailable_count
 
 
 def _environment(args: argparse.Namespace, providers: list[TextProvider]) -> dict[str, Any]:
@@ -345,9 +343,12 @@ async def _run(args: argparse.Namespace) -> int:
             )
         return 0
 
-    providers, unavailable = _resolve_providers(args)
-    for entry in unavailable:
-        print(f"skipped: {entry}", file=sys.stderr)
+    providers, unavailable_count = _resolve_providers(args)
+    if unavailable_count:
+        print(
+            f"skipped {unavailable_count} provider(s) that could not initialize",
+            file=sys.stderr,
+        )
     if not providers:
         print("error: no provider could be initialized", file=sys.stderr)
         return 2

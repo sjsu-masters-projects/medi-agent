@@ -43,8 +43,8 @@ AVAILABLE_MODELS = (*DEFAULT_MODELS, "nim")
 # below happens inside the function that needs it.
 
 
-def _resolve_providers(names: list[str]) -> tuple[list[TextProvider], list[str]]:
-    """Build a provider per requested model, reporting the ones that could not start.
+def _resolve_providers(names: list[str]) -> tuple[list[TextProvider], int]:
+    """Build a provider per requested model and count the ones that cannot start.
 
     A model that fails to initialize is reported and skipped rather than aborting the
     run: comparing the two that did start is more useful than comparing none.
@@ -53,15 +53,13 @@ def _resolve_providers(names: list[str]) -> tuple[list[TextProvider], list[str]]
 
     router = ModelRouter()
     providers: list[TextProvider] = []
-    unavailable: list[str] = []
+    unavailable_count = 0
     for name in names:
         try:
             providers.append(router.get_text_provider_for_model(name))
-        except Exception as error:  # noqa: BLE001 - report and continue
-            # Provider exceptions can include response bodies or credentials. The
-            # comparison only needs to name the failure category.
-            unavailable.append(f"{name} ({type(error).__name__})")
-    return providers, unavailable
+        except Exception:  # noqa: BLE001 - report and continue
+            unavailable_count += 1
+    return providers, unavailable_count
 
 
 def _render(comparison: ProviderComparison) -> str:
@@ -93,9 +91,12 @@ async def _run(args: argparse.Namespace) -> int:
     from app.services.provider_comparison import compare_text_providers
 
     names = [name.strip() for name in args.models.split(",") if name.strip()]
-    providers, unavailable = _resolve_providers(names)
-    for entry in unavailable:
-        print(f"skipped: {entry}", file=sys.stderr)
+    providers, unavailable_count = _resolve_providers(names)
+    if unavailable_count:
+        print(
+            f"skipped {unavailable_count} provider(s) that could not initialize",
+            file=sys.stderr,
+        )
     if not providers:
         print("error: no requested provider could be initialized", file=sys.stderr)
         return 2

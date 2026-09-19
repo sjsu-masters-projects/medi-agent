@@ -29,7 +29,8 @@ A task is done only when its implementation, authorization, error handling, audi
 | Clinician portal | Partial | Dashboard/deep dive exist; consolidated review and action lifecycle incomplete |
 | Backend foundation | Partial | Broad API and test base; empty modules and reachable placeholders remain |
 | Records ingestion | Functional foundation | Needs provenance, correction, FHIR validation, and reconciliation hardening |
-| Chat and triage | Functional foundation | Needs provider abstraction, bilingual qualification, recovery, and full journey tests |
+| Chat and triage | Runtime delivered; acceptance in progress | Deterministic emergency handling and the Care Coordinator are live in the branch; bounded runtime deadlines and full journey tests remain |
+| Document intelligence | Worker delivered; operational acceptance in progress | Uploads queue bounded, anchored OCR/model work for a Cloud Run Job; production synthetic-job evidence remains to be recorded |
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
@@ -652,13 +653,16 @@ model does not fix any of those. This task rebuilds the runtime around them.
       record that must not be lost, whereas telemetry runs on every turn and awaiting a
       stalled database would spend a patient's latency budget on bookkeeping. No patient
       identifiers, prompts or response text are written, pinned by a test.
-- [ ] **WS1 remainder.** Set `GOOGLE_PROJECT_ID` and the Flash model id on Cloud Run, then
-      remove the AI Studio path. Production runs on AI Studio today because
-      `GOOGLE_PROJECT_ID` is unset, so this is a first move to Vertex rather than a model
-      swap, and the order matters: changing the model default first would break the live
-      path, since 3.8 Flash is not served on AI Studio. Then promote
-      `clients/openai_compatible.py` to production for the gpt-oss transport, populate
-      `GenerationRequest.response_schema`, and stop discarding model telemetry.
+- [/] **WS1 remaining.** The production Cloud Run revision is configured with
+      `GOOGLE_PROJECT_ID=medi-agent-490106`, `VERTEX_AI_LOCATION=us-central1`, and
+      `GEMINI_FLASH_MODEL=gemini-3.8-flash`; its runtime identity has Vertex AI User and
+      a direct regional `openai/gpt-oss-120b-maas` request succeeded. The application
+      keeps the AI Studio path only as an explicit local/evaluation compatibility path;
+      it is not selected when the production project is configured. The two outstanding
+      acceptance items are (1) impose the registry's wall-clock budget around the ADK
+      runner and model transports, so an over-budget call deterministically reaches the
+      named fallback, and (2) retain evidence from a deployed synthetic request that
+      `model_invocation_events` records the actual provider and model.
 - [/] **WS2 — Agent runtime skeleton**, replacing the graph framework: one runner
       construction path that refuses to start unless every safety plugin is attached.
       **Dependencies landed.** `google-adk` 2.9.1 and `litellm` 1.101.0 are in
@@ -960,9 +964,11 @@ model does not fix any of those. This task rebuilds the runtime around them.
       anchor is absent, direct JSON extraction import is disabled, and upload requests only
       queue a document. Migration `036_document_ingestion_worker.sql` atomically claims a
       bounded batch with `FOR UPDATE SKIP LOCKED`; `app.workers.document_ingestion` is the
-      Cloud Run Job entry point. The remaining completion gate is operational: apply
-      migrations 034–036, deploy and schedule that job with the backend runtime settings,
-      then run the synthetic acceptance check in `docs/document-ingestion-worker.md`.
+      Cloud Run Job entry point. The operator reports migrations 034–036, the backend
+      deploy, and the scheduled Job configured. WS5 stays in progress until the synthetic
+      acceptance check in `docs/document-ingestion-worker.md` is captured: one queued
+      synthetic upload must be claimed by the Job and yield candidates with a page and
+      bounding-box anchor, without an unreviewed fact becoming approved clinical truth.
 - [ ] **WS6 — Patient-document retrieval in chat.** A new patient-scoped table, not
       `drug_knowledge_chunks`, which has no patient or document column and a blanket
       authenticated-read policy. The search tool takes a query only; the patient is
