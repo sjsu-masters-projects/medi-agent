@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError as PydanticValidationError
 
 from app.core.exceptions import DocumentParseError
 from app.models.document_extraction import DocumentExtractionResult
@@ -112,6 +113,35 @@ async def test_ingestion_records_source_failure() -> None:
 
     assert result["status"] == "failed"
     assert result["error_code"] == "source_unreadable"
+
+
+@pytest.mark.asyncio
+async def test_invalid_model_shape_stops_for_clinician_review_without_another_retry() -> None:
+    db = _make_db()
+    intelligence = MagicMock()
+    intelligence.extract.return_value = _source_extraction()
+    service = IngestionService(db, intelligence=intelligence)
+    with pytest.raises(PydanticValidationError) as invalid:
+        DocumentExtractionResult.model_validate({"medications": [{"name": "Aspirin"}]})
+    service._extract_structured = AsyncMock(side_effect=invalid.value)
+
+    result = await service.ingest_document(
+        document_id=DOCUMENT_ID,
+        patient_id=PATIENT_ID,
+        file_path="patient/doc.pdf",
+        document_type="lab_report",
+    )
+
+    assert result["status"] == "needs_evidence_review"
+    assert result["error_code"] == "invalid_model_response"
+    db.table("documents").update.assert_called_once_with(
+        {
+            "parse_status": "needs_evidence_review",
+            "parse_error": None,
+            "parse_failure_code": "invalid_model_response",
+            "parsed": False,
+        }
+    )
 
 
 @pytest.mark.asyncio
