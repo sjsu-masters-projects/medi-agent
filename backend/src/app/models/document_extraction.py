@@ -12,8 +12,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import DocumentType, MedicationRoute, ObligationType
-
 
 class ExtractionEvidence(BaseModel):
     """Verifiable source support for one extracted candidate."""
@@ -27,18 +25,20 @@ class ExtractedDocumentMetadata(BaseModel):
     """Metadata for the source document that produced extracted records."""
 
     title: str = Field(default="Clinical Document", min_length=1, max_length=255)
-    document_type: DocumentType = DocumentType.OTHER
+    document_type: str | None = Field(default=None, max_length=100)
     source_name: str | None = Field(default=None, max_length=255)
     notes: str | None = None
 
 
 class ExtractedMedication(BaseModel):
-    """Medication record after document parsing and basic normalization."""
+    """Source-worded medication proposal, never a canonical medication record."""
 
     name: str = Field(..., min_length=1, max_length=200)
     dosage: str = Field(default="as directed", min_length=1)
     frequency: str = Field(default="as directed", min_length=1)
-    route: MedicationRoute = MedicationRoute.OTHER
+    # This is the exact source wording, such as ``by mouth`` or ``sublingual``. Controlled
+    # route codes belong to an explicit terminology/clinician-review step, not extraction.
+    route: str | None = Field(default=None, max_length=100)
     instructions: str | None = None
     generic_name: str | None = None
     rxcui: str | None = None
@@ -59,7 +59,7 @@ class ExtractedAllergy(BaseModel):
 
     allergen: str = Field(..., min_length=1)
     reaction: str | None = None
-    severity: str = Field(default="unknown", pattern="^(unknown|mild|moderate|severe)$")
+    severity: str | None = Field(default=None, max_length=100)
     evidence: list[ExtractionEvidence] = Field(min_length=1)
 
 
@@ -68,7 +68,7 @@ class ExtractedObligation(BaseModel):
 
     description: str = Field(..., min_length=1, max_length=500)
     frequency: str = Field(default="as directed", min_length=1)
-    obligation_type: ObligationType = ObligationType.CUSTOM
+    obligation_type: str | None = Field(default=None, max_length=100)
     evidence: list[ExtractionEvidence] = Field(min_length=1)
 
 

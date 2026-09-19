@@ -10,7 +10,10 @@ from app.services.document_intelligence.anchoring import (
     anchor_value,
     normalize_for_match,
 )
-from app.services.document_intelligence.grounding import DocumentEvidenceCandidateService
+from app.services.document_intelligence.grounding import (
+    DocumentEvidenceCandidateService,
+    ground_item,
+)
 from app.services.document_intelligence.models import (
     BoundingBox,
     DocumentClass,
@@ -145,13 +148,42 @@ def test_unanchored_value_is_excluded_instead_of_receiving_a_placeholder_citatio
         patient_id=UUID("00000000-0000-0000-0000-000000000001"),
         actor_id=UUID("00000000-0000-0000-0000-000000000002"),
         document_id=UUID("00000000-0000-0000-0000-000000000003"),
-        extraction=_extraction(_page([[('Aspirin', 0.99), ('81', 0.99), ('mg', 0.99)]])),
+        extraction=_extraction(_page([[("Aspirin", 0.99), ("81", 0.99), ("mg", 0.99)]])),
         items=[("medication", {"name": "Warfarin", "dosage": "5 mg"})],
     )
 
     assert summary.created == 0
     assert summary.unanchored == 1
     registry.create_candidate.assert_not_called()
+
+
+def test_source_route_is_retained_only_when_it_is_page_anchored() -> None:
+    item = ground_item(
+        _extraction(
+            _page([[("Nitroglycerin", 0.99), ("0.4", 0.99), ("mg", 0.99), ("sublingual", 0.99)]])
+        ),
+        "medication",
+        {
+            "name": "Nitroglycerin",
+            "dosage": "0.4 mg",
+            "route": "sublingual",
+            "evidence": [{"page": 1, "excerpt": "Nitroglycerin 0.4 mg", "confidence": 0.9}],
+        },
+    )
+
+    assert item.value["route"] == "sublingual"
+    assert {evidence.field for evidence in item.evidence} == {"name", "dosage", "route"}
+
+
+def test_model_only_route_is_omitted_from_the_candidate() -> None:
+    item = ground_item(
+        _extraction(_page([[("Nitroglycerin", 0.99), ("0.4", 0.99), ("mg", 0.99)]])),
+        "medication",
+        {"name": "Nitroglycerin", "dosage": "0.4 mg", "route": "sublingual"},
+    )
+
+    assert "route" not in item.value
+    assert any("route was omitted" in note for note in item.uncertainty)
 
 
 def test_best_page_wins_and_unusable_pages_are_ignored() -> None:

@@ -40,10 +40,10 @@ _PLACEHOLDER_VALUES = frozenset({"", "as directed", "unknown", "active"})
 # Attributes that must be read on the page for each candidate type. The first is the
 # primary anchor; a candidate whose primary value is not on any page scores zero.
 ANCHOR_FIELDS: dict[str, tuple[str, ...]] = {
-    "medication": ("name", "dosage", "frequency"),
-    "condition": ("name",),
-    "allergy": ("allergen", "reaction"),
-    "obligation": ("description",),
+    "medication": ("name", "dosage", "frequency", "route", "instructions", "generic_name", "rxcui"),
+    "condition": ("name", "status", "notes"),
+    "allergy": ("allergen", "reaction", "severity"),
+    "obligation": ("description", "frequency", "obligation_type"),
 }
 
 
@@ -92,13 +92,18 @@ def ground_item(
     policy = policy or DocumentIntelligencePolicy()
     anchors, uncertainty = _anchor_attributes(extraction, fact_type, value, policy)
     uncertainty.extend(_check_claimed_evidence(extraction, value, anchors))
+    source_value, dropped_fields = _source_backed_value(fact_type, value, anchors)
+    uncertainty.extend(
+        f"The {field} was omitted because it could not be located in the source text."
+        for field in dropped_fields
+    )
     primary = ANCHOR_FIELDS.get(fact_type, ("name",))[0]
     score = _confidence_score(anchors, primary)
     evidence = [_grounded_evidence(field, anchor) for field, anchor in anchors.items()]
     pages = sorted({item.page for item in evidence})
     return GroundedItem(
         fact_type=fact_type,
-        value={key: item for key, item in value.items() if key != "evidence"},
+        value=source_value,
         confidence_score=score,
         confidence_band=policy.band(score),
         uncertainty=[REVIEW_NOTE, *uncertainty, *_page_quality_notes(extraction, pages)],
@@ -274,6 +279,24 @@ def _check_claimed_evidence(
                 f"{', '.join(str(number) for number in sorted(anchored_pages))}."
             )
     return notes
+
+
+def _source_backed_value(
+    fact_type: str, value: dict[str, Any], anchors: dict[str, EvidenceAnchor]
+) -> tuple[dict[str, Any], list[str]]:
+    """Persist only source-located clinical values, never an LLM-only interpretation."""
+    stored = {key: item for key, item in value.items() if key != "evidence"}
+    dropped: list[str] = []
+    for field in ANCHOR_FIELDS.get(fact_type, ("name",)):
+        if field not in stored or field in anchors:
+            continue
+        raw = stored.get(field)
+        if raw is None or str(raw).strip().casefold() in _PLACEHOLDER_VALUES:
+            stored.pop(field, None)
+            continue
+        stored.pop(field, None)
+        dropped.append(field)
+    return stored, dropped
 
 
 def _confidence_score(anchors: dict[str, EvidenceAnchor], primary_field: str) -> float:

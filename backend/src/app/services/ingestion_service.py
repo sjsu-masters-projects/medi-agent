@@ -128,6 +128,16 @@ class IngestionService:
 
         try:
             extraction_result, model_version = await self._extract_structured(model_text)
+        except (PydanticValidationError, json.JSONDecodeError, ValueError) as exc:
+            logger.warning("Document model output needs review for %s: %s", document_id, exc)
+            return self._finish_unvalidated_model_output(
+                document_id,
+                run_id,
+                warnings=warnings,
+                page_count=page_count,
+                text_chars=text_chars,
+                extraction_method=method,
+            )
         except Exception as exc:  # noqa: BLE001 - classified before becoming client-visible
             logger.exception("Document model extraction failed for %s", document_id)
             return self._finish_failed(
@@ -217,6 +227,35 @@ class IngestionService:
             max_tokens=2048,
         )
         return DocumentExtractionResult.model_validate(self._parse_json(response)), telemetry.model
+
+    def _finish_unvalidated_model_output(
+        self,
+        document_id: UUID,
+        run_id: str,
+        *,
+        warnings: list[str],
+        page_count: int,
+        text_chars: int,
+        extraction_method: str | None,
+    ) -> dict[str, Any]:
+        """Stop unsafe model output without spending another retry on the same source."""
+        warning = "Model output could not be safely normalized; clinician review is required."
+        self._set_document(
+            document_id,
+            parse_status="needs_evidence_review",
+            parse_failure_code="invalid_model_response",
+            parsed=False,
+        )
+        self._finish(
+            run_id,
+            status="needs_evidence_review",
+            failure_code="invalid_model_response",
+            warnings=[*warnings, warning],
+            page_count=page_count,
+            text_chars=text_chars,
+            extraction_method=extraction_method,
+        )
+        return self._outcome("needs_evidence_review", error_code="invalid_model_response")
 
     async def _optional_summary(self, extraction: DocumentExtractionResult) -> str | None:
         try:

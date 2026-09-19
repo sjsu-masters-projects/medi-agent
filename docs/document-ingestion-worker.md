@@ -41,3 +41,22 @@ no candidate. Then use the clinician retry action on a deliberately failed file
 and verify it returns to `pending` before the job claims it.
 
 Never use production-like documents for this check.
+
+## Model-output boundary
+
+The worker treats model output as an untrusted proposal. It uses the LLM to extract the
+source-grounded clinical phrase and preserves that wording exactly in the pending candidate:
+for example, `by mouth`, `P.O.`, `sublingual`, and `vía oral` remain the route values. The
+worker does not normalize them through a keyword list or pretend that a fixed enum is a
+medical ontology. Any coding belongs to a later terminology-backed, clinician-reviewed step
+that records its provenance.
+
+Before writing a candidate, the worker independently locates every proposed source field in
+the recovered page text. A field it cannot locate is omitted and shown as an uncertainty;
+the worker never guesses a nearby clinical value. Malformed or incomplete model output ends
+as `needs_evidence_review`, creates no unreviewed fact, and does not spend a retry that
+would merely repeat the same validation failure.
+
+Extraction prompts are clinician-facing and evidence-bound. Patient summaries are a
+separate, plain-language workload: they retain names, doses, frequency, and route while
+not diagnosing, prescribing, or adding facts that were absent from the extraction.
