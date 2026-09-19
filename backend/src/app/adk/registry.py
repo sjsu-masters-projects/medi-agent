@@ -4,11 +4,11 @@ This table replaces `TASK_MODEL_MAP`, which named one model per task and could e
 nothing else: no fallback, no time limit, and no answer for the case where the model is
 slow, disabled, or wrong. Each of those gaps has cost us something measurable.
 
-Every figure here comes from the 2026-09-17 paired re-run over 70 scenarios
-(`.agent/specs/eval-harness-protocol-2026-09.md` §12, §14), not from judgement. The two
-finalists could not be separated on clinical accuracy at that sample size, so the primary
-for each workload is chosen on the properties that *did* separate them — latency, cost,
-recall on reconciliation, and whether the model honours an output schema.
+The routing evidence and its limits are recorded in
+`docs/decisions/ai-runtime-2026-09.md`. The two finalists could not be separated on clinical
+accuracy at the available sample size, so the primary for each workload is chosen on the
+properties that did separate them — latency, cost, recall on reconciliation, and whether the
+model honours an output schema.
 
 Three invariants are enforced at import time, because each one has a failure mode that is
 silent rather than loud:
@@ -58,8 +58,8 @@ class ModelSpec:
     """One addressable model.
 
     `honours_response_schema` is a measured deployment property, not a claim from a model
-    card. gpt-oss-120b violated an accepted JSON schema in 3 of 10 trials on Vertex where
-    Gemini 3.8 Flash violated it in 0 of 10 (protocol §11). A caller routed to a model
+    card. GPT OSS MaaS did not reliably honour an accepted JSON schema in the synthetic
+    evaluation, while Gemini Flash did. A caller routed to a model
     with this set `False` must validate the result and be able to recover from a
     violation; it must not assume the shape it asked for is the shape it received.
     """
@@ -100,10 +100,9 @@ FLASH: Final = ModelSpec(
 THINKING_LEVELS: Final = frozenset({"LOW", "MEDIUM", "HIGH"})
 """Thinking ceilings this product may request.
 
-`MINIMAL` is deliberately absent: Gemini 3.8 Flash rejects it with HTTP 400, and a config
-that assumes otherwise fails at call time rather than at startup. `thinking_budget` is not
-used at all — it is deprecated on Gemini 3.x, where dynamic thinking is always on and the
-level is a ceiling the model may spend less than, or ignore entirely (protocol §17).
+`MINIMAL` is deliberately absent: Gemini Flash rejects it with HTTP 400, and a config that
+assumes otherwise fails at call time rather than at startup. `thinking_budget` is not used at
+all; the configured level is a ceiling the model may spend less than or ignore.
 """
 
 

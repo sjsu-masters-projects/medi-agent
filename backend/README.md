@@ -72,10 +72,11 @@ src/app/
 ├── models/           # Pydantic schemas (Create/Read/Update per entity)
 ├── routers/          # HTTP endpoints — thin, delegate to services
 ├── services/         # Business logic — no FastAPI imports, testable
-├── agents/           # LangGraph agents (base + 7 domain agents)
+├── adk/              # Current agent runtime, registry, and safety plugins
+├── agents/           # Legacy compatibility paths; no new product work
 ├── tools/            # Standalone tools agents can call
-├── mcp/              # MCP servers (external API wrappers)
-├── a2a/              # Agent-to-Agent protocol
+├── mcp/              # In-process adapters; not a published MCP endpoint
+├── a2a/              # Internal delegated-task lifecycle; not an external A2A service
 ├── clients/          # SDK wrappers (Gemini, Deepgram, etc.)
 ├── db/               # Supabase connection helpers, repositories, migrations, seed data
 │   └── migrations/   # SQL files — run in order (001_, 002_, ...)
@@ -85,27 +86,11 @@ src/app/
 
 ## Database Migrations
 
-Migrations are plain SQL files in `src/app/db/migrations/`:
-
-| File | What it does |
-|------|-------------|
-| `001_initial_schema.sql` | 20 enum types, 16 tables, indexes, triggers |
-| `002_rls_policies.sql` | RLS on all tables, 56 policies |
-| `003_storage_and_auth.sql` | 3 storage buckets + storage RLS |
-| `004_jwt_claims_hook.sql` | JWT hook — adds `user_role` claim |
-| `005_document_parse_tracking.sql` | Tracks document parse lifecycle metadata |
-| `006_care_team_invite_compat.sql` | Adds pending invite support to `care_teams` |
-| `007_clinic_identity_foundation.sql` | Adds canonical `clinics` table and clinician clinic binding |
-| `008_soap_notes.sql` | Adds clinician SOAP note generation storage |
-| `009_jwt_claims_hook_hardening.sql` | Re-applies and hardens JWT `user_role` hook parsing and grants |
-| `010_chat_state_and_a2a_tasks.sql` | Adds persistent chat state and A2A task lifecycle storage |
-| `011_locale_contract_upgrade.sql` | Hardens locale defaults and validation contracts |
-| `011_enable_dashboard_realtime_publication.sql` | Publishes dashboard tables to Supabase realtime |
-| `012_document_review_queue.sql` | Adds document review queue storage |
-| `013_cron_scheduler_foundation.sql` | Adds cron run tracking and notification dedupe metadata |
-| `014_patient_timezones_and_reminder_schedules.sql` | Adds patient timezone preferences, obligation notes, and structured reminder schedules |
-| `015_drug_knowledge_rag.sql` | Adds pgvector-backed DailyMed medication knowledge chunks and retrieval RPC |
-| `016_obligation_source_document.sql` | Links generated obligations back to their source document |
+Migrations are plain SQL files in `src/app/db/migrations/`. The repository currently has
+`001`–`036`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
+and document-ingestion worker controls. The migration ledger records full filenames and
+checksums, including the two distinct `011` files; do not maintain a second migration inventory
+here.
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 

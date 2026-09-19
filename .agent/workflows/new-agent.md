@@ -1,88 +1,38 @@
 ---
-description: How to add a new AI agent to the LangGraph system
+description: How to add a bounded product worker to the ADK runtime
 ---
 
-# Adding a New Agent
+# Adding a product worker
 
-## Pre-requisites
-- Read `.agent/ARCHITECTURE.md` (Agent Flow section)
-- Read existing agents in `backend/app/agents/` for patterns
-- Understand LangGraph state management
+## Before creating one
 
-## Steps
+1. Read `.agent/PROJECT.md`, `.agent/ARCHITECTURE.md`, and `.agent/TASKS.md`.
+2. Confirm the work cannot be a deterministic service. Authentication, authorization,
+   approval enforcement, scheduling, notifications, retries, and persistence stay deterministic.
+3. Define the worker's authority, evidence contract, deterministic outcome, and clinician-review
+   boundary. A worker may propose or explain; it cannot approve clinical action.
+4. Obtain a reviewed task entry and peer/safety review where the behaviour is safety-sensitive.
 
-1. **Define the agent's contract**
-   - What triggers it? (user action, cron, another agent)
-   - What input does it receive?
-   - What output does it produce?
-   - What tools does it need?
-   - Which LLM? (Flash for speed, Pro for reasoning)
+## Implementation shape
 
-2. **Create the agent file**
-   ```
-   backend/app/agents/{agent_name}.py
-   ```
-   - Extend `BaseAgent` from `backend/app/agents/base.py`
-   - Define LangGraph state schema
-   - Define graph nodes (each node = one step)
-   - Define edges (routing logic)
-   - Implement `process()` method
+New model-backed work belongs in `backend/src/app/adk/`.
 
-3. **Create any new tools**
-   ```
-   backend/app/tools/{tool_name}.py
-   ```
-   - Each tool is a function that the agent can call
-   - Tools handle external API calls, DB queries, or data transformations
-   - Tools must have clear input/output types
-   - Tools must handle errors gracefully
+1. Add the agent under `adk/agents/<name>/` with a focused `agent.py` and prompts.
+2. Register every model-backed workload in `adk/registry.py`. It must specify a primary
+   transport, a different fallback where one is safe, a deterministic result, a kill switch,
+   an output ceiling, and a latency budget where a person is waiting.
+3. Keep safety and tool restrictions in shared plugins. The emergency floor runs before model
+   execution; tools are deny-by-default.
+4. Validate all model output at the boundary. Persist source/model metadata for candidate facts,
+   never private reasoning or raw patient prompts.
+5. Keep routers thin and place deterministic business rules in services.
 
-4. **Create the router endpoint**
-   - Add API route that triggers the agent
-   - Or connect to existing trigger (Triage routing, cron scheduler)
+## Verification
 
-5. **Write tests**
-   - Golden-set: curated input/output pairs
-   - Unit tests for individual tools
-   - Integration test: trigger → agent → output → database
+- Unit-test the route selection, disabled path, fallback, malformed output, and deterministic
+  result.
+- Add integration coverage for authorization, evidence/provenance, and review behaviour.
+- Add browser coverage when the worker changes a critical user journey.
+- Update `.agent/ARCHITECTURE.md`, the active task, and the applicable decision record.
 
-6. **Update documentation**
-   - Add agent to ARCHITECTURE.md Agent Flow section
-   - Update PROJECT.md agent table
-   - Update TASKS.md with completed status
-
-## Agent Pattern Template
-
-```python
-from app.agents.base import BaseAgent, AgentInput, AgentOutput
-from langgraph.graph import StateGraph, END
-
-class NewAgent(BaseAgent):
-    """One-line description of what this agent does."""
-
-    def __init__(self, llm: LLMClient, tools: dict):
-        self.llm = llm
-        self.tools = tools
-        self.graph = self._build_graph()
-
-    def _build_graph(self) -> StateGraph:
-        graph = StateGraph(AgentState)
-        graph.add_node("step_1", self._step_1)
-        graph.add_node("step_2", self._step_2)
-        graph.add_edge("step_1", "step_2")
-        graph.add_edge("step_2", END)
-        graph.set_entry_point("step_1")
-        return graph.compile()
-
-    async def _step_1(self, state: AgentState) -> AgentState:
-        # First processing step
-        ...
-
-    async def _step_2(self, state: AgentState) -> AgentState:
-        # Second processing step
-        ...
-
-    async def process(self, input: AgentInput) -> AgentOutput:
-        result = await self.graph.ainvoke(input)
-        return AgentOutput(...)
-```
+Do not start new work in `backend/src/app/agents/`; it exists only for legacy compatibility.

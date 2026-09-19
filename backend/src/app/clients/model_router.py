@@ -5,12 +5,11 @@ replaces it. New routing decisions belong in `app.adk.registry`, which records a
 fallback, a latency budget, and a deterministic path for each workload; this map can
 express none of those.
 
-Every task that once routed to MedGemma now routes to Flash. That model was measured and
-dropped (`.agent/specs/eval-harness-protocol-2026-09.md` §14), and in practice it had
-already stopped running: its client raised unless a Vertex endpoint was configured, and
-the default was empty. Document parsing was therefore already served by Flash through the
-fallback path, while triage classification raised on every call and degraded to keyword
-rules without ever recording that it had.
+Every task that once routed to the retired medical-model experiment now routes to Flash. The
+experiment was measured and dropped; its client also raised unless a dedicated endpoint was
+configured. Document parsing therefore already used the Flash fallback, while triage
+classification degraded without a recorded model response. The current decision and limits are
+in `docs/decisions/ai-runtime-2026-09.md`.
 """
 
 from __future__ import annotations

@@ -110,7 +110,7 @@ npm run dev -- --port 3001
 ## Core Stack
 
 - Backend: FastAPI, Pydantic, Supabase
-- AI: Gemini (Flash/Pro), MedGemma routing foundations, LangGraph
+- AI: ADK workload runtime with separate Vertex Gemini and managed open-weight transports
 - Voice: Deepgram
 - Email: Resend
 - Frontend: Next.js 16 + Redux Toolkit + Tailwind v4
@@ -127,13 +127,13 @@ Start here:
 
 Workflow docs:
 
-- `.agent/workflows/new-feature.md`
 - `.agent/workflows/new-agent.md`
 - `.agent/workflows/ai-code-review.md`
+- `.agent/workflows/create-pr.md`
 
 Infra docs:
 
-- `docs/supabase_setup_guide.md`
+- `docs/README.md`
 
 ## Quality Gates
 
