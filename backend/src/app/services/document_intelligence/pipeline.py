@@ -123,9 +123,9 @@ class DocumentIntelligenceService:
     def engine_versions(self) -> dict[str, str]:
         versions: dict[str, str] = {}
         try:
-            import fitz  # type: ignore[import-untyped]
+            import pymupdf  # type: ignore[import-untyped]
 
-            versions["pymupdf"] = str(fitz.version[0])
+            versions["pymupdf"] = str(pymupdf.version[0])
         except Exception:  # noqa: BLE001 - version is informational
             logger.debug("PyMuPDF version unavailable")
         engine = self._ocr_engine
@@ -152,12 +152,14 @@ class DocumentIntelligenceService:
     def _extract_pdf(
         self, content: bytes
     ) -> tuple[DocumentClass, list[PageExtraction], list[str], bool]:
-        import fitz  # type: ignore[import-untyped]
+        import pymupdf  # type: ignore[import-untyped]
 
-        fitz.TOOLS.mupdf_display_errors(False)
-        fitz.TOOLS.mupdf_warnings(reset=True)
+        pymupdf.TOOLS.mupdf_display_errors(False)  # type: ignore[no-untyped-call]
+        pymupdf.TOOLS.mupdf_warnings(reset=True)  # type: ignore[no-untyped-call]
         try:
-            document = fitz.open(stream=content, filetype="pdf")
+            document = pymupdf.open(  # type: ignore[no-untyped-call]
+                stream=content, filetype="pdf"
+            )
         except Exception as exc:  # noqa: BLE001 - any parser failure is "unreadable"
             return DocumentClass.UNREADABLE, [], [f"PDF could not be opened: {exc}"], False
         repaired = bool(getattr(document, "is_repaired", False))
@@ -180,8 +182,10 @@ class DocumentIntelligenceService:
         except Exception as exc:  # noqa: BLE001 - corrupt page trees surface here
             return DocumentClass.UNREADABLE, [], [f"PDF pages could not be read: {exc}"], repaired
         finally:
-            document.close()
-        warnings.extend(_parser_warnings(fitz.TOOLS.mupdf_warnings(reset=True)))
+            document.close()  # type: ignore[no-untyped-call]
+        warnings.extend(
+            _parser_warnings(pymupdf.TOOLS.mupdf_warnings(reset=True))  # type: ignore[no-untyped-call]
+        )
         if not pages:
             return DocumentClass.BLANK, [], ["PDF contains no pages."], repaired
         return _document_class_for(pages), pages, warnings, repaired
@@ -267,10 +271,10 @@ class DocumentIntelligenceService:
 
     def _render(self, page: Any, dpi: int, *, clip: Any) -> Any:
         """Grayscale render: a 300 dpi letter page is ~8 MB instead of ~25 MB in RGB."""
-        import fitz
+        import pymupdf
         from PIL import Image
 
-        pixmap = page.get_pixmap(dpi=dpi, colorspace=fitz.csGRAY, clip=clip)
+        pixmap = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY, clip=clip)
         return Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("L")
 
     def _ink_ratio(self, page: Any) -> float:

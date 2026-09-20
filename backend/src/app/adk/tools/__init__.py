@@ -5,7 +5,9 @@ that authority lives in `clinical_fact_service.approve` and
 `clinical_reconciliation_service.decide`, neither of which is reachable from a tool.
 """
 
+from app.adk.tools.document_context import get_active_document_context
 from app.adk.tools.scoping import (
+    DOCUMENT_CONTEXT_STATE_KEY,
     PATIENT_ID_STATE_KEY,
     PatientScopeError,
     require_patient_id,
@@ -19,10 +21,12 @@ from app.adk.tools.triage_decision import (
 
 __all__ = [
     "PATIENT_ID_STATE_KEY",
+    "DOCUMENT_CONTEXT_STATE_KEY",
     "TRIAGE_DECISION_STATE_KEY",
     "VALID_INTENTS",
     "VALID_URGENCIES",
     "PatientScopeError",
     "require_patient_id",
+    "get_active_document_context",
     "submit_triage_decision",
 ]

@@ -8,6 +8,7 @@ text and coordinates for the extracted value.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -36,6 +37,8 @@ from app.services.document_intelligence.models import (
     ExtractionRoute,
 )
 from app.services.document_intelligence.pipeline import DocumentIntelligenceService
+from app.services.document_preview_service import DocumentPreviewService
+from app.services.explanation_service import normalize_patient_summary
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,13 @@ class IngestionService:
 
         try:
             content = self.db.storage.from_("documents").download(file_path)
+            self._ensure_source_preview(
+                document_id=document_id,
+                patient_id=patient_id,
+                content=content,
+                mime_type=mime_type,
+                source_hash=str(source_hash) if source_hash else None,
+            )
             extraction = self._intelligence.extract(
                 content, mime_type=mime_type, file_name=str(claim.get("file_name") or "")
             )
@@ -259,7 +269,7 @@ class IngestionService:
 
     async def _optional_summary(self, extraction: DocumentExtractionResult) -> str | None:
         try:
-            return await get_router().generate_text(
+            summary = await get_router().generate_text(
                 TaskType.PATIENT_EXPLANATION,
                 prompt=GENERATE_SUMMARY_USER.format(
                     medications=json.dumps(
@@ -273,9 +283,12 @@ class IngestionService:
                     ),
                 ),
                 system_instruction=GENERATE_SUMMARY_SYSTEM,
-                temperature=0.3,
-                max_tokens=512,
+                temperature=0.2,
+                # Gemini's reasoning tokens share this ceiling. 1024 avoids a second
+                # request for the intentionally short (<180 word) patient explanation.
+                max_tokens=1024,
             )
+            return normalize_patient_summary(summary) or None
         except Exception as exc:  # noqa: BLE001 - summary is never a safety boundary
             logger.warning("Optional document summary failed: %s", type(exc).__name__)
             return None
@@ -326,6 +339,54 @@ class IngestionService:
         if ai_summary is not None:
             payload["ai_summary"] = ai_summary
         self.db.table("documents").update(payload).eq("id", str(document_id)).execute()
+
+    def _ensure_source_preview(
+        self,
+        *,
+        document_id: UUID,
+        patient_id: UUID,
+        content: bytes,
+        mime_type: str,
+        source_hash: str | None,
+    ) -> None:
+        """Create a derived TIFF preview without making preview failure clinical failure."""
+        if mime_type != "image/tiff":
+            return
+        try:
+            preview = DocumentPreviewService().create_tiff_pdf_preview(content)
+            # The content hash identifies the immutable source. Computing it directly
+            # avoids running a second OCR pass merely to name a derived preview.
+            version = source_hash or hashlib.sha256(content).hexdigest()
+            preview_path = f"{patient_id}/previews/{document_id}/{version}.pdf"
+            self.db.storage.from_("documents").upload(
+                path=preview_path,
+                file=preview.content,
+                file_options={
+                    "cache-control": "3600",
+                    "content-type": preview.mime_type,
+                    "upsert": "true",
+                },
+            )
+            self.db.table("documents").update(
+                {
+                    "preview_path": preview_path,
+                    "preview_mime_type": preview.mime_type,
+                    "preview_status": "ready",
+                    "preview_failure_code": None,
+                }
+            ).eq("id", str(document_id)).execute()
+        except Exception as exc:  # noqa: BLE001 - original source and OCR can still be reviewed
+            logger.warning(
+                "Could not generate TIFF preview for %s: %s", document_id, type(exc).__name__
+            )
+            self.db.table("documents").update(
+                {
+                    "preview_path": None,
+                    "preview_mime_type": None,
+                    "preview_status": "failed",
+                    "preview_failure_code": "preview_unavailable",
+                }
+            ).eq("id", str(document_id)).execute()
 
     def _has_completed_source_hash(self, *, patient_id: UUID, source_hash: str) -> bool:
         result = (

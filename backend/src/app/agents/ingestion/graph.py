@@ -76,13 +76,15 @@ async def receive_document(state: IngestionState) -> IngestionState:
             ]
             return state
         if mime_type == "application/pdf" or path.endswith(".pdf"):
-            import fitz
+            import pymupdf
 
-            document = fitz.open(stream=file_bytes, filetype="pdf")
+            document: Any = pymupdf.open(  # type: ignore[no-untyped-call]
+                stream=file_bytes, filetype="pdf"
+            )
             try:
                 pages = [page.get_text() for page in document]
             finally:
-                document.close()
+                document.close()  # type: ignore[no-untyped-call]
             state["page_texts"] = pages
             if sum(len(_NON_WHITESPACE.findall(page)) for page in pages) < MIN_EMBEDDED_TEXT_CHARS:
                 state["source_status"] = "needs_ocr"

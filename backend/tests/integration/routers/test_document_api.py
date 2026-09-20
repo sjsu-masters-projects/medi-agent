@@ -468,7 +468,7 @@ class TestExplainDocument:
                 "document_type": "lab_report",
                 "source_clinic": None,
                 "parsed": True,
-                "ai_summary": "Cached summary",
+                "ai_summary": "**Cached** summary",
                 "parse_status": "completed",
                 "parse_error": None,
                 "parse_attempts": 1,

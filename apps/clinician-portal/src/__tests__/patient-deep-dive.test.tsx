@@ -216,9 +216,25 @@ describe("DocumentSummary", () => {
         existingAnnotation: "",
     };
 
-    it("renders accordion sections from parsed summary", () => {
+    it("renders the model summary without inferring clinical categories", () => {
         render(<DocumentSummary {...props} />);
-        expect(screen.getByText("Medications")).toBeDefined();
+        expect(screen.getByText("Summary")).toBeDefined();
+        expect(screen.queryByText("Watch For")).toBeNull();
+    });
+
+    it("does not reinterpret a model field dump as medication links", () => {
+        render(
+            <DocumentSummary
+                {...props}
+                summaryText={
+                    "**Medication Name:** Metformin\n**Dose:** 500 mg\n**Instructions:** Take one tablet by mouth daily"
+                }
+            />,
+        );
+
+        expect(screen.getByText("Medication Name: Metformin")).toBeDefined();
+        expect(screen.getByText("Dose: 500 mg")).toBeDefined();
+        expect(screen.queryByRole("link")).toBeNull();
     });
 
     it("renders clinician annotation section", () => {

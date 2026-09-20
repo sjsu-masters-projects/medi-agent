@@ -38,6 +38,7 @@ from app.adk.agents.care_coordinator.prompts import (
 )
 from app.adk.models import adk_model_for_workload
 from app.adk.registry import Transport, Workload, route_for
+from app.adk.tools.document_context import get_active_document_context
 from app.adk.tools.patient_context import get_patient_context
 from app.adk.tools.triage_decision import submit_triage_decision
 
@@ -52,7 +53,11 @@ TOOL_ALLOWLIST: dict[str, frozenset[str]] = {
     # Derived from the functions rather than spelled as literals: ADK names a tool after
     # the function it wraps, so these cannot drift out of step with the tools themselves.
     COORDINATOR_AGENT_NAME: frozenset(
-        {get_patient_context.__name__, submit_triage_decision.__name__}
+        {
+            get_patient_context.__name__,
+            get_active_document_context.__name__,
+            submit_triage_decision.__name__,
+        }
     ),
     # Stated rather than omitted. Deny-by-default already gives an absent agent nothing,
     # but an explicit empty set records that the responder reaching no tool is a decision:
@@ -112,7 +117,7 @@ def build_care_coordinator() -> SequentialAgent:
         model=adk_model_for_workload(Workload.TRIAGE),
         description="Reads this patient's own record and works out what their message needs.",
         instruction=CARE_COORDINATOR_INSTRUCTION,
-        tools=[get_patient_context, submit_triage_decision],
+        tools=[get_patient_context, get_active_document_context, submit_triage_decision],
         output_key=FINDINGS_STATE_KEY,
         generate_content_config=_generation_config(Workload.TRIAGE),
         disallow_transfer_to_parent=True,

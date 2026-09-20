@@ -11,7 +11,7 @@ import {
   HiOutlineDocumentText,
   HiOutlineFolder,
 } from "react-icons/hi2";
-import { DocumentCard, PdfViewer } from "@/components/features";
+import { DocumentCard, DocumentSourceViewer } from "@/components/features";
 import { PageHeader } from "@/components/layouts";
 import {
   Button,
@@ -32,6 +32,7 @@ import {
 import { playAssistantVoiceResponse } from "@/services/browser-voice";
 import {
   inferDocumentType,
+  normalizePatientSummary,
   type DocumentApiRecord,
 } from "@/services/documents";
 import { hashDocumentFile, uploadDocumentToStorage } from "@/services/storage";
@@ -49,7 +50,13 @@ import {
 } from "@/types";
 import { getEffectiveSessionExpiresAt } from "../../../../../../packages/shared/src/utils/jwt-expiry";
 
-type PortalDocument = Document & { icon: ReactNode; provider: string };
+type PortalDocument = Document & {
+  icon: ReactNode;
+  previewMimeType?: string;
+  previewStatus?: string;
+  previewUrl?: string;
+  provider: string;
+};
 
 const EXPLANATION_UNAVAILABLE_MESSAGE =
   "Translation is currently unavailable. Please try again later.";
@@ -151,7 +158,7 @@ function getDocumentIcon(documentType: DocumentType) {
 
 function mapDocument(record: DocumentApiRecord): PortalDocument {
   return {
-    aiSummary: record.ai_summary ?? undefined,
+    aiSummary: normalizePatientSummary(record.ai_summary),
     createdAt: record.created_at,
     documentType: record.document_type,
     fileName: record.file_name,
@@ -160,6 +167,9 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
     icon: getDocumentIcon(record.document_type),
     id: record.id,
     mimeType: record.mime_type,
+    previewMimeType: record.preview_mime_type ?? undefined,
+    previewStatus: record.preview_status ?? undefined,
+    previewUrl: record.preview_url ?? undefined,
     parseAttempts: record.parse_attempts ?? 0,
     parseFailureCode: record.parse_failure_code ?? undefined,
     parseStatus:
@@ -684,10 +694,14 @@ export default function RecordsPage() {
               {selectedDocument?.provider}
             </p>
           </div>
-          {selectedDocument?.mimeType === "application/pdf" &&
-          selectedDocument.fileUrl ? (
-            <PdfViewer documentUrl={selectedDocument.fileUrl} height="400px" />
-          ) : null}
+          <DocumentSourceViewer
+            fileName={selectedDocument?.fileName ?? "Document"}
+            previewMimeType={selectedDocument?.previewMimeType}
+            previewStatus={selectedDocument?.previewStatus}
+            previewUrl={selectedDocument?.previewUrl}
+            sourceMimeType={selectedDocument?.mimeType}
+            sourceUrl={selectedDocument?.fileUrl}
+          />
           <div className="rounded-3xl border border-[#b9ded6] bg-[#e7f4f1] p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#147465]">

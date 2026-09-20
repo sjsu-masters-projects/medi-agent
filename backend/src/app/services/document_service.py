@@ -32,14 +32,10 @@ def _is_missing_source_document_column_error(error: APIError, table_name: str) -
 ALLOWED_MIME_TYPES = frozenset(
     {
         "application/pdf",
-        "application/json",
         "image/jpeg",
         "image/png",
         "image/webp",
-        "image/heic",
         "image/tiff",
-        "text/plain",
-        "text/csv",
     }
 )
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
@@ -89,6 +85,10 @@ class DocumentService:
             "file_path": file_path,  # storage path for re-signing
             "file_size_bytes": file_size_bytes,
             "mime_type": mime_type,
+            "preview_path": None,
+            "preview_mime_type": None,
+            "preview_status": "pending" if mime_type == "image/tiff" else "not_required",
+            "preview_failure_code": None,
             "document_type": document_type,
             "source_clinic": source_clinic,
             "notes": notes,
@@ -125,8 +125,7 @@ class DocumentService:
         # Refresh signed URLs for each document
         data = cast(list[dict[str, Any]], result.data or [])
         for doc in data:
-            if self._should_sign_url(doc):
-                doc["file_url"] = self._generate_signed_url(doc["file_path"])
+            self._attach_view_urls(doc)
         return data
 
     # ── Get One ─────────────────────────────────────────
@@ -136,8 +135,7 @@ class DocumentService:
         data = self._get_document_row(document_id, patient_id)
 
         # Refresh the signed URL
-        if self._should_sign_url(data):
-            data["file_url"] = self._generate_signed_url(data["file_path"])
+        self._attach_view_urls(data)
         return data
 
     def _get_document_row(self, document_id: UUID, patient_id: UUID) -> dict[str, Any]:
@@ -167,6 +165,9 @@ class DocumentService:
         file_path = str(document.get("file_path") or "").strip()
         if file_path:
             self._delete_storage_file(file_path)
+        preview_path = str(document.get("preview_path") or "").strip()
+        if preview_path:
+            self._delete_storage_file(preview_path)
 
         (
             self.db.table("documents")
@@ -354,6 +355,16 @@ class DocumentService:
         except Exception as e:
             logger.warning("Failed to sign URL for %s: %s", file_path, e)
             return ""
+
+    def _attach_view_urls(self, document: dict[str, Any]) -> None:
+        """Attach short-lived source and derived-preview URLs without persisting either."""
+        if self._should_sign_url(document):
+            document["file_url"] = self._generate_signed_url(str(document["file_path"]))
+        preview_path = str(document.get("preview_path") or "").strip()
+        if document.get("preview_status") == "ready" and preview_path:
+            document["preview_url"] = self._generate_signed_url(preview_path)
+        else:
+            document["preview_url"] = None
 
     def _delete_storage_file(self, file_path: str) -> None:
         """Best-effort removal of a document object from Supabase Storage."""

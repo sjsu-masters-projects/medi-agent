@@ -49,7 +49,11 @@ from app.adk.agents.care_coordinator import (
 )
 from app.adk.plugins import LOCALE_STATE_KEY
 from app.adk.runner import build_runner
-from app.adk.tools import PATIENT_ID_STATE_KEY, TRIAGE_DECISION_STATE_KEY
+from app.adk.tools import (
+    DOCUMENT_CONTEXT_STATE_KEY,
+    PATIENT_ID_STATE_KEY,
+    TRIAGE_DECISION_STATE_KEY,
+)
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.safety import TRIAGE_COPY, apply_safety_override, deterministic_safety_floor
@@ -140,6 +144,7 @@ class CareCoordinatorRuntime:
         session_id: str,
         message: str,
         language: str,
+        document_context: dict[str, Any] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Yield `classification`, then `chunk`s, then `complete` for one turn."""
         text = message.strip()
@@ -173,6 +178,11 @@ class CareCoordinatorRuntime:
                 user_id=user_id,
                 session_id=session_id,
                 new_message=types.Content(role="user", parts=[types.Part(text=text)]),
+                state_delta=(
+                    {DOCUMENT_CONTEXT_STATE_KEY: document_context}
+                    if document_context is not None
+                    else {}
+                ),
                 run_config=RunConfig(streaming_mode=StreamingMode.SSE),
             )
             async for event in stream:

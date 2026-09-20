@@ -6,7 +6,7 @@ import io
 from collections.abc import Sequence
 from typing import Any
 
-import fitz
+import pymupdf
 import pytest
 from PIL import Image
 
@@ -75,7 +75,7 @@ class FakeOcrEngine:
 
 
 def _text_pdf(lines: Sequence[str], *, pages: int = 1) -> bytes:
-    doc = fitz.open()
+    doc = pymupdf.open()
     for _ in range(pages):
         page = doc.new_page(width=612, height=792)
         y = 72.0
@@ -88,7 +88,7 @@ def _text_pdf(lines: Sequence[str], *, pages: int = 1) -> bytes:
 
 
 def _image_pdf(image: Image.Image, *, landscape: bool = False) -> bytes:
-    doc = fitz.open()
+    doc = pymupdf.open()
     width, height = (792, 612) if landscape else (612, 792)
     page = doc.new_page(width=width, height=height)
     page.insert_image(page.rect, stream=_png(image))
@@ -152,7 +152,7 @@ def test_born_digital_pdf_uses_embedded_text_with_coordinates() -> None:
 
 
 def test_empty_pdf_pages_are_blank_and_the_document_is_rejected() -> None:
-    doc = fitz.open()
+    doc = pymupdf.open()
     doc.new_page()
     doc.new_page()
     extraction = _service(FakeOcrEngine()).extract(
@@ -167,9 +167,11 @@ def test_empty_pdf_pages_are_blank_and_the_document_is_rejected() -> None:
 
 
 def test_encrypted_pdf_is_rejected_permanently_without_reading_pages() -> None:
-    doc = fitz.open()
+    doc = pymupdf.open()
     doc.new_page().insert_text((48, 72), "Warfarin 5 mg", fontname="helv")
-    data = bytes(doc.tobytes(encryption=fitz.PDF_ENCRYPT_AES_256, user_pw="u", owner_pw="o"))
+    data = bytes(
+        doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="u", owner_pw="o")
+    )
 
     extraction = _service(FakeOcrEngine()).extract(data, mime_type="application/pdf")
 
@@ -369,7 +371,7 @@ def test_missing_ocr_engine_is_a_transient_failure(monkeypatch: pytest.MonkeyPat
 
 
 def test_garbage_text_layer_over_a_scan_is_ignored_in_favour_of_ocr() -> None:
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=612, height=792)
     page.insert_image(page.rect, stream=_png(_scan_image()))
     page.insert_text(
@@ -388,14 +390,14 @@ def test_garbage_text_layer_over_a_scan_is_ignored_in_favour_of_ocr() -> None:
 
 
 def test_mixed_page_keeps_embedded_words_and_ocrs_only_the_image_region() -> None:
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=612, height=792)
     # The header has to clear `min_text_chars` (20), or the page classifies as a plain
     # scan and the mixed-page branch under test never runs.
     page.insert_text((48, 72), "REFERRAL NOTE - CARDIOLOGY CLINIC", fontsize=12, fontname="helv")
     # Portrait, or FakeOcrEngine treats the region as sideways and returns its "xq"
     # low-confidence sentinel instead of the scripted words.
-    page.insert_image(fitz.Rect(48, 300, 564, 700), stream=_png(_scan_image(800, 1032)))
+    page.insert_image(pymupdf.Rect(48, 300, 564, 700), stream=_png(_scan_image(800, 1032)))
     data = bytes(doc.tobytes())
     engine = FakeOcrEngine(("Furosemide", "40", "mg"))
 

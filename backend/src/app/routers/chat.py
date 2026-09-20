@@ -581,6 +581,7 @@ async def chat_websocket_endpoint(
                     session_id=session_id,
                     message=incoming.content,
                     language=incoming.language.value,
+                    document_context=document_context,
                 )
                 async for event in stream_iter:
                     ev_type = event.get("type")

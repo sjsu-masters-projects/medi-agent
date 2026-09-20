@@ -9,6 +9,9 @@ export interface DocumentApiRecord {
     file_name: string;
     file_url: string;
     mime_type: string;
+    preview_url?: string | null;
+    preview_mime_type?: string | null;
+    preview_status?: string | null;
     file_size_bytes: number;
     parsed: boolean;
     ai_summary?: string | null;
@@ -20,43 +23,27 @@ export interface DocumentApiRecord {
     created_at: string;
 }
 
+/** Render persisted legacy summaries as text even if an older model used Markdown. */
+export function normalizePatientSummary(value: string | null | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value
+    .replaceAll("```", "")
+    .replace(/[\*_`]+/g, "")
+    .replace(/^\s*#{1,6}\s*/gm, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  return normalized || undefined;
+}
+
 export function inferDocumentType(file: File): DocumentType {
-    const normalizedName = file.name.toLowerCase();
-    const normalizedType = file.type.toLowerCase();
-
-    if (normalizedType.startsWith("image/")) {
-        return DocumentType.DIAGNOSTIC_REPORT;
-    }
-
-    if (normalizedName.includes("discharge") || normalizedName.includes("summary")) {
-        return DocumentType.DISCHARGE_SUMMARY;
-    }
-    if (normalizedName.includes("prescription") || normalizedName.includes("rx")) {
-        return DocumentType.PRESCRIPTION;
-    }
-    if (normalizedName.includes("referral")) {
-        return DocumentType.REFERRAL;
-    }
-    if (normalizedName.includes("insurance")) {
-        return DocumentType.INSURANCE;
-    }
-    if (
-        normalizedName.includes("lab")
-        || normalizedName.includes("blood")
-        || normalizedName.includes("result")
-        || normalizedType === "text/csv"
-        || normalizedName.endsWith(".csv")
-    ) {
-        return DocumentType.LAB_REPORT;
-    }
-    if (
-        normalizedName.includes("diagnostic")
-        || normalizedName.includes("xray")
-        || normalizedName.includes("mri")
-        || normalizedName.includes("ct")
-        || normalizedName.includes("scan")
-    ) {
-        return DocumentType.DIAGNOSTIC_REPORT;
-    }
+    // A filename or browser MIME value is not clinical evidence. The ingestion worker
+    // classifies source content separately, and clinicians can review that provenance.
+    void file;
     return DocumentType.OTHER;
 }

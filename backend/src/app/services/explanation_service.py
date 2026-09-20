@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from app.agents.ingestion.prompts import (
@@ -23,6 +24,23 @@ FALLBACK_MESSAGE = (
 )
 
 
+def normalize_patient_summary(value: str) -> str:
+    """Return readable plain text when a model disregards the no-Markdown contract.
+
+    The patient portals deliberately render summaries as text, not rich HTML. Removing
+    presentation syntax here prevents raw model formatting from becoming a clinical UI
+    defect while preserving the source-grounded words themselves.
+    """
+    without_fences = value.replace("```", "")
+    without_emphasis = re.sub(r"[*_`]+", "", without_fences)
+    without_heading = re.sub(r"(?m)^\s*#{1,6}\s*", "", without_emphasis)
+    return "\n\n".join(
+        " ".join(paragraph.split())
+        for paragraph in without_heading.splitlines()
+        if paragraph.strip()
+    ).strip()
+
+
 class ExplanationService:
     """Generates AI explanations for documents."""
 
@@ -37,7 +55,7 @@ class ExplanationService:
 
         try:
             if target_language == Language.EN.value and cached_summary:
-                return cached_summary
+                return normalize_patient_summary(cached_summary) or FALLBACK_MESSAGE
 
             english_summary = cached_summary or await self._generate_summary(document_data)
             if target_language == Language.EN.value:
@@ -76,7 +94,7 @@ class ExplanationService:
             temperature=0.4,
             max_tokens=512,
         )
-        return response.strip() or FALLBACK_MESSAGE
+        return normalize_patient_summary(response) or FALLBACK_MESSAGE
 
     async def _translate_summary(self, summary: str, target_language: str) -> str:
         """Translate an English summary to the target language using Flash Lite."""
@@ -95,4 +113,4 @@ class ExplanationService:
             temperature=0.2,
             max_tokens=512,
         )
-        return response.strip() or FALLBACK_MESSAGE
+        return normalize_patient_summary(response) or FALLBACK_MESSAGE

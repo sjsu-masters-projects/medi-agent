@@ -40,7 +40,10 @@ authorized clinical update.
 The HTTP service accepts and queues work; it does not perform unbounded OCR/model work in a
 request. A Cloud Run Job runs `python -m app.workers.document_ingestion` with one task,
 parallelism/concurrency limited to one, at least 2 GiB memory, and a 300-second task timeout.
-The same runtime identity and relevant configuration as the backend are required.
+The same runtime identity and relevant configuration as the backend are required. PDFs and
+browser-safe images retain their original source for portal viewing; the worker derives a bounded
+PDF preview for TIFF because browsers cannot safely render TIFF consistently. That preview is not
+a replacement for the immutable source or for clinician review.
 
 The complete setup, scheduler, monitoring, failure-handling, and verification instructions are
 in [the document-ingestion worker guide](document-ingestion-worker.md). Queue and worker

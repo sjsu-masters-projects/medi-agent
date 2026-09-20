@@ -1,6 +1,6 @@
 # MediAgent — Architecture Truth Record
 
-> **Updated:** 2026-09-18. This distinguishes code that exists today from the
+> **Updated:** 2026-09-19. This distinguishes code that exists today from the
 > approved delivery target. Do not present a planned interface as deployed.
 
 ## Current implementation
@@ -67,6 +67,15 @@ Safety rules are deterministic before probabilistic routing for emergency signal
 authorization, malformed data, retries, and idempotency. The user-facing result must
 include concise evidence and uncertainty; private model reasoning is neither exposed
 nor relied on as an audit record.
+
+Generic document intake is deliberately narrower than "any medical file": PDF, JPEG,
+PNG, WebP, and TIFF are the supported evidence artifacts. Both portals render private,
+short-lived source URLs with local PDF.js or native image rendering; TIFF retains its
+original source and receives a bounded derived PDF preview. FHIR, CDA, and DICOM require
+their dedicated review paths. The coordinator receives only a server-authorized selected
+document's bounded summary for that chat turn, never a model-selected document identifier,
+private source URL, or the original file. See
+[`docs/document-format-policy.md`](../docs/document-format-policy.md).
 
 The current model decision is recorded in
 [`docs/decisions/ai-runtime-2026-09.md`](../docs/decisions/ai-runtime-2026-09.md).

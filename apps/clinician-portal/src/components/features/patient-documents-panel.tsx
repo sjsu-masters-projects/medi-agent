@@ -4,12 +4,14 @@ import { useState } from "react";
 import { HiOutlineDocumentText } from "react-icons/hi2";
 import { Modal } from "@/components/ui";
 import { DocumentSummary } from "@/components/features/document-summary";
+import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
 import {
     ParseStatusBadge,
     ReviewStatusBadge,
 } from "@/components/features/document-review-badges";
 import {
     approveDocumentReview,
+    fetchClinicianDocumentSource,
     rejectDocumentReview,
     retryClinicianDocumentIngestion,
 } from "@/services/clinicians";
@@ -19,6 +21,7 @@ import {
     UploaderRole,
     getDocumentTypeLabel,
 } from "@/types";
+import type { ClinicianDocumentSource } from "@/services/clinicians";
 
 interface PatientDocumentsPanelProps {
     documents: ClinicianPatientDocument[];
@@ -50,6 +53,26 @@ export function PatientDocumentsPanel({
     const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
     const [rejectingDocumentId, setRejectingDocumentId] = useState<string | null>(null);
     const [rejectNote, setRejectNote] = useState("");
+    const [sourceDocument, setSourceDocument] = useState<ClinicianPatientDocument | null>(null);
+    const [source, setSource] = useState<ClinicianDocumentSource | null>(null);
+    const [sourceError, setSourceError] = useState<string | null>(null);
+    const [sourceLoading, setSourceLoading] = useState(false);
+
+    async function handleOpenSource(document: ClinicianPatientDocument) {
+        setSourceDocument(document);
+        setSource(null);
+        setSourceError(null);
+        setSourceLoading(true);
+        try {
+            setSource(await fetchClinicianDocumentSource(patientId, document.id));
+        } catch (error) {
+            setSourceError(
+                error instanceof Error ? error.message : "Unable to open this source document.",
+            );
+        } finally {
+            setSourceLoading(false);
+        }
+    }
 
     async function handleApproveDocument(documentId: string) {
         setReviewError(null);
@@ -222,6 +245,16 @@ export function PatientDocumentsPanel({
                                 </div>
                             )}
 
+                            <div className="border-b border-gray-100 px-5 py-3">
+                                <button
+                                    className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                                    onClick={() => void handleOpenSource(doc)}
+                                    type="button"
+                                >
+                                    Open source document
+                                </button>
+                            </div>
+
                             {doc.uploadedByRole === UploaderRole.PATIENT &&
                                 doc.reviewStatus === DocumentReviewStatus.PENDING && (
                                     <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-5 py-4">
@@ -311,6 +344,30 @@ export function PatientDocumentsPanel({
                         </button>
                     </div>
                 </div>
+            </Modal>
+
+            <Modal
+                onClose={() => {
+                    if (sourceLoading) return;
+                    setSourceDocument(null);
+                    setSource(null);
+                    setSourceError(null);
+                }}
+                open={Boolean(sourceDocument)}
+                title={sourceDocument?.fileName ?? "Source document"}
+            >
+                {sourceLoading ? <p className="text-sm text-slate-600">Loading source document…</p> : null}
+                {sourceError ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{sourceError}</p> : null}
+                {source && sourceDocument ? (
+                    <DocumentSourceViewer
+                        fileName={source.file_name}
+                        previewMimeType={source.preview_mime_type}
+                        previewStatus={source.preview_status}
+                        previewUrl={source.preview_url}
+                        sourceMimeType={source.mime_type}
+                        sourceUrl={source.file_url}
+                    />
+                ) : null}
             </Modal>
         </div>
     );

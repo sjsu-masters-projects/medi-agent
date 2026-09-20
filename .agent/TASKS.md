@@ -974,25 +974,14 @@ model does not fix any of those. This task rebuilds the runtime around them.
       have been measured for this model on this task, so it keeps the configured Pro model
       it has always used. Adding a routed workload here should follow a measurement rather
       than precede one — recorded so the omission is a decision and not an oversight.
-- [/] **WS5 — Document pipeline**: wired the deterministic OCR/page/bounding-box extractor
-      into the live candidate path; candidate creation now rejects values whose primary
-      anchor is absent, direct JSON extraction import is disabled, and upload requests only
-      queue a document. Migration `036_document_ingestion_worker.sql` atomically claims a
-      bounded batch with `FOR UPDATE SKIP LOCKED`; `app.workers.document_ingestion` is the
-      Cloud Run Job entry point. The deployment workflow declares and updates the Job beside
-      every backend release so its image digest cannot drift from the request path. The
-      operator reports migrations 034–036, the backend deploy, and the Cloud Run Job
-      configured; Scheduler activation remains gated on the synthetic acceptance check.
-      Candidate values are source-worded rather than forced through a closed clinical
-      vocabulary: the worker independently anchors every proposed field and omits any value
-      it cannot locate in the document. Coding into local medication enums belongs to a
-      terminology-backed, provenance-recording clinician-review step, not extraction. This
-      preserves medical language without letting the model silently coerce a clinical fact.
-      Invalid model output goes to `needs_evidence_review` without spending a retry or
-      creating a candidate. WS5 stays in progress until the synthetic acceptance check in
-      `docs/document-ingestion-worker.md` is captured: one queued
-      synthetic upload must be claimed by the Job and yield candidates with a page and
-      bounding-box anchor, without an unreviewed fact becoming approved clinical truth.
+- [/] **WS5 — Document pipeline**: uploads queue work; the Cloud Run Job atomically claims a
+      bounded batch with `FOR UPDATE SKIP LOCKED`. Candidate fields must have independent
+      page/bounding-box evidence and retain source wording; unsupported or incomplete model
+      output ends in `needs_evidence_review` without creating a candidate. The backend
+      deployment workflow updates the Job image on every backend release. The Job is deployed,
+      but scheduling is deliberately not enabled until the synthetic acceptance set passes.
+      See `docs/document-ingestion-worker.md` for the operator checklist and evidence required
+      to close WS5.
 - [ ] **WS6 — Patient-document retrieval in chat.** A new patient-scoped table, not
       `drug_knowledge_chunks`, which has no patient or document column and a blanket
       authenticated-read policy. The search tool takes a query only; the patient is
@@ -1128,6 +1117,16 @@ resources remain evidence-only and do not create local truth.
 
 ### REC-001 — Complete record ingestion lifecycle
 
+- [/] Establish one safe document-format and viewer contract. The generic clinical-document
+      path supports PDF, JPEG, PNG, WebP, and TIFF only; it must render every supported source
+      for the patient and assigned clinician, preserve the original artifact, and keep FHIR,
+      CDA, and DICOM on dedicated interoperability/imaging paths. See
+      `docs/document-format-policy.md`.
+- [/] Replace the licensed Syncfusion stub with local PDF.js/native-image viewing, derive a
+      bounded PDF preview for TIFF, and pass only a selected document's bounded summary to the
+      care coordinator. Implementation and automated coverage are in review; applying migration
+      `037_document_source_previews.sql` and completing the synthetic portal acceptance path are
+      still required before this item can close.
 - [ ] Support patient and clinician PDF/image upload.
 - [x] Constrain both upload entry points to the private `documents` bucket's supported clinical formats (PDF, JPEG, PNG, WebP, TIFF), reject unsupported files locally before storage/API calls, and surface the validation error.
 - [/] Persist upload, extraction, review, correction, and failure states. The guarded attempt/run lifecycle, OCR/evidence-review states, and safe failure codes are implemented; deployed verification remains.
@@ -1138,6 +1137,32 @@ resources remain evidence-only and do not create local truth.
 - [ ] Cover duplicate upload, corrupt file, unsupported type, timeout, and expired-session cases.
 - [ ] Reconcile approved FHIR candidates into existing authoritative records through explicit clinician choices to add, update, keep, defer, or reject; retain the candidate, source provenance, and audit history, and never mutate source data automatically.
 - [/] Provide audited re-projection/backfill for pending imported candidates when mapper versions add useful fields; never overwrite a clinician correction or final review decision. Dry-run and guarded staging application are implemented; production execution requires a reviewed report, an explicit candidate-type scope, and authorization. Legacy CarePlan display repair remains pending a scoped reviewed report.
+
+**REC-001 verification state — 2026-09-19**
+
+- [x] A synthetic born-digital prescription was claimed by the Job after retry and reached a
+      terminal `completed` run on attempt 3 (`embedded_text`, one page, one candidate). This
+      proves the deployed Job can claim and complete a bounded batch; it does not prove the
+      full evidence or viewer acceptance path.
+- [ ] Repeat with one synthetic scanned Spanish image/PDF. Record OCR-backed page evidence, or
+      a safe `needs_ocr` / `needs_evidence_review` terminal state with no ungrounded candidate.
+- [ ] Verify patient and assigned-clinician source viewing for PDF, raster image, and TIFF
+      preview; include expired-URL and unauthorized-access checks.
+- [ ] Verify selected-document chat uses only the authorized bounded summary and does not fall
+      back to a general-record answer when the document has no usable summary.
+- [ ] After every manual check above passes, create the `us-central1` Cloud Scheduler trigger
+      (`*/5 * * * *`, `America/Los_Angeles`) with a dedicated identity limited to
+      `roles/run.invoker` on this Job. Observe duration before enabling a cadence that could
+      overlap executions.
+
+**Implementation verification — local, 2026-09-19**
+
+- [x] `scripts/validate_migrations.py`: 38 PostgreSQL migration files validated.
+- [x] Backend focused document, chat, and API suite: 106 passed; Ruff and mypy passed.
+- [x] Backend full suite: 1,314 passed at 83.46% coverage after the document/viewer changes.
+- [x] Patient portal: lint, typecheck, 84 tests, and webpack production build passed.
+- [x] Clinician portal: lint, typecheck, 83 tests, and webpack production build passed.
+- [x] `npm audit --omit=dev --audit-level=high` reported zero vulnerabilities in both portals.
 
 ### MED-001 — Multi-source medication reconciliation
 
