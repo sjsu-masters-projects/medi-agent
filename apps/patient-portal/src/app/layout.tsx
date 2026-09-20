@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { SyncfusionRegister } from "@/components/features/syncfusion-register";
 import { StoreProvider } from "@/store/provider";
 import "./globals.css";
 
@@ -38,7 +37,6 @@ export default function RootLayout({
   return (
     <html lang="en-US">
       <body className="antialiased">
-        <SyncfusionRegister />
         <StoreProvider>{children}</StoreProvider>
       </body>
     </html>

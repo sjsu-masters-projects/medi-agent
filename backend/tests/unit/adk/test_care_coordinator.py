@@ -100,7 +100,13 @@ def test_the_tool_holder_is_named_exactly_as_its_allowlist_entry(
 
     permitted = ToolPolicyPlugin(TOOL_ALLOWLIST).permitted_tools(coordinator.name)
 
-    assert permitted == frozenset({"get_patient_context", "submit_triage_decision"})
+    assert permitted == frozenset(
+        {
+            "get_active_document_context",
+            "get_patient_context",
+            "submit_triage_decision",
+        }
+    )
 
 
 def test_the_typed_decision_tool_is_granted(coordinator: LlmAgent) -> None:
@@ -255,5 +261,9 @@ def test_the_pipeline_runs_with_every_runtime_guarantee_attached(
     policy = next(p for p in runner.plugin_manager.plugins if p.name == "tool_policy")
 
     assert policy.permitted_tools(COORDINATOR_AGENT_NAME) == frozenset(
-        {"get_patient_context", "submit_triage_decision"}
+        {
+            "get_active_document_context",
+            "get_patient_context",
+            "submit_triage_decision",
+        }
     )

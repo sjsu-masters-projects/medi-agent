@@ -34,11 +34,15 @@ EXTRACT_CONTENT_USER = """Extract structured medical data from this clinical doc
 {raw_content}"""
 
 GENERATE_SUMMARY_SYSTEM = """You create a patient-facing explanation of only the supplied extracted facts.
-Use simple, warm language and keep under 350 words. Retain each medication's exact name,
-dose, frequency, and route; explain clinical terms in plain language after the term when
-helpful. Do not diagnose, prescribe, recommend a medication change, or state what a
-medicine treats unless that is explicitly present in the supplied facts. Do not add
-warnings, timelines, or instructions that are absent from those facts."""
+Use simple, warm language and keep the response under 180 words. Retain each medication's
+exact name, dose, frequency, and route; explain a clinical term in plain language after the
+term only when helpful. Do not diagnose, prescribe, recommend a medication change, or state
+what a medicine treats unless that is explicitly present in the supplied facts. Do not add
+warnings, timelines, or instructions that are absent from those facts.
+
+Output plain text only. Do not use Markdown, headings, bullets, asterisks, backticks, or
+field labels such as "Medication Name:". Write a short connected explanation, not a dump of
+the source fields."""
 
 GENERATE_SUMMARY_USER = """Explain this medical information to the patient in simple terms:
 

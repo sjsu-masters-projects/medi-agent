@@ -13,83 +13,37 @@ interface DocumentSummaryProps {
 }
 
 interface ParsedSection {
-    type: "medications" | "watch_for" | "follow_up" | "general";
+    type: "general";
     title: string;
     items: string[];
 }
 
 // ── Parser ─────────────────────────────────────────────────────────────────
 
-const SECTION_PATTERNS: Array<{ pattern: RegExp; type: ParsedSection["type"]; title: string }> = [
-    { pattern: /medications?|prescriptions?|drugs?/i, type: "medications", title: "Medications" },
-    {
-        pattern: /watch\s+for|adverse|side\s+effects?|warnings?|alerts?|adr/i,
-        type: "watch_for",
-        title: "Watch For",
-    },
-    {
-        pattern: /follow[ -]?up|appointments?|return|schedule/i,
-        type: "follow_up",
-        title: "Follow-up Dates",
-    },
-];
+function cleanSummaryLine(line: string): string {
+    return line
+        .replace(/^#+\s*/, "")
+        .replace(/[\*_`]/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+}
 
 function parseSummary(text: string): ParsedSection[] {
-    // Split on header patterns like "Medications:", "## Follow-up", "**Watch For**", numbered lists
+    // A model-generated summary is display text, not a coded clinical record. Do not
+    // infer medication, risk, or appointment semantics from familiar words: that can
+    // turn an incomplete sentence into a misleading clinical category or action.
     const lines = text
         .split("\n")
-        .map((l) => l.replace(/^#+\s*/, "").replace(/^\*\*(.+)\*\*/, "$1").trim())
+        .map(cleanSummaryLine)
         .filter(Boolean);
 
-    const sections: ParsedSection[] = [];
-    let currentSection: ParsedSection | null = null;
-
-    for (const line of lines) {
-        // Detect section headers (ends with colon OR matches known keyword)
-        const headerMatch = SECTION_PATTERNS.find(({ pattern }) => pattern.test(line));
-        if (headerMatch && (line.endsWith(":") || line.length < 50)) {
-            if (currentSection && currentSection.items.length > 0) {
-                sections.push(currentSection);
-            }
-            currentSection = { type: headerMatch.type, title: headerMatch.title, items: [] };
-            continue;
-        }
-
-        // Bullet / list item
-        const item = line.replace(/^[-•*●]\s*/, "").replace(/^\d+\.\s*/, "").trim();
-        if (item && item.length > 2) {
-            if (currentSection) {
-                currentSection.items.push(item);
-            } else {
-                // Pre-section content goes into "general"
-                if (!sections.find((s) => s.type === "general")) {
-                    sections.push({ type: "general", title: "Summary", items: [item] });
-                } else {
-                    sections.find((s) => s.type === "general")?.items.push(item);
-                }
-            }
-        }
-    }
-
-    if (currentSection && currentSection.items.length > 0) {
-        sections.push(currentSection);
-    }
-
-    // Fallback: if no sections parsed, just show full text
-    if (sections.length === 0 && text.trim()) {
-        sections.push({ type: "general", title: "Summary", items: [text.trim()] });
-    }
-
-    return sections;
+    return lines.length > 0 ? [{ type: "general", title: "Summary", items: lines }] : [];
 }
 
 // ── Section badge ───────────────────────────────────────────────────────────
 
 function SectionBadge({ type, count }: { type: ParsedSection["type"]; count: number }) {
     const styles: Record<ParsedSection["type"], string> = {
-        medications: "bg-blue-100 text-blue-700",
-        watch_for: "bg-red-100 text-red-700",
-        follow_up: "bg-green-100 text-green-700",
         general: "bg-gray-100 text-gray-600",
     };
 
@@ -148,43 +102,11 @@ export function DocumentSummary({
                                     className="flex items-start gap-2 text-sm text-gray-700"
                                     key={itemIdx}
                                 >
-                                    {section.type === "watch_for" ? (
-                                        <span
-                                            aria-hidden="true"
-                                            className="mt-0.5 shrink-0 text-red-500"
-                                        >
-                                            ⚠
-                                        </span>
-                                    ) : section.type === "follow_up" ? (
-                                        <span
-                                            aria-hidden="true"
-                                            className="mt-0.5 shrink-0 text-green-600"
-                                        >
-                                            📅
-                                        </span>
-                                    ) : section.type === "medications" ? (
-                                        <span
-                                            aria-hidden="true"
-                                            className="mt-0.5 shrink-0 text-blue-500"
-                                        >
-                                            💊
-                                        </span>
-                                    ) : (
-                                        <span
-                                            aria-hidden="true"
-                                            className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400"
-                                        />
-                                    )}
-                                    {section.type === "medications" ? (
-                                        <a
-                                            className="text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
-                                            href={`/patients/${patientId}?tab=adherence&med=${encodeURIComponent(item)}`}
-                                        >
-                                            {item}
-                                        </a>
-                                    ) : (
-                                        item
-                                    )}
+                                    <span
+                                        aria-hidden="true"
+                                        className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400"
+                                    />
+                                    {item}
                                 </li>
                             ))}
                         </ul>

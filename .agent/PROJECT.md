@@ -73,7 +73,7 @@ they conflict with the August 2026 revival plan**, not deleted.
 | D3, D14, D17, D18 | Fixed model choices and model-specific reasoning claims | Superseded by provider-neutral, repeatably benchmarked routing; no chain-of-thought claims |
 | D4 | Deepgram voice | Retained behind an adapter; transcript/text fallback required |
 | D5 | Supabase platform | Retained |
-| D6 | Syncfusion viewer | Retained only where licensed and actually used |
+| D6 | Syncfusion viewer | Superseded by local PDF.js and native browser image rendering; TIFF uses a server-generated PDF preview while the original remains the evidence source |
 | D7 | Next.js, Redux, Tailwind | Retained foundation |
 | D8 | LangGraph orchestration | Superseded by the ADK runtime for new model-backed work; legacy graph modules remain only while callers depend on them |
 | D9 | Monorepo | Retained |

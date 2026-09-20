@@ -14,8 +14,9 @@ from uuid import uuid4
 
 import pytest
 
-from app.adk.tools import PATIENT_ID_STATE_KEY
+from app.adk.tools import DOCUMENT_CONTEXT_STATE_KEY, PATIENT_ID_STATE_KEY
 from app.adk.tools import patient_context as patient_context_module
+from app.adk.tools.document_context import get_active_document_context
 from app.adk.tools.drug_reference import lookup_rxnorm_ingredient
 from app.adk.tools.patient_context import get_patient_context
 
@@ -82,6 +83,57 @@ async def test_an_empty_drug_name_does_not_reach_the_service() -> None:
 def test_the_patient_is_not_part_of_the_tool_surface() -> None:
     """The model supplies nothing. `tool_context` is injected and stripped from the schema."""
     assert list(inspect.signature(get_patient_context).parameters) == ["tool_context"]
+
+
+# ---------------------------------------------------------------------------
+# get_active_document_context — one server-attached summary, no model-selected ID
+# ---------------------------------------------------------------------------
+
+
+def test_document_context_has_no_model_selectable_identifier() -> None:
+    assert list(inspect.signature(get_active_document_context).parameters) == ["tool_context"]
+
+
+def test_document_context_returns_only_the_server_attached_summary() -> None:
+    context = _context()
+    context.state[DOCUMENT_CONTEXT_STATE_KEY] = {
+        "id": "doc-1",
+        "file_name": "lab.pdf",
+        "document_type": "lab_report",
+        "summary": "The record notes an elevated A1C.",
+        "parse_status": "completed",
+        "private_source_url": "must not be exposed",
+    }
+
+    result = get_active_document_context(context)
+
+    assert result == {
+        "document_id": "doc-1",
+        "file_name": "lab.pdf",
+        "document_type": "lab_report",
+        "summary": "The record notes an elevated A1C.",
+        "parse_status": "completed",
+    }
+
+
+def test_document_context_refuses_an_unscoped_or_missing_selection() -> None:
+    assert "error" in get_active_document_context(_context(patient_id=None))
+    assert "error" in get_active_document_context(_context())
+
+
+def test_document_context_names_an_unavailable_summary_without_inventing_one() -> None:
+    context = _context()
+    context.state[DOCUMENT_CONTEXT_STATE_KEY] = {
+        "id": "doc-1",
+        "file_name": "scan.pdf",
+        "document_type": "other",
+        "parse_status": "pending",
+    }
+
+    result = get_active_document_context(context)
+
+    assert result["summary"] == ""
+    assert "notice" in result
 
 
 @pytest.mark.asyncio

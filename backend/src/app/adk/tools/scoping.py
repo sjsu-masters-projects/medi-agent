@@ -32,6 +32,14 @@ Durable rather than `temp:`-scoped: the subject of a conversation is a property 
 whole session, not of one turn, and every tool on every turn must resolve the same person.
 """
 
+DOCUMENT_CONTEXT_STATE_KEY = "temp:document_context"
+"""One server-loaded document context for the current chat invocation.
+
+The ``temp:`` prefix makes the record available to the coordinator only while it
+answers the selected-document turn. It is intentionally not a durable chat-session
+field: selecting a document must not cause later unrelated chat turns to inherit it.
+"""
+
 
 class PatientScopeError(RuntimeError):
     """A tool tried to read patient data without an authenticated patient in scope."""

@@ -3,12 +3,15 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
 import {
     approveDocumentReview,
+    fetchClinicianDocumentSource,
     rejectDocumentReview,
 } from "@/services/clinicians";
 
 vi.mock("@/services/clinicians", () => ({
     approveDocumentReview: vi.fn(),
+    fetchClinicianDocumentSource: vi.fn(),
     rejectDocumentReview: vi.fn(),
+    retryClinicianDocumentIngestion: vi.fn(),
 }));
 
 vi.mock("@/components/features/document-summary", () => ({
@@ -17,9 +20,16 @@ vi.mock("@/components/features/document-summary", () => ({
     ),
 }));
 
+vi.mock("@/components/features/document-source-viewer", () => ({
+    DocumentSourceViewer: ({ sourceUrl }: { sourceUrl?: string | null }) => (
+        <div data-testid="source-viewer">{sourceUrl}</div>
+    ),
+}));
+
 describe("PatientDocumentsPanel", () => {
     beforeEach(() => {
         vi.mocked(approveDocumentReview).mockReset();
+        vi.mocked(fetchClinicianDocumentSource).mockReset();
         vi.mocked(rejectDocumentReview).mockReset();
     });
 
@@ -92,6 +102,40 @@ describe("PatientDocumentsPanel", () => {
             expect(approveDocumentReview).toHaveBeenCalledWith("patient-2", "doc-2"),
         );
         await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    });
+
+    it("loads a fresh, authorized source URL only after the clinician opens a document", async () => {
+        vi.mocked(fetchClinicianDocumentSource).mockResolvedValue({
+            file_name: "lab.pdf",
+            file_url: "https://example.test/signed-lab.pdf",
+            mime_type: "application/pdf",
+            preview_status: "not_required",
+        });
+
+        render(
+            <PatientDocumentsPanel
+                documents={[
+                    {
+                        id: "doc-source",
+                        fileName: "lab.pdf",
+                        documentType: "lab_report",
+                        parseStatus: "completed",
+                        createdAt: "2026-04-21T10:00:00Z",
+                        uploadedByRole: "patient",
+                        reviewStatus: "approved",
+                    },
+                ]}
+                onRefresh={vi.fn()}
+                patientId="patient-source"
+            />,
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: /open source document/i }));
+
+        await waitFor(() =>
+            expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-source", "doc-source"),
+        );
+        expect(await screen.findByTestId("source-viewer")).toHaveTextContent("signed-lab.pdf");
     });
 
     it("rejects pending patient uploads with a note and refreshes the deep dive", async () => {

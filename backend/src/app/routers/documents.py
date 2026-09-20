@@ -22,7 +22,7 @@ from app.models.auth import CurrentUser
 from app.models.document import DocumentRead
 from app.models.enums import DocumentType, Language, coerce_locale
 from app.services.document_service import DocumentService
-from app.services.explanation_service import ExplanationService
+from app.services.explanation_service import ExplanationService, normalize_patient_summary
 from app.services.smart_launch_service import SmartLaunchService
 
 router = APIRouter()
@@ -150,6 +150,23 @@ async def retry_clinician_document_ingestion(
 
 
 @router.get(
+    "/patients/{patient_id}/{document_id}/source",
+    response_model=DocumentRead,
+    summary="Get an assigned patient's source document with fresh signed URLs",
+)
+async def get_clinician_document_source(
+    patient_id: UUID,
+    document_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: DocumentService = Depends(_get_service),
+    db: Client = Depends(get_db),
+) -> Any:
+    """Allow a clinician to open only an assigned patient's private source document."""
+    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    return await service.get_document(document_id, patient_id)
+
+
+@router.get(
     "/",
     response_model=list[DocumentRead],
     summary="List my documents",
@@ -202,7 +219,11 @@ async def explain_document(
     document = await service.get_document(document_id, user.id)
 
     if language == Language.EN and document.get("ai_summary"):
-        return {"summary": document["ai_summary"], "language": language.value, "cached": True}
+        # Summaries created before the plain-text prompt contract may contain Markdown.
+        # Keep the cache fast, but make its patient-facing representation match newly
+        # generated summaries rather than exposing model formatting in the portal.
+        summary = normalize_patient_summary(str(document["ai_summary"]))
+        return {"summary": summary, "language": language.value, "cached": True}
 
     explanation_service = ExplanationService()
     summary = await explanation_service.explain(document_data=document, language=language.value)

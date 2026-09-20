@@ -1,0 +1,164 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+
+interface DocumentSourceViewerProps {
+    fileName: string;
+    previewMimeType?: string | null;
+    previewStatus?: string | null;
+    previewUrl?: string | null;
+    sourceMimeType?: string | null;
+    sourceUrl?: string | null;
+}
+
+function PdfCanvasViewer({ documentUrl, fileName }: { documentUrl: string; fileName: string }) {
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [pageNumber, setPageNumber] = useState(1);
+
+    useEffect(() => {
+        let disposed = false;
+        let loadedDocument: PDFDocumentProxy | null = null;
+
+        async function loadDocument() {
+            setDocument(null);
+            setError(null);
+            setPageNumber(1);
+            try {
+                const pdfjs = await import("pdfjs-dist");
+                pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+                    "pdfjs-dist/build/pdf.worker.min.mjs",
+                    import.meta.url,
+                ).toString();
+                const loadingTask = pdfjs.getDocument({ url: documentUrl });
+                loadedDocument = await loadingTask.promise;
+                if (!disposed) setDocument(loadedDocument);
+            } catch {
+                if (!disposed) {
+                    setError("This PDF could not be displayed in the browser. You can still download the original.");
+                }
+            }
+        }
+
+        void loadDocument();
+        return () => {
+            disposed = true;
+            void loadedDocument?.cleanup();
+        };
+    }, [documentUrl]);
+
+    useEffect(() => {
+        if (!document || !canvasRef.current) return;
+        const activeDocument = document;
+        let cancelled = false;
+        let renderTask: RenderTask | null = null;
+
+        async function renderPage() {
+            try {
+                const page = await activeDocument.getPage(pageNumber);
+                const viewport = page.getViewport({ scale: 1.25 });
+                const canvas = canvasRef.current;
+                const context = canvas?.getContext("2d");
+                if (!canvas || !context || cancelled) return;
+                canvas.width = Math.ceil(viewport.width);
+                canvas.height = Math.ceil(viewport.height);
+                renderTask = page.render({ canvas, canvasContext: context, viewport });
+                await renderTask.promise;
+            } catch {
+                if (!cancelled) setError("This page could not be rendered. You can still download the original.");
+            }
+        }
+
+        void renderPage();
+        return () => {
+            cancelled = true;
+            renderTask?.cancel();
+        };
+    }, [document, pageNumber]);
+
+    if (error) return <p className="text-sm text-rose-700">{error}</p>;
+    if (!document) return <p className="text-sm text-slate-500">Loading source document…</p>;
+
+    return (
+        <div className="space-y-3">
+            <div className="max-h-[560px] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <canvas
+                    aria-label={`${fileName}, page ${pageNumber}`}
+                    className="mx-auto max-w-full bg-white shadow-sm"
+                    ref={canvasRef}
+                    role="img"
+                />
+            </div>
+            <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+                <span>Page {pageNumber} of {document.numPages}</span>
+                <div className="flex gap-2">
+                    <button
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+                        disabled={pageNumber <= 1}
+                        onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
+                        type="button"
+                    >
+                        Previous
+                    </button>
+                    <button
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+                        disabled={pageNumber >= document.numPages}
+                        onClick={() => setPageNumber((current) => Math.min(document.numPages, current + 1))}
+                        type="button"
+                    >
+                        Next
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** Render a patient source artifact without giving the browser a permanent storage URL. */
+export function DocumentSourceViewer({
+    fileName,
+    previewMimeType,
+    previewStatus,
+    previewUrl,
+    sourceMimeType,
+    sourceUrl,
+}: DocumentSourceViewerProps) {
+    const usesPreview = previewStatus === "ready" && Boolean(previewUrl);
+    const viewUrl = usesPreview ? previewUrl : sourceUrl;
+    const viewMimeType = usesPreview ? previewMimeType : sourceMimeType;
+    const canRenderNativeImage = Boolean(viewMimeType?.startsWith("image/")) && viewMimeType !== "image/tiff";
+
+    return (
+        <section aria-label="Source document" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Source document</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {usesPreview ? "Preview generated from the original TIFF" : "Original uploaded file"}
+                    </p>
+                </div>
+                {sourceUrl ? (
+                    <a
+                        className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                        href={sourceUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                    >
+                        Download original
+                    </a>
+                ) : null}
+            </div>
+            {viewMimeType === "application/pdf" && viewUrl ? <PdfCanvasViewer documentUrl={viewUrl} fileName={fileName} /> : null}
+            {canRenderNativeImage && viewUrl ? (
+                // The source URL is a short-lived API-signed URL and this is intentionally a native image.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img alt={`Source document: ${fileName}`} className="max-h-[560px] w-full rounded-lg object-contain" src={viewUrl} />
+            ) : null}
+            {previewStatus === "pending" ? <p className="text-sm text-slate-600">A browser preview is being prepared for this TIFF. The original is available to download now.</p> : null}
+            {previewStatus === "failed" ? <p className="text-sm text-rose-700">A browser preview could not be prepared. Download the original or use your established review workflow.</p> : null}
+            {!viewUrl && previewStatus !== "pending" && previewStatus !== "failed" ? <p className="text-sm text-rose-700">This source is temporarily unavailable. Refresh and try again.</p> : null}
+        </section>
+    );
+}

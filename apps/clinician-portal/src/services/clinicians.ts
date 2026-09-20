@@ -161,6 +161,15 @@ export interface DocumentReviewActionResponse {
     review_note?: string;
 }
 
+export interface ClinicianDocumentSource {
+    file_name: string;
+    file_url: string;
+    mime_type: string;
+    preview_url?: string | null;
+    preview_mime_type?: string | null;
+    preview_status?: string | null;
+}
+
 type ApiMedicationRecord = Partial<Medication> & Record<string, unknown>;
 type ApiSymptomReportRecord = Partial<SymptomReport> & Record<string, unknown>;
 interface ApiChatMessageRecord {
@@ -486,6 +495,16 @@ export async function retryClinicianDocumentIngestion(
         { method: "POST" },
     );
     return normalizePatientDocument(document);
+}
+
+/** Fetch a short-lived source URL only when an assigned clinician opens a document. */
+export async function fetchClinicianDocumentSource(
+    patientId: string,
+    documentId: string,
+): Promise<ClinicianDocumentSource> {
+    return apiFetch<ClinicianDocumentSource>(
+        `/api/v1/documents/patients/${patientId}/${documentId}/source`,
+    );
 }
 
 /** Trigger Summarization Agent to generate a SOAP note. */

@@ -5,7 +5,13 @@ API_V1_PREFIX = "/api/v1"
 
 # File uploads
 MAX_FILE_SIZE_MB = 25
-ALLOWED_DOCUMENT_TYPES = {"application/pdf", "image/png", "image/jpeg", "image/webp"}
+ALLOWED_DOCUMENT_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/tiff",
+}
 
 # LLM models
 DEFAULT_LLM_MODEL = "gemini-2.0-flash"

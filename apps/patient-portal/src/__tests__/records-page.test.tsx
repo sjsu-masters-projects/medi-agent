@@ -197,7 +197,7 @@ describe("RecordsPage", () => {
     expect(screen.getByText(/No records yet/i)).toBeInTheDocument();
   });
 
-  it("infers a discharge summary type from uploaded PDF filenames", async () => {
+  it("does not infer a clinical type from an uploaded PDF filename", async () => {
     get.mockResolvedValue([]);
     uploadDocumentToStorage.mockResolvedValue(
       "patient-1/vatsal-discharge-summary.pdf",
@@ -233,7 +233,7 @@ describe("RecordsPage", () => {
       expect(post).toHaveBeenCalledWith(
         "/api/v1/documents/",
         expect.objectContaining({
-          document_type: DocumentType.DISCHARGE_SUMMARY,
+          document_type: DocumentType.OTHER,
           file_name: "vatsal-discharge-summary.pdf",
         }),
         { token: "access-token" },

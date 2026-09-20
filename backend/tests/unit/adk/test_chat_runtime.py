@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from google.adk.agents import LlmAgent, SequentialAgent
@@ -29,7 +30,7 @@ from app.adk.agents.care_coordinator import (
 )
 from app.adk.chat_runtime import APP_NAME, CareCoordinatorRuntime
 from app.adk.runner import build_runner
-from app.adk.tools import submit_triage_decision
+from app.adk.tools import DOCUMENT_CONTEXT_STATE_KEY, submit_triage_decision
 from app.models.enums import Language
 from app.safety import TRIAGE_COPY
 from app.utils.localization import resolve_locale_resource
@@ -167,12 +168,47 @@ async def _turn(
     ]
 
 
+async def _empty_stream() -> AsyncGenerator[Any, None]:
+    if False:
+        yield None
+
+
 def _first(events: list[dict[str, Any]], kind: str) -> dict[str, Any]:
     return next(event for event in events if event["type"] == kind)
 
 
 def _chunks(events: list[dict[str, Any]]) -> str:
     return "".join(e["content"] for e in events if e["type"] == "chunk")
+
+
+@pytest.mark.asyncio
+async def test_selected_document_context_is_passed_only_in_the_current_run() -> None:
+    runner = MagicMock()
+    runner.session_service.get_session = AsyncMock(return_value=object())
+    runner.run_async.return_value = _empty_stream()
+    runtime = CareCoordinatorRuntime(runner=runner)
+    selected_document = {
+        "id": "doc-1",
+        "file_name": "lab.pdf",
+        "document_type": "lab_report",
+        "summary": "A1C was elevated.",
+        "parse_status": "completed",
+    }
+
+    await anext(
+        runtime.process_stream(
+            patient_id=PATIENT_ID,
+            user_id="user-1",
+            session_id="document-turn",
+            message="What does this document say?",
+            language=Language.EN.value,
+            document_context=selected_document,
+        )
+    )
+
+    assert runner.run_async.call_args.kwargs["state_delta"] == {
+        DOCUMENT_CONTEXT_STATE_KEY: selected_document
+    }
 
 
 # ---------------------------------------------------------------------------

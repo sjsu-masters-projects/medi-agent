@@ -1,5 +1,7 @@
 """Test document service validation — file type and size checks."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.services.document_service import (
@@ -24,9 +26,9 @@ class TestFileValidation:
         svc = self._make_service()
         svc._validate_file("image/jpeg", 1024)
 
-    def test_accepts_json_extraction_document(self):
+    def test_accepts_tiff(self):
         svc = self._make_service()
-        svc._validate_file("application/json", 1024)
+        svc._validate_file("image/tiff", 1024)
 
     def test_rejects_executable(self):
         from app.core.exceptions import ValidationError
@@ -55,8 +57,46 @@ class TestFileValidation:
 
     def test_allowed_mime_types_complete(self):
         """Ensure we haven't accidentally emptied the allowed list."""
-        assert len(ALLOWED_MIME_TYPES) >= 7
+        assert len(ALLOWED_MIME_TYPES) == 5
         assert "application/pdf" in ALLOWED_MIME_TYPES
-        assert "application/json" in ALLOWED_MIME_TYPES
         assert "image/jpeg" in ALLOWED_MIME_TYPES
-        assert "text/plain" in ALLOWED_MIME_TYPES
+        assert "image/tiff" in ALLOWED_MIME_TYPES
+
+
+class TestDocumentViewUrls:
+    """Derived previews are separately signed and never become a public URL."""
+
+    def test_ready_preview_gets_a_fresh_signed_url_with_its_source(self):
+        db = MagicMock()
+        bucket = db.storage.from_.return_value
+        bucket.create_signed_url.side_effect = [
+            {"signedURL": "https://example.test/source"},
+            {"signedURL": "https://example.test/preview"},
+        ]
+        document = {
+            "file_path": "patient/source.tiff",
+            "preview_path": "patient/previews/doc/source.pdf",
+            "preview_status": "ready",
+        }
+
+        DocumentService(db)._attach_view_urls(document)
+
+        assert document["file_url"] == "https://example.test/source"
+        assert document["preview_url"] == "https://example.test/preview"
+        assert bucket.create_signed_url.call_count == 2
+
+    def test_pending_preview_never_gets_a_url(self):
+        db = MagicMock()
+        bucket = db.storage.from_.return_value
+        bucket.create_signed_url.return_value = {"signedURL": "https://example.test/source"}
+        document = {
+            "file_path": "patient/source.tiff",
+            "preview_path": None,
+            "preview_status": "pending",
+        }
+
+        DocumentService(db)._attach_view_urls(document)
+
+        assert document["file_url"] == "https://example.test/source"
+        assert document["preview_url"] is None
+        bucket.create_signed_url.assert_called_once()

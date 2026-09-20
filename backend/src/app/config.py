@@ -83,9 +83,6 @@ class Settings(BaseSettings):
         "MediAgent Clinician Onboarding <onboarding@mail.mediagent.live>"
     )
 
-    # Syncfusion
-    syncfusion_license_key: str = ""
-
     # Sentry
     sentry_environment: str = "development"
     sentry_release: str = ""

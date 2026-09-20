@@ -9,6 +9,7 @@ from supabase import Client
 
 from app.core.exceptions import ExternalServiceError
 from app.models.enums import ChatRole, coerce_locale
+from app.services.explanation_service import normalize_patient_summary
 
 DEFAULT_CHAT_SESSION_ID = "default"
 
@@ -325,7 +326,9 @@ class ChatService:
             "id": row.get("id"),
             "file_name": row.get("file_name"),
             "document_type": row.get("document_type"),
-            "summary": row.get("ai_summary") or row.get("notes") or "",
+            "summary": normalize_patient_summary(
+                str(row.get("ai_summary") or row.get("notes") or "")
+            ),
             "parse_status": row.get("parse_status") or "none",
         }
 

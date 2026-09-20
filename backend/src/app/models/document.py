@@ -29,6 +29,10 @@ class DocumentRead(BaseModel):
     file_name: str
     file_url: str  # Supabase Storage signed URL
     mime_type: str = "application/pdf"
+    preview_url: str | None = None
+    preview_mime_type: str | None = None
+    preview_status: str = "not_required"
+    preview_failure_code: str | None = None
     file_size_bytes: int
     parsed: bool = False
     ai_summary: str | None = None
