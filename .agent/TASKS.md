@@ -30,7 +30,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Backend foundation | Partial | Broad API and test base; empty modules and reachable placeholders remain |
 | Records ingestion | Functional foundation | Needs provenance, correction, FHIR validation, and reconciliation hardening |
 | Chat and triage | Runtime delivered; acceptance in progress | Deterministic emergency handling and the Care Coordinator are live in the branch; bounded runtime deadlines and full journey tests remain |
-| Document intelligence | Worker delivered; operational acceptance in progress | Uploads queue bounded, anchored OCR/model work for a Cloud Run Job; production synthetic-job evidence remains to be recorded |
+| Document intelligence | Worker delivered; operational acceptance in progress | Synthetic born-digital and scanned-Spanish OCR runs completed with evidence-backed pending candidates; TIFF and access-control acceptance remain |
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
@@ -38,6 +38,12 @@ A task is done only when its implementation, authorization, error handling, audi
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
 | Dependency security | Clear as of 2026-09-09 | `next` 16.3.4 is on `main` and deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4) that were live on both portals; a fresh `npm ci` reports zero vulnerabilities on both lockfiles. Advisories published after the 2026-08-19 evidence invalidated it, so re-run `npm audit` at the start of each session rather than trusting this row |
 | Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
+
+**Tracker reconciliation — 2026-09-20.** Every named primary task was reviewed for status
+consistency. Existing completion marks were preserved only where the tracker carries implementation
+or verification evidence; unverified work remains open. This update separates the deployed
+document worker's operational gates from the independently incomplete document-chat product work
+and adds the missing clinician-approved care-plan/Today-feed lifecycle.
 
 ## Active task
 
@@ -1138,22 +1144,26 @@ resources remain evidence-only and do not create local truth.
 - [ ] Reconcile approved FHIR candidates into existing authoritative records through explicit clinician choices to add, update, keep, defer, or reject; retain the candidate, source provenance, and audit history, and never mutate source data automatically.
 - [/] Provide audited re-projection/backfill for pending imported candidates when mapper versions add useful fields; never overwrite a clinician correction or final review decision. Dry-run and guarded staging application are implemented; production execution requires a reviewed report, an explicit candidate-type scope, and authorization. Legacy CarePlan display repair remains pending a scoped reviewed report.
 
-**REC-001 verification state — 2026-09-19**
+**REC-001 verification state — 2026-09-20**
 
 - [x] A synthetic born-digital prescription was claimed by the Job after retry and reached a
       terminal `completed` run on attempt 3 (`embedded_text`, one page, one candidate). This
       proves the deployed Job can claim and complete a bounded batch; it does not prove the
       full evidence or viewer acceptance path.
-- [ ] Repeat with one synthetic scanned Spanish image/PDF. Record OCR-backed page evidence, or
-      a safe `needs_ocr` / `needs_evidence_review` terminal state with no ungrounded candidate.
-- [ ] Verify patient and assigned-clinician source viewing for PDF, raster image, and TIFF
-      preview; include expired-URL and unauthorized-access checks.
-- [ ] Verify selected-document chat uses only the authorized bounded summary and does not fall
-      back to a general-record answer when the document has no usable summary.
-- [ ] After every manual check above passes, create the `us-central1` Cloud Scheduler trigger
-      (`*/5 * * * *`, `America/Los_Angeles`) with a dedicated identity limited to
-      `roles/run.invoker` on this Job. Observe duration before enabling a cadence that could
-      overlap executions.
+- [x] A synthetic scanned Spanish PNG was claimed and completed in 34.7 seconds on its first
+      attempt (`ocr`, one page, one candidate). The candidate is `pending_review`; five retained
+      page-1 bounding-box/excerpt records quote the scanned Spanish medication and instructions.
+      This proves OCR and source anchoring for the raster path without promoting an unreviewed
+      candidate to clinical truth.
+- [/] Patient and assigned-clinician raster source viewers both rendered the synthetic Spanish
+      document and the patient view displayed a source-grounded explanation. PDF, TIFF-derived
+      preview, expired-URL, and unauthorized-access checks remain.
+- [/] Document-focused chat did not meet acceptance: opening chat from an existing patient chat
+      lost the visible selected-document context and later returned a generic chart answer.
+      Product and implementation work is tracked by PAT-004; it is not a reason to weaken
+      document authorization or silently pass the acceptance check.
+- [/] Operational scheduling and its remaining acceptance gates are tracked explicitly in
+      OPS-001 below; do not create the trigger from an incomplete viewer/access test.
 
 **Implementation verification — local, 2026-09-19**
 
@@ -1163,6 +1173,77 @@ resources remain evidence-only and do not create local truth.
 - [x] Patient portal: lint, typecheck, 84 tests, and webpack production build passed.
 - [x] Clinician portal: lint, typecheck, 83 tests, and webpack production build passed.
 - [x] `npm audit --omit=dev --audit-level=high` reported zero vulnerabilities in both portals.
+
+### OPS-001 — Operate the document-ingestion Job
+
+**Status:** `[/]` In progress
+
+- [x] Deploy `mediagent-document-ingestion` in `us-central1` with one task, parallelism one,
+      2 GiB memory, a 300-second timeout, no platform retries, and the server-only worker
+      command.
+- [x] Apply migrations through `037_document_source_previews.sql`; schema-ledger and required
+      table verification passed on 2026-09-20.
+- [x] Confirm the backend service and Job release configuration resolve to the same merged image
+      digest, and that a manual born-digital PDF plus scanned-Spanish raster execution complete
+      with source-backed pending candidates.
+- [ ] Process the generated synthetic scanned PDF and record its terminal run, source evidence,
+      and patient/clinician rendering result.
+- [/] Process the generated two-frame TIFF: the 2026-09-20 run reached `completed` with
+      `preview_status = ready`; both pages rendered in the clinician viewer, the assigned
+      clinician received the original TIFF download, and the patient viewer was manually
+      confirmed. The optional patient explanation failed separately with `GenerationProviderError`.
+      Bounded derived-preview storage is implemented; a preview failure must remain safely
+      reviewable rather than creating a fabricated clinical result.
+- [/] Verify access control for the original and TIFF preview. Live no-session requests to the
+      deployed patient-document and clinician-source routes both returned `401` on 2026-09-20,
+      and the predictable public-storage path was unavailable. Focused local checks passed for
+      patient scoping, cross-clinic clinician denial, fresh private source/preview URLs, and
+      denial audit events.
+- [ ] Confirm signed-URL expiry in the deployed environment. Retain freshly issued source and
+      derived-preview URLs for at least their one-hour lifetime, then confirm each URL is denied
+      after expiry; do not treat a refreshed URL, a broken URL, or an unauthenticated API denial
+      as an expiry check.
+- [ ] Confirm a live cross-user denial with a different unassigned synthetic account. It must be
+      unable to obtain either the TIFF original or derived preview through the patient or
+      clinician path, receive no document-existence detail, and create the expected denial audit
+      event. Do not use real patient data or alter care-team assignments for this check.
+- [ ] Record full synthetic execution duration after the PDF and TIFF checks. The observed
+      Spanish raster duration (34.7 seconds) is encouraging but is not by itself a cadence
+      decision for multi-frame input.
+- [ ] Split the optional patient-explanation lifecycle from document ingestion. Persist a
+      summary state, sanitized failure code, source/prompt version, retry count, and retry time;
+      make a provider outage observable and retryable without re-OCRing the source or creating
+      duplicate candidate facts. The 2026-09-20 TIFF run completed extraction and preview, but
+      its optional summary failed with `GenerationProviderError` after the 2,048-token retry and
+      currently leaves only `ai_summary = NULL`.
+- [ ] Only then create `mediagent-document-ingestion-every-5m` in `us-central1` with
+      `*/5 * * * *`, timezone `America/Los_Angeles`, and a dedicated Scheduler identity limited
+      to `roles/run.invoker` on this Job. Monitor overlap and queue delay; database claiming
+      prevents duplicate document claims but does not serialize separate Job executions.
+
+**Next manual acceptance sequence — do not schedule before all steps pass**
+
+1. Upload `~/Downloads/mediagent-synthetic-spanish-prescription-20260920.pdf`, execute the Job,
+   then record the terminal ingestion run, page evidence, and source rendering in both portals.
+2. Upload `~/Downloads/mediagent-synthetic-spanish-multiframe-20260920.tiff`, execute the Job,
+   then confirm a `ready` preview and both frames in the derived PDF preview in both portals. The
+   original TIFF must remain downloadable only to its authorized users.
+3. Preserve freshly issued original and preview URLs until their one-hour expiry, then verify both
+   are denied. In a separate unassigned synthetic user session, verify neither portal/API path
+   reveals the TIFF or its derived preview; confirm the denial is audited without leaking source
+   existence. Record elapsed Job durations for both runs.
+4. Only when those results are safe and comfortably below five minutes, configure the Scheduler
+   trigger described above and observe its first executions.
+
+**Acceptance criteria**
+
+- [ ] Every supported synthetic input has a safe terminal outcome and evidence/preview behavior
+      matching its source type.
+- [ ] A missing patient explanation is visibly unavailable rather than blank, has a durable
+      operational reason and retry path, and cannot alter the immutable source or clinical
+      candidate lifecycle.
+- [ ] Scheduler configuration is recorded with its least-privilege invoker and is enabled only
+      after observed execution time makes the five-minute cadence safe.
 
 ### MED-001 — Multi-source medication reconciliation
 
@@ -1191,17 +1272,66 @@ resources remain evidence-only and do not create local truth.
 
 ### PAT-001 — Reliable conversation lifecycle
 
-- [ ] Persist sessions, messages, structured state, and tool outcomes.
-- [ ] Recover after refresh, websocket reconnect, provider timeout, and quota exhaustion.
+- [/] Persist sessions, messages, structured state, and tool outcomes. Conversation history and
+      state are present, but document focus is still route/session scoped and is completed only
+      through PAT-004's per-message contract.
+- [/] Recover after refresh, websocket reconnect, provider timeout, and quota exhaustion.
+      Existing chat reconnects, but the 2026-09-20 route-reuse defect proves that recovery is not
+      complete for selected-document context.
 - [ ] Prevent duplicate messages and duplicate tool actions.
-- [ ] Show when an answer is based on approved records, general evidence, or insufficient information.
+- [/] Show when an answer is based on approved records, general evidence, or insufficient
+      information. The general contract exists; source visibility and focused-document behavior
+      remain open in PAT-004.
+
+### PAT-004 — Document-focused conversations
+
+**Status:** `[/]` In progress
+
+**Why:** A document must be an explicit, user-visible focus for a chat turn. It cannot be a
+fragile route parameter, hidden session state, or an instruction for the model to search a
+patient's wider chart. The 2026-09-20 synthetic Spanish-document check proved the current
+worker and source viewers, but also exposed that a navigation from an already-open chat can
+drop its selected-document context and yield a generic chart answer.
+
+- [ ] Define the focused-chat interaction: retain conversation history, collapse or label older
+      conversation where useful, and show a persistent "Discussing: <document>" card before the
+      patient sends a question. Prefill a suggested question but never send a model prompt or
+      medical claim without an explicit patient action.
+- [ ] Make document focus a per-message, server-authorized reference rather than conversation-
+      wide state. At send time, authorize the document for the authenticated patient and attach
+      only its bounded, patient-facing summary and provenance to that exchange. Persist the
+      document reference and context version needed for audit; never persist a signed storage URL
+      or let the model choose a document identifier.
+- [ ] Define focus lifecycle and safety behavior: a patient may dismiss or replace the focus;
+      later general questions have no document context; refresh, reconnect, route reuse, and a
+      second browser tab preserve or restore only the selected focus for the intended message.
+      A missing, deleted, unauthorized, or summary-less document must produce an explicit
+      unavailable-context response, not a general-record answer or an invented interpretation.
+- [ ] Keep medical communication source-bound: preserve exact medication names, doses,
+      frequencies, and route wording when present; explain terminology in plain language only
+      when helpful; do not diagnose, prescribe, infer indication, or turn a focused document
+      into a chart-wide answer.
+- [ ] Add browser and backend coverage for: navigation from an already-open chat, context-card
+      rendering, draft-only suggested question, refresh/reconnect, dismiss/replace behavior,
+      patient/clinic isolation, expired/deleted documents, and audit linkage from each focused
+      user message to its authorized document context.
+
+**Acceptance criteria**
+
+- [ ] Selecting **Ask about this document** visibly attaches the intended document before a
+      patient sends anything, without erasing prior conversation.
+- [ ] The first focused answer names or otherwise identifies its source document and is bounded
+      to its authorized evidence; it never silently falls back to the general chart.
+- [ ] A later non-focused turn cannot inherit a previous document's context, and an unassigned
+      user cannot attach or infer another patient's document.
 
 ### PAT-002 — Adherence, symptom, and barrier collection
 
 - [ ] Record medication adherence with patient confirmation.
 - [ ] Collect onset, duration, severity, related medication, and red flags for symptoms.
 - [ ] Capture barriers such as cost, side effects, access, confusion, and schedule.
-- [ ] Create follow-up tasks and care-gap state.
+- [ ] Create clinician-approved follow-up tasks and care-gap state through PAT-005; an AI or
+      unreviewed document must not create a patient-facing obligation directly.
 - [ ] Make structured reports visible in the clinician timeline.
 
 ### SAFE-002 — Deterministic triage overrides
@@ -1265,6 +1395,49 @@ resources remain evidence-only and do not create local truth.
 - [ ] Test language switching mid-session.
 - [ ] Validate voice transcript, error, consent, and emergency flows in both languages.
 - [ ] Complete clinician/pharmacist review of high-risk bilingual content.
+
+### PAT-005 — Clinician-approved care plans and Today feed
+
+**Status:** `[ ]` Backlog
+
+**Why:** The current Today feed deterministically aggregates medications and existing
+obligations. It is not an AI-generated care plan, and FHIR `CarePlan` import remains a candidate
+path. The product needs a deliberate lifecycle for clinician directions found in discharge
+summaries, prescriptions, messages, appointments, or reviewed external records: useful
+exercise, diet, monitoring, follow-up, and medication tasks must become patient-visible only
+through an authorized clinical decision.
+
+- [ ] Define the care-plan item contract: patient goal, action, schedule or due window, owner,
+      start/end and retirement dates, patient completion state, and links to the clinician
+      instruction plus source evidence. Preserve plan versions and replacements rather than
+      mutating history.
+- [ ] Build a clinician-side drafting surface. AI may synthesize *suggestions* only from
+      clinician-authored directions, approved recommendations, and evidence-backed reviewed
+      candidates; pending document extraction, raw OCR, and generic medical knowledge cannot
+      create a plan item or patient notification.
+- [ ] Require an assigned clinician to create, edit, approve, defer, retire, or reject every
+      patient-facing item. Record actor, rationale, evidence, effective date, and all review
+      changes; determine which actions require a second reviewer under SAFE-001 rather than
+      letting the model or a patient self-approve a clinical direction.
+- [ ] Project only current approved items into the patient's Today feed by local timezone. Keep
+      this projection deterministic: it combines approved care-plan items, prescribed medication
+      schedules, appointments, and clinician-sent follow-up tasks, never an LLM response at page
+      load.
+- [ ] Present a plain-language patient view that identifies the care-team source, distinguishes
+      a clinician instruction from an informational suggestion, supports confirmation/barrier
+      reporting where appropriate, and directs patients to their care team for changes.
+- [ ] Handle plan changes safely: supersede or cancel stale tasks, avoid duplicate reminders,
+      retain previously completed activity, update both portal views, and test concurrent edits,
+      reassignment, patient/clinic isolation, and stale browser state.
+
+**Acceptance criteria**
+
+- [ ] A clinician can turn a reviewed, evidence-backed instruction into a dated plan item and
+      see exactly why it appears in the patient's Today feed.
+- [ ] The patient sees only effective approved items, can understand their source and next step,
+      and never receives an AI-invented diet, exercise, medication, or follow-up task.
+- [ ] An audit can reconstruct every published item, source, reviewer decision, revision, and
+      feed appearance without relying on a model transcript.
 
 **R3 exit gate**
 
