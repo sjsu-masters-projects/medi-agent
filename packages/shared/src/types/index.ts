@@ -407,6 +407,8 @@ export interface Document {
     parseStatus: DocumentParseStatus;
     parseFailureCode?: string;
     parseAttempts: number;
+    summaryStatus?: string;
+    summaryFailureCode?: string;
     sourceClinic?: string;
     visibility: DocumentVisibility;
     reviewStatus?: DocumentReviewStatus;
@@ -430,6 +432,9 @@ export interface ClinicianPatientDocument {
     parseFailureCode?: string;
     parseAttempts?: number;
     aiSummary?: string;
+    /** Lifecycle of the optional patient explanation, independent of parseStatus. */
+    summaryStatus?: string;
+    summaryFailureCode?: string;
     createdAt: string;
     uploadedByRole: UploaderRole;
     clinicianAnnotation?: string;
@@ -451,6 +456,8 @@ export interface DocumentReviewQueueItem {
     parseFailureCode?: string;
     parseAttempts?: number;
     aiSummary?: string;
+    summaryStatus?: string;
+    summaryFailureCode?: string;
     sourceClinic?: string;
     createdAt: string;
     uploadedByRole: UploaderRole;

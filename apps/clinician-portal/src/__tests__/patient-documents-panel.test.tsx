@@ -5,6 +5,7 @@ import {
     approveDocumentReview,
     fetchClinicianDocumentSource,
     rejectDocumentReview,
+    retryClinicianDocumentSummary,
 } from "@/services/clinicians";
 
 vi.mock("@/services/clinicians", () => ({
@@ -12,6 +13,7 @@ vi.mock("@/services/clinicians", () => ({
     fetchClinicianDocumentSource: vi.fn(),
     rejectDocumentReview: vi.fn(),
     retryClinicianDocumentIngestion: vi.fn(),
+    retryClinicianDocumentSummary: vi.fn(),
 }));
 
 vi.mock("@/components/features/document-summary", () => ({
@@ -31,6 +33,7 @@ describe("PatientDocumentsPanel", () => {
         vi.mocked(approveDocumentReview).mockReset();
         vi.mocked(fetchClinicianDocumentSource).mockReset();
         vi.mocked(rejectDocumentReview).mockReset();
+        vi.mocked(retryClinicianDocumentSummary).mockReset();
     });
 
     it("renders review metadata for reviewed patient uploads", () => {
@@ -182,5 +185,81 @@ describe("PatientDocumentsPanel", () => {
             ),
         );
         await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    });
+
+    it("offers a retry when the patient explanation is unavailable", async () => {
+        const onRefresh = vi.fn();
+        vi.mocked(retryClinicianDocumentSummary).mockResolvedValue({
+            id: "doc-1",
+            fileName: "lab.pdf",
+            documentType: "lab_report",
+            parseStatus: "completed",
+            summaryStatus: "pending",
+            createdAt: "2026-04-21T10:00:00Z",
+            uploadedByRole: "patient",
+        });
+
+        render(
+            <PatientDocumentsPanel
+                documents={[
+                    {
+                        id: "doc-1",
+                        fileName: "lab.pdf",
+                        documentType: "lab_report",
+                        parseStatus: "completed",
+                        summaryStatus: "failed",
+                        summaryFailureCode: "provider_unavailable",
+                        createdAt: "2026-04-21T10:00:00Z",
+                        uploadedByRole: "patient",
+                    },
+                ]}
+                onRefresh={onRefresh}
+                patientId="patient-1"
+            />,
+        );
+
+        // The clinician is told the clinical record is intact, not just that a box is empty.
+        expect(
+            screen.getByText(/Extraction and review candidates are unaffected/i),
+        ).toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: /retry patient explanation/i }),
+        );
+
+        await waitFor(() => {
+            expect(retryClinicianDocumentSummary).toHaveBeenCalledWith(
+                "patient-1",
+                "doc-1",
+            );
+        });
+        expect(onRefresh).toHaveBeenCalled();
+    });
+
+    it("does not offer a retry for a document with nothing to explain", () => {
+        render(
+            <PatientDocumentsPanel
+                documents={[
+                    {
+                        id: "doc-2",
+                        fileName: "blank.pdf",
+                        documentType: "lab_report",
+                        parseStatus: "completed",
+                        summaryStatus: "not_required",
+                        createdAt: "2026-04-21T10:00:00Z",
+                        uploadedByRole: "patient",
+                    },
+                ]}
+                onRefresh={vi.fn()}
+                patientId="patient-1"
+            />,
+        );
+
+        expect(
+            screen.getByText(/needs a patient explanation/i),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: /retry patient explanation/i }),
+        ).not.toBeInTheDocument();
     });
 });

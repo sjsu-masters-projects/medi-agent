@@ -153,3 +153,54 @@ async def test_save_document_annotation_rejects_document_outside_patient_scope(
 
     with pytest.raises(NotFoundError, match="Document"):
         await service.save_document_annotation(uuid4(), uuid4(), uuid4(), "Needs follow-up")
+
+
+@pytest.mark.asyncio
+async def test_patient_documents_carry_the_summary_lifecycle(service, execute):
+    """A clinician sees why an explanation is missing, not just that it is."""
+    execute.side_effect = [
+        _response(
+            data=[
+                {
+                    "id": str(uuid4()),
+                    "summary_status": "failed",
+                    "summary_failure_code": "provider_unavailable",
+                }
+            ]
+        ),
+        _response(data=[]),
+    ]
+
+    documents = await service.fetch_patient_documents(uuid4())
+
+    assert documents[0]["summary_failure_code"] == "provider_unavailable"
+    selected = service.db.table.return_value.select.call_args.args[0]
+    assert "summary_status" in selected
+
+
+@pytest.mark.asyncio
+async def test_documents_still_load_before_migration_038_is_applied(service, execute):
+    """Naming an undeployed column must not take the clinician's document list down."""
+    from postgrest.exceptions import APIError
+
+    execute.side_effect = [
+        APIError({"code": "42703", "message": "column documents.summary_status does not exist"}),
+        _response(data=[{"id": str(uuid4()), "parse_status": "completed"}]),
+        _response(data=[]),
+    ]
+
+    documents = await service.fetch_patient_documents(uuid4())
+
+    assert len(documents) == 1
+    # The retry drops the summary columns; the API schema supplies their defaults.
+    assert "summary_status" not in service.db.table.return_value.select.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_an_unrelated_read_failure_is_not_retried_away(service, execute):
+    from postgrest.exceptions import APIError
+
+    execute.side_effect = APIError({"code": "42501", "message": "permission denied"})
+
+    with pytest.raises(APIError):
+        await service.fetch_patient_documents(uuid4())

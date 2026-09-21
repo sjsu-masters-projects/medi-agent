@@ -16,6 +16,7 @@ from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.enums import DocumentReviewStatus, UploaderRole
+from app.services.document_summary_service import is_missing_summary_column_error
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,13 @@ def _is_missing_source_document_column_error(error: APIError, table_name: str) -
     return (
         code in {"PGRST204", "42703"} and "source_document_id" in message and table_name in message
     )
+
+
+def _summary_status_for(ai_summary: str | None, parse_status: str) -> str:
+    """A supplied explanation is ready; a completed extraction without one still owes it."""
+    if ai_summary and ai_summary.strip():
+        return "ready"
+    return "pending" if parse_status == "completed" else "not_required"
 
 
 # File validation constants
@@ -277,16 +285,6 @@ class DocumentService:
             .execute()
         )
 
-    async def update_summary(self, document_id: UUID, patient_id: UUID, summary: str) -> None:
-        """Cache an AI summary on the document row."""
-        (
-            self.db.table("documents")
-            .update({"ai_summary": summary, "parsed": True})
-            .eq("id", str(document_id))
-            .eq("patient_id", str(patient_id))
-            .execute()
-        )
-
     def update_parse_result(
         self,
         document_id: UUID,
@@ -303,17 +301,31 @@ class DocumentService:
         not free text — the database rejects anything else. This used to write the legacy
         `parse_error` column, which migration 034 superseded but did not drop, so anything
         written there is now invisible to both portals.
+
+        The summary lifecycle is recorded from the summary this caller already produced,
+        so a document imported with an explanation is not queued for one it already has.
         """
+        payload: dict[str, Any] = {
+            "ai_summary": ai_summary,
+            "parse_failure_code": parse_failure_code,
+            "parse_status": parse_status,
+            "parsed": parsed,
+            "summary_status": _summary_status_for(ai_summary, parse_status),
+        }
+        try:
+            self._write_document(document_id, patient_id, payload)
+        except APIError as exc:
+            # Migration 038 lands after this image deploys; the parse result must still
+            # be recorded during that window.
+            if not is_missing_summary_column_error(exc):
+                raise
+            payload.pop("summary_status")
+            self._write_document(document_id, patient_id, payload)
+
+    def _write_document(self, document_id: UUID, patient_id: UUID, payload: dict[str, Any]) -> None:
         (
             self.db.table("documents")
-            .update(
-                {
-                    "ai_summary": ai_summary,
-                    "parse_failure_code": parse_failure_code,
-                    "parse_status": parse_status,
-                    "parsed": parsed,
-                }
-            )
+            .update(payload)
             .eq("id", str(document_id))
             .eq("patient_id", str(patient_id))
             .execute()

@@ -56,6 +56,8 @@ type PortalDocument = Document & {
   previewStatus?: string;
   previewUrl?: string;
   provider: string;
+  summaryFailureCode?: string;
+  summaryStatus?: string;
 };
 
 const EXPLANATION_UNAVAILABLE_MESSAGE =
@@ -90,6 +92,30 @@ const PARSE_FAILURE_MESSAGES: Record<string, string> = {
 
 function describeParseFailure(code?: string): string {
   return (code && PARSE_FAILURE_MESSAGES[code]) || PARSING_FAILED_FALLBACK_MESSAGE;
+}
+
+/**
+ * Why the plain-language explanation is missing, for a document that parsed fine.
+ *
+ * The explanation has its own lifecycle (migration 038): the document, its source, and
+ * anything a clinician reviews are unaffected when it fails. Showing nothing here read
+ * as "still parsing", which was wrong and left a patient waiting for something that was
+ * never coming.
+ */
+const SUMMARY_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  failed:
+    "A plain-language explanation is not available for this document right now. Your document and your records are unchanged, and your care team can request it again.",
+  not_required:
+    "There is no extracted information in this document to explain. You can still open the original document above or ask your care team about it.",
+  pending:
+    "The plain-language explanation is still being prepared. You can read the original document above and check back shortly.",
+};
+
+function describeMissingSummary(document: PortalDocument): string {
+  const status = document.summaryStatus ?? "pending";
+  return (
+    SUMMARY_UNAVAILABLE_MESSAGES[status] ?? SUMMARY_UNAVAILABLE_MESSAGES.pending
+  );
 }
 const INITIAL_POLL_DELAY_MS = 3_000;
 const MAX_POLL_DELAY_MS = 30_000;
@@ -171,6 +197,8 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
     previewStatus: record.preview_status ?? undefined,
     previewUrl: record.preview_url ?? undefined,
     parseAttempts: record.parse_attempts ?? 0,
+    summaryFailureCode: record.summary_failure_code ?? undefined,
+    summaryStatus: record.summary_status ?? undefined,
     parseFailureCode: record.parse_failure_code ?? undefined,
     parseStatus:
       record.parse_status ??
@@ -200,6 +228,9 @@ function getDocumentStatus(document: PortalDocument) {
   if (document.parsed && document.aiSummary) {
     return { label: "AI Summary", variant: "info" as const };
   }
+  if (document.summaryStatus === "failed") {
+    return { label: "Explanation unavailable", variant: "warning" as const };
+  }
   return null;
 }
 
@@ -217,6 +248,9 @@ export default function RecordsPage() {
   const [explanationLang, setExplanationLang] =
     useState<Locale>(DEFAULT_LOCALE);
   const [explanationText, setExplanationText] = useState<string | null>(null);
+  // Whether the text above is a real explanation or a reason one is missing. The two
+  // must not be confused: a reason may never be forwarded as a document's summary.
+  const [explanationAvailable, setExplanationAvailable] = useState(false);
   const [explanationLoading, setExplanationLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -260,6 +294,8 @@ export default function RecordsPage() {
       setExplanationLang(DEFAULT_LOCALE);
       setExplanationLoading(false);
 
+      setExplanationAvailable(false);
+
       if (
         document.parseStatus === "failed" ||
         needsHumanDocumentReview(document.parseStatus)
@@ -276,7 +312,13 @@ export default function RecordsPage() {
         return;
       }
 
-      setExplanationText(document.aiSummary ?? null);
+      if (!document.aiSummary) {
+        setExplanationText(describeMissingSummary(document));
+        return;
+      }
+
+      setExplanationAvailable(true);
+      setExplanationText(document.aiSummary);
     },
     [parsingDocIds],
   );
@@ -455,7 +497,10 @@ export default function RecordsPage() {
       nextLocale === DEFAULT_LOCALE &&
       selectedDocument?.parseStatus === DocumentParseStatus.COMPLETED
     ) {
-      setExplanationText(selectedDocument.aiSummary ?? null);
+      setExplanationAvailable(Boolean(selectedDocument.aiSummary));
+      setExplanationText(
+        selectedDocument.aiSummary ?? describeMissingSummary(selectedDocument),
+      );
       return;
     }
     if (!selectedDocument) {
@@ -468,13 +513,26 @@ export default function RecordsPage() {
 
     setExplanationLoading(true);
     try {
-      const result = await api.post<{ summary: string }>(
+      const result = await api.post<{
+        available?: boolean;
+        message?: string | null;
+        summary: string | null;
+      }>(
         `/api/v1/documents/${selectedDocument.id}/explain`,
         { language: nextLocale },
         { token: accessToken ?? undefined },
       );
-      setExplanationText(result.summary);
+      // The backend answers with either an explanation or the reason there is none,
+      // already written in the requested locale.
+      const available = result.available !== false && Boolean(result.summary);
+      setExplanationAvailable(available);
+      setExplanationText(
+        available
+          ? result.summary
+          : (result.message ?? EXPLANATION_UNAVAILABLE_MESSAGE),
+      );
     } catch {
+      setExplanationAvailable(false);
       setExplanationText(EXPLANATION_UNAVAILABLE_MESSAGE);
     } finally {
       setExplanationLoading(false);
@@ -498,7 +556,9 @@ export default function RecordsPage() {
         preferredLanguage: explanationLang,
         provider: selectedDocument.provider,
       }),
-      summary: explanationText ?? selectedDocument.aiSummary,
+      summary: explanationAvailable
+        ? (explanationText ?? selectedDocument.aiSummary)
+        : undefined,
     });
 
     closeDocumentModal();
@@ -738,7 +798,7 @@ export default function RecordsPage() {
                 : readbackActive
                   ? `Reading in ${getLocaleLabel(explanationLang)}...`
                   : (explanationText ??
-                    "AI summary will appear here after parsing completes.")}
+                    "A plain-language explanation will appear here once it is ready.")}
             </p>
           </div>
           <div className="space-y-3">

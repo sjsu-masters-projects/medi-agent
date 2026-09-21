@@ -39,6 +39,10 @@ class DocumentRead(BaseModel):
     parse_status: str = "none"
     parse_failure_code: str | None = None
     parse_attempts: int = 0
+    # The optional explanation has its own lifecycle; it never gates the clinical result.
+    summary_status: str = "not_required"
+    summary_failure_code: str | None = None
+    summary_attempts: int = 0
     source_clinic: str | None = None
     visibility: DocumentVisibility = DocumentVisibility.ALL_PROVIDERS
     review_status: DocumentReviewStatus | None = None

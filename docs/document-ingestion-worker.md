@@ -8,7 +8,7 @@ OCR, call extraction, and write candidate facts.
 ## Before enabling it
 
 1. Apply migrations `034_document_ingestion_safety.sql` through
-   `037_document_source_previews.sql` using the normal reviewed migration path.
+   `038_document_summary_lifecycle.sql` using the normal reviewed migration path.
    Do not apply them from a developer machine against a shared environment.
 2. Build the normal backend image. It now includes Tesseract plus `eng` and
    `spa` language data; the worker uses the same image with a different command.
@@ -109,6 +109,57 @@ would merely repeat the same validation failure.
 Extraction prompts are clinician-facing and evidence-bound. Patient summaries are a
 separate, plain-language workload: they retain names, doses, frequency, and route while
 not diagnosing, prescribing, or adding facts that were absent from the extraction.
+
+## The patient explanation has its own lifecycle
+
+Ingestion does not generate the patient explanation. It records the clinical result and
+leaves `summary_status = 'pending'`; the same Job execution then claims owed explanations
+separately through `claim_pending_document_summary` and builds each one from the candidate
+facts that document already has. Nothing in this second phase downloads the source, runs
+OCR, or writes a candidate, so a failure here cannot duplicate facts or alter the clinical
+record — and a retry costs one generation call, not another extraction.
+
+| `summary_status` | Meaning |
+|---|---|
+| `not_required` | The document has no grounded candidate to explain. Generating prose here would be invention, so none is attempted. |
+| `pending` | Owed. The next Job execution claims it; `summary_failure_code` names why the previous attempt did not finish. |
+| `processing` | Claimed by a running execution. |
+| `ready` | `ai_summary` holds the explanation and `summary_prompt_version` records what produced it. |
+| `failed` | Not retried automatically. A clinician assigned to the patient can requeue it. |
+
+A provider outage leaves the row `pending` with `summary_failure_code =
+'provider_unavailable'`, so it recovers on its own; `claim_pending_document_summary` caps
+that at three attempts and then marks the row `failed` with `attempt_limit_reached`. An
+empty model response fails immediately, because repeating an identical prompt over
+identical candidates would only repeat it.
+
+`enqueue_document_summary_retry` backs the clinician retry action and resets the attempt
+counter, which the ingestion retry deliberately does not: re-running ingestion spends OCR
+and re-proposes candidates, while a summary retry only re-reads candidates that already
+exist. Each clinician action buys one bounded cycle.
+
+Both portals show the reason rather than an empty panel. Patients see it in their own
+locale; clinicians additionally see that extraction and review candidates are unaffected,
+plus the retry action when the row is `failed`.
+
+```sql
+-- Explanations that are owed or unavailable, and why.
+select id, parse_status, summary_status, summary_failure_code,
+       summary_attempts, summary_last_attempt_at, summary_prompt_version
+from public.documents
+where parse_status = 'completed'
+  and summary_status in ('pending', 'processing', 'failed')
+order by summary_last_attempt_at desc nulls first
+limit 20;
+```
+
+### Deploy ordering
+
+`deploy-backend.yml` ships the image before migrations are applied by hand, so the code
+reaches production before these columns do. Every write and clinician-facing read of the
+summary lifecycle degrades to the pre-038 column set for that window: documents still
+reach their clinical terminal state, the clinician document list still loads, and owed
+explanations simply stay unclaimed until `038` is applied.
 
 When a patient selects a document in chat, the server authorizes the document first and supplies
 only its bounded patient-facing summary to that single agent invocation. The model cannot choose a

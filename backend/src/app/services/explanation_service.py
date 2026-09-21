@@ -15,13 +15,55 @@ from app.agents.ingestion.prompts import (
 )
 from app.clients.model_router import TaskType, get_router
 from app.models.enums import Language, coerce_locale
-from app.utils.localization import get_locale_display_name
+from app.utils.localization import get_locale_display_name, resolve_locale_resource
 
 logger = logging.getLogger(__name__)
 
 FALLBACK_MESSAGE = (
     "A summary is not available at this time. Please ask your care team for an explanation."
 )
+
+# Why an explanation is missing, in the patient's own locale. A patient who sees nothing
+# cannot tell "this document had nothing to explain" from "the service is down", and the
+# second one is the case where asking the care team is the right next step.
+SUMMARY_UNAVAILABLE_MESSAGES: dict[str, dict[str, str]] = {
+    "not_required": {
+        Language.EN.value: (
+            "There is no extracted information in this document to explain. "
+            "You can still open the original document or ask your care team about it."
+        ),
+        Language.ES.value: (
+            "Este documento no tiene información extraída que se pueda explicar. "
+            "Puede abrir el documento original o preguntarle a su equipo de atención."
+        ),
+    },
+    "pending": {
+        Language.EN.value: (
+            "This explanation is still being prepared. "
+            "You can open the original document now and check back shortly."
+        ),
+        Language.ES.value: (
+            "Esta explicación todavía se está preparando. "
+            "Puede abrir el documento original ahora y volver a consultarla en unos minutos."
+        ),
+    },
+    "failed": {
+        Language.EN.value: (
+            "An explanation is not available right now. This does not change your document "
+            "or your medical record. Your care team can request it again."
+        ),
+        Language.ES.value: (
+            "La explicación no está disponible en este momento. Esto no cambia su documento "
+            "ni su expediente médico. Su equipo de atención puede solicitarla de nuevo."
+        ),
+    },
+}
+
+
+def summary_unavailable_message(status: str, language: str) -> str:
+    """Explain a missing summary in the patient's locale, without inventing content."""
+    resources = SUMMARY_UNAVAILABLE_MESSAGES.get(status) or SUMMARY_UNAVAILABLE_MESSAGES["failed"]
+    return resolve_locale_resource(language, resources)
 
 
 def normalize_patient_summary(value: str) -> str:
@@ -95,6 +137,14 @@ class ExplanationService:
             max_tokens=512,
         )
         return normalize_patient_summary(response) or FALLBACK_MESSAGE
+
+    async def translate(self, summary: str, target_language: str) -> str:
+        """Translate an existing English summary, letting a provider failure surface.
+
+        `explain` swallows failures into a generic message. A caller that reports summary
+        availability needs the failure itself so it can say why nothing is shown.
+        """
+        return await self._translate_summary(summary, target_language)
 
     async def _translate_summary(self, summary: str, target_language: str) -> str:
         """Translate an English summary to the target language using Flash Lite."""

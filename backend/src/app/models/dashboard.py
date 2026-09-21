@@ -131,6 +131,8 @@ class PatientDocumentRead(BaseModel):
     parse_failure_code: str | None = None
     parse_attempts: int = 0
     ai_summary: str | None = None
+    summary_status: str = "not_required"
+    summary_failure_code: str | None = None
     created_at: str
     uploaded_by_role: UploaderRole
     clinician_annotation: str | None = None
@@ -154,6 +156,8 @@ class DocumentReviewQueueItem(BaseModel):
     parse_failure_code: str | None = None
     parse_attempts: int = 0
     ai_summary: str | None = None
+    summary_status: str = "not_required"
+    summary_failure_code: str | None = None
     source_clinic: str | None = None
     created_at: str
     uploaded_by_role: UploaderRole

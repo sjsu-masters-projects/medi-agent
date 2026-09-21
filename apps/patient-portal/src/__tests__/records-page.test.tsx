@@ -146,6 +146,92 @@ describe("RecordsPage", () => {
     });
   });
 
+  it("says why a parsed document has no explanation instead of showing nothing", async () => {
+    get.mockResolvedValue([
+      {
+        ai_summary: null,
+        created_at: "2026-04-20T12:00:00Z",
+        document_type: DocumentType.LAB_REPORT,
+        file_name: "April Lab Report.txt",
+        file_size_bytes: 1200,
+        file_url: "https://example.test/lab.txt",
+        id: "doc-1",
+        mime_type: "text/plain",
+        parse_status: DocumentParseStatus.COMPLETED,
+        parsed: true,
+        patient_id: "patient-1",
+        source_clinic: "City Health",
+        summary_failure_code: "provider_unavailable",
+        summary_status: "failed",
+        uploaded_by: "patient-1",
+        uploaded_by_role: "patient",
+        visibility: "shared",
+      },
+    ]);
+
+    render(<RecordsPage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /April Lab Report\.txt/i }),
+    );
+
+    // The document parsed fine, so the old "after parsing completes" placeholder
+    // would have promised something that was never coming.
+    expect(
+      await screen.findByText(/explanation is not available for this document/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/after parsing completes/i),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /ask about this document/i }),
+    );
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith("/chat?document=doc-1");
+    });
+    // The reason an explanation is missing is not itself a document summary, and must
+    // never be carried into the chat as one.
+    const stored = window.sessionStorage.getItem(
+      "patient-portal.chat.document-context.doc-1",
+    );
+    expect(stored).not.toBeNull();
+    expect(JSON.parse(stored as string).summary).toBeUndefined();
+  });
+
+  it("tells a patient an owed explanation is still being prepared", async () => {
+    get.mockResolvedValue([
+      {
+        ai_summary: null,
+        created_at: "2026-04-20T12:00:00Z",
+        document_type: DocumentType.LAB_REPORT,
+        file_name: "April Lab Report.txt",
+        file_size_bytes: 1200,
+        file_url: "https://example.test/lab.txt",
+        id: "doc-1",
+        mime_type: "text/plain",
+        parse_status: DocumentParseStatus.COMPLETED,
+        parsed: true,
+        patient_id: "patient-1",
+        summary_status: "pending",
+        uploaded_by: "patient-1",
+        uploaded_by_role: "patient",
+        visibility: "shared",
+      },
+    ]);
+
+    render(<RecordsPage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /April Lab Report\.txt/i }),
+    );
+
+    expect(
+      await screen.findByText(/still being prepared/i),
+    ).toBeInTheDocument();
+  });
+
   it("deletes a selected document after confirmation", async () => {
     get.mockResolvedValue([
       {

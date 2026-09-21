@@ -1210,12 +1210,21 @@ resources remain evidence-only and do not create local truth.
 - [ ] Record full synthetic execution duration after the PDF and TIFF checks. The observed
       Spanish raster duration (34.7 seconds) is encouraging but is not by itself a cadence
       decision for multi-frame input.
-- [ ] Split the optional patient-explanation lifecycle from document ingestion. Persist a
-      summary state, sanitized failure code, source/prompt version, retry count, and retry time;
-      make a provider outage observable and retryable without re-OCRing the source or creating
-      duplicate candidate facts. The 2026-09-20 TIFF run completed extraction and preview, but
-      its optional summary failed with `GenerationProviderError` after the 2,048-token retry and
-      currently leaves only `ai_summary = NULL`.
+- [x] Split the optional patient-explanation lifecycle from document ingestion. Migration
+      `038_document_summary_lifecycle.sql` adds `summary_status`, `summary_failure_code`,
+      `summary_prompt_version`, `summary_attempts`, and `summary_last_attempt_at`, plus
+      `claim_pending_document_summary` and a care-team-gated `enqueue_document_summary_retry`.
+      Ingestion no longer calls the summary model: it records the clinical result and leaves the
+      explanation `pending`, and the Job's second phase builds it from candidates that already
+      exist, so a provider outage retries without re-OCRing the source or creating duplicate
+      candidate facts. A provider failure stays `pending` with `provider_unavailable` and
+      recovers automatically within three attempts; an empty response fails for explicit
+      clinician retry. Both portals show the reason instead of an empty panel, and the clinician
+      panel carries the retry action. Verified locally on 2026-09-21: 1,340 backend tests pass at
+      83.65% coverage with Ruff, Ruff format, mypy, and migration validation clean; the patient
+      portal passes 86 tests and the clinician portal 85, both with lint and typecheck. The 2026-09-20
+      TIFF run is the case this addresses; re-running it in the deployed environment is part of
+      the remaining acceptance steps below.
 - [ ] Only then create `mediagent-document-ingestion-every-5m` in `us-central1` with
       `*/5 * * * *`, timezone `America/Los_Angeles`, and a dedicated Scheduler identity limited
       to `roles/run.invoker` on this Job. Monitor overlap and queue delay; database claiming
@@ -1232,16 +1241,23 @@ resources remain evidence-only and do not create local truth.
    are denied. In a separate unassigned synthetic user session, verify neither portal/API path
    reveals the TIFF or its derived preview; confirm the denial is audited without leaking source
    existence. Record elapsed Job durations for both runs.
-4. Only when those results are safe and comfortably below five minutes, configure the Scheduler
+4. Apply migration `038_document_summary_lifecycle.sql`, then re-run the TIFF whose optional
+   summary failed on 2026-09-20. Confirm the explanation reaches `ready`, or that a forced
+   provider failure leaves a named reason that both portals show and that the clinician retry
+   action clears. The document's `parse_status`, stored source, and candidate facts must be
+   unchanged across every one of those outcomes.
+5. Only when those results are safe and comfortably below five minutes, configure the Scheduler
    trigger described above and observe its first executions.
 
 **Acceptance criteria**
 
 - [ ] Every supported synthetic input has a safe terminal outcome and evidence/preview behavior
       matching its source type.
-- [ ] A missing patient explanation is visibly unavailable rather than blank, has a durable
+- [/] A missing patient explanation is visibly unavailable rather than blank, has a durable
       operational reason and retry path, and cannot alter the immutable source or clinical
-      candidate lifecycle.
+      candidate lifecycle. Implemented and covered by tests; the deployed confirmation is
+      pending because migration `038` must be applied from a machine with direct network
+      access, which a hosted session cannot do.
 - [ ] Scheduler configuration is recorded with its least-privilege invoker and is enabled only
       after observed execution time makes the five-minute cadence safe.
 
