@@ -360,7 +360,7 @@ open for sandbox-specific diagnosis.
 
 ### REV-006 — Consolidate durable documentation
 
-**Status:** `[/]` In review in PR #91
+**Status:** `[x]` Merged and verified
 
 **Owner:** Rajeev Chaurasia
 
@@ -371,7 +371,12 @@ open for sandbox-specific diagnosis.
 - [x] Correct stale agent-runtime, MCP, workflow, and package-map guidance that still named
       retired implementation patterns.
 - [x] Remove generated local evaluation reports from version control eligibility.
-- [ ] Merge and verify that internal documentation links resolve on `main`.
+- [x] Merge and verify that internal documentation links resolve on `main`. PR #91 merged as
+      `390f2ad`. Verified 2026-09-21 by resolving all 58 relative links across the 62 tracked
+      markdown files, including heading anchors. Two were broken and are fixed here: the
+      clinician portal README pointed one directory level up instead of two, and the backend
+      testing guide linked a `MOCK_VALIDATION.md` that exists nowhere in the tree, so it now
+      points at the mock-validation tests themselves.
 
 ### AI-002 — Model-routing decision spike (September 2026)
 
@@ -528,7 +533,10 @@ open for sandbox-specific diagnosis.
       created unless an endpoint ID is given.
 - [ ] Team decision on the remaining budget, comparison-credential, GPU-host, and clinical
       adjudication questions recorded in the AI runtime decision.
-- [ ] Execute migration steps 1–6 as separate PRs after the SAFE-002 P0 fix ships.
+- [ ] Execute migration steps 1–6 as separate PRs after the SAFE-002 P0 fix ships. Gate state
+      as of 2026-09-21: two of that P0's three deliverables shipped with the AI-003 runtime
+      rebuild, and the one that remains is a websocket emergency regression test for `es-MX`.
+      See the SAFE-002 row for the verified detail rather than re-deriving it here.
 - [ ] Hand the harness and seed set to `EVA-001` for the remaining 50 scenarios and the 40
       adjudications.
 
@@ -1410,13 +1418,26 @@ drop its selected-document context and yield a generic chart answer.
       Spanish, including a confidently wrong model, co-occurring self-harm and cardiac
       keywords, casing, and unaccented spellings.
 
-- [ ] Run the safety floor before the model on the websocket streaming path.
-      `TriageAgent.process_stream` (`backend/src/app/agents/triage/agent.py:152-155`) calls
-      `_classify_with_llm` first and only reaches `_deterministic_safety_floor` through the
-      rules fallback when the model returns nothing, while `routers/chat.py:523` uses
-      `process_stream` for every websocket turn. The `b72c07f` fix covered `classify_intent`
-      only. Add a websocket-level emergency regression test in both locales and localize the
-      L3 fallback string in `routers/chat.py`. Found by the AI-002 spike on 2026-09-10; P0.
+- [/] Run the safety floor before the model on the websocket streaming path. Found by the
+      AI-002 spike on 2026-09-10; P0. **Re-verified against the code on 2026-09-21, because
+      this row described a runtime that no longer exists:** it named
+      `TriageAgent.process_stream` and `routers/chat.py:523`, and AI-003 has since rebuilt the
+      runtime on the ADK care coordinator. Two of the three deliverables have shipped.
+      - [x] The floor runs before the model. `SafetyFloorPlugin.before_run_callback`
+            (`adk/plugins/safety_floor.py`) returns fixed copy to halt the run before any
+            agent executes, is registered at `adk/runner.py:95`, and every websocket turn
+            reaches it through `routers/chat.py:578` → `chat_runtime.process_stream`. The
+            floor consulted in `chat_runtime` is for the classification label only and does
+            not re-decide the halt.
+      - [x] The L3 outer fallback is localized. `OUTER_FALLBACK_COPY` in `routers/chat.py`
+            answers a Spanish-speaking patient in Spanish at the moment the assistant is
+            least useful.
+      - [ ] The websocket emergency regression test still covers one locale.
+            `tests/integration/routers/test_chat_emergency_copy.py:202` hardcodes
+            `"language": "en"`, so no case asserts on the words an `es-MX` patient reads.
+            Given this task's own post-mortem — the covered half of the safety copy was the
+            half that happened to be safe — this is the gap worth closing, and it is what
+            still gates AI-002's "execute migration steps 1–6".
 - [ ] Close the inflected-keyword gap in the floor. "I've been thinking about ending my life"
       does not match `end my life` (substring matching, no stemming) while its Spanish mirror
       matches `quitarme la vida`; evolving anaphylaxis ("lips swelling, throat tight") and
