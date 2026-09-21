@@ -323,7 +323,27 @@ open for sandbox-specific diagnosis.
       comparable provider, reachable by model name and deliberately absent from
       `TASK_MODEL_MAP` because it exists to be evaluated, not to serve a task. It needs
       `NVIDIA_NIM_API_KEY` and is therefore opt-in on the comparison CLI.
-- [/] Define the voice-provider interface; live voice transport migration remains next.
+- [x] Define the voice-provider interface. `VoiceProvider` was a declared protocol that
+      nothing implemented and that only covered synthesis, so voice had no provider-neutral
+      path at all. It now covers both directions (`transcribe`, `synthesize`) over
+      `VoiceTranscriptionRequest`/`VoiceSynthesisRequest`, carries the locale on the request
+      so a bilingual product can pick the right acoustic and voice model, and reports the
+      same normalized telemetry and error taxonomy as text. `DeepgramVoiceProvider` adapts
+      the existing client with its dependencies injected, so the contract is testable
+      without a key or a network call; `VoiceFallbackProvider` records the selection path
+      and steps over a provider that refuses a direction rather than recording it as an
+      outage. `VoiceService` now calls the chain instead of the client. Two deliberate
+      boundaries: synthesis degrades to `TextOnlyVoiceProvider` (the words survive, the
+      audio does not) while transcription fails loudly, because there is no honest
+      text-only answer to what a patient said; and the websocket refuses to deliver an
+      empty payload as audio, which keeps today's patient-visible behavior until the
+      transport can carry a text-only turn. Verified 2026-09-21: 1,352 backend tests pass
+      at 83.74% coverage, with Ruff, Ruff format, and mypy clean.
+- [/] Migrate live voice transport. The streaming session
+      (`DeepgramLiveTranscriptionSession`) deliberately still holds the Deepgram client
+      directly, mirroring the text decision to leave streaming on its capability-specific
+      contract. Surfacing a text-only turn to the patient when speech is unavailable
+      belongs to this step.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
 - [x] Guarantee deterministic text fallback when audio is unavailable.
 - [x] Replace the retired `gemini-3.1-flash-lite-preview` fallback default with

@@ -8,6 +8,7 @@ import pytest
 
 from app.core.exceptions import ValidationError
 from app.models.enums import Language
+from app.models.generation import GenerationProviderError
 from app.services.voice_service import VoiceAudio, VoiceService
 
 
@@ -71,6 +72,42 @@ async def test_synthesize_speech_returns_encoded_audio_metadata(monkeypatch):
         "model": "aura-2-asteria-en",
         "encoding": "mp3",
     }
+
+
+@pytest.mark.asyncio
+async def test_speech_outage_returns_the_words_rather_than_raising(monkeypatch):
+    """The deterministic text fallback is wired into the service, not left to callers."""
+
+    async def _fail(text, model, encoding):
+        raise RuntimeError("deepgram unavailable")
+
+    monkeypatch.setattr("app.services.voice_service.generate_speech_async", _fail)
+
+    result = await VoiceService().synthesize_speech(
+        text="  Please take your medication.  ",
+        language=Language.EN,
+    )
+
+    assert result.audio == b""
+    assert result.transcript == "Please take your medication."
+    assert result.fallback_path == ("deepgram:unavailable", "text_only")
+
+
+@pytest.mark.asyncio
+async def test_transcription_failure_still_surfaces(monkeypatch):
+    """Synthesis may degrade to text; a transcript may never be invented."""
+
+    async def _fail(audio, model, language, smart_format):
+        raise RuntimeError("deepgram unavailable")
+
+    monkeypatch.setattr("app.services.voice_service.transcribe_audio_bytes_async", _fail)
+
+    with pytest.raises(GenerationProviderError):
+        await VoiceService().transcribe_audio(
+            audio_base64=base64.b64encode(b"audio").decode("ascii"),
+            mime_type="audio/webm",
+            language=Language.EN,
+        )
 
 
 def test_encode_audio_base64_is_ascii_safe():

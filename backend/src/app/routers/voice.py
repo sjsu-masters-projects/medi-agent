@@ -249,6 +249,18 @@ async def _handle_tts_request(
             text=str(payload.get("text", "")),
             language=payload.get("language", Language.EN),
         )
+        if not audio.audio:
+            # The voice chain fell through to the deterministic text provider: the reply
+            # exists, the sound does not. Storing or sending an empty payload would put a
+            # silent clip in front of a patient who asked to hear it, so this stays the
+            # same failure they already see until the transport carries a text-only turn.
+            logger.warning("Voice TTS unavailable; fallback path was %s", list(audio.fallback_path))
+            await _send_voice_error(
+                websocket,
+                code="voice_processing_failed",
+                message="Voice processing failed. Please try again or use text chat.",
+            )
+            return
         audio = await service.persist_assistant_audio_for_message(
             patient_id=patient_id,
             message_id=str(payload.get("message_id") or "").strip() or None,
