@@ -14,6 +14,11 @@ invisible precisely where the copy happened to be safe.
 These assert on the text the patient actually receives, not on the classification. The
 classification was already right when this shipped, and being right there is what made the
 defect hard to see.
+
+Both supported locales are covered. For a long time only `en-US` was, which is the same
+shape of gap as the original defect: the half of the safety copy under test was the half
+that happened to be safe. An `es-MX` patient in an emergency must read the reviewed
+Spanish copy, not an English fallback at the moment they are least able to use one.
 """
 
 from __future__ import annotations
@@ -38,6 +43,11 @@ from app.db.connection import get_db
 from app.followup import SymptomAnalysis
 from app.main import app
 from app.models.auth import CurrentUser
+from app.models.enums import Language
+from app.safety import TRIAGE_COPY
+
+EN_COPY = TRIAGE_COPY[Language.EN.value]
+ES_COPY = TRIAGE_COPY[Language.ES.value]
 
 
 @pytest.fixture
@@ -194,12 +204,12 @@ def _routine_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
 
 
-def _run_turn(client, patient_id, message: str) -> dict[str, Any]:
+def _run_turn(client, patient_id, message: str, language: str = "en") -> dict[str, Any]:
     with client.websocket_connect(
         f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
     ) as websocket:
         assert websocket.receive_json()["type"] == "chat_history"
-        websocket.send_json({"type": "user_message", "content": message, "language": "en"})
+        websocket.send_json({"type": "user_message", "content": message, "language": language})
         assert websocket.receive_json()["type"] == "user_message_saved"
 
         start = websocket.receive_json()
@@ -231,7 +241,10 @@ def test_a_medical_emergency_still_tells_the_patient_to_call_911(
     result = _run_turn(client, patient_id, message)
 
     assert result["start"]["urgency"] == "emergency"
-    assert "911" in result["complete"]["message"]["content"]
+    # Asserted against the reviewed copy, not against "911" appearing somewhere. The
+    # service-unavailable message also contains "911", so the looser check passed for
+    # two weeks while the patient was actually being told to try again in a few minutes.
+    assert result["complete"]["message"]["content"] == EN_COPY["emergency_response"]
 
 
 def test_the_symptom_worker_cannot_replace_an_emergency_answer(
@@ -265,7 +278,7 @@ def test_self_harm_keeps_the_crisis_line(client, override_db, patient_id, monkey
 
     result = _run_turn(client, patient_id, "I want to kill myself")
 
-    assert "988" in result["complete"]["message"]["content"]
+    assert result["complete"]["message"]["content"] == EN_COPY["mental_health_emergency_response"]
 
 
 def test_a_routine_symptom_is_still_answered_by_the_symptom_worker(
@@ -280,3 +293,62 @@ def test_a_routine_symptom_is_still_answered_by_the_symptom_worker(
 
     assert result["start"]["urgency"] != "emergency"
     assert "I logged your symptom" in result["complete"]["message"]["content"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Tengo un dolor de pecho muy fuerte",
+        "Creo que estoy teniendo un infarto",
+        "No puedo respirar",
+        # Unaccented, because a patient in distress does not type carefully.
+        "me desmaye hace un momento",
+    ],
+)
+def test_a_spanish_medical_emergency_reads_the_reviewed_spanish_copy(
+    client, override_db, patient_id, monkeypatch, message: str
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _bland_symptom_worker(monkeypatch)
+
+    result = _run_turn(client, patient_id, message, language="es-MX")
+
+    assert result["start"]["urgency"] == "emergency"
+    content = result["complete"]["message"]["content"]
+    assert content == ES_COPY["emergency_response"]
+    # An emergency is the worst moment to answer in a language the patient does not read.
+    assert content != EN_COPY["emergency_response"]
+
+
+def test_spanish_self_harm_keeps_the_crisis_line(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _bland_symptom_worker(monkeypatch)
+
+    result = _run_turn(client, patient_id, "quiero morir", language="es-MX")
+
+    assert result["complete"]["message"]["content"] == ES_COPY["mental_health_emergency_response"]
+
+
+def test_the_symptom_worker_cannot_replace_a_spanish_emergency_answer(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    """The original defect, in the locale that never had a test for it."""
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _bland_symptom_worker(monkeypatch)
+
+    result = _run_turn(client, patient_id, "Tengo un dolor de pecho muy fuerte", language="es-MX")
+
+    assert "logged your symptom" not in result["complete"]["message"]["content"]
+
+
+def test_a_spanish_emergency_is_still_escalated_to_the_care_team(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _bland_symptom_worker(monkeypatch)
+
+    result = _run_turn(client, patient_id, "Creo que estoy teniendo un infarto", language="es-MX")
+
+    assert result["start"]["urgency"] == "emergency"

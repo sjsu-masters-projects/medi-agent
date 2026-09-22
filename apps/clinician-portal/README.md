@@ -78,4 +78,4 @@ Invite history is intentionally role-sensitive:
 ## Notes
 
 - A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.
-- QA account expectations are documented in [docs/qa-auth-accounts.md](../docs/qa-auth-accounts.md).
+- QA account expectations are documented in [docs/qa-auth-accounts.md](../../docs/qa-auth-accounts.md).

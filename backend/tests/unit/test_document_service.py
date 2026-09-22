@@ -1,8 +1,10 @@
 """Test document service validation — file type and size checks."""
 
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
+from postgrest.exceptions import APIError
 
 from app.services.document_service import (
     ALLOWED_MIME_TYPES,
@@ -100,3 +102,74 @@ class TestDocumentViewUrls:
         assert document["file_url"] == "https://example.test/source"
         assert document["preview_url"] is None
         bucket.create_signed_url.assert_called_once()
+
+
+class TestParseResultSummaryLifecycle:
+    """An imported explanation is recorded as ready; a missing one stays owed."""
+
+    def _service(self):
+        db = MagicMock()
+        table = MagicMock()
+        db.table.return_value = table
+        for method in ["update", "eq"]:
+            getattr(table, method).return_value = table
+        return DocumentService(db), table
+
+    def test_supplied_summary_is_not_queued_for_regeneration(self):
+        service, table = self._service()
+
+        service.update_parse_result(
+            document_id=uuid4(),
+            patient_id=uuid4(),
+            ai_summary="Imported explanation.",
+            parse_status="completed",
+            parsed=True,
+        )
+
+        assert table.update.call_args.args[0]["summary_status"] == "ready"
+
+    def test_completed_extraction_without_a_summary_still_owes_one(self):
+        service, table = self._service()
+
+        service.update_parse_result(
+            document_id=uuid4(),
+            patient_id=uuid4(),
+            ai_summary=None,
+            parse_status="completed",
+            parsed=True,
+        )
+
+        assert table.update.call_args.args[0]["summary_status"] == "pending"
+
+    def test_failed_parse_is_never_owed_an_explanation(self):
+        service, table = self._service()
+
+        service.update_parse_result(
+            document_id=uuid4(),
+            patient_id=uuid4(),
+            ai_summary=None,
+            parse_status="failed",
+            parsed=False,
+            parse_failure_code="source_unreadable",
+        )
+
+        assert table.update.call_args.args[0]["summary_status"] == "not_required"
+
+    def test_parse_result_survives_a_deploy_before_migration_038(self):
+        service, table = self._service()
+        table.execute.side_effect = [
+            APIError({"code": "PGRST204", "message": "Could not find the 'summary_status' column"}),
+            MagicMock(data=None),
+        ]
+
+        service.update_parse_result(
+            document_id=uuid4(),
+            patient_id=uuid4(),
+            ai_summary="Imported explanation.",
+            parse_status="completed",
+            parsed=True,
+        )
+
+        retried = table.update.call_args.args[0]
+        assert retried["ai_summary"] == "Imported explanation."
+        assert "summary_status" not in retried

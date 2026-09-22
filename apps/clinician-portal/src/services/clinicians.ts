@@ -192,6 +192,8 @@ interface PatientDeepDiveResponse
         parse_failure_code?: string;
         parse_attempts?: number;
         ai_summary?: string;
+        summary_status?: string;
+        summary_failure_code?: string;
         created_at: string;
         uploaded_by_role: UploaderRole;
         clinician_annotation?: string;
@@ -218,6 +220,8 @@ interface DocumentReviewQueueItemResponse {
     parse_failure_code?: string;
     parse_attempts?: number;
     ai_summary?: string;
+    summary_status?: string;
+    summary_failure_code?: string;
     source_clinic?: string;
     created_at: string;
     uploaded_by_role: UploaderRole;
@@ -370,6 +374,8 @@ function normalizePatientDocument(
         parseFailureCode: document.parse_failure_code,
         parseAttempts: document.parse_attempts,
         aiSummary: document.ai_summary,
+        summaryStatus: document.summary_status,
+        summaryFailureCode: document.summary_failure_code,
         createdAt: document.created_at,
         uploadedByRole: document.uploaded_by_role,
         clinicianAnnotation: document.clinician_annotation,
@@ -395,6 +401,8 @@ function normalizeDocumentReviewQueueItem(
         parseFailureCode: item.parse_failure_code,
         parseAttempts: item.parse_attempts,
         aiSummary: item.ai_summary,
+        summaryStatus: item.summary_status,
+        summaryFailureCode: item.summary_failure_code,
         sourceClinic: item.source_clinic,
         createdAt: item.created_at,
         uploadedByRole: item.uploaded_by_role,
@@ -492,6 +500,23 @@ export async function retryClinicianDocumentIngestion(
 ): Promise<ClinicianPatientDocument> {
     const document = await apiFetch<PatientDeepDiveResponse["documents"][number]>(
         `/api/v1/documents/patients/${patientId}/${documentId}/ingestion/retry`,
+        { method: "POST" },
+    );
+    return normalizePatientDocument(document);
+}
+
+/**
+ * Requeue only the patient explanation.
+ *
+ * This re-reads candidates that already exist: it does not re-run OCR, propose a
+ * clinical fact again, or change the document's parse state or stored source.
+ */
+export async function retryClinicianDocumentSummary(
+    patientId: string,
+    documentId: string,
+): Promise<ClinicianPatientDocument> {
+    const document = await apiFetch<PatientDeepDiveResponse["documents"][number]>(
+        `/api/v1/documents/patients/${patientId}/${documentId}/summary/retry`,
         { method: "POST" },
     );
     return normalizePatientDocument(document);

@@ -11,12 +11,19 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus, UploaderRole
+from app.services.document_summary_service import is_missing_summary_column_error
+
+# Migration 038 is applied by hand after this image deploys. Naming the summary columns
+# in a select would make the clinician's document list fail outright during that window,
+# so each read degrades to the pre-038 column set and the API schema supplies defaults.
+_SUMMARY_COLUMNS = "summary_status, summary_failure_code, "
 
 
 class ClinicianDocumentWorkflowService:
@@ -35,17 +42,18 @@ class ClinicianDocumentWorkflowService:
 
     async def fetch_patient_documents(self, patient_id: UUID) -> list[dict[str, Any]]:
         """Return patient documents enriched with reviewer metadata."""
-        docs = await self._execute(
-            self.db.table("documents")
+        docs = await self._select_documents(
+            lambda columns: self.db.table("documents")
             .select(
                 "id, file_name, document_type, parse_status, parse_failure_code, parse_attempts, ai_summary, "
+                f"{columns}"
                 "created_at, uploaded_by_role, clinician_annotation, "
                 "review_status, reviewed_by, reviewed_at, review_note"
             )
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
         )
-        return await self._attach_document_reviewers(cast(list[dict[str, Any]], docs.data or []))
+        return await self._attach_document_reviewers(docs)
 
     async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
         """List pending patient-uploaded documents for assigned patients."""
@@ -67,10 +75,11 @@ class ClinicianDocumentWorkflowService:
             if row.get("id")
         }
 
-        docs = await self._execute(
-            self.db.table("documents")
+        docs = await self._select_documents(
+            lambda columns: self.db.table("documents")
             .select(
                 "id, patient_id, file_name, document_type, parse_status, parse_failure_code, parse_attempts, ai_summary, "
+                f"{columns}"
                 "source_clinic, created_at, uploaded_by_role, review_status"
             )
             .in_("patient_id", patient_id_values)
@@ -80,7 +89,7 @@ class ClinicianDocumentWorkflowService:
         )
 
         queue_items: list[dict[str, Any]] = []
-        for row in cast(list[dict[str, Any]], docs.data or []):
+        for row in docs:
             patient = patients_by_id.get(str(row.get("patient_id")))
             if not patient:
                 continue
@@ -148,6 +157,16 @@ class ClinicianDocumentWorkflowService:
         )
 
         return {"status": "saved", "document_id": str(document_id)}
+
+    async def _select_documents(self, build: Callable[[str], Any]) -> list[dict[str, Any]]:
+        """Read documents with the summary lifecycle when the database has it."""
+        try:
+            result = await self._execute(build(_SUMMARY_COLUMNS))
+        except APIError as exc:
+            if not is_missing_summary_column_error(exc):
+                raise
+            result = await self._execute(build(""))
+        return cast(list[dict[str, Any]], result.data or [])
 
     async def _assert_patient_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
         """Require an active care-team assignment before clinician document access."""

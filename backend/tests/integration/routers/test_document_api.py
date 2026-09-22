@@ -516,9 +516,9 @@ class TestExplainDocument:
         )
 
         with patch(
-            "app.routers.documents.ExplanationService.explain",
+            "app.routers.documents.ExplanationService.translate",
             new=AsyncMock(return_value="Resumen en español"),
-        ) as mock_explain:
+        ) as mock_translate:
             response = client.post(
                 f"/api/v1/documents/{document_id}/explain",
                 json={"language": "es"},
@@ -527,8 +527,148 @@ class TestExplainDocument:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["summary"] == "Resumen en español"
+        assert data["available"] is True
         assert data["cached"] is False
-        mock_explain.assert_awaited_once()
+        mock_translate.assert_awaited_once()
+
+    def _document_without_summary(self, document_id, patient_id, **overrides):
+        """A document whose clinical result is complete but whose explanation is not."""
+        document = {
+            "id": str(document_id),
+            "patient_id": str(patient_id),
+            "uploaded_by": str(patient_id),
+            "uploaded_by_role": "patient",
+            "file_name": "lab-results.pdf",
+            "file_path": f"{patient_id}/lab-results.pdf",
+            "file_url": "https://storage.example.com/signed-url",
+            "file_size_bytes": 1024000,
+            "mime_type": "application/pdf",
+            "document_type": "lab_report",
+            "source_clinic": None,
+            "parsed": True,
+            "ai_summary": None,
+            "parse_status": "completed",
+            "parse_error": None,
+            "parse_attempts": 1,
+            "visibility": "all_providers",
+            "created_at": "2025-01-15T00:00:00Z",
+        }
+        document.update(overrides)
+        return document
+
+    def test_unavailable_explanation_reports_its_operational_reason(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        """A provider outage is named, not rendered as an empty card."""
+        document_id = uuid4()
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data=self._document_without_summary(
+                document_id,
+                patient_id,
+                summary_status="failed",
+                summary_failure_code="provider_unavailable",
+            )
+        )
+
+        with patch(
+            "app.routers.documents.ExplanationService.translate", new=AsyncMock()
+        ) as mock_translate:
+            response = client.post(
+                f"/api/v1/documents/{document_id}/explain",
+                json={"language": "en"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["available"] is False
+        assert data["summary"] is None
+        assert data["summary_status"] == "failed"
+        assert data["failure_code"] == "provider_unavailable"
+        assert "not available right now" in data["message"]
+        # The request path never generates a replacement explanation.
+        mock_translate.assert_not_awaited()
+
+    def test_owed_explanation_says_it_is_still_being_prepared(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        document_id = uuid4()
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data=self._document_without_summary(document_id, patient_id, summary_status="pending")
+        )
+
+        response = client.post(
+            f"/api/v1/documents/{document_id}/explain",
+            json={"language": "es"},
+        )
+
+        data = response.json()
+        assert data["available"] is False
+        assert data["summary_status"] == "pending"
+        assert data["language"] == "es-MX"
+        # The reason reaches the patient in their own locale.
+        assert "todavía se está preparando" in data["message"]
+
+    def test_document_with_nothing_to_explain_is_not_reported_as_a_failure(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        document_id = uuid4()
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data=self._document_without_summary(
+                document_id, patient_id, summary_status="not_required"
+            )
+        )
+
+        response = client.post(f"/api/v1/documents/{document_id}/explain", json={"language": "en"})
+
+        data = response.json()
+        assert data["available"] is False
+        assert data["summary_status"] == "not_required"
+        assert data["failure_code"] is None
+        assert "no extracted information" in data["message"]
+
+    def test_pre_migration_document_falls_back_to_its_parse_state(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        """Migration 038 is applied after this image deploys; reads must still work."""
+        document = self._document_without_summary(document_id := uuid4(), patient_id)
+        document.pop("ai_summary")
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data=document
+        )
+
+        response = client.post(f"/api/v1/documents/{document_id}/explain", json={"language": "en"})
+
+        assert response.status_code == status.HTTP_200_OK
+        # A completed extraction still owes an explanation, so it reads as pending.
+        assert response.json()["summary_status"] == "pending"
+
+    def test_translation_outage_is_reported_rather_than_replaced_with_prose(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    ):
+        document_id = uuid4()
+        mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
+            data=self._document_without_summary(
+                document_id,
+                patient_id,
+                ai_summary="English summary",
+                summary_status="ready",
+            )
+        )
+
+        with patch(
+            "app.routers.documents.ExplanationService.translate",
+            new=AsyncMock(side_effect=RuntimeError("provider down")),
+        ):
+            response = client.post(
+                f"/api/v1/documents/{document_id}/explain",
+                json={"language": "es"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["available"] is False
+        assert data["summary"] is None
+        assert data["failure_code"] == "provider_unavailable"
 
 
 class TestAuthorization:

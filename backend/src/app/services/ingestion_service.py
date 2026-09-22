@@ -15,15 +15,11 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
-from app.agents.ingestion.prompts import (
-    EXTRACT_CONTENT_SYSTEM,
-    EXTRACT_CONTENT_USER,
-    GENERATE_SUMMARY_SYSTEM,
-    GENERATE_SUMMARY_USER,
-)
+from app.agents.ingestion.prompts import EXTRACT_CONTENT_SYSTEM, EXTRACT_CONTENT_USER
 from app.clients.model_router import TaskType, get_router
 from app.core.exceptions import DocumentParseError
 from app.models.document_extraction import DocumentExtractionResult
@@ -38,7 +34,7 @@ from app.services.document_intelligence.models import (
 )
 from app.services.document_intelligence.pipeline import DocumentIntelligenceService
 from app.services.document_preview_service import DocumentPreviewService
-from app.services.explanation_service import normalize_patient_summary
+from app.services.document_summary_service import is_missing_summary_column_error
 
 logger = logging.getLogger(__name__)
 
@@ -202,14 +198,15 @@ class IngestionService:
             )
             return self._outcome("needs_evidence_review", error_code="evidence_not_grounded")
 
-        summary = await self._optional_summary(extraction_result)
-        if summary is None:
-            warnings.append("Optional patient summary was unavailable.")
+        # The patient explanation is deliberately not generated here. Ingestion owns the
+        # clinical result; the explanation is an optional convenience built afterwards from
+        # the candidates just registered. Handing it off means a provider outage is retried
+        # on its own, without re-running OCR or re-proposing the same facts.
         self._set_document(
             document_id,
             parse_status="completed",
             parsed=True,
-            ai_summary=summary,
+            summary_status="pending",
         )
         self._finish(
             run_id,
@@ -223,7 +220,7 @@ class IngestionService:
         return self._outcome(
             "completed",
             candidate_count=registered.created,
-            summary_length=len(summary or ""),
+            summary_status="pending",
         )
 
     async def _extract_structured(
@@ -267,32 +264,6 @@ class IngestionService:
         )
         return self._outcome("needs_evidence_review", error_code="invalid_model_response")
 
-    async def _optional_summary(self, extraction: DocumentExtractionResult) -> str | None:
-        try:
-            summary = await get_router().generate_text(
-                TaskType.PATIENT_EXPLANATION,
-                prompt=GENERATE_SUMMARY_USER.format(
-                    medications=json.dumps(
-                        [item.model_dump(exclude={"evidence"}) for item in extraction.medications]
-                    ),
-                    conditions=json.dumps(
-                        [item.model_dump(exclude={"evidence"}) for item in extraction.conditions]
-                    ),
-                    follow_up_instructions=json.dumps(
-                        [item.model_dump(exclude={"evidence"}) for item in extraction.obligations]
-                    ),
-                ),
-                system_instruction=GENERATE_SUMMARY_SYSTEM,
-                temperature=0.2,
-                # Gemini's reasoning tokens share this ceiling. 1024 avoids a second
-                # request for the intentionally short (<180 word) patient explanation.
-                max_tokens=1024,
-            )
-            return normalize_patient_summary(summary) or None
-        except Exception as exc:  # noqa: BLE001 - summary is never a safety boundary
-            logger.warning("Optional document summary failed: %s", type(exc).__name__)
-            return None
-
     def _claim(
         self, document_id: UUID, patient_id: UUID, *, actor_id: UUID | None, is_retry: bool
     ) -> dict[str, Any]:
@@ -328,7 +299,7 @@ class IngestionService:
         parse_status: str,
         parse_failure_code: str | None = None,
         parsed: bool,
-        ai_summary: str | None = None,
+        summary_status: str | None = None,
     ) -> None:
         payload: dict[str, Any] = {
             "parse_status": parse_status,
@@ -336,9 +307,22 @@ class IngestionService:
             "parse_failure_code": parse_failure_code,
             "parsed": parsed,
         }
-        if ai_summary is not None:
-            payload["ai_summary"] = ai_summary
-        self.db.table("documents").update(payload).eq("id", str(document_id)).execute()
+        if summary_status is not None:
+            payload["summary_status"] = summary_status
+        try:
+            self.db.table("documents").update(payload).eq("id", str(document_id)).execute()
+        except APIError as exc:
+            # Migration 038 is applied by hand after this image deploys. A document must
+            # still reach its clinical terminal state during that window; the explanation
+            # simply stays unclaimed until the columns exist.
+            if summary_status is None or not is_missing_summary_column_error(exc):
+                raise
+            logger.warning(
+                "Summary lifecycle columns are not deployed; recorded parse state only for %s",
+                document_id,
+            )
+            payload.pop("summary_status")
+            self.db.table("documents").update(payload).eq("id", str(document_id)).execute()
 
     def _ensure_source_preview(
         self,
@@ -514,7 +498,7 @@ class IngestionService:
         status: str,
         *,
         candidate_count: int = 0,
-        summary_length: int = 0,
+        summary_status: str = "not_required",
         error_code: str | None = None,
     ) -> dict[str, Any]:
         return {
@@ -524,6 +508,6 @@ class IngestionService:
             "conditions_created": 0,
             "allergies_created": 0,
             "obligations_created": 0,
-            "summary_length": summary_length,
+            "summary_status": summary_status,
             "error_code": error_code,
         }

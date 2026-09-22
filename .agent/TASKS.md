@@ -323,7 +323,27 @@ open for sandbox-specific diagnosis.
       comparable provider, reachable by model name and deliberately absent from
       `TASK_MODEL_MAP` because it exists to be evaluated, not to serve a task. It needs
       `NVIDIA_NIM_API_KEY` and is therefore opt-in on the comparison CLI.
-- [/] Define the voice-provider interface; live voice transport migration remains next.
+- [x] Define the voice-provider interface. `VoiceProvider` was a declared protocol that
+      nothing implemented and that only covered synthesis, so voice had no provider-neutral
+      path at all. It now covers both directions (`transcribe`, `synthesize`) over
+      `VoiceTranscriptionRequest`/`VoiceSynthesisRequest`, carries the locale on the request
+      so a bilingual product can pick the right acoustic and voice model, and reports the
+      same normalized telemetry and error taxonomy as text. `DeepgramVoiceProvider` adapts
+      the existing client with its dependencies injected, so the contract is testable
+      without a key or a network call; `VoiceFallbackProvider` records the selection path
+      and steps over a provider that refuses a direction rather than recording it as an
+      outage. `VoiceService` now calls the chain instead of the client. Two deliberate
+      boundaries: synthesis degrades to `TextOnlyVoiceProvider` (the words survive, the
+      audio does not) while transcription fails loudly, because there is no honest
+      text-only answer to what a patient said; and the websocket refuses to deliver an
+      empty payload as audio, which keeps today's patient-visible behavior until the
+      transport can carry a text-only turn. Verified 2026-09-21: 1,352 backend tests pass
+      at 83.74% coverage, with Ruff, Ruff format, and mypy clean.
+- [/] Migrate live voice transport. The streaming session
+      (`DeepgramLiveTranscriptionSession`) deliberately still holds the Deepgram client
+      directly, mirroring the text decision to leave streaming on its capability-specific
+      contract. Surfacing a text-only turn to the patient when speech is unavailable
+      belongs to this step.
 - [x] Record latency, model/version, tool calls, token/usage data, and fallback path in the provider response contract.
 - [x] Guarantee deterministic text fallback when audio is unavailable.
 - [x] Replace the retired `gemini-3.1-flash-lite-preview` fallback default with
@@ -340,7 +360,7 @@ open for sandbox-specific diagnosis.
 
 ### REV-006 — Consolidate durable documentation
 
-**Status:** `[/]` In review in PR #91
+**Status:** `[x]` Merged and verified
 
 **Owner:** Rajeev Chaurasia
 
@@ -351,7 +371,12 @@ open for sandbox-specific diagnosis.
 - [x] Correct stale agent-runtime, MCP, workflow, and package-map guidance that still named
       retired implementation patterns.
 - [x] Remove generated local evaluation reports from version control eligibility.
-- [ ] Merge and verify that internal documentation links resolve on `main`.
+- [x] Merge and verify that internal documentation links resolve on `main`. PR #91 merged as
+      `390f2ad`. Verified 2026-09-21 by resolving all 58 relative links across the 62 tracked
+      markdown files, including heading anchors. Two were broken and are fixed here: the
+      clinician portal README pointed one directory level up instead of two, and the backend
+      testing guide linked a `MOCK_VALIDATION.md` that exists nowhere in the tree, so it now
+      points at the mock-validation tests themselves.
 
 ### AI-002 — Model-routing decision spike (September 2026)
 
@@ -508,7 +533,9 @@ open for sandbox-specific diagnosis.
       created unless an endpoint ID is given.
 - [ ] Team decision on the remaining budget, comparison-credential, GPU-host, and clinical
       adjudication questions recorded in the AI runtime decision.
-- [ ] Execute migration steps 1–6 as separate PRs after the SAFE-002 P0 fix ships.
+- [ ] Execute migration steps 1–6 as separate PRs. The SAFE-002 P0 fix that gated this
+      shipped 2026-09-22 — see that row for the verified detail — so this is now unblocked
+      and ready to start.
 - [ ] Hand the harness and seed set to `EVA-001` for the remaining 50 scenarios and the 40
       adjudications.
 
@@ -1210,12 +1237,21 @@ resources remain evidence-only and do not create local truth.
 - [ ] Record full synthetic execution duration after the PDF and TIFF checks. The observed
       Spanish raster duration (34.7 seconds) is encouraging but is not by itself a cadence
       decision for multi-frame input.
-- [ ] Split the optional patient-explanation lifecycle from document ingestion. Persist a
-      summary state, sanitized failure code, source/prompt version, retry count, and retry time;
-      make a provider outage observable and retryable without re-OCRing the source or creating
-      duplicate candidate facts. The 2026-09-20 TIFF run completed extraction and preview, but
-      its optional summary failed with `GenerationProviderError` after the 2,048-token retry and
-      currently leaves only `ai_summary = NULL`.
+- [x] Split the optional patient-explanation lifecycle from document ingestion. Migration
+      `038_document_summary_lifecycle.sql` adds `summary_status`, `summary_failure_code`,
+      `summary_prompt_version`, `summary_attempts`, and `summary_last_attempt_at`, plus
+      `claim_pending_document_summary` and a care-team-gated `enqueue_document_summary_retry`.
+      Ingestion no longer calls the summary model: it records the clinical result and leaves the
+      explanation `pending`, and the Job's second phase builds it from candidates that already
+      exist, so a provider outage retries without re-OCRing the source or creating duplicate
+      candidate facts. A provider failure stays `pending` with `provider_unavailable` and
+      recovers automatically within three attempts; an empty response fails for explicit
+      clinician retry. Both portals show the reason instead of an empty panel, and the clinician
+      panel carries the retry action. Verified locally on 2026-09-21: 1,340 backend tests pass at
+      83.65% coverage with Ruff, Ruff format, mypy, and migration validation clean; the patient
+      portal passes 86 tests and the clinician portal 85, both with lint and typecheck. The 2026-09-20
+      TIFF run is the case this addresses; re-running it in the deployed environment is part of
+      the remaining acceptance steps below.
 - [ ] Only then create `mediagent-document-ingestion-every-5m` in `us-central1` with
       `*/5 * * * *`, timezone `America/Los_Angeles`, and a dedicated Scheduler identity limited
       to `roles/run.invoker` on this Job. Monitor overlap and queue delay; database claiming
@@ -1232,16 +1268,23 @@ resources remain evidence-only and do not create local truth.
    are denied. In a separate unassigned synthetic user session, verify neither portal/API path
    reveals the TIFF or its derived preview; confirm the denial is audited without leaking source
    existence. Record elapsed Job durations for both runs.
-4. Only when those results are safe and comfortably below five minutes, configure the Scheduler
+4. Apply migration `038_document_summary_lifecycle.sql`, then re-run the TIFF whose optional
+   summary failed on 2026-09-20. Confirm the explanation reaches `ready`, or that a forced
+   provider failure leaves a named reason that both portals show and that the clinician retry
+   action clears. The document's `parse_status`, stored source, and candidate facts must be
+   unchanged across every one of those outcomes.
+5. Only when those results are safe and comfortably below five minutes, configure the Scheduler
    trigger described above and observe its first executions.
 
 **Acceptance criteria**
 
 - [ ] Every supported synthetic input has a safe terminal outcome and evidence/preview behavior
       matching its source type.
-- [ ] A missing patient explanation is visibly unavailable rather than blank, has a durable
+- [/] A missing patient explanation is visibly unavailable rather than blank, has a durable
       operational reason and retry path, and cannot alter the immutable source or clinical
-      candidate lifecycle.
+      candidate lifecycle. Implemented and covered by tests; the deployed confirmation is
+      pending because migration `038` must be applied from a machine with direct network
+      access, which a hosted session cannot do.
 - [ ] Scheduler configuration is recorded with its least-privilege invoker and is enabled only
       after observed execution time makes the five-minute cadence safe.
 
@@ -1374,13 +1417,38 @@ drop its selected-document context and yield a generic chart answer.
       Spanish, including a confidently wrong model, co-occurring self-harm and cardiac
       keywords, casing, and unaccented spellings.
 
-- [ ] Run the safety floor before the model on the websocket streaming path.
-      `TriageAgent.process_stream` (`backend/src/app/agents/triage/agent.py:152-155`) calls
-      `_classify_with_llm` first and only reaches `_deterministic_safety_floor` through the
-      rules fallback when the model returns nothing, while `routers/chat.py:523` uses
-      `process_stream` for every websocket turn. The `b72c07f` fix covered `classify_intent`
-      only. Add a websocket-level emergency regression test in both locales and localize the
-      L3 fallback string in `routers/chat.py`. Found by the AI-002 spike on 2026-09-10; P0.
+- [x] Run the safety floor before the model on the websocket streaming path. Found by the
+      AI-002 spike on 2026-09-10; P0. **Re-verified against the code on 2026-09-21, because
+      this row described a runtime that no longer exists:** it named
+      `TriageAgent.process_stream` and `routers/chat.py:523`, and AI-003 has since rebuilt the
+      runtime on the ADK care coordinator.
+      - [x] The floor runs before the model. `SafetyFloorPlugin.before_run_callback`
+            (`adk/plugins/safety_floor.py`) returns fixed copy to halt the run before any
+            agent executes, is registered at `adk/runner.py:95`, and every websocket turn
+            reaches it through `routers/chat.py:578` → `chat_runtime.process_stream`. The
+            floor consulted in `chat_runtime` is for the classification label only and does
+            not re-decide the halt.
+      - [x] The L3 outer fallback is localized. `OUTER_FALLBACK_COPY` in `routers/chat.py`
+            answers a Spanish-speaking patient in Spanish at the moment the assistant is
+            least useful.
+      - [x] Added the missing `es-MX` websocket emergency regression test and, in writing
+            it, found and fixed a live second P0 the English-only, substring-only test had
+            been hiding. `routers/chat.py` closes the stream as soon as `route == "symptom"`
+            — which is what the floor labels a medical emergency — to stop the symptom
+            worker's reply replacing the coordinator's answer. That guard did not exempt an
+            emergency: closing the stream discarded the floor's reviewed 911 copy along with
+            it, leaving only the `service_unavailable` text seeded moments earlier
+            ("I am having trouble answering right now... try again in a few minutes").
+            Confirmed on both locales, reproduced from `main`, and confirmed present in
+            English too — the old test's `assert "911" in content` could not catch it because
+            `service_unavailable` also contains "911". The fix exempts `assistant_urgency ==
+            "emergency"` from the early close and seeds the reviewed emergency copy instead
+            of `service_unavailable` when a symptom-route turn produces no content before an
+            emergency classification. All patient-facing assertions in
+            `test_chat_emergency_copy.py` now check exact reviewed copy, not a substring;
+            14 cases pass across both locales, self-harm, and medical emergency. Verified
+            2026-09-22: 1,359 backend tests pass at 83.74% coverage, Ruff, Ruff format, mypy,
+            and migration validation clean. This closes the P0 and clears AI-002's gate.
 - [ ] Close the inflected-keyword gap in the floor. "I've been thinking about ending my life"
       does not match `end my life` (substring matching, no stemming) while its Spanish mirror
       matches `quitarme la vida`; evolving anaphylaxis ("lips swelling, throat tight") and

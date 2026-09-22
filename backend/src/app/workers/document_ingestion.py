@@ -11,6 +11,7 @@ from supabase import Client
 
 from app.clients.supabase import get_admin_client
 from app.config import settings
+from app.services.document_summary_service import DocumentSummaryService
 from app.services.ingestion_service import IngestionService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class DocumentIngestionWorker:
         self._db = db
         self._batch_size = max(1, min(batch_size, 100))
         self._service = IngestionService(db)
+        self._summaries = DocumentSummaryService(db)
 
     async def process_batch(self) -> dict[str, int]:
         result = self._db.rpc(
@@ -50,7 +52,34 @@ class DocumentIngestionWorker:
                 summary["needs_review"] += 1
             else:
                 summary["failed"] += 1
+        summary.update(await self.process_pending_summaries())
         return summary
+
+    async def process_pending_summaries(self) -> dict[str, int]:
+        """Generate owed patient explanations from candidates that already exist.
+
+        This runs after ingestion and is deliberately independent of it: a document
+        whose explanation is owed is claimed on its own, so a provider outage retries
+        here without re-reading the source or re-proposing any clinical candidate. A
+        failure never changes the document's clinical result.
+        """
+        claims = self._summaries.claim_pending(limit=self._batch_size)
+        counts = {"summaries_claimed": len(claims), "summaries_ready": 0}
+        for claim in claims:
+            try:
+                outcome = await self._summaries.generate(
+                    document_id=UUID(str(claim["document_id"])),
+                    patient_id=UUID(str(claim["patient_id"])),
+                )
+            except Exception:  # noqa: BLE001 - an optional explanation never fails the Job
+                logger.exception(
+                    "Unhandled patient explanation failure for document %s",
+                    claim.get("document_id"),
+                )
+                continue
+            if outcome.status == "ready":
+                counts["summaries_ready"] += 1
+        return counts
 
 
 async def main() -> int:

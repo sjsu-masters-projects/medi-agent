@@ -50,11 +50,10 @@ backend/tests/
 ├── unit/                    # Unit tests (isolated, mocked dependencies)
 │   ├── services/           # Service layer tests
 │   └── test_mcp_servers.py # MCP server tests
-├── integration/            # Integration tests (multiple components)
-│   ├── routers/           # API endpoint tests
-│   ├── test_middleware.py # Middleware tests
-│   └── test_mock_validation.py # Mock validation tests
-└── MOCK_VALIDATION.md     # Mock validation documentation
+└── integration/            # Integration tests (multiple components)
+    ├── routers/           # API endpoint tests
+    ├── test_middleware.py # Middleware tests
+    └── test_mock_validation.py # Mock validation tests
 ```
 
 ## Testing Patterns
@@ -320,4 +319,4 @@ pre-commit run --all-files
 - [Pytest Documentation](https://docs.pytest.org/)
 - [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
 - [Coverage.py Documentation](https://coverage.readthedocs.io/)
-- [Mock Validation Guide](./MOCK_VALIDATION.md)
+- [Mock validation tests](./integration/test_mock_validation.py)

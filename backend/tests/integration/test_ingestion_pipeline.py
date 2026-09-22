@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+from postgrest.exceptions import APIError
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.exceptions import DocumentParseError
@@ -80,7 +81,6 @@ async def test_full_ingestion_pipeline_creates_only_grounded_candidates() -> Non
     intelligence.extract.return_value = _source_extraction()
     service = IngestionService(db, intelligence=intelligence)
     service._extract_structured = AsyncMock(return_value=(_model_extraction(), "gemini-test"))
-    service._optional_summary = AsyncMock(return_value="Take aspirin daily.")
 
     with patch("app.services.ingestion_service.DocumentEvidenceCandidateService") as registry:
         registry.return_value.register.return_value = CandidateRegistrationSummary(created=1)
@@ -95,6 +95,17 @@ async def test_full_ingestion_pipeline_creates_only_grounded_candidates() -> Non
     assert result["candidate_facts_created"] == 1
     registry.return_value.register.assert_called_once()
     assert db.table.call_args_list
+
+    # Ingestion hands the optional explanation off rather than generating it inline, so a
+    # provider outage there can never reach this document's clinical terminal state.
+    assert result["summary_status"] == "pending"
+    completion = [
+        call.args[0]
+        for call in db.table("documents").update.call_args_list
+        if call.args[0].get("parse_status") == "completed"
+    ]
+    assert completion and completion[-1]["summary_status"] == "pending"
+    assert "ai_summary" not in completion[-1]
 
 
 @pytest.mark.asyncio
@@ -186,3 +197,43 @@ async def test_explain_spanish_translation() -> None:
         )
 
     assert summary == "Resumen en español"
+
+
+def _document_only_db() -> tuple[MagicMock, MagicMock]:
+    """A database whose `documents` writes are the only thing under test."""
+    table = MagicMock()
+    for method in ["select", "eq", "single", "update", "insert"]:
+        getattr(table, method).return_value = table
+    db = MagicMock()
+    db.table.return_value = table
+    return db, table
+
+
+def test_clinical_result_is_recorded_when_the_summary_columns_are_missing() -> None:
+    """Migration 038 is applied by hand after this image reaches Cloud Run."""
+    db, table = _document_only_db()
+    table.execute.side_effect = [
+        APIError({"code": "PGRST204", "message": "Could not find the 'summary_status' column"}),
+        MagicMock(data=None),
+    ]
+
+    IngestionService(db, intelligence=MagicMock())._set_document(
+        DOCUMENT_ID, parse_status="completed", parsed=True, summary_status="pending"
+    )
+
+    # The document still reaches its clinical terminal state; only the optional
+    # explanation stays unclaimed until the columns exist.
+    retried = table.update.call_args_list[-1].args[0]
+    assert retried["parse_status"] == "completed"
+    assert retried["parsed"] is True
+    assert "summary_status" not in retried
+
+
+def test_an_unrelated_write_failure_still_surfaces() -> None:
+    db, table = _document_only_db()
+    table.execute.side_effect = APIError({"code": "23514", "message": "check constraint violated"})
+
+    with pytest.raises(APIError):
+        IngestionService(db, intelligence=MagicMock())._set_document(
+            DOCUMENT_ID, parse_status="completed", parsed=True, summary_status="pending"
+        )

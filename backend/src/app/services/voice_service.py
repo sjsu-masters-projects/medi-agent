@@ -23,6 +23,13 @@ from app.clients.supabase import get_admin_client
 from app.config import settings
 from app.core.exceptions import ValidationError
 from app.models.enums import Language, coerce_locale
+from app.models.generation import VoiceSynthesisRequest, VoiceTranscriptionRequest
+from app.services.generation_providers import (
+    DeepgramVoiceProvider,
+    TextOnlyVoiceProvider,
+    VoiceFallbackProvider,
+    VoiceProvider,
+)
 
 SUPPORTED_AUDIO_MIME_TYPES = {
     "audio/webm",
@@ -52,6 +59,10 @@ class VoiceAudio:
     encoding: str
     audio_url: str | None = None
     signed_url: str | None = None
+    # Which providers were tried, in order, and which one answered. Empty `audio` with a
+    # `text_only` tail is the deterministic fallback: the words exist, the sound does not.
+    fallback_path: tuple[str, ...] = ()
+    transcript: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,11 +145,38 @@ class DeepgramLiveTranscriptionSession:
         )
 
 
+def _tts_model_for(language: str) -> str:
+    if coerce_locale(language) is Language.ES and settings.deepgram_tts_model_es:
+        return settings.deepgram_tts_model_es
+    return settings.deepgram_tts_model_en
+
+
+def build_default_voice_provider() -> VoiceProvider:
+    """Deepgram first, then the deterministic text fallback.
+
+    The fallback is wired here rather than left to each caller, which is what makes the
+    "deterministic text when audio is unavailable" guarantee real: a synthesis outage
+    returns the words with an empty audio payload instead of raising.
+    """
+    return VoiceFallbackProvider(
+        [
+            DeepgramVoiceProvider(
+                transcribe=transcribe_audio_bytes_async,
+                synthesize=generate_speech_async,
+                stt_model=settings.deepgram_stt_model,
+                tts_model_for=_tts_model_for,
+            ),
+            TextOnlyVoiceProvider(),
+        ]
+    )
+
+
 class VoiceService:
     """Coordinates backend-owned speech-to-text and text-to-speech boundaries."""
 
-    def __init__(self, db: Client | None = None) -> None:
+    def __init__(self, db: Client | None = None, *, provider: VoiceProvider | None = None) -> None:
         self.db = db
+        self._provider = provider or build_default_voice_provider()
 
     async def transcribe_audio(
         self,
@@ -149,19 +187,18 @@ class VoiceService:
     ) -> VoiceTranscript:
         audio_bytes = self._decode_audio_payload(audio_base64, mime_type)
         locale = coerce_locale(language)
-        transcript = (
-            await transcribe_audio_bytes_async(
-                audio_bytes,
-                model=settings.deepgram_stt_model,
+        response = await self._provider.transcribe(
+            VoiceTranscriptionRequest(
+                audio=audio_bytes,
+                mime_type=mime_type,
                 language=locale.value,
-                smart_format=True,
             )
-        ).strip()
+        )
 
         return VoiceTranscript(
-            transcript=transcript,
+            transcript=(response.transcript or "").strip(),
             language=locale,
-            model=settings.deepgram_stt_model,
+            model=response.telemetry.model,
         )
 
     def decode_audio_chunk(self, *, audio_base64: str, mime_type: str) -> bytes:
@@ -188,18 +225,23 @@ class VoiceService:
             raise ValidationError("Text is required for speech synthesis")
 
         locale = coerce_locale(language)
-        model = self._select_tts_model(locale)
-        audio = await generate_speech_async(
-            normalized_text,
-            model=model,
-            encoding=DEFAULT_TTS_ENCODING,
+        response = await self._provider.synthesize(
+            VoiceSynthesisRequest(
+                text=normalized_text,
+                language=locale.value,
+                encoding=DEFAULT_TTS_ENCODING,
+            )
         )
         return VoiceAudio(
-            audio=audio,
+            audio=response.audio or b"",
             language=locale,
-            model=model,
-            mime_type="audio/mpeg",
+            model=response.telemetry.model,
+            mime_type=response.mime_type or "audio/mpeg",
             encoding=DEFAULT_TTS_ENCODING,
+            fallback_path=tuple(response.telemetry.fallback_path),
+            # Present only when audio could not be produced, so a caller can still show
+            # the patient the words instead of nothing.
+            transcript=response.transcript,
         )
 
     async def persist_audio(
@@ -270,12 +312,6 @@ class VoiceService:
     @staticmethod
     def encode_audio_base64(audio: bytes) -> str:
         return base64.b64encode(audio).decode("ascii")
-
-    @staticmethod
-    def _select_tts_model(language: Language) -> str:
-        if language is Language.ES and settings.deepgram_tts_model_es:
-            return settings.deepgram_tts_model_es
-        return settings.deepgram_tts_model_en
 
     @staticmethod
     def _decode_audio_payload(audio_base64: str, mime_type: str) -> bytes:

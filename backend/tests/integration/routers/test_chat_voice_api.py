@@ -142,6 +142,55 @@ def test_voice_websocket_generates_assistant_audio(client, monkeypatch, patient_
         }
 
 
+def test_voice_websocket_never_sends_a_silent_clip(client, monkeypatch, patient_id):
+    """A text-only fallback must not be delivered as if it were audio.
+
+    The chain degrades to the words when speech is unavailable, so `synthesize_speech`
+    returns successfully with an empty payload. Sending that through would put a silent
+    clip in front of a patient who pressed play.
+    """
+    token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
+    monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
+    async def _fallback_to_text(self, *, text, language):
+        return VoiceAudio(
+            audio=b"",
+            language=Language.EN,
+            model="none",
+            mime_type="audio/mpeg",
+            encoding="mp3",
+            fallback_path=("deepgram:unavailable", "text_only"),
+            transcript=text,
+        )
+
+    def _must_not_persist(self, **_kwargs):
+        raise AssertionError("An empty audio payload must never be stored")
+
+    monkeypatch.setattr("app.routers.voice.VoiceService.synthesize_speech", _fallback_to_text)
+    monkeypatch.setattr(
+        "app.routers.voice.VoiceService.persist_assistant_audio_for_message",
+        _must_not_persist,
+    )
+
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
+        assert websocket.receive_json()["type"] == "voice_ready"
+        websocket.send_json(
+            {
+                "type": "tts_request",
+                "message_id": "assistant-1",
+                "text": "Hydrate and call your care team if symptoms worsen.",
+                "language": "en-US",
+            }
+        )
+
+        response = websocket.receive_json()
+
+    assert response["type"] == "voice_error"
+    assert response["code"] == "voice_processing_failed"
+
+
 def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
     client, monkeypatch, patient_id
 ):

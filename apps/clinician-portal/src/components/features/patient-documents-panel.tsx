@@ -14,6 +14,7 @@ import {
     fetchClinicianDocumentSource,
     rejectDocumentReview,
     retryClinicianDocumentIngestion,
+    retryClinicianDocumentSummary,
 } from "@/services/clinicians";
 import {
     type ClinicianPatientDocument,
@@ -51,6 +52,7 @@ export function PatientDocumentsPanel({
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [reviewingDocumentId, setReviewingDocumentId] = useState<string | null>(null);
     const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
+    const [retryingSummaryId, setRetryingSummaryId] = useState<string | null>(null);
     const [rejectingDocumentId, setRejectingDocumentId] = useState<string | null>(null);
     const [rejectNote, setRejectNote] = useState("");
     const [sourceDocument, setSourceDocument] = useState<ClinicianPatientDocument | null>(null);
@@ -123,6 +125,46 @@ export function PatientDocumentsPanel({
         } finally {
             setRetryingDocumentId(null);
         }
+    }
+
+    async function handleRetrySummary(documentId: string) {
+        setReviewError(null);
+        setRetryingSummaryId(documentId);
+        try {
+            await retryClinicianDocumentSummary(patientId, documentId);
+            onRefresh();
+        } catch (error) {
+            setReviewError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to retry the patient explanation.",
+            );
+        } finally {
+            setRetryingSummaryId(null);
+        }
+    }
+
+    /**
+     * Why the patient explanation is missing on a document that parsed successfully.
+     *
+     * The explanation has its own lifecycle: it never changes the source, the parse
+     * result, or any candidate awaiting review. Saying so explicitly matters here,
+     * because a clinician seeing an empty summary needs to know the clinical record is
+     * intact and that retrying costs nothing but another generation attempt.
+     */
+    function summaryMessage(document: ClinicianPatientDocument): string | null {
+        if (document.aiSummary || document.parseStatus !== "completed") {
+            return null;
+        }
+        if (document.summaryStatus === "failed") {
+            return document.summaryFailureCode === "summary_empty"
+                ? "The patient explanation came back empty. Extraction and review candidates are unaffected; you can request it again."
+                : "The patient explanation is unavailable after repeated attempts. Extraction and review candidates are unaffected; you can request it again.";
+        }
+        if (document.summaryStatus === "not_required") {
+            return "No extracted information in this document needs a patient explanation.";
+        }
+        return "The patient explanation has not been generated yet. It is queued and does not block review.";
     }
 
     function parseMessage(document: ClinicianPatientDocument): string | null {
@@ -283,7 +325,7 @@ export function PatientDocumentsPanel({
                                     </div>
                                 )}
 
-                            {doc.aiSummary && (
+                            {doc.aiSummary ? (
                                 <div className="px-5 py-4">
                                     <DocumentSummary
                                         documentId={doc.id}
@@ -292,6 +334,26 @@ export function PatientDocumentsPanel({
                                         summaryText={doc.aiSummary}
                                     />
                                 </div>
+                            ) : (
+                                summaryMessage(doc) && (
+                                    <div className="px-5 py-4">
+                                        <p className="text-sm text-gray-600">
+                                            {summaryMessage(doc)}
+                                        </p>
+                                        {doc.summaryStatus === "failed" && (
+                                            <button
+                                                className="mt-3 rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                disabled={retryingSummaryId === doc.id}
+                                                onClick={() => void handleRetrySummary(doc.id)}
+                                                type="button"
+                                            >
+                                                {retryingSummaryId === doc.id
+                                                    ? "Requesting..."
+                                                    : "Retry patient explanation"}
+                                            </button>
+                                        )}
+                                    </div>
+                                )
                             )}
                         </div>
                     ))}

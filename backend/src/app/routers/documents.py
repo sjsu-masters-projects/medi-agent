@@ -9,6 +9,7 @@ Upload flow:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -22,9 +23,14 @@ from app.models.auth import CurrentUser
 from app.models.document import DocumentRead
 from app.models.enums import DocumentType, Language, coerce_locale
 from app.services.document_service import DocumentService
-from app.services.explanation_service import ExplanationService, normalize_patient_summary
+from app.services.explanation_service import (
+    ExplanationService,
+    normalize_patient_summary,
+    summary_unavailable_message,
+)
 from app.services.smart_launch_service import SmartLaunchService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 _clinician_dep = require_role("clinician")
 
@@ -149,6 +155,36 @@ async def retry_clinician_document_ingestion(
     return await service.get_document(document_id, patient_id)
 
 
+@router.post(
+    "/patients/{patient_id}/{document_id}/summary/retry",
+    response_model=DocumentRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Retry an unavailable patient explanation",
+)
+async def retry_clinician_document_summary(
+    patient_id: UUID,
+    document_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: DocumentService = Depends(_get_service),
+    db: Client = Depends(get_db),
+) -> Any:
+    """Requeue only the optional explanation, leaving the clinical result untouched.
+
+    This re-reads candidates that already exist: it never re-runs OCR, never proposes a
+    clinical fact again, and cannot change the document's parse state or stored source.
+    """
+    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    db.rpc(
+        "enqueue_document_summary_retry",
+        {
+            "p_document_id": str(document_id),
+            "p_patient_id": str(patient_id),
+            "p_actor_id": str(user.id),
+        },
+    ).execute()
+    return await service.get_document(document_id, patient_id)
+
+
 @router.get(
     "/patients/{patient_id}/{document_id}/source",
     response_model=DocumentRead,
@@ -215,20 +251,74 @@ async def explain_document(
     user: CurrentUser = Depends(get_current_user),
     service: DocumentService = Depends(_get_service),
 ) -> Any:
-    language = body.language if body else Language.EN
+    locale = coerce_locale(body.language if body else Language.EN).value
     document = await service.get_document(document_id, user.id)
+    cached = str(document.get("ai_summary") or "").strip()
 
-    if language == Language.EN and document.get("ai_summary"):
-        # Summaries created before the plain-text prompt contract may contain Markdown.
-        # Keep the cache fast, but make its patient-facing representation match newly
-        # generated summaries rather than exposing model formatting in the portal.
-        summary = normalize_patient_summary(str(document["ai_summary"]))
-        return {"summary": summary, "language": language.value, "cached": True}
+    if not cached:
+        # The request path deliberately does not generate an explanation. Generation is
+        # the worker's job, so a provider outage is retried there instead of on every
+        # page view, and the patient is told why nothing is shown rather than seeing an
+        # empty card or generic prose that could read as a clinical statement.
+        reported = _reported_summary_status(document)
+        return _unavailable_explanation_response(
+            status=reported, failure_code=document.get("summary_failure_code"), locale=locale
+        )
 
-    explanation_service = ExplanationService()
-    summary = await explanation_service.explain(document_data=document, language=language.value)
+    # Summaries created before the plain-text prompt contract may contain Markdown.
+    # Keep the cache fast, but make its patient-facing representation match newly
+    # generated summaries rather than exposing model formatting in the portal.
+    english = normalize_patient_summary(cached)
+    if locale == Language.EN.value:
+        return _ready_explanation_response(english, locale, cached=True)
 
-    if coerce_locale(language) == Language.EN:
-        await service.update_summary(document_id, user.id, summary)
+    try:
+        translated = await ExplanationService().translate(english, locale)
+    except Exception:  # noqa: BLE001 - a translation outage is reported, never invented around
+        logger.warning("Summary translation failed for document %s", document_id)
+        return _unavailable_explanation_response(
+            status="failed", failure_code="provider_unavailable", locale=locale
+        )
 
-    return {"summary": summary, "language": coerce_locale(language).value, "cached": False}
+    return _ready_explanation_response(translated, locale, cached=False)
+
+
+def _reported_summary_status(document: dict[str, Any]) -> str:
+    """Describe a missing explanation from whichever lifecycle state is available.
+
+    The summary lifecycle columns arrive with migration 038, which is applied after this
+    image deploys. Until then the document's clinical parse state is the honest source:
+    a completed extraction still owes an explanation, and anything else never had one.
+    """
+    recorded = str(document.get("summary_status") or "").strip()
+    if recorded in {"pending", "processing"}:
+        return "pending"
+    if recorded in {"not_required", "failed"}:
+        return recorded
+    return "pending" if document.get("parse_status") == "completed" else "not_required"
+
+
+def _ready_explanation_response(summary: str, locale: str, *, cached: bool) -> dict[str, Any]:
+    return {
+        "summary": summary,
+        "available": True,
+        "summary_status": "ready",
+        "failure_code": None,
+        "message": None,
+        "language": locale,
+        "cached": cached,
+    }
+
+
+def _unavailable_explanation_response(
+    *, status: str, failure_code: str | None, locale: str
+) -> dict[str, Any]:
+    return {
+        "summary": None,
+        "available": False,
+        "summary_status": status,
+        "failure_code": failure_code,
+        "message": summary_unavailable_message(status, locale),
+        "language": locale,
+        "cached": False,
+    }

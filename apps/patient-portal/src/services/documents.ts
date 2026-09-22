@@ -18,6 +18,8 @@ export interface DocumentApiRecord {
     parse_status?: Document["parseStatus"];
     parse_failure_code?: string | null;
     parse_attempts?: number;
+    summary_status?: string | null;
+    summary_failure_code?: string | null;
     source_clinic?: string | null;
     visibility: Document["visibility"];
     created_at: string;

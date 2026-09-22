@@ -83,6 +83,29 @@ class GenerationResponse(BaseModel):
     telemetry: GenerationTelemetry
 
 
+class VoiceTranscriptionRequest(BaseModel):
+    """Audio in, text out. The locale is a request field, not provider configuration.
+
+    A patient's locale decides which acoustic model is used, so it has to travel with
+    the request; a provider pinned to one language cannot serve a bilingual product.
+    """
+
+    audio: bytes
+    mime_type: str = Field(min_length=1)
+    language: str = Field(default="en-US", min_length=2, max_length=16)
+    # Overrides the provider's configured model. Left unset for the normal path.
+    model: str | None = None
+
+
+class VoiceSynthesisRequest(BaseModel):
+    """Text in, audio out, in the language the patient is reading."""
+
+    text: str = Field(min_length=1)
+    language: str = Field(default="en-US", min_length=2, max_length=16)
+    model: str | None = None
+    encoding: str = Field(default="mp3", min_length=1)
+
+
 class VoiceResponse(BaseModel):
     transcript: str | None = None
     audio: bytes | None = None
