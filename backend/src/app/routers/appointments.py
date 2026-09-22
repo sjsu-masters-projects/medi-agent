@@ -8,7 +8,12 @@ from supabase import Client
 
 from app.core.security import get_current_user
 from app.db.connection import get_db
-from app.models import AppointmentCreate, AppointmentRead, AppointmentUpdate
+from app.models import (
+    AppointmentCreate,
+    AppointmentRead,
+    AppointmentResponse,
+    AppointmentUpdate,
+)
 from app.models.auth import CurrentUser
 from app.services.appointment_service import AppointmentService
 
@@ -36,6 +41,21 @@ async def create_appointment(
         user_id=current_user.id,
         role=current_user.role,
         data=data.model_dump(mode="json"),
+    )
+
+
+@router.post("/{appointment_id}/respond", response_model=AppointmentRead)
+async def respond_to_appointment(
+    appointment_id: UUID,
+    data: AppointmentResponse,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    return await AppointmentService(db).respond_to_proposal(
+        user_id=current_user.id,
+        role=current_user.role,
+        appointment_id=appointment_id,
+        action=data.action,
     )
 
 

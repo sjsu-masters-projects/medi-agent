@@ -9,8 +9,13 @@ from uuid import UUID
 from supabase import Client
 
 from app.core import authorization_reasons as reasons
-from app.core.exceptions import AuthorizationError, ExternalServiceError, NotFoundError
-from app.models.enums import AppointmentStatus
+from app.core.exceptions import (
+    AuthorizationError,
+    ExternalServiceError,
+    NotFoundError,
+    ValidationError,
+)
+from app.models.enums import AppointmentResponseAction, AppointmentStatus
 
 
 class AppointmentService:
@@ -74,6 +79,11 @@ class AppointmentService:
             )
 
         clinician_name = await self._get_clinician_name(clinician_id)
+        # A clinician offers a slot the patient must accept; a patient booking
+        # their own appointment has nothing to confirm.
+        initial_status = (
+            AppointmentStatus.PROPOSED if role == "clinician" else AppointmentStatus.SCHEDULED
+        )
         payload = {
             "patient_id": patient_id,
             "care_team_id": str(data.get("care_team_id")),
@@ -84,12 +94,51 @@ class AppointmentService:
             "location": data.get("location"),
             "reason": data.get("reason"),
             "notes": data.get("notes"),
-            "status": AppointmentStatus.SCHEDULED.value,
+            "status": initial_status.value,
         }
         result = await self._execute(self.db.table("appointments").insert(payload))
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         if not rows:
             raise ExternalServiceError("Supabase", "Failed to create appointment")
+        return rows[0]
+
+    async def respond_to_proposal(
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        appointment_id: UUID,
+        action: AppointmentResponseAction,
+    ) -> dict[str, Any]:
+        """Accept or decline a proposed appointment on behalf of its patient."""
+        if role != "patient":
+            raise AuthorizationError(
+                "Only the patient can respond to a proposed appointment",
+                reason_code=reasons.ROLE_LACKS_CLINICAL_SCOPE,
+            )
+
+        appointment = await self._get_appointment(str(appointment_id))
+        if str(appointment.get("patient_id")) != str(user_id):
+            raise AuthorizationError(
+                "You can only respond to your own appointments",
+                reason_code=reasons.PATIENT_SCOPE_SELF_ONLY,
+            )
+        if appointment.get("status") != AppointmentStatus.PROPOSED.value:
+            raise ValidationError("This appointment is not awaiting your response")
+
+        new_status = (
+            AppointmentStatus.CONFIRMED
+            if action == AppointmentResponseAction.ACCEPT
+            else AppointmentStatus.DECLINED
+        )
+        result = await self._execute(
+            self.db.table("appointments")
+            .update({"status": new_status.value})
+            .eq("id", str(appointment_id))
+        )
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        if not rows:
+            raise ExternalServiceError("Supabase", "Failed to update appointment")
         return rows[0]
 
     async def update_for_user(
