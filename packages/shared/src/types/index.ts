@@ -241,7 +241,8 @@ export const AppointmentType = {
 export type AppointmentType = (typeof AppointmentType)[keyof typeof AppointmentType];
 
 export const AppointmentStatus = {
-    SCHEDULED: "scheduled", COMPLETED: "completed", CANCELLED: "cancelled", NO_SHOW: "no_show",
+    PROPOSED: "proposed", CONFIRMED: "confirmed", SCHEDULED: "scheduled", DECLINED: "declined",
+    COMPLETED: "completed", CANCELLED: "cancelled", NO_SHOW: "no_show",
 } as const;
 export type AppointmentStatus = (typeof AppointmentStatus)[keyof typeof AppointmentStatus];
 
