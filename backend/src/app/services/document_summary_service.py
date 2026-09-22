@@ -86,14 +86,8 @@ class DocumentSummaryService:
 
     async def generate(self, *, document_id: UUID, patient_id: UUID) -> SummaryOutcome:
         """Summarize a document's persisted candidates and record the result."""
-        try:
-            sources = self._summary_sources(document_id, patient_id)
-        except Exception as exc:  # noqa: BLE001 - an unreadable candidate set is operational
-            logger.warning(
-                "Could not read candidates for document summary %s: %s",
-                document_id,
-                type(exc).__name__,
-            )
+        sources = self._try_read_sources(document_id, patient_id)
+        if sources is None:
             return self._record(
                 document_id, SummaryOutcome("pending", failure_code="source_unavailable")
             )
@@ -104,6 +98,25 @@ class DocumentSummaryService:
         if not any(sources.values()):
             return self._record(document_id, SummaryOutcome("not_required"))
 
+        outcome = await self._request_summary(document_id, sources)
+        return self._record(document_id, outcome)
+
+    def _try_read_sources(self, document_id: UUID, patient_id: UUID) -> dict[str, list[Any]] | None:
+        """Read a document's candidates, or None when the read itself is the failure."""
+        try:
+            return self._summary_sources(document_id, patient_id)
+        except Exception as exc:  # noqa: BLE001 - an unreadable candidate set is operational
+            logger.warning(
+                "Could not read candidates for document summary %s: %s",
+                document_id,
+                type(exc).__name__,
+            )
+            return None
+
+    async def _request_summary(
+        self, document_id: UUID, sources: dict[str, list[Any]]
+    ) -> SummaryOutcome:
+        """Ask the model for the explanation and classify what came back."""
         try:
             response = await get_router().generate_text(
                 TaskType.PATIENT_EXPLANATION,
@@ -128,16 +141,14 @@ class DocumentSummaryService:
             )
             # Left pending so the next worker run retries without re-reading the source.
             # The claim function caps automatic attempts and then marks the row failed.
-            return self._record(
-                document_id, SummaryOutcome("pending", failure_code="provider_unavailable")
-            )
+            return SummaryOutcome("pending", failure_code="provider_unavailable")
 
         summary = normalize_patient_summary(str(response or ""))
         if not summary:
             # Repeating an identical prompt over identical candidates would reproduce
             # this, so it waits for an explicit retry instead of burning attempts.
-            return self._record(document_id, SummaryOutcome("failed", failure_code="summary_empty"))
-        return self._record(document_id, SummaryOutcome("ready", summary=summary))
+            return SummaryOutcome("failed", failure_code="summary_empty")
+        return SummaryOutcome("ready", summary=summary)
 
     def _summary_sources(self, document_id: UUID, patient_id: UUID) -> dict[str, list[Any]]:
         """Group a document's non-deleted candidate facts into the prompt's sections."""

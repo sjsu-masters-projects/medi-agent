@@ -261,54 +261,26 @@ async def explain_document(
         # page view, and the patient is told why nothing is shown rather than seeing an
         # empty card or generic prose that could read as a clinical statement.
         reported = _reported_summary_status(document)
-        return {
-            "summary": None,
-            "available": False,
-            "summary_status": reported,
-            "failure_code": document.get("summary_failure_code"),
-            "message": summary_unavailable_message(reported, locale),
-            "language": locale,
-            "cached": False,
-        }
+        return _unavailable_explanation_response(
+            status=reported, failure_code=document.get("summary_failure_code"), locale=locale
+        )
 
     # Summaries created before the plain-text prompt contract may contain Markdown.
     # Keep the cache fast, but make its patient-facing representation match newly
     # generated summaries rather than exposing model formatting in the portal.
     english = normalize_patient_summary(cached)
     if locale == Language.EN.value:
-        return {
-            "summary": english,
-            "available": True,
-            "summary_status": "ready",
-            "failure_code": None,
-            "message": None,
-            "language": locale,
-            "cached": True,
-        }
+        return _ready_explanation_response(english, locale, cached=True)
 
     try:
         translated = await ExplanationService().translate(english, locale)
     except Exception:  # noqa: BLE001 - a translation outage is reported, never invented around
         logger.warning("Summary translation failed for document %s", document_id)
-        return {
-            "summary": None,
-            "available": False,
-            "summary_status": "failed",
-            "failure_code": "provider_unavailable",
-            "message": summary_unavailable_message("failed", locale),
-            "language": locale,
-            "cached": False,
-        }
+        return _unavailable_explanation_response(
+            status="failed", failure_code="provider_unavailable", locale=locale
+        )
 
-    return {
-        "summary": translated,
-        "available": True,
-        "summary_status": "ready",
-        "failure_code": None,
-        "message": None,
-        "language": locale,
-        "cached": False,
-    }
+    return _ready_explanation_response(translated, locale, cached=False)
 
 
 def _reported_summary_status(document: dict[str, Any]) -> str:
@@ -324,3 +296,29 @@ def _reported_summary_status(document: dict[str, Any]) -> str:
     if recorded in {"not_required", "failed"}:
         return recorded
     return "pending" if document.get("parse_status") == "completed" else "not_required"
+
+
+def _ready_explanation_response(summary: str, locale: str, *, cached: bool) -> dict[str, Any]:
+    return {
+        "summary": summary,
+        "available": True,
+        "summary_status": "ready",
+        "failure_code": None,
+        "message": None,
+        "language": locale,
+        "cached": cached,
+    }
+
+
+def _unavailable_explanation_response(
+    *, status: str, failure_code: str | None, locale: str
+) -> dict[str, Any]:
+    return {
+        "summary": None,
+        "available": False,
+        "summary_status": status,
+        "failure_code": failure_code,
+        "message": summary_unavailable_message(status, locale),
+        "language": locale,
+        "cached": False,
+    }
