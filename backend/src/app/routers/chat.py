@@ -604,7 +604,16 @@ async def chat_websocket_endpoint(
                         # by the coordinator. Closing the stream here is what keeps the
                         # patient from watching one reply arrive and then be replaced by
                         # a different one.
-                        if route == "symptom":
+                        #
+                        # An emergency is the exception, and must stay one. The floor
+                        # labels a medical emergency `intent="symptom"`, so it arrives
+                        # here too — but its reviewed 911 answer comes from the floor in
+                        # the `complete` event, and the guard below deliberately stops the
+                        # worker replacing it. Closing the stream early therefore threw
+                        # that answer away and left the patient reading "I am having
+                        # trouble answering right now". Nothing replaces an emergency
+                        # reply, so there is nothing to protect the patient from seeing.
+                        if route == "symptom" and assistant_urgency != "emergency":
                             await stream_iter.aclose()
                             break
                     elif ev_type == "chunk":
@@ -649,8 +658,17 @@ async def chat_websocket_endpoint(
                 # the worker below produces nothing, we say we could not reply rather than
                 # making a second attempt at the failure that just happened.
                 if not assistant_content and not outer_fallback:
+                    # "Try again in a few minutes" is never the right thing to tell someone
+                    # reporting a medical emergency, whatever else has failed this turn.
+                    # Only a medical emergency reaches the symptom route; self-harm
+                    # classifies as `mental_health` and is answered elsewhere.
+                    seeded_copy_key = (
+                        "emergency_response"
+                        if assistant_urgency == "emergency"
+                        else "service_unavailable"
+                    )
                     assistant_content = resolve_locale_resource(incoming.language, TRIAGE_COPY)[
-                        "service_unavailable"
+                        seeded_copy_key
                     ]
                 try:
                     symptom_result = await analyse_symptom(

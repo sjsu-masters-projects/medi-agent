@@ -533,10 +533,9 @@ open for sandbox-specific diagnosis.
       created unless an endpoint ID is given.
 - [ ] Team decision on the remaining budget, comparison-credential, GPU-host, and clinical
       adjudication questions recorded in the AI runtime decision.
-- [ ] Execute migration steps 1–6 as separate PRs after the SAFE-002 P0 fix ships. Gate state
-      as of 2026-09-21: two of that P0's three deliverables shipped with the AI-003 runtime
-      rebuild, and the one that remains is a websocket emergency regression test for `es-MX`.
-      See the SAFE-002 row for the verified detail rather than re-deriving it here.
+- [ ] Execute migration steps 1–6 as separate PRs. The SAFE-002 P0 fix that gated this
+      shipped 2026-09-22 — see that row for the verified detail — so this is now unblocked
+      and ready to start.
 - [ ] Hand the harness and seed set to `EVA-001` for the remaining 50 scenarios and the 40
       adjudications.
 
@@ -1418,11 +1417,11 @@ drop its selected-document context and yield a generic chart answer.
       Spanish, including a confidently wrong model, co-occurring self-harm and cardiac
       keywords, casing, and unaccented spellings.
 
-- [/] Run the safety floor before the model on the websocket streaming path. Found by the
+- [x] Run the safety floor before the model on the websocket streaming path. Found by the
       AI-002 spike on 2026-09-10; P0. **Re-verified against the code on 2026-09-21, because
       this row described a runtime that no longer exists:** it named
       `TriageAgent.process_stream` and `routers/chat.py:523`, and AI-003 has since rebuilt the
-      runtime on the ADK care coordinator. Two of the three deliverables have shipped.
+      runtime on the ADK care coordinator.
       - [x] The floor runs before the model. `SafetyFloorPlugin.before_run_callback`
             (`adk/plugins/safety_floor.py`) returns fixed copy to halt the run before any
             agent executes, is registered at `adk/runner.py:95`, and every websocket turn
@@ -1432,12 +1431,24 @@ drop its selected-document context and yield a generic chart answer.
       - [x] The L3 outer fallback is localized. `OUTER_FALLBACK_COPY` in `routers/chat.py`
             answers a Spanish-speaking patient in Spanish at the moment the assistant is
             least useful.
-      - [ ] The websocket emergency regression test still covers one locale.
-            `tests/integration/routers/test_chat_emergency_copy.py:202` hardcodes
-            `"language": "en"`, so no case asserts on the words an `es-MX` patient reads.
-            Given this task's own post-mortem — the covered half of the safety copy was the
-            half that happened to be safe — this is the gap worth closing, and it is what
-            still gates AI-002's "execute migration steps 1–6".
+      - [x] Added the missing `es-MX` websocket emergency regression test and, in writing
+            it, found and fixed a live second P0 the English-only, substring-only test had
+            been hiding. `routers/chat.py` closes the stream as soon as `route == "symptom"`
+            — which is what the floor labels a medical emergency — to stop the symptom
+            worker's reply replacing the coordinator's answer. That guard did not exempt an
+            emergency: closing the stream discarded the floor's reviewed 911 copy along with
+            it, leaving only the `service_unavailable` text seeded moments earlier
+            ("I am having trouble answering right now... try again in a few minutes").
+            Confirmed on both locales, reproduced from `main`, and confirmed present in
+            English too — the old test's `assert "911" in content` could not catch it because
+            `service_unavailable` also contains "911". The fix exempts `assistant_urgency ==
+            "emergency"` from the early close and seeds the reviewed emergency copy instead
+            of `service_unavailable` when a symptom-route turn produces no content before an
+            emergency classification. All patient-facing assertions in
+            `test_chat_emergency_copy.py` now check exact reviewed copy, not a substring;
+            14 cases pass across both locales, self-harm, and medical emergency. Verified
+            2026-09-22: 1,359 backend tests pass at 83.74% coverage, Ruff, Ruff format, mypy,
+            and migration validation clean. This closes the P0 and clears AI-002's gate.
 - [ ] Close the inflected-keyword gap in the floor. "I've been thinking about ending my life"
       does not match `end my life` (substring matching, no stemming) while its Spanish mirror
       matches `quitarme la vida`; evolving anaphylaxis ("lips swelling, throat tight") and
