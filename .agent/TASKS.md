@@ -1488,11 +1488,40 @@ through an authorized clinical decision.
 
 ### SCH-001 — Appointment lifecycle
 
-- [ ] Clinician or approved workflow proposes slots.
-- [ ] Patient accepts, declines, or requests alternatives.
-- [ ] Confirmed appointment appears in both portals.
-- [ ] Support calendar export and timezone-safe rendering.
+**Status:** `[/]` In progress
+
+**Owner:** Tushar Singh
+
+**Approach:** Delivered in vertical slices. Slice 1 (propose → accept/decline) is
+implemented on branch `feature/sch-001-appointment-proposal-lifecycle`; Slices 2–4
+(reschedule/request-alternative, conflict/expiration/duplicate guards, calendar export and
+timezone-safe rendering) remain.
+
+- [/] Clinician or approved workflow proposes slots. A clinician-created appointment now
+      starts as `proposed` (migration `038` adds the `proposed`/`confirmed`/`declined`
+      statuses); an approved-workflow proposal path is not yet built.
+- [/] Patient accepts, declines, or requests alternatives. Accept (`confirmed`) and decline
+      (`declined`) are delivered via `POST /appointments/{id}/respond` and the patient-portal
+      Visits page; "request alternatives" is Slice 2.
+- [/] Confirmed appointment appears in both portals. The patient-portal Visits page renders
+      proposed/upcoming/past groups; the clinician-portal view is not yet built.
+- [ ] Support calendar export and timezone-safe rendering. (Slice 4; dates currently render
+      in the browser's local time.)
 - [ ] Handle conflicts, cancellation, rescheduling, expiration, and duplicate confirmation.
+      (Slices 2–3; a server-side guard already blocks responding to a non-`proposed`
+      appointment, which prevents double-confirmation.)
+
+**Slice 1 verification — local**
+
+- Backend: `038_appointment_proposal_lifecycle.sql` validated (39 migrations); Ruff, mypy,
+  and the full backend suite pass (1,324 tests, 83.7% coverage). New tests:
+  `tests/unit/services/test_appointment_service.py` (transitions and guard rails) and
+  `tests/integration/routers/test_appointments_respond_api.py` (route + validation).
+- Patient portal: ESLint clean; new tests `__tests__/visits-page.test.tsx` and
+  `__tests__/appointments-service.test.ts` pass. Pre-existing `pdfjs-dist` install gap causes
+  four unrelated test files and the typecheck to fail; not caused by this change.
+- Migration `038` applied to `medi-agent-stage` and the propose → accept/decline flow was
+  exercised live in the patient portal.
 
 ### COM-001 — Care-team communication and notifications
 
