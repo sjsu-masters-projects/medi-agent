@@ -381,6 +381,7 @@ def _ensure_patient_content(
     patient_id: str,
     clinician_id: str,
     care_team_id: str,
+    clinician_name: str,
 ) -> None:
     for condition in patient.conditions:
         _ensure_row(
@@ -445,7 +446,10 @@ def _ensure_patient_content(
                 {
                     "patient_id": patient_id,
                     "care_team_id": care_team_id,
-                    "clinician_name": patient.assigned_provider_source_id,
+                    # The patient reads this value directly, so it must be the
+                    # clinician's name. It previously stored the fixture's internal
+                    # provider id, which surfaced as "SYN-PROV-001" in the portal.
+                    "clinician_name": clinician_name,
                     "scheduled_at": event.timestamp,
                     "appointment_type": "follow_up",
                     "reason": event.summary,
@@ -474,6 +478,7 @@ def seed(client: Any, password: str) -> None:
     staff_ids = _ensure_staff(client, fixture, password, clinic_ids)
     patient_ids = _ensure_patients(client, fixture, password)
     care_team_ids = _ensure_care_teams(client, fixture, patient_ids, staff_ids)
+    staff_names = {staff.source_id: staff.display_label for staff in fixture.staff}
     for patient in fixture.patients:
         care_team_id = care_team_ids[(patient.source_id, patient.assigned_provider_source_id)]
         _ensure_patient_content(
@@ -482,6 +487,7 @@ def seed(client: Any, password: str) -> None:
             patient_ids[patient.source_id],
             staff_ids[patient.assigned_provider_source_id],
             care_team_id,
+            staff_names[patient.assigned_provider_source_id],
         )
 
 
