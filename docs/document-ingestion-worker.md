@@ -8,7 +8,7 @@ OCR, call extraction, and write candidate facts.
 ## Before enabling it
 
 1. Apply migrations `034_document_ingestion_safety.sql` through
-   `038_document_summary_lifecycle.sql` using the normal reviewed migration path.
+   `039_document_summary_retry_schedule.sql` using the normal reviewed migration path.
    Do not apply them from a developer machine against a shared environment.
 2. Build the normal backend image. It now includes Tesseract plus `eng` and
    `spa` language data; the worker uses the same image with a different command.
@@ -122,15 +122,21 @@ record — and a retry costs one generation call, not another extraction.
 | `summary_status` | Meaning |
 |---|---|
 | `not_required` | The document has no grounded candidate to explain. Generating prose here would be invention, so none is attempted. |
-| `pending` | Owed. The next Job execution claims it; `summary_failure_code` names why the previous attempt did not finish. |
+| `pending` | Owed. The next eligible Job execution claims it; `summary_failure_code` names why the previous attempt did not finish. |
 | `processing` | Claimed by a running execution. |
 | `ready` | `ai_summary` holds the explanation and `summary_prompt_version` records what produced it. |
 | `failed` | Not retried automatically. A clinician assigned to the patient can requeue it. |
 
 A provider outage leaves the row `pending` with `summary_failure_code =
-'provider_unavailable'`, so it recovers on its own; `claim_pending_document_summary` caps
-that at three attempts and then marks the row `failed` with `attempt_limit_reached`. An
-empty model response fails immediately, because repeating an identical prompt over
+'provider_unavailable'` and `summary_next_attempt_at`. Automatic retries wait for recorded
+two- then five-minute backoff. A third provider failure becomes the visible terminal
+`attempt_limit_reached` state; it does not schedule a fourth model call. Fresh first attempts
+normally take priority over retries, but a retry that has been due for 15 minutes moves into an
+anti-starvation lane ahead of fresh work. This prevents one provider-failed document from
+repeatedly consuming a small batch while a newly extracted document waits, without allowing a
+sustained upload stream to strand an eligible retry. The claim uses a ten-minute lease: an
+execution that stops after claiming work is returned safely to `pending`.
+An empty model response fails immediately, because repeating an identical prompt over
 identical candidates would only repeat it.
 
 `enqueue_document_summary_retry` backs the clinician retry action and resets the attempt
@@ -145,7 +151,8 @@ plus the retry action when the row is `failed`.
 ```sql
 -- Explanations that are owed or unavailable, and why.
 select id, parse_status, summary_status, summary_failure_code,
-       summary_attempts, summary_last_attempt_at, summary_prompt_version
+       summary_attempts, summary_last_attempt_at, summary_next_attempt_at,
+       summary_prompt_version
 from public.documents
 where parse_status = 'completed'
   and summary_status in ('pending', 'processing', 'failed')
@@ -157,9 +164,10 @@ limit 20;
 
 `deploy-backend.yml` ships the image before migrations are applied by hand, so the code
 reaches production before these columns do. Every write and clinician-facing read of the
-summary lifecycle degrades to the pre-038 column set for that window: documents still
-reach their clinical terminal state, the clinician document list still loads, and owed
-explanations simply stay unclaimed until `038` is applied.
+summary lifecycle degrades safely during that window: if `038` is absent, documents still
+reach their clinical terminal state; if only `039` is absent, the existing `038` lifecycle
+continues without scheduling metadata. The clinician document list still loads, and owed
+explanations stay unclaimed only until the matching migration is applied.
 
 When a patient selects a document in chat, the server authorizes the document first and supplies
 only its bounded patient-facing summary to that single agent invocation. The model cannot choose a

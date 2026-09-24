@@ -75,8 +75,33 @@ async def test_provider_outage_stays_retryable_with_a_recorded_reason() -> None:
     # Pending, not failed: the next worker run retries it from the same candidates.
     assert outcome.status == "pending"
     assert outcome.failure_code == "provider_unavailable"
+    assert outcome.next_attempt_at is not None
     written = _written(db)
-    assert written == {"summary_status": "pending", "summary_failure_code": "provider_unavailable"}
+    assert written["summary_status"] == "pending"
+    assert written["summary_failure_code"] == "provider_unavailable"
+    assert written["summary_next_attempt_at"] == outcome.next_attempt_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_third_provider_outage_exposes_a_terminal_retry_state() -> None:
+    db = _db()
+    service = DocumentSummaryService(db, facts=_facts(*_candidate_facts()))
+    router = MagicMock()
+    router.generate_text = AsyncMock(side_effect=RuntimeError("GenerationProviderError"))
+
+    with patch("app.services.document_summary_service.get_router", return_value=router):
+        outcome = await service.generate(
+            document_id=DOCUMENT_ID,
+            patient_id=PATIENT_ID,
+            attempt=3,
+        )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_code == "attempt_limit_reached"
+    assert outcome.next_attempt_at is None
+    written = _written(db)
+    assert written["summary_status"] == "failed"
+    assert written["summary_next_attempt_at"] is None
 
 
 @pytest.mark.asyncio
@@ -92,7 +117,11 @@ async def test_empty_model_output_fails_rather_than_burning_attempts() -> None:
     assert outcome.status == "failed"
     assert outcome.failure_code == "summary_empty"
     # Nothing usable came back, so no explanation text is written at all.
-    assert _written(db) == {"summary_status": "failed", "summary_failure_code": "summary_empty"}
+    assert _written(db) == {
+        "summary_status": "failed",
+        "summary_failure_code": "summary_empty",
+        "summary_next_attempt_at": None,
+    }
 
 
 @pytest.mark.asyncio
@@ -156,6 +185,35 @@ def test_claim_returns_nothing_until_its_function_is_deployed() -> None:
     )
 
     assert DocumentSummaryService(db, facts=MagicMock()).claim_pending(limit=10) == []
+
+
+@pytest.mark.asyncio
+async def test_retry_schedule_degrades_without_losing_the_summary_lifecycle() -> None:
+    db = _db()
+    table = db.table.return_value
+    table.execute.side_effect = [
+        APIError(
+            {
+                "code": "PGRST204",
+                "message": "Could not find the 'summary_next_attempt_at' column",
+            }
+        ),
+        MagicMock(data=[]),
+    ]
+    service = DocumentSummaryService(db, facts=_facts(*_candidate_facts()))
+    router = MagicMock()
+    router.generate_text = AsyncMock(return_value="Your blood pressure medicine.")
+
+    with patch("app.services.document_summary_service.get_router", return_value=router):
+        outcome = await service.generate(document_id=DOCUMENT_ID, patient_id=PATIENT_ID)
+
+    assert outcome.status == "ready"
+    assert table.update.call_args.args[0] == {
+        "summary_status": "ready",
+        "summary_failure_code": None,
+        "ai_summary": "Your blood pressure medicine.",
+        "summary_prompt_version": SUMMARY_PROMPT_VERSION,
+    }
 
 
 def test_unrelated_database_errors_are_not_swallowed() -> None:

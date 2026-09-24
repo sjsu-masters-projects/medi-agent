@@ -194,6 +194,8 @@ interface PatientDeepDiveResponse
         ai_summary?: string;
         summary_status?: string;
         summary_failure_code?: string;
+        summary_attempts?: number;
+        summary_next_attempt_at?: string;
         created_at: string;
         uploaded_by_role: UploaderRole;
         clinician_annotation?: string;
@@ -222,6 +224,8 @@ interface DocumentReviewQueueItemResponse {
     ai_summary?: string;
     summary_status?: string;
     summary_failure_code?: string;
+    summary_attempts?: number;
+    summary_next_attempt_at?: string;
     source_clinic?: string;
     created_at: string;
     uploaded_by_role: UploaderRole;
@@ -376,6 +380,8 @@ function normalizePatientDocument(
         aiSummary: document.ai_summary,
         summaryStatus: document.summary_status,
         summaryFailureCode: document.summary_failure_code,
+        summaryAttempts: document.summary_attempts,
+        summaryNextAttemptAt: document.summary_next_attempt_at,
         createdAt: document.created_at,
         uploadedByRole: document.uploaded_by_role,
         clinicianAnnotation: document.clinician_annotation,
@@ -403,6 +409,8 @@ function normalizeDocumentReviewQueueItem(
         aiSummary: item.ai_summary,
         summaryStatus: item.summary_status,
         summaryFailureCode: item.summary_failure_code,
+        summaryAttempts: item.summary_attempts,
+        summaryNextAttemptAt: item.summary_next_attempt_at,
         sourceClinic: item.source_clinic,
         createdAt: item.created_at,
         uploadedByRole: item.uploaded_by_role,

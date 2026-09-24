@@ -1208,8 +1208,10 @@ resources remain evidence-only and do not create local truth.
 - [x] Deploy `mediagent-document-ingestion` in `us-central1` with one task, parallelism one,
       2 GiB memory, a 300-second timeout, no platform retries, and the server-only worker
       command.
-- [x] Apply migrations through `037_document_source_previews.sql`; schema-ledger and required
-      table verification passed on 2026-09-20.
+- [x] Apply migrations through `038_document_summary_lifecycle.sql`; the deployed migration
+      ledger recorded it on 2026-09-24. The current verifier also found one historical
+      `038_appointment_proposal_lifecycle.sql` entry absent from this checkout; reconcile that
+      ledger drift before treating a raw migration-count check as release evidence.
 - [x] Confirm the backend service and Job release configuration resolve to the same merged image
       digest, and that a manual born-digital PDF plus scanned-Spanish raster execution complete
       with source-backed pending candidates.
@@ -1252,6 +1254,19 @@ resources remain evidence-only and do not create local truth.
       portal passes 86 tests and the clinician portal 85, both with lint and typecheck. The 2026-09-20
       TIFF run is the case this addresses; re-running it in the deployed environment is part of
       the remaining acceptance steps below.
+- [/] Make explanation retries fair and observable. The 2026-09-24 manual Job successfully
+      extracted and previewed Maya's two-frame TIFF, but with `DOCUMENT_INGESTION_BATCH_SIZE=1`
+      its single explanation claim selected an older provider-failed document first. Migration
+      `039_document_summary_retry_schedule.sql` adds a durable next-attempt timestamp, delayed
+      provider retries with a bounded anti-starvation lane, expired-claim lease recovery, and
+      clinician-visible retry state. It preserves the existing care-team-gated retry action and
+      never re-runs OCR or changes candidates. Deploy, migrate, and verify this path before
+      scheduling.
+- [ ] Establish production capacity and alerting before scheduling: choose independent bounded
+      ingestion/summary batch budgets and concurrency from observed provider limits; monitor
+      queue age, claim delay, provider-failure rate, automatic-attempt exhaustion, Job start
+      delay, and execution overlap; page an operator when a document or explanation exceeds its
+      operational objective. Do not treat a manual one-item Job as production throughput.
 - [ ] Only then create `mediagent-document-ingestion-every-5m` in `us-central1` with
       `*/5 * * * *`, timezone `America/Los_Angeles`, and a dedicated Scheduler identity limited
       to `roles/run.invoker` on this Job. Monitor overlap and queue delay; database claiming
@@ -1268,11 +1283,13 @@ resources remain evidence-only and do not create local truth.
    are denied. In a separate unassigned synthetic user session, verify neither portal/API path
    reveals the TIFF or its derived preview; confirm the denial is audited without leaking source
    existence. Record elapsed Job durations for both runs.
-4. Apply migration `038_document_summary_lifecycle.sql`, then re-run the TIFF whose optional
-   summary failed on 2026-09-20. Confirm the explanation reaches `ready`, or that a forced
-   provider failure leaves a named reason that both portals show and that the clinician retry
-   action clears. The document's `parse_status`, stored source, and candidate facts must be
-   unchanged across every one of those outcomes.
+4. Deploy and apply migrations `038_document_summary_lifecycle.sql` and
+   `039_document_summary_retry_schedule.sql`, then run a fresh synthetic TIFF. Confirm its
+   explanation reaches `ready`; a forced provider failure must record a named reason, schedule
+   a delayed retry, leave fresh explanations eligible ahead of that retry, and eventually expose
+   the care-team-gated clinician retry action after bounded automatic attempts. The document's
+   `parse_status`, stored source, preview, and candidate facts must be unchanged across every
+   one of those outcomes.
 5. Only when those results are safe and comfortably below five minutes, configure the Scheduler
    trigger described above and observe its first executions.
 

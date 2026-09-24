@@ -70,6 +70,7 @@ class DocumentIngestionWorker:
                 outcome = await self._summaries.generate(
                     document_id=UUID(str(claim["document_id"])),
                     patient_id=UUID(str(claim["patient_id"])),
+                    attempt=int(claim.get("attempt") or 1),
                 )
             except Exception:  # noqa: BLE001 - an optional explanation never fails the Job
                 logger.exception(

@@ -18,12 +18,16 @@ from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus, UploaderRole
-from app.services.document_summary_service import is_missing_summary_column_error
+from app.services.document_summary_service import (
+    is_missing_summary_column_error,
+    is_missing_summary_schedule_column_error,
+)
 
 # Migration 038 is applied by hand after this image deploys. Naming the summary columns
 # in a select would make the clinician's document list fail outright during that window,
 # so each read degrades to the pre-038 column set and the API schema supplies defaults.
-_SUMMARY_COLUMNS = "summary_status, summary_failure_code, "
+_SUMMARY_LIFECYCLE_COLUMNS = "summary_status, summary_failure_code, summary_attempts, "
+_SUMMARY_COLUMNS = f"{_SUMMARY_LIFECYCLE_COLUMNS}summary_next_attempt_at, "
 
 
 class ClinicianDocumentWorkflowService:
@@ -163,6 +167,9 @@ class ClinicianDocumentWorkflowService:
         try:
             result = await self._execute(build(_SUMMARY_COLUMNS))
         except APIError as exc:
+            if is_missing_summary_schedule_column_error(exc):
+                result = await self._execute(build(_SUMMARY_LIFECYCLE_COLUMNS))
+                return cast(list[dict[str, Any]], result.data or [])
             if not is_missing_summary_column_error(exc):
                 raise
             result = await self._execute(build(""))

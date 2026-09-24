@@ -43,6 +43,7 @@ class DocumentRead(BaseModel):
     summary_status: str = "not_required"
     summary_failure_code: str | None = None
     summary_attempts: int = 0
+    summary_next_attempt_at: str | None = None
     source_clinic: str | None = None
     visibility: DocumentVisibility = DocumentVisibility.ALL_PROVIDERS
     review_status: DocumentReviewStatus | None = None

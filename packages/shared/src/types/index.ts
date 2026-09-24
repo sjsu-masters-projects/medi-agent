@@ -435,6 +435,8 @@ export interface ClinicianPatientDocument {
     /** Lifecycle of the optional patient explanation, independent of parseStatus. */
     summaryStatus?: string;
     summaryFailureCode?: string;
+    summaryAttempts?: number;
+    summaryNextAttemptAt?: string;
     createdAt: string;
     uploadedByRole: UploaderRole;
     clinicianAnnotation?: string;
@@ -458,6 +460,8 @@ export interface DocumentReviewQueueItem {
     aiSummary?: string;
     summaryStatus?: string;
     summaryFailureCode?: string;
+    summaryAttempts?: number;
+    summaryNextAttemptAt?: string;
     sourceClinic?: string;
     createdAt: string;
     uploadedByRole: UploaderRole;

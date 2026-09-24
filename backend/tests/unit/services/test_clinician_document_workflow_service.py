@@ -179,6 +179,32 @@ async def test_patient_documents_carry_the_summary_lifecycle(service, execute):
 
 
 @pytest.mark.asyncio
+async def test_documents_keep_the_existing_lifecycle_before_retry_schedule_migration(
+    service, execute
+):
+    """A missing 039 column must not hide the already deployed 038 lifecycle."""
+    from postgrest.exceptions import APIError
+
+    execute.side_effect = [
+        APIError(
+            {
+                "code": "42703",
+                "message": "column documents.summary_next_attempt_at does not exist",
+            }
+        ),
+        _response(data=[{"id": str(uuid4()), "summary_status": "pending"}]),
+        _response(data=[]),
+    ]
+
+    documents = await service.fetch_patient_documents(uuid4())
+
+    assert documents[0]["summary_status"] == "pending"
+    selected = service.db.table.return_value.select.call_args.args[0]
+    assert "summary_status" in selected
+    assert "summary_next_attempt_at" not in selected
+
+
+@pytest.mark.asyncio
 async def test_documents_still_load_before_migration_038_is_applied(service, execute):
     """Naming an undeployed column must not take the clinician's document list down."""
     from postgrest.exceptions import APIError

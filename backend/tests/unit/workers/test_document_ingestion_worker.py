@@ -1,6 +1,7 @@
 """The durable worker continues a batch after an individual document fails."""
 
 from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 
 import pytest
 
@@ -80,6 +81,11 @@ async def test_owed_explanations_are_claimed_separately_from_ingestion() -> None
         "claim_pending_document_summary",
     ]
     assert worker._service.ingest_document.await_count == 2
+    worker._summaries.generate.assert_awaited_once_with(
+        document_id=UUID("00000000-0000-0000-0000-000000000005"),
+        patient_id=UUID("00000000-0000-0000-0000-000000000006"),
+        attempt=2,
+    )
 
 
 @pytest.mark.asyncio
