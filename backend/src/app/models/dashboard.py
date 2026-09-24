@@ -133,6 +133,8 @@ class PatientDocumentRead(BaseModel):
     ai_summary: str | None = None
     summary_status: str = "not_required"
     summary_failure_code: str | None = None
+    summary_attempts: int = 0
+    summary_next_attempt_at: str | None = None
     created_at: str
     uploaded_by_role: UploaderRole
     clinician_annotation: str | None = None
@@ -158,6 +160,8 @@ class DocumentReviewQueueItem(BaseModel):
     ai_summary: str | None = None
     summary_status: str = "not_required"
     summary_failure_code: str | None = None
+    summary_attempts: int = 0
+    summary_next_attempt_at: str | None = None
     source_clinic: str | None = None
     created_at: str
     uploaded_by_role: UploaderRole

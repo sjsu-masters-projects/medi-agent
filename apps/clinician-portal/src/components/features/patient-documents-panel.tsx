@@ -164,6 +164,17 @@ export function PatientDocumentsPanel({
         if (document.summaryStatus === "not_required") {
             return "No extracted information in this document needs a patient explanation.";
         }
+        if (document.summaryStatus === "processing") {
+            return "The patient explanation is being generated. The clinical extraction and review candidates are unaffected.";
+        }
+        if (document.summaryFailureCode === "provider_unavailable") {
+            const attempt = document.summaryAttempts ?? 0;
+            const attemptLabel = attempt > 0 ? ` (attempt ${attempt} of 3)` : "";
+            if (document.summaryNextAttemptAt) {
+                return `The patient explanation will retry automatically${attemptLabel}. The clinical extraction and review candidates are unaffected.`;
+            }
+            return `The patient explanation is being prepared${attemptLabel}. The clinical extraction and review candidates are unaffected.`;
+        }
         return "The patient explanation has not been generated yet. It is queued and does not block review.";
     }
 

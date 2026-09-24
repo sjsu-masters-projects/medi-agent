@@ -87,10 +87,10 @@ src/app/
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`. The repository currently has
-`001`–`036`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
-and document-ingestion worker controls. The migration ledger records full filenames and
-checksums, including the two distinct `011` files; do not maintain a second migration inventory
-here.
+`001`–`039`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
+document-ingestion worker controls, private TIFF previews, and the independent patient-explanation
+retry lifecycle. The migration ledger records full filenames and checksums, including the two
+distinct `011` files; do not maintain a second migration inventory here.
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 

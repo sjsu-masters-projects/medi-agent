@@ -262,4 +262,32 @@ describe("PatientDocumentsPanel", () => {
             screen.queryByRole("button", { name: /retry patient explanation/i }),
         ).not.toBeInTheDocument();
     });
+
+    it("shows an automatic retry state without offering a duplicate retry", () => {
+        render(
+            <PatientDocumentsPanel
+                documents={[
+                    {
+                        id: "doc-retrying",
+                        fileName: "follow-up.tiff",
+                        documentType: "other",
+                        parseStatus: "completed",
+                        summaryStatus: "pending",
+                        summaryFailureCode: "provider_unavailable",
+                        summaryAttempts: 1,
+                        summaryNextAttemptAt: "2026-04-21T10:02:00Z",
+                        createdAt: "2026-04-21T10:00:00Z",
+                        uploadedByRole: "clinician",
+                    },
+                ]}
+                onRefresh={vi.fn()}
+                patientId="patient-1"
+            />,
+        );
+
+        expect(screen.getByText(/will retry automatically \(attempt 1 of 3\)/i)).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: /retry patient explanation/i }),
+        ).not.toBeInTheDocument();
+    });
 });
