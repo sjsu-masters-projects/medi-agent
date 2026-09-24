@@ -173,10 +173,20 @@ class AppointmentType(StrEnum):
 
 
 class AppointmentStatus(StrEnum):
+    PROPOSED = "proposed"
+    CONFIRMED = "confirmed"
     SCHEDULED = "scheduled"
+    DECLINED = "declined"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     NO_SHOW = "no_show"
+
+
+class AppointmentResponseAction(StrEnum):
+    """How a patient responds to a proposed appointment."""
+
+    ACCEPT = "accept"
+    DECLINE = "decline"
 
 
 # ── Chat ───────────────────────────────────────────

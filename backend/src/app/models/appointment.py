@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import AppointmentStatus, AppointmentType
+from app.models.enums import AppointmentResponseAction, AppointmentStatus, AppointmentType
 
 
 class AppointmentCreate(BaseModel):
@@ -25,6 +25,10 @@ class AppointmentUpdate(BaseModel):
     reason: str | None = None
     notes: str | None = None
     status: AppointmentStatus | None = None
+
+
+class AppointmentResponse(BaseModel):
+    action: AppointmentResponseAction
 
 
 class AppointmentRead(BaseModel):

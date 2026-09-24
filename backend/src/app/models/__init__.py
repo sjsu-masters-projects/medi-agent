@@ -3,7 +3,12 @@
 # Enums (single source of truth for categorical values)
 from app.models.adherence import AdherenceLog, AdherenceLogRead, AdherenceStats
 from app.models.adr import ADRAssessmentRead, MedWatchDraft
-from app.models.appointment import AppointmentCreate, AppointmentRead, AppointmentUpdate
+from app.models.appointment import (
+    AppointmentCreate,
+    AppointmentRead,
+    AppointmentResponse,
+    AppointmentUpdate,
+)
 from app.models.care_team import CareTeamCreate, CareTeamRead
 from app.models.chat import ChatMessage, ChatMessageCreate
 from app.models.clinic import (
@@ -185,6 +190,7 @@ __all__ = [
     # Appointment
     "AppointmentCreate",
     "AppointmentRead",
+    "AppointmentResponse",
     "AppointmentUpdate",
     # Chat
     "ChatMessage",
