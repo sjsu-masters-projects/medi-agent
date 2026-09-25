@@ -1262,6 +1262,12 @@ resources remain evidence-only and do not create local truth.
       clinician-visible retry state. It preserves the existing care-team-gated retry action and
       never re-runs OCR or changes candidates. Deploy, migrate, and verify this path before
       scheduling.
+- [/] Add non-PHI execution telemetry for the document Job. Each run must record its Cloud Run
+      execution/task identity, configured batch size, claimed ingestion count and outcome counts,
+      plus explanation claim/ready/retry/terminal-failure/not-required counts. This closes the
+      2026-09-24 diagnostic blind spot where a successful Job logged a Gemini call but not which
+      queue phase made progress. Per-document identity and source content must stay out of logs;
+      operators reconcile a particular document through its durable lifecycle timestamps instead.
 - [ ] Establish production capacity and alerting before scheduling: choose independent bounded
       ingestion/summary batch budgets and concurrency from observed provider limits; monitor
       queue age, claim delay, provider-failure rate, automatic-attempt exhaustion, Job start

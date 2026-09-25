@@ -1,11 +1,13 @@
 """The durable worker continues a batch after an individual document fails."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
 
 from app.services.document_summary_service import SummaryOutcome
+from app.workers import document_ingestion
 from app.workers.document_ingestion import DocumentIngestionWorker
 
 INGESTION_CLAIMS = [
@@ -104,3 +106,87 @@ async def test_a_failed_explanation_never_fails_the_job() -> None:
     # `failed` drives the Job's exit code and counts clinical ingestion only.
     assert summary["failed"] == 0
     assert summary["completed"] == 2
+
+
+@pytest.mark.asyncio
+async def test_worker_counts_each_patient_explanation_outcome() -> None:
+    worker = DocumentIngestionWorker(_db(), batch_size=10)
+    worker._summaries.generate = AsyncMock(
+        side_effect=[
+            SummaryOutcome("ready", summary="Text."),
+            SummaryOutcome("pending", failure_code="provider_unavailable"),
+            SummaryOutcome("failed", failure_code="summary_empty"),
+            SummaryOutcome("not_required"),
+        ]
+    )
+    worker._summaries.claim_pending = MagicMock(
+        return_value=[
+            {
+                "document_id": f"00000000-0000-0000-0000-00000000000{index}",
+                "patient_id": "00000000-0000-0000-0000-000000000010",
+            }
+            for index in range(1, 5)
+        ]
+    )
+
+    counts = await worker.process_pending_summaries()
+
+    assert counts == {
+        "summaries_claimed": 4,
+        "summaries_ready": 1,
+        "summaries_retry_scheduled": 1,
+        "summaries_failed": 1,
+        "summaries_not_required": 1,
+        "summaries_unhandled_failures": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_main_emits_non_phi_execution_lifecycle_logs(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    batch = MagicMock()
+    batch.process_batch = AsyncMock(
+        return_value={
+            "claimed": 0,
+            "completed": 0,
+            "needs_review": 0,
+            "failed": 0,
+            "summaries_claimed": 1,
+            "summaries_ready": 1,
+        }
+    )
+    monkeypatch.setattr(
+        document_ingestion, "DocumentIngestionWorker", MagicMock(return_value=batch)
+    )
+    monkeypatch.setattr(document_ingestion, "get_admin_client", MagicMock())
+    monkeypatch.setenv("CLOUD_RUN_EXECUTION", "test-execution")
+    monkeypatch.setenv("CLOUD_RUN_TASK_INDEX", "0")
+
+    with caplog.at_level("INFO"):
+        assert await document_ingestion.main() == 0
+
+    events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.getMessage().startswith("{")
+    ]
+    assert events == [
+        {
+            "batch_size": document_ingestion.settings.document_ingestion_batch_size,
+            "event": "document_ingestion_started",
+            "execution": "test-execution",
+            "task_index": "0",
+        },
+        {
+            "claimed": 0,
+            "completed": 0,
+            "event": "document_ingestion_finished",
+            "execution": "test-execution",
+            "failed": 0,
+            "needs_review": 0,
+            "summaries_claimed": 1,
+            "summaries_ready": 1,
+            "task_index": "0",
+        },
+    ]
