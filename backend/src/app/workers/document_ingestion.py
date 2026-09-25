@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 def _configure_worker_logging() -> None:
     """Emit this standalone Job's lifecycle logs at Cloud Run's INFO severity."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # httpx includes the complete request URL in its INFO records. Supabase URLs carry
+    # internal document and patient identifiers in path/query parameters, so lifecycle
+    # telemetry must not enable those request lines. Warnings and errors still reach
+    # Cloud Logging for operational diagnosis.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _log_execution(event: str, **fields: int | str) -> None:

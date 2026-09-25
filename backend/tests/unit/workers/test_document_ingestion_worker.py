@@ -1,6 +1,7 @@
 """The durable worker continues a batch after an individual document fails."""
 
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
@@ -190,3 +191,9 @@ async def test_main_emits_non_phi_execution_lifecycle_logs(
             "task_index": "0",
         },
     ]
+
+
+def test_worker_does_not_emit_http_request_urls_at_info_level() -> None:
+    document_ingestion._configure_worker_logging()
+
+    assert logging.getLogger("httpx").level == logging.WARNING
