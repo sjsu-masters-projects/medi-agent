@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 from typing import Any, cast
 from uuid import UUID
 
@@ -15,6 +17,22 @@ from app.services.document_summary_service import DocumentSummaryService
 from app.services.ingestion_service import IngestionService
 
 logger = logging.getLogger(__name__)
+
+
+def _configure_worker_logging() -> None:
+    """Emit this standalone Job's lifecycle logs at Cloud Run's INFO severity."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+
+def _log_execution(event: str, **fields: int | str) -> None:
+    """Write one non-PHI, machine-readable Cloud Run execution event."""
+    payload: dict[str, int | str] = {
+        "event": event,
+        "execution": os.getenv("CLOUD_RUN_EXECUTION", "local"),
+        "task_index": os.getenv("CLOUD_RUN_TASK_INDEX", "0"),
+        **fields,
+    }
+    logger.info("%s", json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
 class DocumentIngestionWorker:
@@ -64,7 +82,14 @@ class DocumentIngestionWorker:
         failure never changes the document's clinical result.
         """
         claims = self._summaries.claim_pending(limit=self._batch_size)
-        counts = {"summaries_claimed": len(claims), "summaries_ready": 0}
+        counts = {
+            "summaries_claimed": len(claims),
+            "summaries_ready": 0,
+            "summaries_retry_scheduled": 0,
+            "summaries_failed": 0,
+            "summaries_not_required": 0,
+            "summaries_unhandled_failures": 0,
+        }
         for claim in claims:
             try:
                 outcome = await self._summaries.generate(
@@ -77,18 +102,27 @@ class DocumentIngestionWorker:
                     "Unhandled patient explanation failure for document %s",
                     claim.get("document_id"),
                 )
+                counts["summaries_unhandled_failures"] += 1
                 continue
             if outcome.status == "ready":
                 counts["summaries_ready"] += 1
+            elif outcome.status == "pending":
+                counts["summaries_retry_scheduled"] += 1
+            elif outcome.status == "failed":
+                counts["summaries_failed"] += 1
+            elif outcome.status == "not_required":
+                counts["summaries_not_required"] += 1
         return counts
 
 
 async def main() -> int:
+    _configure_worker_logging()
+    _log_execution("document_ingestion_started", batch_size=settings.document_ingestion_batch_size)
     worker = DocumentIngestionWorker(
         get_admin_client(), batch_size=settings.document_ingestion_batch_size
     )
     summary = await worker.process_batch()
-    logger.info("Document ingestion batch finished: %s", summary)
+    _log_execution("document_ingestion_finished", **summary)
     return 1 if summary["failed"] else 0
 
 
