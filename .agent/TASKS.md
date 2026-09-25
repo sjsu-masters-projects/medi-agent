@@ -1268,6 +1268,8 @@ resources remain evidence-only and do not create local truth.
       2026-09-24 diagnostic blind spot where a successful Job logged a Gemini call but not which
       queue phase made progress. Per-document identity and source content must stay out of logs;
       operators reconcile a particular document through its durable lifecycle timestamps instead.
+      The worker must also suppress HTTP-client INFO request lines, because Supabase request URLs
+      can carry internal document and patient identifiers; warnings and errors remain observable.
 - [ ] Establish production capacity and alerting before scheduling: choose independent bounded
       ingestion/summary batch budgets and concurrency from observed provider limits; monitor
       queue age, claim delay, provider-failure rate, automatic-attempt exhaustion, Job start
