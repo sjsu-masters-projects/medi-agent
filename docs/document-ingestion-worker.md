@@ -74,9 +74,9 @@ order by cf.created_at desc;
 
 ## Scheduling after acceptance
 
-Do **not** create a Scheduler trigger until every synthetic acceptance check above has
-passed and the execution duration has been observed. Then create a Cloud Scheduler
-trigger for this Job with the following initial contract:
+For a production deployment, do **not** create a Scheduler trigger until every synthetic
+acceptance check above has passed and execution duration has been observed. Then create a
+Cloud Scheduler trigger for this Job with the following initial contract:
 
 - name: `mediagent-document-ingestion-every-5m`
 - Scheduler region: `us-central1`
@@ -84,6 +84,12 @@ trigger for this Job with the following initial contract:
 - timezone: `America/Los_Angeles`
 - invoker: a dedicated service account granted only `roles/run.invoker` on
   `mediagent-document-ingestion`
+
+**Master's-project demonstration exception (2026-09-26).** The project enabled this exact
+trigger after synthetic functional, viewer, expiry, cross-user-denial, and log-privacy checks.
+It uses `mediagent-doc-ingest-sched@medi-agent-490106.iam.gserviceaccount.com`, which has only
+`roles/run.invoker` on the Job. Capacity analysis, alerting, and load testing are explicitly
+deferred and must be completed before treating this schedule as production-ready.
 
 Cloud Scheduler invokes the Job's `:run` endpoint with OAuth. The Job's one task and
 parallelism limit apply within an execution, not across executions. The database claim
