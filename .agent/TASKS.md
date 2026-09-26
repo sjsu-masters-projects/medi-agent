@@ -25,19 +25,19 @@ A task is done only when its implementation, authorization, error handling, audi
 |---|---|---|
 | Repository | Main synchronized | Local `main` matches `origin/main`; current tracker verification is recorded on a separate documentation branch |
 | Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
-| Patient portal | Partial | Major screens exist; several workflows require real end-to-end completion |
-| Clinician portal | Partial | Dashboard/deep dive exist; consolidated review and action lifecycle incomplete |
-| Backend foundation | Partial | Broad API and test base; empty modules and reachable placeholders remain |
-| Records ingestion | Functional foundation | Needs provenance, correction, FHIR validation, and reconciliation hardening |
-| Chat and triage | Runtime delivered; acceptance in progress | Deterministic emergency handling and the Care Coordinator are live in the branch; bounded runtime deadlines and full journey tests remain |
+| Patient portal | Partial | Patients can view existing medications/obligations, documents, explanations, and basic feed/adherence statistics; no clinician-approved care-plan or complete adherence/barrier loop exists |
+| Clinician portal | Partial | Roster, patient deep dive, and document source viewer exist; document-fact review, consolidated action queues, and a longitudinal decision timeline are incomplete |
+| Backend foundation | Functional foundation | Versioned APIs, auth, RLS, audit, and worker services exist; several product lifecycles are not connected end to end |
+| Records ingestion | Demonstration-ready candidate pipeline | Secure document intake, evidence-backed candidates, TIFF previews, and retryable explanation lifecycle work; clinician review, reconciliation, and downstream approved-action projection remain incomplete |
+| Chat and triage | Partial | Deterministic emergency handling and the Care Coordinator are live; document-focused chat, durable safety-rule audit, and a websocket-token remediation remain open |
 | Document intelligence | Demonstration-ready | Synthetic PDF, scanned-Spanish, and multi-frame TIFF paths completed with evidence-backed candidates, private preview, expiry, and cross-user denial checks; the five-minute Job trigger is enabled for the master's-project demonstration |
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
-| Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
+| Scheduling and communication | Partial | Document ingestion is scheduled; appointments, approved clinical messaging, notification delivery/retry, and care-gap closure are incomplete |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
 | Dependency security | Clear as of 2026-09-09 | `next` 16.3.4 is on `main` and deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4) that were live on both portals; a fresh `npm ci` reports zero vulnerabilities on both lockfiles. Advisories published after the 2026-08-19 evidence invalidated it, so re-run `npm audit` at the start of each session rather than trusting this row |
-| Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
+| Demo data | Functional baseline | Canonical fictional fixture and live patient/clinician isolation checks exist; the fresh end-to-end care-plan scenario is PAT-005 work |
 
 **Tracker reconciliation — 2026-09-26.** Every named primary task was reviewed for status
 consistency. Existing completion marks were preserved only where the tracker carries implementation
@@ -45,6 +45,54 @@ or verification evidence; unverified work remains open. This update separates th
 document worker's demonstration acceptance from the independently incomplete document-chat
 product work, records the enabled five-minute scheduler, and selects the clinician-approved
 care-plan/Today-feed journey as the next vertical slice.
+
+## Product stage and functional gap map — 2026-09-26
+
+**Current stage:** a deployed, synthetic-data prototype with secure document ingestion and
+foundational patient/clinician surfaces. It is **not yet a closed-loop care product**: the system
+can safely read and explain a document, but it cannot yet take a clinician-reviewed instruction
+through an approved care-plan item, a patient action or barrier, and back into clinician follow-up.
+
+| Product journey | Demonstrably working now | Functional gap | Tracked work |
+| --- | --- | --- | --- |
+| Access and clinic boundaries | Synthetic patient/clinician login, assigned-care-team access, unassigned clinician denial, denial audit, private document URLs | WebSocket chat still places a session token in the URL; broader release security qualification remains | SEC-001, QUA-001 |
+| Document intake and understanding | PDF/image/TIFF ingestion, source provenance, evidence-backed pending candidates, private derived previews, plain-language explanation and retry lifecycle | No clinician document-fact review or authorized reconciliation-to-action journey | REC-001, PAT-005 |
+| Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish | Document-focused conversation lifecycle, some safety-audit persistence, and complete recovery journey remain open | PAT-001, PAT-004, SAFE-002 |
+| Today feed and adherence | Existing medication/obligation feed projection and adherence statistics | No clinician-approved plan-item lifecycle; no end-to-end patient completion or barrier loop | PAT-002, PAT-005 |
+| Clinician action workspace | Roster, patient detail, source preview, basic document status | No extracted-facts review panel, consolidated queue, explainable risk, or unified timeline | PAT-005, CLN-001, CLN-002 |
+| Care closure | Document Job runs every five minutes; manual summary retry exists | No approved clinical messaging, appointment completion, notifications/retry, or care-gap follow-up loop | SCH-001, COM-001 |
+| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation | No completed multi-source reconciliation, ADR/Naranjo review, or MedWatch draft lifecycle | MED-001, MED-002, PV-001, PV-002 |
+| Interoperability and continuity | Deployed SMART-on-FHIR sandbox import with candidate provenance | Export, CDS Hooks, official MCP/A2A, multi-provider timeline, and handoff remain incomplete | INT-002, STD-001–003, CON-001 |
+| Bilingual and voice experience | `en-US`/`es-MX` safety-floor coverage and localized fallback exist | End-to-end language parity, clinician content review, and text-first voice lifecycle are incomplete | PAT-003, VOI-001 |
+
+**Selected next product outcome:** PAT-005 proves the smallest meaningful closed loop with a
+fresh fictional patient: clinician-authored source document → evidence-backed candidate →
+assigned clinician approval → deterministic Today item → patient completion or barrier →
+clinician-visible follow-up. The model may assist extraction and drafting but never publishes a
+patient-facing clinical instruction itself.
+
+### Product sequence from here
+
+1. **Now — PAT-005, the controlled Today-feed loop.** Prove that an approved clinician
+   instruction can become a safe, explainable daily item and return a patient response to the
+   care team. This is the first feature that joins the working document pipeline to a patient
+   outcome.
+2. **Next — finish the patient companion loop.** Complete document-focused conversations,
+   reliable recovery, structured adherence/symptom/barrier collection, and English/Spanish
+   acceptance coverage (PAT-001 through PAT-004 and SAFE-002). This makes the patient response
+   usable rather than a one-off demo interaction.
+3. **Then — make clinician work actionable.** Consolidate document, medication, symptom,
+   adherence, and proposed-action review with evidence and an explainable timeline (CLN-001,
+   CLN-002, MED-001, and MED-002). Do not expand autonomous AI behavior to compensate for a
+   missing clinical review surface.
+4. **After the closed loop works — add closure channels and differentiators.** Appointment and
+   approved-message workflows, notification recovery, ADR/MedWatch review, voice, multi-provider
+   continuity, FHIR export/CDS Hooks, and protocol conformance remain valuable later slices;
+   they should extend the proven loop rather than precede it.
+
+For the master's-project demonstration, prioritize this sequence over production-scale document
+throughput work. The five-minute document Job is enabled to support the controlled scenario; it
+does not turn a document-processing component into the product outcome.
 
 ## Active task
 
