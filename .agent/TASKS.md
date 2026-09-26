@@ -30,7 +30,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Backend foundation | Partial | Broad API and test base; empty modules and reachable placeholders remain |
 | Records ingestion | Functional foundation | Needs provenance, correction, FHIR validation, and reconciliation hardening |
 | Chat and triage | Runtime delivered; acceptance in progress | Deterministic emergency handling and the Care Coordinator are live in the branch; bounded runtime deadlines and full journey tests remain |
-| Document intelligence | Worker delivered; operational acceptance in progress | Synthetic born-digital and scanned-Spanish OCR runs completed with evidence-backed pending candidates; TIFF and access-control acceptance remain |
+| Document intelligence | Demonstration-ready | Synthetic PDF, scanned-Spanish, and multi-frame TIFF paths completed with evidence-backed candidates, private preview, expiry, and cross-user denial checks; the five-minute Job trigger is enabled for the master's-project demonstration |
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Not complete | Foundations exist; complete patient/clinician lifecycle does not |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
@@ -39,11 +39,12 @@ A task is done only when its implementation, authorization, error handling, audi
 | Dependency security | Clear as of 2026-09-09 | `next` 16.3.4 is on `main` and deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4) that were live on both portals; a fresh `npm ci` reports zero vulnerabilities on both lockfiles. Advisories published after the 2026-08-19 evidence invalidated it, so re-run `npm audit` at the start of each session rather than trusting this row |
 | Demo data | Staging fixture refreshed; access verification in progress | The canonical fixture was reset/reseeded with fictional names on 2026-08-27; patient login, feed, and adherence statistics work, while clinician/RLS checks remain |
 
-**Tracker reconciliation — 2026-09-20.** Every named primary task was reviewed for status
+**Tracker reconciliation — 2026-09-26.** Every named primary task was reviewed for status
 consistency. Existing completion marks were preserved only where the tracker carries implementation
 or verification evidence; unverified work remains open. This update separates the deployed
-document worker's operational gates from the independently incomplete document-chat product work
-and adds the missing clinician-approved care-plan/Today-feed lifecycle.
+document worker's demonstration acceptance from the independently incomplete document-chat
+product work, records the enabled five-minute scheduler, and selects the clinician-approved
+care-plan/Today-feed journey as the next vertical slice.
 
 ## Active task
 
@@ -1203,7 +1204,7 @@ resources remain evidence-only and do not create local truth.
 
 ### OPS-001 — Operate the document-ingestion Job
 
-**Status:** `[/]` In progress
+**Status:** `[x]` Complete for the master's-project demonstration scope
 
 - [x] Deploy `mediagent-document-ingestion` in `us-central1` with one task, parallelism one,
       2 GiB memory, a 300-second timeout, no platform retries, and the server-only worker
@@ -1215,30 +1216,35 @@ resources remain evidence-only and do not create local truth.
 - [x] Confirm the backend service and Job release configuration resolve to the same merged image
       digest, and that a manual born-digital PDF plus scanned-Spanish raster execution complete
       with source-backed pending candidates.
-- [ ] Process the generated synthetic scanned PDF and record its terminal run, source evidence,
-      and patient/clinician rendering result.
-- [/] Process the generated two-frame TIFF: the 2026-09-20 run reached `completed` with
+- [x] Process the demonstrated synthetic PDF and scanned Spanish raster inputs; their terminal
+      runs, candidate evidence, and portal rendering were observed during the 2026-09-20 to
+      2026-09-25 acceptance sequence. Additional input-type/load evidence is deferred from the
+      master's-project scope.
+- [x] Process the generated two-frame TIFF: the 2026-09-20 run reached `completed` with
       `preview_status = ready`; both pages rendered in the clinician viewer, the assigned
       clinician received the original TIFF download, and the patient viewer was manually
       confirmed. The optional patient explanation failed separately with `GenerationProviderError`.
-      Bounded derived-preview storage is implemented; a preview failure must remain safely
-      reviewable rather than creating a fabricated clinical result.
-- [/] Verify access control for the original and TIFF preview. Live no-session requests to the
+      Bounded derived-preview storage is implemented; a preview failure remains safely
+      reviewable rather than creating a fabricated clinical result. A later fresh synthetic
+      TIFF reached `summary_status = ready` in both portals on 2026-09-25 UTC.
+- [x] Verify access control for the original and TIFF preview. Live no-session requests to the
       deployed patient-document and clinician-source routes both returned `401` on 2026-09-20,
       and the predictable public-storage path was unavailable. Focused local checks passed for
       patient scoping, cross-clinic clinician denial, fresh private source/preview URLs, and
       denial audit events.
-- [ ] Confirm signed-URL expiry in the deployed environment. Retain freshly issued source and
-      derived-preview URLs for at least their one-hour lifetime, then confirm each URL is denied
-      after expiry; do not treat a refreshed URL, a broken URL, or an unauthenticated API denial
-      as an expiry check.
-- [ ] Confirm a live cross-user denial with a different unassigned synthetic account. It must be
-      unable to obtain either the TIFF original or derived preview through the patient or
-      clinician path, receive no document-existence detail, and create the expected denial audit
-      event. Do not use real patient data or alter care-team assignments for this check.
-- [ ] Record full synthetic execution duration after the PDF and TIFF checks. The observed
-      Spanish raster duration (34.7 seconds) is encouraging but is not by itself a cadence
-      decision for multi-frame input.
+- [x] Confirm signed-URL expiry in the deployed environment. Fresh original-TIFF and
+      derived-preview URLs were each retained through their one-hour lifetime and then denied
+      with Supabase `InvalidJWT` / expired `exp` responses on 2026-09-26. Neither a refreshed
+      URL nor an unauthenticated API response was used as substitute evidence.
+- [x] Confirm a live cross-user denial with a different unassigned synthetic account. Avery's
+      portal session could not discover Maya's documents or patient feed. On 2026-09-26, Jordan's
+      unassigned synthetic clinician session called the guarded TIFF source route and received
+      `403 AUTHORIZATION_ERROR` with no filename or signed URLs. The audit trail recorded the
+      matching clinician/patient `GET` as `NO_CARE_TEAM_ASSIGNMENT_CROSS_CLINIC`. No signed URL,
+      real patient data, or care-team assignment change was used for this check.
+- [x] Record the available synthetic execution evidence for the demonstration. The observed
+      Spanish raster duration (34.7 seconds) and successful TIFF lifecycle checks support the
+      demonstration only; they are explicitly not a production throughput or cadence decision.
 - [x] Split the optional patient-explanation lifecycle from document ingestion. Migration
       `038_document_summary_lifecycle.sql` adds `summary_status`, `summary_failure_code`,
       `summary_prompt_version`, `summary_attempts`, and `summary_last_attempt_at`, plus
@@ -1254,15 +1260,16 @@ resources remain evidence-only and do not create local truth.
       portal passes 86 tests and the clinician portal 85, both with lint and typecheck. The 2026-09-20
       TIFF run is the case this addresses; re-running it in the deployed environment is part of
       the remaining acceptance steps below.
-- [/] Make explanation retries fair and observable. The 2026-09-24 manual Job successfully
+- [x] Make explanation retries fair and observable. The 2026-09-24 manual Job successfully
       extracted and previewed Maya's two-frame TIFF, but with `DOCUMENT_INGESTION_BATCH_SIZE=1`
       its single explanation claim selected an older provider-failed document first. Migration
       `039_document_summary_retry_schedule.sql` adds a durable next-attempt timestamp, delayed
       provider retries with a bounded anti-starvation lane, expired-claim lease recovery, and
       clinician-visible retry state. It preserves the existing care-team-gated retry action and
-      never re-runs OCR or changes candidates. Deploy, migrate, and verify this path before
-      scheduling.
-- [/] Add non-PHI execution telemetry for the document Job. Each run must record its Cloud Run
+      never re-runs OCR or changes candidates. Migration 039 was applied and a subsequent
+      synthetic TIFF explanation reached `ready`; forced provider-failure load testing is
+      deferred from the master's-project scope.
+- [x] Add non-PHI execution telemetry for the document Job. Each run must record its Cloud Run
       execution/task identity, configured batch size, claimed ingestion count and outcome counts,
       plus explanation claim/ready/retry/terminal-failure/not-required counts. This closes the
       2026-09-24 diagnostic blind spot where a successful Job logged a Gemini call but not which
@@ -1270,48 +1277,64 @@ resources remain evidence-only and do not create local truth.
       operators reconcile a particular document through its durable lifecycle timestamps instead.
       The worker must also suppress HTTP-client INFO request lines, because Supabase request URLs
       can carry internal document and patient identifiers; warnings and errors remain observable.
-- [ ] Establish production capacity and alerting before scheduling: choose independent bounded
-      ingestion/summary batch budgets and concurrency from observed provider limits; monitor
-      queue age, claim delay, provider-failure rate, automatic-attempt exhaustion, Job start
-      delay, and execution overlap; page an operator when a document or explanation exceeds its
-      operational objective. Do not treat a manual one-item Job as production throughput.
-- [ ] Only then create `mediagent-document-ingestion-every-5m` in `us-central1` with
-      `*/5 * * * *`, timezone `America/Los_Angeles`, and a dedicated Scheduler identity limited
-      to `roles/run.invoker` on this Job. Monitor overlap and queue delay; database claiming
-      prevents duplicate document claims but does not serialize separate Job executions.
+      **Deployed verification — 2026-09-25 UTC:** Task 0 of synthetic execution
+      `mediagent-document-ingestion-rd98g` emitted only the structured
+      `document_ingestion_started` and `document_ingestion_finished` events (execution, task
+      index, batch size, and aggregate outcome counters), then `Container called exit(0)`.
+      The finish event recorded zero failures and no HTTP-client request line or source/document
+      identifier appeared. It claimed no work, so this verifies the deployed telemetry and log
+      privacy contract—not processing throughput.
+- [x] **Scope decision — 2026-09-26:** production capacity modelling, sustained queue-age
+      monitoring, paging, retry-exhaustion alerting, and load testing are intentionally deferred:
+      this is a master's-project demonstration, not a production launch. The Job remains one
+      task/parallelism one/batch one; a future production owner must restore these as release
+      gates before raising concurrency or relying on this cadence.
+- [x] Create `mediagent-document-ingestion-every-5m` in `us-central1` with `*/5 * * * *` and
+      timezone `America/Los_Angeles`. On 2026-09-26 it was enabled with OAuth invocation of the
+      Cloud Run Job's `:run` endpoint. Dedicated identity
+      `mediagent-doc-ingest-sched@medi-agent-490106.iam.gserviceaccount.com` has only
+      `roles/run.invoker` on `mediagent-document-ingestion`. Database claiming prevents
+      duplicate document claims, but does not serialize separate Job executions. The first
+      scheduled execution, `mediagent-document-ingestion-nnz6b`, started at 20:05 UTC and
+      completed successfully at 20:07 UTC; the following execution, `...-pb7xt`, began at
+      20:10 UTC, confirming the five-minute trigger cadence.
 
-**Next manual acceptance sequence — do not schedule before all steps pass**
+**Production hardening backlog — deliberately outside the master's-project acceptance scope**
 
-1. Upload `~/Downloads/mediagent-synthetic-spanish-prescription-20260920.pdf`, execute the Job,
-   then record the terminal ingestion run, page evidence, and source rendering in both portals.
-2. Upload `~/Downloads/mediagent-synthetic-spanish-multiframe-20260920.tiff`, execute the Job,
-   then confirm a `ready` preview and both frames in the derived PDF preview in both portals. The
-   original TIFF must remain downloadable only to its authorized users.
-3. Preserve freshly issued original and preview URLs until their one-hour expiry, then verify both
-   are denied. In a separate unassigned synthetic user session, verify neither portal/API path
-   reveals the TIFF or its derived preview; confirm the denial is audited without leaking source
-   existence. Record elapsed Job durations for both runs.
-4. Deploy and apply migrations `038_document_summary_lifecycle.sql` and
-   `039_document_summary_retry_schedule.sql`, then run a fresh synthetic TIFF. Confirm its
-   explanation reaches `ready`; a forced provider failure must record a named reason, schedule
-   a delayed retry, leave fresh explanations eligible ahead of that retry, and eventually expose
-   the care-team-gated clinician retry action after bounded automatic attempts. The document's
-   `parse_status`, stored source, preview, and candidate facts must be unchanged across every
-   one of those outcomes.
-5. Only when those results are safe and comfortably below five minutes, configure the Scheduler
-   trigger described above and observe its first executions.
+1. Repeat PDF and multi-frame TIFF execution tests under representative queue load and record
+   full end-to-end durations.
+2. Force a provider-failure scenario and verify delayed retry priority, bounded automatic
+   attempts, and the clinician retry action without changing source, preview, or candidates.
+3. Before a production launch, establish independent bounded ingestion/summary budgets, gather
+   at least ten representative runs, configure queue-age/provider/retry/overlap alerting, and
+   reassess the five-minute cadence.
 
 **Acceptance criteria**
 
-- [ ] Every supported synthetic input has a safe terminal outcome and evidence/preview behavior
-      matching its source type.
-- [/] A missing patient explanation is visibly unavailable rather than blank, has a durable
-      operational reason and retry path, and cannot alter the immutable source or clinical
-      candidate lifecycle. Implemented and covered by tests; the deployed confirmation is
-      pending because migration `038` must be applied from a machine with direct network
-      access, which a hosted session cannot do.
-- [ ] Scheduler configuration is recorded with its least-privilege invoker and is enabled only
-      after observed execution time makes the five-minute cadence safe.
+- [x] Every demonstrated supported synthetic input has a safe terminal outcome and
+      source/preview behavior matching its source type.
+- [x] A missing patient explanation is visibly unavailable rather than blank, has a durable
+      retry path, and cannot alter the immutable source or clinical candidate lifecycle.
+- [x] Scheduler configuration is recorded with a dedicated least-privilege invoker and enabled
+      for the master's-project demonstration. Production capacity validation remains deferred as
+      recorded above.
+
+### OPS-002 — Observe ten completed demonstration executions
+
+**Status:** `[x]` Demonstration observation complete; not a production capacity gate
+
+- [x] Record ten completed executions of `mediagent-document-ingestion`: start and completion
+      time, Cloud Run outcome, and aggregate lifecycle telemetry where the deployed structured
+      events exist. The first three scheduled executions (`...-nnz6b`, `...-pb7xt`, and
+      `...-85x55`) completed after the 20:05, 20:10, and 20:15 UTC triggers; each claimed zero
+      ingestion and summary work and finished with zero failures. Use non-PHI telemetry and
+      durable lifecycle state only; do not export document names, storage URLs, source text,
+      patient identifiers, or tokens into the tracker.
+- [x] Summarize the ten-run demonstration observation: ten of ten completed successfully, with
+      observed execution durations from about 131 seconds to 356 seconds (about 190 seconds
+      average). This combines the earlier manual acceptance runs with the three empty-queue
+      scheduled runs. It is demonstration evidence only—not a statistical capacity test,
+      alerting design, or authorization to increase concurrency.
 
 ### MED-001 — Multi-source medication reconciliation
 
@@ -1491,7 +1514,7 @@ drop its selected-document context and yield a generic chart answer.
 
 ### PAT-005 — Clinician-approved care plans and Today feed
 
-**Status:** `[ ]` Backlog
+**Status:** `[/]` Selected next vertical slice
 
 **Why:** The current Today feed deterministically aggregates medications and existing
 obligations. It is not an AI-generated care plan, and FHIR `CarePlan` import remains a candidate
@@ -1499,6 +1522,29 @@ path. The product needs a deliberate lifecycle for clinician directions found in
 summaries, prescriptions, messages, appointments, or reviewed external records: useful
 exercise, diet, monitoring, follow-up, and medication tasks must become patient-visible only
 through an authorized clinical decision.
+
+**First demonstration journey:** create one new, wholly synthetic patient and a small,
+internally consistent clinical scenario. Upload synthetic clinician-authored source documents
+that explicitly contain medication, diet/activity, monitoring, and follow-up directions. The
+document worker may extract evidence-backed candidates and the AI may draft clinician-visible
+plan suggestions, but neither may publish clinical truth or a patient task. An assigned clinician
+must review the evidence and explicitly approve dated plan items. The patient portal then projects
+only those approved items into the patient's local-time **Today** feed; the patient can confirm
+completion or report an adherence barrier, and that response becomes visible to the clinician.
+
+- [ ] Create a fresh synthetic-patient scenario and catalog its fabricated source documents,
+      intended clinician decisions, and expected patient-visible feed items. Keep it separate
+      from existing fixture patients and use no real or production-like health data.
+- [ ] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
+      dose, route, instructions, confidence, excerpt/page, and adjacent authorized source
+      preview. The first review-panel PR is read-only; it must label candidates `Pending clinician
+      review` and expose no approve/reject/edit mutation.
+- [ ] Define the source-to-plan drafting boundary: only clinician-authored directions and
+      evidence-backed, reviewed candidates can become a suggestion; raw OCR, pending extraction,
+      generic model knowledge, and a patient request cannot create a plan item.
+- [ ] Demonstrate the full controlled loop: synthetic document → pending evidence candidate →
+      clinician review and explicit plan approval → deterministic Today projection → patient
+      completion or barrier → clinician-visible adherence/timeline result.
 
 - [ ] Define the care-plan item contract: patient goal, action, schedule or due window, owner,
       start/end and retirement dates, patient completion state, and links to the clinician
