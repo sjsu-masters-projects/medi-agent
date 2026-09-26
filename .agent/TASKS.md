@@ -1,6 +1,6 @@
 # MediAgent — August–December 2026 Execution Tracker
 
-> **Active plan:** [`specs/mediagent-revival-aug-dec-2026.md`](specs/mediagent-revival-aug-dec-2026.md)
+> **Active plan:** [`specs/pat-005-clinician-approved-today-feed-plan.md`](specs/pat-005-clinician-approved-today-feed-plan.md)
 >
 > **Baseline date:** 2026-08-18
 >
@@ -1562,7 +1562,13 @@ drop its selected-document context and yield a generic chart answer.
 
 ### PAT-005 — Clinician-approved care plans and Today feed
 
-**Status:** `[/]` Selected next vertical slice
+**Status:** `[/]` Claimed — controlled Today-feed loop
+
+**Owner:** Rajeev Chaurasia (integration, Supabase, backend) with clinician-portal and
+patient-portal review support.
+
+**Active implementation plan:**
+[`specs/pat-005-clinician-approved-today-feed-plan.md`](specs/pat-005-clinician-approved-today-feed-plan.md)
 
 **Why:** The current Today feed deterministically aggregates medications and existing
 obligations. It is not an AI-generated care plan, and FHIR `CarePlan` import remains a candidate
@@ -1580,40 +1586,42 @@ must review the evidence and explicitly approve dated plan items. The patient po
 only those approved items into the patient's local-time **Today** feed; the patient can confirm
 completion or report an adherence barrier, and that response becomes visible to the clinician.
 
+- [/] Persist the PAT-005 implementation specification and claim the staged backend, clinician,
+      patient, and verification work in this tracker.
 - [ ] Create a fresh synthetic-patient scenario and catalog its fabricated source documents,
       intended clinician decisions, and expected patient-visible feed items. Keep it separate
       from existing fixture patients and use no real or production-like health data.
-- [ ] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
+- [/] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
       dose, route, instructions, confidence, excerpt/page, and adjacent authorized source
       preview. The first review-panel PR is read-only; it must label candidates `Pending clinician
       review` and expose no approve/reject/edit mutation.
-- [ ] Define the source-to-plan drafting boundary: only clinician-authored directions and
+- [/] Define the source-to-plan drafting boundary: only clinician-authored directions and
       evidence-backed, reviewed candidates can become a suggestion; raw OCR, pending extraction,
       generic model knowledge, and a patient request cannot create a plan item.
-- [ ] Demonstrate the full controlled loop: synthetic document → pending evidence candidate →
+- [/] Demonstrate the full controlled loop: synthetic document → pending evidence candidate →
       clinician review and explicit plan approval → deterministic Today projection → patient
       completion or barrier → clinician-visible adherence/timeline result.
 
-- [ ] Define the care-plan item contract: patient goal, action, schedule or due window, owner,
+- [/] Define the care-plan item contract: patient goal, action, schedule or due window, owner,
       start/end and retirement dates, patient completion state, and links to the clinician
       instruction plus source evidence. Preserve plan versions and replacements rather than
       mutating history.
-- [ ] Build a clinician-side drafting surface. AI may synthesize *suggestions* only from
+- [/] Build a clinician-side drafting surface. AI may synthesize *suggestions* only from
       clinician-authored directions, approved recommendations, and evidence-backed reviewed
       candidates; pending document extraction, raw OCR, and generic medical knowledge cannot
       create a plan item or patient notification.
-- [ ] Require an assigned clinician to create, edit, approve, defer, retire, or reject every
+- [/] Require an assigned clinician to create, edit, approve, defer, retire, or reject every
       patient-facing item. Record actor, rationale, evidence, effective date, and all review
       changes; determine which actions require a second reviewer under SAFE-001 rather than
       letting the model or a patient self-approve a clinical direction.
-- [ ] Project only current approved items into the patient's Today feed by local timezone. Keep
+- [/] Project only current approved items into the patient's Today feed by local timezone. Keep
       this projection deterministic: it combines approved care-plan items, prescribed medication
       schedules, appointments, and clinician-sent follow-up tasks, never an LLM response at page
       load.
-- [ ] Present a plain-language patient view that identifies the care-team source, distinguishes
+- [/] Present a plain-language patient view that identifies the care-team source, distinguishes
       a clinician instruction from an informational suggestion, supports confirmation/barrier
       reporting where appropriate, and directs patients to their care team for changes.
-- [ ] Handle plan changes safely: supersede or cancel stale tasks, avoid duplicate reminders,
+- [/] Handle plan changes safely: supersede or cancel stale tasks, avoid duplicate reminders,
       retain previously completed activity, update both portal views, and test concurrent edits,
       reassignment, patient/clinic isolation, and stale browser state.
 
