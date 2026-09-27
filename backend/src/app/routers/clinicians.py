@@ -435,3 +435,16 @@ async def annotate_document(
     return await service.save_document_annotation(
         user.id, patient_id, document_id, data.annotation_text
     )
+
+
+@router.get(
+    "/me/patients/{patient_id}/documents/{document_id}/facts",
+    summary="List evidence-backed extracted facts for one document",
+)
+async def get_document_facts(
+    patient_id: UUID,
+    document_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.get_document_facts(user.id, patient_id, document_id)

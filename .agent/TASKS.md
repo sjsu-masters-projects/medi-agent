@@ -1598,9 +1598,10 @@ completion or report an adherence barrier, and that response becomes visible to 
 - [/] Define the source-to-plan drafting boundary: only clinician-authored directions and
       evidence-backed, reviewed candidates can become a suggestion; raw OCR, pending extraction,
       generic model knowledge, and a patient request cannot create a plan item.
-- [/] Demonstrate the full controlled loop: synthetic document → pending evidence candidate →
+- [/] Implement the controlled-loop contract: synthetic document → pending evidence candidate →
       clinician review and explicit plan approval → deterministic Today projection → patient
-      completion or barrier → clinician-visible adherence/timeline result.
+      completion or barrier → clinician-visible adherence/timeline result. The fresh synthetic
+      proof, approval-rollback exercise, and clinician follow-up acceptance remain open.
 
 - [/] Define the care-plan item contract: patient goal, action, schedule or due window, owner,
       start/end and retirement dates, patient completion state, and links to the clinician

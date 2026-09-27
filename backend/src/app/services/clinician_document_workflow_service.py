@@ -18,6 +18,7 @@ from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus, UploaderRole
+from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_summary_service import (
     is_missing_summary_column_error,
     is_missing_summary_schedule_column_error,
@@ -161,6 +162,20 @@ class ClinicianDocumentWorkflowService:
         )
 
         return {"status": "saved", "document_id": str(document_id)}
+
+    async def document_facts(
+        self, clinician_id: UUID, patient_id: UUID, document_id: UUID
+    ) -> list[dict[str, Any]]:
+        """Return evidence-backed candidates for one authorized source document."""
+        await self._assert_patient_assignment(clinician_id, patient_id)
+        await self._get_document_row(patient_id, document_id)
+        facts = ClinicalFactService(self.db).list_facts_for_document(document_id, patient_id)
+        payload: list[dict[str, Any]] = []
+        for fact in facts:
+            lineage = ClinicalFactService(self.db).get_lineage(UUID(str(fact["id"])), patient_id)
+            citations = lineage.get("citations") or []
+            payload.append({**fact, "citations": citations})
+        return payload
 
     async def _select_documents(self, build: Callable[[str], Any]) -> list[dict[str, Any]]:
         """Read documents with the summary lifecycle when the database has it."""

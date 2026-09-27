@@ -28,6 +28,8 @@ interface ApiFeedTask {
     requires_schedule_configuration?: boolean;
     requiresScheduleConfiguration?: boolean;
     provider?: ApiFeedProvider | null;
+    care_plan_item_id?: string | null;
+    carePlanItemId?: string | null;
 }
 
 interface ApiTodayFeedResponse {
@@ -75,6 +77,7 @@ function mapApiProvider(provider?: ApiFeedProvider | null): FeedTask["provider"]
 function mapApiTask(task: ApiFeedTask): FeedTask {
     return {
         completedAt: task.completedAt ?? task.completed_at ?? undefined,
+        carePlanItemId: task.carePlanItemId ?? task.care_plan_item_id ?? undefined,
         description: task.description ?? undefined,
         frequency: task.frequency,
         id: task.id,
@@ -140,6 +143,14 @@ export const feedSlice = createSlice({
             state.summary.missed = state.tasks.filter((task) => task.status === FeedTaskStatus.MISSED).length;
             state.summary.pending = state.tasks.filter((task) => task.status === FeedTaskStatus.PENDING).length;
         },
+        markTaskSkipped: (state, action: PayloadAction<{ taskId: string }>) => {
+            state.tasks = state.tasks.map((task) =>
+                task.id === action.payload.taskId ? { ...task, status: FeedTaskStatus.SKIPPED } : task,
+            );
+            state.summary.completed = state.tasks.filter((task) => task.status === FeedTaskStatus.COMPLETED).length;
+            state.summary.skipped = state.tasks.filter((task) => task.status === FeedTaskStatus.SKIPPED).length;
+            state.summary.pending = state.tasks.filter((task) => task.status === FeedTaskStatus.PENDING).length;
+        },
         setMissedTasks: (state, action: PayloadAction<string[]>) => {
             const missedIds = new Set(action.payload);
             state.tasks = state.tasks.map((task) =>
@@ -170,4 +181,4 @@ export const feedSlice = createSlice({
     },
 });
 
-export const { markTaskComplete, setMissedTasks } = feedSlice.actions;
+export const { markTaskComplete, markTaskSkipped, setMissedTasks } = feedSlice.actions;

@@ -1,5 +1,6 @@
 """Adherence tracking schemas."""
 
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -15,6 +16,9 @@ class AdherenceLog(BaseModel):
     status: AdherenceStatus
     scheduled_time: str | None = None
     notes: str | None = None
+    barrier_code: (
+        Literal["side_effects", "cost", "access", "schedule", "confusion", "other"] | None
+    ) = None
 
 
 class AdherenceLogRead(BaseModel):
@@ -25,6 +29,7 @@ class AdherenceLogRead(BaseModel):
     status: AdherenceStatus
     scheduled_time: str | None = None
     notes: str | None = None
+    barrier_code: str | None = None
     logged_at: str
 
 

@@ -515,6 +515,15 @@ class ClinicianService:
             med["reminder_schedule"] = reminder_map.get(("medication", str(med["id"])))
 
         adherence_series = await self._build_adherence_series(patient_id)
+        barriers_res = await self._execute(
+            self.db.table("adherence_logs")
+            .select("target_type, target_id, barrier_code, notes, logged_at")
+            .eq("patient_id", pid)
+            .not_.is_("barrier_code", "null")
+            .order("logged_at", desc=True)
+            .limit(20)
+        )
+        adherence_barriers = cast(list[dict[str, Any]], barriers_res.data or [])
 
         symptoms = await self._execute(
             self.db.table("symptom_reports")
@@ -596,6 +605,7 @@ class ClinicianService:
             "adherence_score": adherence_score,
             "medications": medications,
             "adherence_series": adherence_series,
+            "adherence_barriers": adherence_barriers,
             "symptom_reports": symptom_reports,
             "chat_messages": list(reversed(chat_messages)),
             "conditions": conditions,
@@ -680,6 +690,11 @@ class ClinicianService:
             document_id,
             annotation_text,
         )
+
+    async def get_document_facts(
+        self, clinician_id: UUID, patient_id: UUID, document_id: UUID
+    ) -> list[dict[str, Any]]:
+        return await self.document_workflows.document_facts(clinician_id, patient_id, document_id)
 
     async def get_patient_a2a_timeline(
         self,

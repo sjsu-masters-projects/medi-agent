@@ -217,6 +217,12 @@ class IngestionService:
             text_chars=text_chars,
             extraction_method=method,
         )
+        if registered.created:
+            # A generation request is durable and debounced by the worker.  The request
+            # contains no source text; drafting later reads only the registered, grounded facts.
+            from app.services.care_plan_service import CarePlanService
+
+            CarePlanService(self.db).request_generation(patient_id, datetime.now(UTC))
         return self._outcome(
             "completed",
             candidate_count=registered.created,

@@ -127,6 +127,13 @@ export interface PatientDeepDive {
     adherence_score: number;
     medications: Medication[];
     adherence_series: AdherenceDataPoint[];
+    adherence_barriers?: Array<{
+        target_type: string;
+        target_id: string;
+        barrier_code: string;
+        notes?: string | null;
+        logged_at: string;
+    }>;
     symptom_reports: SymptomReport[];
     chat_messages: Array<{
         role: typeof ChatRole[keyof typeof ChatRole];
@@ -168,6 +175,49 @@ export interface ClinicianDocumentSource {
     preview_url?: string | null;
     preview_mime_type?: string | null;
     preview_status?: string | null;
+}
+
+export interface ExtractedDocumentFact {
+    id: string;
+    fact_type: string;
+    value: Record<string, unknown>;
+    confidence_score?: number | null;
+    confidence_band?: string;
+    uncertainty?: string[];
+    review_state: string;
+    citations?: Array<{ excerpt?: string; location?: { page?: number } }>;
+}
+
+export interface CarePlanItem {
+    id: string;
+    source_fact_id?: string | null;
+    category: string;
+    title: string;
+    instructions: string;
+    frequency: string;
+    schedule: Record<string, unknown>;
+    medication: Record<string, unknown>;
+    confidence_score?: number | null;
+    uncertainty: string[];
+    conflict: Record<string, unknown>;
+    blocker_reason?: string | null;
+    is_removed: boolean;
+    source?: {
+        document_id?: string;
+        excerpt?: string;
+        location?: { page?: number };
+    } | null;
+}
+
+export interface CarePlanVersion {
+    id: string;
+    patient_id: string;
+    version_number: number;
+    status: "draft" | "approved" | "superseded" | "rejected" | "generation_failed";
+    generated_at?: string | null;
+    generation_error_code?: string | null;
+    approved_at?: string | null;
+    items: CarePlanItem[];
 }
 
 type ApiMedicationRecord = Partial<Medication> & Record<string, unknown>;
@@ -538,6 +588,57 @@ export async function fetchClinicianDocumentSource(
     return apiFetch<ClinicianDocumentSource>(
         `/api/v1/documents/patients/${patientId}/${documentId}/source`,
     );
+}
+
+/** List grounded facts for one document; this is a read-only review surface. */
+export async function fetchExtractedDocumentFacts(
+    patientId: string,
+    documentId: string,
+): Promise<ExtractedDocumentFact[]> {
+    return apiFetch<ExtractedDocumentFact[]>(
+        `/api/v1/clinicians/me/patients/${patientId}/documents/${documentId}/facts`,
+    );
+}
+
+export async function fetchClinicianCarePlan(patientId: string): Promise<CarePlanVersion | null> {
+    return apiFetch<CarePlanVersion | null>(`/api/v1/care-plans/clinician/patients/${patientId}`);
+}
+
+export async function updateClinicianCarePlan(
+    patientId: string,
+    planId: string,
+    items: Array<{
+        id: string;
+        title: string;
+        instructions: string;
+        frequency: string;
+        schedule: Record<string, unknown>;
+        medication: Record<string, unknown>;
+        is_removed: boolean;
+        clinician_confirmed: boolean;
+    }>,
+): Promise<CarePlanVersion> {
+    return apiFetch<CarePlanVersion>(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}`, {
+        method: "PUT",
+        body: JSON.stringify({ items }),
+    });
+}
+
+export async function approveClinicianCarePlan(
+    patientId: string,
+    planId: string,
+    note: string,
+): Promise<{ status: string }> {
+    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ note }),
+    });
+}
+
+export async function retryClinicianCarePlanGeneration(patientId: string): Promise<{ status: string }> {
+    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/retry-generation`, {
+        method: "POST",
+    });
 }
 
 /** Trigger Summarization Agent to generate a SOAP note. */

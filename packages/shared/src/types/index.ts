@@ -510,6 +510,7 @@ export interface FeedTask {
     completedAt?: string;
     requiresScheduleConfiguration?: boolean;
     provider?: FeedProvider;
+    carePlanItemId?: string;
 }
 
 export interface FeedSummary {

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
-import { Card, EmptyState, ErrorState, Skeleton } from "@/components/ui";
+import { Card, EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
@@ -54,10 +55,13 @@ export default function TodayPage() {
         error,
         loading,
         markComplete,
+        reportBarrier,
         refreshFeed,
         summary,
         tasks,
     } = useFeedData();
+    const [barrierTask, setBarrierTask] = useState<FeedTask | null>(null);
+    const [barrierNote, setBarrierNote] = useState("");
     const profile = usePatientProfile();
     const displayName = profile?.firstName ?? "";
     const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
@@ -181,6 +185,7 @@ export default function TodayPage() {
                                             instructions={task.description}
                                             name={medication.name}
                                             onMarkComplete={() => markComplete(task)}
+                                            onReportBarrier={() => setBarrierTask(task)}
                                             prescriber={task.provider?.name}
                                             status={status}
                                             time={task.scheduledTime ?? ""}
@@ -205,6 +210,7 @@ export default function TodayPage() {
                                         description={task.name}
                                         id={task.id}
                                         onMarkComplete={() => markComplete(task)}
+                                        onReportBarrier={() => setBarrierTask(task)}
                                         status={status}
                                         time={task.scheduledTime ?? ""}
                                         type={task.frequency?.includes("walk") ? "exercise" : "custom"}
@@ -227,6 +233,22 @@ export default function TodayPage() {
                     </Card>
                 </Link>
             </div>
+            <Modal
+                onClose={() => { setBarrierTask(null); setBarrierNote(""); }}
+                open={Boolean(barrierTask)}
+                title="I couldn’t do this"
+            >
+                <div className="space-y-3">
+                    <p className="text-sm text-[#5b6b83]">Choose what got in the way. Your care team can use this to follow up.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                        {(["side_effects", "cost", "access", "schedule", "confusion"] as const).map((code) => (
+                            <button className="rounded-lg border border-[#b6d9d2] px-3 py-2 text-sm font-semibold capitalize text-[#147465]" key={code} onClick={() => { if (barrierTask) void reportBarrier(barrierTask, code); setBarrierTask(null); }} type="button">{code.replace("_", " ")}</button>
+                        ))}
+                    </div>
+                    <label className="block text-sm font-semibold text-[#17233a]">Other (please describe)<textarea className="mt-1 min-h-20 w-full rounded-lg border border-[#b6d9d2] p-2 font-normal" value={barrierNote} onChange={(event) => setBarrierNote(event.target.value)} /></label>
+                    <button className="w-full rounded-lg bg-[#147465] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={!barrierNote.trim()} onClick={() => { if (barrierTask) void reportBarrier(barrierTask, "other", barrierNote); setBarrierTask(null); setBarrierNote(""); }} type="button">Send to care team</button>
+                </div>
+            </Modal>
         </div>
     );
 }

@@ -20,6 +20,7 @@ import { AdherenceChart } from "@/components/features/adherence-chart";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
+import { CarePlanPanel } from "@/components/features/care-plan-panel";
 import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import {
     loadPatientDeepDive,
@@ -30,7 +31,7 @@ import type { AppDispatch, RootState } from "@/store/store";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents";
+type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan";
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentification }> = [
     { id: "profile", label: "Profile", icon: HiOutlineIdentification },
@@ -40,6 +41,7 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentificati
     { id: "chat", label: "Chat Transcript", icon: HiOutlineChatBubbleLeftRight },
     { id: "soap", label: "SOAP Notes", icon: HiOutlineSparkles },
     { id: "documents", label: "Documents", icon: HiOutlineDocumentText },
+    { id: "care-plan", label: "Care Plan", icon: HiOutlineSparkles },
 ];
 
 function isTabId(value: string | null): value is TabId {
@@ -464,6 +466,10 @@ function PatientDeepDivePageContent() {
                                 </div>
                             ))}
                         </div>
+                        <section className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <h3 className="text-sm font-semibold text-gray-900">Patient-reported barriers</h3>
+                            {(patient.adherence_barriers?.length ?? 0) === 0 ? <p className="mt-2 text-sm text-gray-500">No barriers reported in the recent adherence history.</p> : <ul className="mt-3 space-y-2">{patient.adherence_barriers?.map((barrier) => <li className="rounded-lg bg-white px-3 py-2 text-sm text-gray-700" key={`${barrier.target_id}-${barrier.logged_at}`}><span className="font-semibold capitalize">{barrier.barrier_code.replace("_", " ")}</span>{barrier.notes ? ` — ${barrier.notes}` : ""}<span className="ml-2 text-xs text-gray-400">{new Date(barrier.logged_at).toLocaleString()}</span></li>)}</ul>}
+                        </section>
                     </div>
                 )}
 
@@ -638,6 +644,7 @@ function PatientDeepDivePageContent() {
                         patientId={patientId}
                     />
                 )}
+                {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} />}
             </Card>
         </div>
     );

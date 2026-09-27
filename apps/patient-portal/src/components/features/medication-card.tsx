@@ -10,6 +10,7 @@ interface MedicationCardProps {
     prescriber?: string;
     status: TaskCardStatus;
     onMarkComplete: (id: string) => void;
+    onReportBarrier?: (id: string) => void;
 }
 
 const badgeVariant = {
@@ -32,6 +33,7 @@ export function MedicationCard({
     instructions,
     name,
     onMarkComplete,
+    onReportBarrier,
     prescriber,
     status,
     time,
@@ -57,9 +59,7 @@ export function MedicationCard({
                 </div>
             </div>
             {status === "active" || status === "missed" ? (
-                <Button fullWidth onClick={() => onMarkComplete(id)} size="lg" variant={status === "missed" ? "danger" : "primary"}>
-                    Mark as Taken
-                </Button>
+                <div className="space-y-2"><Button fullWidth onClick={() => onMarkComplete(id)} size="lg" variant={status === "missed" ? "danger" : "primary"}>Mark as Taken</Button>{onReportBarrier ? <button className="w-full text-sm font-semibold text-[#5b6b83] underline" onClick={() => onReportBarrier(id)} type="button">I couldn&apos;t do this</button> : null}</div>
             ) : null}
         </Card>
     );
