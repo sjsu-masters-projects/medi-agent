@@ -39,6 +39,7 @@ function NavItem({
                 active ? "bg-[#e6f4f1] text-[#147465]" : "text-[#718096] hover:bg-[#f6f1ea]"
             }`}
             href={href}
+            prefetch={false}
         >
             <span className="text-[1.35rem]">{icon}</span>
             <span className="text-[11px] font-bold">{label}</span>
@@ -69,6 +70,7 @@ export function BottomNav({ currentPath }: BottomNavProps) {
                         currentPath === "/chat" ? "bg-[#0f5f53]" : "bg-[#147465]"
                     }`}
                     href="/chat"
+                    prefetch={false}
                 >
                     <HiOutlineChatBubbleLeftRight />
                 </Link>

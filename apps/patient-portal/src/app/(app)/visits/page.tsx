@@ -1,10 +1,12 @@
 "use client";
 
 import { HiOutlineCalendarDays } from "react-icons/hi2";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/layouts";
 import { Button, Card, EmptyState } from "@/components/ui";
 
 export default function VisitsPage() {
+    const router = useRouter();
     return (
         <div className="patient-page space-y-4 pb-8">
             <PageHeader
@@ -42,9 +44,7 @@ export default function VisitsPage() {
                     <Button
                         className="mt-3"
                         fullWidth
-                        onClick={() => {
-                            window.location.href = "/chat";
-                        }}
+                        onClick={() => router.push("/chat")}
                         size="lg"
                         variant="secondary"
                     >

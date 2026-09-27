@@ -141,6 +141,7 @@ async def login(
         user=UserInfo(**result["user"]),
         mfa_required=result.get("mfa_required", False),
         mfa_factors=result.get("mfa_factors", []),
+        requires_clinic_join=result.get("requires_clinic_join", False),
     )
 
 

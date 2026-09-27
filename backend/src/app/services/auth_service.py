@@ -224,6 +224,7 @@ class AuthService:
                 **response,
                 "mfa_required": False,
                 "mfa_factors": [],
+                "requires_clinic_join": not self._has_active_care_team(response["user"]["id"]),
             }
 
         self._assert_clinician_matches_clinic(response["user"]["id"], clinic_code)
@@ -285,6 +286,23 @@ class AuthService:
             raise AuthenticationError("Invalid email or password") from None
 
         return self._format_session(response, expected_role=expected_role)
+
+    def _has_active_care_team(self, patient_id: str) -> bool:
+        """Return the tiny onboarding decision without exposing care-team data at login."""
+        try:
+            result = (
+                self.db.table("care_teams")
+                .select("id")
+                .eq("patient_id", patient_id)
+                .eq("status", "active")
+                .limit(1)
+                .execute()
+            )
+            return bool(result.data)
+        except Exception:
+            # Authentication must remain available if the optional onboarding lookup is delayed.
+            logger.warning("Could not read care-team onboarding state for patient login")
+            return True
 
     def _cleanup_signup(self, profile_table: str, user_id: str) -> None:
         """Best-effort rollback for partially created signup records."""

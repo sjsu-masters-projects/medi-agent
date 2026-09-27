@@ -57,8 +57,8 @@ describe("Patient login page", () => {
                 id: "patient-1",
                 role: "patient",
             },
+            requires_clinic_join: false,
         });
-        get.mockResolvedValue([{ id: "team-1" }]);
 
         render(<LoginPage />);
         fireEvent.change(screen.getByLabelText(/email address/i), {
@@ -82,6 +82,7 @@ describe("Patient login page", () => {
             });
         });
         expect(replace).toHaveBeenCalledWith("/today");
+        expect(get).not.toHaveBeenCalled();
     });
 
     it("redirects to safe return_path after successful login when care team exists", async () => {
@@ -96,8 +97,8 @@ describe("Patient login page", () => {
                 id: "patient-1",
                 role: "patient",
             },
+            requires_clinic_join: false,
         });
-        get.mockResolvedValue([{ id: "team-1" }]);
 
         setSearchParams("return_path=%2Ftoday%3Ftab%3Dfeed");
 
@@ -127,8 +128,8 @@ describe("Patient login page", () => {
                 id: "patient-2",
                 role: "patient",
             },
+            requires_clinic_join: true,
         });
-        get.mockResolvedValue([]);
 
         render(<LoginPage />);
         fireEvent.change(screen.getByLabelText(/email address/i), {
@@ -142,6 +143,7 @@ describe("Patient login page", () => {
         await waitFor(() => {
             expect(replace).toHaveBeenCalledWith("/profile?joinClinic=1");
         });
+        expect(get).not.toHaveBeenCalled();
     });
 
     it("shows an error for clinician credentials", async () => {
