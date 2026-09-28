@@ -1627,7 +1627,11 @@ completion or report an adherence barrier, and that response becomes visible to 
 - [/] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
       dose, route, instructions, confidence, excerpt/page, and adjacent authorized source
       preview. The first review-panel PR is read-only; it must label candidates `Pending clinician
-      review` and expose no approve/reject/edit mutation.
+      review` and expose no approve/reject/edit mutation. The initial refinement renders
+      structured medication fields instead of raw JSON, loads the facts and protected source
+      independently, and presents the selected candidate beside the authorized preview. Focused
+      clinician-portal typecheck, lint, and eight panel tests passed on 2026-09-27; the fresh
+      synthetic-scenario and live authorization acceptance remain open.
 - [/] Define the source-to-plan drafting boundary: only clinician-authored directions and
       evidence-backed, reviewed candidates can become a suggestion; raw OCR, pending extraction,
       generic model knowledge, and a patient request cannot create a plan item.

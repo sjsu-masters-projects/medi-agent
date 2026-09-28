@@ -31,6 +31,34 @@ interface PatientDocumentsPanelProps {
     onRefresh: () => void;
 }
 
+const FACT_FIELD_LABELS: Record<string, string> = {
+    dosage: "Dose",
+    frequency: "Frequency",
+    instructions: "Instructions",
+    name: "Medication",
+    route: "Route",
+};
+
+function formatFactField(value: unknown): string {
+    if (typeof value === "string" || typeof value === "number") {
+        return String(value);
+    }
+    return JSON.stringify(value) ?? "Not supplied";
+}
+
+function factFields(fact: ExtractedDocumentFact): Array<[string, string]> {
+    return Object.entries(fact.value).map(([key, value]) => [
+        FACT_FIELD_LABELS[key] ?? key.replaceAll("_", " "),
+        formatFactField(value),
+    ]);
+}
+
+function candidateState(fact: ExtractedDocumentFact): string {
+    return fact.review_state === "pending_review"
+        ? "Pending clinician review"
+        : fact.review_state.replaceAll("_", " ");
+}
+
 function formatReviewerName(
     reviewer?: { firstName?: string; lastName?: string } | null,
 ): string | null {
@@ -64,18 +92,39 @@ export function PatientDocumentsPanel({
     const [facts, setFacts] = useState<ExtractedDocumentFact[]>([]);
     const [factsLoading, setFactsLoading] = useState(false);
     const [factsError, setFactsError] = useState<string | null>(null);
+    const [factsSource, setFactsSource] = useState<ClinicianDocumentSource | null>(null);
+    const [factsSourceError, setFactsSourceError] = useState<string | null>(null);
+    const [factsSourceLoading, setFactsSourceLoading] = useState(false);
+    const [selectedFactId, setSelectedFactId] = useState<string | null>(null);
 
     async function handleReviewFacts(document: ClinicianPatientDocument) {
         setFactsDocument(document);
         setFacts([]);
         setFactsError(null);
+        setFactsSource(null);
+        setFactsSourceError(null);
+        setSelectedFactId(null);
         setFactsLoading(true);
+        setFactsSourceLoading(true);
         try {
-            setFacts(await fetchExtractedDocumentFacts(patientId, document.id));
-        } catch (error) {
-            setFactsError(error instanceof Error ? error.message : "Unable to load extracted facts.");
+            const [factsResult, sourceResult] = await Promise.allSettled([
+                fetchExtractedDocumentFacts(patientId, document.id),
+                fetchClinicianDocumentSource(patientId, document.id),
+            ]);
+            if (factsResult.status === "fulfilled") {
+                setFacts(factsResult.value);
+                setSelectedFactId(factsResult.value[0]?.id ?? null);
+            } else {
+                setFactsError("Unable to load extracted facts.");
+            }
+            if (sourceResult.status === "fulfilled") {
+                setFactsSource(sourceResult.value);
+            } else {
+                setFactsSourceError("Unable to open the protected source preview.");
+            }
         } finally {
             setFactsLoading(false);
+            setFactsSourceLoading(false);
         }
     }
 
@@ -455,8 +504,12 @@ export function PatientDocumentsPanel({
                         setFactsDocument(null);
                         setFacts([]);
                         setFactsError(null);
+                        setFactsSource(null);
+                        setFactsSourceError(null);
+                        setSelectedFactId(null);
                     }
                 }}
+                contentClassName="max-w-6xl"
                 open={Boolean(factsDocument)}
                 title={factsDocument ? `Extracted facts — ${factsDocument.fileName}` : "Extracted facts"}
             >
@@ -467,21 +520,55 @@ export function PatientDocumentsPanel({
                     {factsLoading ? <p className="text-sm text-slate-600">Loading extracted facts…</p> : null}
                     {factsError ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{factsError}</p> : null}
                     {!factsLoading && !factsError && facts.length === 0 ? <p className="text-sm text-slate-600">No grounded facts were extracted from this document.</p> : null}
-                    {facts.map((fact) => (
-                        <article className="rounded-xl border border-slate-200 p-3" key={fact.id}>
-                            <div className="flex items-start justify-between gap-3">
-                                <div>
-                                    <p className="text-sm font-semibold capitalize text-slate-900">{fact.fact_type}</p>
-                                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{JSON.stringify(fact.value)}</p>
-                                </div>
-                                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                                    {fact.confidence_score === null || fact.confidence_score === undefined ? "Confidence unavailable" : `${Math.round(fact.confidence_score * 100)}% confidence`}
-                                </span>
+                    {facts.length > 0 ? (
+                        <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="space-y-3" role="list" aria-label="Extracted fact candidates">
+                                {facts.map((fact) => (
+                                    <button
+                                        aria-pressed={selectedFactId === fact.id}
+                                        className={`w-full rounded-xl border p-3 text-left ${selectedFactId === fact.id ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                                        key={fact.id}
+                                        onClick={() => setSelectedFactId(fact.id)}
+                                        type="button"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold capitalize text-gray-900">{fact.fact_type}</p>
+                                                <p className="mt-1 text-xs font-semibold text-amber-800">{candidateState(fact)}</p>
+                                            </div>
+                                            <span className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-semibold text-yellow-800">
+                                                {fact.confidence_score === null || fact.confidence_score === undefined ? "Confidence unavailable" : `${Math.round(fact.confidence_score * 100)}% confidence`}
+                                            </span>
+                                        </div>
+                                        <dl className="mt-3 space-y-1 text-sm text-gray-700">
+                                            {factFields(fact).map(([label, value]) => (
+                                                <div className="grid grid-cols-[7rem_1fr] gap-2" key={label}>
+                                                    <dt className="font-medium capitalize text-gray-500">{label}</dt>
+                                                    <dd>{value}</dd>
+                                                </div>
+                                            ))}
+                                        </dl>
+                                        {fact.citations?.[0]?.excerpt ? <p className="mt-3 border-l-2 border-blue-300 pl-2 text-xs text-gray-600">“{fact.citations[0].excerpt}”{fact.citations[0].location?.page ? ` · page ${fact.citations[0].location.page}` : ""}</p> : null}
+                                    </button>
+                                ))}
                             </div>
-                            {fact.citations?.[0]?.excerpt ? <p className="mt-2 border-l-2 border-violet-300 pl-2 text-xs text-slate-600">“{fact.citations[0].excerpt}”{fact.citations[0].location?.page ? ` · page ${fact.citations[0].location.page}` : ""}</p> : null}
-                        </article>
-                    ))}
-                    {factsDocument ? <button className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50" onClick={() => void handleOpenSource(factsDocument)} type="button">Open protected source preview</button> : null}
+                            <div className="min-h-80 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                                <p className="mb-3 text-sm font-semibold text-gray-900">Protected source preview</p>
+                                {factsSourceLoading ? <p className="text-sm text-gray-500">Loading source preview…</p> : null}
+                                {factsSourceError ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{factsSourceError}</p> : null}
+                                {factsSource ? (
+                                    <DocumentSourceViewer
+                                        fileName={factsSource.file_name}
+                                        previewMimeType={factsSource.preview_mime_type}
+                                        previewStatus={factsSource.preview_status}
+                                        previewUrl={factsSource.preview_url}
+                                        sourceMimeType={factsSource.mime_type}
+                                        sourceUrl={factsSource.file_url}
+                                    />
+                                ) : null}
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </Modal>
 

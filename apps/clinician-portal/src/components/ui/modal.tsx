@@ -7,9 +7,10 @@ interface ModalProps {
     onClose: () => void;
     title: string;
     children: ReactNode;
+    contentClassName?: string;
 }
 
-export function Modal({ children, onClose, open, title }: ModalProps) {
+export function Modal({ children, contentClassName, onClose, open, title }: ModalProps) {
     if (!open) {
         return null;
     }
@@ -17,7 +18,7 @@ export function Modal({ children, onClose, open, title }: ModalProps) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
             <div
-                className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl"
+                className={`w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl ${contentClassName ?? ""}`}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-center justify-between">
