@@ -152,6 +152,38 @@ does not turn a document-processing component into the product outcome.
 - Acquit audit, 2026-08-29: PRs #64–#78 all completed the Acquit 0.1.3 canary job successfully. PR #65 is the single verified selective observation: all 58 backend test files were proven unaffected and safely skipped. The other 14 PRs correctly ran the full suite because they changed backend code, migrations, dependency/workflow/configuration files, or reached the full test graph. No canary job failed or reported an unsafe selection; nine additional selective observations are still required before `enforce` is considered.
 - Acquit 0.3.0, 2026-09-27: upgraded the canary and declared three verified standalone backend commands as `isolated_entrypoints`. Local selection accepted all three declarations with no R019 or R008 finding. This PR still runs the full suite because it changes a migration and dependency configuration; it does not count as another selective observation.
 
+### CI-001 — Prove and enable selective backend test execution
+
+**Status:** `[ ]` Backlog
+
+**Priority:** P2
+
+**Owner:** Unassigned; suitable bounded CI-maintenance task
+
+**Goal:** Turn Acquit's fail-closed PR analysis into a measured reduction in redundant
+backend test work without weakening the full-suite safety gate.
+
+- [ ] Keep Acquit in `canary` mode and record nine additional eligible selective PR
+  observations, including the report result, selected test files, and full-suite outcome.
+- [ ] Classify expected run-all changes (migrations, dependency manifests, pytest/CI
+  configuration, and broad backend foundations) separately from avoidable blockers.
+- [ ] For each avoidable blocker, add only a policy-verified configuration declaration or
+  remove the underlying import side effect; do not use blanket waivers for R008/R019.
+- [ ] Add CI evidence that shows Acquit's candidate selection beside the test commands that
+  actually ran, so a reviewer can distinguish canary analysis from the retained full coverage run.
+- [ ] After ten safe selective observations, propose a reviewed enforcement design: use the
+  selected tests for PR feedback while retaining full coverage on `main` and a scheduled run.
+
+**Acceptance criteria**
+
+- Ten documented selective observations have zero unsafe-skip alarms and are reproducible with
+  Acquit replay evidence.
+- A deliberately changed migration still selects the full backend suite.
+- A frontend-only change and a narrowly scoped backend change demonstrate a smaller, auditable
+  test selection.
+- Any analysis error, unknown import behavior, or invalid declaration fails closed to the full
+  suite and is visible in the PR report.
+
 ---
 
 ## Milestone R0 — Revival and truth restoration · Weeks 1–2
