@@ -6,10 +6,21 @@ import hashlib
 import html
 import json
 import re
-from importlib import import_module
 from typing import Any, cast
 from uuid import UUID
 
+from fhir.resources.R4B.allergyintolerance import AllergyIntolerance
+from fhir.resources.R4B.bundle import Bundle
+from fhir.resources.R4B.careplan import CarePlan
+from fhir.resources.R4B.condition import Condition
+from fhir.resources.R4B.diagnosticreport import DiagnosticReport
+from fhir.resources.R4B.documentreference import DocumentReference
+from fhir.resources.R4B.encounter import Encounter
+from fhir.resources.R4B.medicationrequest import MedicationRequest
+from fhir.resources.R4B.medicationstatement import MedicationStatement
+from fhir.resources.R4B.observation import Observation
+from fhir.resources.R4B.patient import Patient
+from fhir.resources.R4B.procedure import Procedure
 from supabase import Client
 
 from app.core.exceptions import ValidationError
@@ -39,19 +50,19 @@ SUPPORTED_RESOURCE_TYPES = frozenset(
     }
 )
 
-_FHIR_MODULES = {
-    "Patient": "patient",
-    "Encounter": "encounter",
-    "Condition": "condition",
-    "AllergyIntolerance": "allergyintolerance",
-    "MedicationRequest": "medicationrequest",
-    "MedicationStatement": "medicationstatement",
-    "Observation": "observation",
-    "DiagnosticReport": "diagnosticreport",
-    "Procedure": "procedure",
-    "CarePlan": "careplan",
-    "DocumentReference": "documentreference",
-    "Bundle": "bundle",
+_FHIR_MODELS: dict[str, Any] = {
+    "Patient": Patient,
+    "Encounter": Encounter,
+    "Condition": Condition,
+    "AllergyIntolerance": AllergyIntolerance,
+    "MedicationRequest": MedicationRequest,
+    "MedicationStatement": MedicationStatement,
+    "Observation": Observation,
+    "DiagnosticReport": DiagnosticReport,
+    "Procedure": Procedure,
+    "CarePlan": CarePlan,
+    "DocumentReference": DocumentReference,
+    "Bundle": Bundle,
 }
 
 
@@ -145,12 +156,10 @@ class FhirImportService:
         resource_type = resource.get("resourceType")
         if not isinstance(resource_type, str) or not resource_type:
             return ["resourceType is required"]
-        module_name = _FHIR_MODULES.get(resource_type)
-        if not module_name:
+        model = _FHIR_MODELS.get(resource_type)
+        if model is None:
             return []
         try:
-            module = import_module(f"fhir.resources.R4B.{module_name}")
-            model = getattr(module, resource_type)
             model.model_validate(resource)
         except Exception as exc:
             return [str(exc)]
