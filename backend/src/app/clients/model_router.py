@@ -162,7 +162,7 @@ class ModelRouter:
             # Provider exceptions can contain request or response content. Keep this
             # operational log deliberately generic; diagnostics belong in the
             # provider's protected telemetry, not application logs.
-            logger.error("Primary client unavailable for %s; falling back to Flash", task_type)
+            logger.error("Primary client unavailable; falling back to Flash")
             return self.flash_client
 
     def get_text_provider(self, task_type: TaskType) -> TextProvider:
@@ -242,7 +242,7 @@ class ModelRouter:
         except Exception:
             if TASK_MODEL_MAP.get(task_type) == "flash":
                 raise
-            logger.warning("Primary text provider unavailable for %s; using Flash", task_type)
+            logger.warning("Primary text provider unavailable; using Flash")
             return self.get_text_provider(TaskType.CHAT_RESPONSE)
         if TASK_MODEL_MAP.get(task_type) == "flash":
             return primary
