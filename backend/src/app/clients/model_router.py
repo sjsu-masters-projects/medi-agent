@@ -158,9 +158,11 @@ class ModelRouter:
         """
         try:
             return self.get_client(task_type)
-        except Exception as e:
+        except Exception as exc:
             logger.error(
-                f"Failed to get primary client for {task_type}: {e}. Falling back to Flash."
+                "Failed to get primary client for %s; falling back to Flash (error_type=%s)",
+                task_type,
+                type(exc).__name__,
             )
             return self.flash_client
 
@@ -242,9 +244,9 @@ class ModelRouter:
             if TASK_MODEL_MAP.get(task_type) == "flash":
                 raise
             logger.warning(
-                "Primary text provider is unavailable for %s; using Flash: %s",
+                "Primary text provider is unavailable for %s; using Flash (error_type=%s)",
                 task_type,
-                exc,
+                type(exc).__name__,
             )
             return self.get_text_provider(TaskType.CHAT_RESPONSE)
         if TASK_MODEL_MAP.get(task_type) == "flash":
@@ -252,7 +254,9 @@ class ModelRouter:
         try:
             fallback = self.get_text_provider(TaskType.CHAT_RESPONSE)
         except Exception as exc:
-            logger.warning("Text fallback provider is unavailable: %s", exc)
+            logger.warning(
+                "Text fallback provider is unavailable (error_type=%s)", type(exc).__name__
+            )
             return primary
         return TextFallbackProvider([primary, fallback])
 
