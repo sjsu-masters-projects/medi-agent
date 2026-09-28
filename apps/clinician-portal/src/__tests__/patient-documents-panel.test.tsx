@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
 import {
     approveDocumentReview,
+    fetchExtractedDocumentFacts,
     fetchClinicianDocumentSource,
     rejectDocumentReview,
     retryClinicianDocumentSummary,
@@ -10,6 +11,7 @@ import {
 
 vi.mock("@/services/clinicians", () => ({
     approveDocumentReview: vi.fn(),
+    fetchExtractedDocumentFacts: vi.fn(),
     fetchClinicianDocumentSource: vi.fn(),
     rejectDocumentReview: vi.fn(),
     retryClinicianDocumentIngestion: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 describe("PatientDocumentsPanel", () => {
     beforeEach(() => {
         vi.mocked(approveDocumentReview).mockReset();
+        vi.mocked(fetchExtractedDocumentFacts).mockReset();
         vi.mocked(fetchClinicianDocumentSource).mockReset();
         vi.mocked(rejectDocumentReview).mockReset();
         vi.mocked(retryClinicianDocumentSummary).mockReset();
@@ -139,6 +142,63 @@ describe("PatientDocumentsPanel", () => {
             expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-source", "doc-source"),
         );
         expect(await screen.findByTestId("source-viewer")).toHaveTextContent("signed-lab.pdf");
+    });
+
+    it("reviews formatted pending facts beside the protected source preview", async () => {
+        vi.mocked(fetchExtractedDocumentFacts).mockResolvedValue([
+            {
+                id: "fact-1",
+                fact_type: "medication",
+                value: {
+                    name: "Lisinopril",
+                    dosage: "10 mg",
+                    route: "oral",
+                    instructions: "Take once daily.",
+                },
+                confidence_score: 0.92,
+                review_state: "pending_review",
+                citations: [
+                    {
+                        excerpt: "Lisinopril 10 mg by mouth daily",
+                        location: { page: 2 },
+                    },
+                ],
+            },
+        ]);
+        vi.mocked(fetchClinicianDocumentSource).mockResolvedValue({
+            file_name: "follow-up.pdf",
+            file_url: "https://example.test/signed-follow-up.pdf",
+            mime_type: "application/pdf",
+            preview_status: "not_required",
+        });
+
+        render(
+            <PatientDocumentsPanel
+                documents={[
+                    {
+                        id: "doc-facts",
+                        fileName: "follow-up.pdf",
+                        documentType: "other",
+                        parseStatus: "completed",
+                        createdAt: "2026-04-21T10:00:00Z",
+                        uploadedByRole: "clinician",
+                    },
+                ]}
+                onRefresh={vi.fn()}
+                patientId="patient-facts"
+            />,
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: /review extracted facts/i }));
+
+        await waitFor(() =>
+            expect(fetchExtractedDocumentFacts).toHaveBeenCalledWith("patient-facts", "doc-facts"),
+        );
+        expect(await screen.findByText("Pending clinician review")).toBeInTheDocument();
+        expect(screen.getByText("Medication")).toBeInTheDocument();
+        expect(screen.getByText("10 mg")).toBeInTheDocument();
+        expect(screen.getByText(/page 2/i)).toBeInTheDocument();
+        expect(screen.getByTestId("source-viewer")).toHaveTextContent("signed-follow-up.pdf");
     });
 
     it("rejects pending patient uploads with a note and refreshes the deep dive", async () => {

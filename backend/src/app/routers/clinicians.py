@@ -23,6 +23,7 @@ from app.core.security import require_role
 from app.db.connection import get_db
 from app.middleware.rate_limit import soap_note_rate_limiter
 from app.models.auth import CurrentUser
+from app.models.care_plan import CarePlanVersionRead
 from app.models.clinician import ClinicianRead, ClinicianUpdate
 from app.models.clinician_message import ClinicianMessageRead, ClinicianPatientMessageCreate
 from app.models.dashboard import (
@@ -48,7 +49,6 @@ from app.models.invite import (
     InviteCodeListResponse,
     InviteCodeRevokeResponse,
 )
-from app.models.obligation import ObligationRead
 from app.models.patient import PatientRead
 from app.services.clinician_service import ClinicianService
 
@@ -404,9 +404,12 @@ async def generate_soap_note(
 
 @router.post(
     "/me/patients/{patient_id}/obligations",
-    response_model=ObligationRead,
-    summary="Set an obligation for a patient",
-    description="Clinician creates a diet, exercise, or custom obligation for a patient.",
+    response_model=CarePlanVersionRead,
+    summary="Stage a clinician-authored care-plan item",
+    description=(
+        "Compatibility endpoint: stages a diet, exercise, or custom item in a clinician "
+        "care-plan draft. It never creates an active patient obligation directly."
+    ),
 )
 async def set_patient_obligation(
     patient_id: UUID,
@@ -414,7 +417,7 @@ async def set_patient_obligation(
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
-    """POST /api/v1/clinicians/me/patients/{patient_id}/obligations"""
+    """Stage the legacy obligation payload for review and whole-plan approval."""
     return await service.set_patient_obligation(user.id, patient_id, data.model_dump())
 
 

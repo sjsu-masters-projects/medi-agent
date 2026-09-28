@@ -1,0 +1,140 @@
+{
+  "scenario_id": "PAT-005-SYN-001",
+  "synthetic_only": true,
+  "not_medical_advice": true,
+  "locale": "en-US",
+  "timezone": "America/Los_Angeles",
+  "patient": {
+    "display_label": "Morgan Ellis",
+    "provisioning_note": "Create as a new synthetic account for the PAT-005 demonstration. Do not reuse or modify a canonical fixture patient."
+  },
+  "care_team": {
+    "required_role": "assigned clinician",
+    "provisioning_note": "Assign one synthetic clinician with normal record access before uploading the documents."
+  },
+  "documents": [
+    {
+      "id": "PAT-005-DOC-001",
+      "file_name": "pat-005-synthetic-medication-order.pdf",
+      "document_type": "prescription",
+      "uploaded_by_role": "clinician",
+      "purpose": "Supplies one clear medication candidate.",
+      "pages": [
+        {
+          "title": "Medication order",
+          "lines": [
+            "Patient: Morgan Ellis (synthetic)",
+            "Metformin 500 mg tablet - take one tablet by mouth twice daily with meals.",
+            "Route: oral.",
+            "This is a fictional test order for the MediAgent PAT-005 demonstration."
+          ]
+        }
+      ],
+      "expected_facts": [
+        {
+          "fact_type": "medication",
+          "value": {
+            "name": "Metformin",
+            "dosage": "500 mg",
+            "route": "oral",
+            "instructions": "Take one tablet by mouth twice daily with meals."
+          },
+          "source_page": 1
+        }
+      ]
+    },
+    {
+      "id": "PAT-005-DOC-002",
+      "file_name": "pat-005-synthetic-follow-up-instructions.pdf",
+      "document_type": "discharge_summary",
+      "uploaded_by_role": "clinician",
+      "purpose": "Supplies explicit monitoring, movement, hydration, and follow-up directions.",
+      "pages": [
+        {
+          "title": "Follow-up instructions",
+          "lines": [
+            "Patient: Morgan Ellis (synthetic)",
+            "Monitoring: Check fasting blood glucose before breakfast each day and record the value in the portal.",
+            "Movement: Walk for 20 minutes after dinner on Monday, Wednesday, and Friday.",
+            "Hydration: Drink one glass of water with breakfast and one glass of water with dinner.",
+            "Follow-up: Contact the care team to arrange a primary-care follow-up in 14 days.",
+            "These are fictional test instructions for the MediAgent PAT-005 demonstration."
+          ]
+        }
+      ],
+      "expected_facts": [
+        {
+          "fact_type": "monitoring",
+          "value": {
+            "instructions": "Check fasting blood glucose before breakfast each day and record the value in the portal."
+          },
+          "source_page": 1
+        },
+        {
+          "fact_type": "movement",
+          "value": {
+            "instructions": "Walk for 20 minutes after dinner on Monday, Wednesday, and Friday."
+          },
+          "source_page": 1
+        },
+        {
+          "fact_type": "hydration",
+          "value": {
+            "instructions": "Drink one glass of water with breakfast and one glass of water with dinner."
+          },
+          "source_page": 1
+        },
+        {
+          "fact_type": "follow_up",
+          "value": {
+            "instructions": "Contact the care team to arrange a primary-care follow-up in 14 days."
+          },
+          "source_page": 1
+        }
+      ]
+    },
+    {
+      "id": "PAT-005-DOC-003",
+      "file_name": "pat-005-synthetic-medication-reconciliation-conflict.pdf",
+      "document_type": "other",
+      "uploaded_by_role": "clinician",
+      "purpose": "Creates an intentional dose conflict that blocks approval until a clinician resolves it.",
+      "pages": [
+        {
+          "title": "Medication reconciliation alert",
+          "lines": [
+            "Patient: Morgan Ellis (synthetic)",
+            "Previous order: Metformin 500 mg by mouth twice daily with meals.",
+            "Unconfirmed conflicting draft: Metformin 1000 mg by mouth once daily with the evening meal.",
+            "Do not treat either dose as confirmed until the assigned clinician completes medication reconciliation.",
+            "This is an intentional fictional conflict for the MediAgent PAT-005 demonstration."
+          ]
+        }
+      ],
+      "expected_facts": [
+        {
+          "fact_type": "medication",
+          "value": {
+            "name": "Metformin",
+            "dosage": "1000 mg",
+            "route": "oral",
+            "instructions": "Take once daily with the evening meal."
+          },
+          "source_page": 1,
+          "expected_state": "conflicting"
+        }
+      ]
+    }
+  ],
+  "approval_blocker": {
+    "reason": "Metformin dose and cadence conflict between PAT-005-DOC-001 and PAT-005-DOC-003.",
+    "resolution": "The assigned clinician must edit, confirm, or remove the conflicting candidate before approving the complete plan."
+  },
+  "expected_after_approval": [
+    "Metformin 500 mg oral twice daily with meals.",
+    "Check fasting blood glucose before breakfast each day.",
+    "Walk for 20 minutes after dinner on Monday, Wednesday, and Friday.",
+    "Drink water with breakfast and dinner.",
+    "Contact the care team to arrange a primary-care follow-up in 14 days."
+  ]
+}

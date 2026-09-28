@@ -179,17 +179,20 @@ async def test_generate_text_still_returns_only_text():
     assert await router.generate_text(TaskType.CHAT_RESPONSE, prompt="hi") == "Just prose"
 
 
-def test_text_provider_falls_back_to_flash_when_primary_cannot_initialize():
+def test_text_provider_falls_back_without_logging_provider_error_detail(caplog):
     router = ModelRouter()
     flash = MagicMock(model_name="flash-test")
 
     def get_client(task_type):
         if task_type == TaskType.CHAT_RESPONSE:
             return flash
-        raise RuntimeError("primary unavailable")
+        raise RuntimeError("patient private detail")
 
     router.get_client = MagicMock(side_effect=get_client)  # type: ignore[method-assign]
 
     provider = router.get_text_provider_with_fallback(TaskType.SOAP_NOTE)
 
     assert provider.name == "flash"
+    assert "patient private detail" not in caplog.text
+    assert "Primary text provider unavailable; using Flash" in caplog.text
+    assert "RuntimeError" not in caplog.text

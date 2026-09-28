@@ -52,6 +52,7 @@ class TaskType(Enum):
     MEDWATCH_DRAFT = "medwatch_draft"
     PHARMACOVIGILANCE_SCAN = "pharmacovigilance_scan"
     COMPLEX_ANALYSIS = "complex_analysis"
+    CARE_PLAN_DRAFT = "care_plan_draft"
 
 
 # Route mapping: TaskType → model name
@@ -72,6 +73,9 @@ TASK_MODEL_MAP = {
     TaskType.MEDWATCH_DRAFT: "pro",
     TaskType.PHARMACOVIGILANCE_SCAN: "pro",
     TaskType.COMPLEX_ANALYSIS: "pro",
+    # Clinician-visible structure only. The care-plan service validates source
+    # fact IDs and copies all patient-facing wording from grounded evidence.
+    TaskType.CARE_PLAN_DRAFT: "flash",
 }
 
 
@@ -154,10 +158,11 @@ class ModelRouter:
         """
         try:
             return self.get_client(task_type)
-        except Exception as e:
-            logger.error(
-                f"Failed to get primary client for {task_type}: {e}. Falling back to Flash."
-            )
+        except Exception:
+            # Provider exceptions can contain request or response content. Keep this
+            # operational log deliberately generic; diagnostics belong in the
+            # provider's protected telemetry, not application logs.
+            logger.error("Primary client unavailable; falling back to Flash")
             return self.flash_client
 
     def get_text_provider(self, task_type: TaskType) -> TextProvider:
@@ -234,21 +239,17 @@ class ModelRouter:
         """Return a text provider with Flash as the transparent fallback."""
         try:
             primary = self.get_text_provider(task_type)
-        except Exception as exc:
+        except Exception:
             if TASK_MODEL_MAP.get(task_type) == "flash":
                 raise
-            logger.warning(
-                "Primary text provider is unavailable for %s; using Flash: %s",
-                task_type,
-                exc,
-            )
+            logger.warning("Primary text provider unavailable; using Flash")
             return self.get_text_provider(TaskType.CHAT_RESPONSE)
         if TASK_MODEL_MAP.get(task_type) == "flash":
             return primary
         try:
             fallback = self.get_text_provider(TaskType.CHAT_RESPONSE)
-        except Exception as exc:
-            logger.warning("Text fallback provider is unavailable: %s", exc)
+        except Exception:
+            logger.warning("Text fallback provider is unavailable")
             return primary
         return TextFallbackProvider([primary, fallback])
 

@@ -46,6 +46,18 @@ async def get_clinician_care_plan(
     return service.get_for_clinician(user.id, patient_id)
 
 
+@router.get(
+    "/clinician/patients/{patient_id}/generation",
+    summary="Get automatic care-plan draft generation state",
+)
+async def get_care_plan_generation(
+    patient_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanService = Depends(_service),
+) -> Any:
+    return service.generation_for_clinician(user.id, patient_id)
+
+
 @router.put(
     "/clinician/patients/{patient_id}/{plan_id}",
     summary="Save clinician edits to a care-plan draft",

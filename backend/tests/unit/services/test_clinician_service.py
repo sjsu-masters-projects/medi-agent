@@ -161,21 +161,23 @@ async def test_pending_medwatch_count_queries_only_valid_draft_status(service, m
 
 
 @pytest.mark.asyncio
-async def test_set_patient_obligation_inserts_care_team_scoped_row(service, mock_db):
+async def test_set_patient_obligation_stages_care_plan_draft(service, mock_db, monkeypatch):
     clinician_id = uuid4()
     patient_id = uuid4()
-    care_team_id = str(uuid4())
-    created = {"id": str(uuid4()), "description": "Walk daily"}
-    chain = MagicMock()
-    for method in ("select", "eq", "insert"):
-        getattr(chain, method).return_value = chain
-    mock_db.table.return_value = chain
-    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
-        return_value=[{"id": care_team_id}]
-    )
-    service._execute = AsyncMock(  # type: ignore[method-assign]
-        return_value=_response(data=[created])
-    )
+    created = {"id": str(uuid4()), "status": "draft"}
+
+    class FakeCarePlanService:
+        def __init__(self, db):
+            assert db is mock_db
+
+        def add_clinician_authored_obligation(self, *args):
+            assert args[0] == clinician_id
+            assert args[1] == patient_id
+            return created
+
+    from app.services import care_plan_service
+
+    monkeypatch.setattr(care_plan_service, "CarePlanService", FakeCarePlanService)
 
     result = await service.set_patient_obligation(
         clinician_id,
@@ -189,29 +191,29 @@ async def test_set_patient_obligation_inserts_care_team_scoped_row(service, mock
     )
 
     assert result == created
-    chain.insert.assert_called_once_with(
-        {
-            "patient_id": str(patient_id),
-            "set_by_care_team_id": care_team_id,
-            "obligation_type": "exercise",
-            "description": "Walk daily",
-            "frequency": "daily",
-            "notes": "30 minutes minimum",
-            "is_active": True,
-        }
-    )
+    mock_db.table.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_set_patient_obligation_requires_assignment(service):
-    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
-        return_value=[]
-    )
+async def test_set_patient_obligation_propagates_care_plan_assignment_denial(service, monkeypatch):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+
+    class FakeCarePlanService:
+        def __init__(self, _db):
+            pass
+
+        def add_clinician_authored_obligation(self, *_args):
+            raise AuthorizationError("You are not assigned to this patient")
+
+    from app.services import care_plan_service
+
+    monkeypatch.setattr(care_plan_service, "CarePlanService", FakeCarePlanService)
 
     with pytest.raises(AuthorizationError, match="not assigned"):
         await service.set_patient_obligation(
-            uuid4(),
-            uuid4(),
+            clinician_id,
+            patient_id,
             {
                 "obligation_type": "diet",
                 "description": "Reduce sodium",

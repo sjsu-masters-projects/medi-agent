@@ -1621,13 +1621,21 @@ completion or report an adherence barrier, and that response becomes visible to 
 
 - [/] Persist the PAT-005 implementation specification and claim the staged backend, clinician,
       patient, and verification work in this tracker.
-- [ ] Create a fresh synthetic-patient scenario and catalog its fabricated source documents,
+- [/] Create a fresh synthetic-patient scenario and catalog its fabricated source documents,
       intended clinician decisions, and expected patient-visible feed items. Keep it separate
-      from existing fixture patients and use no real or production-like health data.
+      from existing fixture patients and use no real or production-like health data. The
+      version-controlled `PAT-005-SYN-001` manifest, local PDF builder, and operator guide now
+      define three upload-ready source documents and the deliberate Metformin conflict. The
+      fresh synthetic account, assigned clinician, and live controlled-journey evidence remain
+      open.
 - [/] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
       dose, route, instructions, confidence, excerpt/page, and adjacent authorized source
       preview. The first review-panel PR is read-only; it must label candidates `Pending clinician
-      review` and expose no approve/reject/edit mutation.
+      review` and expose no approve/reject/edit mutation. The initial refinement renders
+      structured medication fields instead of raw JSON, loads the facts and protected source
+      independently, and presents the selected candidate beside the authorized preview. Focused
+      clinician-portal typecheck, lint, and eight panel tests passed on 2026-09-27; the fresh
+      synthetic-scenario and live authorization acceptance remain open.
 - [/] Define the source-to-plan drafting boundary: only clinician-authored directions and
       evidence-backed, reviewed candidates can become a suggestion; raw OCR, pending extraction,
       generic model knowledge, and a patient request cannot create a plan item.
@@ -1643,11 +1651,23 @@ completion or report an adherence barrier, and that response becomes visible to 
 - [/] Build a clinician-side drafting surface. AI may synthesize *suggestions* only from
       clinician-authored directions, approved recommendations, and evidence-backed reviewed
       candidates; pending document extraction, raw OCR, and generic medical knowledge cannot
-      create a plan item or patient notification.
+      create a plan item or patient notification. The automatic-draft worker now accepts only
+      an exact, once-only list of grounded fact IDs from the model and copies every
+      patient-visible title, instruction, frequency, dose, and route from the candidate itself.
+      It records a cross-document medication reconciliation conflict as an approval blocker,
+      uses an approved version as the baseline for version `N+1`, and exposes durable
+      pending/retry/failed state to the assigned clinician. The Care Plan panel now opens the
+      existing protected document-preview route beside a selected evidence-backed item; a
+      clinician-authored entry clearly reports that it has no source document. Full live proof
+      with the PAT-005 synthetic journey remains open.
 - [/] Require an assigned clinician to create, edit, approve, defer, retire, or reject every
       patient-facing item. Record actor, rationale, evidence, effective date, and all review
       changes; determine which actions require a second reviewer under SAFE-001 rather than
-      letting the model or a patient self-approve a clinical direction.
+      letting the model or a patient self-approve a clinical direction. The legacy clinician
+      obligation endpoint now stages a clinician-authored, provenance-backed item in the current
+      draft rather than inserting an active Today obligation; the upload UI directs clinicians to
+      the Care Plan review tab. Focused authorization, audit, and live approval acceptance remain
+      open.
 - [/] Project only current approved items into the patient's Today feed by local timezone. Keep
       this projection deterministic: it combines approved care-plan items, prescribed medication
       schedules, appointments, and clinician-sent follow-up tasks, never an LLM response at page
