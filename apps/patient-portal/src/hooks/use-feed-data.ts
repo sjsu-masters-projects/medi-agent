@@ -19,11 +19,10 @@ import {
 import {
   fetchTodayFeed,
   markTaskComplete,
-  setMissedTasks,
+  markTaskSkipped,
 } from "@/store/slices/feed-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import {
-  FeedTaskStatus,
   FeedTaskType,
   type AdherenceStats,
   type FeedTask,
@@ -81,28 +80,6 @@ function mapAdherenceStats(stats: ApiAdherenceStats): AdherenceStats {
   };
 }
 
-function getMissedTaskIds(tasks: FeedTask[]) {
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  return tasks
-    .filter(
-      (task) => task.status === FeedTaskStatus.PENDING && task.scheduledTime,
-    )
-    .filter((task) => {
-      const [hours, minutes] =
-        task.scheduledTime
-          ?.split(":")
-          .map((value) => Number.parseInt(value, 10)) ?? [];
-      return (
-        Number.isFinite(hours) &&
-        Number.isFinite(minutes) &&
-        hours * 60 + minutes < currentMinutes
-      );
-    })
-    .map((task) => task.id);
-}
-
 export function useFeedData() {
   const dispatch = useDispatch<AppDispatch>();
   const feed = useSelector((state: RootState) => state.feed);
@@ -142,13 +119,6 @@ export function useFeedData() {
       .catch(() => setAdherenceStats(emptyAdherenceStats));
   }, [accessToken]);
 
-  useEffect(() => {
-    const missedIds = getMissedTaskIds(feed.tasks);
-    if (missedIds.length > 0) {
-      dispatch(setMissedTasks(missedIds));
-    }
-  }, [dispatch, feed.tasks]);
-
   async function markComplete(task: FeedTask) {
     const completedAt = new Date().toISOString();
     dispatch(markTaskComplete({ completedAt, taskId: task.id }));
@@ -170,6 +140,27 @@ export function useFeedData() {
       );
     } catch {
       // Keep optimistic UI state even when backend is unavailable.
+    }
+  }
+
+  async function reportBarrier(
+    task: FeedTask,
+    barrierCode: "side_effects" | "cost" | "access" | "schedule" | "confusion" | "other",
+    notes?: string,
+  ) {
+    dispatch(markTaskSkipped({ taskId: task.id }));
+    if (!accessToken) return;
+    try {
+      await api.post("/api/v1/adherence", {
+        scheduled_time: task.scheduledAt,
+        status: "skipped",
+        target_id: task.targetId,
+        target_type: task.type,
+        barrier_code: barrierCode,
+        notes: notes?.trim() || undefined,
+      }, { token: accessToken });
+    } catch {
+      // Preserve the patient's locally recorded barrier if the network drops.
     }
   }
 
@@ -269,6 +260,7 @@ export function useFeedData() {
     importDocumentFile,
     loading: feed.loading,
     markComplete,
+    reportBarrier,
     refreshFeed,
     summary: feed.summary,
     tasks: feed.tasks,

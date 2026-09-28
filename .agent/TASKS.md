@@ -1,6 +1,6 @@
 # MediAgent — August–December 2026 Execution Tracker
 
-> **Active plan:** [`specs/mediagent-revival-aug-dec-2026.md`](specs/mediagent-revival-aug-dec-2026.md)
+> **Active plan:** [`specs/pat-005-clinician-approved-today-feed-plan.md`](specs/pat-005-clinician-approved-today-feed-plan.md)
 >
 > **Baseline date:** 2026-08-18
 >
@@ -35,7 +35,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Scheduling and communication | Partial | Document ingestion is scheduled; appointments, approved clinical messaging, notification delivery/retry, and care-gap closure are incomplete |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
-| CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.1.3 remains a non-blocking canary until 10 selective observations are collected |
+| CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.3.0 remains a non-blocking canary until 10 selective observations are collected |
 | Dependency security | Clear as of 2026-09-09 | `next` 16.3.4 is on `main` and deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4) that were live on both portals; a fresh `npm ci` reports zero vulnerabilities on both lockfiles. Advisories published after the 2026-08-19 evidence invalidated it, so re-run `npm audit` at the start of each session rather than trusting this row |
 | Demo data | Functional baseline | Canonical fictional fixture and live patient/clinician isolation checks exist; the fresh end-to-end care-plan scenario is PAT-005 work |
 
@@ -150,6 +150,39 @@ does not turn a document-processing component into the product outcome.
 - GitHub Actions confirmed the third green main observation on 2026-08-20: the restored baseline succeeded twice (run 32283434650, attempts 1 and 2) and the next merged main change succeeded (run 32407010020).
 - Acquit remains in canary mode. PR #64 ran the full backend suite after CI, dependency, and test-configuration changes; PR #65 safely selected zero of 58 backend test files for a patient-portal-only change; PR #66 ran the full suite after workflow and resource changes. This is one selective observation, not the ten required before enforcement.
 - Acquit audit, 2026-08-29: PRs #64–#78 all completed the Acquit 0.1.3 canary job successfully. PR #65 is the single verified selective observation: all 58 backend test files were proven unaffected and safely skipped. The other 14 PRs correctly ran the full suite because they changed backend code, migrations, dependency/workflow/configuration files, or reached the full test graph. No canary job failed or reported an unsafe selection; nine additional selective observations are still required before `enforce` is considered.
+- Acquit 0.3.0, 2026-09-27: upgraded the canary and declared three verified standalone backend commands as `isolated_entrypoints`. Local selection accepted all three declarations with no R019 or R008 finding. This PR still runs the full suite because it changes a migration and dependency configuration; it does not count as another selective observation.
+
+### CI-001 — Prove and enable selective backend test execution
+
+**Status:** `[ ]` Backlog
+
+**Priority:** P2
+
+**Owner:** Unassigned; suitable bounded CI-maintenance task
+
+**Goal:** Turn Acquit's fail-closed PR analysis into a measured reduction in redundant
+backend test work without weakening the full-suite safety gate.
+
+- [ ] Keep Acquit in `canary` mode and record nine additional eligible selective PR
+  observations, including the report result, selected test files, and full-suite outcome.
+- [ ] Classify expected run-all changes (migrations, dependency manifests, pytest/CI
+  configuration, and broad backend foundations) separately from avoidable blockers.
+- [ ] For each avoidable blocker, add only a policy-verified configuration declaration or
+  remove the underlying import side effect; do not use blanket waivers for R008/R019.
+- [ ] Add CI evidence that shows Acquit's candidate selection beside the test commands that
+  actually ran, so a reviewer can distinguish canary analysis from the retained full coverage run.
+- [ ] After ten safe selective observations, propose a reviewed enforcement design: use the
+  selected tests for PR feedback while retaining full coverage on `main` and a scheduled run.
+
+**Acceptance criteria**
+
+- Ten documented selective observations have zero unsafe-skip alarms and are reproducible with
+  Acquit replay evidence.
+- A deliberately changed migration still selects the full backend suite.
+- A frontend-only change and a narrowly scoped backend change demonstrate a smaller, auditable
+  test selection.
+- Any analysis error, unknown import behavior, or invalid declaration fails closed to the full
+  suite and is visible in the PR report.
 
 ---
 
@@ -1562,7 +1595,13 @@ drop its selected-document context and yield a generic chart answer.
 
 ### PAT-005 — Clinician-approved care plans and Today feed
 
-**Status:** `[/]` Selected next vertical slice
+**Status:** `[/]` Claimed — controlled Today-feed loop
+
+**Owner:** Rajeev Chaurasia (integration, Supabase, backend) with clinician-portal and
+patient-portal review support.
+
+**Active implementation plan:**
+[`specs/pat-005-clinician-approved-today-feed-plan.md`](specs/pat-005-clinician-approved-today-feed-plan.md)
 
 **Why:** The current Today feed deterministically aggregates medications and existing
 obligations. It is not an AI-generated care plan, and FHIR `CarePlan` import remains a candidate
@@ -1580,40 +1619,43 @@ must review the evidence and explicitly approve dated plan items. The patient po
 only those approved items into the patient's local-time **Today** feed; the patient can confirm
 completion or report an adherence barrier, and that response becomes visible to the clinician.
 
+- [/] Persist the PAT-005 implementation specification and claim the staged backend, clinician,
+      patient, and verification work in this tracker.
 - [ ] Create a fresh synthetic-patient scenario and catalog its fabricated source documents,
       intended clinician decisions, and expected patient-visible feed items. Keep it separate
       from existing fixture patients and use no real or production-like health data.
-- [ ] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
+- [/] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
       dose, route, instructions, confidence, excerpt/page, and adjacent authorized source
       preview. The first review-panel PR is read-only; it must label candidates `Pending clinician
       review` and expose no approve/reject/edit mutation.
-- [ ] Define the source-to-plan drafting boundary: only clinician-authored directions and
+- [/] Define the source-to-plan drafting boundary: only clinician-authored directions and
       evidence-backed, reviewed candidates can become a suggestion; raw OCR, pending extraction,
       generic model knowledge, and a patient request cannot create a plan item.
-- [ ] Demonstrate the full controlled loop: synthetic document → pending evidence candidate →
+- [/] Implement the controlled-loop contract: synthetic document → pending evidence candidate →
       clinician review and explicit plan approval → deterministic Today projection → patient
-      completion or barrier → clinician-visible adherence/timeline result.
+      completion or barrier → clinician-visible adherence/timeline result. The fresh synthetic
+      proof, approval-rollback exercise, and clinician follow-up acceptance remain open.
 
-- [ ] Define the care-plan item contract: patient goal, action, schedule or due window, owner,
+- [/] Define the care-plan item contract: patient goal, action, schedule or due window, owner,
       start/end and retirement dates, patient completion state, and links to the clinician
       instruction plus source evidence. Preserve plan versions and replacements rather than
       mutating history.
-- [ ] Build a clinician-side drafting surface. AI may synthesize *suggestions* only from
+- [/] Build a clinician-side drafting surface. AI may synthesize *suggestions* only from
       clinician-authored directions, approved recommendations, and evidence-backed reviewed
       candidates; pending document extraction, raw OCR, and generic medical knowledge cannot
       create a plan item or patient notification.
-- [ ] Require an assigned clinician to create, edit, approve, defer, retire, or reject every
+- [/] Require an assigned clinician to create, edit, approve, defer, retire, or reject every
       patient-facing item. Record actor, rationale, evidence, effective date, and all review
       changes; determine which actions require a second reviewer under SAFE-001 rather than
       letting the model or a patient self-approve a clinical direction.
-- [ ] Project only current approved items into the patient's Today feed by local timezone. Keep
+- [/] Project only current approved items into the patient's Today feed by local timezone. Keep
       this projection deterministic: it combines approved care-plan items, prescribed medication
       schedules, appointments, and clinician-sent follow-up tasks, never an LLM response at page
       load.
-- [ ] Present a plain-language patient view that identifies the care-team source, distinguishes
+- [/] Present a plain-language patient view that identifies the care-team source, distinguishes
       a clinician instruction from an informational suggestion, supports confirmation/barrier
       reporting where appropriate, and directs patients to their care team for changes.
-- [ ] Handle plan changes safely: supersede or cancel stale tasks, avoid duplicate reminders,
+- [/] Handle plan changes safely: supersede or cancel stale tasks, avoid duplicate reminders,
       retain previously completed activity, update both portal views, and test concurrent edits,
       reassignment, patient/clinic isolation, and stale browser state.
 

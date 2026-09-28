@@ -160,7 +160,7 @@ export default function SignupPage() {
 
                 <Card className="space-y-2 bg-white/76" padding="md">
                     <p className="text-base text-[#5b6b83]">Already have an account?</p>
-                    <Link className="inline-flex min-h-11 items-center text-base font-bold text-[#147465]" href="/login">
+                    <Link className="inline-flex min-h-11 items-center text-base font-bold text-[#147465]" href="/login" prefetch={false}>
                         Sign in
                     </Link>
                 </Card>

@@ -15,6 +15,7 @@ import {
     rejectDocumentReview,
     retryClinicianDocumentIngestion,
     retryClinicianDocumentSummary,
+    fetchExtractedDocumentFacts,
 } from "@/services/clinicians";
 import {
     type ClinicianPatientDocument,
@@ -22,7 +23,7 @@ import {
     UploaderRole,
     getDocumentTypeLabel,
 } from "@/types";
-import type { ClinicianDocumentSource } from "@/services/clinicians";
+import type { ClinicianDocumentSource, ExtractedDocumentFact } from "@/services/clinicians";
 
 interface PatientDocumentsPanelProps {
     documents: ClinicianPatientDocument[];
@@ -59,6 +60,24 @@ export function PatientDocumentsPanel({
     const [source, setSource] = useState<ClinicianDocumentSource | null>(null);
     const [sourceError, setSourceError] = useState<string | null>(null);
     const [sourceLoading, setSourceLoading] = useState(false);
+    const [factsDocument, setFactsDocument] = useState<ClinicianPatientDocument | null>(null);
+    const [facts, setFacts] = useState<ExtractedDocumentFact[]>([]);
+    const [factsLoading, setFactsLoading] = useState(false);
+    const [factsError, setFactsError] = useState<string | null>(null);
+
+    async function handleReviewFacts(document: ClinicianPatientDocument) {
+        setFactsDocument(document);
+        setFacts([]);
+        setFactsError(null);
+        setFactsLoading(true);
+        try {
+            setFacts(await fetchExtractedDocumentFacts(patientId, document.id));
+        } catch (error) {
+            setFactsError(error instanceof Error ? error.message : "Unable to load extracted facts.");
+        } finally {
+            setFactsLoading(false);
+        }
+    }
 
     async function handleOpenSource(document: ClinicianPatientDocument) {
         setSourceDocument(document);
@@ -299,13 +318,24 @@ export function PatientDocumentsPanel({
                             )}
 
                             <div className="border-b border-gray-100 px-5 py-3">
-                                <button
-                                    className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-                                    onClick={() => void handleOpenSource(doc)}
-                                    type="button"
-                                >
-                                    Open source document
-                                </button>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                                        onClick={() => void handleOpenSource(doc)}
+                                        type="button"
+                                    >
+                                        Open source document
+                                    </button>
+                                    {doc.parseStatus === "completed" ? (
+                                        <button
+                                            className="rounded-lg border border-violet-200 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-50"
+                                            onClick={() => void handleReviewFacts(doc)}
+                                            type="button"
+                                        >
+                                            Review extracted facts
+                                        </button>
+                                    ) : null}
+                                </div>
                             </div>
 
                             {doc.uploadedByRole === UploaderRole.PATIENT &&
@@ -416,6 +446,42 @@ export function PatientDocumentsPanel({
                             {reviewingDocumentId ? "Saving..." : "Confirm rejection"}
                         </button>
                     </div>
+                </div>
+            </Modal>
+
+            <Modal
+                onClose={() => {
+                    if (!factsLoading) {
+                        setFactsDocument(null);
+                        setFacts([]);
+                        setFactsError(null);
+                    }
+                }}
+                open={Boolean(factsDocument)}
+                title={factsDocument ? `Extracted facts — ${factsDocument.fileName}` : "Extracted facts"}
+            >
+                <div className="space-y-3">
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                        Pending clinician review — these are evidence-backed candidates, not clinical truth.
+                    </p>
+                    {factsLoading ? <p className="text-sm text-slate-600">Loading extracted facts…</p> : null}
+                    {factsError ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{factsError}</p> : null}
+                    {!factsLoading && !factsError && facts.length === 0 ? <p className="text-sm text-slate-600">No grounded facts were extracted from this document.</p> : null}
+                    {facts.map((fact) => (
+                        <article className="rounded-xl border border-slate-200 p-3" key={fact.id}>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold capitalize text-slate-900">{fact.fact_type}</p>
+                                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{JSON.stringify(fact.value)}</p>
+                                </div>
+                                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                                    {fact.confidence_score === null || fact.confidence_score === undefined ? "Confidence unavailable" : `${Math.round(fact.confidence_score * 100)}% confidence`}
+                                </span>
+                            </div>
+                            {fact.citations?.[0]?.excerpt ? <p className="mt-2 border-l-2 border-violet-300 pl-2 text-xs text-slate-600">“{fact.citations[0].excerpt}”{fact.citations[0].location?.page ? ` · page ${fact.citations[0].location.page}` : ""}</p> : null}
+                        </article>
+                    ))}
+                    {factsDocument ? <button className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50" onClick={() => void handleOpenSource(factsDocument)} type="button">Open protected source preview</button> : null}
                 </div>
             </Modal>
 

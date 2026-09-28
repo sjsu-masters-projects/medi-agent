@@ -3,8 +3,8 @@
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-ACQUIT_VERSION = "0.2.0"
-ACQUIT_ACTION_SHA = "b992c5820a0fd059ec8f8ef640f30cec7be29c55"
+ACQUIT_VERSION = "0.3.0"
+ACQUIT_ACTION_SHA = "ca647e83986768b62b50343ec7b23dff87921293"
 
 
 def test_acquit_canary_uses_the_verified_release_everywhere() -> None:

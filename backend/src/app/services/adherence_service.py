@@ -45,6 +45,11 @@ class AdherenceService:
         target_type = data["target_type"]
         target_id = data["target_id"]
 
+        if data.get("barrier_code") and data.get("status") != "skipped":
+            raise ValidationError("A barrier must be recorded as a skipped task")
+        if data.get("barrier_code") == "other" and not str(data.get("notes") or "").strip():
+            raise ValidationError("A note is required when the barrier is other")
+
         # Verify the target exists and belongs to the patient
         table = "medications" if target_type == "medication" else "obligations"
         target = (
@@ -66,6 +71,7 @@ class AdherenceService:
             "status": data["status"],
             "scheduled_time": data.get("scheduled_time"),
             "notes": data.get("notes"),
+            "barrier_code": data.get("barrier_code"),
         }
         result = self.db.table("adherence_logs").insert(row).execute()
         if not result.data:

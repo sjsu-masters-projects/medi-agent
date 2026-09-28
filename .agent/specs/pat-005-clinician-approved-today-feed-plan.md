@@ -1,0 +1,79 @@
+# PAT-005 — Clinician-Approved Care Plan to Today Feed
+
+## Outcome
+
+PAT-005 closes MediAgent's first controlled-care loop:
+
+```text
+synthetic documents → grounded facts → automatic AI draft → clinician review/edit
+→ whole-plan approval → deterministic Today feed → completion/barrier → clinician follow-up
+```
+
+The model drafts. It never publishes a patient-facing clinical instruction. An assigned
+clinician approves the complete plan version. The first complete scenario is `en-US`; `es-MX`
+parity is a follow-up task.
+
+## Product contract
+
+- Both patient and clinician uploads use the existing document-ingestion, grounding, provenance,
+  and authorization paths.
+- A five-minute quiet window groups newly processed documents for one patient into one automatic
+  draft request. One patient has at most one open draft at a time.
+- Every draft item carries source fact/citation, document/page/excerpt, confidence, uncertainty,
+  and any conflict. The generator receives grounded facts only; it cannot invent dose, schedule,
+  duration, hydration target, generic advice, or appointment booking.
+- Low-confidence, conflicting, or incomplete items block whole-plan approval until the clinician
+  confirms, edits, or removes them.
+- Approval is atomic: it records the final payload and decision, freezes the plan version,
+  supersedes the old version, projects medication changes and non-medication obligations, and
+  writes audit events. Failure leaves the prior approved plan active.
+- Patient Today reads only active, effective projections. The patient can complete an item or
+  report a structured barrier. In-app states only; no push, email, SMS, or appointment booking.
+
+## Delivery sequence
+
+1. **Evidence review and scenario.** Add document-level read-only extracted-facts review with
+   authorized source preview. Add the fresh fictional scenario and acceptance fixtures.
+2. **Automatic draft lifecycle.** Add versioned plans, items, request queue, retries, worker,
+   and a clinician API for status/current draft. New evidence revises a draft or creates `N+1`;
+   it never edits an approved version.
+3. **Clinician decision surface.** Add the Care Plan tab, evidence-visible item cards, edits,
+   blockers, patient preview, and a transactional approve-and-publish operation. Replace the
+   upload-page direct-obligation control with draft-based authoring.
+4. **Patient and follow-up loop.** Enrich Today tasks with approved-plan provenance, extend
+   adherence with barriers, and show missed/barrier results to the assigned clinician.
+5. **End-to-end proof.** Verify upload, draft consolidation, evidence review, blocker handling,
+   approval, Today projection, completion/barrier, audit reconstruction, version supersession,
+   and assignment isolation.
+
+## Technical boundaries
+
+- Store the immutable plan snapshot in `care_plan_versions` and `care_plan_items`; keep a linked
+  `clinical_recommendations` recommendation for the whole-plan approval decision.
+- Use a `care_plan_generation_requests` claim queue with bounded retries and a patient-scoped
+  uniqueness constraint. The existing scheduled Cloud Run document worker may process this stage
+  after document extraction without turning the request path into a worker.
+- Retain medications and obligations as runtime projections so existing reminders, Today feed,
+  and adherence statistics continue to work. Link each projection to its source plan item.
+- New database tables enable RLS, use explicit least-privilege grants/policies, and have
+  assignment-based allow and deny tests. Browser clients use authenticated backend routes only.
+- Existing adherence history is never rewritten when a plan is superseded.
+
+## Acceptance checklist
+
+- [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
+      patient uploads.
+- [ ] Several completed documents inside the quiet window create one draft.
+- [ ] The clinician can inspect a candidate and plan item beside its protected source preview.
+- [ ] A blocker prevents approval until it is resolved.
+- [ ] Approval atomically creates or updates medications and publishes non-medication items.
+- [ ] Only approved effective items appear in the correct patient-local Today feed.
+- [ ] Completion and each barrier category become clinician-visible.
+- [ ] Unassigned users cannot read, draft, approve, preview, or report against the plan.
+- [ ] Plan version, citations, approval, projections, and adherence outcome are reconstructable
+      from audit records.
+
+## Explicitly deferred
+
+- Spanish parity, appointment booking, external notifications, production capacity alerts,
+  generic wellness advice, autonomous medication changes, and production-readiness claims.

@@ -25,10 +25,7 @@ interface AuthResponse {
         id: string;
         role: typeof PortalUserRole[keyof typeof PortalUserRole];
     };
-}
-
-interface CareTeamMembership {
-    id: string;
+    requires_clinic_join?: boolean;
 }
 
 function LoginPageContent() {
@@ -74,11 +71,9 @@ function LoginPageContent() {
             writeStoredSession(session);
             dispatch(hydrateSession(session));
 
-            const careTeams = await api.get<CareTeamMembership[]>("/api/v1/patients/me/care-team", {
-                token: session.accessToken,
-            });
-
-            if (careTeams.length === 0) {
+            // The login response carries this single onboarding decision so we do not
+            // make a second blocking request before the first authenticated route.
+            if (response.requires_clinic_join) {
                 router.replace("/profile?joinClinic=1");
             } else {
                 const returnPath = sanitizeReturnPath(searchParams?.get("return_path"));
@@ -159,7 +154,7 @@ function LoginPageContent() {
                 <Card className="space-y-3 border-[#b6d9d2] bg-[#e6f4f1]" padding="md">
                     <p className="text-base font-bold text-[#17233a]">New to MediAgent Care?</p>
                     <p className="text-base leading-7 text-[#5b6b83]">Create your account to get medication reminders and clinician updates.</p>
-                    <Link className="inline-flex min-h-11 items-center text-base font-bold text-[#147465]" href="/signup">
+                    <Link className="inline-flex min-h-11 items-center text-base font-bold text-[#147465]" href="/signup" prefetch={false}>
                         Create one
                     </Link>
                 </Card>

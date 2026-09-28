@@ -39,6 +39,7 @@ class ActionTier(StrEnum):
 # omission — see `tier_for`.
 ACTION_TIERS: Final[dict[str, ActionTier]] = {
     "routine_message": ActionTier.CLINICIAN_REVIEW,
+    "publish_care_plan": ActionTier.CLINICIAN_REVIEW,
 }
 
 

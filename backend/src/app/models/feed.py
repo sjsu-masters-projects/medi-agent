@@ -21,6 +21,7 @@ class FeedTask(BaseModel):
     id: str
     type: Literal["medication", "obligation"]
     target_id: UUID
+    care_plan_item_id: UUID | None = None
     name: str
     description: str | None = None
     frequency: str

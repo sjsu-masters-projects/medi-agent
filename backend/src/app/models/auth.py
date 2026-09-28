@@ -130,6 +130,7 @@ class AuthLoginResponse(BaseModel):
     user: UserInfo
     mfa_required: bool = False
     mfa_factors: list[MFAFactorSummary] = Field(default_factory=list)
+    requires_clinic_join: bool = False
 
 
 # ── JWT Claims (internal) ──────────────────────────────────

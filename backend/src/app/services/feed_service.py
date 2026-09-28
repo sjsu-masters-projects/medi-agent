@@ -90,6 +90,14 @@ class FeedService:
         )
         for task in tasks:
             task.pop("_order", None)
+            if (
+                target_date == datetime.now(timezone_info).date()
+                and task.get("status") == "pending"
+                and task.get("scheduled_at")
+                and datetime.fromisoformat(str(task["scheduled_at"]).replace("Z", "+00:00"))
+                < datetime.now(UTC)
+            ):
+                task["status"] = "missed"
 
         # Calculate summary
         summary = self._calculate_summary(tasks)
@@ -132,6 +140,7 @@ class FeedService:
                     dosage,
                     frequency,
                     instructions,
+                    care_plan_item_id,
                     prescribed_by_care_team_id,
                     care_teams!prescribed_by_care_team_id(
                         id,
@@ -166,6 +175,7 @@ class FeedService:
                     notes,
                     frequency,
                     obligation_type,
+                    care_plan_item_id,
                     set_by_care_team_id,
                     care_teams!set_by_care_team_id(
                         id,
@@ -321,6 +331,7 @@ class FeedService:
                         and guidance.get("recommended_times_per_day")
                     ),
                     "provider": self._extract_provider(med.get("care_teams")),
+                    "care_plan_item_id": med.get("care_plan_item_id"),
                 }
             )
         return tasks
@@ -386,6 +397,7 @@ class FeedService:
                         and guidance.get("recommended_times_per_day")
                     ),
                     "provider": self._extract_provider(obl.get("care_teams")),
+                    "care_plan_item_id": obl.get("care_plan_item_id"),
                 }
             )
         return tasks
@@ -425,6 +437,7 @@ class FeedService:
                     "completed_at": adherence.get("logged_at") if adherence else None,
                     "requires_schedule_configuration": False,
                     "provider": self._extract_provider(target.get("care_teams")),
+                    "care_plan_item_id": target.get("care_plan_item_id"),
                 }
             )
         return tasks

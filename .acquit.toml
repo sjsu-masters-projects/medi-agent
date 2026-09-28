@@ -14,3 +14,12 @@ assume_inert = [
   "meetings/**",
   "packages/**",
 ]
+
+# These commands are not importable application modules or pytest targets. Acquit
+# 0.3 verifies that assertion against the analyzed tree before it can narrow R008
+# (`sys.path` mutation); an invalid declaration fails closed to the full suite.
+isolated_entrypoints = [
+  "backend/scripts/benchmark_document_intelligence.py",
+  "backend/scripts/compare_providers.py",
+  "backend/scripts/verify_authorization_denials.py",
+]

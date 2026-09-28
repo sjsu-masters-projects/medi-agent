@@ -13,6 +13,7 @@ from supabase import Client
 
 from app.clients.supabase import get_admin_client
 from app.config import settings
+from app.services.care_plan_service import CarePlanService
 from app.services.document_summary_service import DocumentSummaryService
 from app.services.ingestion_service import IngestionService
 
@@ -48,6 +49,7 @@ class DocumentIngestionWorker:
         self._batch_size = max(1, min(batch_size, 100))
         self._service = IngestionService(db)
         self._summaries = DocumentSummaryService(db)
+        self._care_plans = CarePlanService(db)
 
     async def process_batch(self) -> dict[str, int]:
         result = self._db.rpc(
@@ -76,6 +78,7 @@ class DocumentIngestionWorker:
             else:
                 summary["failed"] += 1
         summary.update(await self.process_pending_summaries())
+        summary.update(await self._care_plans.process_pending(limit=self._batch_size))
         return summary
 
     async def process_pending_summaries(self) -> dict[str, int]:

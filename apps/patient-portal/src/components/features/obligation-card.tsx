@@ -8,6 +8,7 @@ interface ObligationCardProps {
     time: string;
     status: TaskCardStatus;
     onMarkComplete: (id: string) => void;
+    onReportBarrier?: (id: string) => void;
 }
 
 const badgeVariant = {
@@ -40,6 +41,7 @@ export function ObligationCard({
     description,
     id,
     onMarkComplete,
+    onReportBarrier,
     status,
     time,
     type,
@@ -62,9 +64,7 @@ export function ObligationCard({
                 </div>
             </div>
             {status === "active" || status === "missed" ? (
-                <Button fullWidth onClick={() => onMarkComplete(id)} size="lg" variant={status === "missed" ? "danger" : "primary"}>
-                    Mark as Done
-                </Button>
+                <div className="space-y-2"><Button fullWidth onClick={() => onMarkComplete(id)} size="lg" variant={status === "missed" ? "danger" : "primary"}>Mark as Done</Button>{onReportBarrier ? <button className="w-full text-sm font-semibold text-[#5b6b83] underline" onClick={() => onReportBarrier(id)} type="button">I couldn&apos;t do this</button> : null}</div>
             ) : null}
         </Card>
     );

@@ -20,6 +20,7 @@ from app.routers import (
     adherence,
     appointments,
     auth,
+    care_plans,
     chat,
     clinicians,
     clinics,
@@ -138,6 +139,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(adherence.router, prefix=f"{api}/adherence", tags=["Adherence"])
     application.include_router(chat.router, prefix=f"{api}/chat", tags=["Chat"])
+    application.include_router(care_plans.router, prefix=f"{api}/care-plans", tags=["Care plans"])
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])
     application.include_router(

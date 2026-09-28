@@ -40,6 +40,9 @@ def _db(*, summary_claims: list[dict] | None = None) -> MagicMock:
         "claim_pending_document_summary": MagicMock(
             data=list(SUMMARY_CLAIMS if summary_claims is None else summary_claims)
         ),
+        # Care-plan generation runs after summaries in the same worker. Keep the
+        # fake RPC contract complete so the worker test exercises that sequencing.
+        "claim_pending_care_plan_generation": MagicMock(data=[]),
     }
     db.rpc.side_effect = lambda name, _params: MagicMock(
         execute=MagicMock(return_value=responses[name])
@@ -82,6 +85,7 @@ async def test_owed_explanations_are_claimed_separately_from_ingestion() -> None
     assert [call.args[0] for call in db.rpc.call_args_list] == [
         "claim_pending_document_ingestion",
         "claim_pending_document_summary",
+        "claim_pending_care_plan_generation",
     ]
     assert worker._service.ingest_document.await_count == 2
     worker._summaries.generate.assert_awaited_once_with(

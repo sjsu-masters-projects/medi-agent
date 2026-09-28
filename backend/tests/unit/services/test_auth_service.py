@@ -545,6 +545,7 @@ async def test_login_success(auth_service, mock_auth_client):
 
     mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
     auth_service._list_verified_mfa_factors = MagicMock(return_value=[])  # type: ignore[method-assign]
+    auth_service._has_active_care_team = MagicMock(return_value=True)  # type: ignore[method-assign]
 
     # Call login
     result = await auth_service.login(email="user@example.com", password="password123")
@@ -558,6 +559,7 @@ async def test_login_success(auth_service, mock_auth_client):
     assert result["tokens"]["access_token"] == "login-access-token"
     assert result["user"]["id"] == "user-123"
     assert result["mfa_required"] is False
+    assert result["requires_clinic_join"] is False
 
 
 @pytest.mark.asyncio

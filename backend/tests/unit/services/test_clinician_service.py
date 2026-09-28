@@ -506,6 +506,7 @@ async def test_get_patient_deep_dive_includes_review_metadata(service):
             _response(data=[]),
             _response(data=[]),
             _response(data=[]),
+            _response(data=[]),
         ]
     )
     service.document_workflows.fetch_patient_documents = AsyncMock(  # type: ignore[method-assign]
