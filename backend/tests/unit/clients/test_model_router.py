@@ -194,4 +194,5 @@ def test_text_provider_falls_back_without_logging_provider_error_detail(caplog):
 
     assert provider.name == "flash"
     assert "patient private detail" not in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
+    assert "Primary text provider unavailable" in caplog.text
+    assert "RuntimeError" not in caplog.text
