@@ -13,7 +13,15 @@ from app.clients.model_router import TaskType, get_router
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.models.care_plan import CarePlanCategory, CarePlanDraftProposal, CarePlanDraftUpdate
+from app.models.clinical_fact import (
+    ClinicalFactCreate,
+    ConfidenceBand,
+    EvidenceCitationCreate,
+    SourceArtifactType,
+    SourceProvenanceCreate,
+)
 from app.services.care_plan_prompts import CARE_PLAN_DRAFT_SYSTEM, CARE_PLAN_DRAFT_USER
+from app.services.clinical_fact_service import ClinicalFactService
 
 _LOW_CONFIDENCE = 0.7
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
@@ -161,6 +169,85 @@ class CarePlanService:
                 "requested_at": datetime.now(UTC).isoformat(),
             }
         ).eq("id", str(row["id"])).execute()
+
+    def add_clinician_authored_obligation(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        obligation_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Stage a clinician-authored activity in a draft; never publish it directly.
+
+        This preserves the legacy clinician-obligation endpoint's input contract while
+        removing its direct route into the patient Today feed.  The clinician entry is
+        registered as explicit provenance, then it becomes a source-linked plan item
+        that still requires whole-plan approval before any runtime projection exists.
+        """
+        self._require_assignment(clinician_id, patient_id)
+        description = str(obligation_data["description"]).strip()
+        frequency = str(obligation_data["frequency"]).strip()
+        notes = str(obligation_data.get("notes") or "").strip()
+        obligation_type = str(obligation_data["obligation_type"])
+        instructions = notes or description
+        excerpt = f"{description}\nFrequency: {frequency}"
+        if notes:
+            excerpt = f"{excerpt}\nNotes: {notes}"
+
+        fact = ClinicalFactService(self.db).create_candidate(
+            ClinicalFactCreate(
+                patient_id=patient_id,
+                fact_type="obligation",
+                subject_type="patient",
+                value={
+                    "description": description,
+                    "frequency": frequency,
+                    "obligation_type": obligation_type,
+                    "instructions": instructions,
+                },
+                confidence_score=1.0,
+                confidence_band=ConfidenceBand.HIGH,
+                provenance=SourceProvenanceCreate(
+                    artifact_type=SourceArtifactType.CLINICIAN_ENTRY,
+                    source_system="clinician_portal",
+                    source_reference=f"clinician:{clinician_id}:care-plan-entry",
+                    document_location={"kind": "clinician_authored_care_plan_entry"},
+                ),
+                citations=[
+                    EvidenceCitationCreate(
+                        excerpt=excerpt,
+                        location={"kind": "clinician_authored_care_plan_entry"},
+                    )
+                ],
+            ),
+            actor_id=clinician_id,
+        )
+        draft = self._open_draft(patient_id, datetime.now(UTC).isoformat())
+        category = {
+            "diet": CarePlanCategory.NUTRITION.value,
+            "exercise": CarePlanCategory.MOVEMENT.value,
+            "custom": CarePlanCategory.OTHER.value,
+        }[obligation_type]
+        self.db.table("care_plan_items").insert(
+            {
+                "plan_version_id": str(draft["id"]),
+                "source_fact_id": str(fact["id"]),
+                "category": category,
+                "title": description,
+                "instructions": instructions,
+                "frequency": frequency,
+                "confidence_score": 1.0,
+                "uncertainty": [],
+                "conflict": {},
+                "blocker_reason": None,
+            }
+        ).execute()
+        self._audit(
+            UUID(str(draft["id"])),
+            clinician_id,
+            "clinician_authored_item_added",
+            {"source_fact_id": str(fact["id"]), "category": category},
+        )
+        return self._hydrate_plan(draft)
 
     async def _generate(self, claim: dict[str, Any]) -> None:
         patient_id = UUID(str(claim["patient_id"]))

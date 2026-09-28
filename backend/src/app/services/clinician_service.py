@@ -651,31 +651,17 @@ class ClinicianService:
     async def set_patient_obligation(
         self, clinician_id: UUID, patient_id: UUID, obligation_data: dict[str, Any]
     ) -> Any:
-        """Create an obligation for a patient on behalf of a clinician."""
-        assignment_rows = await self.care_team_repo.find_active_assignment(
-            str(clinician_id),
-            str(patient_id),
+        """Stage a clinician-authored item in a reviewable plan draft.
+
+        The legacy route is intentionally retained, but it can no longer create an
+        active obligation.  Patient-visible projections are reserved for the
+        atomic care-plan approval path.
+        """
+        from app.services.care_plan_service import CarePlanService
+
+        return CarePlanService(self.db).add_clinician_authored_obligation(
+            clinician_id, patient_id, obligation_data
         )
-        if not assignment_rows:
-            await self._raise_unassigned(clinician_id, patient_id)
-
-        care_team_id = assignment_rows[0]["id"]
-
-        row = {
-            "patient_id": str(patient_id),
-            "set_by_care_team_id": care_team_id,
-            "obligation_type": obligation_data["obligation_type"],
-            "description": obligation_data["description"],
-            "frequency": obligation_data["frequency"],
-            "notes": obligation_data.get("notes"),
-            "is_active": True,
-        }
-
-        result = await self._execute(self.db.table("obligations").insert(row))
-        if not result.data:
-            raise ExternalServiceError("Supabase", "Failed to create obligation")
-
-        return cast(list[dict[str, Any]], result.data)[0]
 
     async def save_document_annotation(
         self, clinician_id: UUID, patient_id: UUID, document_id: UUID, annotation_text: str

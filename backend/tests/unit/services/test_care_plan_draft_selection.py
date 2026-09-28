@@ -8,6 +8,7 @@ from uuid import UUID
 
 import pytest
 
+from app.models.clinical_fact import SourceArtifactType
 from app.services import care_plan_service
 from app.services.care_plan_service import CarePlanService
 
@@ -122,3 +123,68 @@ def test_conflicting_medication_sources_block_every_candidate() -> None:
     )
     assert item["instructions"] == "Take one tablet by mouth twice daily with meals."
     assert item["blocker_reason"] == "Resolve conflicting medication instructions before approval."
+
+
+def test_legacy_obligation_payload_stages_a_provenance_backed_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clinician_id = UUID("00000000-0000-0000-0000-000000000201")
+    patient_id = UUID("00000000-0000-0000-0000-000000000202")
+    fact_id = UUID("00000000-0000-0000-0000-000000000203")
+    created_candidates = []
+
+    class FakeFactService:
+        def __init__(self, _db: MagicMock) -> None:
+            pass
+
+        def create_candidate(self, candidate: object, *, actor_id: UUID) -> dict[str, str]:
+            created_candidates.append((candidate, actor_id))
+            return {"id": str(fact_id)}
+
+    db = MagicMock()
+    service = CarePlanService(db)
+    monkeypatch.setattr(care_plan_service, "ClinicalFactService", FakeFactService)
+    monkeypatch.setattr(service, "_require_assignment", lambda *_args: None)
+    monkeypatch.setattr(service, "_open_draft", lambda *_args: {"id": str(UUID(int=204))})
+    monkeypatch.setattr(
+        service, "_hydrate_plan", lambda plan: {"id": plan["id"], "status": "draft"}
+    )
+
+    result = service.add_clinician_authored_obligation(
+        clinician_id,
+        patient_id,
+        {
+            "obligation_type": "exercise",
+            "description": "Walk for 20 minutes.",
+            "frequency": "3x per week",
+            "notes": "Stop if you feel unwell.",
+        },
+    )
+
+    assert result["status"] == "draft"
+    candidate, actor_id = created_candidates[0]
+    assert actor_id == clinician_id
+    assert candidate.provenance.artifact_type is SourceArtifactType.CLINICIAN_ENTRY
+    assert candidate.value == {
+        "description": "Walk for 20 minutes.",
+        "frequency": "3x per week",
+        "obligation_type": "exercise",
+        "instructions": "Stop if you feel unwell.",
+    }
+    assert candidate.citations[0].excerpt.startswith("Walk for 20 minutes.")
+
+    item_chain = db.table.return_value
+    item_chain.insert.assert_any_call(
+        {
+            "plan_version_id": str(UUID(int=204)),
+            "source_fact_id": str(fact_id),
+            "category": "movement",
+            "title": "Walk for 20 minutes.",
+            "instructions": "Stop if you feel unwell.",
+            "frequency": "3x per week",
+            "confidence_score": 1.0,
+            "uncertainty": [],
+            "conflict": {},
+            "blocker_reason": None,
+        }
+    )
