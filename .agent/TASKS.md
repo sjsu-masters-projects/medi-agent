@@ -1621,9 +1621,13 @@ completion or report an adherence barrier, and that response becomes visible to 
 
 - [/] Persist the PAT-005 implementation specification and claim the staged backend, clinician,
       patient, and verification work in this tracker.
-- [ ] Create a fresh synthetic-patient scenario and catalog its fabricated source documents,
+- [/] Create a fresh synthetic-patient scenario and catalog its fabricated source documents,
       intended clinician decisions, and expected patient-visible feed items. Keep it separate
-      from existing fixture patients and use no real or production-like health data.
+      from existing fixture patients and use no real or production-like health data. The
+      version-controlled `PAT-005-SYN-001` manifest, local PDF builder, and operator guide now
+      define three upload-ready source documents and the deliberate Metformin conflict. The
+      fresh synthetic account, assigned clinician, and live controlled-journey evidence remain
+      open.
 - [/] Add the clinician **Review extracted facts** panel for a document: pending candidate name,
       dose, route, instructions, confidence, excerpt/page, and adjacent authorized source
       preview. The first review-panel PR is read-only; it must label candidates `Pending clinician

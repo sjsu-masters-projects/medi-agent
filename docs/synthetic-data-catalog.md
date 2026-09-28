@@ -31,6 +31,15 @@ only; it never calls a model or uses credentials. OCR vendor selection remains d
 so scanned/image fixtures are expected to stop in `needs_ocr` until a reviewed OCR
 capability is approved.
 
+## PAT-005 controlled-care journey
+
+[`synthetic_today_feed_scenario.json`](../backend/tests/fixtures/pat005/synthetic_today_feed_scenario.json)
+defines a separate, `en-US`, three-document source bundle for the PAT-005 controlled
+Today-feed demonstration. The companion local builder creates upload-ready PDFs in
+an ignored directory; it never seeds an account, uploads a document, or creates a
+clinical action. See [PAT-005 synthetic scenario](pat-005-synthetic-scenario.md)
+for the required clinician-review and approval journey.
+
 ## Intentionally unpersisted product gaps
 
 The canonical source remains authoritative for these values, but the adapter does not
