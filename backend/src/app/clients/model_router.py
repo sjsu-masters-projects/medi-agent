@@ -52,6 +52,7 @@ class TaskType(Enum):
     MEDWATCH_DRAFT = "medwatch_draft"
     PHARMACOVIGILANCE_SCAN = "pharmacovigilance_scan"
     COMPLEX_ANALYSIS = "complex_analysis"
+    CARE_PLAN_DRAFT = "care_plan_draft"
 
 
 # Route mapping: TaskType → model name
@@ -72,6 +73,9 @@ TASK_MODEL_MAP = {
     TaskType.MEDWATCH_DRAFT: "pro",
     TaskType.PHARMACOVIGILANCE_SCAN: "pro",
     TaskType.COMPLEX_ANALYSIS: "pro",
+    # Clinician-visible structure only. The care-plan service validates source
+    # fact IDs and copies all patient-facing wording from grounded evidence.
+    TaskType.CARE_PLAN_DRAFT: "flash",
 }
 
 

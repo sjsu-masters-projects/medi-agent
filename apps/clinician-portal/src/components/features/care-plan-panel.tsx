@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     approveClinicianCarePlan,
     fetchClinicianCarePlan,
+    fetchClinicianCarePlanGeneration,
     retryClinicianCarePlanGeneration,
     updateClinicianCarePlan,
     type CarePlanItem,
+    type CarePlanGeneration,
     type CarePlanVersion,
 } from "@/services/clinicians";
 
@@ -24,6 +26,7 @@ function displaySource(item: CarePlanItem): string {
 /** Clinician-controlled publication surface. No browser mutation bypasses this API. */
 export function CarePlanPanel({ patientId }: CarePlanPanelProps) {
     const [plan, setPlan] = useState<CarePlanVersion | null>(null);
+    const [generation, setGeneration] = useState<CarePlanGeneration | null>(null);
     const [items, setItems] = useState<EditableItem[]>([]);
     const [note, setNote] = useState("");
     const [loading, setLoading] = useState(true);
@@ -34,8 +37,12 @@ export function CarePlanPanel({ patientId }: CarePlanPanelProps) {
         setLoading(true);
         setError(null);
         try {
-            const next = await fetchClinicianCarePlan(patientId);
+            const [next, nextGeneration] = await Promise.all([
+                fetchClinicianCarePlan(patientId),
+                fetchClinicianCarePlanGeneration(patientId),
+            ]);
             setPlan(next);
+            setGeneration(nextGeneration);
             setItems((next?.items ?? []).map((item) => ({ ...item, clinician_confirmed: false })));
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "Unable to load the care plan.");
@@ -86,12 +93,12 @@ export function CarePlanPanel({ patientId }: CarePlanPanelProps) {
     }
 
     if (loading) return <p className="text-sm text-slate-600">Loading care plan…</p>;
-    if (!plan) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700"><p className="font-semibold">Waiting for an automatic evidence draft</p><p className="mt-1">A draft is created after newly processed evidence has been quiet for five minutes. Nothing is visible to the patient until approval.</p></div>;
+    if (!plan) return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700"><p className="font-semibold">{generation?.status === "failed" ? "Automatic evidence draft failed" : "Waiting for an automatic evidence draft"}</p><p className="mt-1">{generation?.status === "failed" ? "The previous approved plan, if any, remains active. Retry uses the same grounded evidence and never publishes a plan automatically." : "A draft is created after newly processed evidence has been quiet for five minutes. Nothing is visible to the patient until approval."}</p>{generation?.status === "failed" ? <button className="mt-3 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 disabled:opacity-60" disabled={saving} onClick={() => void retry()} type="button">Retry generation</button> : null}</div>;
 
     return <section aria-labelledby="tab-btn-care-plan" id="tab-panel-care-plan" role="tabpanel" className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
             <div><h2 className="text-lg font-semibold text-slate-900">Care plan</h2><p className="text-sm text-slate-600">Version {plan.version_number} · {plan.status === "draft" ? "AI-generated draft — not visible to patient" : `Status: ${plan.status}`}</p></div>
-            {plan.status === "generation_failed" ? <button className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 disabled:opacity-60" disabled={saving} onClick={() => void retry()} type="button">Retry generation</button> : null}
+            {generation?.status === "retry" ? <p className="text-sm text-amber-700">Automatic retry scheduled{generation.next_attempt_at ? ` for ${new Date(generation.next_attempt_at).toLocaleString()}` : ""}.</p> : null}
         </div>
         {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p> : null}
         {unresolved.length ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{unresolved.length} unresolved item{unresolved.length === 1 ? "" : "s"} block whole-plan approval. Edit, remove, or explicitly confirm each one.</p> : null}

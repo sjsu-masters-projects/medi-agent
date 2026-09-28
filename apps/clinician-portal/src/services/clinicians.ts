@@ -220,6 +220,18 @@ export interface CarePlanVersion {
     items: CarePlanItem[];
 }
 
+export interface CarePlanGeneration {
+    id: string;
+    patient_id: string;
+    status: "pending" | "processing" | "retry" | "completed" | "failed";
+    attempts: number;
+    requested_at: string;
+    next_attempt_at?: string | null;
+    completed_at?: string | null;
+    failure_code?: string | null;
+    plan_version_id?: string | null;
+}
+
 type ApiMedicationRecord = Partial<Medication> & Record<string, unknown>;
 type ApiSymptomReportRecord = Partial<SymptomReport> & Record<string, unknown>;
 interface ApiChatMessageRecord {
@@ -602,6 +614,14 @@ export async function fetchExtractedDocumentFacts(
 
 export async function fetchClinicianCarePlan(patientId: string): Promise<CarePlanVersion | null> {
     return apiFetch<CarePlanVersion | null>(`/api/v1/care-plans/clinician/patients/${patientId}`);
+}
+
+export async function fetchClinicianCarePlanGeneration(
+    patientId: string,
+): Promise<CarePlanGeneration | null> {
+    return apiFetch<CarePlanGeneration | null>(
+        `/api/v1/care-plans/clinician/patients/${patientId}/generation`,
+    );
 }
 
 export async function updateClinicianCarePlan(

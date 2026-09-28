@@ -28,6 +28,21 @@ class CarePlanCategory(StrEnum):
     OTHER = "other"
 
 
+class CarePlanDraftSelection(BaseModel):
+    """A model-selected category for one already-grounded source fact.
+
+    The model may classify a supplied fact, but it cannot author patient-facing
+    content. The service copies wording only from the evidence-backed fact.
+    """
+
+    source_fact_id: UUID
+    category: CarePlanCategory
+
+
+class CarePlanDraftProposal(BaseModel):
+    items: list[CarePlanDraftSelection] = Field(min_length=1, max_length=100)
+
+
 class CarePlanItemUpdate(BaseModel):
     id: UUID
     title: str = Field(min_length=1, max_length=300)
@@ -79,6 +94,19 @@ class CarePlanVersionRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     items: list[CarePlanItemRead] = Field(default_factory=list)
+
+
+class CarePlanGenerationRead(BaseModel):
+    id: UUID
+    patient_id: UUID
+    source_watermark: datetime
+    status: str
+    attempts: int
+    requested_at: datetime
+    next_attempt_at: datetime | None = None
+    completed_at: datetime | None = None
+    failure_code: str | None = None
+    plan_version_id: UUID | None = None
 
 
 class PatientCarePlanRead(BaseModel):
