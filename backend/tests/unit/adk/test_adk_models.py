@@ -15,7 +15,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from google.adk.models import Gemini
+from google.adk.models import FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 
 from app.adk.models.adk_models import BearerLiteLlm, adk_model_for, adk_model_for_workload
@@ -206,8 +206,29 @@ def test_a_workload_gets_the_model_the_registry_routes_it_to() -> None:
     assert model.model == "openai/openai/gpt-oss-120b-maas"
 
 
-def test_every_workload_can_build_its_primary_model() -> None:
-    """A routing table naming a model the runtime cannot construct is not a routing table."""
+def test_a_workload_builds_its_declared_fallback_after_the_primary() -> None:
+    """A registry fallback that never reaches the ADK model is only documentation."""
+    with _capturing_genai_client():
+        model = adk_model_for_workload(Workload.TRIAGE)
+
+    assert isinstance(model, FallbackModel)
+    assert [candidate.model for candidate in model.models] == [
+        "openai/openai/gpt-oss-120b-maas",
+        "gemini-3.8-flash",
+    ]
+
+
+def test_a_workload_without_a_fallback_keeps_its_primary_model() -> None:
+    """A route that forbids substitution must not gain one in the runtime adapter."""
+    with _capturing_genai_client():
+        model = adk_model_for_workload(Workload.EXTRACTION)
+
+    assert isinstance(model, Gemini)
+    assert not isinstance(model, FallbackModel)
+
+
+def test_every_workload_can_build_its_complete_model_route() -> None:
+    """Every primary and fallback named by the registry must be constructible."""
     with _capturing_genai_client():
         for workload in Workload:
             assert adk_model_for_workload(workload) is not None
