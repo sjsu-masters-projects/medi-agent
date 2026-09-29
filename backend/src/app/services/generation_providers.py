@@ -73,6 +73,11 @@ class ClientTextProvider:
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
             )
+        except GenerationProviderError:
+            # The capability-specific client already classified this safely.  Preserving
+            # it lets background workflows distinguish a configuration fault from a
+            # recoverable outage without exposing provider messages.
+            raise
         except TimeoutError as exc:
             raise GenerationProviderError(
                 GenerationErrorCode.TIMEOUT, "Text generation timed out"

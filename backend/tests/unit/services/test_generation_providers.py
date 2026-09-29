@@ -14,6 +14,7 @@ from app.models.generation import (
     VoiceTranscriptionRequest,
 )
 from app.services.generation_providers import (
+    ClientTextProvider,
     DeepgramVoiceProvider,
     TextFallbackProvider,
     TextOnlyVoiceProvider,
@@ -50,6 +51,19 @@ async def test_text_provider_records_fallback_path() -> None:
 
     assert response.text == "ready"
     assert response.telemetry.fallback_path == ["primary:timeout", "secondary"]
+
+
+@pytest.mark.asyncio
+async def test_client_text_provider_preserves_a_typed_client_failure() -> None:
+    async def _fail(**_: object) -> str:
+        raise GenerationProviderError(GenerationErrorCode.CONFIGURATION, "safe test failure")
+
+    provider = ClientTextProvider(name="gemini", model="test", generate=_fail)
+
+    with pytest.raises(GenerationProviderError) as caught:
+        await provider.generate(GenerationRequest(prompt="test"))
+
+    assert caught.value.code is GenerationErrorCode.CONFIGURATION
 
 
 @pytest.mark.asyncio

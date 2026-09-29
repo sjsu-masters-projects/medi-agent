@@ -6,6 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.core.exceptions import LLMError
+from app.models.generation import GenerationErrorCode, GenerationProviderError
 
 
 class TestResponse(BaseModel):
@@ -163,6 +164,37 @@ async def test_generate_exception(gemini_client):
 
     with pytest.raises(LLMError, match="generation failed"):
         await gemini_client.generate(prompt="Test prompt")
+
+
+@pytest.mark.asyncio
+async def test_generate_does_not_retry_a_permanent_provider_rejection(gemini_client):
+    """A rejected configuration cannot be repaired by resending private context."""
+
+    class ProviderRejectedError(Exception):
+        status_code = 403
+
+    gemini_client.model.generate_content_async = AsyncMock(side_effect=ProviderRejectedError())
+    gemini_client.max_retries = 3
+
+    with pytest.raises(GenerationProviderError) as raised:
+        await gemini_client.generate(prompt="Test prompt")
+
+    assert raised.value.code is GenerationErrorCode.AUTHENTICATION
+    assert gemini_client.model.generate_content_async.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_logs_only_the_safe_failure_category(gemini_client, caplog):
+    gemini_client.model.generate_content_async = AsyncMock(
+        side_effect=RuntimeError("private provider diagnostics must not be logged")
+    )
+    gemini_client.max_retries = 1
+
+    with pytest.raises(GenerationProviderError):
+        await gemini_client.generate(prompt="Test prompt")
+
+    assert "private provider diagnostics" not in caplog.text
+    assert "category=unavailable" in caplog.text
 
 
 # ============================================================
