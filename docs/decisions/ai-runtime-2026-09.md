@@ -44,6 +44,8 @@ documented in `.env.example`; do not commit a real `.env` file.
    fallback path. It deliberately records no patient identifier, prompt, or response text.
 6. Model-generated clinical data remains a reviewable candidate. A model cannot approve a
    medication change, diagnosis, or external clinical action.
+7. ADK agents construct the registry's complete primary/fallback route. Retriable provider
+   failures (including HTTP 429) move to the declared fallback before any response is emitted.
 
 ## Evidence and limits
 

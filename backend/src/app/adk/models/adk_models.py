@@ -23,7 +23,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from google.adk.models import BaseLlm, Gemini
+from google.adk.models import BaseLlm, FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 from pydantic import PrivateAttr
 
@@ -120,5 +120,9 @@ def adk_model_for(
 
 
 def adk_model_for_workload(workload: Workload) -> BaseLlm:
-    """Build the primary model for a workload, as the registry routes it."""
-    return adk_model_for(route_for(workload).primary)
+    """Build the complete model route for a workload, including its fallback."""
+    route = route_for(workload)
+    primary = adk_model_for(route.primary)
+    if route.fallback is None:
+        return primary
+    return FallbackModel(models=[primary, adk_model_for(route.fallback)])
