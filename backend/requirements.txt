@@ -449,7 +449,7 @@ pydantic-settings==2.15.0
     #   litellm
 pygments==2.21.0
     # via rich
-pyjwt==2.13.0
+pyjwt==2.15.1
     # via
     #   -r requirements.in
     #   supabase-auth
