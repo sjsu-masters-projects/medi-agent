@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
+from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
 from app.clients.model_router import TaskType, get_router
@@ -20,11 +21,19 @@ from app.models.clinical_fact import (
     SourceArtifactType,
     SourceProvenanceCreate,
 )
+from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.services.care_plan_prompts import CARE_PLAN_DRAFT_SYSTEM, CARE_PLAN_DRAFT_USER
 from app.services.clinical_fact_service import ClinicalFactService
 
 _LOW_CONFIDENCE = 0.7
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
+_TRANSIENT_PROVIDER_FAILURES = frozenset(
+    {
+        GenerationErrorCode.RATE_LIMITED,
+        GenerationErrorCode.TIMEOUT,
+        GenerationErrorCode.UNAVAILABLE,
+    }
+)
 
 
 class CarePlanService:
@@ -55,11 +64,8 @@ class CarePlanService:
             try:
                 await self._generate(claim)
                 counts["care_plans_ready"] += 1
-            except Exception:  # noqa: BLE001 - a plan failure must not fail document ingestion
-                if self._retry(claim):
-                    counts["care_plans_failed"] += 1
-                else:
-                    counts["care_plans_retry"] += 1
+            except Exception as error:  # noqa: BLE001 - classification owns the safe boundary
+                counts[self._record_generation_failure(claim, error)] += 1
         return counts
 
     def get_for_clinician(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any] | None:
@@ -469,18 +475,33 @@ class CarePlanService:
                 ).execute()
         return draft
 
-    def _retry(self, claim: dict[str, Any]) -> bool:
+    def _record_generation_failure(self, claim: dict[str, Any], error: Exception) -> str:
+        """Persist a safe outcome without retrying deterministic draft failures."""
+        if isinstance(error, GenerationProviderError):
+            failure = f"provider_{error.code.value}"
+            if error.code in _TRANSIENT_PROVIDER_FAILURES:
+                return (
+                    "care_plans_failed"
+                    if self._retry(claim, failure=failure)
+                    else "care_plans_retry"
+                )
+        elif isinstance(error, PydanticValidationError | ValueError):
+            failure = "invalid_model_response"
+        else:
+            failure = "generation_internal_error"
+        self._finish_request(claim, status="failed", plan_id=None, failure=failure)
+        return "care_plans_failed"
+
+    def _retry(self, claim: dict[str, Any], *, failure: str) -> bool:
         attempt = int(claim.get("attempt") or 1)
         if attempt >= 3:
-            self._finish_request(
-                claim, status="failed", plan_id=None, failure="provider_unavailable"
-            )
+            self._finish_request(claim, status="failed", plan_id=None, failure=failure)
             return True
         self.db.table("care_plan_generation_requests").update(
             {
                 "status": "retry",
                 "next_attempt_at": (datetime.now(UTC) + _RETRY_DELAYS[attempt - 1]).isoformat(),
-                "failure_code": "provider_unavailable",
+                "failure_code": failure,
                 "claimed_at": None,
             }
         ).eq("id", str(claim["request_id"])).execute()

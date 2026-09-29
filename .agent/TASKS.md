@@ -1656,7 +1656,9 @@ completion or report an adherence barrier, and that response becomes visible to 
       patient-visible title, instruction, frequency, dose, and route from the candidate itself.
       It records a cross-document medication reconciliation conflict as an approval blocker,
       uses an approved version as the baseline for version `N+1`, and exposes durable
-      pending/retry/failed state to the assigned clinician. The Care Plan panel now opens the
+      pending/retry/failed state to the assigned clinician. Only transient provider failures
+      retry with bounded backoff; invalid model structure and configuration failures terminate
+      with a safe failure code rather than being mislabeled as an outage. The Care Plan panel now opens the
       existing protected document-preview route beside a selected evidence-backed item; a
       clinician-authored entry clearly reports that it has no source document. Migration 041
       backfills one pending request for eligible document-grounded facts completed before the
