@@ -25,8 +25,8 @@ A task is done only when its implementation, authorization, error handling, audi
 |---|---|---|
 | Repository | Main synchronized | Local `main` matches `origin/main`; current tracker verification is recorded on a separate documentation branch |
 | Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
-| Patient portal | Partial | Patients can view existing medications/obligations, documents, explanations, and basic feed/adherence statistics; no clinician-approved care-plan or complete adherence/barrier loop exists |
-| Clinician portal | Partial | Roster, patient deep dive, and document source viewer exist; document-fact review, consolidated action queues, and a longitudinal decision timeline are incomplete |
+| Patient portal | Partial | Patients can view existing medications/obligations, documents, explanations, and basic feed/adherence statistics. The Today feed now guards plan-linked tasks by approved/effective plan state and shows plan provenance; live clinician-approved-plan acceptance remains unproven. |
+| Clinician portal | Partial | Roster, patient deep dive, document source viewer, extracted-fact review, and Care Plan draft/review surfaces exist; the fresh synthetic approval journey, consolidated action queues, and a longitudinal decision timeline remain incomplete. |
 | Backend foundation | Functional foundation | Versioned APIs, auth, RLS, audit, and worker services exist; several product lifecycles are not connected end to end |
 | Records ingestion | Demonstration-ready candidate pipeline | Secure document intake, evidence-backed candidates, TIFF previews, and retryable explanation lifecycle work; clinician review, reconciliation, and downstream approved-action projection remain incomplete |
 | Chat and triage | Partial | Deterministic emergency handling and the Care Coordinator are live; document-focused chat, durable safety-rule audit, and a websocket-token remediation remain open |
@@ -49,17 +49,18 @@ care-plan/Today-feed journey as the next vertical slice.
 ## Product stage and functional gap map — 2026-09-26
 
 **Current stage:** a deployed, synthetic-data prototype with secure document ingestion and
-foundational patient/clinician surfaces. It is **not yet a closed-loop care product**: the system
-can safely read and explain a document, but it cannot yet take a clinician-reviewed instruction
-through an approved care-plan item, a patient action or barrier, and back into clinician follow-up.
+foundational patient/clinician surfaces. The controlled care-plan implementation now spans draft,
+clinician review, approval, projection, patient completion/barrier, and clinician display, but the
+fresh synthetic end-to-end proof is still blocked on diagnosing and retrying the observed draft
+failure. It must not be presented as a completed closed-loop care product until that proof passes.
 
 | Product journey | Demonstrably working now | Functional gap | Tracked work |
 | --- | --- | --- | --- |
 | Access and clinic boundaries | Synthetic patient/clinician login, assigned-care-team access, unassigned clinician denial, denial audit, private document URLs | WebSocket chat still places a session token in the URL; broader release security qualification remains | SEC-001, QUA-001 |
-| Document intake and understanding | PDF/image/TIFF ingestion, source provenance, evidence-backed pending candidates, private derived previews, plain-language explanation and retry lifecycle | No clinician document-fact review or authorized reconciliation-to-action journey | REC-001, PAT-005 |
+| Document intake and understanding | PDF/image/TIFF ingestion, source provenance, evidence-backed pending candidates, private derived previews, plain-language explanation and retry lifecycle; clinician extracted-facts review | Fresh synthetic evidence-to-approved-plan proof and authorized reconciliation-to-action journey remain incomplete | REC-001, PAT-005 |
 | Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish | Document-focused conversation lifecycle, some safety-audit persistence, and complete recovery journey remain open | PAT-001, PAT-004, SAFE-002 |
-| Today feed and adherence | Existing medication/obligation feed projection and adherence statistics | No clinician-approved plan-item lifecycle; no end-to-end patient completion or barrier loop | PAT-002, PAT-005 |
-| Clinician action workspace | Roster, patient detail, source preview, basic document status | No extracted-facts review panel, consolidated queue, explainable risk, or unified timeline | PAT-005, CLN-001, CLN-002 |
+| Today feed and adherence | Deterministic medication/obligation feed, adherence statistics, completion/barrier capture, and plan-linked approved/effective-task guard | No live proof of the clinician-approved item through patient and clinician follow-up | PAT-002, PAT-005 |
+| Clinician action workspace | Roster, patient detail, source preview, extracted-facts review, care-plan draft/review, and basic document status | No consolidated queue, explainable risk, or unified timeline; live care-plan acceptance remains incomplete | PAT-005, CLN-001, CLN-002 |
 | Care closure | Document Job runs every five minutes; manual summary retry exists | No approved clinical messaging, appointment completion, notifications/retry, or care-gap follow-up loop | SCH-001, COM-001 |
 | Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation | No completed multi-source reconciliation, ADR/Naranjo review, or MedWatch draft lifecycle | MED-001, MED-002, PV-001, PV-002 |
 | Interoperability and continuity | Deployed SMART-on-FHIR sandbox import with candidate provenance | Export, CDS Hooks, official MCP/A2A, multi-provider timeline, and handoff remain incomplete | INT-002, STD-001–003, CON-001 |
@@ -103,15 +104,29 @@ task section, and update this row. Do not add work to an item marked **Claimed**
 explicitly asks for help. A **Blocked** row names the exact unblocker so it is not mistaken for
 available work.
 
+### Current delivery queue
+
+**Current sprint goal:** turn the versioned clinician-approved care-plan implementation into one
+recorded `PAT-005-SYN-001` journey. The evidence must run from upload through clinician approval,
+patient completion or barrier, and clinician follow-up. A successful UI screen alone is not
+completion; the proof needs the source, approval, projections, and audit evidence described in
+PAT-005.
+
 | Work item | State | Owner / working branch | Next concrete result | Dependency or handoff |
 | --- | --- | --- | --- | --- |
-| PAT-005 — controlled Today-feed loop | **Claimed** | Rajeev — `codex/pat-005-care-plan-observability` | Emit a safe, structured care-plan generation outcome in the worker log; it records request/attempt/outcome/failure code only. | Keep clinical text, prompts, source facts, and patient identifiers out of logs. Handoff to the E2E proof row after merge/deployment. |
-| PAT-005 — fresh synthetic E2E proof | **Blocked** | Rajeev + assigned synthetic clinician | Retry Maya's failed generation once the safe outcome event is deployed; record its failure code, or review the resulting draft through approval, Today, completion/barrier, and clinician follow-up. | The currently displayed failed request predates safe outcome logging. It needs one clinician-authorized retry after the observability change deploys; no migration or manual Cloud Run execution is needed. |
-| PAT-004 — document-focused conversation | **Ready** | Patient-portal lane — unassigned | Implement the persistent selected-document context card and server-authorized per-message document reference. | Must preserve the source-bound, no-chart-wide-inference rules in PAT-004; it is independent of PAT-005 approval work. |
-| CI-001 — selective backend test evidence | **Ready** | Unassigned CI-maintenance lane | Collect one eligible Acquit selective-run observation and publish the selected-test/full-suite evidence. | Keep Acquit in canary mode. Do not change enforcement until ten safe observations are documented. |
-| SAFE-002 — safety-floor language gap | **Blocked** | Clinical reviewer + safety owner | Approve exact English and Mexican-Spanish wording/coverage for the identified inflected self-harm, anaphylaxis, and stroke phrases, then add deterministic tests and rules. | Engineering must not invent clinical escalation wording; clinical sign-off is the unblocker. |
-| CLN-001 — consolidated clinician queue | **Blocked** | Clinician-portal lane — unassigned | Design the queue only after PAT-005's approval, adherence, and barrier artifacts are demonstrated live. | PAT-005 E2E proof defines the real approval and follow-up records this queue must present. |
-| MED-001 / MED-002 — medication reconciliation | **Ready after PAT-005 proof** | Platform + clinician-portal lanes — unassigned | Scope the reviewed candidate-versus-local medication comparison using the PAT-005 conflict scenario. | Reuse, rather than duplicate, PAT-005's evidence and approval boundaries. |
+| `PAT-005-A` — safe draft-failure diagnostics | **Claimed** | Rajeev — `codex/pat-005-care-plan-observability` | Emit a safe worker event containing only request ID, attempt, outcome, and failure code. | Keep clinical text, prompts, source facts, patient IDs, and provider exception text out of logs. After deployment, hand off to `PAT-005-B`. |
+| `PAT-005-B` — diagnose the existing failed request | **Blocked** | Rajeev + assigned synthetic clinician | Use the clinician retry action after `PAT-005-A` deploys; record the safe failure code from the next scheduled Job execution. | Maya's already-failed request predates outcome logging. This is a diagnostic retry only; do not upload a replacement document or manually execute Cloud Run. |
+| `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | Starts only after `PAT-005-B` identifies and resolves the generation fault. It is the PAT-005 completion gate. |
+| `PAT-002-A` — adherence/barrier acceptance evidence | **Sequenced** | Patient + clinician portal lanes | Exercise each patient barrier category and completion against an approved effective plan item; verify clinician display and assignment denial. | Runs with `PAT-005-C`; do not create a parallel adherence data model or bypass the plan projection. |
+| `PAT-004-A` — document-focused conversation | **Ready** | Patient-portal lane — unassigned | Implement the persistent selected-document context card and server-authorized per-message document reference. | Preserve the source-bound, no-chart-wide-inference rules in PAT-004. Independent of PAT-005. |
+| `CI-001-A` — selective-test evidence | **Ready** | CI-maintenance lane — unassigned | Collect one eligible Acquit selective-run observation and publish selected-test/full-suite evidence. | Keep Acquit in canary mode; enforcement waits for ten safe observations. |
+| `SAFE-002-A` — language-gap safety rules | **Blocked** | Clinical reviewer + safety owner | Approve exact English and Mexican-Spanish wording/coverage for inflected self-harm, anaphylaxis, and stroke phrases; then add deterministic tests and rules. | Engineering must not invent clinical escalation wording. Clinical sign-off is the unblocker. |
+| `CLN-001-A` — consolidated clinician queue | **Sequenced** | Clinician-portal lane — unassigned | Design the queue around demonstrated PAT-005 approval, adherence, and barrier artifacts. | Wait for `PAT-005-C`; that proof defines which records the queue must render. |
+| `MED-001/002-A` — reconciliation scope | **Sequenced** | Platform + clinician-portal lanes — unassigned | Use PAT-005's medication-conflict scenario to scope reviewed candidate-versus-local comparison. | Reuse PAT-005 evidence/approval boundaries; do not duplicate a competing clinical-decision lifecycle. |
+
+**State meanings:** **Claimed** has one active owner and branch; **Ready** is safe to start in a
+separate branch; **Blocked** needs the stated external decision or evidence; **Sequenced** is
+intentionally deferred until its named predecessor finishes.
 
 ### Claim and handoff rules
 
@@ -125,7 +140,7 @@ available work.
    visible acceptance path are all complete. Otherwise leave it **Claimed** or **Blocked** with
    the reason.
 
-## Active task
+## Foundational and CI maintenance
 
 ### REV-001 — Restore a trustworthy green CI baseline
 
