@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 _LOW_CONFIDENCE = 0.7
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
+_CARE_PLAN_MIN_OUTPUT_TOKENS = 4096
+_CARE_PLAN_TOKENS_PER_FACT = 128
+_CARE_PLAN_MAX_OUTPUT_TOKENS = 8192
 _TRANSIENT_PROVIDER_FAILURES = frozenset(
     {
         GenerationErrorCode.RATE_LIMITED,
@@ -317,12 +320,21 @@ class CarePlanService:
             }
             for fact in facts
         ]
+        # The contract requires one JSON entry for every fact and Gemini counts hidden
+        # reasoning against the output ceiling.  A fixed 1,024-token ceiling truncated
+        # valid classification runs before the model could emit the final IDs.  The
+        # budget scales only with the already bounded input count and remains capped.
+        max_tokens = min(
+            _CARE_PLAN_MAX_OUTPUT_TOKENS,
+            max(_CARE_PLAN_MIN_OUTPUT_TOKENS, len(prompt_facts) * _CARE_PLAN_TOKENS_PER_FACT),
+        )
         response, _telemetry = await get_router().generate_text_with_telemetry(
             TaskType.CARE_PLAN_DRAFT,
             prompt=CARE_PLAN_DRAFT_USER.format(facts_json=json.dumps(prompt_facts, sort_keys=True)),
             system_instruction=CARE_PLAN_DRAFT_SYSTEM,
             temperature=0,
-            max_tokens=1024,
+            max_tokens=max_tokens,
+            thinking_level="LOW",
         )
         proposal = CarePlanDraftProposal.model_validate_json(str(response))
         expected_ids = {str(fact["id"]) for fact in facts}

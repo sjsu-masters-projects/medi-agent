@@ -261,6 +261,7 @@ class ModelRouter:
         system_instruction: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        thinking_level: str | None = None,
     ) -> str:
         """Generate plain text through the provider contract and return text only."""
         text, _telemetry = await self.generate_text_with_telemetry(
@@ -269,6 +270,7 @@ class ModelRouter:
             system_instruction=system_instruction,
             temperature=temperature,
             max_tokens=max_tokens,
+            thinking_level=thinking_level,
         )
         return text
 
@@ -280,6 +282,7 @@ class ModelRouter:
         system_instruction: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        thinking_level: str | None = None,
     ) -> tuple[str, GenerationTelemetry]:
         """Generate text and return which model produced it, alongside the text.
 
@@ -299,6 +302,7 @@ class ModelRouter:
                 system_instruction=system_instruction,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                thinking_level=thinking_level,
                 task=task_type.value,
             )
         )

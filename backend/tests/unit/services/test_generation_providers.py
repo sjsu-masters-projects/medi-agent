@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from app.models.generation import (
@@ -64,6 +66,16 @@ async def test_client_text_provider_preserves_a_typed_client_failure() -> None:
         await provider.generate(GenerationRequest(prompt="test"))
 
     assert caught.value.code is GenerationErrorCode.CONFIGURATION
+
+
+@pytest.mark.asyncio
+async def test_client_text_provider_passes_reasoning_ceiling_only_when_requested() -> None:
+    generate = AsyncMock(return_value="ready")
+    provider = ClientTextProvider(name="gemini", model="test", generate=generate)
+
+    await provider.generate(GenerationRequest(prompt="test", thinking_level="LOW"))
+
+    assert generate.await_args.kwargs["thinking_level"] == "LOW"
 
 
 @pytest.mark.asyncio

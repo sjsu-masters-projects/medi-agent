@@ -89,6 +89,8 @@ async def test_draft_selector_accepts_only_complete_fixed_fact_classification(
     prompt = router.generate_text_with_telemetry.await_args.kwargs["prompt"]
     assert "Metformin" in prompt
     assert "source_fact_id" in prompt
+    assert router.generate_text_with_telemetry.await_args.kwargs["thinking_level"] == "LOW"
+    assert router.generate_text_with_telemetry.await_args.kwargs["max_tokens"] == 4096
 
 
 @pytest.mark.asyncio
