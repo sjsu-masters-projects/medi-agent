@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
@@ -24,6 +25,8 @@ from app.models.clinical_fact import (
 from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.services.care_plan_prompts import CARE_PLAN_DRAFT_SYSTEM, CARE_PLAN_DRAFT_USER
 from app.services.clinical_fact_service import ClinicalFactService
+
+logger = logging.getLogger(__name__)
 
 _LOW_CONFIDENCE = 0.7
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
@@ -64,8 +67,11 @@ class CarePlanService:
             try:
                 await self._generate(claim)
                 counts["care_plans_ready"] += 1
+                self._log_generation_outcome(claim, outcome="ready")
             except Exception as error:  # noqa: BLE001 - classification owns the safe boundary
-                counts[self._record_generation_failure(claim, error)] += 1
+                outcome, failure = self._record_generation_failure(claim, error)
+                counts[outcome] += 1
+                self._log_generation_outcome(claim, outcome=outcome, failure_code=failure)
         return counts
 
     def get_for_clinician(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any] | None:
@@ -475,22 +481,40 @@ class CarePlanService:
                 ).execute()
         return draft
 
-    def _record_generation_failure(self, claim: dict[str, Any], error: Exception) -> str:
+    def _record_generation_failure(
+        self, claim: dict[str, Any], error: Exception
+    ) -> tuple[str, str]:
         """Persist a safe outcome without retrying deterministic draft failures."""
         if isinstance(error, GenerationProviderError):
             failure = f"provider_{error.code.value}"
             if error.code in _TRANSIENT_PROVIDER_FAILURES:
                 return (
-                    "care_plans_failed"
+                    ("care_plans_failed", failure)
                     if self._retry(claim, failure=failure)
-                    else "care_plans_retry"
+                    else ("care_plans_retry", failure)
                 )
         elif isinstance(error, PydanticValidationError | ValueError):
             failure = "invalid_model_response"
         else:
             failure = "generation_internal_error"
         self._finish_request(claim, status="failed", plan_id=None, failure=failure)
-        return "care_plans_failed"
+        return "care_plans_failed", failure
+
+    @staticmethod
+    def _log_generation_outcome(
+        claim: dict[str, Any], *, outcome: str, failure_code: str | None = None
+    ) -> None:
+        """Emit a Cloud Run-correlatable outcome without source or patient content."""
+        event: dict[str, int | str] = {
+            "event": "care_plan_generation_outcome",
+            "outcome": outcome,
+            "request_id": str(claim["request_id"]),
+            "attempt": int(claim.get("attempt") or 1),
+        }
+        if failure_code is not None:
+            event["failure_code"] = failure_code
+        log = logger.warning if failure_code is not None else logger.info
+        log("%s", json.dumps(event, sort_keys=True, separators=(",", ":")))
 
     def _retry(self, claim: dict[str, Any], *, failure: str) -> bool:
         attempt = int(claim.get("attempt") or 1)

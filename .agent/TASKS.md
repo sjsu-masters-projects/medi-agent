@@ -94,6 +94,37 @@ For the master's-project demonstration, prioritize this sequence over production
 throughput work. The five-minute document Job is enabled to support the controlled scenario; it
 does not turn a document-processing component into the product outcome.
 
+## Work coordination board
+
+Use this board before claiming work. It is the short operational view; the linked task section
+remains the source for detailed requirements and acceptance criteria. A teammate may take a
+**Ready** item without waiting for another task, but must create a branch, name themselves in the
+task section, and update this row. Do not add work to an item marked **Claimed** unless its owner
+explicitly asks for help. A **Blocked** row names the exact unblocker so it is not mistaken for
+available work.
+
+| Work item | State | Owner / working branch | Next concrete result | Dependency or handoff |
+| --- | --- | --- | --- | --- |
+| PAT-005 — controlled Today-feed loop | **Claimed** | Rajeev — `codex/pat-005-care-plan-observability` | Emit a safe, structured care-plan generation outcome in the worker log; it records request/attempt/outcome/failure code only. | Keep clinical text, prompts, source facts, and patient identifiers out of logs. Handoff to the E2E proof row after merge/deployment. |
+| PAT-005 — fresh synthetic E2E proof | **Blocked** | Rajeev + assigned synthetic clinician | Retry Maya's failed generation once the safe outcome event is deployed; record its failure code, or review the resulting draft through approval, Today, completion/barrier, and clinician follow-up. | The currently displayed failed request predates safe outcome logging. It needs one clinician-authorized retry after the observability change deploys; no migration or manual Cloud Run execution is needed. |
+| PAT-004 — document-focused conversation | **Ready** | Patient-portal lane — unassigned | Implement the persistent selected-document context card and server-authorized per-message document reference. | Must preserve the source-bound, no-chart-wide-inference rules in PAT-004; it is independent of PAT-005 approval work. |
+| CI-001 — selective backend test evidence | **Ready** | Unassigned CI-maintenance lane | Collect one eligible Acquit selective-run observation and publish the selected-test/full-suite evidence. | Keep Acquit in canary mode. Do not change enforcement until ten safe observations are documented. |
+| SAFE-002 — safety-floor language gap | **Blocked** | Clinical reviewer + safety owner | Approve exact English and Mexican-Spanish wording/coverage for the identified inflected self-harm, anaphylaxis, and stroke phrases, then add deterministic tests and rules. | Engineering must not invent clinical escalation wording; clinical sign-off is the unblocker. |
+| CLN-001 — consolidated clinician queue | **Blocked** | Clinician-portal lane — unassigned | Design the queue only after PAT-005's approval, adherence, and barrier artifacts are demonstrated live. | PAT-005 E2E proof defines the real approval and follow-up records this queue must present. |
+| MED-001 / MED-002 — medication reconciliation | **Ready after PAT-005 proof** | Platform + clinician-portal lanes — unassigned | Scope the reviewed candidate-versus-local medication comparison using the PAT-005 conflict scenario. | Reuse, rather than duplicate, PAT-005's evidence and approval boundaries. |
+
+### Claim and handoff rules
+
+1. Before editing, move the row to **Claimed**, add the owner and branch, and link the detailed
+   task section that supplies acceptance criteria.
+2. A PR may cover one row plus its direct verification/docs update. Split unrelated changes into
+   another branch so parallel work does not create merge conflicts.
+3. On handoff, replace “next concrete result” with the exact verification command, screenshot,
+   synthetic fixture, or deployment evidence needed by the next owner.
+4. Only mark a row **Done** after the detailed task's authorization, error, audit, tests, and
+   visible acceptance path are all complete. Otherwise leave it **Claimed** or **Blocked** with
+   the reason.
+
 ## Active task
 
 ### REV-001 — Restore a trustworthy green CI baseline

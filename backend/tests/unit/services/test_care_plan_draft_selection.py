@@ -165,6 +165,35 @@ async def test_invalid_model_response_fails_without_a_retry() -> None:
 
 
 @pytest.mark.asyncio
+async def test_terminal_generation_failure_logs_only_safe_operational_fields(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    service = _service_with_claim()
+    service._generate = AsyncMock(side_effect=ValueError("private source text must not be logged"))
+    service._finish_request = MagicMock()
+
+    with caplog.at_level("WARNING", logger=care_plan_service.__name__):
+        await service.process_pending(limit=1)
+
+    events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.getMessage().startswith("{")
+    ]
+    assert events == [
+        {
+            "attempt": 1,
+            "event": "care_plan_generation_outcome",
+            "failure_code": "invalid_model_response",
+            "outcome": "care_plans_failed",
+            "request_id": "00000000-0000-0000-0000-000000000301",
+        }
+    ]
+    assert "private source text" not in caplog.text
+    assert "00000000-0000-0000-0000-000000000302" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_non_transient_provider_failure_fails_without_a_retry() -> None:
     service = _service_with_claim()
     service._generate = AsyncMock(
