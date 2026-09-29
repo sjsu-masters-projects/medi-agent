@@ -12,6 +12,14 @@
 The allocation is the execution starting point for the August–December plan. Update
 the table and `.agent/TASKS.md` whenever responsibility changes.
 
+## Sequenced work ownership
+
+- Ganesh Thampi owns `PV-001` (clinician ADR/Naranjo review) once the confirmed symptom-report
+  contract from `PAT-002-B` and `PAT-002-C` is available.
+- Jeevan Kurian owns `PV-002` (clinician-approved MedWatch draft/export) after `PV-001`.
+- These assignments do not authorize autonomous ADR decisions or FDA submission; the clinical
+  reviewer remains the decision-maker and final approver.
+
 ## Operating cadence
 
 - Maintain one integrated vertical increment each week.
