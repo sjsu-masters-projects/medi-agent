@@ -497,6 +497,13 @@ export interface FeedProvider {
     clinicName: string;
 }
 
+export interface FeedCarePlanProvenance {
+    versionNumber: number;
+    category: string;
+    effectiveStartDate?: string;
+    effectiveEndDate?: string;
+}
+
 export interface FeedTask {
     id: string;
     type: FeedTaskType;
@@ -511,6 +518,7 @@ export interface FeedTask {
     requiresScheduleConfiguration?: boolean;
     provider?: FeedProvider;
     carePlanItemId?: string;
+    carePlan?: FeedCarePlanProvenance;
 }
 
 export interface FeedSummary {

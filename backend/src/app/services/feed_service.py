@@ -47,11 +47,14 @@ class FeedService:
             target_date = datetime.now(timezone_info).date()
 
         # Fetch data concurrently for performance
-        medications, obligations, adherence_logs = await asyncio.gather(
+        medications, obligations, adherence_logs, plan_items = await asyncio.gather(
             self._get_medications(patient_id),
             self._get_obligations(patient_id),
             self._get_today_adherence(patient_id, target_date, effective_timezone),
+            self._get_approved_plan_items(patient_id),
         )
+        medications = self._current_plan_projections(medications, plan_items, target_date)
+        obligations = self._current_plan_projections(obligations, plan_items, target_date)
 
         adherence_occurrence_map, adherence_unscheduled_map = self._build_adherence_maps(
             adherence_logs
@@ -198,6 +201,45 @@ class FeedService:
             logger.error(f"Failed to fetch obligations: {e}")
             return []
 
+    async def _get_approved_plan_items(self, patient_id: UUID) -> dict[str, dict[str, Any]]:
+        """Load only current approved plan items for feed projection validation."""
+        try:
+            versions = cast(
+                list[dict[str, Any]],
+                self.db.table("care_plan_versions")
+                .select("id, version_number")
+                .eq("patient_id", str(patient_id))
+                .eq("status", "approved")
+                .execute()
+                .data
+                or [],
+            )
+            version_numbers = {str(row["id"]): int(row["version_number"]) for row in versions}
+            if not version_numbers:
+                return {}
+            items = cast(
+                list[dict[str, Any]],
+                self.db.table("care_plan_items")
+                .select("id, plan_version_id, category, schedule, is_removed")
+                .in_("plan_version_id", list(version_numbers))
+                .eq("is_removed", False)
+                .execute()
+                .data
+                or [],
+            )
+        except Exception:
+            logger.warning("Failed to load approved care-plan projections")
+            return {}
+        return {
+            str(item["id"]): {
+                "version_number": version_numbers[str(item["plan_version_id"])],
+                "category": str(item["category"]),
+                "schedule": item.get("schedule") or {},
+            }
+            for item in items
+            if str(item["plan_version_id"]) in version_numbers
+        }
+
     async def _get_today_adherence(
         self, patient_id: UUID, target_date: date, timezone_name: str
     ) -> list[dict[str, Any]]:
@@ -270,6 +312,59 @@ class FeedService:
                     unscheduled_map[key] = log
         return occurrence_map, unscheduled_map
 
+    @classmethod
+    def _current_plan_projections(
+        cls,
+        projections: list[dict[str, Any]],
+        approved_items: dict[str, dict[str, Any]],
+        target_date: date,
+    ) -> list[dict[str, Any]]:
+        """Keep legacy projections plus approved care-plan items effective on this date."""
+        visible: list[dict[str, Any]] = []
+        for projection in projections:
+            item_id = projection.get("care_plan_item_id")
+            if item_id is None:
+                visible.append(projection)
+                continue
+            plan_item = approved_items.get(str(item_id))
+            if plan_item is not None and cls._plan_item_is_effective(plan_item, target_date):
+                projection["care_plan"] = cls._plan_provenance(plan_item)
+                visible.append(projection)
+        return visible
+
+    @staticmethod
+    def _plan_item_is_effective(plan_item: dict[str, Any], target_date: date) -> bool:
+        schedule = plan_item.get("schedule")
+        if not isinstance(schedule, dict):
+            return False
+        start = FeedService._schedule_date(schedule, "start_date")
+        end = FeedService._schedule_date(schedule, "end_date")
+        if (schedule.get("start_date") and start is None) or (
+            schedule.get("end_date") and end is None
+        ):
+            return False
+        return (start is None or start <= target_date) and (end is None or target_date <= end)
+
+    @staticmethod
+    def _schedule_date(schedule: dict[str, Any], key: str) -> date | None:
+        value = schedule.get(key)
+        if not value:
+            return None
+        try:
+            return date.fromisoformat(str(value))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _plan_provenance(plan_item: dict[str, Any]) -> dict[str, Any]:
+        schedule = cast(dict[str, Any], plan_item.get("schedule") or {})
+        return {
+            "version_number": plan_item["version_number"],
+            "category": plan_item["category"],
+            "effective_start_date": schedule.get("start_date"),
+            "effective_end_date": schedule.get("end_date"),
+        }
+
     def _medications_to_tasks(
         self,
         medications: list[dict[str, Any]],
@@ -332,6 +427,7 @@ class FeedService:
                     ),
                     "provider": self._extract_provider(med.get("care_teams")),
                     "care_plan_item_id": med.get("care_plan_item_id"),
+                    "care_plan": med.get("care_plan"),
                 }
             )
         return tasks
@@ -398,6 +494,7 @@ class FeedService:
                     ),
                     "provider": self._extract_provider(obl.get("care_teams")),
                     "care_plan_item_id": obl.get("care_plan_item_id"),
+                    "care_plan": obl.get("care_plan"),
                 }
             )
         return tasks
@@ -438,6 +535,7 @@ class FeedService:
                     "requires_schedule_configuration": False,
                     "provider": self._extract_provider(target.get("care_teams")),
                     "care_plan_item_id": target.get("care_plan_item_id"),
+                    "care_plan": target.get("care_plan"),
                 }
             )
         return tasks

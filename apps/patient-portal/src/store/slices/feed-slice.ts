@@ -30,6 +30,12 @@ interface ApiFeedTask {
     provider?: ApiFeedProvider | null;
     care_plan_item_id?: string | null;
     carePlanItemId?: string | null;
+    care_plan?: {
+        version_number: number;
+        category: string;
+        effective_start_date?: string | null;
+        effective_end_date?: string | null;
+    } | null;
 }
 
 interface ApiTodayFeedResponse {
@@ -78,6 +84,14 @@ function mapApiTask(task: ApiFeedTask): FeedTask {
     return {
         completedAt: task.completedAt ?? task.completed_at ?? undefined,
         carePlanItemId: task.carePlanItemId ?? task.care_plan_item_id ?? undefined,
+        carePlan: task.care_plan
+            ? {
+                  versionNumber: task.care_plan.version_number,
+                  category: task.care_plan.category,
+                  effectiveStartDate: task.care_plan.effective_start_date ?? undefined,
+                  effectiveEndDate: task.care_plan.effective_end_date ?? undefined,
+              }
+            : undefined,
         description: task.description ?? undefined,
         frequency: task.frequency,
         id: task.id,

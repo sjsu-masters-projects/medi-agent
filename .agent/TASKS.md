@@ -1675,7 +1675,10 @@ completion or report an adherence barrier, and that response becomes visible to 
 - [/] Project only current approved items into the patient's Today feed by local timezone. Keep
       this projection deterministic: it combines approved care-plan items, prescribed medication
       schedules, appointments, and clinician-sent follow-up tasks, never an LLM response at page
-      load.
+      load. The feed now defensively excludes plan-linked projections unless their immutable item
+      belongs to an approved plan and is effective on the patient's selected local date; it returns
+      plan version, category, and effective dates for the patient-visible care-plan label. Full
+      live approval and timezone acceptance remain open.
 - [/] Present a plain-language patient view that identifies the care-team source, distinguishes
       a clinician instruction from an informational suggestion, supports confirmation/barrier
       reporting where appropriate, and directs patients to their care team for changes.
