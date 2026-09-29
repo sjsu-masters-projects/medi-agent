@@ -1658,8 +1658,10 @@ completion or report an adherence barrier, and that response becomes visible to 
       uses an approved version as the baseline for version `N+1`, and exposes durable
       pending/retry/failed state to the assigned clinician. The Care Plan panel now opens the
       existing protected document-preview route beside a selected evidence-backed item; a
-      clinician-authored entry clearly reports that it has no source document. Full live proof
-      with the PAT-005 synthetic journey remains open.
+      clinician-authored entry clearly reports that it has no source document. Migration 041
+      backfills one pending request for eligible document-grounded facts completed before the
+      lifecycle was deployed; it never republishes a plan or bypasses clinician review. Full
+      live proof with the PAT-005 synthetic journey remains open.
 - [/] Require an assigned clinician to create, edit, approve, defer, retire, or reject every
       patient-facing item. Record actor, rationale, evidence, effective date, and all review
       changes; determine which actions require a second reviewer under SAFE-001 rather than
