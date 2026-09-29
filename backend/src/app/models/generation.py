@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.core.exceptions import LLMError
+
 
 class GenerationCapability(StrEnum):
     TEXT = "text"
@@ -33,10 +35,19 @@ class GenerationErrorCode(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
-class GenerationProviderError(Exception):
+class GenerationProviderError(LLMError):
+    """A normalized provider failure that remains compatible with LLM callers.
+
+    Provider adapters need a machine-readable category so background work can retry
+    only failures that may recover.  It also remains an ``LLMError`` so legacy callers
+    that handle model failures as one family keep their existing behavior.
+    """
+
+    code: GenerationErrorCode
+
     def __init__(self, code: GenerationErrorCode, message: str) -> None:
+        super().__init__(message=message, code=code.value)
         self.code = code
-        super().__init__(message)
 
 
 MAX_OUTPUT_TOKENS = 32_768
