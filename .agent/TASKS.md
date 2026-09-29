@@ -58,11 +58,11 @@ failure. It must not be presented as a completed closed-loop care product until 
 | --- | --- | --- | --- |
 | Access and clinic boundaries | Synthetic patient/clinician login, assigned-care-team access, unassigned clinician denial, denial audit, private document URLs, and WebSocket subprotocol authentication | Broader release security qualification remains | SEC-001, QUA-001 |
 | Document intake and understanding | PDF/image/TIFF ingestion, source provenance, evidence-backed pending candidates, private derived previews, plain-language explanation and retry lifecycle; clinician extracted-facts review | Fresh synthetic evidence-to-approved-plan proof and authorized reconciliation-to-action journey remain incomplete | REC-001, PAT-005 |
-| Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish, and immediate typing feedback | Document-focused conversation lifecycle, some safety-audit persistence, and complete recovery from an interrupted model turn remain open | PAT-001, PAT-004, SAFE-002 |
+| Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish, and immediate typing feedback | Document-focused conversation lifecycle, durable safety-audit persistence, terminal turn recovery, and a patient-confirmed guided symptom-report flow remain open | PAT-001, PAT-004, PAT-002-B, SAFE-002 |
 | Today feed and adherence | Deterministic medication/obligation feed, adherence statistics, completion/barrier capture, and plan-linked approved/effective-task guard | No live proof of the clinician-approved item through patient and clinician follow-up | PAT-002, PAT-005 |
 | Clinician action workspace | Roster, patient detail, source preview, extracted-facts review, care-plan draft/review, and basic document status | No consolidated queue, explainable risk, or unified timeline; live care-plan acceptance remains incomplete | PAT-005, CLN-001, CLN-002 |
 | Care closure | Document Job runs every five minutes; manual summary retry exists | No approved clinical messaging, appointment completion, notifications/retry, or care-gap follow-up loop | SCH-001, COM-001 |
-| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation | No completed multi-source reconciliation, ADR/Naranjo review, or MedWatch draft lifecycle | MED-001, MED-002, PV-001, PV-002 |
+| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation | No completed multi-source reconciliation, patient-confirmed symptom report, ADR/Naranjo review, or MedWatch draft lifecycle | MED-001, MED-002, PAT-002-B/C, PV-001, PV-002 |
 | Interoperability and continuity | Deployed SMART-on-FHIR sandbox import with candidate provenance | Export, CDS Hooks, official MCP/A2A, multi-provider timeline, and handoff remain incomplete | INT-002, STD-001–003, CON-001 |
 | Bilingual and voice experience | `en-US`/`es-MX` safety-floor coverage and localized fallback exist | End-to-end language parity, clinician content review, and text-first voice lifecycle are incomplete | PAT-003, VOI-001 |
 
@@ -78,18 +78,22 @@ patient-facing clinical instruction itself.
    instruction can become a safe, explainable daily item and return a patient response to the
    care team. This is the first feature that joins the working document pipeline to a patient
    outcome.
-2. **Next — finish the patient companion loop.** Complete document-focused conversations,
-   reliable recovery, structured adherence/symptom/barrier collection, and English/Spanish
-   acceptance coverage (PAT-001 through PAT-004 and SAFE-002). This makes the patient response
-   usable rather than a one-off demo interaction.
+2. **After PAT-005 live proof — finish the patient companion loop.** Complete durable chat-turn
+   recovery and the explicit symptom path: guided chat intake → patient confirmation of a
+   structured report → patient timeline and clinician-visible detail (PAT-001-A, PAT-002-B,
+   PAT-002-C). Document-focused conversations, adherence/barrier acceptance, and English/Spanish
+   coverage continue alongside that work (PAT-002-A through PAT-004 and SAFE-002). This makes the
+   patient response usable rather than a one-off demo interaction.
 3. **Then — make clinician work actionable.** Consolidate document, medication, symptom,
    adherence, and proposed-action review with evidence and an explainable timeline (CLN-001,
    CLN-002, MED-001, and MED-002). Do not expand autonomous AI behavior to compensate for a
    missing clinical review surface.
-4. **After the closed loop works — add closure channels and differentiators.** Appointment and
-   approved-message workflows, notification recovery, ADR/MedWatch review, voice, multi-provider
-   continuity, FHIR export/CDS Hooks, and protocol conformance remain valuable later slices;
-   they should extend the proven loop rather than precede it.
+4. **After the confirmed symptom-report model — add pharmacovigilance and other closure
+   channels.** Clinician ADR/Naranjo review and the editable MedWatch export draft (PV-001,
+   PV-002) consume the confirmed report; neither can begin as an autonomous report or submission.
+   Appointment and approved-message workflows, notification recovery, voice, multi-provider
+   continuity, FHIR export/CDS Hooks, and protocol conformance remain valuable later slices; they
+   should extend the proven loop rather than precede it.
 
 For the master's-project demonstration, prioritize this sequence over production-scale document
 throughput work. The five-minute document Job is enabled to support the controlled scenario; it
@@ -117,6 +121,8 @@ PAT-005.
 | `PAT-005-A` — safe draft-failure diagnostics | **Claimed** | Rajeev — `codex/pat-005-care-plan-observability` | Emit a safe worker event containing only request ID, attempt, outcome, and failure code. | Keep clinical text, prompts, source facts, patient IDs, and provider exception text out of logs. After deployment, hand off to `PAT-005-B`. |
 | `PAT-005-B` — diagnose the existing failed request | **Blocked** | Rajeev + assigned synthetic clinician | Use the clinician retry action after `PAT-005-A` deploys; record the safe failure code from the next scheduled Job execution. | Maya's already-failed request predates outcome logging. This is a diagnostic retry only; do not upload a replacement document or manually execute Cloud Run. |
 | `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | Starts only after `PAT-005-B` identifies and resolves the generation fault. It is the PAT-005 completion gate. |
+| `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver chat-led, deterministic-safe symptom follow-up, then require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Reuse SAFE-002 emergency overrides; no autonomous diagnosis, clinician task, ADR decision, or MedWatch action. Blocks `PAT-002-C` and `PV-001`. |
+| `PAT-002-C` — symptom timeline and clinician report detail | **Sequenced** | Patient + clinician portal lanes — unassigned | Show each confirmed report in the patient's timeline and an authorized clinician detail view with source conversation, follow-up answers, and status. | Starts after `PAT-002-B` establishes the confirmed-report contract. Blocks `PV-001`; preserve patient/clinic assignment isolation and audit linkage. |
 | `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
 | `PAT-002-A` — adherence/barrier acceptance evidence | **Sequenced** | Patient + clinician portal lanes | Exercise each patient barrier category and completion against an approved effective plan item; verify clinician display and assignment denial. | Runs with `PAT-005-C`; do not create a parallel adherence data model or bypass the plan projection. |
 | `PAT-004-A` — document-focused conversation | **Claimed** | Rajeev — `codex/pat-004-chat-document-catalog` | Answer clear document-catalog questions from the patient's authorized portal metadata and show typing immediately after send. | Keep catalog answers deterministic, metadata-only, and separate from selected-document interpretation. This is independent of PAT-005. |
@@ -124,6 +130,8 @@ PAT-005.
 | `SAFE-002-A` — language-gap safety rules | **Blocked** | Clinical reviewer + safety owner | Approve exact English and Mexican-Spanish wording/coverage for inflected self-harm, anaphylaxis, and stroke phrases; then add deterministic tests and rules. | Engineering must not invent clinical escalation wording. Clinical sign-off is the unblocker. |
 | `CLN-001-A` — consolidated clinician queue | **Sequenced** | Clinician-portal lane — unassigned | Design the queue around demonstrated PAT-005 approval, adherence, and barrier artifacts. | Wait for `PAT-005-C`; that proof defines which records the queue must render. |
 | `MED-001/002-A` — reconciliation scope | **Sequenced** | Platform + clinician-portal lanes — unassigned | Use PAT-005's medication-conflict scenario to scope reviewed candidate-versus-local comparison. | Reuse PAT-005 evidence/approval boundaries; do not duplicate a competing clinical-decision lifecycle. |
+| `PV-001` — clinician ADR/Naranjo review | **Sequenced** | Pharmacovigilance + clinician lanes — unassigned | Review a confirmed symptom report, request missing information, and provide deterministic Naranjo assistance separate from clinician judgment. | Starts after `PAT-002-C`. It must not infer an ADR report from raw chat or submit anything externally. Blocks `PV-002`. |
+| `PV-002` — clinician-approved MedWatch draft/export | **Sequenced** | Pharmacovigilance + clinician lanes — unassigned | Produce an editable, evidence-linked MedWatch-compatible draft and export it only after clinician/pharmacist approval. | Starts after `PV-001`; export is not FDA submission. |
 
 **State meanings:** **Claimed** has one active owner and branch; **Ready** is safe to start in a
 separate branch; **Blocked** needs the stated external decision or evidence; **Sequenced** is
@@ -1557,11 +1565,84 @@ drop its selected-document context and yield a generic chart answer.
 ### PAT-002 — Adherence, symptom, and barrier collection
 
 - [ ] Record medication adherence with patient confirmation.
-- [ ] Collect onset, duration, severity, related medication, and red flags for symptoms.
+- [ ] Collect onset, duration, severity, related medication, and red flags for symptoms through
+      the sequenced tasks below. A raw chat utterance is not itself a clinician report.
 - [ ] Capture barriers such as cost, side effects, access, confusion, and schedule.
 - [ ] Create clinician-approved follow-up tasks and care-gap state through PAT-005; an AI or
       unreviewed document must not create a patient-facing obligation directly.
 - [ ] Make structured reports visible in the clinician timeline.
+
+#### PAT-002-B — Guided chat symptom intake and patient-confirmed structured report
+
+**Status:** `[ ]` Backlog — sequenced after `PAT-005-C` live proof
+
+**Owner:** Unassigned; patient + backend lanes
+
+**Goal:** Make patient chat the intake surface for symptoms without treating free text as a
+clinical conclusion. The Care Coordinator first applies the deterministic safety floor, then
+uses bounded follow-up questions to collect only the details needed for a structured report. The
+patient reviews and confirms that report before it is visible as a report to the care team.
+
+- [ ] Apply `SAFE-002` emergency/self-harm overrides before any symptom follow-up. The reviewed
+      escalation copy and required care-team notification take precedence over conversational
+      intake; do not ask questions that delay emergency direction.
+- [ ] For non-emergency symptom turns, collect only relevant missing fields: onset, duration,
+      severity, course, related medication or treatment when supplied by the patient, associated
+      symptoms, and red-flag answers. Never diagnose, assign causality, invent a medication link,
+      or tell the patient that an ADR has been established.
+- [ ] Persist a draft intake separately from a confirmed report. The patient can correct,
+      abandon, or confirm it; only confirmation creates the clinician-visible structured report.
+- [ ] Record the source conversation/turn references, locale, deterministic safety result,
+      patient-entered answers, confirmation actor/time, and safe report status needed for audit.
+      Do not persist private model reasoning, prompts, or provider traces.
+- [ ] Keep clinician notification and care-plan changes under existing review paths. The chat
+      agent must not autonomously create a patient-facing task, clinical recommendation, ADR
+      decision, or MedWatch record.
+- [ ] Enforce patient ownership, care-team assignment, RLS/grants, and API authorization for
+      drafts, confirmed reports, cancellation, and retrieval. Browser clients cannot directly
+      mutate clinician-facing report state.
+
+**Acceptance criteria**
+
+- [ ] A non-emergency patient can complete a bounded guided intake, see an accurate report
+      preview, correct it, and explicitly confirm it.
+- [ ] An emergency symptom follows the deterministic escalation path and is never obscured by a
+      symptom-worker acknowledgement or an intake questionnaire.
+- [ ] A confirmed report reconstructs the patient answers, source turns, safety result, and
+      confirmation without representing model output as clinical fact.
+- [ ] An unrelated patient or unassigned clinician cannot list, read, alter, or infer a report.
+
+#### PAT-002-C — Patient symptom timeline and clinician-visible report detail
+
+**Status:** `[ ]` Backlog — depends on `PAT-002-B`
+
+**Owner:** Unassigned; patient + clinician portal lanes
+
+**Goal:** Render confirmed symptom reports as an understandable patient timeline and an
+authorized clinician detail record. This makes the report reviewable before pharmacovigilance
+work begins; it is not an ADR verdict or a MedWatch submission surface.
+
+- [ ] Show the patient a timeline of their confirmed reports, with timestamp, status, and the
+      patient-confirmed fields. Keep unconfirmed drafts private to the patient and clearly
+      distinguish them from reports shared with the care team.
+- [ ] Give assigned clinicians a detail view containing the structured report, conversation
+      provenance, patient confirmation, follow-up answers, safety result, and later clinician
+      actions. Do not expose hidden prompts or chain-of-thought.
+- [ ] Add report-status transitions for clinician review and information requests while retaining
+      the original confirmed report immutably. A correction or new patient report must be linked,
+      not silently overwrite history.
+- [ ] Add timeline/audit events and assignment-denial coverage for patient, clinician, and
+      cross-clinic access. Use the existing protected patient/document access patterns.
+
+**Acceptance criteria**
+
+- [ ] A patient sees only their own confirmed reports and can distinguish a draft from a shared
+      report.
+- [ ] An assigned clinician can inspect a report's patient-confirmed content and provenance;
+      an unassigned clinician receives a deny response and an audit event where applicable.
+- [ ] A later report or clinician information request preserves the original report history.
+- [ ] `PV-001` can consume this confirmed-report contract without scraping chat messages or
+      deriving an ADR from an unconfirmed draft.
 
 ### SAFE-002 — Deterministic triage overrides
 
@@ -1777,13 +1858,41 @@ completion or report an adherence barrier, and that response becomes visible to 
 
 ### PV-001 — ADR and Naranjo workflow
 
+**Status:** `[ ]` Backlog — depends on confirmed symptom-report model (`PAT-002-B` and
+`PAT-002-C`)
+
+**Owner:** Unassigned; pharmacovigilance + clinician lanes
+
+**Boundary:** This work begins from a patient-confirmed, clinician-visible symptom report—not
+from an unconfirmed chat message, model classification, or raw document text. It is clinician
+decision support, never autonomous ADR determination or external reporting.
+
 - [ ] Replace empty pharmacovigilance modules with tested implementation.
+- [ ] Consume the confirmed symptom-report contract with its patient answers, safety result, and
+      provenance; let a clinician request missing information without rewriting the original
+      report.
 - [ ] Collect complete ADR evidence and missing-information requests.
 - [ ] Calculate Naranjo assistance deterministically where possible.
 - [ ] Keep model-generated classification separate from reviewer decision.
 - [ ] Support reassessment when evidence changes.
 
+**Acceptance criteria**
+
+- [ ] A clinician can review a confirmed report, document an ADR decision or uncertainty, and
+      see the evidence/provenance used for each conclusion.
+- [ ] Naranjo assistance exposes its inputs and is never presented as the clinician's final
+      decision.
+- [ ] An unassigned clinician cannot access the report or ADR review, and all reviewer actions
+      are auditable.
+
 ### PV-002 — MedWatch draft lifecycle
+
+**Status:** `[ ]` Backlog — depends on clinician ADR review (`PV-001`)
+
+**Owner:** Unassigned; pharmacovigilance + clinician lanes
+
+**Boundary:** The outcome is an editable, clinician-approved export artifact. This slice must
+never submit a report to FDA/MedWatch or portray a draft as filed.
 
 - [ ] Generate an editable MedWatch-compatible draft.
 - [ ] Link every populated field to source evidence.
@@ -1970,9 +2079,10 @@ would still have to be constrained and verified first.
 | Jeevan Kurian | Clinician portal, review queues, messaging, continuity | FHIR workflow UX |
 
 - [x] Replace Engineer 1–4 with team-member names.
-- [ ] Assign an owner for pharmacovigilance (PV-001, PV-002). The superseded
-      placeholder table listed PV under the clinician-portal lane; `TEAM.md` does not,
-      so the whole R4 pharmacovigilance milestone is currently unowned.
+- [ ] Assign an owner for pharmacovigilance (`PV-001`, `PV-002`) before `PAT-002-C` hands off
+      the confirmed symptom-report contract. The superseded placeholder table listed PV under
+      the clinician-portal lane; `TEAM.md` does not, so this later sequenced work is currently
+      unowned.
 - [ ] Assign the first integration owner.
 - [ ] Assign a clinician/pharmacist review schedule.
 - [ ] Require one peer review for every PR.
