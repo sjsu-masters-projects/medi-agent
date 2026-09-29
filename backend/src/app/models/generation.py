@@ -67,7 +67,7 @@ class GenerationRequest(BaseModel):
     # thought tokens against the same budget, so a cap sized for a plain model truncates a
     # thinking one before it writes anything.
     max_tokens: int = Field(default=1024, ge=1, le=MAX_OUTPUT_TOKENS)
-    # Vertex reasoning consumes this same token budget.  Workloads that do not need
+    # Vertex reasoning consumes this same token budget. Workloads that do not need
     # open-ended deliberation can request a bounded reasoning ceiling explicitly.
     thinking_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None
     task: str = Field(default="general", min_length=1, max_length=100)

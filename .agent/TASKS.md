@@ -36,7 +36,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.3.0 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | Remediation pending | `next` 16.3.4 remains deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4). The 2026-09-29 main-branch audit found PyJWT 2.13.0 CVE-2026-102274; the locked PyJWT 2.15.1 remediation is in PR #111. Re-run locked dependency audits at the start of each session rather than trusting historical evidence. |
+| Dependency security | Clear as of 2026-09-29 | `next` 16.3.4 remains deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4). PR #111 merged the PyJWT 2.15.1 lockfile remediation for CVE-2026-102274; its locked dependency audit passed. Re-run locked dependency audits at the start of each session rather than trusting historical evidence. |
 | Demo data | Functional baseline | Canonical fictional fixture and live patient/clinician isolation checks exist; the fresh end-to-end care-plan scenario is PAT-005 work |
 
 **Tracker reconciliation — 2026-09-26.** Every named primary task was reviewed for status
@@ -126,6 +126,7 @@ PAT-005.
 | `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
 | `PAT-002-A` — adherence/barrier acceptance evidence | **Sequenced** | Patient + clinician portal lanes | Exercise each patient barrier category and completion against an approved effective plan item; verify clinician display and assignment denial. | Runs with `PAT-005-C`; do not create a parallel adherence data model or bypass the plan projection. |
 | `PAT-004-A` — document-focused conversation | **Claimed** | Rajeev — `codex/pat-004-chat-document-catalog` | Answer clear document-catalog questions from the patient's authorized portal metadata and show typing immediately after send. | Keep catalog answers deterministic, metadata-only, and separate from selected-document interpretation. This is independent of PAT-005. |
+| `AI-003-WS1-B` — central background-workload routing | **Claimed** | Rajeev — `codex/centralize-background-ai-routing` | Move the active document extraction, document explanation, and evidence-only care-plan classification calls onto the ADK registry executor, with one route-owned model, budget, thinking ceiling, kill switch, fallback rule, and telemetry path. | This is infrastructure only: each owning service retains its current safe deterministic outcome. It must not turn a fixed background workflow into an autonomous agent or change approval/provenance boundaries. |
 | `CI-001-A` — selective-test evidence | **Ready** | CI-maintenance lane — unassigned | Collect one eligible Acquit selective-run observation and publish selected-test/full-suite evidence. | Keep Acquit in canary mode; enforcement waits for ten safe observations. |
 | `SAFE-002-A` — language-gap safety rules | **Blocked** | Clinical reviewer + safety owner | Approve exact English and Mexican-Spanish wording/coverage for inflected self-harm, anaphylaxis, and stroke phrases; then add deterministic tests and rules. | Engineering must not invent clinical escalation wording. Clinical sign-off is the unblocker. |
 | `CLN-001-A` — consolidated clinician queue | **Sequenced** | Clinician-portal lane — unassigned | Design the queue around demonstrated PAT-005 approval, adherence, and barrier artifacts. | Wait for `PAT-005-C`; that proof defines which records the queue must render. |
@@ -679,6 +680,17 @@ model does not fix any of those. This task rebuilds the runtime around them.
       runner and model transports, so an over-budget call deterministically reaches the
       named fallback, and (2) retain evidence from a deployed synthetic request that
       `model_invocation_events` records the actual provider and model.
+- [/] **WS1-B — central background-workload routing.** The active legacy background
+      callers (document extraction, patient explanation, and evidence-only care-plan
+      classification) are being moved behind one registry-backed executor. It must enforce
+      the route's token and reasoning ceilings, wall-clock limit where one exists, named
+      distinct-model fallback, kill switch, and safe telemetry for every attempt. The
+      owning service, not an agent, remains responsible for the deterministic clinical
+      outcome: no extraction means evidence review, no explanation means its existing
+      retry/fallback state, and no care-plan classification keeps the approved plan intact
+      while the draft remains retryable. The work is claimed on
+      `codex/centralize-background-ai-routing`; direct client construction remains only for
+      evaluation or workloads that lack measured routing evidence.
 - [/] **WS2 — Agent runtime skeleton**, replacing the graph framework: one runner
       construction path that refuses to start unless every safety plugin is attached.
       **Dependencies landed.** `google-adk` 2.9.1 and `litellm` 1.101.0 are in

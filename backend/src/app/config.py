@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     discrepancy_ai_enabled: bool = True
     adr_extraction_ai_enabled: bool = True
     explanation_ai_enabled: bool = True
+    care_plan_ai_enabled: bool = True
 
     # NVIDIA NIM (independent provider for evaluation comparison)
     nvidia_nim_api_key: str = ""

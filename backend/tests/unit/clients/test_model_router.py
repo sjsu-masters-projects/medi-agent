@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.clients.model_router import TASK_MODEL_MAP, ModelRouter, TaskType, get_router
-from app.models.generation import GenerationRequest
+from app.models.generation import GenerationRequest, GenerationResponse, GenerationTelemetry
 
 
 @pytest.fixture
@@ -131,13 +131,16 @@ async def test_generate_text_with_telemetry_reports_which_model_answered():
     or retire them selectively.
     """
     router = ModelRouter()
-    client = MagicMock(model_name="gemini-3.8-flash")
-    client.generate = AsyncMock(return_value="Extracted record")
-    router.get_client = MagicMock(return_value=client)  # type: ignore[method-assign]
-
-    text, telemetry = await router.generate_text_with_telemetry(
-        TaskType.DOCUMENT_PARSING, prompt="Extract"
+    response = GenerationResponse(
+        text="Extracted record",
+        telemetry=GenerationTelemetry(provider="flash", model="gemini-3.8-flash", latency_ms=4),
     )
+    with patch(
+        "app.clients.model_router.generate_for_workload", new=AsyncMock(return_value=response)
+    ):
+        text, telemetry = await router.generate_text_with_telemetry(
+            TaskType.DOCUMENT_PARSING, prompt="Extract"
+        )
 
     assert text == "Extracted record"
     assert telemetry.model == "gemini-3.8-flash"
