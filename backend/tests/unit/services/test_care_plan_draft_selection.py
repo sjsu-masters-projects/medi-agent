@@ -9,6 +9,7 @@ from uuid import UUID
 import pytest
 
 from app.models.clinical_fact import SourceArtifactType
+from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.services import care_plan_service
 from app.services.care_plan_service import CarePlanService
 
@@ -51,6 +52,18 @@ def _router_for(response: dict[str, object]) -> MagicMock:
         return_value=(json.dumps(response), MagicMock())
     )
     return router
+
+
+def _service_with_claim() -> CarePlanService:
+    db = MagicMock()
+    db.rpc.return_value.execute.return_value.data = [
+        {
+            "request_id": "00000000-0000-0000-0000-000000000301",
+            "patient_id": "00000000-0000-0000-0000-000000000302",
+            "attempt": 1,
+        }
+    ]
+    return CarePlanService(db)
 
 
 @pytest.mark.asyncio
@@ -97,6 +110,82 @@ async def test_draft_selector_rejects_an_invented_or_missing_fact_id(
 
     with pytest.raises(ValueError, match="exactly once"):
         await CarePlanService(MagicMock())._select_categories(_facts())
+
+
+@pytest.mark.asyncio
+async def test_transient_provider_failure_is_scheduled_for_retry() -> None:
+    service = _service_with_claim()
+    service._generate = AsyncMock(
+        side_effect=GenerationProviderError(GenerationErrorCode.TIMEOUT, "safe test failure")
+    )
+    service._retry = MagicMock(return_value=False)
+
+    counts = await service.process_pending(limit=1)
+
+    assert counts == {
+        "care_plans_claimed": 1,
+        "care_plans_ready": 0,
+        "care_plans_retry": 1,
+        "care_plans_failed": 0,
+    }
+    service._retry.assert_called_once_with(
+        {
+            "request_id": "00000000-0000-0000-0000-000000000301",
+            "patient_id": "00000000-0000-0000-0000-000000000302",
+            "attempt": 1,
+        },
+        failure="provider_timeout",
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalid_model_response_fails_without_a_retry() -> None:
+    service = _service_with_claim()
+    service._generate = AsyncMock(side_effect=ValueError("safe test failure"))
+    service._finish_request = MagicMock()
+
+    counts = await service.process_pending(limit=1)
+
+    assert counts == {
+        "care_plans_claimed": 1,
+        "care_plans_ready": 0,
+        "care_plans_retry": 0,
+        "care_plans_failed": 1,
+    }
+    service._finish_request.assert_called_once_with(
+        {
+            "request_id": "00000000-0000-0000-0000-000000000301",
+            "patient_id": "00000000-0000-0000-0000-000000000302",
+            "attempt": 1,
+        },
+        status="failed",
+        plan_id=None,
+        failure="invalid_model_response",
+    )
+
+
+@pytest.mark.asyncio
+async def test_non_transient_provider_failure_fails_without_a_retry() -> None:
+    service = _service_with_claim()
+    service._generate = AsyncMock(
+        side_effect=GenerationProviderError(GenerationErrorCode.CONFIGURATION, "safe test failure")
+    )
+    service._finish_request = MagicMock()
+
+    counts = await service.process_pending(limit=1)
+
+    assert counts["care_plans_failed"] == 1
+    assert counts["care_plans_retry"] == 0
+    service._finish_request.assert_called_once_with(
+        {
+            "request_id": "00000000-0000-0000-0000-000000000301",
+            "patient_id": "00000000-0000-0000-0000-000000000302",
+            "attempt": 1,
+        },
+        status="failed",
+        plan_id=None,
+        failure="provider_configuration",
+    )
 
 
 def test_conflicting_medication_sources_block_every_candidate() -> None:
