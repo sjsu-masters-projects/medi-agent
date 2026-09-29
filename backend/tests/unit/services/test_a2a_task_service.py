@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.exceptions import ValidationError
 from app.services.a2a_task_service import A2ATaskService
 
 
@@ -68,6 +69,52 @@ async def test_run_symptom_to_pharmacovigilance_completes_lifecycle(mock_db):
     statuses = [event["status"] for event in result["events"]]
     assert statuses == ["submitted", "working", "completed"]
     assert result["output"]["requires_clinician_review"] is True
+    assert result["output"]["naranjo_assistance"]["score"] == 0
+    assert len(result["output"]["naranjo_assistance"]["missing_questions"]) == 10
+
+
+def test_pharmacovigilance_result_scores_only_explicit_naranjo_answers(mock_db):
+    service = A2ATaskService(mock_db)
+
+    result = service._build_pharmacovigilance_result(
+        {
+            "symptom_report": {"symptom": "rash", "severity": 10},
+            "naranjo_answers": {
+                "previous_reports": "yes",
+                "event_after_drug": "yes",
+                "alternative_causes": "no",
+            },
+        }
+    )
+
+    assert result["naranjo_assistance"]["score"] == 5
+    assert result["naranjo_assistance"]["causality"] == "Probable"
+    assert len(result["naranjo_assistance"]["missing_questions"]) == 7
+
+
+def test_symptom_severity_never_changes_the_naranjo_score(mock_db):
+    service = A2ATaskService(mock_db)
+
+    result = service._build_pharmacovigilance_result(
+        {"symptom_report": {"symptom": "rash", "severity": 10}}
+    )
+
+    assert result["requires_clinician_review"] is True
+    assert result["naranjo_assistance"]["score"] == 0
+    assert result["naranjo_assistance"]["causality"] == "Doubtful"
+
+
+@pytest.mark.parametrize("answers", [[], "yes", 3])
+def test_naranjo_answers_must_be_a_json_object(mock_db, answers):
+    service = A2ATaskService(mock_db)
+
+    with pytest.raises(ValidationError, match="naranjo_answers must be a JSON object"):
+        service._build_pharmacovigilance_result(
+            {
+                "symptom_report": {"symptom": "rash", "severity": 7},
+                "naranjo_answers": answers,
+            }
+        )
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,7 @@ import httpx
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError, ValidationError
+from app.pharmacovigilance import score_naranjo
 
 
 class A2ATaskService:
@@ -230,8 +231,8 @@ class A2ATaskService:
             working = await self.mark_working(
                 task_id=task_id,
                 worker_payload={
-                    "step": "naranjo_pre_screen",
-                    "engine": "rule_based_v1",
+                    "step": "adr_evidence_assessment",
+                    "engine": "naranjo_v1",
                 },
             )
             events.append(self._to_event(working))
@@ -419,6 +420,12 @@ class A2ATaskService:
         severity = int(report.get("severity") or 0)
         symptom = str(report.get("symptom") or "reported symptom")
         flagged_for_adr = bool(report.get("flagged_for_adr") or payload.get("flagged_for_adr"))
+        raw_answers = payload.get("naranjo_answers")
+        if raw_answers is None:
+            raw_answers = {}
+        if not isinstance(raw_answers, dict):
+            raise ValidationError("naranjo_answers must be a JSON object")
+        naranjo = score_naranjo(raw_answers)
 
         requires_review = flagged_for_adr or severity >= 7
         priority = "high" if severity >= 8 or flagged_for_adr else "medium"
@@ -436,4 +443,5 @@ class A2ATaskService:
             "symptom": symptom,
             "severity": severity,
             "recommendation": recommendation,
+            "naranjo_assistance": naranjo.model_dump(mode="json"),
         }
