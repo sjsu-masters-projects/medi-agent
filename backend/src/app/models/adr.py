@@ -16,8 +16,11 @@ class ADRAssessmentRead(BaseModel):
     symptom_report_id: UUID
     suspect_medication_id: UUID
     suspect_medication_name: str  # denormalized
-    naranjo_score: int = Field(..., ge=0, le=13)
+    naranjo_score: int = Field(..., ge=-4, le=13)
     causality: NaranjoCausality
+    naranjo_answers: dict[str, str] = Field(default_factory=dict)
+    naranjo_assessment: dict[str, Any] = Field(default_factory=dict)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
     thinking_chain: str | None = None  # Gemini Pro thinking trace
     status: ADRStatus = ADRStatus.DRAFT
     reviewed_by: UUID | None = None

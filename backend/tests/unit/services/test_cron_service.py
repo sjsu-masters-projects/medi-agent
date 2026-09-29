@@ -78,9 +78,6 @@ async def test_run_nightly_adr_scan_flags_candidates(monkeypatch, cron_service):
     async def _fetch_symptoms(*args, **kwargs):
         return symptom_rows
 
-    async def _fetch_active_med_map(*args, **kwargs):
-        return {"patient-1": [{"id": "med-1"}]}
-
     async def _flag(symptom_ids):
         flagged_ids.append(symptom_ids)
 
@@ -92,7 +89,6 @@ async def test_run_nightly_adr_scan_flags_candidates(monkeypatch, cron_service):
     monkeypatch.setattr(cron_service, "_finish_run", _finish_run)
     monkeypatch.setattr(cron_service, "_resolve_adr_scan_since", _resolve_since)
     monkeypatch.setattr(cron_service, "_fetch_symptom_reports_for_adr_scan", _fetch_symptoms)
-    monkeypatch.setattr(cron_service, "_fetch_active_medication_map", _fetch_active_med_map)
     monkeypatch.setattr(cron_service, "_flag_symptom_reports_for_adr", _flag)
 
     result = await cron_service.run_nightly_adr_scan(
@@ -102,5 +98,6 @@ async def test_run_nightly_adr_scan_flags_candidates(monkeypatch, cron_service):
     )
 
     assert result["job_name"] == "nightly_adr_scan"
-    assert result["summary"]["candidate_flags_created"] == 2
-    assert flagged_ids == [["symptom-1", "symptom-2"]]
+    assert result["summary"]["candidate_flags_created"] == 1
+    assert result["summary"]["high_severity_without_medication_link"] == 1
+    assert flagged_ids == [["symptom-2"]]

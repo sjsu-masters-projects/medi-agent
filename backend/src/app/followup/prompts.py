@@ -60,11 +60,28 @@ Return JSON with:
   "duration": "string | null",
   "body_area": "string | null",
   "related_medication_name": "string | null",
+  "adr_evidence": [
+    {{
+      "question": "one of: previous_reports, event_after_drug, improved_on_dechallenge,
+        reappeared_on_rechallenge, alternative_causes, reappeared_with_placebo,
+        toxic_drug_concentration, dose_response, similar_previous_reaction,
+        objective_evidence",
+      "answer": "yes | no | do_not_know",
+      "evidence": "the patient's supporting words | null"
+    }}
+  ],
   "needs_follow_up": false,
   "follow_up_question": "string | null",
-  "flagged_for_adr": false,
   "ai_assessment": "short non-diagnostic assessment"
 }}
+
+ADR evidence rules:
+- Include an answer only when the patient message or recent conversation explicitly supports it.
+- Do not infer an answer from general medical knowledge or symptom severity.
+- Known yes/no answers must carry the patient's supporting words in `evidence`.
+- Use `related_medication_name` only when it exactly matches an active medication above.
+- If medication timing or another key relationship is missing, leave it unknown and ask one
+  targeted follow-up question.
 """
 
 

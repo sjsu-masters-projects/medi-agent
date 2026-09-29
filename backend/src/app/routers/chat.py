@@ -724,6 +724,8 @@ async def chat_websocket_endpoint(
                                     "idempotency_key": f"symptom_event:{symptom_event_id}",
                                     "symptom_report": saved_report,
                                     "flagged_for_adr": True,
+                                    "naranjo_answers": symptom_result.naranjo_answers,
+                                    "adr_evidence": symptom_result.adr_evidence,
                                     "document_context": document_context,
                                     "conversation_state": conversation_state,
                                 },

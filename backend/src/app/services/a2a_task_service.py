@@ -174,6 +174,13 @@ class A2ATaskService:
             task_type = str(task.get("task_type") or "")
             if task_type == "symptom_adr_screen":
                 output_payload = self._build_pharmacovigilance_result(input_payload)
+                if output_payload["requires_clinician_review"]:
+                    assessment = await self._persist_adr_assessment(
+                        patient_id=str(task.get("patient_id") or ""),
+                        payload=input_payload,
+                        output_payload=output_payload,
+                    )
+                    output_payload["adr_assessment_id"] = assessment.get("id")
             else:
                 raise ValueError(f"Unsupported retry task type: {task_type or 'unknown'}")
 
@@ -238,6 +245,13 @@ class A2ATaskService:
             events.append(self._to_event(working))
 
             output_payload = self._build_pharmacovigilance_result(payload)
+            if output_payload["requires_clinician_review"]:
+                assessment = await self._persist_adr_assessment(
+                    patient_id=patient_id,
+                    payload=payload,
+                    output_payload=output_payload,
+                )
+                output_payload["adr_assessment_id"] = assessment.get("id")
             completed = await self.mark_completed(task_id=task_id, output_payload=output_payload)
             events.append(self._to_event(completed))
 
@@ -277,6 +291,55 @@ class A2ATaskService:
         if not read_rows:
             raise ExternalServiceError("Supabase", f"A2A task {task_id} not found")
         return read_rows[0]
+
+    async def _persist_adr_assessment(
+        self,
+        *,
+        patient_id: str,
+        payload: dict[str, Any],
+        output_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Upsert one auditable draft for the symptom report awaiting human review."""
+        report = payload.get("symptom_report")
+        if not isinstance(report, dict):
+            raise ValidationError("symptom_report must be a JSON object")
+
+        symptom_report_id = str(report.get("id") or "").strip()
+        medication_id = str(report.get("related_medication_id") or "").strip()
+        medication_name = str(report.get("related_medication_name") or "").strip()
+        if not patient_id or not symptom_report_id or not medication_id or not medication_name:
+            raise ValidationError(
+                "ADR review requires patient, symptom report, and active medication identifiers"
+            )
+
+        naranjo = output_payload.get("naranjo_assistance")
+        if not isinstance(naranjo, dict):
+            raise ValidationError("naranjo_assistance must be a JSON object")
+
+        raw_answers = payload.get("naranjo_answers") or {}
+        raw_evidence = payload.get("adr_evidence") or []
+        row = {
+            "patient_id": patient_id,
+            "symptom_report_id": symptom_report_id,
+            "suspect_medication_id": medication_id,
+            "suspect_medication_name": medication_name,
+            "naranjo_score": naranjo.get("score"),
+            "causality": naranjo.get("causality"),
+            "naranjo_answers": raw_answers,
+            "naranjo_assessment": naranjo,
+            "evidence": raw_evidence,
+            "status": "draft",
+        }
+        result = await self._execute(
+            self.db.table("adr_assessments").upsert(
+                row,
+                on_conflict="symptom_report_id",
+            )
+        )
+        rows = [item for item in (result.data or []) if isinstance(item, dict)]
+        if not rows:
+            raise ExternalServiceError("Supabase", "Failed to persist ADR review draft")
+        return rows[0]
 
     async def _get_task(self, task_id: str) -> dict[str, Any]:
         result = await self._execute(
@@ -427,7 +490,7 @@ class A2ATaskService:
             raise ValidationError("naranjo_answers must be a JSON object")
         naranjo = score_naranjo(raw_answers)
 
-        requires_review = flagged_for_adr or severity >= 7
+        requires_review = flagged_for_adr
         priority = "high" if severity >= 8 or flagged_for_adr else "medium"
 
         if requires_review:

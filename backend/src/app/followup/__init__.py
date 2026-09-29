@@ -9,13 +9,20 @@ which runtime happened to be in fashion when it was captured.
 """
 
 from app.followup.followup_copy import FOLLOWUP_COPY
-from app.followup.models import SymptomExtractionResult
-from app.followup.service import SEVERE_THRESHOLD, SymptomAnalysis, analyse_symptom
+from app.followup.models import ADREvidenceAnswer, SymptomExtractionResult
+from app.followup.service import (
+    SEVERE_THRESHOLD,
+    SymptomAnalysis,
+    analyse_symptom,
+    is_possible_adr_candidate,
+)
 
 __all__ = [
     "FOLLOWUP_COPY",
+    "ADREvidenceAnswer",
     "SEVERE_THRESHOLD",
     "SymptomAnalysis",
     "SymptomExtractionResult",
     "analyse_symptom",
+    "is_possible_adr_candidate",
 ]
