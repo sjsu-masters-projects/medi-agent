@@ -15,6 +15,15 @@ class TaskProvider(BaseModel):
     clinic_name: str
 
 
+class CarePlanTaskProvenance(BaseModel):
+    """The approved plan version that made a task patient-visible."""
+
+    version_number: int = Field(..., ge=1)
+    category: str
+    effective_start_date: str | None = None
+    effective_end_date: str | None = None
+
+
 class FeedTask(BaseModel):
     """Single task in the feed."""
 
@@ -22,6 +31,7 @@ class FeedTask(BaseModel):
     type: Literal["medication", "obligation"]
     target_id: UUID
     care_plan_item_id: UUID | None = None
+    care_plan: CarePlanTaskProvenance | None = None
     name: str
     description: str | None = None
     frequency: str

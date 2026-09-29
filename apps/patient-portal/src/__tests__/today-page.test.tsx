@@ -103,6 +103,10 @@ describe("TodayPage", () => {
                 name: "Dr. Chen",
                 specialty: "Primary care",
             },
+            carePlan: {
+                category: "monitoring",
+                versionNumber: 2,
+            },
             requiresScheduleConfiguration: false,
             scheduledTime: "08:00",
             status: FeedTaskStatus.PENDING,
@@ -115,6 +119,7 @@ describe("TodayPage", () => {
 
         expect(screen.getByText(/8:00 AM .* Now/i)).toBeInTheDocument();
         expect(screen.getByText(/Lisinopril/i)).toBeInTheDocument();
+        expect(screen.getByText("Care plan v2 • monitoring")).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: /mark as taken/i }));
         expect(markComplete).toHaveBeenCalledWith(task);

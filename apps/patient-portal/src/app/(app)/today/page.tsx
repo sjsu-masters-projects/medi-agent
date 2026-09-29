@@ -49,6 +49,13 @@ function formatTimeLabel(
     return status === FeedTaskStatus.PENDING ? `${label} • Now` : label;
 }
 
+function carePlanLabel(task: FeedTask) {
+    if (!task.carePlan) {
+        return null;
+    }
+    return `Care plan v${task.carePlan.versionNumber} • ${task.carePlan.category.replaceAll("_", " ")}`;
+}
+
 export default function TodayPage() {
     const {
         adherenceStats,
@@ -179,6 +186,7 @@ export default function TodayPage() {
                                                 task.requiresScheduleConfiguration,
                                             )}
                                         </p>
+                                        {carePlanLabel(task) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task)}</p> : null}
                                         <MedicationCard
                                             dosage={medication.dosage}
                                             id={task.id}
@@ -206,6 +214,7 @@ export default function TodayPage() {
                                             task.requiresScheduleConfiguration,
                                         )}
                                     </p>
+                                    {carePlanLabel(task) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task)}</p> : null}
                                     <ObligationCard
                                         description={task.name}
                                         id={task.id}

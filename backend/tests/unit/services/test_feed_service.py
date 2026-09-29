@@ -9,6 +9,55 @@ import pytest
 from app.services.feed_service import FeedService
 
 
+def test_current_plan_projections_excludes_removed_unapproved_and_out_of_range_items(feed_service):
+    today = date(2026, 9, 29)
+    visible = feed_service._current_plan_projections(
+        [
+            {"id": "legacy", "care_plan_item_id": None},
+            {"id": "approved", "care_plan_item_id": "current"},
+            {"id": "expired", "care_plan_item_id": "expired"},
+            {"id": "unapproved", "care_plan_item_id": "missing"},
+        ],
+        {
+            "current": {
+                "version_number": 2,
+                "category": "monitoring",
+                "schedule": {"start_date": "2026-09-01", "end_date": "2026-10-01"},
+            },
+            "expired": {
+                "version_number": 1,
+                "category": "movement",
+                "schedule": {"end_date": "2026-09-28"},
+            },
+        },
+        today,
+    )
+
+    assert [row["id"] for row in visible] == ["legacy", "approved"]
+    assert visible[1]["care_plan"] == {
+        "version_number": 2,
+        "category": "monitoring",
+        "effective_start_date": "2026-09-01",
+        "effective_end_date": "2026-10-01",
+    }
+
+
+def test_current_plan_projections_excludes_malformed_effective_dates(feed_service):
+    visible = feed_service._current_plan_projections(
+        [{"id": "unsafe", "care_plan_item_id": "current"}],
+        {
+            "current": {
+                "version_number": 1,
+                "category": "other",
+                "schedule": {"start_date": "not-a-date"},
+            }
+        },
+        date(2026, 9, 29),
+    )
+
+    assert visible == []
+
+
 @pytest.fixture
 def mock_supabase_client():
     """Create a mock Supabase client."""
@@ -421,8 +470,9 @@ async def test_get_today_empty_feed(feed_service, mock_supabase_client):
     assert result["tasks"] == []
     assert result["summary"]["total"] == 0
 
-    assert mock_supabase_client.table.call_count == 5
-    assert mock_table.select.call_count == 5
+    # The feed also checks plan-item approval/effective state before returning projections.
+    assert mock_supabase_client.table.call_count == 6
+    assert mock_table.select.call_count == 6
     mock_table.eq.assert_any_call("patient_id", str(patient_id))
     assert mock_table.gte.call_count == 1
     assert mock_table.lt.call_count == 1
@@ -472,8 +522,8 @@ async def test_get_today_with_timezone(feed_service, mock_supabase_client):
 
     assert result["timezone"] == "America/New_York"
 
-    assert mock_supabase_client.table.call_count == 3
-    assert mock_table.select.call_count == 3
+    assert mock_supabase_client.table.call_count == 4
+    assert mock_table.select.call_count == 4
     mock_table.eq.assert_any_call("patient_id", str(patient_id))
     assert mock_table.gte.call_count == 1
     assert mock_table.lt.call_count == 1
