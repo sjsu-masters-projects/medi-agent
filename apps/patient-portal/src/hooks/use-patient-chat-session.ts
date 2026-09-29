@@ -314,6 +314,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             }),
         );
 
+        // Feedback must begin when the user sends, not after the model has classified the turn.
+        // `assistant_complete`, socket errors, and socket close all clear this state.
+        dispatch(setTyping(true));
         dispatch(setChatError(null));
         setSafetyNotice(null);
         resetVoiceFeedback();

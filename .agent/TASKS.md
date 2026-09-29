@@ -29,7 +29,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Clinician portal | Partial | Roster, patient deep dive, document source viewer, extracted-fact review, and Care Plan draft/review surfaces exist; the fresh synthetic approval journey, consolidated action queues, and a longitudinal decision timeline remain incomplete. |
 | Backend foundation | Functional foundation | Versioned APIs, auth, RLS, audit, and worker services exist; several product lifecycles are not connected end to end |
 | Records ingestion | Demonstration-ready candidate pipeline | Secure document intake, evidence-backed candidates, TIFF previews, and retryable explanation lifecycle work; clinician review, reconciliation, and downstream approved-action projection remain incomplete |
-| Chat and triage | Partial | Deterministic emergency handling and the Care Coordinator are live; document-focused chat, durable safety-rule audit, and a websocket-token remediation remain open |
+| Chat and triage | Partial | Deterministic emergency handling, the Care Coordinator, and WebSocket subprotocol authentication are live; document-focused chat, durable safety-rule audit, and terminal turn recovery remain open |
 | Document intelligence | Demonstration-ready | Synthetic PDF, scanned-Spanish, and multi-frame TIFF paths completed with evidence-backed candidates, private preview, expiry, and cross-user denial checks; the five-minute Job trigger is enabled for the master's-project demonstration |
 | Pharmacovigilance | Not complete | Empty agent/tool files and incomplete ADR service paths |
 | Scheduling and communication | Partial | Document ingestion is scheduled; appointments, approved clinical messaging, notification delivery/retry, and care-gap closure are incomplete |
@@ -56,9 +56,9 @@ failure. It must not be presented as a completed closed-loop care product until 
 
 | Product journey | Demonstrably working now | Functional gap | Tracked work |
 | --- | --- | --- | --- |
-| Access and clinic boundaries | Synthetic patient/clinician login, assigned-care-team access, unassigned clinician denial, denial audit, private document URLs | WebSocket chat still places a session token in the URL; broader release security qualification remains | SEC-001, QUA-001 |
+| Access and clinic boundaries | Synthetic patient/clinician login, assigned-care-team access, unassigned clinician denial, denial audit, private document URLs, and WebSocket subprotocol authentication | Broader release security qualification remains | SEC-001, QUA-001 |
 | Document intake and understanding | PDF/image/TIFF ingestion, source provenance, evidence-backed pending candidates, private derived previews, plain-language explanation and retry lifecycle; clinician extracted-facts review | Fresh synthetic evidence-to-approved-plan proof and authorized reconciliation-to-action journey remain incomplete | REC-001, PAT-005 |
-| Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish | Document-focused conversation lifecycle, some safety-audit persistence, and complete recovery journey remain open | PAT-001, PAT-004, SAFE-002 |
+| Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish, and immediate typing feedback | Document-focused conversation lifecycle, some safety-audit persistence, and complete recovery from an interrupted model turn remain open | PAT-001, PAT-004, SAFE-002 |
 | Today feed and adherence | Deterministic medication/obligation feed, adherence statistics, completion/barrier capture, and plan-linked approved/effective-task guard | No live proof of the clinician-approved item through patient and clinician follow-up | PAT-002, PAT-005 |
 | Clinician action workspace | Roster, patient detail, source preview, extracted-facts review, care-plan draft/review, and basic document status | No consolidated queue, explainable risk, or unified timeline; live care-plan acceptance remains incomplete | PAT-005, CLN-001, CLN-002 |
 | Care closure | Document Job runs every five minutes; manual summary retry exists | No approved clinical messaging, appointment completion, notifications/retry, or care-gap follow-up loop | SCH-001, COM-001 |
@@ -117,8 +117,9 @@ PAT-005.
 | `PAT-005-A` — safe draft-failure diagnostics | **Claimed** | Rajeev — `codex/pat-005-care-plan-observability` | Emit a safe worker event containing only request ID, attempt, outcome, and failure code. | Keep clinical text, prompts, source facts, patient IDs, and provider exception text out of logs. After deployment, hand off to `PAT-005-B`. |
 | `PAT-005-B` — diagnose the existing failed request | **Blocked** | Rajeev + assigned synthetic clinician | Use the clinician retry action after `PAT-005-A` deploys; record the safe failure code from the next scheduled Job execution. | Maya's already-failed request predates outcome logging. This is a diagnostic retry only; do not upload a replacement document or manually execute Cloud Run. |
 | `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | Starts only after `PAT-005-B` identifies and resolves the generation fault. It is the PAT-005 completion gate. |
+| `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
 | `PAT-002-A` — adherence/barrier acceptance evidence | **Sequenced** | Patient + clinician portal lanes | Exercise each patient barrier category and completion against an approved effective plan item; verify clinician display and assignment denial. | Runs with `PAT-005-C`; do not create a parallel adherence data model or bypass the plan projection. |
-| `PAT-004-A` — document-focused conversation | **Ready** | Patient-portal lane — unassigned | Implement the persistent selected-document context card and server-authorized per-message document reference. | Preserve the source-bound, no-chart-wide-inference rules in PAT-004. Independent of PAT-005. |
+| `PAT-004-A` — document-focused conversation | **Claimed** | Rajeev — `codex/pat-004-chat-document-catalog` | Answer clear document-catalog questions from the patient's authorized portal metadata and show typing immediately after send. | Keep catalog answers deterministic, metadata-only, and separate from selected-document interpretation. This is independent of PAT-005. |
 | `CI-001-A` — selective-test evidence | **Ready** | CI-maintenance lane — unassigned | Collect one eligible Acquit selective-run observation and publish selected-test/full-suite evidence. | Keep Acquit in canary mode; enforcement waits for ten safe observations. |
 | `SAFE-002-A` — language-gap safety rules | **Blocked** | Clinical reviewer + safety owner | Approve exact English and Mexican-Spanish wording/coverage for inflected self-harm, anaphylaxis, and stroke phrases; then add deterministic tests and rules. | Engineering must not invent clinical escalation wording. Clinical sign-off is the unblocker. |
 | `CLN-001-A` — consolidated clinician queue | **Sequenced** | Clinician-portal lane — unassigned | Design the queue around demonstrated PAT-005 approval, adherence, and barrier artifacts. | Wait for `PAT-005-C`; that proof defines which records the queue must render. |
@@ -1496,6 +1497,10 @@ resources remain evidence-only and do not create local truth.
 - [/] Recover after refresh, websocket reconnect, provider timeout, and quota exhaustion.
       Existing chat reconnects, but the 2026-09-20 route-reuse defect proves that recovery is not
       complete for selected-document context.
+- [ ] Add durable terminal handling for each saved chat turn: persist `processing`, `completed`,
+      `failed`, or `interrupted`; enforce a bounded model deadline; reconcile unfinished turns on
+      reconnect; and retry the saved turn without duplicating the patient's message. Record only
+      safe outcome, duration, revision, and failure-category telemetry.
 - [ ] Prevent duplicate messages and duplicate tool actions.
 - [/] Show when an answer is based on approved records, general evidence, or insufficient
       information. The general contract exists; source visibility and focused-document behavior
@@ -1533,6 +1538,12 @@ drop its selected-document context and yield a generic chart answer.
       rendering, draft-only suggested question, refresh/reconnect, dismiss/replace behavior,
       patient/clinic isolation, expired/deleted documents, and audit linkage from each focused
       user message to its authorized document context.
+- [/] Answer a clear catalog question (for example, “What documents do you have on me?”) from
+      authenticated, patient-scoped portal metadata without invoking a model. The response lists
+      only documents available in MediAgent, never a signed URL, raw source text, or records from
+      another patient; it must not claim that the portal has no record access.
+- [/] Show the typing state immediately after a message is sent, rather than waiting for model
+      classification. A terminal completion, error, or connection close clears it.
 
 **Acceptance criteria**
 
