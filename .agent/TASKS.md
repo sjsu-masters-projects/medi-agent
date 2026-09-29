@@ -45,6 +45,7 @@ Independent work: PAT-001-A chat recovery; PAT-004 document chat; SAFE-002-A saf
 | PAT-005-C PAT-005-SYN-001 proof | Blocked | Rajeev + test accounts | Draft consolidation, blocker resolution, approval, Today, completion/barrier, clinician/audit proof. | PAT-005-B resolved; current product completion gate. |
 | PAT-001-A Durable chat-turn recovery | Ready | Unassigned — patient/backend | Persist terminal state, deadline, reconnect reconciliation, and no-duplicate retry. | Safe outcome/duration/failure telemetry only. |
 | PAT-004-A Document catalog chat | Claimed | Rajeev — codex/pat-004-chat-document-catalog | Merge PR #109 and manually verify catalog/typing behavior. | Metadata only; no signed URLs, raw source, or model call. |
+| SEC-001-A WebSocket credential cutover verification | Ready | Unassigned — backend/patient | Verify deployed chat and voice reject query-string credentials, accept only subprotocol auth, and never log credential-bearing URLs. | Protects the active chat surface; no query-token compatibility fallback. |
 | PAT-002-A Adherence/barrier evidence | Sequenced | Unassigned — patient/clinician | Exercise completion and all barriers on approved effective plan item. | Runs with PAT-005-C; reuse current model. |
 | PAT-002-B Guided symptom intake | Sequenced | Unassigned — patient/backend | Bounded safe chat intake and patient confirmation of structured report. | After PAT-005-C; blocks PAT-002-C/PV-001. |
 | PAT-002-C Timeline/report detail | Sequenced | Unassigned — patient/clinician | Patient timeline plus assigned-clinician report detail. | After PAT-002-B; blocks PV-001. |
@@ -112,6 +113,12 @@ OCR is already implemented: embedded text is recovered where available; scans, r
 - [ ] Full viewer acceptance including expired/deleted source behavior.
 - [ ] Explicit clinician reconciliation of approved FHIR/document candidates.
 
+### SAFE-001 — Approval and audit infrastructure
+
+- [x] Tiered authority, idempotency, reviewer/decision/outcome audit, duplicate protection, and authorization-denial audit are implemented.
+- [ ] Complete remaining live denial-fixture verification and route-ownership decisions for unverified declared actions.
+- [ ] Confirm every PAT-005 publication executor is classified and fails closed when unclassified.
+
 ### AI-003 — Runtime/provider contract
 
 - [x] Safety floor, registry, fallback, safe outcomes, and native structured output are implemented.
@@ -132,6 +139,7 @@ OCR is already implemented: embedded text is recovered where available; scans, r
 | CLN-001 | Consolidated clinician queue | PAT-005-C | Render proven artifacts; no competing decision lifecycle. |
 | CLN-002 | Explainable risk/timeline | CLN-001 + PAT-002-C | Every signal links to provenance/reviewer outcome. |
 | MED-001/002 | Medication reconciliation + clinician review | PAT-005-C | Explicit clinician decisions, no automatic truth overwrite. |
+| REC-002 | SMART/document external-record reconciliation | PAT-005-C | Candidate-only import, clinician field-level reconciliation, and staging acceptance. |
 | PV-001 | Clinician ADR/Naranjo review | PAT-002-C | Starts from confirmed report; no autonomous ADR decision. |
 | PV-002 | Clinician-approved MedWatch draft/export | PV-001 | Editable evidence-linked export; never FDA submission. |
 | PAT-003 | EN-US/es-MX end-to-end parity | PAT-005-C | Bilingual clinical review required. |
@@ -139,6 +147,7 @@ OCR is already implemented: embedded text is recovered where available; scans, r
 | VOI-001 | Text-first voice | PAT-003 | Text/transcript fallback and safety parity. |
 | CON-001 | Multi-provider continuity | CLN-002 | Assignment, provenance, and handoff first. |
 | INT-002/003 | FHIR reconciliation/export and SMART maturity | MED-001 | Imports remain candidates until reviewed. |
+| INT-001 | Canonical facts/provenance lifecycle refinements | INT-002/003 | Preserve source, confidence, uncertainty, reviewer state, and export validation. |
 | STD-001–003 | CDS Hooks, official MCP, focused A2A | Proven internal flows | No compatibility claim without conformance. |
 | EVA-001 | Synthetic evaluation and adjudication | Stable AI-003 contract | Evidence only; not a substitute for safety/review. |
 
@@ -150,6 +159,8 @@ Not PAT-005 blockers for this master's-project demonstration:
 - Broad release hardening: RBAC/RLS/privilege drills, WCAG/PWA qualification, observability, and external-service failure exercises.
 - Release package: demo script, deployment/reset guide, architecture/safety/interoperability brief, and explicit synthetic-data limits.
 - Final production qualification or production-readiness claims.
+- QUA-001 release hardening: RBAC/RLS/privilege drills, resilience, accessibility, observability, and secret/PHI exposure review.
+- REL-001/002/003: qualification, synthetic demonstration deployment, and final delivery package.
 
 ## Verified foundation
 
