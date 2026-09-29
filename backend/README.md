@@ -62,6 +62,26 @@ open backend/htmlcov/index.html
 
 See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing documentation.
 
+## Care-plan model preflight
+
+Before deploying a change to care-plan classification or its provider route, validate the
+exact worker contract against synthetic facts:
+
+```bash
+cd backend
+PYTHONPATH=src .venv/bin/python scripts/preflight_care_plan_classification.py --dry-run
+PYTHONPATH=src .venv/bin/python scripts/preflight_care_plan_classification.py
+```
+
+The live command needs Vertex credentials and `GOOGLE_PROJECT_ID`,
+`GEMINI_VERTEX_AI_LOCATION=global`, and the configured `GEMINI_FLASH_MODEL`. It
+classifies 12 fictional facts through the production route and prints only counts
+and safe failure categories. It never reads the database, prints model output, or
+publishes a plan. The backend deployment workflow runs the same command before
+building or updating Cloud Run. A failure prevents that deployment; the scheduled
+Job continues using its previous image. Deterministic contract tests still run in
+PR CI without cloud credentials.
+
 ## Package Layout
 
 ```

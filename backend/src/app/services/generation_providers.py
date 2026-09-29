@@ -76,6 +76,8 @@ class ClientTextProvider:
         # keyword to an adapter that does not support it when the caller did not ask.
         if request.thinking_level is not None:
             generate_kwargs["thinking_level"] = request.thinking_level
+        if request.response_schema is not None:
+            generate_kwargs["response_schema"] = request.response_schema
         try:
             text = await self._generate(**generate_kwargs)
         except GenerationProviderError:

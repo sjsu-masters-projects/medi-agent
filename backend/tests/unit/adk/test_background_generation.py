@@ -46,6 +46,7 @@ async def test_background_generation_uses_the_registry_token_and_reasoning_limit
         response = await generate_for_workload(
             Workload.CARE_PLAN_CLASSIFICATION,
             prompt="classify fixed source facts",
+            response_schema={"type": "object"},
         )
 
     assert response.text == '{"items": []}'
@@ -53,6 +54,7 @@ async def test_background_generation_uses_the_registry_token_and_reasoning_limit
     assert request.task == Workload.CARE_PLAN_CLASSIFICATION.value
     assert request.max_tokens == 8192
     assert request.thinking_level == "LOW"
+    assert request.response_schema == {"type": "object"}
     assert response.telemetry.fallback_path == ["flash"]
     telemetry.assert_called_once()
 

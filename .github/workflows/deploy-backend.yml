@@ -36,6 +36,27 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Set up Python for synthetic model preflight
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install preflight runtime
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Preflight care-plan model contract
+        timeout-minutes: 3
+        working-directory: backend
+        env:
+          GOOGLE_PROJECT_ID: ${{ env.PROJECT_ID }}
+          GEMINI_VERTEX_AI_LOCATION: global
+          GEMINI_FLASH_MODEL: gemini-3.8-flash
+        run: |
+          PYTHONPATH=src python scripts/preflight_care_plan_classification.py
+
       - name: Authorize Docker push
         run: gcloud auth configure-docker ${REGION}-docker.pkg.dev
 

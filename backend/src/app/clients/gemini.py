@@ -211,6 +211,7 @@ class GeminiClient:
         max_tokens: int = 2048,
         thinking_level: str | None = None,
         response_model: type[BaseModel] | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
         """Generate text completion.
 
@@ -222,8 +223,11 @@ class GeminiClient:
                 which manage their own sampling — see `_honours_sampling_parameters`.
             max_tokens: Max output tokens, covering reasoning and answer together
             thinking_level: Reasoning ceiling — LOW, MEDIUM or HIGH (Vertex only)
-            response_model: Schema the answer must satisfy, enforced natively by Vertex.
+            response_model: Pydantic schema the answer must satisfy, enforced natively by Vertex.
                 Ignored on AI Studio, which has no native structured-output path.
+            response_schema: JSON schema for an adapter-owned structured request. This is
+                equivalent to ``response_model`` on Vertex and keeps provider contracts
+                independent of callers' Pydantic classes.
 
         Returns:
             Generated text
@@ -232,6 +236,8 @@ class GeminiClient:
             LLMError: If generation fails after retries, or is truncated
         """
         if self.use_vertex_ai:
+            if response_model is not None and response_schema is not None:
+                raise ValueError("Specify either response_model or response_schema, not both")
             return await self._generate_genai_sdk(
                 prompt,
                 system_instruction,
@@ -239,7 +245,7 @@ class GeminiClient:
                 temperature,
                 max_tokens,
                 thinking_level,
-                response_model,
+                response_model or response_schema,
             )
         return await self._generate_ai_studio(
             prompt, system_instruction, image, temperature, max_tokens
@@ -253,7 +259,7 @@ class GeminiClient:
         temperature: float,
         max_tokens: int,
         thinking_level: str | None = None,
-        response_model: type[BaseModel] | None = None,
+        response_schema: type[BaseModel] | dict[str, Any] | None = None,
     ) -> str:
         """Generate using the Google Gen AI SDK.
 
@@ -278,15 +284,17 @@ class GeminiClient:
             max_output_tokens=max_tokens,
             system_instruction=system_instruction,
             thinking_config=(
-                types.ThinkingConfig(thinking_level=thinking_level) if thinking_level else None
+                types.ThinkingConfig(thinking_level=types.ThinkingLevel(thinking_level))
+                if thinking_level
+                else None
             ),
             # Native schema enforcement, rather than asking for a shape in the prompt and
             # hoping. Verified on the locked SDK that this coexists with `thinking_config`
             # — worth checking, because constrained decoding and reasoning collided badly
             # on MedGemma, where the grammar applied from the first token and the model
             # never got to think.
-            response_mime_type="application/json" if response_model else None,
-            response_schema=response_model,
+            response_mime_type="application/json" if response_schema else None,
+            response_schema=response_schema,
         )
 
         # Build content parts
@@ -602,7 +610,9 @@ JSON response:""",
             system_instruction=system_instruction,
             max_output_tokens=max_tokens,
             thinking_config=(
-                types.ThinkingConfig(thinking_level=thinking_level) if thinking_level else None
+                types.ThinkingConfig(thinking_level=types.ThinkingLevel(thinking_level))
+                if thinking_level
+                else None
             ),
         )
 

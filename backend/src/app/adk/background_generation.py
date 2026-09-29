@@ -38,6 +38,8 @@ async def generate_for_workload(
     prompt: str,
     system_instruction: str | None = None,
     temperature: float = 0.2,
+    response_schema: dict[str, object] | None = None,
+    record_telemetry: bool = True,
 ) -> GenerationResponse:
     """Generate through one named route and record every attempt without patient data.
 
@@ -53,12 +55,13 @@ async def generate_for_workload(
             model=route.primary.model_id,
             latency_ms=0,
         )
-        schedule_generation_record(
-            workload=workload.value,
-            telemetry=telemetry,
-            succeeded=False,
-            error_code=GenerationErrorCode.CONFIGURATION.value,
-        )
+        if record_telemetry:
+            schedule_generation_record(
+                workload=workload.value,
+                telemetry=telemetry,
+                succeeded=False,
+                error_code=GenerationErrorCode.CONFIGURATION.value,
+            )
         raise GenerationProviderError(
             GenerationErrorCode.CONFIGURATION,
             f"AI is disabled for {workload.value}",
@@ -71,6 +74,7 @@ async def generate_for_workload(
         max_tokens=route.max_output_tokens,
         thinking_level=route.thinking_level,
         task=workload.value,
+        response_schema=response_schema,
     )
     attempts = [route.primary, *([route.fallback] if route.fallback else [])]
     failures: list[str] = []
@@ -92,27 +96,30 @@ async def generate_for_workload(
                 GenerationErrorCode.TIMEOUT, f"{workload.value} exceeded its routing budget"
             )
             telemetry = _failure_telemetry(provider=spec.key, model=spec.model_id, started=started)
-            schedule_generation_record(
-                workload=workload.value,
-                telemetry=telemetry,
-                succeeded=False,
-                error_code=error.code.value,
-            )
+            if record_telemetry:
+                schedule_generation_record(
+                    workload=workload.value,
+                    telemetry=telemetry,
+                    succeeded=False,
+                    error_code=error.code.value,
+                )
             failures.append(f"{spec.key}:{error.code.value}")
             last_error: GenerationProviderError = error
         except GenerationProviderError as error:
             telemetry = _failure_telemetry(provider=spec.key, model=spec.model_id, started=started)
-            schedule_generation_record(
-                workload=workload.value,
-                telemetry=telemetry,
-                succeeded=False,
-                error_code=error.code.value,
-            )
+            if record_telemetry:
+                schedule_generation_record(
+                    workload=workload.value,
+                    telemetry=telemetry,
+                    succeeded=False,
+                    error_code=error.code.value,
+                )
             failures.append(f"{spec.key}:{error.code.value}")
             last_error = error
         else:
             response.telemetry.fallback_path = [*failures, spec.key]
-            schedule_generation_record(workload=workload.value, telemetry=response.telemetry)
+            if record_telemetry:
+                schedule_generation_record(workload=workload.value, telemetry=response.telemetry)
             return response
 
     raise last_error

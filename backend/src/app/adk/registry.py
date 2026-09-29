@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Final
+from typing import Final, Literal
 
 from app.config import settings
 
@@ -133,7 +133,7 @@ class WorkloadRoute:
     # our runs — so these are floors that make truncation rare, not limits that make it
     # impossible. Detecting truncation is what has to be reliable.
     max_output_tokens: int = 2048
-    thinking_level: str = "LOW"
+    thinking_level: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
 
     def is_enabled(self) -> bool:
         """Whether the model path is live for this workload right now."""

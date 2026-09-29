@@ -100,7 +100,9 @@ def _generation_config(workload: Workload) -> types.GenerateContentConfig:
         # reached over an OpenAI-compatible surface that has never seen it; their
         # reasoning ceiling is set as `reasoning_effort` when the model is built, at the
         # low level every measurement we have of them was taken at.
-        config.thinking_config = types.ThinkingConfig(thinking_level=route.thinking_level)
+        config.thinking_config = types.ThinkingConfig(
+            thinking_level=types.ThinkingLevel(route.thinking_level)
+        )
 
     return config
 
