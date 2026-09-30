@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # Gemini 3.8 Flash is also served globally through its distinct Gen AI transport.
     vertex_ai_location: str = "global"
     gemini_vertex_ai_location: str = "global"
+    # The chat pipeline makes two sequential model calls. Per-workload deadlines live in
+    # the registry; this outer ceiling prevents their fallbacks from accumulating into a
+    # minute-long websocket turn. MaaS failures open a short process-local cooldown so a
+    # burst of patients does not repeat the same throttled call.
+    chat_turn_timeout_seconds: float = 30.0
+    model_circuit_breaker_cooldown_seconds: float = 60.0
 
     # Per-workload kill switches. Turning one off routes that workload to the
     # deterministic path recorded beside it in `app/adk/registry.py`, which is why every

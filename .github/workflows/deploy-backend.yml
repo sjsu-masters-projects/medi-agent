@@ -101,7 +101,7 @@ jobs:
             --max-instances 2 \
             --allow-unauthenticated \
             --service-account ${RUNTIME_SERVICE_ACCOUNT} \
-            --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global \
+            --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60 \
             --port 8080 \
             --timeout 300
 

@@ -110,11 +110,12 @@ all; the configured level is a ceiling the model may spend less than or ignore.
 class WorkloadRoute:
     """The complete routing decision for one workload.
 
-    `budget_seconds` is a wall-clock limit on the model call, enforced by the caller. It
-    is not a timeout tuned for the model's comfort: it is the point at which waiting
-    longer is worse for the person than a deterministic answer. The measured tail is why
-    it exists at all — Flash took 95.2 s on its slowest triage call and 88.2 s on its
-    slowest explanation, and neither is survivable in front of a patient.
+    `budget_seconds` is the wall-clock limit for each provider attempt, enforced by the
+    ADK model adapter. It is not a timeout tuned for the model's comfort: it is the point
+    at which waiting longer is worse for the person than trying the declared fallback.
+    The chat runtime has a separate whole-turn ceiling so two fallback routes cannot add
+    up to a minute. The measured tail is why both limits exist at all — Flash took 95.2 s
+    on its slowest triage call and 88.2 s on its slowest explanation.
 
     `deterministic` names what runs when the model is disabled, over budget, or failing.
     It is a name rather than a callable so this module stays free of agent imports and
@@ -170,7 +171,9 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         workload=Workload.REPLY,
         primary=FLASH,
         fallback=GPT_OSS,
-        budget_seconds=30.0,
+        # Normal replies measured at 3-4 seconds in production. Ten seconds leaves enough
+        # of the 30-second whole-turn ceiling for the declared fallback to answer.
+        budget_seconds=10.0,
         deterministic="localized reply template",
         enabled_setting="reply_ai_enabled",
         max_output_tokens=2048,
@@ -225,7 +228,7 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         workload=Workload.EXPLANATION,
         primary=FLASH,
         fallback=GPT_OSS,
-        budget_seconds=30.0,
+        budget_seconds=20.0,
         deterministic="localized explanation template",
         enabled_setting="explanation_ai_enabled",
         # Measured: the bilingual explanation answer runs 950-1166 tokens and truncated

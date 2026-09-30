@@ -14,3 +14,5 @@ def test_production_model_defaults_use_global_vertex_endpoints() -> None:
     assert settings.gemini_flash_model == "gemini-3.8-flash"
     assert settings.vertex_ai_location == "global"
     assert settings.gemini_vertex_ai_location == "global"
+    assert settings.chat_turn_timeout_seconds == 30.0
+    assert settings.model_circuit_breaker_cooldown_seconds == 60.0

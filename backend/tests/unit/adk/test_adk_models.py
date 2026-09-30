@@ -19,6 +19,7 @@ from google.adk.models import FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 
 from app.adk.models.adk_models import BearerLiteLlm, adk_model_for, adk_model_for_workload
+from app.adk.models.resilient import ResilientLlm
 from app.adk.registry import FLASH, GPT_OSS, ModelSpec, Transport, Workload
 from app.config import settings
 
@@ -212,10 +213,22 @@ def test_a_workload_builds_its_declared_fallback_after_the_primary() -> None:
         model = adk_model_for_workload(Workload.TRIAGE)
 
     assert isinstance(model, FallbackModel)
+    assert all(isinstance(candidate, ResilientLlm) for candidate in model.models)
     assert [candidate.model for candidate in model.models] == [
         "openai/openai/gpt-oss-120b-maas",
         "gemini-3.8-flash",
     ]
+    assert model.models[0].timeout_seconds == 8.0
+    assert model.models[0].circuit_breaker is True
+    assert model.models[1].circuit_breaker is False
+
+
+def test_reply_timeout_leaves_room_for_its_fallback() -> None:
+    with _capturing_genai_client():
+        model = adk_model_for_workload(Workload.REPLY)
+
+    assert isinstance(model, FallbackModel)
+    assert all(candidate.timeout_seconds == 10.0 for candidate in model.models)
 
 
 def test_a_workload_without_a_fallback_keeps_its_primary_model() -> None:

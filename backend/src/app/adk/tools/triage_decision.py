@@ -23,6 +23,10 @@ Nothing here decides safety. An emergency was already answered by `SafetyFloorPl
 before any agent ran, and escalation is re-applied deterministically at the boundary by
 `app.safety.apply_safety_override`, which may raise an urgency and never lower one. So a
 model that under-calls urgency cannot talk the turn down.
+
+The successful tool result also sets ``skip_summarization``. The decision is the
+coordinator's complete output; asking the same model to narrate the tool result would add
+a second provider call whose prose is deliberately discarded by the runtime.
 """
 
 from __future__ import annotations
@@ -97,4 +101,7 @@ async def submit_triage_decision(
         "urgency": normalized_urgency,
         "reason": (reason or "").strip()[:500],
     }
+    actions = getattr(tool_context, "actions", None)
+    if actions is not None:
+        actions.skip_summarization = True
     return {"recorded": True}

@@ -46,6 +46,15 @@ documented in `.env.example`; do not commit a real `.env` file.
    medication change, diagnosis, or external clinical action.
 7. ADK agents construct the registry's complete primary/fallback route. Retriable provider
    failures (including HTTP 429) move to the declared fallback before any response is emitted.
+8. Every interactive provider attempt has a registry-owned deadline. Its output is buffered
+   until the attempt completes, so a timeout can fall back without splicing two models' partial
+   answers together.
+9. GPT OSS timeouts and retriable provider failures open a 60-second process-local circuit.
+   Requests during that cooldown immediately use Gemini instead of repeating a call against the
+   same unhealthy shared-capacity pool.
+10. The complete coordinator-and-responder turn has a 30-second ceiling and returns reviewed,
+    localized unavailable copy when both routes cannot finish. The triage decision tool ends the
+    coordinator stage directly; no second model call narrates a decision whose prose is discarded.
 
 ## Evidence and limits
 
