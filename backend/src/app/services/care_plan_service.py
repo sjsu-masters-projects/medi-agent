@@ -85,6 +85,30 @@ class CarePlanService:
         plans = self._plans(patient_id)
         return self._hydrate_plan(plans[0]) if plans else None
 
+    def get_review_context_for_clinician(
+        self, clinician_id: UUID, patient_id: UUID
+    ) -> dict[str, Any]:
+        """Return both review states without exposing another patient's plan."""
+        self._require_assignment(clinician_id, patient_id)
+        plans = self._plans(patient_id)
+        active = next((plan for plan in plans if plan["status"] == "approved"), None)
+        patient = cast(
+            dict[str, Any],
+            self.db.table("patients")
+            .select("preferred_language")
+            .eq("id", str(patient_id))
+            .single()
+            .execute()
+            .data
+            or {},
+        )
+        latest = plans[0] if plans else None
+        return {
+            "latest": self._hydrate_plan(latest) if latest else None,
+            "active": self._hydrate_plan(active) if active and active != latest else None,
+            "patient_locale": patient.get("preferred_language") or "en-US",
+        }
+
     def generation_for_clinician(
         self, clinician_id: UUID, patient_id: UUID
     ) -> dict[str, Any] | None:
@@ -605,13 +629,14 @@ class CarePlanService:
     def _hydrate_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
         items = self._items(UUID(str(plan["id"])))
         fact_ids = [str(item["source_fact_id"]) for item in items if item.get("source_fact_id")]
-        sources: dict[str, dict[str, Any]] = {}
+        sources: dict[str, list[dict[str, Any]]] = {}
         if fact_ids:
             citations = cast(
                 list[dict[str, Any]],
                 self.db.table("evidence_citations")
                 .select("fact_id, excerpt, location, provenance_id")
                 .in_("fact_id", fact_ids)
+                .order("created_at")
                 .execute()
                 .data
                 or [],
@@ -633,20 +658,50 @@ class CarePlanService:
                 else []
             )
             by_provenance = {str(row["id"]): row for row in provenance}
+            document_ids = list(
+                {
+                    str(row["document_id"])
+                    for row in provenance
+                    if row.get("document_id") is not None
+                }
+            )
+            documents = (
+                cast(
+                    list[dict[str, Any]],
+                    self.db.table("documents")
+                    .select("id, file_name")
+                    .in_("id", document_ids)
+                    .execute()
+                    .data
+                    or [],
+                )
+                if document_ids
+                else []
+            )
+            document_names = {str(row["id"]): row["file_name"] for row in documents}
             for citation in citations:
                 source = by_provenance.get(str(citation.get("provenance_id")))
                 if source:
-                    sources[str(citation["fact_id"])] = {
-                        "document_id": source.get("document_id"),
-                        "excerpt": citation.get("excerpt"),
-                        "location": citation.get("location")
-                        or source.get("document_location")
-                        or {},
-                    }
+                    document_id = source.get("document_id")
+                    sources.setdefault(str(citation["fact_id"]), []).append(
+                        {
+                            "document_id": document_id,
+                            "file_name": document_names.get(str(document_id)),
+                            "excerpt": citation.get("excerpt"),
+                            "location": citation.get("location")
+                            or source.get("document_location")
+                            or {},
+                        }
+                    )
         return {
             **plan,
             "items": [
-                {**item, "source": sources.get(str(item.get("source_fact_id")))} for item in items
+                {
+                    **item,
+                    "source": next(iter(sources.get(str(item.get("source_fact_id")), [])), None),
+                    "sources": sources.get(str(item.get("source_fact_id")), []),
+                }
+                for item in items
             ],
         }
 

@@ -75,6 +75,17 @@ Invite history is intentionally role-sensitive:
 - Review actions are surfaced in both the dedicated review queue and the patient deep dive documents tab.
 - The deep-dive documents experience is intentionally factored into `PatientDocumentsPanel` so document review state, modal flows, and refresh behavior stay isolated from the rest of the deep-dive page.
 
+## Care-plan revision review
+
+The Care Plan tab loads the latest version and the currently approved version through an
+assignment-scoped backend review endpoint. When a newer draft exists, the approved plan remains
+active in Today. The tab lists the source documents/citations attached to proposed items and
+labels an item as carried forward, edited, removed, or linked to new evidence by source-fact ID.
+“New evidence” does not establish a new therapy or reconcile medications. The publication
+summary is not an exact Today preview; patient timezone, reminders, and existing medications
+still affect the feed. Save draft edits before approval. Medication matching, locale verification,
+and a live version-supersession proof remain PAT-005 acceptance work.
+
 ## Notes
 
 - A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.
