@@ -1,8 +1,8 @@
 from app.config import Settings
 
 
-def test_stable_flash_lite_is_the_default_model() -> None:
-    """The retired preview model must never be the application default."""
+def test_production_model_defaults_use_global_vertex_endpoints() -> None:
+    """Default model routes must not regress to retired or regional endpoints."""
     settings = Settings(
         _env_file=None,
         supabase_url="https://test.supabase.co",
@@ -12,4 +12,5 @@ def test_stable_flash_lite_is_the_default_model() -> None:
     )
 
     assert settings.gemini_flash_model == "gemini-3.8-flash"
+    assert settings.vertex_ai_location == "global"
     assert settings.gemini_vertex_ai_location == "global"

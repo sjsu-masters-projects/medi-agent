@@ -23,11 +23,11 @@ latency budgets are in `backend/src/app/adk/registry.py`.
 
 - **Gemini Flash** is called with the Google Gen AI SDK through Vertex's global endpoint:
   `GEMINI_VERTEX_AI_LOCATION=global`.
-- **GPT OSS MaaS** uses Vertex's OpenAI-compatible regional endpoint:
-  `VERTEX_AI_LOCATION=us-central1` and `openai/gpt-oss-120b-maas`.
-- The locations must remain separate. Moving MaaS to `global` breaks its approved regional
-  route; using the MaaS region for Gemini 3.8 Flash caused the responder's immediate client
-  error.
+- **GPT OSS MaaS** uses Vertex's OpenAI-compatible global endpoint:
+  `VERTEX_AI_LOCATION=global` and `openai/gpt-oss-120b-maas`. The global route was selected
+  after the regional shared pool returned concurrency-throttle 429s under light load.
+- The location settings remain separate even though both are currently `global`; using a MaaS
+  region for Gemini 3.8 Flash previously caused the responder's immediate client error.
 
 Cloud Run owns the production settings. The deployment workflow uses an update operation, so
 it preserves separately managed variables and secret references. Local configuration is

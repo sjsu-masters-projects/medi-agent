@@ -101,7 +101,7 @@ jobs:
             --max-instances 2 \
             --allow-unauthenticated \
             --service-account ${RUNTIME_SERVICE_ACCOUNT} \
-            --update-env-vars GEMINI_VERTEX_AI_LOCATION=global \
+            --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global \
             --port 8080 \
             --timeout 300
 
@@ -127,5 +127,5 @@ jobs:
             --task-timeout 300s \
             --max-retries 0 \
             --service-account ${RUNTIME_SERVICE_ACCOUNT} \
-            --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=us-central1,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_FLASH_MODEL=gemini-3.8-flash,DOCUMENT_INGESTION_BATCH_SIZE=1 \
+            --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_FLASH_MODEL=gemini-3.8-flash,DOCUMENT_INGESTION_BATCH_SIZE=1 \
             --set-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest

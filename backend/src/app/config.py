@@ -46,10 +46,10 @@ class Settings(BaseSettings):
     rag_embedding_dimensions: int = 768
     rag_min_similarity: float = 0.72
 
-    # Vertex AI transports use different serving locations. MaaS remains regional so its
-    # OpenAI-compatible endpoint stays in us-central1; Gemini 3.8 Flash is served from
-    # Vertex's global endpoint.
-    vertex_ai_location: str = "us-central1"
+    # Vertex AI transports keep separate settings so either can move independently. GPT
+    # OSS MaaS uses the global endpoint to draw from the broader shared-capacity pool;
+    # Gemini 3.8 Flash is also served globally through its distinct Gen AI transport.
+    vertex_ai_location: str = "global"
     gemini_vertex_ai_location: str = "global"
 
     # Per-workload kill switches. Turning one off routes that workload to the
