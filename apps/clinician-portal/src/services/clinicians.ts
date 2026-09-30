@@ -204,9 +204,16 @@ export interface CarePlanItem {
     is_removed: boolean;
     source?: {
         document_id?: string;
+        file_name?: string | null;
         excerpt?: string;
         location?: { page?: number };
     } | null;
+    sources?: Array<{
+        document_id?: string;
+        file_name?: string | null;
+        excerpt?: string;
+        location?: { page?: number };
+    }>;
 }
 
 export interface CarePlanVersion {
@@ -218,6 +225,12 @@ export interface CarePlanVersion {
     generation_error_code?: string | null;
     approved_at?: string | null;
     items: CarePlanItem[];
+}
+
+export interface CarePlanReviewContext {
+    latest: CarePlanVersion | null;
+    active: CarePlanVersion | null;
+    patient_locale: string;
 }
 
 export interface CarePlanGeneration {
@@ -614,6 +627,14 @@ export async function fetchExtractedDocumentFacts(
 
 export async function fetchClinicianCarePlan(patientId: string): Promise<CarePlanVersion | null> {
     return apiFetch<CarePlanVersion | null>(`/api/v1/care-plans/clinician/patients/${patientId}`);
+}
+
+export async function fetchClinicianCarePlanReviewContext(
+    patientId: string,
+): Promise<CarePlanReviewContext> {
+    return apiFetch<CarePlanReviewContext>(
+        `/api/v1/care-plans/clinician/patients/${patientId}/review-context`,
+    );
 }
 
 export async function fetchClinicianCarePlanGeneration(

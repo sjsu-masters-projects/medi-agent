@@ -47,6 +47,18 @@ async def get_clinician_care_plan(
 
 
 @router.get(
+    "/clinician/patients/{patient_id}/review-context",
+    summary="Compare the latest draft with the current approved care plan",
+)
+async def get_care_plan_review_context(
+    patient_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanService = Depends(_service),
+) -> Any:
+    return service.get_review_context_for_clinician(user.id, patient_id)
+
+
+@router.get(
     "/clinician/patients/{patient_id}/generation",
     summary="Get automatic care-plan draft generation state",
 )

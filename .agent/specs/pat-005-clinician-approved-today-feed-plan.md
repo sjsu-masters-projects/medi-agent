@@ -59,6 +59,22 @@ parity is a follow-up task.
   assignment-based allow and deny tests. Browser clients use authenticated backend routes only.
 - Existing adherence history is never rewritten when a plan is superseded.
 
+## Revision review after an approved plan
+
+When new documents register grounded facts, the approved version remains active while a newer
+draft is prepared. The assigned clinician needs both snapshots in one review: the current
+approved version, the proposed version, each item's linked source documents/pages, and a clear
+distinction between carried-forward wording, edits, removals, and newly sourced facts. A new
+fact is **not** automatically a new therapy or a reconciled medication change. The review UI
+must not call an item list an exact Today preview while timezone, reminders, and existing
+medications can alter the final feed.
+
+Before live revision approval is considered complete, add explicit matching decisions for each
+medication against active canonical records, prevent duplicate projections, verify patient-facing
+wording in the patient's preferred locale, and test the v1-approved → new document → v2-draft →
+v2-approved path with unchanged adherence history. The current comparison surface is a review
+aid, not a substitute for those publication safeguards or clinician judgment.
+
 ## Acceptance checklist
 
 - [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
@@ -72,6 +88,8 @@ parity is a follow-up task.
 - [ ] Unassigned users cannot read, draft, approve, preview, or report against the plan.
 - [ ] Plan version, citations, approval, projections, and adherence outcome are reconstructable
       from audit records.
+- [ ] A clinician can compare active and proposed versions, identify all contributing documents,
+      reconcile overlapping medications, and verify localized wording before v2 publication.
 
 ## Explicitly deferred
 
