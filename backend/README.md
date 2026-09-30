@@ -73,14 +73,15 @@ PYTHONPATH=src .venv/bin/python scripts/preflight_care_plan_classification.py --
 PYTHONPATH=src .venv/bin/python scripts/preflight_care_plan_classification.py
 ```
 
-The live command needs Vertex credentials and `GOOGLE_PROJECT_ID`,
-`GEMINI_VERTEX_AI_LOCATION=global`, and the configured `GEMINI_FLASH_MODEL`. It
-classifies 12 fictional facts through the production route and prints only counts
-and safe failure categories. It never reads the database, prints model output, or
-publishes a plan. The backend deployment workflow runs the same command before
-building or updating Cloud Run. A failure prevents that deployment; the scheduled
-Job continues using its previous image. Deterministic contract tests still run in
-PR CI without cloud credentials.
+Run the live command locally with the normal backend configuration loaded (the
+app settings import requires Supabase variables), Vertex credentials,
+`GOOGLE_PROJECT_ID`, `GEMINI_VERTEX_AI_LOCATION=global`, and the configured
+`GEMINI_FLASH_MODEL`. It classifies 12 fictional facts through the production
+route and prints only counts and safe failure categories. It never reads the
+database, prints model output, or publishes a plan. This credentialed model call
+is an operator-run local check, not a CI or deployment gate. Deterministic
+contract tests run in PR CI without cloud
+credentials. Record the local preflight result with the PR verification evidence.
 
 ## Package Layout
 
