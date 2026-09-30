@@ -75,6 +75,14 @@ wording in the patient's preferred locale, and test the v1-approved → new docu
 v2-approved path with unchanged adherence history. The current comparison surface is a review
 aid, not a substitute for those publication safeguards or clinician judgment.
 
+Publication review records the clinician-verified locale on each active draft item and an
+explicit create/update decision on each proposed medication. The API validates those decisions
+against current patient and medication state; the atomic database publication operation checks
+again before any recommendation, supersession, or projection write. Verification is human
+attestation against the source, not automatic translation or a claim of clinical correctness.
+An absent match decision or a same-name active medication blocks creation. The exact Today
+preview and live supersession proof remain separate acceptance gates.
+
 ## Acceptance checklist
 
 - [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
