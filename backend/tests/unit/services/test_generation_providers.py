@@ -79,6 +79,27 @@ async def test_client_text_provider_passes_reasoning_ceiling_only_when_requested
 
 
 @pytest.mark.asyncio
+async def test_client_text_provider_passes_native_json_schema_when_requested() -> None:
+    generate = AsyncMock(return_value='{"items": []}')
+    provider = ClientTextProvider(name="gemini", model="test", generate=generate)
+    schema = {"type": "object", "properties": {"items": {"type": "array"}}}
+
+    await provider.generate(GenerationRequest(prompt="classify", response_schema=schema))
+
+    assert generate.await_args.kwargs["response_schema"] == schema
+
+
+@pytest.mark.asyncio
+async def test_client_text_provider_does_not_add_schema_to_plain_text_requests() -> None:
+    generate = AsyncMock(return_value="plain text")
+    provider = ClientTextProvider(name="gemini", model="test", generate=generate)
+
+    await provider.generate(GenerationRequest(prompt="explain"))
+
+    assert "response_schema" not in generate.await_args.kwargs
+
+
+@pytest.mark.asyncio
 async def test_text_only_voice_provider_returns_normalized_transcript_without_audio() -> None:
     response = await TextOnlyVoiceProvider().synthesize(
         VoiceSynthesisRequest(text="  Please   review this.  ")

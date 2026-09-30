@@ -9,8 +9,13 @@ from uuid import UUID
 import pytest
 
 from app.models.clinical_fact import SourceArtifactType
-from app.models.generation import GenerationErrorCode, GenerationProviderError
-from app.services import care_plan_service
+from app.models.generation import (
+    GenerationErrorCode,
+    GenerationProviderError,
+    GenerationResponse,
+    GenerationTelemetry,
+)
+from app.services import care_plan_classification, care_plan_service
 from app.services.care_plan_service import CarePlanService
 
 MEDICATION_FACT_ID = UUID("00000000-0000-0000-0000-000000000101")
@@ -46,12 +51,11 @@ def _facts() -> list[dict[str, object]]:
     ]
 
 
-def _router_for(response: dict[str, object]) -> MagicMock:
-    router = MagicMock()
-    router.generate_text_with_telemetry = AsyncMock(
-        return_value=(json.dumps(response), MagicMock())
+def _response(response: dict[str, object]) -> GenerationResponse:
+    return GenerationResponse(
+        text=json.dumps(response),
+        telemetry=GenerationTelemetry(provider="flash", model="gemini-test", latency_ms=1),
     )
-    return router
 
 
 def _service_with_claim() -> CarePlanService:
@@ -70,7 +74,7 @@ def _service_with_claim() -> CarePlanService:
 async def test_draft_selector_accepts_only_complete_fixed_fact_classification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    router = _router_for(
+    response = _response(
         {
             "items": [
                 {"source_fact_id": str(MEDICATION_FACT_ID), "category": "medication"},
@@ -78,7 +82,8 @@ async def test_draft_selector_accepts_only_complete_fixed_fact_classification(
             ]
         }
     )
-    monkeypatch.setattr(care_plan_service, "get_router", lambda: router)
+    generate = AsyncMock(return_value=response)
+    monkeypatch.setattr(care_plan_classification, "generate_for_workload", generate)
 
     selected = await CarePlanService(MagicMock())._select_categories(_facts())
 
@@ -86,18 +91,17 @@ async def test_draft_selector_accepts_only_complete_fixed_fact_classification(
         str(MEDICATION_FACT_ID): "medication",
         str(MONITORING_FACT_ID): "monitoring",
     }
-    prompt = router.generate_text_with_telemetry.await_args.kwargs["prompt"]
+    prompt = generate.await_args.kwargs["prompt"]
     assert "Metformin" in prompt
     assert "source_fact_id" in prompt
-    assert router.generate_text_with_telemetry.await_args.kwargs["thinking_level"] == "LOW"
-    assert router.generate_text_with_telemetry.await_args.kwargs["max_tokens"] == 4096
+    assert generate.await_args.kwargs["response_schema"]["type"] == "object"
 
 
 @pytest.mark.asyncio
 async def test_draft_selector_rejects_an_invented_or_missing_fact_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    router = _router_for(
+    response = _response(
         {
             "items": [
                 {"source_fact_id": str(MEDICATION_FACT_ID), "category": "medication"},
@@ -108,10 +112,41 @@ async def test_draft_selector_rejects_an_invented_or_missing_fact_id(
             ]
         }
     )
-    monkeypatch.setattr(care_plan_service, "get_router", lambda: router)
+    generate = AsyncMock(return_value=response)
+    monkeypatch.setattr(care_plan_classification, "generate_for_workload", generate)
 
-    with pytest.raises(ValueError, match="exactly once"):
+    with pytest.raises(ValueError, match="fact_selection_mismatch"):
         await CarePlanService(MagicMock())._select_categories(_facts())
+
+    assert generate.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_draft_selector_repairs_one_semantic_contract_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generate = AsyncMock(
+        side_effect=[
+            _response(
+                {"items": [{"source_fact_id": str(MEDICATION_FACT_ID), "category": "medication"}]}
+            ),
+            _response(
+                {
+                    "items": [
+                        {"source_fact_id": str(MEDICATION_FACT_ID), "category": "medication"},
+                        {"source_fact_id": str(MONITORING_FACT_ID), "category": "monitoring"},
+                    ]
+                }
+            ),
+        ]
+    )
+    monkeypatch.setattr(care_plan_classification, "generate_for_workload", generate)
+
+    assert await CarePlanService(MagicMock())._select_categories(_facts()) == {
+        str(MEDICATION_FACT_ID): "medication",
+        str(MONITORING_FACT_ID): "monitoring",
+    }
+    assert "final schema-repair attempt" in generate.await_args.kwargs["prompt"]
 
 
 @pytest.mark.asyncio
@@ -193,6 +228,32 @@ async def test_terminal_generation_failure_logs_only_safe_operational_fields(
     ]
     assert "private source text" not in caplog.text
     assert "00000000-0000-0000-0000-000000000302" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_invalid_contract_logs_only_safe_validation_counts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    service = _service_with_claim()
+    service._generate = AsyncMock(
+        side_effect=care_plan_service.CarePlanClassificationError(
+            "fact_selection_mismatch",
+            {"missing_fact_count": 1, "returned_item_count": 1, "repair_attempted": 1},
+        )
+    )
+    service._finish_request = MagicMock()
+
+    with caplog.at_level("WARNING", logger=care_plan_service.__name__):
+        await service.process_pending(limit=1)
+
+    event = next(
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.getMessage().startswith("{")
+    )
+    assert event["failure_code"] == "invalid_model_response"
+    assert event["missing_fact_count"] == 1
+    assert event["repair_attempted"] == 1
 
 
 @pytest.mark.asyncio

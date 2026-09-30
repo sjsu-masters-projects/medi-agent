@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from app.adk.background_generation import generate_for_workload
 from app.adk.registry import Workload
@@ -273,7 +273,7 @@ class ModelRouter:
         system_instruction: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
-        thinking_level: str | None = None,
+        thinking_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None,
     ) -> str:
         """Generate plain text through the provider contract and return text only."""
         text, _telemetry = await self.generate_text_with_telemetry(
@@ -294,7 +294,7 @@ class ModelRouter:
         system_instruction: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
-        thinking_level: str | None = None,
+        thinking_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None,
     ) -> tuple[str, GenerationTelemetry]:
         """Generate text and return which model produced it, alongside the text.
 

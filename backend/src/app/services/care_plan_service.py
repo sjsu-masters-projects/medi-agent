@@ -8,13 +8,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
-from app.clients.model_router import TaskType, get_router
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
-from app.models.care_plan import CarePlanCategory, CarePlanDraftProposal, CarePlanDraftUpdate
+from app.models.care_plan import CarePlanCategory, CarePlanDraftUpdate
 from app.models.clinical_fact import (
     ClinicalFactCreate,
     ConfidenceBand,
@@ -23,16 +21,16 @@ from app.models.clinical_fact import (
     SourceProvenanceCreate,
 )
 from app.models.generation import GenerationErrorCode, GenerationProviderError
-from app.services.care_plan_prompts import CARE_PLAN_DRAFT_SYSTEM, CARE_PLAN_DRAFT_USER
+from app.services.care_plan_classification import (
+    CarePlanClassificationError,
+    classify_facts,
+)
 from app.services.clinical_fact_service import ClinicalFactService
 
 logger = logging.getLogger(__name__)
 
 _LOW_CONFIDENCE = 0.7
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
-_CARE_PLAN_MIN_OUTPUT_TOKENS = 4096
-_CARE_PLAN_TOKENS_PER_FACT = 128
-_CARE_PLAN_MAX_OUTPUT_TOKENS = 8192
 _TRANSIENT_PROVIDER_FAILURES = frozenset(
     {
         GenerationErrorCode.RATE_LIMITED,
@@ -74,7 +72,12 @@ class CarePlanService:
             except Exception as error:  # noqa: BLE001 - classification owns the safe boundary
                 outcome, failure = self._record_generation_failure(claim, error)
                 counts[outcome] += 1
-                self._log_generation_outcome(claim, outcome=outcome, failure_code=failure)
+                diagnostics = (
+                    error.diagnostics if isinstance(error, CarePlanClassificationError) else None
+                )
+                self._log_generation_outcome(
+                    claim, outcome=outcome, failure_code=failure, diagnostics=diagnostics
+                )
         return counts
 
     def get_for_clinician(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any] | None:
@@ -310,46 +313,7 @@ class CarePlanService:
 
     async def _select_categories(self, facts: list[dict[str, Any]]) -> dict[str, str]:
         """Let the model classify fixed evidence; it cannot author an instruction."""
-        prompt_facts = [
-            {
-                "source_fact_id": str(fact["id"]),
-                "fact_type": fact["fact_type"],
-                "value": fact.get("value") or {},
-                "confidence_score": fact.get("confidence_score"),
-                "uncertainty": fact.get("uncertainty") or [],
-            }
-            for fact in facts
-        ]
-        # The contract requires one JSON entry for every fact and Gemini counts hidden
-        # reasoning against the output ceiling.  A fixed 1,024-token ceiling truncated
-        # valid classification runs before the model could emit the final IDs.  The
-        # budget scales only with the already bounded input count and remains capped.
-        max_tokens = min(
-            _CARE_PLAN_MAX_OUTPUT_TOKENS,
-            max(_CARE_PLAN_MIN_OUTPUT_TOKENS, len(prompt_facts) * _CARE_PLAN_TOKENS_PER_FACT),
-        )
-        response, _telemetry = await get_router().generate_text_with_telemetry(
-            TaskType.CARE_PLAN_DRAFT,
-            prompt=CARE_PLAN_DRAFT_USER.format(facts_json=json.dumps(prompt_facts, sort_keys=True)),
-            system_instruction=CARE_PLAN_DRAFT_SYSTEM,
-            temperature=0,
-            max_tokens=max_tokens,
-            thinking_level="LOW",
-        )
-        proposal = CarePlanDraftProposal.model_validate_json(str(response))
-        expected_ids = {str(fact["id"]) for fact in facts}
-        selected_ids = [str(item.source_fact_id) for item in proposal.items]
-        if set(selected_ids) != expected_ids or len(selected_ids) != len(expected_ids):
-            raise ValueError("Care-plan draft must select every grounded source fact exactly once")
-
-        categories = {str(item.source_fact_id): item.category.value for item in proposal.items}
-        for fact in facts:
-            category = categories[str(fact["id"])]
-            if fact["fact_type"] == "medication" and category != CarePlanCategory.MEDICATION.value:
-                raise ValueError("Medication facts must remain medication plan items")
-            if fact["fact_type"] == "obligation" and category == CarePlanCategory.MEDICATION.value:
-                raise ValueError("Obligation facts cannot become medication plan items")
-        return categories
+        return await classify_facts(facts)
 
     @staticmethod
     def _medication_conflicts(facts: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -505,7 +469,7 @@ class CarePlanService:
                     if self._retry(claim, failure=failure)
                     else ("care_plans_retry", failure)
                 )
-        elif isinstance(error, PydanticValidationError | ValueError):
+        elif isinstance(error, CarePlanClassificationError | ValueError):
             failure = "invalid_model_response"
         else:
             failure = "generation_internal_error"
@@ -514,7 +478,11 @@ class CarePlanService:
 
     @staticmethod
     def _log_generation_outcome(
-        claim: dict[str, Any], *, outcome: str, failure_code: str | None = None
+        claim: dict[str, Any],
+        *,
+        outcome: str,
+        failure_code: str | None = None,
+        diagnostics: dict[str, int | str] | None = None,
     ) -> None:
         """Emit a Cloud Run-correlatable outcome without source or patient content."""
         event: dict[str, int | str] = {
@@ -525,6 +493,8 @@ class CarePlanService:
         }
         if failure_code is not None:
             event["failure_code"] = failure_code
+        if diagnostics is not None:
+            event.update(diagnostics)
         log = logger.warning if failure_code is not None else logger.info
         log("%s", json.dumps(event, sort_keys=True, separators=(",", ":")))
 
