@@ -68,8 +68,9 @@ def override_db(mock_supabase_db):
 class TestLogAdherence:
     """POST /api/v1/adherence/ - Log adherence event."""
 
+    @pytest.mark.parametrize("path", ["/api/v1/adherence", "/api/v1/adherence/"])
     def test_success_medication_completed(
-        self, client, override_auth, override_db, mock_supabase_db, patient_id
+        self, client, override_auth, override_db, mock_supabase_db, patient_id, path
     ):
         """Successfully log medication taken."""
         medication_id = uuid4()
@@ -94,7 +95,8 @@ class TestLogAdherence:
         mock_supabase_db.table().insert().execute.return_value = MagicMock(data=[log_data])
 
         response = client.post(
-            "/api/v1/adherence/",
+            path,
+            follow_redirects=False,
             json={
                 "target_type": "medication",
                 "target_id": str(medication_id),

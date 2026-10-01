@@ -267,7 +267,7 @@ class ReminderScheduleService:
         target_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        await self._assert_target_belongs_to_patient(patient_id, target_type, target_id)
+        target = await self._assert_target_belongs_to_patient(patient_id, target_type, target_id)
         timezone_name = validate_timezone_name(str(payload.get("timezone") or "UTC"))
         times_of_day = sorted(
             {normalize_time_of_day(str(value)) for value in list(payload.get("times_of_day") or [])}
@@ -275,6 +275,22 @@ class ReminderScheduleService:
         if not times_of_day:
             raise ValidationError("Add at least one reminder time")
         days_of_week = normalize_days_of_week(list(payload.get("days_of_week") or DAY_ORDER))
+        guidance = infer_frequency_guidance(str(target.get("frequency") or ""))
+        if payload.get("is_enabled", True):
+            if not guidance["supports_automatic_reminders"]:
+                raise ValidationError(
+                    "As-needed instructions cannot be converted into a routine schedule"
+                )
+            expected_times = guidance["recommended_times_per_day"]
+            expected_days = guidance["recommended_days_per_week"]
+            if expected_times is not None and len(times_of_day) != expected_times:
+                raise ValidationError(
+                    f"Choose exactly {expected_times} reminder time(s) to match the care instruction"
+                )
+            if expected_days is not None and len(days_of_week) != expected_days:
+                raise ValidationError(
+                    f"Choose exactly {expected_days} day(s) to match the care instruction"
+                )
 
         schedule_map = await self.get_schedule_map_for_patient(patient_id)
         existing = schedule_map.get((target_type, target_id))
@@ -409,7 +425,7 @@ class ReminderScheduleService:
 
     async def _assert_target_belongs_to_patient(
         self, patient_id: str, target_type: str, target_id: str
-    ) -> None:
+    ) -> dict[str, Any]:
         if target_type not in {"medication", "obligation"}:
             raise ValidationError("Target type must be medication or obligation")
         table = "medications" if target_type == "medication" else "obligations"
@@ -417,7 +433,7 @@ class ReminderScheduleService:
             self,
             lambda db: (
                 db.table(table)
-                .select("id")
+                .select("id, frequency")
                 .eq("id", target_id)
                 .eq("patient_id", patient_id)
                 .eq("is_active", True)
@@ -428,3 +444,4 @@ class ReminderScheduleService:
         )
         if not response.data:
             raise ValidationError(f"{target_type.capitalize()} not found for this patient")
+        return cast(dict[str, Any], response.data[0])

@@ -15,6 +15,17 @@ PATIENT_ID = UUID("00000000-0000-0000-0000-000000000201")
 CLINICIAN_ID = UUID("00000000-0000-0000-0000-000000000202")
 
 
+@pytest.mark.parametrize("status", ["pending", "processing", "retry", "failed"])
+def test_partial_generation_cannot_be_approved_even_when_items_are_reviewed(status: str) -> None:
+    service = CarePlanService(MagicMock())
+    service._require_assignment = MagicMock()
+    service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
+    service.generation_for_clinician = MagicMock(return_value={"status": status})
+    with pytest.raises(ValidationError, match="generation must complete"):
+        service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, "Reviewed all visible items")
+    service.db.rpc.assert_not_called()
+
+
 def test_review_context_returns_active_and_proposed_versions() -> None:
     db = MagicMock()
     service = CarePlanService(db)
@@ -123,6 +134,7 @@ def test_medication_decision_requires_explicit_match_or_new_name() -> None:
 def test_approval_denies_unreviewed_patient_language_before_rpc() -> None:
     db = MagicMock()
     service = CarePlanService(db)
+    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
     service._require_assignment = MagicMock()  # type: ignore[method-assign]
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]
@@ -140,6 +152,7 @@ def test_approval_denies_unreviewed_patient_language_before_rpc() -> None:
 def test_approval_denies_unmatched_medication_before_rpc() -> None:
     db = MagicMock()
     service = CarePlanService(db)
+    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
     service._require_assignment = MagicMock()  # type: ignore[method-assign]
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]
@@ -166,6 +179,7 @@ def test_approval_denies_unmatched_medication_before_rpc() -> None:
 def test_approval_calls_transaction_for_reviewed_matching_medication() -> None:
     db = MagicMock()
     service = CarePlanService(db)
+    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
     service._require_assignment = MagicMock()  # type: ignore[method-assign]
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]

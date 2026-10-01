@@ -19,7 +19,7 @@ vi.mock("@/services/clinicians", () => ({
 }));
 
 vi.mock("@/components/features/document-source-viewer", () => ({
-    DocumentSourceViewer: ({ fileName }: { fileName: string }) => <p>Preview: {fileName}</p>,
+    DocumentSourceViewer: ({ fileName, initialPage }: { fileName: string; initialPage?: number }) => <p>Preview: {fileName} (page {initialPage})</p>,
 }));
 
 describe("CarePlanPanel", () => {
@@ -52,6 +52,34 @@ describe("CarePlanPanel", () => {
         );
     });
 
+    it.each(["pending", "failed"] as const)("shows %s revision state alongside the immutable active plan", async (status) => {
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: { id: "plan-1", patient_id: "patient-1", version_number: 1, status: "approved", items: [] }, active: null, patient_locale: "en-US", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue({ id: "request-1", patient_id: "patient-1", status, attempts: 0, requested_at: "2026-10-01T23:13:00Z" });
+        render(<CarePlanPanel patientId="patient-1" />);
+        expect(await screen.findByText(/Approved version 1 remains active/)).toBeInTheDocument();
+        if (status === "failed") expect(screen.getByRole("button", { name: "Retry generation" })).toBeInTheDocument();
+        else expect(screen.getByText(/five-minute evidence quiet window/)).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Approve and publish plan" })).not.toBeInTheDocument();
+    });
+
+    it.each(["pending", "processing", "retry", "failed"] as const)("blocks a partial draft with %s generation even after all visible items are reviewed", async (status) => {
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({
+            latest: { id: "plan-2", patient_id: "patient-1", version_number: 2, status: "draft", items: [{
+                id: "item-1", source_fact_id: "fact-1", category: "movement", title: "Walk", instructions: "Walk 20 minutes", frequency: "daily", schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false, reviewed_locale: "en-US",
+            }] }, active: null, patient_locale: "en-US", active_medications: [],
+        });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue({ id: "request-2", patient_id: "patient-1", status, attempts: 1, requested_at: "2026-10-01T23:13:00Z", failure_code: status === "failed" ? "source_fields_incomplete" : null });
+        render(<CarePlanPanel patientId="patient-1" />);
+        const approve = await screen.findByRole("button", { name: "Approve and publish plan" });
+        fireEvent.change(screen.getByPlaceholderText("Record the basis for your approval."), { target: { value: "All visible items reviewed" } });
+        expect(approve).toBeDisabled();
+        expect(screen.getByRole("alert")).toHaveTextContent("publication blocked");
+        if (status === "failed") {
+            expect(screen.getByRole("button", { name: "Retry generation" })).toBeInTheDocument();
+            expect(screen.getByText(/Repeating the same request will not repair/)).toBeInTheDocument();
+        }
+    });
+
     it("opens an item source with the existing protected document route", async () => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
             id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft", items: [{
@@ -75,9 +103,27 @@ describe("CarePlanPanel", () => {
         expect(await screen.findAllByRole("button", { name: "Review source: source.pdf" })).toHaveLength(1);
         fireEvent.click(await screen.findByRole("button", { name: "Review source: source.pdf" }));
         await waitFor(() => expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-1", "document-1"));
-        expect(await screen.findByText("Preview: source.pdf")).toBeInTheDocument();
+        expect(await screen.findByText("Preview: source.pdf (page 2)")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Review source: follow-up.pdf" }));
         await waitFor(() => expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-1", "document-2"));
+    });
+
+    it("retries a failed protected source request without reloading the plan", async () => {
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
+            id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft", items: [{
+                id: "item-1", source_fact_id: "fact-1", category: "movement", title: "Walk", instructions: "Walk.", frequency: "daily", schedule: {}, medication: {}, confidence_score: 0.9, uncertainty: [], conflict: {}, is_removed: false,
+                source: { document_id: "document-1", file_name: "source.pdf", excerpt: "Walk.", location: { page: 2 } },
+            }],
+        }, active: null, patient_locale: "en-US", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(fetchClinicianDocumentSource).mockRejectedValueOnce(new Error("Temporary source failure"));
+        render(<CarePlanPanel patientId="patient-1" />);
+        fireEvent.click(await screen.findByRole("button", { name: "Review source: source.pdf" }));
+        expect(await screen.findByText("Temporary source failure")).toBeInTheDocument();
+        vi.mocked(fetchClinicianDocumentSource).mockResolvedValue({ file_name: "source.pdf", file_url: "https://signed.test/original", mime_type: "application/pdf" });
+        fireEvent.click(screen.getByRole("button", { name: "Retry source preview" }));
+        expect(await screen.findByText("Preview: source.pdf (page 2)")).toBeInTheDocument();
+        expect(fetchClinicianDocumentSource).toHaveBeenCalledTimes(2);
     });
 
     it("shows the active plan beside a new draft and its source documents", async () => {

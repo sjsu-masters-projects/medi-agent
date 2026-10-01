@@ -36,7 +36,7 @@ A task is done only when its implementation, authorization, error handling, audi
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.3.0 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | urllib3 fix verified locally; pending review — 2026-10-01 | Post-merge run `36931686500` found PYSEC-2026-4175/4176/4177 against `urllib3` 2.7.0. `codex/urllib3-security` adds a 2.8.0 minimum and updates only that version in both locks. CI-pinned audit reports zero known vulnerabilities; 1414 backend tests pass at 83.69% coverage; Ruff, mypy, and repeat lock generation pass. Backend deployment succeeded, but the original audit failure skipped downstream backend CI. Merge and green main CI remain the rollout gate. |
+| Dependency security | Verified — PR #117 merged/deployed | urllib3 2.8.0 minimum and both locks merged at `e81c9c1`; main CI `36933661245` and deployment `36933661124` succeeded. Local audit found no known vulnerabilities. |
 | Demo data | Functional baseline | Canonical fictional fixture and live patient/clinician isolation checks exist; the fresh end-to-end care-plan scenario is PAT-005 work |
 
 **Tracker reconciliation — 2026-09-26.** Every named primary task was reviewed for status
@@ -120,9 +120,11 @@ PAT-005.
 | --- | --- | --- | --- | --- |
 | `PAT-005-A` — safe draft-failure diagnostics | **Done** | Rajeev — PR #114 | Local model preflight and credential-free CI contract tests now separate deployment validation from live provider calls. | The corrected backend and ingestion Job deployed on 2026-09-30; Maya's draft is visible. This closes the original generation-failure investigation, not PAT-005 acceptance. |
 | `PAT-005-B` — verify the corrected draft request | **Done** | Rajeev + assigned synthetic clinician | Maya's existing synthetic evidence produced a version-1 draft shown in the clinician Care Plan tab on 2026-09-30. | Draft generation is demonstrated. Publication and the fresh scenario remain `PAT-005-C`; do not treat Maya's Spanish draft as safe for her `en-US` preference. |
-| `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | Wait for `PAT-005-E` review-safety migration and clinician verification. This is the PAT-005 completion gate. |
+| `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | E is deployed; F exposed non-persisting adherence actions. Deploy/verify F before recording the fresh proof. This remains the PAT-005 completion gate. |
 | `PAT-005-D` — safe plan revision review | **Done** | Rajeev — PR #115 | Active/proposed comparison, linked source documents, citation display, and unsaved-edit guard deployed; Maya's draft loads on 2026-09-30. | This is a review aid only. Exact Today preview, locale-safe publication, medication matching, and live v1→v2 proof remain `PAT-005-E/C` gates. |
-| `PAT-005-E` — approval safety and citation clarity | **Claimed** | Rajeev — `codex/care-plan-approval-safety` | Deduplicate repeated citations without discarding distinct evidence; require clinician verification of final patient-language wording and an explicit create/update medication decision; enforce both inside atomic publication and cover allow/deny cases. | Maya's draft exposed Spanish patient-facing text for an `en-US` patient and repeated same-source controls. Do not publish Maya's plan or treat a language checkbox as machine translation. |
+| `PAT-005-E` — approval safety and citation clarity | **Done** | Rajeev — PR #116 | Migration 042 applied; live Maya review verified wording edits reset attestation, save/reload retained edits, explicit medication decisions blocked/enabled approval, and approved V1 became immutable. | Synthetic English wording was manually reviewed; this is not automatic translation. Full fresh scenario, rollback and denial proof remain C. |
+| `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — `codex/pat005-live-qa` | Fix silent adherence write failures, barrier recovery, omitted instructions, daily progress, cadence-changing reminders, and citation preview recovery; repeat persistence/clinician follow-up after deployment. | [QA findings and remaining gates](specs/pat-005-live-qa-2026-10-01.md). Maya V1 approved; English follow-up uploaded for V2. Legacy PRN/unknown cadence, extraction completeness, hydration diagnosis, exact preview and version-history proof remain open. Blocks C. |
+| `PAT-005-G` — incomplete-evidence draft persistence | **Ready** | Unclaimed — coordinate with Rajeev | Persist missing evidence as explicit editable/removable blockers; enforce generation completeness atomically at publication and test against real SQL constraints. | F contains fail-closed containment only. Live V2 is partial/failed because empty source fields violate the current table contract. Can design/test locally now; C's V2 proof waits for G and deployed F. No remote migration or cleanup without exact authorization. |
 | `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
 | `PAT-002-C` — symptom timeline and clinician report detail | **Sequenced** | Patient + clinician portal lanes — unassigned | Show each confirmed report in the patient's timeline and an authorized clinician detail view with clearly separated patient answers, document-grounded context, and clinician decisions. | Starts after `PAT-002-B` establishes the confirmed-report contract. Blocks `PV-001`; preserve patient/clinic assignment isolation, source citations, and audit linkage. |
 | `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
@@ -1695,14 +1697,28 @@ completion or report an adherence barrier, and that response becomes visible to 
       all recorded citations, and an unsaved-edit approval guard. It does not yet reconcile a
       new medication fact with a canonical medication, enforce patient-locale wording, or render
       an exact Today preview; those remain required before the v1→v2 live acceptance test.
-- [/] `PAT-005-E` harden publication after Maya's review revealed repeated same-source
+- [x] `PAT-005-E` harden publication after Maya's review revealed repeated same-source
       citations, Spanish draft wording for an `en-US` patient, and no visible canonical
       medication match. The implementation deduplicates citation presentation, shows active
       medication comparisons, requires a reviewed patient locale and explicit create/update
       decision, and checks both in the atomic publication function. A checkbox records a
       clinician's language verification; it does not machine-translate or prove that Spanish
-      text is English. Local tests and migration syntax are required before review, and the
-      migration plus live assigned-clinician acceptance are required before this is done.
+      text is English. PR #116 merged, migration 042 applied, and authorized synthetic Maya
+      review/save/reload/approval exercised on 2026-10-01. Whole PAT-005 acceptance is still open.
+- [/] `PAT-005-F` repair live closed-loop defects and repeat the deployed acceptance path.
+      Findings, synthetic actions, regression coverage, and remaining issues are recorded in
+      [the live QA report](specs/pat-005-live-qa-2026-10-01.md). Do not treat optimistic UI state
+      as persisted adherence or count this historical Maya run as the fresh scenario proof.
+      Repair implementation is in PR #118; not deployed. Includes failure-state visibility,
+      service/UI publication guards and pre-write field validation for partial generation.
+- [ ] `PAT-005-G` repair the incomplete-evidence draft persistence contract. Missing source
+      wording must remain cited review blockers, not invented instructions or silently omitted
+      facts. Allow clinician edits/removal while publication enforces complete active items;
+      check generation state in the atomic SQL publication path. Test actual SQL constraints,
+      retry after partial writes, candidate provenance, draft uniqueness, and V1/history
+      preservation. Unclaimed; coordinate schema/service ownership with Rajeev. May start local
+      design/tests alongside F, but deployed V2 acceptance in C depends on both. Remote schema
+      changes require separate explicit authorization. See the live QA report for reproduction.
 
 **Acceptance criteria**
 
