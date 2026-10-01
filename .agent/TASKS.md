@@ -1710,7 +1710,9 @@ completion or report an adherence barrier, and that response becomes visible to 
       Findings, synthetic actions, regression coverage, and remaining issues are recorded in
       [the live QA report](specs/pat-005-live-qa-2026-10-01.md). Do not treat optimistic UI state
       as persisted adherence or count this historical Maya run as the fresh scenario proof.
-      Repair implementation is in PR #118; not deployed. Includes failure-state visibility,
+      Main repair implementation merged in PR #118; post-merge deployment/live acceptance
+      still needs verification. Patient naming and the CodeQL empty-except fix missed the
+      merge timing and continue on `codex/patient-care-labels`. Includes failure-state visibility,
       service/UI publication guards and pre-write field validation for partial generation.
 - [ ] `PAT-005-G` repair the incomplete-evidence draft persistence contract. Missing source
       wording must remain cited review blockers, not invented instructions or silently omitted
