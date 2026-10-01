@@ -138,6 +138,35 @@ def test_build_adherence_map_empty_logs(feed_service):
     assert result == {}
 
 
+@pytest.mark.parametrize(
+    "timestamp",
+    ["2026-10-01T15:00:00Z", "2026-10-01T15:00:00.000+00:00", "2026-10-01T08:00:00-07:00"],
+)
+def test_saved_scheduled_completion_survives_timestamp_serialization(feed_service, timestamp):
+    logs = [
+        {
+            "target_type": "obligation",
+            "target_id": "walk",
+            "scheduled_time": timestamp,
+            "logged_at": "2026-10-01T15:01:00+00:00",
+            "status": "completed",
+        }
+    ]
+    occurrences, _ = feed_service._build_adherence_maps(logs)
+    tasks = feed_service._scheduled_tasks_for_item(
+        target_type="obligation",
+        target={"id": "walk", "description": "Walk", "frequency": "daily"},
+        target_date=date(2026, 10, 1),
+        schedule={
+            "timezone": "America/Los_Angeles",
+            "times_of_day": ["08:00"],
+            "days_of_week": ["thursday"],
+        },
+        adherence_occurrence_map=occurrences,
+    )
+    assert tasks[0]["status"] == "completed"
+
+
 def test_build_adherence_map_single_log(feed_service, sample_adherence_log):
     """Test building adherence map with single log."""
     result = feed_service._build_adherence_map([sample_adherence_log])

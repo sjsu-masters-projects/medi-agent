@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
-const { markComplete, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
+const { markComplete, reportBarrier, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
     markComplete: vi.fn(),
+    reportBarrier: vi.fn(),
     refreshFeed: vi.fn(),
     useFeedData: vi.fn(),
     usePatientProfile: vi.fn(),
@@ -31,6 +32,9 @@ function baseFeedData() {
         error: null,
         loading: false,
         markComplete,
+        reportBarrier,
+        actionError: null as string | null,
+        submitting: false,
         refreshFeed,
         summary: {
             completed: 1,
@@ -43,6 +47,7 @@ function baseFeedData() {
 describe("TodayPage", () => {
     beforeEach(() => {
         markComplete.mockReset();
+        reportBarrier.mockReset();
         refreshFeed.mockReset();
         useFeedData.mockReset();
         usePatientProfile.mockReset();
@@ -61,6 +66,7 @@ describe("TodayPage", () => {
 
     it("renders a safe zero percent when adherence is not finite", () => {
         mockFeedData({
+            summary: { completed: 0, total: 0 },
             adherenceStats: {
                 currentStreakDays: 0,
                 overallScore: Number.NaN,
@@ -167,7 +173,34 @@ describe("TodayPage", () => {
         render(<TodayPage />);
 
         expect(screen.getByText("Blood pressure check")).toBeInTheDocument();
+        expect(screen.getByText("Record a blood-pressure reading")).toBeInTheDocument();
         expect(screen.getByText("Any time")).toBeInTheDocument();
+    });
+
+    it("uses today's completion count rather than the 30-day score", () => {
+        mockFeedData({ summary: { completed: 1, total: 4 }, adherenceStats: { currentStreakDays: 0, overallScore: 0.9 } });
+        render(<TodayPage />);
+        expect(screen.getByText("25%")).toBeInTheDocument();
+        expect(screen.queryByText("90%")).not.toBeInTheDocument();
+    });
+
+    it("shows a saved barrier as reported, not upcoming", () => {
+        mockFeedData({ tasks: [{ id: "task-4", name: "Walk", status: FeedTaskStatus.SKIPPED, type: FeedTaskType.OBLIGATION } as FeedTask] });
+        render(<TodayPage />);
+        expect(screen.getByText("Barrier reported")).toBeInTheDocument();
+        expect(screen.queryByText("upcoming")).not.toBeInTheDocument();
+    });
+
+    it("keeps the barrier modal and note open when saving fails", async () => {
+        reportBarrier.mockResolvedValue(false);
+        const task = { id: "task-4", name: "Walk", status: FeedTaskStatus.PENDING, type: FeedTaskType.OBLIGATION } as FeedTask;
+        mockFeedData({ tasks: [task] });
+        render(<TodayPage />);
+        fireEvent.click(screen.getByRole("button", { name: "I couldn't do this" }));
+        fireEvent.change(screen.getByRole("textbox"), { target: { value: "Synthetic QA barrier" } });
+        fireEvent.click(screen.getByRole("button", { name: "Send to care team" }));
+        await waitFor(() => expect(reportBarrier).toHaveBeenCalledWith(task, "other", "Synthetic QA barrier"));
+        expect(screen.getByRole("textbox")).toHaveValue("Synthetic QA barrier");
     });
 
 });

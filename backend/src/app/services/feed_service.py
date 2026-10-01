@@ -297,7 +297,7 @@ class FeedService:
             target_id = str(log["target_id"])
             scheduled_time = log.get("scheduled_time")
             if scheduled_time:
-                occurrence_key = (target_type, target_id, str(scheduled_time))
+                occurrence_key = (target_type, target_id, self._occurrence_key(str(scheduled_time)))
                 if (
                     occurrence_key not in occurrence_map
                     or log["logged_at"] > occurrence_map[occurrence_key]["logged_at"]
@@ -311,6 +311,17 @@ class FeedService:
                 ):
                     unscheduled_map[key] = log
         return occurrence_map, unscheduled_map
+
+    @staticmethod
+    def _occurrence_key(value: str) -> str:
+        """Match equivalent persisted timestamp formats, never a time-only legacy value."""
+        try:
+            instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if instant.tzinfo is not None:
+                return instant.astimezone(UTC).isoformat()
+        except ValueError:
+            pass
+        return value
 
     @classmethod
     def _current_plan_projections(
@@ -514,7 +525,9 @@ class FeedService:
 
         tasks: list[dict[str, Any]] = []
         for scheduled_at, local_time in occurrences:
-            adherence = adherence_occurrence_map.get((target_type, str(target["id"]), scheduled_at))
+            adherence = adherence_occurrence_map.get(
+                (target_type, str(target["id"]), self._occurrence_key(scheduled_at))
+            )
             name = (
                 f"{target['name']} {target['dosage']}"
                 if target_type == "medication"

@@ -9,6 +9,7 @@ interface MedicationCardProps {
     instructions?: string;
     prescriber?: string;
     status: TaskCardStatus;
+    submitting?: boolean;
     onMarkComplete: (id: string) => void;
     onReportBarrier?: (id: string) => void;
 }
@@ -18,6 +19,7 @@ const badgeVariant = {
     completed: "success",
     missed: "danger",
     upcoming: "neutral",
+    skipped: "neutral",
 } as const;
 
 const cardClasses = {
@@ -25,6 +27,7 @@ const cardClasses = {
     completed: "border-[#dbe7df] bg-[#f2f8f4]",
     missed: "border-[#efbeb5] bg-[#fff5f2]",
     upcoming: "border-white/70 bg-white/82",
+    skipped: "border-[#edd59a] bg-[#fff7dc]",
 } as const;
 
 export function MedicationCard({
@@ -36,6 +39,7 @@ export function MedicationCard({
     onReportBarrier,
     prescriber,
     status,
+    submitting = false,
     time,
 }: MedicationCardProps) {
     return (
@@ -54,12 +58,12 @@ export function MedicationCard({
                         Rx
                     </span>
                     <Badge variant={badgeVariant[status]}>
-                        {status === "missed" ? "Missed" : status === "active" ? "Due now" : status}
+                        {status === "skipped" ? "Barrier reported" : status === "missed" ? "Missed" : status === "active" ? "Due now" : status}
                     </Badge>
                 </div>
             </div>
             {status === "active" || status === "missed" ? (
-                <div className="space-y-2"><Button fullWidth onClick={() => onMarkComplete(id)} size="lg" variant={status === "missed" ? "danger" : "primary"}>Mark as Taken</Button>{onReportBarrier ? <button className="w-full text-sm font-semibold text-[#5b6b83] underline" onClick={() => onReportBarrier(id)} type="button">I couldn&apos;t do this</button> : null}</div>
+                <div className="space-y-2"><Button disabled={submitting} fullWidth onClick={() => onMarkComplete(id)} size="lg" variant={status === "missed" ? "danger" : "primary"}>Mark as Taken</Button>{onReportBarrier ? <button disabled={submitting} className="w-full text-sm font-semibold text-[#5b6b83] underline" onClick={() => onReportBarrier(id)} type="button">I couldn&apos;t do this</button> : null}</div>
             ) : null}
         </Card>
     );

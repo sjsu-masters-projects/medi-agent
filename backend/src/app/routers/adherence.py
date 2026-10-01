@@ -21,6 +21,12 @@ def _get_service(db: Client = Depends(get_db)) -> AdherenceService:
 
 
 @router.post(
+    "",
+    response_model=AdherenceLogRead,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+@router.post(
     "/",
     response_model=AdherenceLogRead,
     status_code=status.HTTP_201_CREATED,

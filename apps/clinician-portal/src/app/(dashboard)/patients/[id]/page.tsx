@@ -644,7 +644,7 @@ function PatientDeepDivePageContent() {
                         patientId={patientId}
                     />
                 )}
-                {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} />}
+                {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void dispatch(loadPatientDeepDive(patientId))} />}
             </Card>
         </div>
     );
