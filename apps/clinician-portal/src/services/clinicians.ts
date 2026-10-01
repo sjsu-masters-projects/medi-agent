@@ -201,6 +201,7 @@ export interface CarePlanItem {
     uncertainty: string[];
     conflict: Record<string, unknown>;
     blocker_reason?: string | null;
+    reviewed_locale?: string | null;
     is_removed: boolean;
     source?: {
         document_id?: string;
@@ -231,6 +232,15 @@ export interface CarePlanReviewContext {
     latest: CarePlanVersion | null;
     active: CarePlanVersion | null;
     patient_locale: string;
+    active_medications: Array<{
+        id: string;
+        name: string;
+        dosage: string;
+        frequency: string;
+        route: string;
+        instructions?: string | null;
+        care_plan_item_id?: string | null;
+    }>;
 }
 
 export interface CarePlanGeneration {
@@ -657,6 +667,8 @@ export async function updateClinicianCarePlan(
         medication: Record<string, unknown>;
         is_removed: boolean;
         clinician_confirmed: boolean;
+        language_verified: boolean;
+        verified_locale: "en-US" | "es-MX" | null;
     }>,
 ): Promise<CarePlanVersion> {
     return apiFetch<CarePlanVersion>(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}`, {

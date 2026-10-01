@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -52,6 +52,8 @@ class CarePlanItemUpdate(BaseModel):
     medication: dict[str, Any] = Field(default_factory=dict)
     is_removed: bool = False
     clinician_confirmed: bool = False
+    language_verified: bool = False
+    verified_locale: Literal["en-US", "es-MX"] | None = None
 
 
 class CarePlanDraftUpdate(BaseModel):
@@ -75,6 +77,7 @@ class CarePlanItemRead(BaseModel):
     uncertainty: list[str] = Field(default_factory=list)
     conflict: dict[str, Any] = Field(default_factory=dict)
     blocker_reason: str | None = None
+    reviewed_locale: str | None = None
     is_removed: bool = False
     projection_type: str | None = None
     projection_id: UUID | None = None

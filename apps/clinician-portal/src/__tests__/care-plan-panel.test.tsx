@@ -32,7 +32,7 @@ describe("CarePlanPanel", () => {
     });
 
     it("shows a failed automatic draft and retries the same evidence", async () => {
-        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: null, active: null, patient_locale: "en-US" });
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: null, active: null, patient_locale: "en-US", active_medications: [] });
         vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue({
             id: "generation-1",
             patient_id: "patient-1",
@@ -59,10 +59,12 @@ describe("CarePlanPanel", () => {
                 source: { document_id: "document-1", file_name: "source.pdf", excerpt: "Walk for 20 minutes.", location: { page: 2 } },
                 sources: [
                     { document_id: "document-1", file_name: "source.pdf", excerpt: "Walk for 20 minutes.", location: { page: 2 } },
+                    { document_id: "document-1", file_name: "source.pdf", excerpt: "Walk for 20 minutes.", location: { page: 2 } },
+                    { document_id: "document-1", file_name: "source.pdf", excerpt: "Walk for 20", location: { page: 2 } },
                     { document_id: "document-2", file_name: "follow-up.pdf", excerpt: "Continue walking.", location: { page: 1 } },
                 ],
             }],
-        }, active: null, patient_locale: "en-US" });
+        }, active: null, patient_locale: "en-US", active_medications: [] });
         vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
         vi.mocked(fetchClinicianDocumentSource).mockResolvedValue({
             file_name: "source.pdf", file_url: "https://signed.test/original", mime_type: "application/pdf", preview_status: "ready", preview_url: "https://signed.test/preview", preview_mime_type: "application/pdf",
@@ -70,7 +72,8 @@ describe("CarePlanPanel", () => {
 
         render(<CarePlanPanel patientId="patient-1" />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Review source beside item" }));
+        expect(await screen.findAllByRole("button", { name: "Review source: source.pdf" })).toHaveLength(1);
+        fireEvent.click(await screen.findByRole("button", { name: "Review source: source.pdf" }));
         await waitFor(() => expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-1", "document-1"));
         expect(await screen.findByText("Preview: source.pdf")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Review source: follow-up.pdf" }));
@@ -80,6 +83,7 @@ describe("CarePlanPanel", () => {
     it("shows the active plan beside a new draft and its source documents", async () => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({
             patient_locale: "en-US",
+            active_medications: [],
             active: {
                 id: "plan-1", patient_id: "patient-1", version_number: 1, status: "approved",
                 items: [{
@@ -110,13 +114,13 @@ describe("CarePlanPanel", () => {
 
     it("does not allow approval while the clinician has unsaved changes", async () => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({
-            patient_locale: "en-US", active: null,
+            patient_locale: "en-US", active_medications: [], active: null,
             latest: {
                 id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft",
                 items: [{
                     id: "item-1", source_fact_id: "fact-1", category: "movement", title: "Walk",
                     instructions: "Walk 20 minutes", frequency: "daily", schedule: {}, medication: {},
-                    uncertainty: [], conflict: {}, is_removed: false,
+                    uncertainty: [], conflict: {}, is_removed: false, reviewed_locale: "en-US",
                 }],
             },
         });
@@ -128,6 +132,45 @@ describe("CarePlanPanel", () => {
         fireEvent.change(screen.getByPlaceholderText("Record the basis for your approval."), { target: { value: "Verified" } });
         expect(approve).toBeEnabled();
         fireEvent.change(screen.getByDisplayValue("Walk 20 minutes"), { target: { value: "Walk 30 minutes" } });
+        expect(approve).toBeDisabled();
+        expect(screen.getByText(/Save your edits before approving/)).toBeInTheDocument();
+    });
+
+    it("shows a load error instead of incorrectly reporting that generation is waiting", async () => {
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockRejectedValue(new Error("Request failed (500)"));
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+
+        render(<CarePlanPanel patientId="patient-1" />);
+
+        expect(await screen.findByRole("alert")).toHaveTextContent("Request failed (500)");
+        expect(screen.queryByText("Waiting for an automatic evidence draft")).not.toBeInTheDocument();
+    });
+
+    it("blocks approval until locale wording and a medication projection are reviewed", async () => {
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({
+            patient_locale: "en-US", active_medications: [{ id: "med-1", name: "Metformin", dosage: "500 mg", frequency: "daily", route: "oral" }], active: null,
+            latest: {
+                id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft",
+                items: [{
+                    id: "item-1", source_fact_id: "fact-1", category: "medication", title: "Metformina 500 mg",
+                    instructions: "Tome una tableta al día", frequency: "una vez al día", schedule: {},
+                    medication: { name: "Metformin", dosage: "500 mg", frequency: "daily", route: "oral" },
+                    uncertainty: [], conflict: {}, is_removed: false,
+                }],
+            },
+        });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+
+        render(<CarePlanPanel patientId="patient-1" />);
+
+        const approve = await screen.findByRole("button", { name: "Approve and publish plan" });
+        fireEvent.change(screen.getByPlaceholderText("Record the basis for your approval."), { target: { value: "Reviewed" } });
+        expect(approve).toBeDisabled();
+        expect(screen.getByText(/final patient-facing wording/)).toBeInTheDocument();
+        expect(screen.getByText(/Choose whether each medication/)).toBeInTheDocument();
+        expect(screen.getByRole("option", { name: /Update Metformin/ })).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText("Publication decision"), { target: { value: "update:med-1" } });
+        fireEvent.click(screen.getByRole("checkbox", { name: /I checked this final title/ }));
         expect(approve).toBeDisabled();
         expect(screen.getByText(/Save your edits before approving/)).toBeInTheDocument();
     });

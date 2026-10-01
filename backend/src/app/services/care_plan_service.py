@@ -92,21 +92,12 @@ class CarePlanService:
         self._require_assignment(clinician_id, patient_id)
         plans = self._plans(patient_id)
         active = next((plan for plan in plans if plan["status"] == "approved"), None)
-        patient = cast(
-            dict[str, Any],
-            self.db.table("patients")
-            .select("preferred_language")
-            .eq("id", str(patient_id))
-            .single()
-            .execute()
-            .data
-            or {},
-        )
         latest = plans[0] if plans else None
         return {
             "latest": self._hydrate_plan(latest) if latest else None,
             "active": self._hydrate_plan(active) if active and active != latest else None,
-            "patient_locale": patient.get("preferred_language") or "en-US",
+            "patient_locale": self._patient_locale(patient_id),
+            "active_medications": self._active_medications(patient_id),
         }
 
     def generation_for_clinician(
@@ -146,8 +137,23 @@ class CarePlanService:
         known = {str(row["id"]): row for row in self._items(UUID(str(plan["id"])))}
         if set(str(item.id) for item in update.items) != set(known):
             raise ValidationError("The draft changed; reload before saving your review")
+        locale = self._patient_locale(patient_id)
+        medications = self._active_medications(patient_id)
+        validated: list[tuple[UUID, dict[str, Any]]] = []
         for item in update.items:
             original = known[str(item.id)]
+            if item.language_verified and item.verified_locale != locale:
+                raise ValidationError(
+                    "Patient language changed; reload before verifying this draft"
+                )
+            if (
+                original["category"] == "medication"
+                and not item.is_removed
+                and item.medication.get("decision")
+            ):
+                self._validate_medication_decision(item.medication, medications)
+                if item.frequency.strip() != str(item.medication.get("frequency") or "").strip():
+                    raise ValidationError("Medication frequency must match the patient-facing item")
             blocker = self._blocker(
                 category=str(original["category"]),
                 title=item.title,
@@ -159,17 +165,27 @@ class CarePlanService:
                 removed=item.is_removed,
                 confirmed=item.clinician_confirmed,
             )
-            self.db.table("care_plan_items").update(
-                {
-                    "title": item.title.strip(),
-                    "instructions": item.instructions.strip(),
-                    "frequency": item.frequency.strip(),
-                    "schedule": item.schedule,
-                    "medication": item.medication,
-                    "is_removed": item.is_removed,
-                    "blocker_reason": blocker,
-                }
-            ).eq("id", str(item.id)).eq("plan_version_id", str(plan_id)).execute()
+            validated.append(
+                (
+                    item.id,
+                    {
+                        "title": item.title.strip(),
+                        "instructions": item.instructions.strip(),
+                        "frequency": item.frequency.strip(),
+                        "schedule": item.schedule,
+                        "medication": item.medication,
+                        "is_removed": item.is_removed,
+                        "blocker_reason": blocker,
+                        "reviewed_locale": locale
+                        if item.language_verified and not item.is_removed
+                        else None,
+                    },
+                )
+            )
+        for item_id, payload in validated:
+            self.db.table("care_plan_items").update(payload).eq("id", str(item_id)).eq(
+                "plan_version_id", str(plan_id)
+            ).execute()
         self._audit(plan_id, clinician_id, "draft_edited", {"item_count": len(update.items)})
         return self._hydrate_plan(self._plan(plan_id, patient_id))
 
@@ -178,6 +194,20 @@ class CarePlanService:
     ) -> dict[str, Any]:
         self._require_assignment(clinician_id, patient_id)
         self._draft(plan_id, patient_id)
+        locale = self._patient_locale(patient_id)
+        medications = self._active_medications(patient_id)
+        for item in self._items(plan_id):
+            if item.get("is_removed"):
+                continue
+            if item.get("reviewed_locale") != locale:
+                raise ValidationError("Verify every patient-facing item in the patient's language")
+            if item["category"] == "medication":
+                self._validate_medication_decision(item.get("medication") or {}, medications)
+                if (
+                    str(item.get("frequency") or "").strip()
+                    != str((item.get("medication") or {}).get("frequency") or "").strip()
+                ):
+                    raise ValidationError("Medication frequency must match the patient-facing item")
         result = self.db.rpc(
             "approve_care_plan_version",
             {
@@ -187,6 +217,44 @@ class CarePlanService:
             },
         ).execute()
         return cast(dict[str, Any], result.data or {})
+
+    def _patient_locale(self, patient_id: UUID) -> str:
+        result = (
+            self.db.table("patients")
+            .select("preferred_language")
+            .eq("id", str(patient_id))
+            .single()
+            .execute()
+        )
+        patient = cast(dict[str, Any], result.data or {})
+        return str(patient.get("preferred_language") or "en-US")
+
+    def _active_medications(self, patient_id: UUID) -> list[dict[str, Any]]:
+        result = (
+            self.db.table("medications")
+            .select("id, name, dosage, frequency, route, instructions, care_plan_item_id")
+            .eq("patient_id", str(patient_id))
+            .eq("is_active", True)
+            .execute()
+        )
+        return cast(list[dict[str, Any]], result.data or [])
+
+    @staticmethod
+    def _validate_medication_decision(
+        medication: dict[str, Any], active: list[dict[str, Any]]
+    ) -> None:
+        decision = medication.get("decision")
+        name = str(medication.get("name") or "").strip().casefold()
+        target_id = str(medication.get("target_id") or "")
+        if decision == "create" and name and not target_id:
+            if any(str(row.get("name") or "").strip().casefold() == name for row in active):
+                raise ValidationError("An active medication with this name already exists")
+            return
+        if decision == "update" and target_id:
+            target = next((row for row in active if str(row.get("id")) == target_id), None)
+            if target and str(target.get("name") or "").strip().casefold() == name:
+                return
+        raise ValidationError("Choose an active matching medication to update or create a new one")
 
     def retry_failed_generation(self, clinician_id: UUID, patient_id: UUID) -> None:
         self._require_assignment(clinician_id, patient_id)
@@ -679,18 +747,28 @@ class CarePlanService:
                 else []
             )
             document_names = {str(row["id"]): row["file_name"] for row in documents}
+            seen_citations: set[tuple[str, str, str, str]] = set()
             for citation in citations:
                 source = by_provenance.get(str(citation.get("provenance_id")))
                 if source:
                     document_id = source.get("document_id")
+                    location = citation.get("location") or source.get("document_location") or {}
+                    excerpt = " ".join(str(citation.get("excerpt") or "").split())
+                    key = (
+                        str(citation["fact_id"]),
+                        str(document_id),
+                        json.dumps(location, sort_keys=True),
+                        excerpt,
+                    )
+                    if key in seen_citations:
+                        continue
+                    seen_citations.add(key)
                     sources.setdefault(str(citation["fact_id"]), []).append(
                         {
                             "document_id": document_id,
                             "file_name": document_names.get(str(document_id)),
-                            "excerpt": citation.get("excerpt"),
-                            "location": citation.get("location")
-                            or source.get("document_location")
-                            or {},
+                            "excerpt": excerpt,
+                            "location": location,
                         }
                     )
         return {

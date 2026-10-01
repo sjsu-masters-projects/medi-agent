@@ -83,8 +83,16 @@ active in Today. The tab lists the source documents/citations attached to propos
 labels an item as carried forward, edited, removed, or linked to new evidence by source-fact ID.
 “New evidence” does not establish a new therapy or reconcile medications. The publication
 summary is not an exact Today preview; patient timezone, reminders, and existing medications
-still affect the feed. Save draft edits before approval. Medication matching, locale verification,
-and a live version-supersession proof remain PAT-005 acceptance work.
+still affect the feed. Save draft edits before approval. Clinical review of medication matching
+and locale wording, plus a live version-supersession proof, remain PAT-005 acceptance work.
+
+Care Plan review makes each proposed medication an explicit create-or-update
+decision against the assigned patient's active medication list. It shows one source action per
+document and collapses redundant same-page excerpts in the review display without deleting
+stored evidence. The clinician must edit patient-facing wording into the patient's preferred
+language and attest to reviewing the final text; the checkbox is not a translation service.
+The backend and publication transaction both reject missing locale or medication decisions.
+Apply migration `042_care_plan_publication_review_guards.sql` before deploying this contract.
 
 ## Notes
 
