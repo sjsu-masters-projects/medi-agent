@@ -124,6 +124,7 @@ PAT-005.
 | `PAT-005-D` — safe plan revision review | **Done** | Rajeev — PR #115 | Active/proposed comparison, linked source documents, citation display, and unsaved-edit guard deployed; Maya's draft loads on 2026-09-30. | This is a review aid only. Exact Today preview, locale-safe publication, medication matching, and live v1→v2 proof remain `PAT-005-E/C` gates. |
 | `PAT-005-E` — approval safety and citation clarity | **Done** | Rajeev — PR #116 | Migration 042 applied; live Maya review verified wording edits reset attestation, save/reload retained edits, explicit medication decisions blocked/enabled approval, and approved V1 became immutable. | Synthetic English wording was manually reviewed; this is not automatic translation. Full fresh scenario, rollback and denial proof remain C. |
 | `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — `codex/pat005-live-qa` | Fix silent adherence write failures, barrier recovery, omitted instructions, daily progress, cadence-changing reminders, and citation preview recovery; repeat persistence/clinician follow-up after deployment. | [QA findings and remaining gates](specs/pat-005-live-qa-2026-10-01.md). Maya V1 approved; English follow-up uploaded for V2. Legacy PRN/unknown cadence, extraction completeness, hydration diagnosis, exact preview and version-history proof remain open. Blocks C. |
+| `PAT-005-G` — incomplete-evidence draft persistence | **Ready** | Unclaimed — coordinate with Rajeev | Persist missing evidence as explicit editable/removable blockers; enforce generation completeness atomically at publication and test against real SQL constraints. | F contains fail-closed containment only. Live V2 is partial/failed because empty source fields violate the current table contract. Can design/test locally now; C's V2 proof waits for G and deployed F. No remote migration or cleanup without exact authorization. |
 | `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
 | `PAT-002-C` — symptom timeline and clinician report detail | **Sequenced** | Patient + clinician portal lanes — unassigned | Show each confirmed report in the patient's timeline and an authorized clinician detail view with clearly separated patient answers, document-grounded context, and clinician decisions. | Starts after `PAT-002-B` establishes the confirmed-report contract. Blocks `PV-001`; preserve patient/clinic assignment isolation, source citations, and audit linkage. |
 | `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
@@ -1708,6 +1709,16 @@ completion or report an adherence barrier, and that response becomes visible to 
       Findings, synthetic actions, regression coverage, and remaining issues are recorded in
       [the live QA report](specs/pat-005-live-qa-2026-10-01.md). Do not treat optimistic UI state
       as persisted adherence or count this historical Maya run as the fresh scenario proof.
+      Repair implementation is in PR #118; not deployed. Includes failure-state visibility,
+      service/UI publication guards and pre-write field validation for partial generation.
+- [ ] `PAT-005-G` repair the incomplete-evidence draft persistence contract. Missing source
+      wording must remain cited review blockers, not invented instructions or silently omitted
+      facts. Allow clinician edits/removal while publication enforces complete active items;
+      check generation state in the atomic SQL publication path. Test actual SQL constraints,
+      retry after partial writes, candidate provenance, draft uniqueness, and V1/history
+      preservation. Unclaimed; coordinate schema/service ownership with Rajeev. May start local
+      design/tests alongside F, but deployed V2 acceptance in C depends on both. Remote schema
+      changes require separate explicit authorization. See the live QA report for reproduction.
 
 **Acceptance criteria**
 

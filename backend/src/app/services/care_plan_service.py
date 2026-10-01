@@ -40,6 +40,10 @@ _TRANSIENT_PROVIDER_FAILURES = frozenset(
 )
 
 
+class CarePlanSourceFieldsError(Exception):
+    """Grounded wording cannot fit the current draft persistence contract."""
+
+
 class CarePlanService:
     """Own the care-plan lifecycle; callers never publish a projection directly."""
 
@@ -194,6 +198,7 @@ class CarePlanService:
     ) -> dict[str, Any]:
         self._require_assignment(clinician_id, patient_id)
         self._draft(plan_id, patient_id)
+        self._require_generation_complete(clinician_id, patient_id)
         locale = self._patient_locale(patient_id)
         medications = self._active_medications(patient_id)
         for item in self._items(plan_id):
@@ -217,6 +222,13 @@ class CarePlanService:
             },
         ).execute()
         return cast(dict[str, Any], result.data or {})
+
+    def _require_generation_complete(self, clinician_id: UUID, patient_id: UUID) -> None:
+        generation = self.generation_for_clinician(clinician_id, patient_id)
+        if generation and generation["status"] != "completed":
+            raise ValidationError(
+                "Automatic generation must complete before this draft can be published"
+            )
 
     def _patient_locale(self, patient_id: UUID) -> str:
         result = (
@@ -367,6 +379,23 @@ class CarePlanService:
             return
         categories = await self._select_categories(facts)
         conflicts = self._medication_conflicts(facts)
+        proposed = [
+            self._item_from_fact(
+                fact,
+                category=categories[str(fact["id"])],
+                conflict=conflicts.get(str(fact["id"]), {}),
+            )
+            for fact in facts
+        ]
+        # Check the complete payload before opening/copying/writing a draft.  The
+        # current SQL contract cannot store absent wording; never fabricate it or
+        # leave the first few new facts looking like a completed generation.
+        for item in proposed:
+            if any(
+                not str(item[field]).strip() or len(str(item[field])) > maximum
+                for field, maximum in (("title", 300), ("instructions", 2000), ("frequency", 200))
+            ):
+                raise CarePlanSourceFieldsError()
         draft = self._open_draft(patient_id, str(claim["source_watermark"]))
         plan_id = UUID(str(draft["id"]))
         existing_fact_ids = {
@@ -374,14 +403,9 @@ class CarePlanService:
             for item in self._items(plan_id)
             if item.get("source_fact_id") is not None
         }
-        for fact in facts:
-            if str(fact["id"]) in existing_fact_ids:
+        for item in proposed:
+            if str(item["source_fact_id"]) in existing_fact_ids:
                 continue
-            item = self._item_from_fact(
-                fact,
-                category=categories[str(fact["id"])],
-                conflict=conflicts.get(str(fact["id"]), {}),
-            )
             self.db.table("care_plan_items").insert(
                 {"plan_version_id": str(draft["id"]), **item}
             ).execute()
@@ -561,6 +585,8 @@ class CarePlanService:
                     if self._retry(claim, failure=failure)
                     else ("care_plans_retry", failure)
                 )
+        elif isinstance(error, CarePlanSourceFieldsError):
+            failure = "source_fields_incomplete"
         elif isinstance(error, CarePlanClassificationError | ValueError):
             failure = "invalid_model_response"
         else:

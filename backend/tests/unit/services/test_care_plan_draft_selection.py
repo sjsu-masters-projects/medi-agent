@@ -22,6 +22,41 @@ MEDICATION_FACT_ID = UUID("00000000-0000-0000-0000-000000000101")
 MONITORING_FACT_ID = UUID("00000000-0000-0000-0000-000000000102")
 
 
+@pytest.mark.asyncio
+async def test_missing_frequency_fails_before_any_draft_write() -> None:
+    service = CarePlanService(MagicMock())
+    facts = _facts()
+    facts[1]["value"].pop("frequency")
+    service._plan_facts = MagicMock(return_value=facts)
+    service._select_categories = AsyncMock(
+        return_value={
+            str(MEDICATION_FACT_ID): "medication",
+            str(MONITORING_FACT_ID): "monitoring",
+        }
+    )
+    service._open_draft = MagicMock()
+
+    with pytest.raises(care_plan_service.CarePlanSourceFieldsError):
+        await service._generate(
+            {"patient_id": str(UUID(int=302)), "source_watermark": "2026-10-01T23:00:00Z"}
+        )
+
+    service._open_draft.assert_not_called()
+    service.db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_source_contract_failure_has_a_safe_nonretryable_code() -> None:
+    service = _service_with_claim()
+    service._generate = AsyncMock(side_effect=care_plan_service.CarePlanSourceFieldsError())
+    service._finish_request = MagicMock()
+    service._retry = MagicMock()
+    counts = await service.process_pending(limit=1)
+    assert counts["care_plans_failed"] == 1
+    assert service._finish_request.call_args.kwargs["failure"] == "source_fields_incomplete"
+    service._retry.assert_not_called()
+
+
 def _facts() -> list[dict[str, object]]:
     return [
         {
