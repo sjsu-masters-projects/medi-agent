@@ -9,6 +9,11 @@ import pytest
 from app.services.feed_service import FeedService
 
 
+@pytest.mark.parametrize("value", ["08:00", "not-a-timestamp", "2026-10-01T08:00:00"])
+def test_legacy_occurrence_keys_remain_exact(value):
+    assert FeedService._occurrence_key(value) == value
+
+
 def test_current_plan_projections_excludes_removed_unapproved_and_out_of_range_items(feed_service):
     today = date(2026, 9, 29)
     visible = feed_service._current_plan_projections(

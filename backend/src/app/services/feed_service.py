@@ -320,7 +320,9 @@ class FeedService:
             if instant.tzinfo is not None:
                 return instant.astimezone(UTC).isoformat()
         except ValueError:
-            pass
+            # Legacy time-only keys are intentionally exact matches; parsing
+            # failure must not turn them into a different dated occurrence.
+            return value
         return value
 
     @classmethod
