@@ -125,7 +125,10 @@ describe("TodayPage", () => {
 
         expect(screen.getByText(/8:00 AM .* Now/i)).toBeInTheDocument();
         expect(screen.getByText(/Lisinopril/i)).toBeInTheDocument();
-        expect(screen.getByText("Care plan v2 • monitoring")).toBeInTheDocument();
+        expect(screen.getByText("Care-team approved • monitoring")).toBeInTheDocument();
+        expect(screen.getByText("Care plan approved by Dr. Chen")).toBeInTheDocument();
+        expect(screen.queryByText("Prescribed by Dr. Chen")).not.toBeInTheDocument();
+        expect(screen.getByText(/Approved plan version 2/)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: /mark as taken/i }));
         expect(markComplete).toHaveBeenCalledWith(task);

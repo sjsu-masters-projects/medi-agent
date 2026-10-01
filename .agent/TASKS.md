@@ -125,6 +125,7 @@ PAT-005.
 | `PAT-005-E` — approval safety and citation clarity | **Done** | Rajeev — PR #116 | Migration 042 applied; live Maya review verified wording edits reset attestation, save/reload retained edits, explicit medication decisions blocked/enabled approval, and approved V1 became immutable. | Synthetic English wording was manually reviewed; this is not automatic translation. Full fresh scenario, rollback and denial proof remain C. |
 | `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — `codex/pat005-live-qa` | Fix silent adherence write failures, barrier recovery, omitted instructions, daily progress, cadence-changing reminders, and citation preview recovery; repeat persistence/clinician follow-up after deployment. | [QA findings and remaining gates](specs/pat-005-live-qa-2026-10-01.md). Maya V1 approved; English follow-up uploaded for V2. Legacy PRN/unknown cadence, extraction completeness, hydration diagnosis, exact preview and version-history proof remain open. Blocks C. |
 | `PAT-005-G` — incomplete-evidence draft persistence | **Ready** | Unclaimed — coordinate with Rajeev | Persist missing evidence as explicit editable/removable blockers; enforce generation completeness atomically at publication and test against real SQL constraints. | F contains fail-closed containment only. Live V2 is partial/failed because empty source fields violate the current table contract. Can design/test locally now; C's V2 proof waits for G and deployed F. No remote migration or cleanup without exact authorization. |
+| `PAT-005-H` — patient reminder usability | **Ready** | Unclaimed — coordinate with patient-portal owner | Compact schedule summaries; edit one activity at a time; contextual Today setup; timezone under advanced settings. | Can design in parallel with G. Preserve clinician-approved frequency, meal/event instructions and persisted preferences; no automatic assignment of clinical times or routine PRN reminders. |
 | `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
 | `PAT-002-C` — symptom timeline and clinician report detail | **Sequenced** | Patient + clinician portal lanes — unassigned | Show each confirmed report in the patient's timeline and an authorized clinician detail view with clearly separated patient answers, document-grounded context, and clinician decisions. | Starts after `PAT-002-B` establishes the confirmed-report contract. Blocks `PV-001`; preserve patient/clinic assignment isolation, source citations, and audit linkage. |
 | `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
@@ -1719,6 +1720,16 @@ completion or report an adherence barrier, and that response becomes visible to 
       preservation. Unclaimed; coordinate schema/service ownership with Rajeev. May start local
       design/tests alongside F, but deployed V2 acceptance in C depends on both. Remote schema
       changes require separate explicit authorization. See the live QA report for reproduction.
+- [ ] `PAT-005-H` simplify patient reminder setup. Show a compact activity/saved-time summary,
+      then edit one item in a focused accessible panel reached from Today or settings. Keep
+      daily days implicit, show weekday choices only for a sourced weekly cadence, and show
+      only the required number of time inputs for a recognized frequency. Explain reminders
+      as optional preferences, not changes to instructions or delivered push notifications.
+      Preserve meal/event-based wording; ask for the patient's choice instead of assigning
+      clinical times. Keep timezone in an advanced control and surface unknown/PRN cadence
+      honestly. Test saved/reloaded preferences, cancellation, validation, error retention,
+      keyboard/mobile use and locale copy. Ready/unclaimed; design can run alongside G;
+      implementation must retain F's server-side cadence safeguards.
 
 **Acceptance criteria**
 

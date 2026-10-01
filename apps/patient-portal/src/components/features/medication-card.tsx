@@ -8,6 +8,7 @@ interface MedicationCardProps {
     time: string;
     instructions?: string;
     prescriber?: string;
+    approvedBy?: string;
     status: TaskCardStatus;
     submitting?: boolean;
     onMarkComplete: (id: string) => void;
@@ -38,6 +39,7 @@ export function MedicationCard({
     onMarkComplete,
     onReportBarrier,
     prescriber,
+    approvedBy,
     status,
     submitting = false,
     time,
@@ -51,7 +53,7 @@ export function MedicationCard({
                         {name} <span className={`font-semibold ${status === "completed" ? "text-[#9aa7b8] line-through" : "text-[#5b6b83]"}`}>{dosage}</span>
                     </h3>
                     <p className={`text-base leading-7 ${status === "completed" ? "text-[#9aa7b8] line-through" : "text-[#5b6b83]"}`}>{instructions ?? "Take as prescribed."}</p>
-                    {prescriber ? <p className="text-sm font-medium text-[#147465]">Prescribed by {prescriber}</p> : null}
+                    {approvedBy ? <p className="text-sm font-medium text-[#147465]">Care plan approved by {approvedBy}</p> : prescriber ? <p className="text-sm font-medium text-[#147465]">Prescribed by {prescriber}</p> : null}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2 text-right">
                     <span className="inline-flex rounded-full bg-[#f4f0ea] px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#5b6b83]">
