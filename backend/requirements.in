@@ -44,6 +44,8 @@ passlib[bcrypt]
 
 # -- HTTP Client --
 httpx
+# Security floor for PYSEC-2026-4175, PYSEC-2026-4176, and PYSEC-2026-4177.
+urllib3>=2.8.0,<3.0.0
 
 # -- Logging --
 structlog
