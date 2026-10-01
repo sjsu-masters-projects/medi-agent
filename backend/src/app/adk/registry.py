@@ -96,6 +96,15 @@ FLASH: Final = ModelSpec(
     honours_response_schema=True,
 )
 
+TRIAGE_LITE: Final = ModelSpec(
+    key="triage_lite",
+    # Kept separate from FLASH so the inexpensive classifier can be changed without
+    # moving patient-facing prose, extraction, reconciliation, or ADR explanation.
+    model_id=settings.gemini_triage_model,
+    transport=Transport.VERTEX_GENAI,
+    honours_response_schema=True,
+)
+
 
 THINKING_LEVELS: Final = frozenset({"LOW", "MEDIUM", "HIGH"})
 """Thinking ceilings this product may request.
@@ -141,13 +150,13 @@ class WorkloadRoute:
 
 
 _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
-    # gpt-oss answered triage at a 2.2 s median against Flash's 6.2 s and scored 100% on
-    # the same scenarios, so it leads here. Triage output is a small enum, which is the
-    # one shape its schema violations are least likely to damage — and the deterministic
-    # emergency floor runs before the model either way, so no escalation depends on it.
+    # Flash-Lite is the inexpensive, GCP-native classifier. It uses the same Gen AI SDK,
+    # ADC identity, global endpoint, function-calling surface, and telemetry path as the
+    # stronger Flash model, avoiding the separate MaaS capacity pool that made chat
+    # availability depend on GPT OSS. The deterministic emergency floor still runs first.
     Workload.TRIAGE: WorkloadRoute(
         workload=Workload.TRIAGE,
-        primary=GPT_OSS,
+        primary=TRIAGE_LITE,
         fallback=FLASH,
         budget_seconds=8.0,
         # There used to be a keyword cascade here, guessing an intent from substrings when
@@ -158,9 +167,9 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         # else.
         deterministic="emergency safety floor, then the localized service-unavailable message",
         enabled_setting="triage_ai_enabled",
-        # Measured: answers run 115-136 tokens with 201-439 spent thinking, so 1024 is
-        # comfortable and keeps the fastest workload fast.
-        max_output_tokens=1024,
+        # The tool call is a small enum plus a bounded reason. Keep enough room for low
+        # thinking while preventing a classifier from spending reply-sized output.
+        max_output_tokens=512,
         thinking_level="LOW",
     ),
     # Patient-facing prose, where Flash's fluency and its perfect schema record matter
@@ -170,7 +179,7 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
     Workload.REPLY: WorkloadRoute(
         workload=Workload.REPLY,
         primary=FLASH,
-        fallback=GPT_OSS,
+        fallback=TRIAGE_LITE,
         # Normal replies measured at 3-4 seconds in production. Ten seconds leaves enough
         # of the 30-second whole-turn ceiling for the declared fallback to answer.
         budget_seconds=10.0,
@@ -211,7 +220,7 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
     Workload.ADR_EXTRACTION: WorkloadRoute(
         workload=Workload.ADR_EXTRACTION,
         primary=FLASH,
-        fallback=GPT_OSS,
+        fallback=TRIAGE_LITE,
         budget_seconds=15.0,
         # There used to be a rule-based extractor here, inferring the symptom from
         # substrings and inventing a severity when the model was unavailable — "worst
@@ -227,7 +236,7 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
     Workload.EXPLANATION: WorkloadRoute(
         workload=Workload.EXPLANATION,
         primary=FLASH,
-        fallback=GPT_OSS,
+        fallback=TRIAGE_LITE,
         budget_seconds=20.0,
         deterministic="localized explanation template",
         enabled_setting="explanation_ai_enabled",

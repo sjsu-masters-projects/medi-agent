@@ -40,15 +40,16 @@ class Settings(BaseSettings):
     # is configuration and switching is a one-line change here plus a redeploy. Watch the
     # release notes: a retired id fails as a 404 at call time, which is how
     # `gemini-3.1-flash-lite-preview` once broke chat in production.
+    gemini_triage_model: str = "gemini-3.1-flash-lite"
     gemini_flash_model: str = "gemini-3.8-flash"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
     google_embedding_model: str = "gemini-embedding-001"
     rag_embedding_dimensions: int = 768
     rag_min_similarity: float = 0.72
 
-    # Vertex AI transports keep separate settings so either can move independently. GPT
-    # OSS MaaS uses the global endpoint to draw from the broader shared-capacity pool;
-    # Gemini 3.8 Flash is also served globally through its distinct Gen AI transport.
+    # Vertex AI transports keep separate settings so either can move independently.
+    # Interactive Gemini models use the global Gen AI endpoint. The MaaS location remains
+    # for evaluation of managed open-weight models; no patient chat route depends on it.
     vertex_ai_location: str = "global"
     gemini_vertex_ai_location: str = "global"
     # The chat pipeline makes two sequential model calls. Per-workload deadlines live in

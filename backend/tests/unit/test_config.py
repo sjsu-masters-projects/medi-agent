@@ -11,6 +11,7 @@ def test_production_model_defaults_use_global_vertex_endpoints() -> None:
         supabase_jwt_secret="jwt-secret",
     )
 
+    assert settings.gemini_triage_model == "gemini-3.1-flash-lite"
     assert settings.gemini_flash_model == "gemini-3.8-flash"
     assert settings.vertex_ai_location == "global"
     assert settings.gemini_vertex_ai_location == "global"
