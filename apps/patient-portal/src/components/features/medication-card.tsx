@@ -60,7 +60,7 @@ export function MedicationCard({
                         Rx
                     </span>
                     <Badge variant={badgeVariant[status]}>
-                        {status === "skipped" ? "Barrier reported" : status === "missed" ? "Missed" : status === "active" ? "Due now" : status}
+                        {status === "skipped" ? "Barrier reported" : status === "missed" ? "Missed" : status === "active" ? time ? "Due now" : "Available" : status}
                     </Badge>
                 </div>
             </div>

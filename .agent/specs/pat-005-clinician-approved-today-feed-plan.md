@@ -111,6 +111,17 @@ event/schedule contexts are not automatically combined. Future carried-forward m
 link their prior approved projection as an update, never reuse the original create decision.
 No missing route is inferred; unsupported route wording requires clinician review.
 
+Patient reminder preferences are administrative, not a new clinical regimen. The reminder
+screen shows compact saved-day/time/timezone summaries and opens one editor at a time.
+New times are blank; weekly days are patient-selected rather than silently assigned.
+Existing per-item timezones remain unchanged when the profile timezone changes.
+Save failures retain the patient's unsaved choices for retry.
+As-needed, activity-based and unrecognized frequencies cannot create routine schedules.
+Today and notification dispatch also reject older schedules that no longer match the current
+frequency; these records remain available for review/removal, not silently deleted.
+Unscheduled pending items are available, not labeled due now. Known cadence counts and
+eight-hour intervals are enforced by the backend, independently of UI validation.
+
 Rollout: apply `044_care_plan_overlap_publication_guard.sql` with the existing migration
 runner before deploying. Reload the existing draft, explicitly exclude imported proposals,
 review overlap groups, save, then verify publication/Today and historical adherence. Do not

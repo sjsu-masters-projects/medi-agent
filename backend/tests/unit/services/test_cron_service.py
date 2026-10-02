@@ -14,6 +14,60 @@ def cron_service():
     return CronService(db=None)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("kind", ["medication", "obligation"])
+@pytest.mark.parametrize(
+    "frequency", ["as-needed", "as recorded", "once after each walking session", ""]
+)
+def test_legacy_unsafe_schedule_cannot_create_a_notification(cron_service, kind, frequency):
+    schedule = {
+        "target_type": kind,
+        "target_id": "synthetic",
+        "timezone": "UTC",
+        "times_of_day": ["08:00"],
+        "days_of_week": ["monday"],
+    }
+    targets = {"synthetic": {"frequency": frequency}}
+    result = cron_service._build_schedule_notification_candidates(
+        schedule=schedule,
+        medication_map=targets if kind == "medication" else {},
+        obligation_map=targets if kind == "obligation" else {},
+        window_start=datetime(2026, 9, 28, 8, tzinfo=UTC),
+        window_end=datetime(2026, 9, 28, 9, tzinfo=UTC),
+    )
+    assert result == []
+
+
+@pytest.mark.parametrize("kind", ["medication", "obligation"])
+def test_matching_daily_schedule_still_creates_one_candidate(cron_service, kind):
+    from app.services.reminder_schedule_service import DAY_ORDER
+
+    schedule = {
+        "patient_id": "synthetic-patient",
+        "target_type": kind,
+        "target_id": "synthetic",
+        "timezone": "UTC",
+        "times_of_day": ["08:00"],
+        "days_of_week": DAY_ORDER,
+    }
+    targets = {
+        "synthetic": {
+            "frequency": "daily",
+            "name": "Synthetic medication",
+            "description": "Synthetic activity",
+        }
+    }
+    result = cron_service._build_schedule_notification_candidates(
+        schedule=schedule,
+        medication_map=targets if kind == "medication" else {},
+        obligation_map=targets if kind == "obligation" else {},
+        window_start=datetime(2026, 9, 28, 8, tzinfo=UTC),
+        window_end=datetime(2026, 9, 28, 9, tzinfo=UTC),
+    )
+    assert len(result) == 1
+    assert result[0]["metadata"]["target_id"] == "synthetic"
+    assert result[0]["metadata"]["scheduled_at"] == "2026-09-28T08:00:00+00:00"
+
+
 @pytest.mark.asyncio
 async def test_dispatch_reminders_summarizes_created_notifications(monkeypatch, cron_service):
     started_at = datetime.now(UTC).isoformat()

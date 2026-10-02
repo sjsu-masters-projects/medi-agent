@@ -3,7 +3,54 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.exceptions import ValidationError
-from app.services.reminder_schedule_service import ReminderScheduleService
+from app.services.reminder_schedule_service import (
+    DAY_ORDER,
+    ReminderScheduleService,
+    infer_frequency_guidance,
+    schedule_matches_frequency,
+)
+
+
+@pytest.mark.parametrize(
+    "frequency",
+    [
+        "biweekly",
+        "twice weekly",
+        "four times daily",
+        "daily after each exercise session",
+        "as-needed",
+        "as recorded",
+    ],
+)
+def test_unclear_or_event_frequency_is_not_a_routine(frequency):
+    assert infer_frequency_guidance(frequency)["supports_automatic_reminders"] is False
+
+
+@pytest.mark.parametrize(
+    "times,valid", [(["06:00", "14:00", "22:00"], True), (["08:00", "12:00", "20:00"], False)]
+)
+def test_interval_reminders_preserve_the_eight_hour_interval(times, valid):
+    assert (
+        schedule_matches_frequency(
+            {"times_of_day": times, "days_of_week": DAY_ORDER}, "every 8 hours"
+        )
+        is valid
+    )
+
+
+@pytest.mark.parametrize(
+    "times,days",
+    [
+        (["08:00", "20:00"], DAY_ORDER),
+        (["08:00", "08:00"], DAY_ORDER),
+        (["08:00"], ["monday"]),
+        (["bad"], DAY_ORDER),
+    ],
+)
+def test_legacy_daily_schedule_with_wrong_cadence_is_not_effective(times, days):
+    assert (
+        schedule_matches_frequency({"times_of_day": times, "days_of_week": days}, "daily") is False
+    )
 
 
 @pytest.mark.asyncio
@@ -19,6 +66,11 @@ from app.services.reminder_schedule_service import ReminderScheduleService
             ["08:00"],
         ),
         ("as needed", ["monday"], ["08:00"]),
+        ("as-needed rescue use", ["monday"], ["08:00"]),
+        ("as recorded", ["monday"], ["08:00"]),
+        ("", ["monday"], ["08:00"]),
+        ("once after each walking session", ["monday"], ["08:00"]),
+        ("after walking daily", ["monday"], ["08:00"]),
     ],
 )
 async def test_reminder_preferences_cannot_reduce_or_increase_known_cadence(frequency, days, times):

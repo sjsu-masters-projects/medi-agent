@@ -15,6 +15,7 @@ from app.services.reminder_schedule_service import (
     ReminderScheduleService,
     infer_frequency_guidance,
     occurrence_datetimes_for_day,
+    schedule_matches_frequency,
     validate_timezone_name,
 )
 
@@ -402,7 +403,7 @@ class FeedService:
         tasks: list[dict[str, Any]] = []
         for med in medications:
             schedule = effective_reminder_map.get(("medication", str(med["id"])))
-            if schedule:
+            if schedule and schedule_matches_frequency(schedule, str(med.get("frequency") or "")):
                 tasks.extend(
                     self._scheduled_tasks_for_item(
                         target_type="medication",
@@ -469,7 +470,7 @@ class FeedService:
         tasks: list[dict[str, Any]] = []
         for obl in obligations:
             schedule = effective_reminder_map.get(("obligation", str(obl["id"])))
-            if schedule:
+            if schedule and schedule_matches_frequency(schedule, str(obl.get("frequency") or "")):
                 tasks.extend(
                     self._scheduled_tasks_for_item(
                         target_type="obligation",
