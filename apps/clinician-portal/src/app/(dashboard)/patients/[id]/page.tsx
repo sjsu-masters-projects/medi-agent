@@ -16,7 +16,7 @@ import {
 } from "react-icons/hi2";
 import { Card, Skeleton } from "@/components/ui";
 import { RiskBadge } from "@/components/features/risk-badge";
-import { AdherenceChart } from "@/components/features/adherence-chart";
+import { PatientAdherencePanel } from "@/components/features/patient-adherence-panel";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
@@ -142,8 +142,6 @@ function PatientDeepDivePageContent() {
     if (!patient) return null;
 
     const adherencePct = Math.round(patient.adherence_score * 100);
-    const obligationCount = patient.obligations?.length ?? 0;
-    const obligationCompletionPct = Math.round((patient.obligation_completion_rate ?? 0) * 100);
 
     return (
         <div className="mx-auto max-w-6xl space-y-6">
@@ -418,58 +416,7 @@ function PatientDeepDivePageContent() {
                         id="tab-panel-adherence"
                         role="tabpanel"
                     >
-                        <h2 className="mb-1 text-lg font-semibold text-gray-900">
-                            30-Day Adherence Trend
-                        </h2>
-                        <p className="mb-6 text-sm text-gray-500">
-                            Daily completion rate for medications and obligations
-                        </p>
-                        <AdherenceChart data={patient.adherence_series} />
-
-                        {/* Summary stats */}
-                        <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-                            {[
-                                {
-                                    label: "Overall Score",
-                                    value: `${adherencePct}%`,
-                                    color:
-                                        adherencePct >= 80
-                                            ? "text-green-600"
-                                            : adherencePct >= 60
-                                              ? "text-amber-600"
-                                              : "text-red-600",
-                                },
-                                {
-                                    label: "Days Tracked",
-                                    value: patient.adherence_series.filter(
-                                        (d) => d.expected > 0,
-                                    ).length,
-                                    color: "text-gray-900",
-                                },
-                                {
-                                    label: "Active Obligations",
-                                    value: obligationCount,
-                                    color: "text-gray-900",
-                                },
-                                {
-                                    label: "Obligation Completion",
-                                    value: `${obligationCompletionPct}%`,
-                                    color: "text-gray-900",
-                                },
-                            ].map(({ label, value, color }) => (
-                                <div
-                                    className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center"
-                                    key={label}
-                                >
-                                    <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                                    <p className="mt-1 text-xs text-gray-500">{label}</p>
-                                </div>
-                            ))}
-                        </div>
-                        <section className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                            <h3 className="text-sm font-semibold text-gray-900">Patient-reported barriers</h3>
-                            {(patient.adherence_barriers?.length ?? 0) === 0 ? <p className="mt-2 text-sm text-gray-500">No barriers reported in the recent adherence history.</p> : <ul className="mt-3 space-y-2">{patient.adherence_barriers?.map((barrier) => <li className="rounded-lg bg-white px-3 py-2 text-sm text-gray-700" key={`${barrier.target_id}-${barrier.logged_at}`}><span className="font-semibold capitalize">{barrier.barrier_code.replace("_", " ")}</span>{barrier.notes ? ` — ${barrier.notes}` : ""}<span className="ml-2 text-xs text-gray-400">{new Date(barrier.logged_at).toLocaleString()}</span></li>)}</ul>}
-                        </section>
+                        <PatientAdherencePanel patient={patient} />
                     </div>
                 )}
 

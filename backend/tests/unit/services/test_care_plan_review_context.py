@@ -15,6 +15,110 @@ PATIENT_ID = UUID("00000000-0000-0000-0000-000000000201")
 CLINICIAN_ID = UUID("00000000-0000-0000-0000-000000000202")
 
 
+def review_service(original: dict) -> CarePlanService:
+    service = CarePlanService(MagicMock())
+    service._require_assignment = MagicMock()
+    service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
+    service._items = MagicMock(return_value=[original])
+    service._patient_locale = MagicMock(return_value="en-US")
+    service._active_medications = MagicMock(return_value=[{"id": "med-1", "name": "Metformin"}])
+    service._audit = MagicMock()
+    service._plan = MagicMock(return_value={})
+    service._hydrate_plan = MagicMock(return_value={})
+    return service
+
+
+@pytest.mark.parametrize(
+    "decision,expected", [("create", "already exists"), (None, "Choose an active")]
+)
+def test_incomplete_medication_reconciliation_is_saveable_but_blocked(decision, expected) -> None:
+    original = {"id": str(PATIENT_ID), "category": "medication", "confidence_score": 0.95}
+    service = review_service(original)
+    update = CarePlanDraftUpdate.model_validate(
+        {
+            "items": [
+                {
+                    "id": str(PATIENT_ID),
+                    "title": "Metformin",
+                    "instructions": "Synthetic instruction",
+                    "frequency": "daily",
+                    "clinician_confirmed": True,
+                    "medication": {
+                        "name": "Metformin",
+                        "dosage": "500 mg",
+                        "route": "oral",
+                        "frequency": "daily",
+                        "decision": decision,
+                    },
+                }
+            ]
+        }
+    )
+    service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, update)
+    payload = service.db.table.return_value.update.call_args.args[0]
+    assert expected in payload["blocker_reason"]
+    assert service.db.table.call_args.args == ("care_plan_items",)
+    service.db.rpc.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "change", [None, "title", "instructions", "frequency", "schedule", "medication", "restored"]
+)
+def test_saved_resolution_survives_only_unchanged_active_review(change: str | None) -> None:
+    original = {
+        "id": str(PATIENT_ID),
+        "category": "movement",
+        "confidence_score": 0.5,
+        "title": "Walk",
+        "instructions": "Synthetic walking instruction",
+        "frequency": "daily",
+        "schedule": {},
+        "medication": {},
+        "conflict": {"reason": "Synthetic conflict"},
+        "blocker_reason": None,
+    }
+    service = review_service(original)
+    values = {
+        k: original[k]
+        for k in ("id", "title", "instructions", "frequency", "schedule", "medication")
+    }
+    if change in ("title", "instructions", "frequency"):
+        values[change] = "Changed wording"
+    elif change in ("schedule", "medication"):
+        values[change] = {"changed": True}
+    elif change == "restored":
+        original["is_removed"] = True
+    service.update_draft(
+        CLINICIAN_ID,
+        PATIENT_ID,
+        PATIENT_ID,
+        CarePlanDraftUpdate.model_validate({"items": [values]}),
+    )
+    payload = service.db.table.return_value.update.call_args.args[0]
+    assert bool(payload["blocker_reason"]) is (change is not None)
+
+
+def test_saved_resolution_cannot_bypass_missing_instruction() -> None:
+    original = {
+        "id": str(PATIENT_ID),
+        "category": "movement",
+        "confidence_score": 0.95,
+        "title": "Walk",
+        "instructions": "",
+        "frequency": "daily",
+        "blocker_reason": None,
+    }
+    service = review_service(original)
+    values = {k: original[k] for k in ("id", "title", "instructions", "frequency")}
+    service.update_draft(
+        CLINICIAN_ID,
+        PATIENT_ID,
+        PATIENT_ID,
+        CarePlanDraftUpdate.model_validate({"items": [values]}),
+    )
+    assert "Clarify" in service.db.table.return_value.update.call_args.args[0]["blocker_reason"]
+
+
 @pytest.mark.parametrize("status", ["pending", "processing", "retry", "failed"])
 def test_partial_generation_cannot_be_approved_even_when_items_are_reviewed(status: str) -> None:
     service = CarePlanService(MagicMock())

@@ -59,6 +59,24 @@ parity is a follow-up task.
   assignment-based allow and deny tests. Browser clients use authenticated backend routes only.
 - Existing adherence history is never rewritten when a plan is superseded.
 
+Migration 045 retains an obligation identity only when one active canonical activity matches
+the prior approved item and its exact source fact, category, wording, frequency, and schedule.
+Its reminders and adherence logs therefore continue across approval. Changed, newly sourced,
+inactive, or ambiguous activities receive new identities; historical item links remain immutable.
+This protects future revisions, not a retroactive rewrite of already-published V2 history.
+Apply `045_care_plan_activity_continuity.sql` through `scripts/apply-supabase-migrations.sh`
+before repeating revision acceptance. Local opt-in PostgreSQL tests exercise unchanged identity,
+changed wording/schedule/source, inactive or externally edited canonical records, rollback, and
+browser-role denial without remote credentials. Live clinician-barrier and revision acceptance
+must still be repeated after deployment.
+
+Draft review may save an unresolved medication matching decision as a visible publication
+blocker; saving exclusions must not require finishing reconciliation first. Publication still
+validates matching against current canonical records. A saved conflict resolution survives only
+unchanged active clinical content; edits or restoration require renewed confirmation. Clinician
+deep-dive responses include the existing patient-reported barrier details, not only aggregate
+adherence scores.
+
 Incomplete evidence stays in a cited draft item with empty missing fields and an explicit
 review blocker. Confirmation cannot substitute for missing instructions, frequency, or
 medication fields; the clinician must supply reviewed wording or remove the item. New

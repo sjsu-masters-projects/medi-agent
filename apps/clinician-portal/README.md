@@ -104,5 +104,11 @@ need review, not a generation retry; no automatic translation or medication choi
 
 ## Notes
 
+The Adherence tab shows response-based completion, coverage, daily counts, current activities,
+and the latest 20 patient-reported barriers (including historical versions). Its chart uses
+UTC daily buckets from the reporting API; barrier timestamps use the patient's timezone.
+Unrecorded days are gaps, not missed doses. Current activity counts are not the historical
+scheduled-dose denominator, and patient-reported side effects are not clinician-reviewed ADRs.
+
 - A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.
 - QA account expectations are documented in [docs/qa-auth-accounts.md](../../docs/qa-auth-accounts.md).

@@ -27,7 +27,7 @@ FACT = "00000000-0000-0000-0000-000000000004"
 
 @pytest.fixture
 def sql(tmp_path: Path):
-    """Create an isolated cluster, apply real table constraints and migration 043."""
+    """Create an isolated cluster and apply publication/generation migrations 042–045."""
     programs = {name: shutil.which(name) for name in ("initdb", "pg_ctl", "psql")}
     if not all(programs.values()):
         pytest.fail("initdb, pg_ctl and psql are required for this local check")
@@ -114,6 +114,7 @@ def sql(tmp_path: Path):
         execute((MIGRATIONS / "042_care_plan_publication_review_guards.sql").read_text())
         execute((MIGRATIONS / "043_incomplete_care_plan_drafts.sql").read_text())
         execute((MIGRATIONS / "044_care_plan_overlap_publication_guard.sql").read_text())
+        execute((MIGRATIONS / "045_care_plan_activity_continuity.sql").read_text())
         execute(f"""
           INSERT INTO patients(id) VALUES ('{PATIENT}');
           INSERT INTO auth.users VALUES ('{PATIENT}');
@@ -139,6 +140,90 @@ def sql(tmp_path: Path):
 def batch(items: str) -> str:
     return f"""SELECT complete_care_plan_generation('{PLAN}', '{REQUEST}',
       '2026-10-01T00:00:00Z', '{items}'::jsonb);"""
+
+
+@pytest.mark.parametrize(
+    "change", [None, "instructions", "schedule", "source", "inactive", "canonical", "rollback"]
+)
+def test_revision_preserves_only_exact_unchanged_activity_identity(sql, change) -> None:
+    sql(
+        batch(
+            json.dumps(
+                [
+                    {
+                        "source_fact_id": FACT,
+                        "category": "movement",
+                        "title": "Walk",
+                        "instructions": "Synthetic walk",
+                        "frequency": "daily",
+                        "confidence_score": 1,
+                    }
+                ]
+            )
+        )
+    )
+    sql("UPDATE care_plan_items SET reviewed_locale='en-US'")
+    sql(f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')")
+    old_item = sql("SELECT id FROM care_plan_items")
+    target = sql("SELECT id FROM obligations")
+    sql(f"""
+      CREATE TABLE synthetic_reminders(target_id uuid REFERENCES obligations(id), time text);
+      CREATE TABLE synthetic_logs(target_id uuid REFERENCES obligations(id), item_id uuid, outcome text);
+      INSERT INTO synthetic_reminders VALUES ('{target}', '08:00');
+      INSERT INTO synthetic_logs VALUES ('{target}', '{old_item}', 'completed'),
+                                        ('{target}', '{old_item}', 'schedule');
+    """)
+    new_plan = "00000000-0000-0000-0000-000000000007"
+    sql(f"""
+      INSERT INTO care_plan_versions(id,patient_id,version_number,source_watermark)
+        VALUES ('{new_plan}', '{PATIENT}', 2, '2026-10-02T00:00:00Z');
+      INSERT INTO care_plan_items(plan_version_id,source_fact_id,category,title,instructions,
+                                 frequency,confidence_score,reviewed_locale)
+        SELECT '{new_plan}',source_fact_id,category,title,instructions,frequency,
+               confidence_score,reviewed_locale FROM care_plan_items WHERE id='{old_item}';
+    """)
+    if change == "instructions":
+        sql(
+            f"UPDATE care_plan_items SET instructions='Changed walk' WHERE plan_version_id='{new_plan}'"
+        )
+    elif change == "schedule":
+        sql(
+            f"UPDATE care_plan_items SET schedule='{{\"days\":[\"mon\"]}}' WHERE plan_version_id='{new_plan}'"
+        )
+    elif change == "source":
+        sql(f"INSERT INTO clinical_facts VALUES ('{new_plan}', '{PATIENT}', 'pending_review')")
+        sql(
+            f"UPDATE care_plan_items SET source_fact_id='{new_plan}' WHERE plan_version_id='{new_plan}'"
+        )
+    elif change == "inactive":
+        sql("UPDATE obligations SET is_active=false")
+    elif change == "canonical":
+        sql("UPDATE obligations SET description='Changed canonical activity'")
+    if change == "rollback":
+        sql("UPDATE care_plan_generation_requests SET status='failed'")
+        assert "generation must complete" in sql(
+            f"SELECT approve_care_plan_version('{new_plan}', '{PATIENT}', 'Synthetic revision')",
+            succeeds=False,
+        )
+        assert sql(f"SELECT status FROM care_plan_versions WHERE id='{PLAN}'") == "approved"
+        assert (
+            sql(f"SELECT care_plan_item_id FROM obligations WHERE id='{target}' AND is_active")
+            == old_item
+        )
+        sql("UPDATE care_plan_generation_requests SET status='completed'")
+    sql(f"SELECT approve_care_plan_version('{new_plan}', '{PATIENT}', 'Synthetic revision')")
+    current = sql("SELECT id FROM obligations WHERE is_active")
+    assert (current == target) is (change in (None, "rollback"))
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{PLAN}'") == "superseded"
+    assert sql(f"SELECT projection_id FROM care_plan_items WHERE id='{old_item}'") == target
+    assert sql("SELECT time FROM synthetic_reminders") == "08:00"
+    assert sql(f"SELECT count(*) FROM synthetic_logs WHERE item_id='{old_item}'") == "2"
+    assert sql(f"SELECT count(*) FROM synthetic_logs WHERE target_id='{current}'") == (
+        "2" if change in (None, "rollback") else "0"
+    )
+    assert "only draft" in sql(
+        f"UPDATE care_plan_items SET title='Rewritten' WHERE id='{old_item}'", succeeds=False
+    )
 
 
 @pytest.mark.parametrize("cadence", ["daily", "weekly"])
@@ -331,6 +416,13 @@ def test_publication_checks_generation_and_freezes_approved_items(sql) -> None:
 
 def test_browser_roles_cannot_execute_generation_or_guards(sql) -> None:
     for role in ("anon", "authenticated"):
+        assert (
+            sql(
+                f"SELECT has_function_privilege('{role}',"
+                "'approve_care_plan_version(uuid,uuid,text)', 'execute')"
+            )
+            == "f"
+        )
         assert (
             sql(
                 f"SELECT has_function_privilege('{role}',"
