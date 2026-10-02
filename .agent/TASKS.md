@@ -120,12 +120,12 @@ PAT-005.
 | --- | --- | --- | --- | --- |
 | `PAT-005-A` — safe draft-failure diagnostics | **Done** | Rajeev — PR #114 | Local model preflight and credential-free CI contract tests now separate deployment validation from live provider calls. | The corrected backend and ingestion Job deployed on 2026-09-30; Maya's draft is visible. This closes the original generation-failure investigation, not PAT-005 acceptance. |
 | `PAT-005-B` — verify the corrected draft request | **Done** | Rajeev + assigned synthetic clinician | Maya's existing synthetic evidence produced a version-1 draft shown in the clinician Care Plan tab on 2026-09-30. | Draft generation is demonstrated. Publication and the fresh scenario remain `PAT-005-C`; do not treat Maya's Spanish draft as safe for her `en-US` preference. |
-| `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | E is deployed; F exposed non-persisting adherence actions. Deploy/verify F before recording the fresh proof. This remains the PAT-005 completion gate. |
+| `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | Existing Maya completion/barrier persistence is verified after PR #122. Fresh-patient proof, next-publication continuity, exact Today preview and unassigned-account denial/audit proof remain gates; Maya's already-approved V2 does not substitute for them. |
 | `PAT-005-D` — safe plan revision review | **Done** | Rajeev — PR #115 | Active/proposed comparison, linked source documents, citation display, and unsaved-edit guard deployed; Maya's draft loads on 2026-09-30. | This is a review aid only. Exact Today preview, locale-safe publication, medication matching, and live v1→v2 proof remain `PAT-005-E/C` gates. |
 | `PAT-005-E` — approval safety and citation clarity | **Done** | Rajeev — PR #116 | Migration 042 applied; live Maya review verified wording edits reset attestation, save/reload retained edits, explicit medication decisions blocked/enabled approval, and approved V1 became immutable. | Synthetic English wording was manually reviewed; this is not automatic translation. Full fresh scenario, rollback and denial proof remain C. |
-| `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — coordinate with `codex/care-plan-oversized-evidence` | Repeat persisted completion/barrier and clinician follow-up after deployed PR #118/#119; remove duplicate medication review controls. | Maya V1 approved; English follow-up uploaded for V2. Legacy PRN/unknown cadence, extraction completeness, hydration diagnosis, exact preview and version-history proof remain open. Blocks C. |
+| `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — `codex/care-plan-acceptance-checks` | Verify unchanged-activity continuity across a subsequent revision, then record the fresh scenario. | Browser access restored: V2 monitoring completion and a new walking barrier survive reload; clinician sees the correct activity and synthetic note. Walking reminder Mon/Wed/Fri 08:00 America/Los_Angeles also survives reload. These checks do not prove continuity across publication. Legacy PRN/unknown cadence, exact preview, full barrier-category and denial/audit acceptance remain open. Blocks C. |
 | `PAT-005-G` — incomplete-evidence draft persistence | **Claimed** | Rajeev — `codex/care-plan-oversized-evidence` | Handle oversized source fields as cited, non-confirmable review blockers rather than failing the whole generation batch. | PR #119 merged/deployed and migration 043 applied. Maya's retry exposed a 338-character title against the 300-character draft limit. C still waits for the repaired deployed V2/reload/history proof. No additional migration planned. |
-| `PAT-005-H` — patient reminder usability | **Ready** | Unclaimed — coordinate with patient-portal owner | Compact schedule summaries; edit one activity at a time; contextual Today setup; timezone under advanced settings. | Can design in parallel with G. Preserve clinician-approved frequency, meal/event instructions and persisted preferences; no automatic assignment of clinical times or routine PRN reminders. |
+| `PAT-005-H` — patient reminder usability | **Claimed** | Rajeev — `codex/care-plan-acceptance-checks` | Compact schedule summaries; edit one activity at a time; contextual Today setup; timezone under advanced settings. | Consolidated with F at the requester's direction. Preserve clinician-approved frequency, meal/event instructions and persisted preferences; no automatic assignment of clinical times or routine PRN reminders. |
 | `PAT-005-I` — evidence applicability and overlap review | **Done** | Rajeev — PR #121 | Migration 044 applied and deployed controls verified: imported exclusions persist, overlap review soft-removes proposals without deleting evidence, and unresolved overlap blocks publication. | Synthetic Maya V2 approved on 2026-10-02 with four retained items and 49 excluded proposals. Fresh-scenario/denial proof remains C; review and continuity defects are J. |
 | `PAT-005-J` — review persistence and revision continuity | **Claimed** | Rajeev — PR #122 / `codex/care-plan-review-follow-up` | Save incomplete medication reconciliation as a publication blocker; retain unchanged conflict resolutions; serialize clinician barrier detail; preserve unchanged activity identities across approval. Include clinician adherence usability: response-based metrics, unknown-day gaps, daily counts, named barriers, and current activity context. | Live QA found all four defects. V2 has one Metformin and new monitoring; monitoring completion survives reload. Migration 045 is required for future unchanged-activity continuity, not retroactive repair of V2. Deploy and repeat clinician barrier/revision checks before closing F/C. Do not treat recorded-response counts as scheduled doses or infer ADRs from patient barriers. |
 | `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
@@ -145,6 +145,40 @@ PAT-005.
 separate branch; **Blocked** needs the stated external decision or evidence; **Sequenced** is
 intentionally deferred until its named predecessor finishes.
 
+**PAT-005-F verification — 2026-10-02:** PR #122 merge `5ede2bd` passed main CI
+(`37042676826`), frontend CI (`37042676824`), and backend/ingestion deployment
+(`37042676735`). Migration 045 application was confirmed by the requester. On
+`codex/care-plan-acceptance-checks`, the focused backend command
+`PYTHONPATH=src .venv/bin/pytest tests/unit/services/test_care_plan_review_context.py tests/unit/services/test_care_plan_reconciliation.py tests/integration/routers/test_clinician_api.py --no-cov -q`
+passed 61 tests. Clinician command
+`npm test -- src/__tests__/patient-adherence-panel.test.tsx src/__tests__/patient-deep-dive.test.tsx`
+passed 34 tests, including all six barrier labels, target attribution, literal-note rendering,
+and reporting-timezone context; typecheck, changed-test ESLint and Prettier checks passed.
+The opt-in local PostgreSQL rerun could not initialize a cluster: macOS shared-memory
+allocation failed (`shmget`, no space available), before application assertions ran.
+Do not count those 20 setup errors as passed contract tests. Live browser attachment also
+timed out before page inspection. Remaining acceptance requires restored browser access and
+a successful disposable PostgreSQL rerun; no remote data or configuration was changed.
+
+**PAT-005-F live follow-up — 2026-10-02:** Browser access was subsequently restored.
+The patient submitted an `other` barrier on approved V2's walking activity with the note
+“Synthetic QA only: unable to complete the walking activity during this test session.”
+After patient reload, Today retained `Barrier reported` and the existing monitoring completion
+(1/7). Clinician refresh displayed the new report against “Walk for 20 minutes”, retained the
+older V1 scheduling barrier separately, and showed 2 completed / 4 recorded responses (50%).
+The patient and clinician percentages have different denominators; neither establishes
+scheduled-dose adherence. ADR flag count stayed at the pre-test value of 2.
+The synthetic walking reminder was saved for Monday/Wednesday/Friday at 08:00 in
+America/Los_Angeles and retained those exact settings after reload. No medication schedule
+or clinical instruction was changed. Publication-continuity proof remains open: no V3 was
+generated or approved in this check. Reminder QA also confirmed that legacy “as recorded”
+albuterol and the after-walking monitoring item still offer routine clock-time controls;
+`PAT-005-H` must resolve unknown/PRN/event semantics without inferring clinical timing.
+Full regression rerun: backend `PYTHONPATH=src .venv/bin/pytest tests/ -q --cov-report=term:skip-covered`
+passed 1,466 tests with 84.55% coverage (20 opt-in PostgreSQL tests skipped); clinician
+`npm test` passed 122 tests; patient `npm test` passed 103 tests. Both portals'
+`npm run typecheck` passed. This does not supersede the unsuccessful opt-in PostgreSQL rerun.
+
 **PAT-005-I local verification — 2026-10-02:** Backend `PYTHONPATH=src .venv/bin/pytest tests/ -q
 --cov-report=term:skip-covered`: 1,456 passed, 84.53% coverage; 13 opt-in PostgreSQL cases
 verified separately with `CARE_PLAN_TEST_POSTGRES=1` against a disposable local cluster.
@@ -154,6 +188,22 @@ intermediate run; the complete rerun passed. Live verification is still pending 
 merge/deployment and clinician review; no remote writes or automatic cleanup were performed.
 
 ### Claim and handoff rules
+
+**Consolidated F/H delivery — 2026-10-02:** The current acceptance branch implements
+compact reminder summaries, a single open editor with cancel, blank new times and patient-selected
+weekly days, advanced timezone settings, and save-error preservation. Existing schedule timezones
+are not silently changed with the profile. Routine PRN/event/unknown schedules are rejected;
+Today and notification dispatch ignore unsafe or cadence-mismatched legacy schedules, and inactive
+targets do not receive these reminders. Unscheduled cards say `Available`, not `Due now`.
+No schema migration, remote cleanup, deployment or clinical instruction change is included.
+Verification: backend full suite passed 1,500 tests (20 opt-in PostgreSQL cases skipped),
+84.80% coverage; changed Python Ruff/mypy passed. Patient lint/typecheck/build passed;
+110 full patient tests and seven focused reminder/card cases passed. Clinician changed-test ESLint,
+typecheck and nine adherence-panel cases passed. Existing live Maya V2 is still approved with
+four retained items, four active medications and two pre-existing ADR flags.
+This branch's new UI is not deployed or live-verified. Exact Today preview, fresh-scenario
+denial/audit proof and a subsequent approval's identity/reminder/adherence continuity remain
+explicitly open; do not mark PAT-005 complete or treat the 20 skipped database tests as passing.
 
 1. Before editing, move the row to **Claimed**, add the owner and branch, and link the detailed
    task section that supplies acceptance criteria.

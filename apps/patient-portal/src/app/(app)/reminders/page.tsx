@@ -9,15 +9,7 @@ import type { RootState } from "@/store/store";
 import type { ReminderDayOfWeek, ReminderSchedule, ReminderTarget } from "@/types";
 import { useSelector } from "react-redux";
 
-const DAYS: ReminderDayOfWeek[] = [
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-];
+const DAYS: ReminderDayOfWeek[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 interface PatientProfileResponse {
     timezone?: string;
@@ -100,23 +92,14 @@ function makeTargetKey(target: Pick<ReminderTarget, "targetId" | "targetType">) 
 
 function defaultDaysOfWeek(target: ReminderTarget): ReminderDayOfWeek[] {
     const count = target.guidance.recommendedDaysPerWeek;
-    if (!count || count >= DAYS.length) {
+    if (count === DAYS.length) {
         return DAYS;
     }
-    return DAYS.slice(0, count);
+    return [];
 }
 
 function defaultTimesOfDay(target: ReminderTarget): string[] {
-    switch (target.guidance.recommendedTimesPerDay) {
-        case 3:
-            return ["08:00", "13:00", "20:00"];
-        case 2:
-            return ["08:00", "20:00"];
-        case 1:
-            return ["08:00"];
-        default:
-            return ["08:00"];
-    }
+    return Array.from({ length: target.guidance.recommendedTimesPerDay || 1 }, () => "");
 }
 
 function buildDraft(target: ReminderTarget, timezone: string): ScheduleDraft {
@@ -145,6 +128,8 @@ export default function ReminderSettingsPage() {
     const [savingTimezone, setSavingTimezone] = useState(false);
     const [savingTargetKey, setSavingTargetKey] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [editingKey, setEditingKey] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
     const timezones = useMemo(() => getSupportedTimezones(), []);
 
     const loadData = useCallback(async () => {
@@ -155,8 +140,12 @@ export default function ReminderSettingsPage() {
         setPageError(null);
         try {
             const [profile, reminderTargets] = await Promise.all([
-                api.get<PatientProfileResponse>("/api/v1/patients/me", { token: accessToken }),
-                api.get<ReminderTargetResponse[]>("/api/v1/reminders/targets", { token: accessToken }),
+                api.get<PatientProfileResponse>("/api/v1/patients/me", {
+                    token: accessToken,
+                }),
+                api.get<ReminderTargetResponse[]>("/api/v1/reminders/targets", {
+                    token: accessToken,
+                }),
             ]);
             const timezone = profile.timezone ?? getBrowserTimezone();
             const normalizedTargets = reminderTargets.map(normalizeTarget);
@@ -178,16 +167,14 @@ export default function ReminderSettingsPage() {
         void loadData();
     }, [loadData]);
 
-    function updateDraft(
-        target: ReminderTarget,
-        updater: (current: ScheduleDraft) => ScheduleDraft,
-    ) {
+    function updateDraft(target: ReminderTarget, updater: (current: ScheduleDraft) => ScheduleDraft) {
         const key = makeTargetKey(target);
         setDrafts((current) => ({
             ...current,
             [key]: updater(current[key] ?? buildDraft(target, patientTimezone)),
         }));
         setActionMessage(null);
+        setActionError(null);
     }
 
     async function saveTimezone() {
@@ -196,23 +183,25 @@ export default function ReminderSettingsPage() {
         }
         setSavingTimezone(true);
         setActionMessage(null);
+        setActionError(null);
         try {
-            await api.put(
-                "/api/v1/patients/me",
-                { timezone: patientTimezone },
-                { token: accessToken },
-            );
+            await api.put("/api/v1/patients/me", { timezone: patientTimezone }, { token: accessToken });
             setActionMessage("Timezone updated.");
             setDrafts((current) =>
                 Object.fromEntries(
                     Object.entries(current).map(([key, draft]) => [
                         key,
-                        { ...draft, timezone: patientTimezone },
+                        {
+                            ...draft,
+                            timezone: targets.find((target) => makeTargetKey(target) === key)?.reminderSchedule
+                                ? draft.timezone
+                                : patientTimezone,
+                        },
                     ]),
                 ),
             );
         } catch (error) {
-            setPageError((error as Error).message);
+            setActionError((error as Error).message);
         } finally {
             setSavingTimezone(false);
         }
@@ -229,6 +218,7 @@ export default function ReminderSettingsPage() {
         }
         setSavingTargetKey(key);
         setActionMessage(null);
+        setActionError(null);
         try {
             await api.put(
                 `/api/v1/reminders/${target.targetType}/${target.targetId}`,
@@ -241,9 +231,10 @@ export default function ReminderSettingsPage() {
                 { token: accessToken },
             );
             await loadData();
+            setEditingKey(null);
             setActionMessage(`${target.name} reminder schedule saved.`);
         } catch (error) {
-            setPageError((error as Error).message);
+            setActionError((error as Error).message);
         } finally {
             setSavingTargetKey(null);
         }
@@ -256,6 +247,7 @@ export default function ReminderSettingsPage() {
         const key = makeTargetKey(target);
         setSavingTargetKey(key);
         setActionMessage(null);
+        setActionError(null);
         try {
             await api.delete(`/api/v1/reminders/${target.targetType}/${target.targetId}`, {
                 token: accessToken,
@@ -263,7 +255,7 @@ export default function ReminderSettingsPage() {
             await loadData();
             setActionMessage(`${target.name} reminder schedule removed.`);
         } catch (error) {
-            setPageError((error as Error).message);
+            setActionError((error as Error).message);
         } finally {
             setSavingTargetKey(null);
         }
@@ -295,30 +287,43 @@ export default function ReminderSettingsPage() {
                 {!loading && !pageError ? (
                     <>
                         <Card className="space-y-4">
-                            <div className="flex items-start justify-between gap-3">
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">Timezone</p>
-                                    <h2 className="mt-1 text-xl font-semibold text-[#17233a]">Your local schedule</h2>
-                                    <p className="mt-1 text-base leading-7 text-[#5b6b83]">
-                                        Reminder times are interpreted in this timezone.
-                                    </p>
+                            <details>
+                                <summary className="cursor-pointer font-semibold">
+                                    Advanced settings · {patientTimezone}
+                                </summary>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">
+                                            Timezone
+                                        </p>
+                                        <h2 className="mt-1 text-xl font-semibold text-[#17233a]">
+                                            Your local schedule
+                                        </h2>
+                                        <p className="mt-1 text-base leading-7 text-[#5b6b83]">
+                                            Reminder times are interpreted in this timezone.
+                                        </p>
+                                    </div>
                                 </div>
-                                <Badge variant="info">Saved to profile</Badge>
-                            </div>
-                            <select
-                                className="min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
-                                onChange={(event) => setPatientTimezone(event.target.value)}
-                                value={patientTimezone}
-                            >
-                                {timezones.map((timezone) => (
-                                    <option key={timezone} value={timezone}>
-                                        {timezone}
-                                    </option>
-                                ))}
-                            </select>
-                            <Button disabled={savingTimezone} onClick={saveTimezone} size="lg">
-                                {savingTimezone ? "Saving timezone..." : "Save timezone"}
-                            </Button>
+                                <select
+                                    aria-label="Profile timezone"
+                                    className="min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
+                                    onChange={(event) => setPatientTimezone(event.target.value)}
+                                    value={patientTimezone}
+                                >
+                                    {timezones.map((timezone) => (
+                                        <option key={timezone} value={timezone}>
+                                            {timezone}
+                                        </option>
+                                    ))}
+                                </select>
+                                <Button
+                                    disabled={savingTimezone || editingKey !== null}
+                                    onClick={saveTimezone}
+                                    size="lg"
+                                >
+                                    {savingTimezone ? "Saving timezone..." : "Save timezone"}
+                                </Button>
+                            </details>
                         </Card>
 
                         {actionMessage ? (
@@ -326,35 +331,76 @@ export default function ReminderSettingsPage() {
                                 {actionMessage}
                             </Card>
                         ) : null}
+                        {actionError ? (
+                            <p role="alert" className="rounded-2xl bg-[#fff2ef] p-4 text-[#b94032]">
+                                {actionError}
+                            </p>
+                        ) : null}
 
                         {targets.map((target) => {
                             const key = makeTargetKey(target);
                             const draft = drafts[key] ?? buildDraft(target, patientTimezone);
                             const disableAutomatic = !target.guidance.supportsAutomaticReminders;
                             const isSaving = savingTargetKey === key;
+                            const isEditing = editingKey === key;
 
                             return (
                                 <Card className="space-y-4" key={key}>
                                     <div className="flex items-start justify-between gap-3">
                                         <div>
                                             <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">
-                                                {target.targetType}
+                                                {target.targetType === "medication" ? "Medication" : "Care activity"}
                                             </p>
-                                            <h3 className="mt-1 text-xl font-semibold text-[#17233a]">
-                                                {target.name}
-                                            </h3>
+                                            <h3 className="mt-1 text-xl font-semibold text-[#17233a]">{target.name}</h3>
                                             <p className="mt-1 text-base leading-7 text-[#5b6b83]">
                                                 {target.frequency}
                                                 {target.providerName ? ` · ${target.providerName}` : ""}
                                             </p>
                                         </div>
                                         <Badge variant={target.reminderSchedule ? "success" : "warning"}>
-                                            {target.reminderSchedule ? "Configured" : "Needs setup"}
+                                            {target.reminderSchedule
+                                                ? "Configured"
+                                                : disableAutomatic
+                                                  ? "No routine reminder"
+                                                  : "Not set"}
                                         </Badge>
                                     </div>
 
                                     {target.description ? (
                                         <p className="text-base leading-7 text-[#48627c]">{target.description}</p>
+                                    ) : null}
+                                    {target.reminderSchedule ? (
+                                        <p className="text-sm text-[#5b6b83]">
+                                            {target.reminderSchedule.daysOfWeek
+                                                .map((day) => day.slice(0, 3))
+                                                .join(", ")}{" "}
+                                            ·{" "}
+                                            {target.reminderSchedule.timesOfDay
+                                                .map((value) => value.slice(0, 5))
+                                                .join(", ")}{" "}
+                                            · {target.reminderSchedule.timezone}
+                                        </p>
+                                    ) : null}
+                                    {!disableAutomatic && !isEditing ? (
+                                        <Button
+                                            onClick={() => {
+                                                setEditingKey(key);
+                                                setDrafts((current) =>
+                                                    Object.fromEntries(
+                                                        targets.map((entry) => [
+                                                            makeTargetKey(entry),
+                                                            makeTargetKey(entry) === key
+                                                                ? (current[key] ?? buildDraft(entry, patientTimezone))
+                                                                : buildDraft(entry, patientTimezone),
+                                                        ]),
+                                                    ),
+                                                );
+                                            }}
+                                            disabled={editingKey !== null}
+                                            variant="secondary"
+                                        >
+                                            {target.reminderSchedule ? "Edit reminder" : "Set reminder"}
+                                        </Button>
                                     ) : null}
 
                                     {target.guidance.guidanceText ? (
@@ -364,11 +410,19 @@ export default function ReminderSettingsPage() {
                                     ) : null}
 
                                     {disableAutomatic ? (
-                                        <div className="rounded-2xl border border-[#f3d7a1] bg-[#fff4d8] px-4 py-3 text-base leading-7 text-[#7a4f00]">
-                                            Automatic reminders are off for as-needed items. Keep this regimen available in Today, but only set reminders if your clinician specifically asked you to.
-                                        </div>
-                                    ) : (
+                                        <p className="text-sm text-[#5b6b83]">
+                                            This item stays available in Today. Routine clock-time reminders require a
+                                            clear care-team instruction.
+                                        </p>
+                                    ) : isEditing ? (
                                         <>
+                                            <p className="text-sm text-[#5b6b83]">
+                                                Choose times that match the instruction above, including meal or
+                                                activity timing. These are reminders, not changes to your care plan.
+                                            </p>
+                                            <p className="text-sm text-[#5b6b83]">
+                                                Reminder timezone: {draft.timezone}
+                                            </p>
                                             <div>
                                                 <p className="mb-3 text-base font-semibold text-[#30415f]">Days</p>
                                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -386,7 +440,9 @@ export default function ReminderSettingsPage() {
                                                                         updateDraft(target, (current) => ({
                                                                             ...current,
                                                                             daysOfWeek: checked
-                                                                                ? current.daysOfWeek.filter((value) => value !== day)
+                                                                                ? current.daysOfWeek.filter(
+                                                                                      (value) => value !== day,
+                                                                                  )
                                                                                 : [...current.daysOfWeek, day],
                                                                         }))
                                                                     }
@@ -401,13 +457,15 @@ export default function ReminderSettingsPage() {
 
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
-                                                    <p className="text-base font-semibold text-[#30415f]">Reminder times</p>
+                                                    <p className="text-base font-semibold text-[#30415f]">
+                                                        Reminder times
+                                                    </p>
                                                     <button
                                                         className="min-h-11 rounded-full px-3 text-sm font-semibold text-[#147465] hover:bg-[#e7f4f1]"
                                                         onClick={() =>
                                                             updateDraft(target, (current) => ({
                                                                 ...current,
-                                                                timesOfDay: [...current.timesOfDay, "12:00"],
+                                                                timesOfDay: [...current.timesOfDay, ""],
                                                             }))
                                                         }
                                                         type="button"
@@ -416,14 +474,21 @@ export default function ReminderSettingsPage() {
                                                     </button>
                                                 </div>
                                                 {draft.timesOfDay.map((value, index) => (
-                                                    <div className="flex items-center gap-3" key={`${key}-time-${index}`}>
+                                                    <div
+                                                        className="flex items-center gap-3"
+                                                        key={`${key}-time-${index}`}
+                                                    >
                                                         <input
+                                                            aria-label={`Reminder time ${index + 1}`}
                                                             className="min-h-[3.25rem] w-full rounded-2xl border border-[#d9cbc0] bg-white/90 px-4 py-3 text-base text-[#17233a] shadow-sm outline-none focus:border-[#147465] focus:ring-4 focus:ring-[#147465]/15"
                                                             onChange={(event) =>
                                                                 updateDraft(target, (current) => ({
                                                                     ...current,
-                                                                    timesOfDay: current.timesOfDay.map((entry, entryIndex) =>
-                                                                        entryIndex === index ? event.target.value : entry,
+                                                                    timesOfDay: current.timesOfDay.map(
+                                                                        (entry, entryIndex) =>
+                                                                            entryIndex === index
+                                                                                ? event.target.value
+                                                                                : entry,
                                                                     ),
                                                                 }))
                                                             }
@@ -438,7 +503,10 @@ export default function ReminderSettingsPage() {
                                                                     timesOfDay:
                                                                         current.timesOfDay.length === 1
                                                                             ? current.timesOfDay
-                                                                            : current.timesOfDay.filter((_, entryIndex) => entryIndex !== index),
+                                                                            : current.timesOfDay.filter(
+                                                                                  (_, entryIndex) =>
+                                                                                      entryIndex !== index,
+                                                                              ),
                                                                 }))
                                                             }
                                                             type="button"
@@ -449,29 +517,55 @@ export default function ReminderSettingsPage() {
                                                 ))}
                                             </div>
                                         </>
-                                    )}
+                                    ) : null}
 
                                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                        <Button
-                                            disabled={
-                                                isSaving
-                                                || disableAutomatic
-                                                || draft.daysOfWeek.length === 0
-                                                || draft.timesOfDay.length === 0
-                                            }
-                                            onClick={() => void saveSchedule(target)}
-                                            size="lg"
-                                        >
-                                            {isSaving ? "Saving..." : "Save reminder schedule"}
-                                        </Button>
-                                        <Button
-                                            disabled={isSaving || !target.reminderSchedule}
-                                            onClick={() => void clearSchedule(target)}
-                                            size="lg"
-                                            variant="secondary"
-                                        >
-                                            Clear schedule
-                                        </Button>
+                                        {isEditing ? (
+                                            <Button
+                                                disabled={
+                                                    isSaving ||
+                                                    disableAutomatic ||
+                                                    draft.daysOfWeek.length === 0 ||
+                                                    draft.timesOfDay.length === 0 ||
+                                                    draft.timesOfDay.some((value) => !value) ||
+                                                    (target.guidance.recommendedTimesPerDay != null &&
+                                                        draft.timesOfDay.length !==
+                                                            target.guidance.recommendedTimesPerDay) ||
+                                                    (target.guidance.recommendedDaysPerWeek != null &&
+                                                        draft.daysOfWeek.length !==
+                                                            target.guidance.recommendedDaysPerWeek)
+                                                }
+                                                onClick={() => void saveSchedule(target)}
+                                                size="lg"
+                                            >
+                                                {isSaving ? "Saving..." : "Save reminder schedule"}
+                                            </Button>
+                                        ) : null}
+                                        {isEditing ? (
+                                            <Button
+                                                disabled={isSaving}
+                                                variant="secondary"
+                                                onClick={() => {
+                                                    setEditingKey(null);
+                                                    setDrafts((current) => ({
+                                                        ...current,
+                                                        [key]: buildDraft(target, patientTimezone),
+                                                    }));
+                                                }}
+                                            >
+                                                Cancel
+                                            </Button>
+                                        ) : null}
+                                        {target.reminderSchedule ? (
+                                            <Button
+                                                disabled={isSaving || (editingKey !== null && editingKey !== key)}
+                                                onClick={() => void clearSchedule(target)}
+                                                size="lg"
+                                                variant="secondary"
+                                            >
+                                                Clear schedule
+                                            </Button>
+                                        ) : null}
                                     </div>
                                 </Card>
                             );

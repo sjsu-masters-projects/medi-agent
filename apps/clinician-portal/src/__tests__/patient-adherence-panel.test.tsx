@@ -8,6 +8,51 @@ vi.mock("@/components/features/adherence-chart", () => ({
 }));
 
 describe("PatientAdherencePanel", () => {
+  it.each([
+    ["side_effects", "Side effects"],
+    ["cost", "Cost"],
+    ["access", "Access"],
+    ["schedule", "Schedule"],
+    ["confusion", "Instructions unclear"],
+    ["other", "Other"],
+  ])("shows the %s barrier as a patient statement", (code, label) => {
+    render(
+      <PatientAdherencePanel
+        patient={{
+          ...adherencePatient,
+          adherence_barriers: [
+            {
+              target_type: "medication",
+              target_id: "med-1",
+              barrier_code: code,
+              notes: "<script>Synthetic note</script>",
+              logged_at: "2026-10-02T08:00:00Z",
+            },
+          ],
+        }}
+      />,
+    );
+    const section = screen
+      .getByRole("heading", {
+        name: /Patient-reported barriers/,
+      })
+      .closest("section")!;
+    expect(within(section).getByText(label)).toBeInTheDocument();
+    expect(
+      within(section).getByText("Synthetic medication"),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText("<script>Synthetic note</script>"),
+    ).toBeInTheDocument();
+    expect(section.querySelector("script")).toBeNull();
+    expect(
+      within(section).getByText(/Patient statements, not reviewed ADR/),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/Report time in America\/Los_Angeles/),
+    ).toBeInTheDocument();
+  });
+
   it("shows response-based metrics without treating unknown days as missed", () => {
     render(<PatientAdherencePanel patient={adherencePatient} />);
     expect(screen.getByText("33%")).toBeInTheDocument();

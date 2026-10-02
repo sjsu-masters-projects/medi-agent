@@ -9,6 +9,37 @@ import pytest
 from app.services.feed_service import FeedService
 
 
+@pytest.mark.parametrize("target_type", ["medication", "obligation"])
+@pytest.mark.parametrize(
+    "frequency", ["as-needed", "as recorded", "once after each walking session", ""]
+)
+def test_unsafe_legacy_reminder_does_not_create_due_occurrences(
+    feed_service, target_type, frequency
+):
+    target = {
+        "id": "target",
+        "name": "Synthetic item",
+        "dosage": "test",
+        "description": "Synthetic activity",
+        "frequency": frequency,
+    }
+    schedule = {
+        "timezone": "UTC",
+        "times_of_day": ["08:00", "20:00"],
+        "days_of_week": ["monday"],
+        "is_enabled": True,
+    }
+    renderer = (
+        feed_service._medications_to_tasks
+        if target_type == "medication"
+        else feed_service._obligations_to_tasks
+    )
+    tasks = renderer([target], date(2026, 9, 28), {(target_type, "target"): schedule})
+    assert len(tasks) == 1
+    assert tasks[0]["scheduled_at"] is None
+    assert tasks[0]["requires_schedule_configuration"] is False
+
+
 @pytest.mark.parametrize("value", ["08:00", "not-a-timestamp", "2026-10-01T08:00:00"])
 def test_legacy_occurrence_keys_remain_exact(value):
     assert FeedService._occurrence_key(value) == value
