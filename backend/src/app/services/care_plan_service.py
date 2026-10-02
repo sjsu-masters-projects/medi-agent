@@ -256,8 +256,23 @@ class CarePlanService:
     def approve(
         self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, note: str
     ) -> dict[str, Any]:
+        self.publication_snapshot(clinician_id, patient_id, plan_id)
+        result = self.db.rpc(
+            "approve_care_plan_version",
+            {
+                "p_plan_version_id": str(plan_id),
+                "p_reviewer_id": str(clinician_id),
+                "p_note": note.strip(),
+            },
+        ).execute()
+        return cast(dict[str, Any], result.data or {})
+
+    def publication_snapshot(
+        self, clinician_id: UUID, patient_id: UUID, plan_id: UUID
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Read-only publication preflight. The transaction rechecks these guards."""
         self._require_assignment(clinician_id, patient_id)
-        self._draft(plan_id, patient_id)
+        plan = self._draft(plan_id, patient_id)
         self._require_generation_complete(clinician_id, patient_id)
         locale = self._patient_locale(patient_id)
         medications = self._active_medications(patient_id)
@@ -288,15 +303,7 @@ class CarePlanService:
             )
         if overlaps(items, facts):
             raise ValidationError("Resolve overlapping plan items before publication")
-        result = self.db.rpc(
-            "approve_care_plan_version",
-            {
-                "p_plan_version_id": str(plan_id),
-                "p_reviewer_id": str(clinician_id),
-                "p_note": note.strip(),
-            },
-        ).execute()
-        return cast(dict[str, Any], result.data or {})
+        return plan, items
 
     def _require_generation_complete(self, clinician_id: UUID, patient_id: UUID) -> None:
         generation = self.generation_for_clinician(clinician_id, patient_id)

@@ -149,6 +149,15 @@ attestation against the source, not automatic translation or a claim of clinical
 An absent match decision or a same-name active medication blocks creation. The exact Today
 preview and live supersession proof remain separate acceptance gates.
 
+The saved-draft Today preview is a read-only, assigned-clinician snapshot using the same
+renderer as the patient feed. It includes canonical legacy activities, proposed medication
+create/update decisions, exact unchanged-activity continuity, effective dates, valid stored
+reminders and retained responses in the patient-local day. New identities are preview-only;
+changed/new activities never inherit previous reminders or completion. Blocked/incomplete
+generation, incomplete review, missing evidence and failed reads cannot produce a successful
+preview. Unsaved edits invalidate the UI snapshot. Publication remains the separately guarded
+database transaction; the preview neither writes nor guarantees unchanged state at approval.
+
 ## Acceptance checklist
 
 - [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
