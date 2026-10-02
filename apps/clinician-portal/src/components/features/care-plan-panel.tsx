@@ -44,6 +44,14 @@ function medicationText(value: unknown): string {
     return typeof value === "string" ? value : "";
 }
 
+function missingRequiredEvidence(item: CarePlanItem): boolean {
+    return !item.title.trim() || !item.instructions.trim() || !item.frequency.trim() ||
+        item.frequency.trim().toLowerCase() === "as directed" ||
+        (item.category === "medication" && ["name", "dosage", "route", "frequency"].some(
+            (field) => !medicationText(item.medication[field]).trim(),
+        ));
+}
+
 function distinctDocuments(item: CarePlanItem) {
     const byDocument = new Map<string, ReturnType<typeof distinctSources>[number]>();
     for (const source of distinctSources(item)) {
@@ -134,7 +142,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     }, [patientId, selectedSourceDocumentId, sourceRetry]);
 
     const unresolved = useMemo(
-        () => items.filter((item) => !item.is_removed && Boolean(item.blocker_reason) && !item.clinician_confirmed),
+        () => items.filter((item) => !item.is_removed && (missingRequiredEvidence(item) || Boolean(item.blocker_reason) && !item.clinician_confirmed)),
         [items],
     );
     const unverified = items.filter((item) => !item.is_removed && !item.language_verified);
@@ -243,6 +251,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                 <p className="font-semibold">Medication reconciliation</p>
                 <p className="mt-1 text-xs">Compare with active records. Creating a new record is blocked if this exact medication name is already active.</p>
                 <ul className="mt-2 list-disc pl-5 text-xs">{activeMedications.length ? activeMedications.map((medication) => <li key={medication.id}>{medication.name} · {medication.dosage} · {medication.frequency} · {medication.route}</li>) : <li>No active medications found.</li>}</ul>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">{["name", "dosage", "route"].map((field) => <label key={field} className="text-xs font-semibold">Medication {field}<input className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" value={medicationText(item.medication[field])} onChange={(event) => patchItem(item.id, { medication: { ...item.medication, [field]: event.target.value } })} /></label>)}</div>
                 <label className="mt-3 block text-xs font-semibold">Publication decision<select className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" value={medicationText(item.medication.decision) === "update" ? `update:${medicationText(item.medication.target_id)}` : medicationText(item.medication.decision)} onChange={(event) => { const [decision, targetId] = event.target.value.split(":"); patchItem(item.id, { medication: { ...item.medication, decision: decision || undefined, target_id: targetId || undefined } }); }}><option value="">Choose a decision</option><option value="create">Create a new medication record</option>{activeMedications.filter((medication) => medication.name.trim().toLocaleLowerCase() === medicationText(item.medication.name).trim().toLocaleLowerCase()).map((medication) => <option key={medication.id} value={`update:${medication.id}`}>Update {medication.name} · {medication.dosage} · {medication.frequency}</option>)}</select></label>
                 <div className="mt-3 grid gap-2 sm:grid-cols-3"><label className="text-xs font-semibold">Medication name<input className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" value={medicationText(item.medication.name)} onChange={(event) => patchItem(item.id, { medication: { ...item.medication, name: event.target.value, decision: undefined, target_id: undefined } })} /></label><label className="text-xs font-semibold">Dose<input className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" value={medicationText(item.medication.dosage)} onChange={(event) => patchItem(item.id, { medication: { ...item.medication, dosage: event.target.value } })} /></label><label className="text-xs font-semibold">Route<select className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" value={medicationText(item.medication.route)} onChange={(event) => patchItem(item.id, { medication: { ...item.medication, route: event.target.value } })}><option value="">Choose route</option>{["oral", "topical", "inhaled", "iv", "im", "subcutaneous"].map((route) => <option key={route} value={route}>{route}</option>)}</select></label></div>
             </div> : null}

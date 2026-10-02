@@ -46,8 +46,10 @@ class CarePlanDraftProposal(BaseModel):
 class CarePlanItemUpdate(BaseModel):
     id: UUID
     title: str = Field(min_length=1, max_length=300)
-    instructions: str = Field(min_length=1, max_length=2000)
-    frequency: str = Field(min_length=1, max_length=200)
+    # Incomplete evidence remains editable/removable in drafts. Publication,
+    # not review submission, owns the complete-instruction requirement.
+    instructions: str = Field(max_length=2000)
+    frequency: str = Field(max_length=200)
     schedule: dict[str, Any] = Field(default_factory=dict)
     medication: dict[str, Any] = Field(default_factory=dict)
     is_removed: bool = False

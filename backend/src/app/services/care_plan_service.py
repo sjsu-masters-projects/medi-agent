@@ -387,33 +387,27 @@ class CarePlanService:
             )
             for fact in facts
         ]
-        # Check the complete payload before opening/copying/writing a draft.  The
-        # current SQL contract cannot store absent wording; never fabricate it or
-        # leave the first few new facts looking like a completed generation.
+        # Reject oversized evidence before writes; absent wording is preserved as
+        # an editable blocker by the draft contract, never filled with model advice.
         for item in proposed:
             if any(
-                not str(item[field]).strip() or len(str(item[field])) > maximum
+                len(str(item[field])) > maximum
                 for field, maximum in (("title", 300), ("instructions", 2000), ("frequency", 200))
             ):
                 raise CarePlanSourceFieldsError()
         draft = self._open_draft(patient_id, str(claim["source_watermark"]))
         plan_id = UUID(str(draft["id"]))
-        existing_fact_ids = {
-            str(item["source_fact_id"])
-            for item in self._items(plan_id)
-            if item.get("source_fact_id") is not None
-        }
-        for item in proposed:
-            if str(item["source_fact_id"]) in existing_fact_ids:
-                continue
-            self.db.table("care_plan_items").insert(
-                {"plan_version_id": str(draft["id"]), **item}
-            ).execute()
-        self.db.table("care_plan_versions").update(
-            {"source_watermark": str(claim["source_watermark"])}
-        ).eq("id", str(plan_id)).execute()
-        self._audit(plan_id, None, "generated", {"fact_count": len(facts)})
-        self._finish_request(claim, status="completed", plan_id=plan_id)
+        # All new evidence and the completion marker commit together. A retry
+        # retains already-reviewed items and cannot acknowledge a partial write.
+        self.db.rpc(
+            "complete_care_plan_generation",
+            {
+                "p_plan_version_id": str(plan_id),
+                "p_request_id": str(claim["request_id"]),
+                "p_source_watermark": str(claim["source_watermark"]),
+                "p_items": proposed,
+            },
+        ).execute()
 
     def _plan_facts(self, patient_id: UUID) -> list[dict[str, Any]]:
         result = (
@@ -628,7 +622,9 @@ class CarePlanService:
                 "failure_code": failure,
                 "claimed_at": None,
             }
-        ).eq("id", str(claim["request_id"])).execute()
+        ).eq("id", str(claim["request_id"])).eq("status", "processing").eq(
+            "source_watermark", str(claim["source_watermark"])
+        ).execute()
         return False
 
     def _finish_request(
@@ -646,7 +642,9 @@ class CarePlanService:
                 "completed_at": datetime.now(UTC).isoformat(),
                 "failure_code": failure,
             }
-        ).eq("id", str(claim["request_id"])).execute()
+        ).eq("id", str(claim["request_id"])).eq("status", "processing").eq(
+            "source_watermark", str(claim["source_watermark"])
+        ).execute()
 
     @staticmethod
     def _blocker(
@@ -661,10 +659,8 @@ class CarePlanService:
         removed: bool,
         confirmed: bool,
     ) -> str | None:
-        if removed or confirmed:
+        if removed:
             return None
-        if conflict:
-            return "Resolve conflicting medication instructions before approval."
         if (
             not title.strip()
             or not instructions.strip()
@@ -672,12 +668,16 @@ class CarePlanService:
             or frequency.strip().lower() == "as directed"
         ):
             return "Clarify the patient-facing instruction and frequency before approval."
-        if confidence is None or float(confidence) < _LOW_CONFIDENCE:
-            return "Confirm this low-confidence source extraction before approval."
         if category == "medication" and not all(
             str(medication.get(k) or "").strip() for k in ("name", "dosage", "frequency", "route")
         ):
             return "Medication name, dose, route, and frequency are required before approval."
+        if confirmed:
+            return None
+        if conflict:
+            return "Resolve conflicting medication instructions before approval."
+        if confidence is None or float(confidence) < _LOW_CONFIDENCE:
+            return "Confirm this low-confidence source extraction before approval."
         return None
 
     def _plans(self, patient_id: UUID) -> list[dict[str, Any]]:
