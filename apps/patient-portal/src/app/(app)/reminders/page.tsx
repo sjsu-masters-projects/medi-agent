@@ -357,9 +357,9 @@ export default function ReminderSettingsPage() {
                                                 {target.providerName ? ` · ${target.providerName}` : ""}
                                             </p>
                                         </div>
-                                        <Badge variant={target.reminderSchedule ? "success" : "warning"}>
+                                        <Badge variant={target.reminderSchedule && !disableAutomatic ? "success" : "warning"}>
                                             {target.reminderSchedule
-                                                ? "Configured"
+                                                ? disableAutomatic ? "Review old reminder" : "Configured"
                                                 : disableAutomatic
                                                   ? "No routine reminder"
                                                   : "Not set"}

@@ -123,6 +123,7 @@ describe("Reminder settings", () => {
         render(<ReminderSettingsPage />);
         await screen.findByText("After-walking check");
         expect(screen.getByText(/mon · 17:30 · America\/New_York/)).toBeInTheDocument();
+        expect(screen.getByText("Review old reminder")).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Edit reminder" })).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Clear schedule" }));
         await waitFor(() =>
