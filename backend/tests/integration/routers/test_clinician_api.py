@@ -613,7 +613,9 @@ class TestRevokeInviteCode:
         assert data["care_team_id"] == str(care_team_id)
         assert data["status"] == "inactive"
 
-    def test_reject_non_pending(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
+    def test_reject_non_pending(
+        self, client, override_auth, override_db, mock_supabase_db, clinician_id
+    ):
         care_team_id = uuid4()
 
         mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
@@ -659,7 +661,9 @@ class TestDashboardRoutes:
             }
         )
 
-        response = client.get("/api/v1/clinicians/me/dashboard", params={"page": 1, "page_size": 25})
+        response = client.get(
+            "/api/v1/clinicians/me/dashboard", params={"page": 1, "page_size": 25}
+        )
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -721,6 +725,15 @@ class TestPatientDeepDiveRoutes:
                     }
                 ],
                 "obligation_completion_rate": 0.5,
+                "adherence_barriers": [
+                    {
+                        "target_type": "obligation",
+                        "target_id": str(patient_id),
+                        "barrier_code": "schedule",
+                        "notes": "Synthetic schedule conflict",
+                        "logged_at": "2026-10-02T09:00:00Z",
+                    }
+                ],
             }
         )
 
@@ -731,6 +744,8 @@ class TestPatientDeepDiveRoutes:
         assert data["documents"][0]["review_status"] == "approved"
         assert data["documents"][0]["reviewer"]["first_name"] == "Priya"
         assert data["obligations"][0]["description"] == "Walk daily"
+        assert data["adherence_barriers"][0]["barrier_code"] == "schedule"
+        assert data["adherence_barriers"][0]["notes"] == "Synthetic schedule conflict"
 
 
 class TestDocumentReviewQueueRoutes:

@@ -12,7 +12,7 @@ from supabase import Client
 
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
-from app.models.care_plan import CarePlanCategory, CarePlanDraftUpdate
+from app.models.care_plan import CarePlanCategory, CarePlanDraftUpdate, CarePlanItemUpdate
 from app.models.clinical_fact import (
     ClinicalFactCreate,
     ConfidenceBand,
@@ -150,18 +150,25 @@ class CarePlanService:
         validated: list[tuple[UUID, dict[str, Any]]] = []
         for item in update.items:
             original = known[str(item.id)]
+            medication_error = None
             if item.language_verified and item.verified_locale != locale:
                 raise ValidationError(
                     "Patient language changed; reload before verifying this draft"
                 )
-            if (
-                original["category"] == "medication"
-                and not item.is_removed
-                and item.medication.get("decision")
-            ):
-                self._validate_medication_decision(item.medication, medications)
-                if item.frequency.strip() != str(item.medication.get("frequency") or "").strip():
-                    raise ValidationError("Medication frequency must match the patient-facing item")
+            if original["category"] == "medication" and not item.is_removed:
+                try:
+                    self._validate_medication_decision(item.medication, medications)
+                    if (
+                        item.frequency.strip()
+                        != str(item.medication.get("frequency") or "").strip()
+                    ):
+                        raise ValidationError(
+                            "Medication frequency must match the patient-facing item"
+                        )
+                except ValidationError as exc:
+                    # Review must remain saveable before reconciliation is complete.
+                    # Publication validates the decision independently and still rejects it.
+                    medication_error = str(exc)
             blocker = self._blocker(
                 category=str(original["category"]),
                 title=item.title,
@@ -171,12 +178,13 @@ class CarePlanService:
                 confidence=original.get("confidence_score"),
                 conflict=cast(dict[str, Any], original.get("conflict") or {}),
                 removed=item.is_removed,
-                confirmed=item.clinician_confirmed,
+                confirmed=item.clinician_confirmed or self._retains_confirmation(original, item),
                 source_title_requires_edit=(
                     _SOURCE_TITLE_REVIEW in (original.get("uncertainty") or [])
                     and item.title.strip() == str(original["title"]).strip()
                 ),
             )
+            blocker = medication_error or blocker
             validated.append(
                 (
                     item.id,
@@ -210,6 +218,11 @@ class CarePlanService:
             "draft_edited",
             {
                 "item_count": len(update.items),
+                "confirmed_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if item.clinician_confirmed and not item.is_removed
+                ],
                 "removed_item_ids": [
                     str(item.id)
                     for item in update.items
@@ -223,6 +236,22 @@ class CarePlanService:
             },
         )
         return self._hydrate_plan(self._plan(plan_id, patient_id))
+
+    @staticmethod
+    def _retains_confirmation(original: dict[str, Any], item: CarePlanItemUpdate) -> bool:
+        """A saved resolution applies only to exactly unchanged, active review content."""
+        return (
+            "blocker_reason" in original
+            and original["blocker_reason"] is None
+            and not original.get("is_removed")
+            and not item.is_removed
+            and all(
+                str(original.get(field) or "").strip() == getattr(item, field).strip()
+                for field in ("title", "instructions", "frequency")
+            )
+            and (original.get("schedule") or {}) == item.schedule
+            and (original.get("medication") or {}) == item.medication
+        )
 
     def approve(
         self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, note: str
