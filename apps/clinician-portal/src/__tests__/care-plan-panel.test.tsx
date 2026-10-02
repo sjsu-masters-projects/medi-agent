@@ -31,6 +31,24 @@ describe("CarePlanPanel", () => {
         vi.mocked(updateClinicianCarePlan).mockReset();
     });
 
+    it("keeps missing evidence blocked after confirmation and allows removal without invented wording", async () => {
+        const incomplete = { id: "item-1", source_fact_id: "fact-1", category: "monitoring" as const,
+            title: "Record the activity", instructions: "", frequency: "", schedule: {}, medication: {},
+            uncertainty: [], conflict: {}, is_removed: false, blocker_reason: "Missing source wording",
+            reviewed_locale: "en-US" };
+        const plan = { id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft" as const, items: [incomplete] };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({latest: plan, active: null, patient_locale: "en-US", active_medications: []});
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(updateClinicianCarePlan).mockResolvedValue({...plan, items: [{...incomplete, is_removed: true, blocker_reason: null}]});
+        render(<CarePlanPanel patientId="patient-1" />);
+        const confirm = await screen.findByRole("checkbox", {name: "Confirm after review"});
+        fireEvent.click(confirm);
+        expect(screen.getByText(/1 unresolved item/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("checkbox", {name: "Remove from this version"}));
+        fireEvent.click(screen.getByRole("button", {name: "Save review"}));
+        await waitFor(() => expect(updateClinicianCarePlan).toHaveBeenCalledWith("patient-1", "plan-1", [expect.objectContaining({instructions: "", frequency: "", is_removed: true})]));
+    });
+
     it("shows a failed automatic draft and retries the same evidence", async () => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: null, active: null, patient_locale: "en-US", active_medications: [] });
         vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue({

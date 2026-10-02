@@ -59,6 +59,15 @@ parity is a follow-up task.
   assignment-based allow and deny tests. Browser clients use authenticated backend routes only.
 - Existing adherence history is never rewritten when a plan is superseded.
 
+Incomplete evidence stays in a cited draft item with empty missing fields and an explicit
+review blocker. Confirmation cannot substitute for missing instructions, frequency, or
+medication fields; the clinician must supply reviewed wording or remove the item. New
+evidence items and the generation completion marker commit in one service-only transaction
+that rejects stale claims. Publication independently checks completed generation and complete
+active items inside its transaction, and approved item wording is immutable. Migration 043
+must precede deployment of this contract; disposable local PostgreSQL tests cover it without
+remote credentials or live provider calls.
+
 ## Revision review after an approved plan
 
 When new documents register grounded facts, the approved version remains active while a newer

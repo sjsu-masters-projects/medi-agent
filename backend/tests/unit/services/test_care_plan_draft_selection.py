@@ -23,7 +23,7 @@ MONITORING_FACT_ID = UUID("00000000-0000-0000-0000-000000000102")
 
 
 @pytest.mark.asyncio
-async def test_missing_frequency_fails_before_any_draft_write() -> None:
+async def test_missing_frequency_commits_a_cited_blocker_without_inventing_wording() -> None:
     service = CarePlanService(MagicMock())
     facts = _facts()
     facts[1]["value"].pop("frequency")
@@ -34,14 +34,20 @@ async def test_missing_frequency_fails_before_any_draft_write() -> None:
             str(MONITORING_FACT_ID): "monitoring",
         }
     )
-    service._open_draft = MagicMock()
-
-    with pytest.raises(care_plan_service.CarePlanSourceFieldsError):
-        await service._generate(
-            {"patient_id": str(UUID(int=302)), "source_watermark": "2026-10-01T23:00:00Z"}
-        )
-
-    service._open_draft.assert_not_called()
+    service._open_draft = MagicMock(return_value={"id": str(UUID(int=303))})
+    await service._generate(
+        {
+            "patient_id": str(UUID(int=302)),
+            "request_id": str(UUID(int=301)),
+            "source_watermark": "2026-10-01T23:00:00Z",
+        }
+    )
+    name, payload = service.db.rpc.call_args.args
+    assert name == "complete_care_plan_generation"
+    item = payload["p_items"][1]
+    assert item["source_fact_id"] == str(MONITORING_FACT_ID)
+    assert item["frequency"] == ""
+    assert item["blocker_reason"]
     service.db.table.assert_not_called()
 
 
@@ -100,6 +106,7 @@ def _service_with_claim() -> CarePlanService:
             "request_id": "00000000-0000-0000-0000-000000000301",
             "patient_id": "00000000-0000-0000-0000-000000000302",
             "attempt": 1,
+            "source_watermark": "2026-10-01T23:00:00Z",
         }
     ]
     return CarePlanService(db)
@@ -205,6 +212,7 @@ async def test_transient_provider_failure_is_scheduled_for_retry() -> None:
             "request_id": "00000000-0000-0000-0000-000000000301",
             "patient_id": "00000000-0000-0000-0000-000000000302",
             "attempt": 1,
+            "source_watermark": "2026-10-01T23:00:00Z",
         },
         failure="provider_timeout",
     )
@@ -229,6 +237,7 @@ async def test_invalid_model_response_fails_without_a_retry() -> None:
             "request_id": "00000000-0000-0000-0000-000000000301",
             "patient_id": "00000000-0000-0000-0000-000000000302",
             "attempt": 1,
+            "source_watermark": "2026-10-01T23:00:00Z",
         },
         status="failed",
         plan_id=None,
@@ -308,6 +317,7 @@ async def test_non_transient_provider_failure_fails_without_a_retry() -> None:
             "request_id": "00000000-0000-0000-0000-000000000301",
             "patient_id": "00000000-0000-0000-0000-000000000302",
             "attempt": 1,
+            "source_watermark": "2026-10-01T23:00:00Z",
         },
         status="failed",
         plan_id=None,
@@ -339,6 +349,36 @@ def test_conflicting_medication_sources_block_every_candidate() -> None:
     )
     assert item["instructions"] == "Take one tablet by mouth twice daily with meals."
     assert item["blocker_reason"] == "Resolve conflicting medication instructions before approval."
+
+
+@pytest.mark.parametrize("removed,confirmed,blocked", [(False, True, True), (True, False, False)])
+def test_confirmation_cannot_supply_missing_instructions(
+    removed: bool, confirmed: bool, blocked: bool
+) -> None:
+    blocker = CarePlanService._blocker(
+        category="monitoring",
+        title="Record walking",
+        instructions="",
+        frequency="",
+        medication={},
+        confidence=0.95,
+        removed=removed,
+        confirmed=confirmed,
+    )
+    assert bool(blocker) is blocked
+
+
+def test_incomplete_removed_item_can_be_submitted_without_fabrication() -> None:
+    from app.models.care_plan import CarePlanItemUpdate
+
+    item = CarePlanItemUpdate(
+        id=MONITORING_FACT_ID,
+        title="Record walking",
+        instructions="",
+        frequency="",
+        is_removed=True,
+    )
+    assert item.instructions == item.frequency == ""
 
 
 def test_legacy_obligation_payload_stages_a_provenance_backed_draft(

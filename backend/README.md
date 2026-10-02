@@ -108,7 +108,7 @@ src/app/
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`. The repository currently has
-`001`–`042`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
+`001`–`043`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
 document-ingestion worker controls, private TIFF previews, the independent patient-explanation
 retry lifecycle, and the clinician-approved care-plan lifecycle with its one-time historical
 document-fact request backfill and care-plan publication review guards. The migration ledger records full filenames and checksums,
@@ -121,6 +121,19 @@ Validate migration naming, sequence continuity, and PostgreSQL syntax before app
 ```bash
 python scripts/validate_migrations.py
 ```
+
+Before deploying the incomplete-evidence care-plan contract, apply migration
+`043_incomplete_care_plan_drafts.sql` using the repository migration procedure.
+Drafts may retain missing instructions/frequency as review blockers; approval still
+requires complete active items and completed generation. Run the deterministic local
+PostgreSQL check with `initdb`, `pg_ctl`, and `psql` installed:
+
+```bash
+CARE_PLAN_TEST_POSTGRES=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_care_plan_postgres.py --no-cov
+```
+
+This starts and stops disposable local clusters, never uses the configured remote
+database or cloud credentials, and remains opt-in rather than a live CI preflight.
 
 ## DailyMed Medication RAG Ingestion
 

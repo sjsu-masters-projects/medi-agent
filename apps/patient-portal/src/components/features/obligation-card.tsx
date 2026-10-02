@@ -7,7 +7,7 @@ interface ObligationCardProps {
     instructions?: string;
     frequency?: string;
     submitting?: boolean;
-    type: "diet" | "exercise" | "custom";
+    type: "diet" | "exercise" | "custom" | "hydration" | "monitoring" | "follow_up";
     time: string;
     status: TaskCardStatus;
     onMarkComplete: (id: string) => void;
@@ -23,15 +23,21 @@ const badgeVariant = {
 } as const;
 
 const obligationLabel = {
-    custom: "Custom task",
-    diet: "Diet obligation",
-    exercise: "Exercise obligation",
+    custom: "Care activity",
+    diet: "Nutrition activity",
+    exercise: "Movement activity",
+    hydration: "Hydration activity",
+    monitoring: "Health check",
+    follow_up: "Follow-up activity",
 } as const;
 
 const typeLabel = {
-    custom: "Task",
+    custom: "Care",
     diet: "Diet",
     exercise: "Move",
+    hydration: "Hydration",
+    monitoring: "Check",
+    follow_up: "Follow-up",
 } as const;
 
 const cardClasses = {

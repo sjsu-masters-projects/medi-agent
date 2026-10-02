@@ -53,7 +53,12 @@ function carePlanLabel(task: FeedTask) {
     if (!task.carePlan) {
         return null;
     }
-    return `Care plan v${task.carePlan.versionNumber} • ${task.carePlan.category.replaceAll("_", " ")}`;
+    return `Care-team approved • ${task.carePlan.category.replaceAll("_", " ")}`;
+}
+
+function CarePlanDetails({ task }: { task: FeedTask }) {
+    if (!task.carePlan) return null;
+    return <details className="mb-3 text-xs text-slate-600"><summary className="cursor-pointer">Care plan details</summary><p className="mt-1">Approved plan version {task.carePlan.versionNumber}. This activity is part of your approved care plan.</p></details>;
 }
 
 export default function TodayPage() {
@@ -204,11 +209,13 @@ export default function TodayPage() {
                                             name={medication.name}
                                             onMarkComplete={() => markComplete(task)}
                                             onReportBarrier={() => setBarrierTask(task)}
-                                            prescriber={task.provider?.name}
+                                            prescriber={task.carePlan ? undefined : task.provider?.name}
+                                            approvedBy={task.carePlan ? task.provider?.name : undefined}
                                             status={status}
                                             submitting={submitting}
                                             time={task.scheduledTime ?? ""}
                                         />
+                                        <CarePlanDetails task={task} />
                                     </div>
                                 );
                             }
@@ -236,8 +243,9 @@ export default function TodayPage() {
                                         status={status}
                                         submitting={submitting}
                                         time={task.scheduledTime ?? ""}
-                                        type={task.carePlan?.category === "movement" ? "exercise" : task.carePlan?.category === "nutrition" ? "diet" : "custom"}
+                                        type={task.carePlan?.category === "movement" ? "exercise" : task.carePlan?.category === "nutrition" ? "diet" : task.carePlan?.category === "hydration" ? "hydration" : task.carePlan?.category === "monitoring" ? "monitoring" : task.carePlan?.category === "follow_up" ? "follow_up" : "custom"}
                                     />
+                                    <CarePlanDetails task={task} />
                                 </div>
                             );
                         })}
