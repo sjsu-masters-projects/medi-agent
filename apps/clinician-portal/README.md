@@ -94,6 +94,14 @@ language and attest to reviewing the final text; the checkbox is not a translati
 The backend and publication transaction both reject missing locale or medication decisions.
 Apply migration `042_care_plan_publication_review_guards.sql` before deploying this contract.
 
+Overlap review groups flag identical source facts/instructions and same-name medications;
+they do not establish clinical equivalence. “Keep this proposal; remove its overlaps” stages
+explicit removals, and “Save review” persists them without changing the active approved plan.
+Historical imported proposals can be excluded together; approved carried items are protected
+from that bulk action. Removed rows and their evidence remain available under “Show removed
+items.” Migration 044 adds the atomic overlap publication guard. Existing completed drafts
+need review, not a generation retry; no automatic translation or medication choice is implied.
+
 ## Notes
 
 - A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.

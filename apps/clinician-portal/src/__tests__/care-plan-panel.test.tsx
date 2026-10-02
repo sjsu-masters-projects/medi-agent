@@ -23,6 +23,37 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("CarePlanPanel", () => {
+    it("stages imported-record exclusions without changing approved carried items or publishing", async () => {
+        const base = {category: "monitoring", title: "Imported record", instructions: "", frequency: "", schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false, imported_evidence: true};
+        const historical = {...base, id: "history", source_fact_id: "old-import"};
+        const carried = {...base, id: "carried", source_fact_id: "approved-fact", title: "Approved carried instruction"};
+        const plan = {id: "v2", patient_id: "p", version_number: 2, status: "draft" as const, items: [historical, carried]};
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({latest: plan, active: {...plan, id: "v1", version_number: 1, status: "approved", items: [carried]}, patient_locale: "en-US", active_medications: []});
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(updateClinicianCarePlan).mockResolvedValue({...plan, items: [{...historical, is_removed: true}, carried]});
+        render(<CarePlanPanel patientId="p" />);
+        fireEvent.click(await screen.findByRole("button", {name: "Exclude imported proposals from this draft"}));
+        expect(updateClinicianCarePlan).not.toHaveBeenCalled();
+        expect(screen.getByRole("checkbox", {name: /Show removed items/})).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", {name: "Save review"}));
+        await waitFor(() => expect(updateClinicianCarePlan).toHaveBeenCalledWith("p", "v2", [expect.objectContaining({id: "history", is_removed: true}), expect.objectContaining({id: "carried", is_removed: false})]));
+    });
+    it("requires an explicit overlap choice and preserves the removed source row on save", async () => {
+        const first = {id: "one", category: "movement", title: "Walk", instructions: "Walk 20 minutes", frequency: "daily", schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false, reviewed_locale: "en-US"};
+        const second = {...first, id: "two", title: "Walking activity"};
+        const plan = {id: "v2", patient_id: "p", version_number: 2, status: "draft" as const, items: [first, second]};
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({latest: plan, active: null, patient_locale: "en-US", active_medications: []});
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(updateClinicianCarePlan).mockResolvedValue({...plan, items: [first, {...second, is_removed: true}]});
+        render(<CarePlanPanel patientId="p" />);
+        const buttons = await screen.findAllByRole("button", {name: "Keep this proposal; remove its overlaps"});
+        fireEvent.change(screen.getByPlaceholderText("Record the basis for your approval."), {target: {value: "Reviewed"}});
+        expect(screen.getByRole("button", {name: "Approve and publish plan"})).toBeDisabled();
+        fireEvent.click(buttons[0]);
+        expect(screen.queryByText(/2 items overlap/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", {name: "Save review"}));
+        await waitFor(() => expect(updateClinicianCarePlan).toHaveBeenCalledWith("p", "v2", [expect.objectContaining({id: "one", is_removed: false}), expect.objectContaining({id: "two", is_removed: true})]));
+    });
     it("requires replacing an abbreviated source heading even after confirmation", async () => {
         const warning = "Source title exceeds the draft limit; replace it after reviewing the full evidence.";
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({latest: {

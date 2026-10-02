@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { carePlanChanges } from "@/components/features/care-plan-changes";
+import { carePlanChanges, carePlanOverlaps } from "@/components/features/care-plan-changes";
 import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
 import {
     approveClinicianCarePlan,
@@ -25,6 +25,7 @@ interface CarePlanPanelProps {
 type EditableItem = CarePlanItem & { clinician_confirmed: boolean; language_verified: boolean };
 type ActiveMedication = CarePlanReviewContext["active_medications"][number];
 const SOURCE_TITLE_REVIEW = "Source title exceeds the draft limit; replace it after reviewing the full evidence.";
+const MEDICATION_ROUTES = ["oral", "topical", "inhaled", "iv", "im", "subcutaneous"];
 
 function distinctSources(item: CarePlanItem) {
     const unique: NonNullable<CarePlanItem["sources"]> = [];
@@ -50,7 +51,7 @@ function missingRequiredEvidence(item: CarePlanItem): boolean {
         item.frequency.trim().toLowerCase() === "as directed" ||
         (item.category === "medication" && ["name", "dosage", "route", "frequency"].some(
             (field) => !medicationText(item.medication[field]).trim(),
-        ));
+        )) || (item.category === "medication" && !MEDICATION_ROUTES.includes(medicationText(item.medication.route)));
 }
 
 function distinctDocuments(item: CarePlanItem) {
@@ -85,6 +86,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const [sourceLoading, setSourceLoading] = useState(false);
     const [sourceError, setSourceError] = useState<string | null>(null);
     const [sourceRetry, setSourceRetry] = useState(0);
+    const [showRemoved, setShowRemoved] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -149,13 +151,19 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
         [items, plan],
     );
     const unverified = items.filter((item) => !item.is_removed && !item.language_verified);
-    const undecidedMedications = items.filter((item) => !item.is_removed && item.category === "medication" && !["create", "update"].includes(medicationText(item.medication.decision)));
+    const undecidedMedications = items.filter((item) => !item.is_removed && item.category === "medication" && (
+        !["create", "update"].includes(medicationText(item.medication.decision)) ||
+        (item.medication.decision === "create" && activeMedications.some((active) => active.name.trim().toLowerCase() === medicationText(item.medication.name).trim().toLowerCase()))
+    ));
     const generationBlocked = Boolean(generation && generation.status !== "completed");
     const changes = useMemo(() => carePlanChanges(items, activePlan), [items, activePlan]);
+    const overlapping = useMemo(() => carePlanOverlaps(items), [items]);
     const previousByFact = useMemo(
         () => new Map((activePlan?.items ?? []).filter((item) => item.source_fact_id).map((item) => [item.source_fact_id, item])),
         [activePlan],
     );
+    const importedItems = items.filter((item) => item.imported_evidence && !item.is_removed && !previousByFact.has(item.source_fact_id));
+    const removedCount = items.filter((item) => item.is_removed).length;
     const sourceDocuments = useMemo(() => {
         const byId = new Map<string, string>();
         for (const item of items) {
@@ -171,6 +179,12 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             ...item, ...change,
             language_verified: change.language_verified ?? (change.is_removed === true ? false : item.language_verified && change.title === undefined && change.instructions === undefined && change.frequency === undefined && change.medication === undefined),
         } : item));
+        setHasUnsavedChanges(true);
+    }
+
+    function removeItems(ids: string[]) {
+        setItems((current) => current.map((item) => ids.includes(item.id)
+            ? { ...item, is_removed: true, language_verified: false } : item));
         setHasUnsavedChanges(true);
     }
 
@@ -193,7 +207,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     }
 
     async function approve() {
-        if (!plan || generationBlocked || unresolved.length || unverified.length || undecidedMedications.length || !note.trim() || hasUnsavedChanges) return;
+        if (!plan || generationBlocked || overlapping.size || unresolved.length || unverified.length || undecidedMedications.length || !note.trim() || hasUnsavedChanges) return;
         setSaving(true); setError(null);
         try { await approveClinicianCarePlan(patientId, plan.id, note); await load(); onPublished?.(); }
         catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to approve this care plan."); }
@@ -241,11 +255,19 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
         {unresolved.length ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{unresolved.length} unresolved item{unresolved.length === 1 ? "" : "s"} block whole-plan approval. Edit, remove, or explicitly confirm each one.</p> : null}
         {unverified.length ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Verify the final patient-facing wording of {unverified.length} item{unverified.length === 1 ? "" : "s"} in {patientLocale} before approval. This review does not translate source text automatically.</p> : null}
         {undecidedMedications.length ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Choose whether each medication updates a matching active record or creates a new record. Remove an unchanged proposal rather than publishing a duplicate.</p> : null}
+        {plan.status === "draft" && importedItems.length ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-gray-700">
+            <p className="font-semibold">{importedItems.length} imported-record proposals need separate reconciliation</p>
+            <p className="mt-1">An imported record is historical evidence, not a new instruction. Review it in External records. You can exclude these proposals from this draft without deleting their sources or changing the approved plan.</p>
+            <button className="mt-3 rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium" disabled={saving} onClick={() => removeItems(importedItems.map((item) => item.id))} type="button">Exclude imported proposals from this draft</button>
+        </div> : null}
+        {plan.status === "draft" && overlapping.size ? <p className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">{overlapping.size} items overlap. Compare their sources and keep one reviewed proposal per activity or medication before publication. Different wording is not proof of a different therapy.</p> : null}
+        {removedCount > 0 ? <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={showRemoved} onChange={(event) => setShowRemoved(event.target.checked)} />Show removed items ({removedCount}) — sources retained</label> : null}
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.85fr)]">
-        <div className="space-y-4">{items.map((item) => <article className={`rounded-xl border p-4 ${item.is_removed ? "border-slate-200 bg-slate-50 opacity-65" : "border-slate-200 bg-white"}`} key={item.id}>
+        <div className="space-y-4">{items.filter((item) => showRemoved || !item.is_removed).map((item) => <article className={`rounded-xl border p-4 ${item.is_removed ? "border-slate-200 bg-slate-50 opacity-65" : "border-slate-200 bg-white"}`} key={item.id}>
             <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{item.category}{activePlan && plan.status === "draft" ? ` · ${changes.get(item.id)}` : ""}</p><p className="mt-1 text-sm font-semibold text-slate-900">{item.title}</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{item.confidence_score == null ? "Confidence unavailable" : `${Math.round(item.confidence_score * 100)}% confidence`}</span></div>
             {changes.get(item.id) === "edited" && previousByFact.get(item.source_fact_id) ? <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"><p className="font-semibold">Approved version {activePlan?.version_number} wording</p><p>{previousByFact.get(item.source_fact_id)?.title} — {previousByFact.get(item.source_fact_id)?.instructions} · {previousByFact.get(item.source_fact_id)?.frequency}</p></div> : null}
             {item.source?.file_name ? <p className="mt-1 text-xs text-slate-500">Source: {item.source.file_name}</p> : null}
+            {plan.status === "draft" && overlapping.has(item.id) ? <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800"><p className="font-semibold">Overlapping proposals — review before choosing</p><ul className="mt-1 list-disc pl-5">{items.filter((other) => overlapping.get(item.id)?.includes(other.id)).map((other) => <li key={other.id}>{other.title} · {other.frequency} · {other.source?.file_name || "Source excerpt below"}</li>)}</ul><button className="mt-2 rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700" disabled={saving} onClick={() => removeItems(overlapping.get(item.id) ?? [])} type="button">Keep this proposal; remove its overlaps</button><p className="mt-1 text-xs">This stages removals only. Save review to persist; no medication or approved instruction changes until publication.</p></div> : null}
             {distinctSources(item).filter((citation) => Boolean(citation.excerpt)).map((citation, index) => <p className="mt-2 border-l-2 border-blue-200 pl-2 text-xs text-slate-600" key={`${citation.document_id}-${index}`}>{citation.file_name ? `${citation.file_name}: ` : ""}“{citation.excerpt}”{citation.location?.page ? ` · page ${citation.location.page}` : ""}</p>)}
             {!item.source?.excerpt ? <p className="mt-2 border-l-2 border-blue-200 pl-2 text-xs text-slate-600">{displaySource(item)}</p> : null}
             {distinctDocuments(item).map((source) => <button aria-pressed={selectedSourceItemId === item.id && selectedSourceDocumentId === source.document_id} className="mr-2 mt-3 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50" key={source.document_id} onClick={() => { setSelectedSourceItemId(item.id); setSelectedSourceDocumentId(source.document_id ?? null); }} type="button">Review source: {source.file_name || source.document_id}</button>)}
@@ -270,6 +292,6 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             {source ? <DocumentSourceViewer fileName={source.file_name} initialPage={selectedSourceItem ? distinctDocuments(selectedSourceItem).find((citation) => citation.document_id === selectedSourceDocumentId)?.location?.page ?? 1 : 1} previewMimeType={source.preview_mime_type} previewStatus={source.preview_status} previewUrl={source.preview_url} sourceMimeType={source.mime_type} sourceUrl={source.file_url} /> : null}
         </aside>
         </div>
-        {plan.status === "draft" ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><h3 className="font-semibold text-slate-900">Proposed publication summary</h3><p className="mt-1 text-sm text-slate-600">These items would be projected to Today after approval. This is not an exact Today preview; patient timezone and reminder settings affect the final display.</p><ul className="mt-2 list-disc pl-5 text-sm text-slate-700">{items.filter((item) => !item.is_removed).map((item) => <li key={item.id}>{item.title} — {item.instructions} · {item.frequency}{item.category === "medication" ? ` · ${medicationText(item.medication.decision) || "no medication decision"}` : ""}</li>)}</ul><label className="mt-3 block text-sm font-medium text-slate-700">Approval note<textarea className="mt-1 min-h-20 w-full rounded-lg border border-slate-300 p-2" placeholder="Record the basis for your approval." value={note} onChange={(event) => setNote(event.target.value)} /></label><div className="mt-3 flex gap-3"><button className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 disabled:opacity-60" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save review"}</button><button className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving || generationBlocked || hasUnsavedChanges || unresolved.length > 0 || unverified.length > 0 || undecidedMedications.length > 0 || !note.trim()} onClick={() => void approve()} type="button">Approve and publish plan</button></div></div> : null}
+        {plan.status === "draft" ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><h3 className="font-semibold text-slate-900">Proposed publication summary</h3><p className="mt-1 text-sm text-slate-600">These items would be projected to Today after approval. This is not an exact Today preview; patient timezone and reminder settings affect the final display.</p><ul className="mt-2 list-disc pl-5 text-sm text-slate-700">{items.filter((item) => !item.is_removed).map((item) => <li key={item.id}>{item.title} — {item.instructions} · {item.frequency}{item.category === "medication" ? ` · ${medicationText(item.medication.decision) || "no medication decision"}` : ""}</li>)}</ul><label className="mt-3 block text-sm font-medium text-slate-700">Approval note<textarea className="mt-1 min-h-20 w-full rounded-lg border border-slate-300 p-2" placeholder="Record the basis for your approval." value={note} onChange={(event) => setNote(event.target.value)} /></label><div className="mt-3 flex gap-3"><button className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 disabled:opacity-60" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save review"}</button><button className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving || generationBlocked || overlapping.size > 0 || hasUnsavedChanges || unresolved.length > 0 || unverified.length > 0 || undecidedMedications.length > 0 || !note.trim()} onClick={() => void approve()} type="button">Approve and publish plan</button></div></div> : null}
     </section>;
 }

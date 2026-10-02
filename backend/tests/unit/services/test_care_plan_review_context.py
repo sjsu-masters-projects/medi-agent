@@ -67,6 +67,7 @@ def test_review_context_denies_unassigned_clinician_before_reading_plans() -> No
 def test_hydrated_item_retains_every_supporting_document() -> None:
     db = MagicMock()
     responses = {
+        "clinical_facts": [],
         "care_plan_items": [{"id": "item-1", "source_fact_id": "fact-1"}],
         "evidence_citations": [
             {
@@ -193,6 +194,7 @@ def test_approval_calls_transaction_for_reviewed_matching_medication() -> None:
                 "is_removed": False,
                 "reviewed_locale": "en-US",
                 "frequency": "daily",
+                "id": str(PATIENT_ID),
                 "medication": {
                     "decision": "update",
                     "target_id": "med-1",

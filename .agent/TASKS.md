@@ -126,6 +126,7 @@ PAT-005.
 | `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — coordinate with `codex/care-plan-oversized-evidence` | Repeat persisted completion/barrier and clinician follow-up after deployed PR #118/#119; remove duplicate medication review controls. | Maya V1 approved; English follow-up uploaded for V2. Legacy PRN/unknown cadence, extraction completeness, hydration diagnosis, exact preview and version-history proof remain open. Blocks C. |
 | `PAT-005-G` — incomplete-evidence draft persistence | **Claimed** | Rajeev — `codex/care-plan-oversized-evidence` | Handle oversized source fields as cited, non-confirmable review blockers rather than failing the whole generation batch. | PR #119 merged/deployed and migration 043 applied. Maya's retry exposed a 338-character title against the 300-character draft limit. C still waits for the repaired deployed V2/reload/history proof. No additional migration planned. |
 | `PAT-005-H` — patient reminder usability | **Ready** | Unclaimed — coordinate with patient-portal owner | Compact schedule summaries; edit one activity at a time; contextual Today setup; timezone under advanced settings. | Can design in parallel with G. Preserve clinician-approved frequency, meal/event instructions and persisted preferences; no automatic assignment of clinical times or routine PRN reminders. |
+| `PAT-005-I` — evidence applicability and overlap review | **Claimed** | Rajeev — `codex/care-plan-evidence-reconciliation` | Limit automatic generation to unwithdrawn document/clinician-entry evidence; flag exact-source, identical-instruction and same-name medication overlaps; stage explicit clinician removals with retained evidence. | Maya's deployed V2 has 53 proposals, including 41 imported-record proposals; the read-only corrected query selects 12 eligible facts. Migration 044 must precede deployment. Existing V2 needs explicit review/exclusion, not silent deletion or another generation retry. V1 remains active; C is still open. |
 | `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
 | `PAT-002-C` — symptom timeline and clinician report detail | **Sequenced** | Patient + clinician portal lanes — unassigned | Show each confirmed report in the patient's timeline and an authorized clinician detail view with clearly separated patient answers, document-grounded context, and clinician decisions. | Starts after `PAT-002-B` establishes the confirmed-report contract. Blocks `PV-001`; preserve patient/clinic assignment isolation, source citations, and audit linkage. |
 | `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
@@ -142,6 +143,14 @@ PAT-005.
 **State meanings:** **Claimed** has one active owner and branch; **Ready** is safe to start in a
 separate branch; **Blocked** needs the stated external decision or evidence; **Sequenced** is
 intentionally deferred until its named predecessor finishes.
+
+**PAT-005-I local verification — 2026-10-02:** Backend `PYTHONPATH=src .venv/bin/pytest tests/ -q
+--cov-report=term:skip-covered`: 1,456 passed, 84.53% coverage; 13 opt-in PostgreSQL cases
+verified separately with `CARE_PLAN_TEST_POSTGRES=1` against a disposable local cluster.
+Ruff, format, mypy and migration parsing passed. Clinician lint/typecheck, 111 Vitest cases
+and `npm run build -- --webpack` passed. One unrelated review-queue test timed out in an
+intermediate run; the complete rerun passed. Live verification is still pending migration,
+merge/deployment and clinician review; no remote writes or automatic cleanup were performed.
 
 ### Claim and handoff rules
 
