@@ -39,7 +39,13 @@ def test_interval_reminders_preserve_the_eight_hour_interval(times, valid):
 
 
 @pytest.mark.parametrize(
-    "times,days", [(["08:00", "20:00"], DAY_ORDER), (["08:00"], ["monday"]), (["bad"], DAY_ORDER)]
+    "times,days",
+    [
+        (["08:00", "20:00"], DAY_ORDER),
+        (["08:00", "08:00"], DAY_ORDER),
+        (["08:00"], ["monday"]),
+        (["bad"], DAY_ORDER),
+    ],
 )
 def test_legacy_daily_schedule_with_wrong_cadence_is_not_effective(times, days):
     assert (

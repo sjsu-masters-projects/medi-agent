@@ -180,7 +180,8 @@ def schedule_matches_frequency(schedule: dict[str, Any], frequency: str) -> bool
     except ValidationError:
         return False
     if (
-        len(set(times)) != guidance["recommended_times_per_day"]
+        len(times) != len(set(times))
+        or len(times) != guidance["recommended_times_per_day"]
         or len(days) != guidance["recommended_days_per_week"]
     ):
         return False
