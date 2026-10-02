@@ -17,8 +17,8 @@ interface AdherenceChartProps {
 
 /** Format axis tick: "Mar 15" */
 function formatDate(dateStr: string): string {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const date = new Date(`${dateStr}T12:00:00Z`);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 /** Custom tooltip content */
@@ -40,14 +40,18 @@ function CustomTooltip({
                 {Math.round((point?.value ?? 0) * 100)}% adherence
             </p>
             <p className="text-xs text-gray-400">
-                {point?.payload?.completed ?? 0} of {point?.payload?.expected ?? 0} completed
+                {point?.payload?.completed ?? 0} of {point?.payload?.expected ?? 0} recorded responses completed
             </p>
         </div>
     );
 }
 
+export function toAdherenceChartData(data: AdherenceDataPoint[]) {
+    return data.map((point) => ({ ...point, score: point.expected > 0 ? point.score : null }));
+}
+
 export function AdherenceChart({ data }: AdherenceChartProps) {
-    if (data.length === 0) {
+    if (!data.some((point) => point.expected > 0)) {
         return (
             <div
                 aria-label="30-day adherence chart"
@@ -60,16 +64,16 @@ export function AdherenceChart({ data }: AdherenceChartProps) {
 
     // Use the axis tick value itself, not array indexing, so labels stay correct.
     const tickFormatter = (value: string) => {
-        const date = new Date(value);
+        const date = new Date(`${value}T12:00:00Z`);
         if (Number.isNaN(date.getTime())) return "";
-        return date.getDate() % 5 === 0 ? formatDate(value) : "";
+        return date.getUTCDate() % 5 === 0 ? formatDate(value) : "";
     };
 
     return (
         <div className="w-full" aria-label="30-day adherence chart">
             <ResponsiveContainer height={220} width="100%">
                 <LineChart
-                    data={data}
+                    data={toAdherenceChartData(data)}
                     margin={{ top: 4, right: 16, bottom: 4, left: -16 }}
                 >
                     <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false} />
@@ -90,11 +94,12 @@ export function AdherenceChart({ data }: AdherenceChartProps) {
                     <Tooltip content={<CustomTooltip />} />
                     <Line
                         dataKey="score"
-                        dot={false}
+                        dot={{ r: 3 }}
+                        connectNulls={false}
                         name="Adherence"
                         stroke="#2563eb"
                         strokeWidth={2}
-                        type="monotone"
+                        type="linear"
                         activeDot={{ r: 5, fill: "#2563eb", strokeWidth: 0 }}
                     />
                 </LineChart>
