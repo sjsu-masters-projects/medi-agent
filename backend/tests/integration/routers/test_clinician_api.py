@@ -613,7 +613,9 @@ class TestRevokeInviteCode:
         assert data["care_team_id"] == str(care_team_id)
         assert data["status"] == "inactive"
 
-    def test_reject_non_pending(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
+    def test_reject_non_pending(
+        self, client, override_auth, override_db, mock_supabase_db, clinician_id
+    ):
         care_team_id = uuid4()
 
         mock_supabase_db.table().select().eq().eq().single().execute.return_value = MagicMock(
@@ -655,16 +657,81 @@ class TestDashboardRoutes:
                 "high_risk": 1,
                 "medium_risk": 0,
                 "low_risk": 0,
-                "medwatch_pending": 2,
+                "pending_adr_reviews": 2,
+                "medwatch_pending": 0,
             }
         )
 
-        response = client.get("/api/v1/clinicians/me/dashboard", params={"page": 1, "page_size": 25})
+        response = client.get(
+            "/api/v1/clinicians/me/dashboard", params={"page": 1, "page_size": 25}
+        )
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["total"] == 1
         assert data["patients"][0]["risk_level"] == "high"
+
+
+class TestADRReviewQueueRoutes:
+    """GET /api/v1/clinicians/me/adr-assessments"""
+
+    def test_success_returns_patient_grounded_naranjo_evidence(
+        self, client, override_auth, override_service, clinician_id
+    ):
+        patient_id = uuid4()
+        assessment_id = uuid4()
+        symptom_report_id = uuid4()
+        medication_id = uuid4()
+        override_service.list_adr_review_queue = AsyncMock(
+            return_value={
+                "items": [
+                    {
+                        "id": str(assessment_id),
+                        "patient_id": str(patient_id),
+                        "patient_first_name": "Maya",
+                        "patient_last_name": "Patel",
+                        "symptom_report_id": str(symptom_report_id),
+                        "symptom": "dizziness",
+                        "severity": 2,
+                        "onset": "after starting medication",
+                        "symptom_created_at": "2026-10-02T09:59:00Z",
+                        "suspect_medication_id": str(medication_id),
+                        "suspect_medication_name": "fluticasone/salmeterol inhaler",
+                        "naranjo_score": 3,
+                        "causality": "Possible",
+                        "naranjo_answers": {"event_after_drug": "yes"},
+                        "naranjo_assessment": {"missing_questions": ["alternative_causes"]},
+                        "evidence": [
+                            {
+                                "question": "event_after_drug",
+                                "answer": "yes",
+                                "evidence": "Dizziness began after starting the inhaler.",
+                            }
+                        ],
+                        "status": "draft",
+                        "created_at": "2026-10-02T10:00:00Z",
+                    }
+                ],
+                "total": 1,
+            }
+        )
+
+        response = client.get(
+            "/api/v1/clinicians/me/adr-assessments",
+            params={"status": "draft", "limit": 25},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["total"] == 1
+        assert data["items"][0]["naranjo_score"] == 3
+        assert data["items"][0]["evidence"][0]["question"] == "event_after_drug"
+        assert "thinking_chain" not in data["items"][0]
+        override_service.list_adr_review_queue.assert_awaited_once_with(
+            clinician_id,
+            status_filter="draft",
+            limit=25,
+        )
 
 
 class TestPatientDeepDiveRoutes:

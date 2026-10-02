@@ -55,8 +55,8 @@ export function TopHeader() {
 
         if (pathname === "/medwatch") {
             return {
-                title: "MedWatch Queue",
-                subtitle: "Review pending FDA safety drafts and clinician follow-through.",
+                title: "ADR Review Queue",
+                subtitle: "Review patient-grounded evidence before any clinical or MedWatch decision.",
                 rightContent: null,
             };
         }

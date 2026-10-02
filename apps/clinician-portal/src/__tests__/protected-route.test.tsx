@@ -17,24 +17,24 @@ vi.mock("react-redux", () => ({
 import { ProtectedRoute } from "@/components/layouts/protected-route";
 
 describe("ProtectedRoute", () => {
-    it("renders children when authenticated", () => {
+    it("renders children when authenticated", async () => {
         mockUseSelector.mockReturnValue({ isAuthenticated: true, loading: false });
         render(
             <ProtectedRoute>
                 <p>Dashboard content</p>
             </ProtectedRoute>,
         );
-        expect(screen.getByText("Dashboard content")).toBeInTheDocument();
+        expect(await screen.findByText("Dashboard content")).toBeInTheDocument();
     });
 
-    it("renders nothing when not authenticated and not loading", () => {
+    it("renders nothing when not authenticated and not loading", async () => {
         mockUseSelector.mockReturnValue({ isAuthenticated: false, loading: false });
         const { container } = render(
             <ProtectedRoute>
                 <p>Dashboard content</p>
             </ProtectedRoute>,
         );
-        expect(container.innerHTML).toBe("");
+        await waitFor(() => expect(container.innerHTML).toBe(""));
     });
 
     it("redirects to login with return_path when unauthenticated", async () => {

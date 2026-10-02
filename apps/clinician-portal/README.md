@@ -62,6 +62,7 @@ Invite history is intentionally role-sensitive:
 - login flow: `src/app/(auth)/login/page.tsx`
 - admin bootstrap: `src/app/(auth)/signup/admin/page.tsx`
 - dashboard review queue: `src/app/(dashboard)/review-queue/page.tsx`
+- ADR evidence queue: `src/app/(dashboard)/medwatch/page.tsx`
 - patient deep dive: `src/app/(dashboard)/patients/[id]/page.tsx`
 - patient deep dive documents panel: `src/components/features/patient-documents-panel.tsx`
 - settings / invite history: `src/app/(dashboard)/settings/page.tsx`
@@ -74,6 +75,12 @@ Invite history is intentionally role-sensitive:
 - Patient-uploaded documents enter a shared clinician review queue.
 - Review actions are surfaced in both the dedicated review queue and the patient deep dive documents tab.
 - The deep-dive documents experience is intentionally factored into `PatientDocumentsPanel` so document review state, modal flows, and refresh behavior stay isolated from the rest of the deep-dive page.
+
+## ADR Review Workflow
+
+- `GET /api/v1/clinicians/me/adr-assessments` returns draft assessments only for patients assigned to the authenticated clinician.
+- The ADR review queue shows the deterministic Naranjo score, patient-grounded evidence, and missing inputs. It never exposes private model reasoning or presents the score as a clinician decision.
+- MedWatch records remain a separate lifecycle and are not counted or presented as generated until a real `medwatch_drafts` record exists.
 
 ## Notes
 

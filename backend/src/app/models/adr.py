@@ -29,6 +29,41 @@ class ADRAssessmentRead(BaseModel):
     created_at: str
 
 
+class ADRReviewQueueItem(BaseModel):
+    """Assigned-patient ADR evidence shown for clinician review.
+
+    This intentionally excludes ``thinking_chain``. Clinicians receive the
+    deterministic score inputs and patient-grounded evidence, not private model
+    reasoning.
+    """
+
+    id: UUID
+    patient_id: UUID
+    patient_first_name: str
+    patient_last_name: str
+    symptom_report_id: UUID
+    symptom: str
+    severity: int = Field(..., ge=1, le=10)
+    onset: str | None = None
+    symptom_created_at: str
+    suspect_medication_id: UUID
+    suspect_medication_name: str
+    naranjo_score: int = Field(..., ge=-4, le=13)
+    causality: NaranjoCausality
+    naranjo_answers: dict[str, str] = Field(default_factory=dict)
+    naranjo_assessment: dict[str, Any] = Field(default_factory=dict)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    status: ADRStatus
+    created_at: str
+
+
+class ADRReviewQueueResponse(BaseModel):
+    """Clinician-scoped ADR review queue."""
+
+    items: list[ADRReviewQueueItem]
+    total: int = Field(..., ge=0)
+
+
 class MedWatchDraft(BaseModel):
     """FDA 3500A form fields, auto-populated from patient data."""
 

@@ -57,6 +57,7 @@ class DashboardResponse(BaseModel):
     high_risk: int
     medium_risk: int
     low_risk: int
+    pending_adr_reviews: int
     medwatch_pending: int
 
 

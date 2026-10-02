@@ -25,9 +25,10 @@ endpoints.
 
 Implemented route groups include auth/MFA, clinics, patients, clinicians, documents,
 medications, obligations, adherence, chat, feed, appointments, notifications,
-reminders, staff, and cron. The previous ADR REST group was removed because every
-handler was an unimplemented placeholder. A clinician-facing ADR workflow remains a
-delivery target, not an available public API.
+reminders, staff, and cron. The previous standalone ADR REST group was removed because every
+handler was an unimplemented placeholder. Assigned clinicians can now read draft ADR assessments
+through the clinician API and inspect deterministic Naranjo evidence in the portal. Clinician
+decisions, evidence requests, reassessment, and MedWatch drafting remain delivery targets.
 
 ## Worker and service boundaries
 
