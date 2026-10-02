@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.models.feed import TodayFeedResponse
+
 
 class CarePlanStatus(StrEnum):
     DRAFT = "draft"
@@ -64,6 +66,15 @@ class CarePlanDraftUpdate(BaseModel):
 
 class CarePlanApprovalRequest(BaseModel):
     note: str = Field(min_length=1, max_length=5000)
+
+
+class CarePlanTodayPreviewRead(BaseModel):
+    """Current-record snapshot, not a reservation or publication result."""
+
+    plan_id: UUID
+    version_number: int = Field(ge=1)
+    generated_at: datetime
+    feed: TodayFeedResponse
 
 
 class CarePlanItemRead(BaseModel):

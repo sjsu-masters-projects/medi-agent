@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
@@ -11,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from supabase import Client
 
+from app.core.exceptions import ValidationError
 from app.services.reminder_schedule_service import (
     ReminderScheduleService,
     infer_frequency_guidance,
@@ -20,6 +22,19 @@ from app.services.reminder_schedule_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FeedSnapshot:
+    """Read-only inputs shared by live Today and publication previews."""
+
+    target_date: date
+    timezone: str
+    medications: list[dict[str, Any]]
+    obligations: list[dict[str, Any]]
+    plan_items: dict[str, dict[str, Any]]
+    reminders: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
+    adherence: list[dict[str, Any]] = field(default_factory=list)
 
 
 class FeedService:
@@ -54,11 +69,33 @@ class FeedService:
             self._get_today_adherence(patient_id, target_date, effective_timezone),
             self._get_approved_plan_items(patient_id),
         )
-        medications = self._current_plan_projections(medications, plan_items, target_date)
-        obligations = self._current_plan_projections(obligations, plan_items, target_date)
+        return self.render_snapshot(
+            FeedSnapshot(
+                target_date,
+                effective_timezone,
+                medications,
+                obligations,
+                plan_items,
+                reminder_map,
+                adherence_logs,
+            )
+        )
+
+    def render_snapshot(self, snapshot: FeedSnapshot) -> dict[str, Any]:
+        """Render without database reads or writes; never invent reminder times."""
+        target_date = snapshot.target_date
+        effective_timezone = snapshot.timezone
+        timezone_info = ZoneInfo(effective_timezone)
+        reminder_map = snapshot.reminders
+        medications = self._current_plan_projections(
+            snapshot.medications, snapshot.plan_items, target_date
+        )
+        obligations = self._current_plan_projections(
+            snapshot.obligations, snapshot.plan_items, target_date
+        )
 
         adherence_occurrence_map, adherence_unscheduled_map = self._build_adherence_maps(
-            adherence_logs
+            snapshot.adherence
         )
 
         # Transform to tasks
@@ -113,7 +150,7 @@ class FeedService:
             "summary": summary,
         }
 
-    async def _get_patient(self, patient_id: UUID) -> dict[str, Any]:
+    async def _get_patient(self, patient_id: UUID, *, strict: bool = False) -> dict[str, Any]:
         result = (
             self.db.table("patients")
             .select("id, timezone")
@@ -122,17 +159,25 @@ class FeedService:
             .execute()
         )
         if not isinstance(result.data, dict):
+            if strict:
+                raise ValidationError("Patient timezone is unavailable; refresh the review")
             return {"id": str(patient_id), "timezone": "UTC"}
         timezone = result.data.get("timezone")
         if not isinstance(timezone, str):
+            if strict:
+                raise ValidationError("Patient timezone is unavailable; refresh the review")
             return {"id": str(patient_id), "timezone": "UTC"}
         try:
             validate_timezone_name(timezone)
         except Exception:
+            if strict:
+                raise
             return {"id": str(patient_id), "timezone": "UTC"}
         return cast(dict[str, Any], result.data)
 
-    async def _get_medications(self, patient_id: UUID) -> list[dict[str, Any]]:
+    async def _get_medications(
+        self, patient_id: UUID, *, strict: bool = False
+    ) -> list[dict[str, Any]]:
         """Fetch active medications with provider info."""
         try:
             result = (
@@ -164,10 +209,14 @@ class FeedService:
             )
             return result.data or []  # type: ignore[return-value]
         except Exception as e:
+            if strict:
+                raise
             logger.error(f"Failed to fetch medications: {e}")
             return []
 
-    async def _get_obligations(self, patient_id: UUID) -> list[dict[str, Any]]:
+    async def _get_obligations(
+        self, patient_id: UUID, *, strict: bool = False
+    ) -> list[dict[str, Any]]:
         """Fetch active obligations with provider info."""
         try:
             result = (
@@ -199,6 +248,8 @@ class FeedService:
             )
             return result.data or []  # type: ignore[return-value]
         except Exception as e:
+            if strict:
+                raise
             logger.error(f"Failed to fetch obligations: {e}")
             return []
 
@@ -242,7 +293,7 @@ class FeedService:
         }
 
     async def _get_today_adherence(
-        self, patient_id: UUID, target_date: date, timezone_name: str
+        self, patient_id: UUID, target_date: date, timezone_name: str, *, strict: bool = False
     ) -> list[dict[str, Any]]:
         """Fetch today's adherence logs."""
         try:
@@ -262,6 +313,8 @@ class FeedService:
             )
             return result.data or []  # type: ignore[return-value]
         except Exception as e:
+            if strict:
+                raise
             logger.error(f"Failed to fetch adherence logs: {e}")
             return []
 

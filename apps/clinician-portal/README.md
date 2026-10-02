@@ -82,8 +82,16 @@ assignment-scoped backend review endpoint. When a newer draft exists, the approv
 active in Today. The tab lists the source documents/citations attached to proposed items and
 labels an item as carried forward, edited, removed, or linked to new evidence by source-fact ID.
 “New evidence” does not establish a new therapy or reconcile medications. The publication
-summary is not an exact Today preview; patient timezone, reminders, and existing medications
-still affect the feed. Save draft edits before approval. Clinical review of medication matching
+summary lists plan instructions only. After resolving review requirements and saving the draft,
+**Preview Today** requests a read-only current-record snapshot from
+`GET /api/v1/care-plans/clinician/patients/{patient_id}/{plan_id}/today-preview`. It uses the
+live Today renderer with the patient-local date, valid reminders, existing medications,
+proposed projections and retained activity responses. New activity IDs are preview-only;
+new/changed activities do not inherit reminder times or completion. Edits and saves clear the
+preview. Refresh it if records or reminders change: it is not a transaction reservation or a
+guarantee of later publication. Errors discard the snapshot, not display an empty success.
+The backend must be deployed before the preview UI; no new migration is required.
+Save draft edits before approval. Clinical review of medication matching
 and locale wording, plus a live version-supersession proof, remain PAT-005 acceptance work.
 
 Care Plan review makes each proposed medication an explicit create-or-update

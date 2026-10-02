@@ -220,7 +220,8 @@ describe("CarePlanPanel", () => {
         expect(await screen.findByText(/Approved version 1 remains active in Today/)).toBeInTheDocument();
         expect(screen.getByText("follow-up.pdf")).toBeInTheDocument();
         expect(screen.getByText("hydration · new evidence")).toBeInTheDocument();
-        expect(screen.getByText(/not an exact Today preview/)).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: "Proposed Today preview" })).toBeInTheDocument();
+        expect(screen.getByText(/Read-only view using the saved draft/)).toBeInTheDocument();
     });
 
     it("does not allow approval while the clinician has unsaved changes", async () => {

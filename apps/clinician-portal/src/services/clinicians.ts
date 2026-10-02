@@ -657,6 +657,33 @@ export async function fetchClinicianCarePlanGeneration(
     );
 }
 
+export interface CarePlanTodayPreview {
+    plan_id: string;
+    version_number: number;
+    generated_at: string;
+    feed: {
+        date: string;
+        timezone: string;
+        tasks: Array<{
+            id: string;
+            name: string;
+            description: string | null;
+            frequency: string;
+            status: "pending" | "completed" | "skipped" | "missed";
+            scheduled_at: string | null;
+            requires_schedule_configuration: boolean;
+            care_plan: { version_number: number; category: string } | null;
+        }>;
+    };
+}
+
+export async function fetchCarePlanTodayPreview(
+    patientId: string,
+    planId: string,
+): Promise<CarePlanTodayPreview> {
+    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}/today-preview`);
+}
+
 export async function updateClinicianCarePlan(
     patientId: string,
     planId: string,
