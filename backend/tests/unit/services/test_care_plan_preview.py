@@ -222,7 +222,14 @@ async def test_denied_assignment_precedes_all_feed_reads():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "change", [{"blocker_reason": "Needs review"}, {"instructions": ""}, {"is_removed": True}]
+    "change",
+    [
+        {"blocker_reason": "Needs review"},
+        {"instructions": ""},
+        {"is_removed": True},
+        {"schedule": {"start_date": "not-a-date"}},
+        {"schedule": {"start_date": "2026-10-03", "end_date": "2026-10-02"}},
+    ],
 )
 async def test_incomplete_saved_review_cannot_preview(change):
     service = preview_service()
@@ -238,6 +245,26 @@ async def test_read_failure_is_not_presented_as_an_empty_preview():
     service = preview_service()
     service.feed._get_medications.side_effect = RuntimeError("Read unavailable")
     with pytest.raises(RuntimeError, match="Read unavailable"):
+        await service.preview(CLINICIAN, PATIENT, PLAN)
+    service.db.rpc.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_newly_present_matching_medication_blocks_create_preview():
+    service = preview_service()
+    item = service.plans.publication_snapshot.return_value[1][0]
+    item.update(
+        category="medication",
+        medication={
+            "decision": "create",
+            "name": "Metformin",
+            "dosage": "500 mg",
+            "frequency": "daily",
+            "route": "oral",
+        },
+    )
+    service.feed._get_medications.return_value = [{"id": "med", "name": "Metformin"}]
+    with pytest.raises(ValidationError, match="already exists"):
         await service.preview(CLINICIAN, PATIENT, PLAN)
     service.db.rpc.assert_not_called()
 

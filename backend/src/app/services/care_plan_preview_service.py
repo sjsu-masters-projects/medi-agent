@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 from zoneinfo import ZoneInfo
@@ -141,6 +141,24 @@ class CarePlanPreviewService:
                 str(item.get(key) or "").strip() for key in ("title", "instructions", "frequency")
             ):
                 raise ValidationError("Complete patient-facing instructions before preview")
+            schedule = item.get("schedule") or {}
+            try:
+                start = (
+                    date.fromisoformat(str(schedule["start_date"]))
+                    if schedule.get("start_date")
+                    else None
+                )
+                end = (
+                    date.fromisoformat(str(schedule["end_date"]))
+                    if schedule.get("end_date")
+                    else None
+                )
+            except (ValueError, TypeError):
+                raise ValidationError(
+                    "Review the plan item's effective dates before preview"
+                ) from None
+            if start and end and start > end:
+                raise ValidationError("The plan item's end date must not precede its start date")
             if item["category"] == "medication" and not all(
                 str(item["medication"].get(key) or "").strip()
                 for key in ("name", "dosage", "frequency")
@@ -173,15 +191,16 @@ class CarePlanPreviewService:
             .execute()
         )
         providers = cast(list[dict[str, Any]], provider_result.data or [])
-        records = proposed_records(
-            active,
-            PublicationRecords(
-                await self.feed._get_medications(patient_id, strict=True),
-                await self.feed._get_obligations(patient_id, strict=True),
-                previous_items,
-                providers[0] if providers else None,
-            ),
+        current = PublicationRecords(
+            await self.feed._get_medications(patient_id, strict=True),
+            await self.feed._get_obligations(patient_id, strict=True),
+            previous_items,
+            providers[0] if providers else None,
         )
+        for item in active:
+            if item["category"] == "medication":
+                self.plans._validate_medication_decision(item["medication"], current.medications)
+        records = proposed_records(active, current)
         reminders = await ReminderScheduleService(self.db).get_schedule_map_for_patient(
             str(patient_id)
         )
