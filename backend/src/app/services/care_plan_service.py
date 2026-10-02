@@ -30,6 +30,9 @@ from app.services.clinical_fact_service import ClinicalFactService
 logger = logging.getLogger(__name__)
 
 _LOW_CONFIDENCE = 0.7
+_SOURCE_TITLE_REVIEW = (
+    "Source title exceeds the draft limit; replace it after reviewing the full evidence."
+)
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
 _TRANSIENT_PROVIDER_FAILURES = frozenset(
     {
@@ -168,6 +171,10 @@ class CarePlanService:
                 conflict=cast(dict[str, Any], original.get("conflict") or {}),
                 removed=item.is_removed,
                 confirmed=item.clinician_confirmed,
+                source_title_requires_edit=(
+                    _SOURCE_TITLE_REVIEW in (original.get("uncertainty") or [])
+                    and item.title.strip() == str(original["title"]).strip()
+                ),
             )
             validated.append(
                 (
@@ -180,6 +187,12 @@ class CarePlanService:
                         "medication": item.medication,
                         "is_removed": item.is_removed,
                         "blocker_reason": blocker,
+                        "uncertainty": [
+                            warning
+                            for warning in (original.get("uncertainty") or [])
+                            if warning != _SOURCE_TITLE_REVIEW
+                            or item.title.strip() == str(original["title"]).strip()
+                        ],
                         "reviewed_locale": locale
                         if item.language_verified and not item.is_removed
                         else None,
@@ -387,14 +400,6 @@ class CarePlanService:
             )
             for fact in facts
         ]
-        # Reject oversized evidence before writes; absent wording is preserved as
-        # an editable blocker by the draft contract, never filled with model advice.
-        for item in proposed:
-            if any(
-                len(str(item[field])) > maximum
-                for field, maximum in (("title", 300), ("instructions", 2000), ("frequency", 200))
-            ):
-                raise CarePlanSourceFieldsError()
         draft = self._open_draft(patient_id, str(claim["source_watermark"]))
         plan_id = UUID(str(draft["id"]))
         # All new evidence and the completion marker commit together. A retry
@@ -482,6 +487,24 @@ class CarePlanService:
             frequency = str(value.get("frequency") or "")
             instructions = title
             medication = {}
+        uncertainty = list(fact.get("uncertainty") or [])
+        oversized_title = len(title) > 300
+        if oversized_title:
+            # Only the review heading is abbreviated. Full wording remains in the
+            # linked fact/citations, and confirmation cannot publish this heading.
+            title = title[:299] + "…"
+            uncertainty.append(_SOURCE_TITLE_REVIEW)
+        if len(instructions) > 2000:
+            instructions = ""
+            uncertainty.append(
+                "Source instructions exceed the draft limit; review the full evidence."
+            )
+        if len(frequency) > 200:
+            frequency = ""
+            medication.pop("frequency", None)
+            uncertainty.append(
+                "Source frequency exceeds the draft limit; review the full evidence."
+            )
         return {
             "source_fact_id": str(fact["id"]),
             "category": category,
@@ -490,7 +513,7 @@ class CarePlanService:
             "frequency": frequency,
             "medication": medication,
             "confidence_score": fact.get("confidence_score"),
-            "uncertainty": fact.get("uncertainty") or [],
+            "uncertainty": uncertainty,
             "conflict": conflict,
             "blocker_reason": self._blocker(
                 category=category,
@@ -502,6 +525,7 @@ class CarePlanService:
                 conflict=conflict,
                 removed=False,
                 confirmed=False,
+                source_title_requires_edit=oversized_title,
             ),
         }
 
@@ -658,9 +682,12 @@ class CarePlanService:
         conflict: dict[str, Any] | None = None,
         removed: bool,
         confirmed: bool,
+        source_title_requires_edit: bool = False,
     ) -> str | None:
         if removed:
             return None
+        if source_title_requires_edit:
+            return _SOURCE_TITLE_REVIEW
         if (
             not title.strip()
             or not instructions.strip()

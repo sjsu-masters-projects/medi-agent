@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
@@ -20,6 +21,57 @@ from app.services.care_plan_service import CarePlanService
 
 MEDICATION_FACT_ID = UUID("00000000-0000-0000-0000-000000000101")
 MONITORING_FACT_ID = UUID("00000000-0000-0000-0000-000000000102")
+
+
+@pytest.mark.parametrize(
+    "field,maximum", [("description", 300), ("instructions", 2000), ("frequency", 200)]
+)
+@pytest.mark.parametrize("extra", [0, 1, 38])
+def test_source_field_limits_preserve_evidence_and_block_overflow(
+    field: str, maximum: int, extra: int
+) -> None:
+    fact = _facts()[0 if field == "instructions" else 1]
+    fact["value"][field] = "é" * (maximum + extra)
+    original = deepcopy(fact)
+    item = CarePlanService(MagicMock())._item_from_fact(
+        fact, category="medication" if field == "instructions" else "monitoring", conflict={}
+    )
+    assert fact == original
+    assert item["source_fact_id"] == fact["id"]
+    assert len(item["title"]) <= 300
+    assert len(item["instructions"]) <= 2000
+    assert len(item["frequency"]) <= 200
+    assert bool(item["blocker_reason"]) is bool(extra)
+    if extra and field != "description":
+        assert item[field] == ""
+    if extra and field == "description":
+        assert item["title"].endswith("…")
+        assert item["instructions"] == original["value"][field]
+
+
+@pytest.mark.asyncio
+async def test_oversized_title_does_not_fail_the_generation_batch() -> None:
+    service = CarePlanService(MagicMock())
+    facts = _facts()
+    facts[1]["value"]["description"] = "x" * 338
+    service._plan_facts = MagicMock(return_value=facts)
+    service._select_categories = AsyncMock(
+        return_value={str(MEDICATION_FACT_ID): "medication", str(MONITORING_FACT_ID): "monitoring"}
+    )
+    service._open_draft = MagicMock(return_value={"id": str(UUID(int=303))})
+    await service._generate(
+        {
+            "patient_id": str(UUID(int=302)),
+            "request_id": str(UUID(int=301)),
+            "source_watermark": "2026-10-01T23:00:00Z",
+        }
+    )
+    name, payload = service.db.rpc.call_args.args
+    assert name == "complete_care_plan_generation"
+    assert len(payload["p_items"]) == 2
+    assert payload["p_items"][1]["blocker_reason"] == care_plan_service._SOURCE_TITLE_REVIEW
+    assert len(payload["p_items"][1]["title"]) == 300
+    service.db.table.assert_not_called()
 
 
 @pytest.mark.asyncio

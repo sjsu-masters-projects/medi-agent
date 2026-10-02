@@ -23,6 +23,22 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("CarePlanPanel", () => {
+    it("requires replacing an abbreviated source heading even after confirmation", async () => {
+        const warning = "Source title exceeds the draft limit; replace it after reviewing the full evidence.";
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({latest: {
+            id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft", items: [{
+                id: "item-1", category: "movement", title: "Abbreviated heading…", instructions: "Full source instruction", frequency: "daily",
+                schedule: {}, medication: {}, uncertainty: [warning], conflict: {}, is_removed: false, blocker_reason: warning,
+            }],
+        }, active: null, patient_locale: "en-US", active_medications: []});
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        render(<CarePlanPanel patientId="patient-1" />);
+        fireEvent.click(await screen.findByRole("checkbox", {name: "Confirm after review"}));
+        expect(screen.getByText(/1 unresolved item/)).toBeInTheDocument();
+        expect(screen.getByRole("button", {name: "Approve and publish plan"})).toBeDisabled();
+        fireEvent.change(screen.getByRole("textbox", {name: "Title"}), {target: {value: "Reviewed activity"}});
+        expect(screen.queryByText(/1 unresolved item/)).not.toBeInTheDocument();
+    });
     beforeEach(() => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockReset();
         vi.mocked(fetchClinicianCarePlanGeneration).mockReset();
@@ -228,6 +244,10 @@ describe("CarePlanPanel", () => {
         render(<CarePlanPanel patientId="patient-1" />);
 
         const approve = await screen.findByRole("button", { name: "Approve and publish plan" });
+        expect(screen.getAllByRole("textbox", { name: "Medication name" })).toHaveLength(1);
+        expect(screen.getAllByRole("textbox", { name: "Dose" })).toHaveLength(1);
+        expect(screen.getAllByRole("combobox", { name: "Route" })).toHaveLength(1);
+        expect(screen.queryByRole("textbox", { name: "Medication dosage" })).not.toBeInTheDocument();
         fireEvent.change(screen.getByPlaceholderText("Record the basis for your approval."), { target: { value: "Reviewed" } });
         expect(approve).toBeDisabled();
         expect(screen.getByText(/final patient-facing wording/)).toBeInTheDocument();
