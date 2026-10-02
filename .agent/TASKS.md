@@ -123,8 +123,8 @@ PAT-005.
 | `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | E is deployed; F exposed non-persisting adherence actions. Deploy/verify F before recording the fresh proof. This remains the PAT-005 completion gate. |
 | `PAT-005-D` — safe plan revision review | **Done** | Rajeev — PR #115 | Active/proposed comparison, linked source documents, citation display, and unsaved-edit guard deployed; Maya's draft loads on 2026-09-30. | This is a review aid only. Exact Today preview, locale-safe publication, medication matching, and live v1→v2 proof remain `PAT-005-E/C` gates. |
 | `PAT-005-E` — approval safety and citation clarity | **Done** | Rajeev — PR #116 | Migration 042 applied; live Maya review verified wording edits reset attestation, save/reload retained edits, explicit medication decisions blocked/enabled approval, and approved V1 became immutable. | Synthetic English wording was manually reviewed; this is not automatic translation. Full fresh scenario, rollback and denial proof remain C. |
-| `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — `codex/patient-care-labels`, PR #119 | Repeat persisted completion/barrier and clinician follow-up after deployed PR #118; finish patient naming and CodeQL follow-up. | Maya V1 approved; English follow-up uploaded for V2. Legacy PRN/unknown cadence, extraction completeness, hydration diagnosis, exact preview and version-history proof remain open. Blocks C. |
-| `PAT-005-G` — incomplete-evidence draft persistence | **Claimed** | Rajeev — `codex/patient-care-labels`, PR #119 | Persist missing evidence as explicit editable/removable blockers; enforce generation completeness atomically at publication and test against real SQL constraints. | Migration 043 and local PostgreSQL contract tests in progress. C's V2 proof waits for migration/deployment and repeat acceptance. No remote migration or cleanup without exact authorization. |
+| `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — coordinate with `codex/care-plan-oversized-evidence` | Repeat persisted completion/barrier and clinician follow-up after deployed PR #118/#119; remove duplicate medication review controls. | Maya V1 approved; English follow-up uploaded for V2. Legacy PRN/unknown cadence, extraction completeness, hydration diagnosis, exact preview and version-history proof remain open. Blocks C. |
+| `PAT-005-G` — incomplete-evidence draft persistence | **Claimed** | Rajeev — `codex/care-plan-oversized-evidence` | Handle oversized source fields as cited, non-confirmable review blockers rather than failing the whole generation batch. | PR #119 merged/deployed and migration 043 applied. Maya's retry exposed a 338-character title against the 300-character draft limit. C still waits for the repaired deployed V2/reload/history proof. No additional migration planned. |
 | `PAT-005-H` — patient reminder usability | **Ready** | Unclaimed — coordinate with patient-portal owner | Compact schedule summaries; edit one activity at a time; contextual Today setup; timezone under advanced settings. | Can design in parallel with G. Preserve clinician-approved frequency, meal/event instructions and persisted preferences; no automatic assignment of clinical times or routine PRN reminders. |
 | `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
 | `PAT-002-C` — symptom timeline and clinician report detail | **Sequenced** | Patient + clinician portal lanes — unassigned | Show each confirmed report in the patient's timeline and an authorized clinician detail view with clearly separated patient answers, document-grounded context, and clinician decisions. | Starts after `PAT-002-B` establishes the confirmed-report contract. Blocks `PV-001`; preserve patient/clinic assignment isolation, source citations, and audit linkage. |
@@ -1135,6 +1135,13 @@ resources remain evidence-only and do not create local truth.
 
 ### REC-001 — Complete record ingestion lifecycle
 
+- [ ] Add content-derived document display titles after grounded extraction for future patient
+      and clinician uploads. Use only sourced document type, subject and date; never infer
+      missing diagnosis/date or rename the original file/storage key. Preserve the original
+      filename, document ID and provenance; show a neutral fallback and the original name
+      when uncertain. Reuse the display title consistently in document lists, chat catalog,
+      citations and care-plan review. Existing-document backfill is a separate opt-in step.
+      Ready for scoping with the evidence/portal owners; not part of PAT-005-G's generation fix.
 - [/] Establish one safe document-format and viewer contract. The generic clinical-document
       path supports PDF, JPEG, PNG, WebP, and TIFF only; it must render every supported source
       for the patient and assigned clinician, preserve the original artifact, and keep FHIR,
@@ -1716,15 +1723,16 @@ completion or report an adherence barrier, and that response becomes visible to 
       Do not treat optimistic UI state
       as persisted adherence or count this historical Maya run as the fresh scenario proof.
       Main repair implementation merged/deployed in PR #118; post-merge live acceptance
-      still needs verification. Patient naming and the CodeQL empty-except fix missed the
-      merge timing and continue on `codex/patient-care-labels`. Includes failure-state visibility,
+      still needs verification. Patient naming and the CodeQL empty-except fix merged in
+      PR #119. Duplicate medication inputs are repaired with the oversized-evidence fix.
+      Includes failure-state visibility,
       service/UI publication guards and pre-write field validation for partial generation.
 - [/] `PAT-005-G` repair the incomplete-evidence draft persistence contract. Missing source
       wording must remain cited review blockers, not invented instructions or silently omitted
       facts. Allow clinician edits/removal while publication enforces complete active items;
       check generation state in the atomic SQL publication path. Test actual SQL constraints,
       retry after partial writes, candidate provenance, draft uniqueness, and V1/history
-      preservation. Claimed by Rajeev in PR #119. May start local
+      preservation. Claimed by Rajeev on `codex/care-plan-oversized-evidence`. May start local
       design/tests alongside F, but deployed V2 acceptance in C depends on both. Remote schema
       changes require separate explicit authorization. Reproduction: Maya had 53 eligible
       facts; 42 lacked frequency, while migration 040 required nonempty draft fields.
@@ -1732,8 +1740,18 @@ completion or report an adherence barrier, and that response becomes visible to 
       PR #119 implements missing-field review, transactional evidence/completion writes,
       stale-claim guards and database publication/immutability checks. Seven disposable local
       PostgreSQL cases pass (real constraints and approval function, rollback, permission
-      boundary and assignment denial). Remote migration 043 and deployed V2/reload/history
-      proof remain pending; do not mark G or PAT-005 complete from these component tests.
+      boundary and assignment denial). PR #119 merged/deployed and the user applied migration
+      043. The next retry failed because a source-derived title was 338 characters (limit 300).
+      Keep the complete fact/citation unchanged; abbreviate only the draft review heading,
+      require a reviewed replacement or removal (confirmation alone cannot resolve it), and
+      leave oversized instructions/frequency empty and blocked rather than truncating clinical
+      wording. Add boundary and real-SQL regression coverage. Deployed V2/reload/history proof
+      remains pending; do not mark G or PAT-005 complete from component tests.
+      Current fix verification: 1,449 backend tests passed (84.35% coverage; ten opt-in SQL
+      cases skipped in that run), all ten disposable SQL cases passed separately, and clinician
+      lint/typecheck/build plus 106 tests passed. Read-only preparation of Maya's 53 facts kept
+      all 53 items within storage bounds: one oversized heading and 42 review blockers; no model
+      call or remote write. This does not prove deployed model generation or publication.
 - [ ] `PAT-005-H` simplify patient reminder setup. Show a compact activity/saved-time summary,
       then edit one item in a focused accessible panel reached from Today or settings. Keep
       daily days implicit, show weekday choices only for a sourced weekly cadence, and show

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+
+from app.services.care_plan_service import CarePlanService
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("CARE_PLAN_TEST_POSTGRES") != "1",
@@ -156,6 +160,46 @@ def test_missing_evidence_persists_but_confirmation_cannot_publish(sql) -> None:
     )
     assert "complete reviewed instructions" in error
     assert sql("SELECT status FROM care_plan_versions") == "draft"
+
+
+@pytest.mark.parametrize(
+    "field,length", [("description", 338), ("instructions", 2001), ("frequency", 201)]
+)
+def test_oversized_evidence_commits_a_blocked_draft_against_real_constraints(
+    sql, field: str, length: int
+) -> None:
+    medication = field == "instructions"
+    fact = {
+        "id": FACT,
+        "fact_type": "medication" if medication else "obligation",
+        "value": {
+            "name": "Synthetic medication",
+            "dosage": "1 mg",
+            "route": "oral",
+            "description": "Synthetic activity",
+            "instructions": "Synthetic instruction",
+            "frequency": "daily",
+            field: "x" * length,
+        },
+        "confidence_score": 0.95,
+    }
+    prepared = CarePlanService(MagicMock())._item_from_fact(
+        fact, category="medication" if medication else "monitoring", conflict={}
+    )
+    sql(batch(json.dumps([prepared])))
+    assert sql("SELECT status FROM care_plan_generation_requests") == "completed"
+    assert sql("SELECT count(*) FROM care_plan_items WHERE blocker_reason IS NOT NULL") == "1"
+    sql("UPDATE care_plan_items SET reviewed_locale='en-US'")
+    assert (
+        "blockers must be resolved"
+        in sql(
+            f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')",
+            succeeds=False,
+        ).lower()
+    )
+    assert sql("SELECT status FROM care_plan_versions") == "draft"
+    assert sql("SELECT count(*) FROM medications") == "0"
+    assert sql("SELECT count(*) FROM obligations") == "0"
 
 
 def test_bad_batch_rolls_back_items_audit_and_completion(sql) -> None:

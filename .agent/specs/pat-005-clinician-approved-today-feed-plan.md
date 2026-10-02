@@ -68,6 +68,12 @@ active items inside its transaction, and approved item wording is immutable. Mig
 must precede deployment of this contract; disposable local PostgreSQL tests cover it without
 remote credentials or live provider calls.
 
+Oversized source wording must not fail the entire draft batch. Preserve the full fact and
+citations; abbreviate only the review heading and require a clinician replacement or removal
+before publication. Confirmation alone cannot resolve an abbreviated heading. Oversized
+instructions or frequency stay empty and blocked until reviewed wording is supplied; never
+silently truncate clinical instructions. This uses migration 043's existing draft contract.
+
 ## Revision review after an approved plan
 
 When new documents register grounded facts, the approved version remains active while a newer

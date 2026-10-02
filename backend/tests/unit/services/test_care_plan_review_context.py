@@ -262,3 +262,48 @@ def test_draft_save_persists_explicit_locale_review() -> None:
     with pytest.raises(ValidationError, match="language changed"):
         service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, stale)
     db.table.return_value.update.assert_not_called()
+
+
+@pytest.mark.parametrize("edited,removed", [(False, False), (True, False), (False, True)])
+def test_abbreviated_source_title_requires_edit_or_removal(edited: bool, removed: bool) -> None:
+    from app.services.care_plan_service import _SOURCE_TITLE_REVIEW
+
+    db = MagicMock()
+    service = CarePlanService(db)
+    service._require_assignment = MagicMock()
+    service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
+    service._items = MagicMock(
+        return_value=[
+            {
+                "id": str(PATIENT_ID),
+                "category": "movement",
+                "title": "x" * 299 + "…",
+                "uncertainty": [_SOURCE_TITLE_REVIEW, "Retain this other uncertainty"],
+                "confidence_score": 0.95,
+            }
+        ]
+    )
+    service._patient_locale = MagicMock(return_value="en-US")
+    service._active_medications = MagicMock(return_value=[])
+    service._audit = MagicMock()
+    service._plan = MagicMock(return_value={})
+    service._hydrate_plan = MagicMock(return_value={})
+    update = CarePlanDraftUpdate.model_validate(
+        {
+            "items": [
+                {
+                    "id": str(PATIENT_ID),
+                    "title": "Reviewed activity" if edited else "x" * 299 + "…",
+                    "instructions": "Reviewed source instruction",
+                    "frequency": "daily",
+                    "clinician_confirmed": True,
+                    "is_removed": removed,
+                }
+            ]
+        }
+    )
+    service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, update)
+    payload = db.table.return_value.update.call_args.args[0]
+    assert bool(payload["blocker_reason"]) is (not edited and not removed)
+    assert (_SOURCE_TITLE_REVIEW in payload["uncertainty"]) is (not edited)
+    assert "Retain this other uncertainty" in payload["uncertainty"]
