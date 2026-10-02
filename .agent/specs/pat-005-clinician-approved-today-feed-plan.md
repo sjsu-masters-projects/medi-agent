@@ -76,6 +76,28 @@ silently truncate clinical instructions. This uses migration 043's existing draf
 
 ## Revision review after an approved plan
 
+Automatic generation uses only medication/activity facts supported by unwithdrawn uploaded
+documents or clinician entries. SMART/FHIR and external-record candidates remain in their
+reconciliation workspace; import alone does not mean a historical therapy belongs in today's
+care plan. Already-persisted imported proposals are retained and labeled, with an explicit
+clinician action to exclude them from the draft (not delete source records). Approved
+carried-forward items are not included in that bulk exclusion.
+
+Exact structured-source matches, identical instructions with potentially different cadence,
+and same-name medication proposals are overlap review groups, not automatic equivalence or
+translation decisions. The reviewer compares sources and keeps/removes proposals explicitly;
+all item rows, source facts and citations survive. Removed items can be expanded and restored.
+The API and migration 044 publication trigger reject unresolved overlaps atomically, including
+identical-source items whose carried-forward display wording was translated. Different
+event/schedule contexts are not automatically combined. Future carried-forward medications
+link their prior approved projection as an update, never reuse the original create decision.
+No missing route is inferred; unsupported route wording requires clinician review.
+
+Rollout: apply `044_care_plan_overlap_publication_guard.sql` with the existing migration
+runner before deploying. Reload the existing draft, explicitly exclude imported proposals,
+review overlap groups, save, then verify publication/Today and historical adherence. Do not
+retry completed generation to clean up an existing draft. Full PAT-005 live proof remains open.
+
 When new documents register grounded facts, the approved version remains active while a newer
 draft is prepared. The assigned clinician needs both snapshots in one review: the current
 approved version, the proposed version, each item's linked source documents/pages, and a clear

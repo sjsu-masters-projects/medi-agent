@@ -86,7 +86,7 @@ def sql(tmp_path: Path):
             patient_id uuid, action_type text, proposed_payload jsonb, evidence jsonb,
             rationale text, proposer_type text, proposer_reference text, state text);
           CREATE TABLE public.clinical_facts(id uuid PRIMARY KEY, patient_id uuid,
-            review_state text);
+            review_state text, fact_type text, value jsonb);
           CREATE TYPE public.adherence_target_type_enum AS ENUM ('medication', 'obligation');
           CREATE FUNCTION public.update_updated_at() RETURNS trigger LANGUAGE plpgsql
             AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
@@ -113,6 +113,7 @@ def sql(tmp_path: Path):
         """)
         execute((MIGRATIONS / "042_care_plan_publication_review_guards.sql").read_text())
         execute((MIGRATIONS / "043_incomplete_care_plan_drafts.sql").read_text())
+        execute((MIGRATIONS / "044_care_plan_overlap_publication_guard.sql").read_text())
         execute(f"""
           INSERT INTO patients(id) VALUES ('{PATIENT}');
           INSERT INTO auth.users VALUES ('{PATIENT}');
@@ -138,6 +139,88 @@ def sql(tmp_path: Path):
 def batch(items: str) -> str:
     return f"""SELECT complete_care_plan_generation('{PLAN}', '{REQUEST}',
       '2026-10-01T00:00:00Z', '{items}'::jsonb);"""
+
+
+@pytest.mark.parametrize("cadence", ["daily", "weekly"])
+def test_overlap_guard_rolls_back_publication_and_preserves_sources(sql, cadence) -> None:
+    second = "00000000-0000-0000-0000-000000000005"
+    sql(f"INSERT INTO clinical_facts VALUES ('{second}', '{PATIENT}', 'pending_review')")
+    prepared = {
+        "source_fact_id": FACT,
+        "category": "movement",
+        "title": "Walk",
+        "instructions": "Walk 20 minutes",
+        "frequency": "daily",
+        "confidence_score": 1,
+    }
+    sql(
+        batch(
+            json.dumps(
+                [
+                    prepared,
+                    {
+                        **prepared,
+                        "source_fact_id": second,
+                        "title": "Another heading",
+                        "frequency": cadence,
+                    },
+                ]
+            )
+        )
+    )
+    sql("UPDATE care_plan_items SET reviewed_locale='en-US'")
+    old_plan = "00000000-0000-0000-0000-000000000006"
+    sql(f"UPDATE care_plan_versions SET version_number=2 WHERE id='{PLAN}'")
+    sql(
+        f"INSERT INTO care_plan_versions(id, patient_id, version_number, source_watermark, status, approved_by, approved_at) "
+        f"VALUES ('{old_plan}', '{PATIENT}', 1, '2026-09-01T00:00:00Z', 'approved', '{PATIENT}', now())"
+    )
+    error = sql(
+        f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')",
+        succeeds=False,
+    )
+    assert "overlapping" in error
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{PLAN}'") == "draft"
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{old_plan}'") == "approved"
+    assert sql("SELECT count(*) FROM obligations") == "0"
+    assert sql("SELECT count(*) FROM clinical_recommendations") == "0"
+    assert sql("SELECT count(*) FROM care_plan_items") == "2"
+    sql(f"UPDATE care_plan_items SET is_removed=true WHERE source_fact_id='{second}'")
+    sql(f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')")
+    assert sql("SELECT count(*) FROM obligations") == "1"
+    assert sql("SELECT count(*) FROM clinical_facts") == "2"
+
+
+def test_translated_duplicate_source_cannot_bypass_atomic_guard(sql) -> None:
+    second = "00000000-0000-0000-0000-000000000005"
+    sql(f"INSERT INTO clinical_facts VALUES ('{second}', '{PATIENT}', 'pending_review')")
+    sql(
+        "UPDATE clinical_facts SET fact_type='obligation', value="
+        '\'{"description":"Caminar 20 minutos","frequency":"daily"}\'::jsonb'
+    )
+    prepared = {
+        "source_fact_id": FACT,
+        "category": "movement",
+        "title": "Walk",
+        "instructions": "Walk 20 minutes",
+        "frequency": "daily",
+        "confidence_score": 1,
+    }
+    sql(
+        batch(
+            json.dumps(
+                [
+                    prepared,
+                    {**prepared, "source_fact_id": second, "instructions": "Take a 20-minute walk"},
+                ]
+            )
+        )
+    )
+    sql("UPDATE care_plan_items SET reviewed_locale='en-US'")
+    assert "overlapping" in sql(
+        f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Reviewed')", succeeds=False
+    )
+    assert sql("SELECT count(*) FROM obligations") == "0"
 
 
 def item(*, frequency: str = "", category: str = "monitoring") -> str:

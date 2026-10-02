@@ -25,6 +25,7 @@ from app.services.care_plan_classification import (
     CarePlanClassificationError,
     classify_facts,
 )
+from app.services.care_plan_reconciliation import overlaps
 from app.services.clinical_fact_service import ClinicalFactService
 
 logger = logging.getLogger(__name__)
@@ -203,7 +204,24 @@ class CarePlanService:
             self.db.table("care_plan_items").update(payload).eq("id", str(item_id)).eq(
                 "plan_version_id", str(plan_id)
             ).execute()
-        self._audit(plan_id, clinician_id, "draft_edited", {"item_count": len(update.items)})
+        self._audit(
+            plan_id,
+            clinician_id,
+            "draft_edited",
+            {
+                "item_count": len(update.items),
+                "removed_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if item.is_removed and not known[str(item.id)].get("is_removed")
+                ],
+                "restored_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if not item.is_removed and known[str(item.id)].get("is_removed")
+                ],
+            },
+        )
         return self._hydrate_plan(self._plan(plan_id, patient_id))
 
     def approve(
@@ -214,7 +232,8 @@ class CarePlanService:
         self._require_generation_complete(clinician_id, patient_id)
         locale = self._patient_locale(patient_id)
         medications = self._active_medications(patient_id)
-        for item in self._items(plan_id):
+        items = self._items(plan_id)
+        for item in items:
             if item.get("is_removed"):
                 continue
             if item.get("reviewed_locale") != locale:
@@ -226,6 +245,20 @@ class CarePlanService:
                     != str((item.get("medication") or {}).get("frequency") or "").strip()
                 ):
                     raise ValidationError("Medication frequency must match the patient-facing item")
+        fact_ids = [str(item["source_fact_id"]) for item in items if item.get("source_fact_id")]
+        facts: list[dict[str, Any]] = []
+        if fact_ids:
+            facts = cast(
+                list[dict[str, Any]],
+                self.db.table("clinical_facts")
+                .select("id, fact_type, value")
+                .in_("id", fact_ids)
+                .execute()
+                .data
+                or [],
+            )
+        if overlaps(items, facts):
+            raise ValidationError("Resolve overlapping plan items before publication")
         result = self.db.rpc(
             "approve_care_plan_version",
             {
@@ -424,7 +457,31 @@ class CarePlanService:
             .order("created_at", desc=True)
             .execute()
         )
-        return cast(list[dict[str, Any]], result.data or [])
+        facts = cast(list[dict[str, Any]], result.data or [])
+        if not facts:
+            return []
+        citations = cast(
+            list[dict[str, Any]],
+            self.db.table("evidence_citations")
+            .select("fact_id, source_provenances!inner(artifact_type, document_id, withdrawn_at)")
+            .in_("fact_id", [str(fact["id"]) for fact in facts])
+            .execute()
+            .data
+            or [],
+        )
+        eligible = {
+            str(row["fact_id"])
+            for row in citations
+            if (source := row.get("source_provenances"))
+            and not source.get("withdrawn_at")
+            and (
+                source.get("artifact_type") == "clinician_entry"
+                or (source.get("artifact_type") == "document" and source.get("document_id"))
+            )
+        }
+        # SMART/FHIR candidates stay in External records. Importing a resource is
+        # not an instruction to propose that historical therapy in today's plan.
+        return [fact for fact in facts if str(fact["id"]) in eligible]
 
     async def _select_categories(self, facts: list[dict[str, Any]]) -> dict[str, str]:
         """Let the model classify fixed evidence; it cannot author an instruction."""
@@ -581,6 +638,12 @@ class CarePlanService:
                         "is_removed",
                     }
                 }
+                if item.get("projection_type") == "medication" and item.get("projection_id"):
+                    payload["medication"] = {
+                        **(item.get("medication") or {}),
+                        "decision": "update",
+                        "target_id": str(item["projection_id"]),
+                    }
                 self.db.table("care_plan_items").insert(
                     {
                         **payload,
@@ -699,6 +762,15 @@ class CarePlanService:
             str(medication.get(k) or "").strip() for k in ("name", "dosage", "frequency", "route")
         ):
             return "Medication name, dose, route, and frequency are required before approval."
+        if category == "medication" and medication.get("route") not in {
+            "oral",
+            "topical",
+            "inhaled",
+            "iv",
+            "im",
+            "subcutaneous",
+        }:
+            return "Review and select a supported medication route before approval."
         if confirmed:
             return None
         if conflict:
@@ -751,7 +823,18 @@ class CarePlanService:
         items = self._items(UUID(str(plan["id"])))
         fact_ids = [str(item["source_fact_id"]) for item in items if item.get("source_fact_id")]
         sources: dict[str, list[dict[str, Any]]] = {}
+        facts: list[dict[str, Any]] = []
+        origins: dict[str, set[str]] = {}
         if fact_ids:
+            facts = cast(
+                list[dict[str, Any]],
+                self.db.table("clinical_facts")
+                .select("id, fact_type, value")
+                .in_("id", fact_ids)
+                .execute()
+                .data
+                or [],
+            )
             citations = cast(
                 list[dict[str, Any]],
                 self.db.table("evidence_citations")
@@ -769,7 +852,7 @@ class CarePlanService:
                 cast(
                     list[dict[str, Any]],
                     self.db.table("source_provenances")
-                    .select("id, document_id, document_location")
+                    .select("id, document_id, document_location, artifact_type")
                     .in_("id", provenance_ids)
                     .execute()
                     .data
@@ -804,6 +887,9 @@ class CarePlanService:
             for citation in citations:
                 source = by_provenance.get(str(citation.get("provenance_id")))
                 if source:
+                    origins.setdefault(str(citation["fact_id"]), set()).add(
+                        str(source.get("artifact_type") or "unknown")
+                    )
                     document_id = source.get("document_id")
                     location = citation.get("location") or source.get("document_location") or {}
                     excerpt = " ".join(str(citation.get("excerpt") or "").split())
@@ -824,11 +910,18 @@ class CarePlanService:
                             "location": location,
                         }
                     )
+        peers = overlaps(items, facts) if plan.get("status") == "draft" else {}
         return {
             **plan,
             "items": [
                 {
                     **item,
+                    "overlapping_item_ids": peers.get(str(item["id"]), []),
+                    "imported_evidence": bool(
+                        origins.get(str(item.get("source_fact_id")))
+                        and origins[str(item.get("source_fact_id"))]
+                        <= {"fhir_resource", "external_record"}
+                    ),
                     "source": next(iter(sources.get(str(item.get("source_fact_id")), [])), None),
                     "sources": sources.get(str(item.get("source_fact_id")), []),
                 }

@@ -67,6 +67,7 @@ def test_review_context_denies_unassigned_clinician_before_reading_plans() -> No
 def test_hydrated_item_retains_every_supporting_document() -> None:
     db = MagicMock()
     responses = {
+        "clinical_facts": [],
         "care_plan_items": [{"id": "item-1", "source_fact_id": "fact-1"}],
         "evidence_citations": [
             {
@@ -193,6 +194,7 @@ def test_approval_calls_transaction_for_reviewed_matching_medication() -> None:
                 "is_removed": False,
                 "reviewed_locale": "en-US",
                 "frequency": "daily",
+                "id": str(PATIENT_ID),
                 "medication": {
                     "decision": "update",
                     "target_id": "med-1",
@@ -307,3 +309,6 @@ def test_abbreviated_source_title_requires_edit_or_removal(edited: bool, removed
     assert bool(payload["blocker_reason"]) is (not edited and not removed)
     assert (_SOURCE_TITLE_REVIEW in payload["uncertainty"]) is (not edited)
     assert "Retain this other uncertainty" in payload["uncertainty"]
+    assert service._audit.call_args.args[3]["removed_item_ids"] == (
+        [str(PATIENT_ID)] if removed else []
+    )

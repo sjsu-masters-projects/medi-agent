@@ -203,6 +203,8 @@ export interface CarePlanItem {
     blocker_reason?: string | null;
     reviewed_locale?: string | null;
     is_removed: boolean;
+    imported_evidence?: boolean;
+    overlapping_item_ids?: string[];
     source?: {
         document_id?: string;
         file_name?: string | null;
