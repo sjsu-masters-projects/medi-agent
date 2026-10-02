@@ -788,6 +788,15 @@ class TestPatientDeepDiveRoutes:
                     }
                 ],
                 "obligation_completion_rate": 0.5,
+                "adherence_barriers": [
+                    {
+                        "target_type": "obligation",
+                        "target_id": str(patient_id),
+                        "barrier_code": "schedule",
+                        "notes": "Synthetic schedule conflict",
+                        "logged_at": "2026-10-02T09:00:00Z",
+                    }
+                ],
             }
         )
 
@@ -798,6 +807,8 @@ class TestPatientDeepDiveRoutes:
         assert data["documents"][0]["review_status"] == "approved"
         assert data["documents"][0]["reviewer"]["first_name"] == "Priya"
         assert data["obligations"][0]["description"] == "Walk daily"
+        assert data["adherence_barriers"][0]["barrier_code"] == "schedule"
+        assert data["adherence_barriers"][0]["notes"] == "Synthetic schedule conflict"
 
 
 class TestDocumentReviewQueueRoutes:

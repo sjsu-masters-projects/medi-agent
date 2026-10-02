@@ -279,6 +279,24 @@ async def test_vertex_enforces_the_schema_natively(client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_background_adapter_schema_reaches_vertex_config(client) -> None:
+    seen: list[object] = []
+    schema = {"type": "object", "properties": {"items": {"type": "array"}}}
+
+    async def _generate_content(**kwargs):
+        seen.append(kwargs["config"])
+        return _response('{"items": []}')
+
+    client.genai_client.aio.models.generate_content = _generate_content
+
+    await client.generate(prompt="classify", response_schema=schema, thinking_level="LOW")
+
+    assert seen[0].response_schema == schema
+    assert seen[0].response_mime_type == "application/json"
+    assert seen[0].thinking_config.thinking_level == "LOW"
+
+
+@pytest.mark.asyncio
 async def test_the_schema_is_not_also_pasted_into_the_prompt(client) -> None:
     """Asking twice is not stronger than constraining once, and it costs input tokens."""
     prompts: list[str] = []

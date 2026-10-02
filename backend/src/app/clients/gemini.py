@@ -14,11 +14,12 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.core.exceptions import LLMError
+from app.models.generation import GenerationErrorCode, GenerationProviderError
 
 logger = logging.getLogger(__name__)
 
 
-class AnswerTruncatedError(LLMError):
+class AnswerTruncatedError(GenerationProviderError):
     """The model ran out of the token budget we set, mid-answer.
 
     A distinct type because it is the one failure here that resending the identical
@@ -27,6 +28,50 @@ class AnswerTruncatedError(LLMError):
     lead to different handling, and collapsing them into one generic error is how a
     truncated clinical answer gets retried three times and then reported as an outage.
     """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(GenerationErrorCode.TRUNCATED, message)
+
+
+_STATUS_TO_GENERATION_ERROR: dict[int, GenerationErrorCode] = {
+    400: GenerationErrorCode.INVALID_REQUEST,
+    401: GenerationErrorCode.AUTHENTICATION,
+    403: GenerationErrorCode.AUTHENTICATION,
+    404: GenerationErrorCode.CONFIGURATION,
+    422: GenerationErrorCode.INVALID_REQUEST,
+    429: GenerationErrorCode.RATE_LIMITED,
+}
+
+_RETRYABLE_GENERATION_ERRORS = frozenset(
+    {
+        GenerationErrorCode.RATE_LIMITED,
+        GenerationErrorCode.TIMEOUT,
+        GenerationErrorCode.UNAVAILABLE,
+    }
+)
+
+
+def _provider_error_code(exc: Exception) -> GenerationErrorCode:
+    """Classify a provider error using only its safe transport status.
+
+    SDK messages can contain provider diagnostics and are never suitable for application
+    logs.  Both the Google Gen AI SDK and its underlying HTTP stack expose a numeric
+    status as ``status_code`` or ``code``; unknown failures remain unavailable rather
+    than guessing from exception text.
+    """
+    if isinstance(exc, GenerationProviderError):
+        return exc.code
+    if isinstance(exc, TimeoutError):
+        return GenerationErrorCode.TIMEOUT
+
+    for attribute in ("status_code", "code"):
+        raw_status = getattr(exc, attribute, None)
+        if isinstance(raw_status, int):
+            return _STATUS_TO_GENERATION_ERROR.get(
+                raw_status,
+                GenerationErrorCode.UNAVAILABLE,
+            )
+    return GenerationErrorCode.UNAVAILABLE
 
 
 def _honours_sampling_parameters(model: str) -> bool:
@@ -166,6 +211,7 @@ class GeminiClient:
         max_tokens: int = 2048,
         thinking_level: str | None = None,
         response_model: type[BaseModel] | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
         """Generate text completion.
 
@@ -177,8 +223,11 @@ class GeminiClient:
                 which manage their own sampling — see `_honours_sampling_parameters`.
             max_tokens: Max output tokens, covering reasoning and answer together
             thinking_level: Reasoning ceiling — LOW, MEDIUM or HIGH (Vertex only)
-            response_model: Schema the answer must satisfy, enforced natively by Vertex.
+            response_model: Pydantic schema the answer must satisfy, enforced natively by Vertex.
                 Ignored on AI Studio, which has no native structured-output path.
+            response_schema: JSON schema for an adapter-owned structured request. This is
+                equivalent to ``response_model`` on Vertex and keeps provider contracts
+                independent of callers' Pydantic classes.
 
         Returns:
             Generated text
@@ -187,6 +236,8 @@ class GeminiClient:
             LLMError: If generation fails after retries, or is truncated
         """
         if self.use_vertex_ai:
+            if response_model is not None and response_schema is not None:
+                raise ValueError("Specify either response_model or response_schema, not both")
             return await self._generate_genai_sdk(
                 prompt,
                 system_instruction,
@@ -194,7 +245,7 @@ class GeminiClient:
                 temperature,
                 max_tokens,
                 thinking_level,
-                response_model,
+                response_model or response_schema,
             )
         return await self._generate_ai_studio(
             prompt, system_instruction, image, temperature, max_tokens
@@ -208,7 +259,7 @@ class GeminiClient:
         temperature: float,
         max_tokens: int,
         thinking_level: str | None = None,
-        response_model: type[BaseModel] | None = None,
+        response_schema: type[BaseModel] | dict[str, Any] | None = None,
     ) -> str:
         """Generate using the Google Gen AI SDK.
 
@@ -233,15 +284,17 @@ class GeminiClient:
             max_output_tokens=max_tokens,
             system_instruction=system_instruction,
             thinking_config=(
-                types.ThinkingConfig(thinking_level=thinking_level) if thinking_level else None
+                types.ThinkingConfig(thinking_level=types.ThinkingLevel(thinking_level))
+                if thinking_level
+                else None
             ),
             # Native schema enforcement, rather than asking for a shape in the prompt and
             # hoping. Verified on the locked SDK that this coexists with `thinking_config`
             # — worth checking, because constrained decoding and reasoning collided badly
             # on MedGemma, where the grammar applied from the first token and the model
             # never got to think.
-            response_mime_type="application/json" if response_model else None,
-            response_schema=response_model,
+            response_mime_type="application/json" if response_schema else None,
+            response_schema=response_schema,
         )
 
         # Build content parts
@@ -300,16 +353,24 @@ class GeminiClient:
                     )
 
                 if not response.text:
-                    raise LLMError("Empty response from Gemini (Gen AI SDK)")
+                    raise GenerationProviderError(
+                        GenerationErrorCode.INVALID_RESPONSE,
+                        "Empty response from Gemini (Gen AI SDK)",
+                    )
 
                 return str(response.text)
 
             except TimeoutError:
                 logger.warning(
-                    f"Gemini (Gen AI SDK) timeout (attempt {attempt + 1}/{self.max_retries})"
+                    "Gemini (Gen AI SDK) failure category=timeout attempt=%d/%d",
+                    attempt + 1,
+                    self.max_retries,
                 )
                 if attempt == self.max_retries - 1:
-                    raise LLMError("Gemini (Gen AI SDK) request timed out") from None
+                    raise GenerationProviderError(
+                        GenerationErrorCode.TIMEOUT,
+                        "Gemini request timed out",
+                    ) from None
                 await asyncio.sleep(2**attempt)
 
             except AnswerTruncatedError:
@@ -319,15 +380,22 @@ class GeminiClient:
                 # handler so it reaches the caller as truncation rather than as an outage.
                 raise
 
-            except Exception as e:
-                logger.error(
-                    f"Gemini (Gen AI SDK) error (attempt {attempt + 1}/{self.max_retries}): {e}"
+            except GenerationProviderError:
+                raise
+
+            except Exception as exc:
+                code = _provider_error_code(exc)
+                logger.warning(
+                    "Gemini (Gen AI SDK) failure category=%s attempt=%d/%d",
+                    code.value,
+                    attempt + 1,
+                    self.max_retries,
                 )
-                if attempt == self.max_retries - 1:
-                    raise LLMError(f"Gemini (Gen AI SDK) generation failed: {e}") from e
+                if code not in _RETRYABLE_GENERATION_ERRORS or attempt == self.max_retries - 1:
+                    raise GenerationProviderError(code, "Gemini generation failed") from None
                 await asyncio.sleep(2**attempt)
 
-        raise LLMError("Gemini (Gen AI SDK) generation failed after all retries")
+        raise GenerationProviderError(GenerationErrorCode.UNAVAILABLE, "Gemini generation failed")
 
     async def _generate_ai_studio(
         self,
@@ -374,27 +442,42 @@ class GeminiClient:
                 )
 
                 if not response.text:
-                    raise LLMError("Empty response from Gemini (AI Studio)")
+                    raise GenerationProviderError(
+                        GenerationErrorCode.INVALID_RESPONSE,
+                        "Empty response from Gemini (AI Studio)",
+                    )
 
                 return str(response.text)
 
             except TimeoutError:
                 logger.warning(
-                    f"Gemini (AI Studio) timeout (attempt {attempt + 1}/{self.max_retries})"
+                    "Gemini (AI Studio) failure category=timeout attempt=%d/%d",
+                    attempt + 1,
+                    self.max_retries,
                 )
                 if attempt == self.max_retries - 1:
-                    raise LLMError("Gemini (AI Studio) request timed out") from None
+                    raise GenerationProviderError(
+                        GenerationErrorCode.TIMEOUT,
+                        "Gemini request timed out",
+                    ) from None
                 await asyncio.sleep(2**attempt)
 
-            except Exception as e:
-                logger.error(
-                    f"Gemini (AI Studio) error (attempt {attempt + 1}/{self.max_retries}): {e}"
+            except GenerationProviderError:
+                raise
+
+            except Exception as exc:
+                code = _provider_error_code(exc)
+                logger.warning(
+                    "Gemini (AI Studio) failure category=%s attempt=%d/%d",
+                    code.value,
+                    attempt + 1,
+                    self.max_retries,
                 )
-                if attempt == self.max_retries - 1:
-                    raise LLMError(f"Gemini (AI Studio) generation failed: {e}") from e
+                if code not in _RETRYABLE_GENERATION_ERRORS or attempt == self.max_retries - 1:
+                    raise GenerationProviderError(code, "Gemini generation failed") from None
                 await asyncio.sleep(2**attempt)
 
-        raise LLMError("Gemini (AI Studio) generation failed after all retries")
+        raise GenerationProviderError(GenerationErrorCode.UNAVAILABLE, "Gemini generation failed")
 
     async def generate_structured(
         self,
@@ -527,7 +610,9 @@ JSON response:""",
             system_instruction=system_instruction,
             max_output_tokens=max_tokens,
             thinking_config=(
-                types.ThinkingConfig(thinking_level=thinking_level) if thinking_level else None
+                types.ThinkingConfig(thinking_level=types.ThinkingLevel(thinking_level))
+                if thinking_level
+                else None
             ),
         )
 

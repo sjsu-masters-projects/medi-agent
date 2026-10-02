@@ -5,13 +5,18 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from supabase import Client
 
 from app.core.security import get_current_user, require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
-from app.models.care_plan import CarePlanApprovalRequest, CarePlanDraftUpdate
+from app.models.care_plan import (
+    CarePlanApprovalRequest,
+    CarePlanDraftUpdate,
+    CarePlanTodayPreviewRead,
+)
+from app.services.care_plan_preview_service import CarePlanPreviewService
 from app.services.care_plan_service import CarePlanService
 
 router = APIRouter()
@@ -20,6 +25,26 @@ _clinician_dep = require_role("clinician")
 
 def _service(db: Client = Depends(get_db)) -> CarePlanService:
     return CarePlanService(db)
+
+
+def _preview_service(db: Client = Depends(get_db)) -> CarePlanPreviewService:
+    return CarePlanPreviewService(db)
+
+
+@router.get(
+    "/clinician/patients/{patient_id}/{plan_id}/today-preview",
+    summary="Preview the saved proposal in today's patient feed without publishing",
+    response_model=CarePlanTodayPreviewRead,
+)
+async def preview_care_plan_today(
+    patient_id: UUID,
+    plan_id: UUID,
+    response: Response,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanPreviewService = Depends(_preview_service),
+) -> Any:
+    response.headers["Cache-Control"] = "no-store"
+    return await service.preview(user.id, patient_id, plan_id)
 
 
 @router.get("/patients/{patient_id}", summary="Get the active approved care plan")
@@ -44,6 +69,18 @@ async def get_clinician_care_plan(
     service: CarePlanService = Depends(_service),
 ) -> Any:
     return service.get_for_clinician(user.id, patient_id)
+
+
+@router.get(
+    "/clinician/patients/{patient_id}/review-context",
+    summary="Compare the latest draft with the current approved care plan",
+)
+async def get_care_plan_review_context(
+    patient_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanService = Depends(_service),
+) -> Any:
+    return service.get_review_context_for_clinician(user.id, patient_id)
 
 
 @router.get(

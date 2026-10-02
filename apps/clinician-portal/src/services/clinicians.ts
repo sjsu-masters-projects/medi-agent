@@ -258,12 +258,22 @@ export interface CarePlanItem {
     uncertainty: string[];
     conflict: Record<string, unknown>;
     blocker_reason?: string | null;
+    reviewed_locale?: string | null;
     is_removed: boolean;
+    imported_evidence?: boolean;
+    overlapping_item_ids?: string[];
     source?: {
         document_id?: string;
+        file_name?: string | null;
         excerpt?: string;
         location?: { page?: number };
     } | null;
+    sources?: Array<{
+        document_id?: string;
+        file_name?: string | null;
+        excerpt?: string;
+        location?: { page?: number };
+    }>;
 }
 
 export interface CarePlanVersion {
@@ -275,6 +285,21 @@ export interface CarePlanVersion {
     generation_error_code?: string | null;
     approved_at?: string | null;
     items: CarePlanItem[];
+}
+
+export interface CarePlanReviewContext {
+    latest: CarePlanVersion | null;
+    active: CarePlanVersion | null;
+    patient_locale: string;
+    active_medications: Array<{
+        id: string;
+        name: string;
+        dosage: string;
+        frequency: string;
+        route: string;
+        instructions?: string | null;
+        care_plan_item_id?: string | null;
+    }>;
 }
 
 export interface CarePlanGeneration {
@@ -700,12 +725,47 @@ export async function fetchClinicianCarePlan(patientId: string): Promise<CarePla
     return apiFetch<CarePlanVersion | null>(`/api/v1/care-plans/clinician/patients/${patientId}`);
 }
 
+export async function fetchClinicianCarePlanReviewContext(
+    patientId: string,
+): Promise<CarePlanReviewContext> {
+    return apiFetch<CarePlanReviewContext>(
+        `/api/v1/care-plans/clinician/patients/${patientId}/review-context`,
+    );
+}
+
 export async function fetchClinicianCarePlanGeneration(
     patientId: string,
 ): Promise<CarePlanGeneration | null> {
     return apiFetch<CarePlanGeneration | null>(
         `/api/v1/care-plans/clinician/patients/${patientId}/generation`,
     );
+}
+
+export interface CarePlanTodayPreview {
+    plan_id: string;
+    version_number: number;
+    generated_at: string;
+    feed: {
+        date: string;
+        timezone: string;
+        tasks: Array<{
+            id: string;
+            name: string;
+            description: string | null;
+            frequency: string;
+            status: "pending" | "completed" | "skipped" | "missed";
+            scheduled_at: string | null;
+            requires_schedule_configuration: boolean;
+            care_plan: { version_number: number; category: string } | null;
+        }>;
+    };
+}
+
+export async function fetchCarePlanTodayPreview(
+    patientId: string,
+    planId: string,
+): Promise<CarePlanTodayPreview> {
+    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}/today-preview`);
 }
 
 export async function updateClinicianCarePlan(
@@ -720,6 +780,8 @@ export async function updateClinicianCarePlan(
         medication: Record<string, unknown>;
         is_removed: boolean;
         clinician_confirmed: boolean;
+        language_verified: boolean;
+        verified_locale: "en-US" | "es-MX" | null;
     }>,
 ): Promise<CarePlanVersion> {
     return apiFetch<CarePlanVersion>(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}`, {

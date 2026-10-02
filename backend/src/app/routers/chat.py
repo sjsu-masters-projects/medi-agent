@@ -27,6 +27,10 @@ from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
 from app.safety import TRIAGE_COPY
 from app.services.a2a_task_service import A2ATaskService
+from app.services.chat_document_catalog import (
+    build_document_catalog_reply,
+    is_document_catalog_question,
+)
 from app.services.chat_service import ChatService, ConversationStateConflictError
 from app.services.drug_knowledge_service import DrugKnowledgeService
 from app.utils.localization import resolve_locale_resource
@@ -193,6 +197,68 @@ async def _send_terminal_event(websocket: WebSocket, payload: dict[str, Any]) ->
         logger.info("Chat websocket closed before its terminal event could be delivered")
         return False
     return True
+
+
+async def _send_document_catalog_reply(
+    *,
+    websocket: WebSocket,
+    service: ChatService,
+    patient_id: str,
+    incoming: ChatMessageCreate,
+    session_id: str,
+    document_context: dict[str, Any] | None,
+    conversation_history: list[dict[str, Any]],
+    conversation_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist and emit the deterministic answer to a portal-document catalog question."""
+    documents = await service.get_document_catalog(patient_id)
+    content = build_document_catalog_reply(documents, incoming.language)
+    await websocket.send_json(
+        {"type": "assistant_start", "intent": "document_catalog", "urgency": "routine"}
+    )
+    for chunk in _chunk_text(content):
+        await websocket.send_json({"type": "assistant_chunk", "content": chunk})
+
+    assistant_message = await service.save_message(
+        patient_id=patient_id,
+        data={
+            "content": content,
+            "role": ChatRole.ASSISTANT,
+            "intent": "document_catalog",
+            "language": incoming.language,
+        },
+    )
+    assistant_payload = _serialize_chat_message(assistant_message)
+    conversation_history.append(assistant_payload)
+    next_state = _build_conversation_state(
+        conversation_history,
+        prior_state=conversation_state,
+        last_intent="document_catalog",
+        last_urgency="routine",
+        last_route="triage",
+    )
+    await _persist_conversation_state_with_retry(
+        service,
+        patient_id=patient_id,
+        session_id=session_id,
+        language=incoming.language,
+        document_context=document_context,
+        conversation_history=conversation_history,
+        fallback_state=next_state,
+        last_intent="document_catalog",
+        last_urgency="routine",
+        last_route="triage",
+    )
+    await websocket.send_json(
+        {
+            "type": "assistant_complete",
+            "message": assistant_payload,
+            "intent": "document_catalog",
+            "urgency": "routine",
+            "escalation_required": False,
+        }
+    )
+    return next_state
 
 
 async def _persist_conversation_state_with_retry(
@@ -558,6 +624,19 @@ async def chat_websocket_endpoint(
             user_payload = _serialize_chat_message(user_message)
             conversation_history.append(user_payload)
             await websocket.send_json({"type": "user_message_saved", "message": user_payload})
+
+            if is_document_catalog_question(incoming.content):
+                conversation_state = await _send_document_catalog_reply(
+                    websocket=websocket,
+                    service=service,
+                    patient_id=str(patient_id),
+                    incoming=incoming,
+                    session_id=session_id,
+                    document_context=document_context,
+                    conversation_history=conversation_history,
+                    conversation_state=conversation_state,
+                )
+                continue
 
             # Drug knowledge is best-effort; failures must NOT collapse the turn.
             try:

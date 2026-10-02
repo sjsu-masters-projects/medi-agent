@@ -76,71 +76,84 @@ def normalize_days_of_week(days: list[str]) -> list[str]:
 
 def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
     """Infer scheduling guidance from a human-readable regimen frequency."""
-    value = frequency.strip().lower()
+    value = frequency.strip().lower().replace("-", " ")
     if not value:
         return {
-            "supports_automatic_reminders": True,
+            "supports_automatic_reminders": False,
             "recommended_times_per_day": None,
             "recommended_days_per_week": None,
-            "guidance_text": "Add reminder times that match your care plan.",
+            "guidance_text": "Ask your care team to clarify the frequency before setting routine reminders.",
         }
-    if "as needed" in value or "prn" in value:
+    if "as needed" in value or re.search(r"\bprn\b", value):
         return {
             "supports_automatic_reminders": False,
             "recommended_times_per_day": 0,
             "recommended_days_per_week": None,
             "guidance_text": "As-needed items should not create automatic reminders by default.",
         }
-    if "every 8 hour" in value:
+    if re.search(
+        r"\b(after|before|following|each|every)\b.*\b(session|exercise|walking|activity|event)\b",
+        value,
+    ):
+        return {
+            "supports_automatic_reminders": False,
+            "recommended_times_per_day": None,
+            "recommended_days_per_week": None,
+            "guidance_text": "Follow the activity-based instruction. It does not specify a routine clock-time schedule.",
+        }
+    if re.fullmatch(r"every 8 hours?", value):
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 3,
             "recommended_days_per_week": 7,
             "guidance_text": "Use three evenly spaced reminder times that fit the prescribed interval.",
         }
-    if "3x per week" in value or "three times per week" in value:
+    if value in {"3x per week", "three times per week"}:
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 1,
             "recommended_days_per_week": 3,
             "guidance_text": "Choose which three days of the week to receive this reminder.",
         }
-    if "weekly" in value:
+    if re.fullmatch(r"(?:once |1x |one time )?(?:weekly|per week|a week)", value):
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 1,
             "recommended_days_per_week": 1,
             "guidance_text": "Choose the day of week and time that best fits the weekly plan.",
         }
-    if "with each meal" in value or "with meals" in value:
+    if value in {"with each meal", "with meals"}:
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 3,
             "recommended_days_per_week": 7,
             "guidance_text": "Set breakfast, lunch, and dinner reminder times that match your routine.",
         }
-    if "three times daily" in value or "3x daily" in value:
+    if value in {"three times daily", "3x daily"}:
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 3,
             "recommended_days_per_week": 7,
             "guidance_text": "Set three reminder times across the day.",
         }
-    if "twice daily" in value or "2x daily" in value or "two times daily" in value:
+    if value in {"twice daily", "2x daily", "two times daily"}:
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 2,
             "recommended_days_per_week": 7,
             "guidance_text": "Set two reminder times, usually one earlier and one later in the day.",
         }
-    if "before bed" in value:
+    if value == "before bed":
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 1,
             "recommended_days_per_week": 7,
             "guidance_text": "Choose the time you usually wind down for the night.",
         }
-    if "daily" in value:
+    if re.fullmatch(
+        r"(?:once |1x |one time )?(?:daily|per day|a day)(?: (?:with|after|before) (?:breakfast|lunch|dinner|food))?",
+        value,
+    ):
         return {
             "supports_automatic_reminders": True,
             "recommended_times_per_day": 1,
@@ -148,11 +161,42 @@ def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
             "guidance_text": "Choose one daily reminder time.",
         }
     return {
-        "supports_automatic_reminders": True,
+        "supports_automatic_reminders": False,
         "recommended_times_per_day": None,
         "recommended_days_per_week": None,
-        "guidance_text": "Confirm the timing with your clinician, then choose reminder times that match your routine.",
+        "guidance_text": "Ask your care team to clarify the frequency before setting routine reminders.",
     }
+
+
+def schedule_matches_frequency(schedule: dict[str, Any], frequency: str) -> bool:
+    """Fail closed when a stored reminder no longer matches the current instruction."""
+    guidance = infer_frequency_guidance(frequency)
+    if not schedule.get("is_enabled", True) or not guidance["supports_automatic_reminders"]:
+        return False
+    try:
+        validate_timezone_name(str(schedule.get("timezone") or "UTC"))
+        times = [normalize_time_of_day(str(value)) for value in schedule.get("times_of_day") or []]
+        days = normalize_days_of_week(list(schedule.get("days_of_week") or []))
+    except ValidationError:
+        return False
+    if (
+        len(times) != len(set(times))
+        or len(times) != guidance["recommended_times_per_day"]
+        or len(days) != guidance["recommended_days_per_week"]
+    ):
+        return False
+    if "every 8 hour" in frequency.lower():
+        seconds = sorted(
+            time.fromisoformat(value).hour * 3600
+            + time.fromisoformat(value).minute * 60
+            + time.fromisoformat(value).second
+            for value in times
+        )
+        return all(
+            (seconds[(index + 1) % len(seconds)] - value) % 86400 == 28800
+            for index, value in enumerate(seconds)
+        )
+    return True
 
 
 def generate_default_times(count: int | None) -> list[str]:
@@ -267,7 +311,7 @@ class ReminderScheduleService:
         target_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        await self._assert_target_belongs_to_patient(patient_id, target_type, target_id)
+        target = await self._assert_target_belongs_to_patient(patient_id, target_type, target_id)
         timezone_name = validate_timezone_name(str(payload.get("timezone") or "UTC"))
         times_of_day = sorted(
             {normalize_time_of_day(str(value)) for value in list(payload.get("times_of_day") or [])}
@@ -275,6 +319,29 @@ class ReminderScheduleService:
         if not times_of_day:
             raise ValidationError("Add at least one reminder time")
         days_of_week = normalize_days_of_week(list(payload.get("days_of_week") or DAY_ORDER))
+        guidance = infer_frequency_guidance(str(target.get("frequency") or ""))
+        if payload.get("is_enabled", True):
+            if not guidance["supports_automatic_reminders"]:
+                raise ValidationError(
+                    "As-needed, activity-based, or unclear instructions cannot be converted into a routine schedule"
+                )
+            expected_times = guidance["recommended_times_per_day"]
+            expected_days = guidance["recommended_days_per_week"]
+            if expected_times is not None and len(times_of_day) != expected_times:
+                raise ValidationError(
+                    f"Choose exactly {expected_times} reminder time(s) to match the care instruction"
+                )
+            if expected_days is not None and len(days_of_week) != expected_days:
+                raise ValidationError(
+                    f"Choose exactly {expected_days} day(s) to match the care instruction"
+                )
+            if not schedule_matches_frequency(
+                {"times_of_day": times_of_day, "days_of_week": days_of_week},
+                str(target.get("frequency") or ""),
+            ):
+                raise ValidationError(
+                    "Reminder times must preserve the care instruction's interval"
+                )
 
         schedule_map = await self.get_schedule_map_for_patient(patient_id)
         existing = schedule_map.get((target_type, target_id))
@@ -409,7 +476,7 @@ class ReminderScheduleService:
 
     async def _assert_target_belongs_to_patient(
         self, patient_id: str, target_type: str, target_id: str
-    ) -> None:
+    ) -> dict[str, Any]:
         if target_type not in {"medication", "obligation"}:
             raise ValidationError("Target type must be medication or obligation")
         table = "medications" if target_type == "medication" else "obligations"
@@ -417,7 +484,7 @@ class ReminderScheduleService:
             self,
             lambda db: (
                 db.table(table)
-                .select("id")
+                .select("id, frequency")
                 .eq("id", target_id)
                 .eq("patient_id", patient_id)
                 .eq("is_active", True)
@@ -428,3 +495,4 @@ class ReminderScheduleService:
         )
         if not response.data:
             raise ValidationError(f"{target_type.capitalize()} not found for this patient")
+        return cast(dict[str, Any], response.data[0])

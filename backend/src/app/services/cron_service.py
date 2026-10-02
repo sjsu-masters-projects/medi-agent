@@ -11,7 +11,10 @@ from supabase import Client
 
 from app.core.exceptions import ValidationError
 from app.db.supabase_execute import execute_async
-from app.services.reminder_schedule_service import occurrence_datetimes_for_day
+from app.services.reminder_schedule_service import (
+    occurrence_datetimes_for_day,
+    schedule_matches_frequency,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -406,8 +409,9 @@ class CronService:
         response = await execute_async(
             self,
             lambda db: db.table("medications")
-            .select("id, name, dosage, instructions")
-            .in_("id", target_ids),
+            .select("id, name, dosage, instructions, frequency")
+            .in_("id", target_ids)
+            .eq("is_active", True),
             operation="fetch medication reminder display data",
             retry_transient=True,
         )
@@ -421,8 +425,9 @@ class CronService:
         response = await execute_async(
             self,
             lambda db: db.table("obligations")
-            .select("id, description, notes")
-            .in_("id", target_ids),
+            .select("id, description, notes, frequency")
+            .in_("id", target_ids)
+            .eq("is_active", True),
             operation="fetch obligation reminder display data",
             retry_transient=True,
         )
@@ -462,6 +467,12 @@ class CronService:
         window_start: datetime,
         window_end: datetime,
     ) -> list[dict[str, Any]]:
+        target_map = (
+            medication_map if schedule.get("target_type") == "medication" else obligation_map
+        )
+        target = target_map.get(str(schedule.get("target_id"))) or {}
+        if not schedule_matches_frequency(schedule, str(target.get("frequency") or "")):
+            return []
         timezone_name = str(schedule.get("timezone") or "UTC")
         tz = ZoneInfo(timezone_name)
         local_dates = {

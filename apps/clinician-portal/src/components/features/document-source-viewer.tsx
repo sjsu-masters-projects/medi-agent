@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 interface DocumentSourceViewerProps {
+    initialPage?: number;
     fileName: string;
     previewMimeType?: string | null;
     previewStatus?: string | null;
@@ -12,11 +13,12 @@ interface DocumentSourceViewerProps {
     sourceUrl?: string | null;
 }
 
-function PdfCanvasViewer({ documentUrl, fileName }: { documentUrl: string; fileName: string }) {
+function PdfCanvasViewer({ documentUrl, fileName, initialPage = 1 }: { documentUrl: string; fileName: string; initialPage?: number }) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [pageNumber, setPageNumber] = useState(1);
+    const [retryCount, setRetryCount] = useState(0);
 
     useEffect(() => {
         let disposed = false;
@@ -25,7 +27,6 @@ function PdfCanvasViewer({ documentUrl, fileName }: { documentUrl: string; fileN
         async function loadDocument() {
             setDocument(null);
             setError(null);
-            setPageNumber(1);
             try {
                 const pdfjs = await import("pdfjs-dist");
                 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -34,7 +35,10 @@ function PdfCanvasViewer({ documentUrl, fileName }: { documentUrl: string; fileN
                 ).toString();
                 const loadingTask = pdfjs.getDocument({ url: documentUrl });
                 loadedDocument = await loadingTask.promise;
-                if (!disposed) setDocument(loadedDocument);
+                if (!disposed) {
+                    setPageNumber(Math.min(loadedDocument.numPages, Math.max(1, initialPage)));
+                    setDocument(loadedDocument);
+                }
             } catch {
                 if (!disposed) {
                     setError("This PDF could not be displayed in the browser. You can still download the original.");
@@ -47,7 +51,7 @@ function PdfCanvasViewer({ documentUrl, fileName }: { documentUrl: string; fileN
             disposed = true;
             void loadedDocument?.cleanup();
         };
-    }, [documentUrl]);
+    }, [documentUrl, initialPage, retryCount]);
 
     useEffect(() => {
         if (!document || !canvasRef.current) return;
@@ -78,7 +82,7 @@ function PdfCanvasViewer({ documentUrl, fileName }: { documentUrl: string; fileN
         };
     }, [document, pageNumber]);
 
-    if (error) return <p className="text-sm text-rose-700">{error}</p>;
+    if (error) return <div role="alert"><p className="text-sm text-rose-700">{error}</p><button className="mt-2 rounded border px-3 py-2" onClick={() => setRetryCount((current) => current + 1)} type="button">Retry PDF preview</button></div>;
     if (!document) return <p className="text-sm text-slate-500">Loading source document…</p>;
 
     return (
@@ -118,6 +122,7 @@ function PdfCanvasViewer({ documentUrl, fileName }: { documentUrl: string; fileN
 
 /** Render a patient source artifact without giving the browser a permanent storage URL. */
 export function DocumentSourceViewer({
+    initialPage,
     fileName,
     previewMimeType,
     previewStatus,
@@ -150,7 +155,7 @@ export function DocumentSourceViewer({
                     </a>
                 ) : null}
             </div>
-            {viewMimeType === "application/pdf" && viewUrl ? <PdfCanvasViewer documentUrl={viewUrl} fileName={fileName} /> : null}
+            {viewMimeType === "application/pdf" && viewUrl ? <PdfCanvasViewer documentUrl={viewUrl} fileName={fileName} initialPage={initialPage} /> : null}
             {canRenderNativeImage && viewUrl ? (
                 // The source URL is a short-lived API-signed URL and this is intentionally a native image.
                 // eslint-disable-next-line @next/next/no-img-element

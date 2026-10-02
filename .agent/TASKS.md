@@ -29,14 +29,14 @@ A task is done only when its implementation, authorization, error handling, audi
 | Clinician portal | Partial | Roster, patient deep dive, document source viewer, extracted-fact review, and Care Plan draft/review surfaces exist; the fresh synthetic approval journey, consolidated action queues, and a longitudinal decision timeline remain incomplete. |
 | Backend foundation | Functional foundation | Versioned APIs, auth, RLS, audit, and worker services exist; several product lifecycles are not connected end to end |
 | Records ingestion | Demonstration-ready candidate pipeline | Secure document intake, evidence-backed candidates, TIFF previews, and retryable explanation lifecycle work; clinician review, reconciliation, and downstream approved-action projection remain incomplete |
-| Chat and triage | Partial | Deterministic emergency handling and the Care Coordinator are live; document-focused chat, durable safety-rule audit, and a websocket-token remediation remain open |
+| Chat and triage | Partial | Deterministic emergency handling, the Care Coordinator, and WebSocket subprotocol authentication are live; document-focused chat, durable safety-rule audit, and terminal turn recovery remain open |
 | Document intelligence | Demonstration-ready | Synthetic PDF, scanned-Spanish, and multi-frame TIFF paths completed with evidence-backed candidates, private preview, expiry, and cross-user denial checks; the five-minute Job trigger is enabled for the master's-project demonstration |
 | Pharmacovigilance | Partial | Deterministic Naranjo scoring, auditable evidence, and an assigned-clinician read-only ADR queue work; clinician decisions, evidence requests, reassessment, and MedWatch drafting remain incomplete |
 | Scheduling and communication | Partial | Document ingestion is scheduled; appointments, approved clinical messaging, notification delivery/retry, and care-gap closure are incomplete |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.3.0 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | Clear as of 2026-09-09 | `next` 16.3.4 is on `main` and deployed, closing two critical unauthenticated-RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4) that were live on both portals; a fresh `npm ci` reports zero vulnerabilities on both lockfiles. Advisories published after the 2026-08-19 evidence invalidated it, so re-run `npm audit` at the start of each session rather than trusting this row |
+| Dependency security | Verified — PR #117 merged/deployed | urllib3 2.8.0 minimum and both locks merged at `e81c9c1`; main CI `36933661245` and deployment `36933661124` succeeded. Local audit found no known vulnerabilities. |
 | Demo data | Functional baseline | Canonical fictional fixture and live patient/clinician isolation checks exist; the fresh end-to-end care-plan scenario is PAT-005 work |
 
 **Tracker reconciliation — 2026-09-26.** Every named primary task was reviewed for status
@@ -56,13 +56,13 @@ failure. It must not be presented as a completed closed-loop care product until 
 
 | Product journey | Demonstrably working now | Functional gap | Tracked work |
 | --- | --- | --- | --- |
-| Access and clinic boundaries | Synthetic patient/clinician login, assigned-care-team access, unassigned clinician denial, denial audit, private document URLs | WebSocket chat still places a session token in the URL; broader release security qualification remains | SEC-001, QUA-001 |
+| Access and clinic boundaries | Synthetic patient/clinician login, assigned-care-team access, unassigned clinician denial, denial audit, private document URLs, and WebSocket subprotocol authentication | Broader release security qualification remains | SEC-001, QUA-001 |
 | Document intake and understanding | PDF/image/TIFF ingestion, source provenance, evidence-backed pending candidates, private derived previews, plain-language explanation and retry lifecycle; clinician extracted-facts review | Fresh synthetic evidence-to-approved-plan proof and authorized reconciliation-to-action journey remain incomplete | REC-001, PAT-005 |
-| Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish | Document-focused conversation lifecycle, some safety-audit persistence, and complete recovery journey remain open | PAT-001, PAT-004, SAFE-002 |
+| Patient conversation and safety | Care Coordinator, persistence foundation, deterministic emergency response in English/Spanish, and immediate typing feedback | Document-focused conversation lifecycle, durable safety-audit persistence, terminal turn recovery, and a patient-confirmed guided symptom-report flow remain open | PAT-001, PAT-004, PAT-002-B, SAFE-002 |
 | Today feed and adherence | Deterministic medication/obligation feed, adherence statistics, completion/barrier capture, and plan-linked approved/effective-task guard | No live proof of the clinician-approved item through patient and clinician follow-up | PAT-002, PAT-005 |
 | Clinician action workspace | Roster, patient detail, source preview, extracted-facts review, care-plan draft/review, and basic document status | No consolidated queue, explainable risk, or unified timeline; live care-plan acceptance remains incomplete | PAT-005, CLN-001, CLN-002 |
 | Care closure | Document Job runs every five minutes; manual summary retry exists | No approved clinical messaging, appointment completion, notifications/retry, or care-gap follow-up loop | SCH-001, COM-001 |
-| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation, deterministic Naranjo assistance, and assigned-clinician ADR evidence queue | No completed multi-source reconciliation, clinician ADR decision/reassessment flow, or MedWatch draft lifecycle | MED-001, MED-002, PV-001, PV-002 |
+| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation, deterministic Naranjo assistance, and assigned-clinician ADR evidence queue | No completed multi-source reconciliation, patient-confirmed symptom-report flow, clinician ADR decision/reassessment flow, or MedWatch draft lifecycle | MED-001, MED-002, PAT-002-B/C, PV-001, PV-002 |
 | Interoperability and continuity | Deployed SMART-on-FHIR sandbox import with candidate provenance | Export, CDS Hooks, official MCP/A2A, multi-provider timeline, and handoff remain incomplete | INT-002, STD-001–003, CON-001 |
 | Bilingual and voice experience | `en-US`/`es-MX` safety-floor coverage and localized fallback exist | End-to-end language parity, clinician content review, and text-first voice lifecycle are incomplete | PAT-003, VOI-001 |
 
@@ -78,18 +78,22 @@ patient-facing clinical instruction itself.
    instruction can become a safe, explainable daily item and return a patient response to the
    care team. This is the first feature that joins the working document pipeline to a patient
    outcome.
-2. **Next — finish the patient companion loop.** Complete document-focused conversations,
-   reliable recovery, structured adherence/symptom/barrier collection, and English/Spanish
-   acceptance coverage (PAT-001 through PAT-004 and SAFE-002). This makes the patient response
-   usable rather than a one-off demo interaction.
+2. **After PAT-005 live proof — finish the patient companion loop.** Complete durable chat-turn
+   recovery and the explicit symptom path: guided chat intake → patient confirmation of a
+   structured report → patient timeline and clinician-visible detail (PAT-001-A, PAT-002-B,
+   PAT-002-C). Document-focused conversations, adherence/barrier acceptance, and English/Spanish
+   coverage continue alongside that work (PAT-002-A through PAT-004 and SAFE-002). This makes the
+   patient response usable rather than a one-off demo interaction.
 3. **Then — make clinician work actionable.** Consolidate document, medication, symptom,
    adherence, and proposed-action review with evidence and an explainable timeline (CLN-001,
    CLN-002, MED-001, and MED-002). Do not expand autonomous AI behavior to compensate for a
    missing clinical review surface.
-4. **After the closed loop works — add closure channels and differentiators.** Appointment and
-   approved-message workflows, notification recovery, ADR/MedWatch review, voice, multi-provider
-   continuity, FHIR export/CDS Hooks, and protocol conformance remain valuable later slices;
-   they should extend the proven loop rather than precede it.
+4. **After the confirmed symptom-report model — add pharmacovigilance and other closure
+   channels.** Clinician ADR/Naranjo review and the editable MedWatch export draft (PV-001,
+   PV-002) consume the confirmed report; neither can begin as an autonomous report or submission.
+   Appointment and approved-message workflows, notification recovery, voice, multi-provider
+   continuity, FHIR export/CDS Hooks, and protocol conformance remain valuable later slices; they
+   should extend the proven loop rather than precede it.
 
 For the master's-project demonstration, prioritize this sequence over production-scale document
 throughput work. The five-minute document Job is enabled to support the controlled scenario; it
@@ -114,21 +118,94 @@ PAT-005.
 
 | Work item | State | Owner / working branch | Next concrete result | Dependency or handoff |
 | --- | --- | --- | --- | --- |
-| `PAT-005-A` — safe draft-failure diagnostics | **Claimed** | Rajeev — `codex/pat-005-care-plan-observability` | Emit a safe worker event containing only request ID, attempt, outcome, and failure code. | Keep clinical text, prompts, source facts, patient IDs, and provider exception text out of logs. After deployment, hand off to `PAT-005-B`. |
-| `PAT-005-B` — diagnose the existing failed request | **Blocked** | Rajeev + assigned synthetic clinician | Use the clinician retry action after `PAT-005-A` deploys; record the safe failure code from the next scheduled Job execution. | Maya's already-failed request predates outcome logging. This is a diagnostic retry only; do not upload a replacement document or manually execute Cloud Run. |
-| `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | Starts only after `PAT-005-B` identifies and resolves the generation fault. It is the PAT-005 completion gate. |
+| `PAT-005-A` — safe draft-failure diagnostics | **Done** | Rajeev — PR #114 | Local model preflight and credential-free CI contract tests now separate deployment validation from live provider calls. | The corrected backend and ingestion Job deployed on 2026-09-30; Maya's draft is visible. This closes the original generation-failure investigation, not PAT-005 acceptance. |
+| `PAT-005-B` — verify the corrected draft request | **Done** | Rajeev + assigned synthetic clinician | Maya's existing synthetic evidence produced a version-1 draft shown in the clinician Care Plan tab on 2026-09-30. | Draft generation is demonstrated. Publication and the fresh scenario remain `PAT-005-C`; do not treat Maya's Spanish draft as safe for her `en-US` preference. |
+| `PAT-005-C` — fresh `PAT-005-SYN-001` proof | **Blocked** | Rajeev + patient/clinician test accounts | Upload the catalogued synthetic documents, verify one quiet-window draft, resolve the planned conflict, approve, then record Today, completion/barrier, clinician follow-up, and audit evidence. | Existing Maya completion/barrier persistence is verified after PR #122. Fresh-patient proof, next-publication continuity, exact Today preview and unassigned-account denial/audit proof remain gates; Maya's already-approved V2 does not substitute for them. |
+| `PAT-005-D` — safe plan revision review | **Done** | Rajeev — PR #115 | Active/proposed comparison, linked source documents, citation display, and unsaved-edit guard deployed; Maya's draft loads on 2026-09-30. | This is a review aid only. Exact Today preview, locale-safe publication, medication matching, and live v1→v2 proof remain `PAT-005-E/C` gates. |
+| `PAT-005-E` — approval safety and citation clarity | **Done** | Rajeev — PR #116 | Migration 042 applied; live Maya review verified wording edits reset attestation, save/reload retained edits, explicit medication decisions blocked/enabled approval, and approved V1 became immutable. | Synthetic English wording was manually reviewed; this is not automatic translation. Full fresh scenario, rollback and denial proof remain C. |
+| `PAT-005-F` — live QA and closed-loop defect repair | **Claimed** | Rajeev — `codex/care-plan-acceptance-checks` | Verify unchanged-activity continuity across a subsequent revision, then record the fresh scenario. | Browser access restored: V2 monitoring completion and a new walking barrier survive reload; clinician sees the correct activity and synthetic note. Walking reminder Mon/Wed/Fri 08:00 America/Los_Angeles also survives reload. These checks do not prove continuity across publication. Legacy PRN/unknown cadence, exact preview, full barrier-category and denial/audit acceptance remain open. Blocks C. |
+| `PAT-005-G` — incomplete-evidence draft persistence | **Claimed** | Rajeev — `codex/care-plan-oversized-evidence` | Handle oversized source fields as cited, non-confirmable review blockers rather than failing the whole generation batch. | PR #119 merged/deployed and migration 043 applied. Maya's retry exposed a 338-character title against the 300-character draft limit. C still waits for the repaired deployed V2/reload/history proof. No additional migration planned. |
+| `PAT-005-H` — patient reminder usability | **Done** | Rajeev — PR #124 | Compact schedule summaries, one editor with cancel, blank new times, patient-selected weekly days, contextual Today setup, and advanced timezone settings. | PR #124 backend deployment `37052584390` and frontend CI `37052584538` succeeded. Live QA on 2026-10-02 verified Mon/Wed/Fri 08:00, cadence-invalid Save disabled, Cancel preserved settings, and no routine reminder controls for albuterol/after-walking monitoring. No clinical timing was invented. Full fresh-scenario proof remains C. |
+| `PAT-005-K` — proposed Today preview | **Claimed** | Rajeev — `codex/care-plan-publication-preview` | Assigned-clinician read-only preview using the Today renderer, saved draft, current canonical records, patient-local date and reminders. | Implemented locally from main `1731fdf`; backend 1,536 passed, 85.01% coverage (20 opt-in PostgreSQL tests skipped); clinician 127 passed; full Python Ruff/format/mypy and clinician lint/typecheck passed. Clinician webpack production build passed; Turbopack was blocked by local helper-port permissions. Browser access restored: approved V2, seven Today activities and named clinician barrier are visible. The new preview still needs deployed UI proof; it never publishes or guarantees unchanged state at later approval. No migration. |
+| `AUTH-001` — resilient portal session renewal | **Ready** | Portal + backend lanes — unassigned | Diagnose the reported spontaneous logout; distinguish terminal refresh rejection from transient failure, coordinate refresh callers/rotated tokens, and recover expired authenticated requests before redirecting. | Refresh exists in both portals, but hook/storage catch-all paths clear sessions on any failure; base API clients redirect on authenticated 401 without renewal; backend refresh maps all provider exceptions to invalid-token authentication errors. Recent Cloud Run refresh requests succeeded (one took 36 seconds); no HTTP refresh failure found in the 24-hour check. The reported logout's exact cause is not yet reproduced. Can run parallel to K; do not relax MFA/session policy or replay clinical writes automatically. Verify transient outage, returning/sleeping tab, expiry, concurrent refresh, real revocation and role/MFA preservation. |
+| `PAT-005-I` — evidence applicability and overlap review | **Done** | Rajeev — PR #121 | Migration 044 applied and deployed controls verified: imported exclusions persist, overlap review soft-removes proposals without deleting evidence, and unresolved overlap blocks publication. | Synthetic Maya V2 approved on 2026-10-02 with four retained items and 49 excluded proposals. Fresh-scenario/denial proof remains C; review and continuity defects are J. |
+| `PAT-005-J` — review persistence and revision continuity | **Claimed** | Rajeev — PR #122 / `codex/care-plan-review-follow-up` | Save incomplete medication reconciliation as a publication blocker; retain unchanged conflict resolutions; serialize clinician barrier detail; preserve unchanged activity identities across approval. Include clinician adherence usability: response-based metrics, unknown-day gaps, daily counts, named barriers, and current activity context. | Live QA found all four defects. V2 has one Metformin and new monitoring; monitoring completion survives reload. Migration 045 is required for future unchanged-activity continuity, not retroactive repair of V2. Deploy and repeat clinician barrier/revision checks before closing F/C. Do not treat recorded-response counts as scheduled doses or infer ADRs from patient barriers. |
+| `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
+| `PAT-002-C` — symptom timeline and clinician report detail | **Sequenced** | Patient + clinician portal lanes — unassigned | Show each confirmed report in the patient's timeline and an authorized clinician detail view with clearly separated patient answers, document-grounded context, and clinician decisions. | Starts after `PAT-002-B` establishes the confirmed-report contract. Blocks `PV-001`; preserve patient/clinic assignment isolation, source citations, and audit linkage. |
+| `PAT-001-A` — durable chat-turn recovery | **Ready** | Patient + backend lanes — unassigned | Persist a per-turn state and bounded outcome so a provider stall, timeout, or Cloud Run revision replacement cannot leave a saved message permanently typing. | Retry the existing saved message without creating a duplicate; log only safe outcome, duration, and failure category. |
 | `PAT-002-A` — adherence/barrier acceptance evidence | **Sequenced** | Patient + clinician portal lanes | Exercise each patient barrier category and completion against an approved effective plan item; verify clinician display and assignment denial. | Runs with `PAT-005-C`; do not create a parallel adherence data model or bypass the plan projection. |
-| `PAT-004-A` — document-focused conversation | **Ready** | Patient-portal lane — unassigned | Implement the persistent selected-document context card and server-authorized per-message document reference. | Preserve the source-bound, no-chart-wide-inference rules in PAT-004. Independent of PAT-005. |
+| `PAT-004-A` — document-focused conversation | **Claimed** | Rajeev — `codex/pat-004-chat-document-catalog` | Answer clear document-catalog questions from the patient's authorized portal metadata and show typing immediately after send. | Keep catalog answers deterministic, metadata-only, and separate from selected-document interpretation. This is independent of PAT-005. |
+| `AI-003-WS1-B` — central background-workload routing | **Done** | Rajeev — PR #112 | Active document extraction, document explanation, and evidence-only care-plan classification use the ADK registry executor with route-owned model, budget, thinking ceiling, kill switch, fallback rule, and telemetry path. | Merged infrastructure only; the care-plan structured-response repair and deployed proof remain `PAT-005-A/B`. |
 | `CI-001-A` — selective-test evidence | **Ready** | CI-maintenance lane — unassigned | Collect one eligible Acquit selective-run observation and publish selected-test/full-suite evidence. | Keep Acquit in canary mode; enforcement waits for ten safe observations. |
 | `SAFE-002-A` — language-gap safety rules | **Blocked** | Clinical reviewer + safety owner | Approve exact English and Mexican-Spanish wording/coverage for inflected self-harm, anaphylaxis, and stroke phrases; then add deterministic tests and rules. | Engineering must not invent clinical escalation wording. Clinical sign-off is the unblocker. |
 | `CLN-001-A` — consolidated clinician queue | **Sequenced** | Clinician-portal lane — unassigned | Design the queue around demonstrated PAT-005 approval, adherence, and barrier artifacts. | Wait for `PAT-005-C`; that proof defines which records the queue must render. |
 | `MED-001/002-A` — reconciliation scope | **Sequenced** | Platform + clinician-portal lanes — unassigned | Use PAT-005's medication-conflict scenario to scope reviewed candidate-versus-local comparison. | Reuse PAT-005 evidence/approval boundaries; do not duplicate a competing clinical-decision lifecycle. |
+| `PV-001` — clinician ADR/Naranjo review | **Sequenced** | Ganesh — pharmacovigilance + clinician lanes | Review a confirmed symptom report, request missing information, and provide deterministic Naranjo assistance separate from clinician judgment. | Starts after `PAT-002-C`. It must not infer an ADR report from raw chat or submit anything externally. Blocks `PV-002`. |
+| `PV-002` — clinician-approved MedWatch draft/export | **Sequenced** | Jeevan — clinician portal + pharmacovigilance lanes | Produce an editable, evidence-linked MedWatch-compatible draft from patient-confirmed and clinician-approved facts; export it only after clinician/pharmacist approval. | Starts after `PV-001`; export is not FDA submission. |
 
 **State meanings:** **Claimed** has one active owner and branch; **Ready** is safe to start in a
 separate branch; **Blocked** needs the stated external decision or evidence; **Sequenced** is
 intentionally deferred until its named predecessor finishes.
 
+**PAT-005-F verification — 2026-10-02:** PR #122 merge `5ede2bd` passed main CI
+(`37042676826`), frontend CI (`37042676824`), and backend/ingestion deployment
+(`37042676735`). Migration 045 application was confirmed by the requester. On
+`codex/care-plan-acceptance-checks`, the focused backend command
+`PYTHONPATH=src .venv/bin/pytest tests/unit/services/test_care_plan_review_context.py tests/unit/services/test_care_plan_reconciliation.py tests/integration/routers/test_clinician_api.py --no-cov -q`
+passed 61 tests. Clinician command
+`npm test -- src/__tests__/patient-adherence-panel.test.tsx src/__tests__/patient-deep-dive.test.tsx`
+passed 34 tests, including all six barrier labels, target attribution, literal-note rendering,
+and reporting-timezone context; typecheck, changed-test ESLint and Prettier checks passed.
+The opt-in local PostgreSQL rerun could not initialize a cluster: macOS shared-memory
+allocation failed (`shmget`, no space available), before application assertions ran.
+Do not count those 20 setup errors as passed contract tests. Live browser attachment also
+timed out before page inspection. Remaining acceptance requires restored browser access and
+a successful disposable PostgreSQL rerun; no remote data or configuration was changed.
+
+**PAT-005-F live follow-up — 2026-10-02:** Browser access was subsequently restored.
+The patient submitted an `other` barrier on approved V2's walking activity with the note
+“Synthetic QA only: unable to complete the walking activity during this test session.”
+After patient reload, Today retained `Barrier reported` and the existing monitoring completion
+(1/7). Clinician refresh displayed the new report against “Walk for 20 minutes”, retained the
+older V1 scheduling barrier separately, and showed 2 completed / 4 recorded responses (50%).
+The patient and clinician percentages have different denominators; neither establishes
+scheduled-dose adherence. ADR flag count stayed at the pre-test value of 2.
+The synthetic walking reminder was saved for Monday/Wednesday/Friday at 08:00 in
+America/Los_Angeles and retained those exact settings after reload. No medication schedule
+or clinical instruction was changed. Publication-continuity proof remains open: no V3 was
+generated or approved in this check. Reminder QA also confirmed that legacy “as recorded”
+albuterol and the after-walking monitoring item still offer routine clock-time controls;
+`PAT-005-H` must resolve unknown/PRN/event semantics without inferring clinical timing.
+Full regression rerun: backend `PYTHONPATH=src .venv/bin/pytest tests/ -q --cov-report=term:skip-covered`
+passed 1,466 tests with 84.55% coverage (20 opt-in PostgreSQL tests skipped); clinician
+`npm test` passed 122 tests; patient `npm test` passed 103 tests. Both portals'
+`npm run typecheck` passed. This does not supersede the unsuccessful opt-in PostgreSQL rerun.
+
+**PAT-005-I local verification — 2026-10-02:** Backend `PYTHONPATH=src .venv/bin/pytest tests/ -q
+--cov-report=term:skip-covered`: 1,456 passed, 84.53% coverage; 13 opt-in PostgreSQL cases
+verified separately with `CARE_PLAN_TEST_POSTGRES=1` against a disposable local cluster.
+Ruff, format, mypy and migration parsing passed. Clinician lint/typecheck, 111 Vitest cases
+and `npm run build -- --webpack` passed. One unrelated review-queue test timed out in an
+intermediate run; the complete rerun passed. Live verification is still pending migration,
+merge/deployment and clinician review; no remote writes or automatic cleanup were performed.
+
 ### Claim and handoff rules
+
+**Consolidated F/H delivery — 2026-10-02:** The current acceptance branch implements
+compact reminder summaries, a single open editor with cancel, blank new times and patient-selected
+weekly days, advanced timezone settings, and save-error preservation. Existing schedule timezones
+are not silently changed with the profile. Routine PRN/event/unknown schedules are rejected;
+Today and notification dispatch ignore unsafe or cadence-mismatched legacy schedules, and inactive
+targets do not receive these reminders. Unscheduled cards say `Available`, not `Due now`.
+No schema migration, remote cleanup, deployment or clinical instruction change is included.
+Verification: backend full suite passed 1,500 tests (20 opt-in PostgreSQL cases skipped),
+84.80% coverage; changed Python Ruff/mypy passed. Patient lint/typecheck/build passed;
+110 full patient tests and seven focused reminder/card cases passed. Clinician changed-test ESLint,
+typecheck and nine adherence-panel cases passed. Existing live Maya V2 is still approved with
+four retained items, four active medications and two pre-existing ADR flags.
+This branch's new UI is not deployed or live-verified. Exact Today preview, fresh-scenario
+denial/audit proof and a subsequent approval's identity/reminder/adherence continuity remain
+explicitly open; do not mark PAT-005 complete or treat the 20 skipped database tests as passing.
 
 1. Before editing, move the row to **Claimed**, add the owner and branch, and link the detailed
    task section that supplies acceptance criteria.
@@ -484,7 +561,8 @@ open for sandbox-specific diagnosis.
       provider candidates. Compare quality, abstention, schema validity, latency, cost,
       data controls, SDK lifecycle, and failover behavior; record the selected providers and
       version-pinning policy in an ADR. The retired-model incident is the trigger, not proof
-      that a provider should be replaced without this evaluation. Tracked as `AI-002`.
+      that a provider should be replaced without this evaluation. Active runtime work is tracked
+      in `AI-003`; later evaluation/adjudication work is tracked in `EVA-001`.
 
 ### REV-006 — Consolidate durable documentation
 
@@ -506,176 +584,6 @@ open for sandbox-specific diagnosis.
       testing guide linked a `MOCK_VALIDATION.md` that exists nowhere in the tree, so it now
       points at the mock-validation tests themselves.
 
-### AI-002 — Model-routing decision spike (September 2026)
-
-**Status:** `[/]` Spike delivered; team decisions and follow-up PRs pending
-
-**Priority:** P1 (contains one P0 safety finding routed to SAFE-002)
-
-**Owner:** Ganesh Thampi (provider adapters, evaluation); safety review required
-
-**Decision record:** [`../docs/decisions/ai-runtime-2026-09.md`](../docs/decisions/ai-runtime-2026-09.md)
-
-- [x] Map every model call site, prompt, schema, fallback, telemetry field, and persisted
-      version field for the nine AI workloads against the spike requirements (spec §3).
-- [x] Snapshot the September 2026 market for paid, free-tier, and open-weight candidates,
-      including SDK lifecycle, data handling, and BAA posture (spec §4).
-- [x] Build a provider-neutral evaluation harness: scenario schema, per-workload scoring
-      against the release thresholds, an OpenAI-compatible `TextProvider` adapter
-      (`backend/src/app/clients/openai_compatible.py`), an optional `response_schema` on
-      `GenerationRequest`, and `backend/scripts/run_ai_eval.py` (spec §6).
-- [x] Author 70 synthetic gold-labeled seed scenarios in `backend/tests/fixtures/eval/`
-      (28 triage, 10 document, 14 discrepancy, 10 ADR, 8 explanation), every high-risk case
-      mirrored in `en-US` and `es-MX`, with CI tests for validity, mirroring, and
-      synthetic-only content. All adjudication is `pending`.
-- [x] Run the harness against every provider reachable with existing credentials and record
-      the reports (`backend/reports/ai_eval_20260910_065321`, `_173527`, `_173605`; spec §7).
-      Measured: `gemini-3.1-flash-lite`, `gemini-3.1-pro-preview` (router, Vertex),
-      `gemini-3.5-flash-lite` and `gemini-3.8-flash` (Vertex OpenAI-compatible endpoint through
-      the new adapter). Unreachable providers were recorded as reliability results: the
-      MedGemma 27B Vertex endpoint fails DNS on every call, and the AI Studio key returns 429
-      (prepaid credits depleted) for all models. Headline: `gemini-3.5-flash-lite` led every
-      interactive workload (triage 28/28 with zero under-triage at p50 0.8 s; explanation 8/8
-      in both locales; documents 87% with 100% verifiable evidence); Pro was most accurate on
-      discrepancies but 5–19 s at p50; `gemini-3.8-flash` could not be judged (project quota,
-      reasoning tokens truncating output). No scenario is adjudicated, so no threshold is met
-      for release.
-- [x] Write the ADR (exact model IDs, pinning policy, retirement monitoring, data controls,
-      kill switch, rollback) and the migration plan that preserves `TextProvider`,
-      `ModelRouter`, and reconciliation authorization (spec §9, §10).
-- [x] Research medical-specialised models per use case (open medical LLMs and their licences,
-      clinical NER and SNOMED linking incl. Spanish resources, medical speech, medical
-      embeddings, safety classifiers, drug-knowledge data sources after the NLM interaction
-      API retirement, and the physician-rubric benchmarks) and record the eight decisions in
-      the AI runtime decision record.
-      Finding: no medical fine-tune outranks current general models on MedHELM or HealthBench;
-      the medical-specific investments that pay off are terminology, Spanish clinical NLP,
-      medical STT, and a self-harm classifier layer.
-- [x] Consolidate solution, measured quality, and cost per use case, including an assessment
-      of the OCR and document-intelligence document, in
-      the AI runtime decision record.
-      Key point: reading quality (97.8% fields found, assessment) and structuring quality
-      (87% fields, 100% evidence, spike) are different steps; end to end is unmeasured.
-- [x] Broad inference and hosting research (NVIDIA hosted and self-hosted NIM, token-priced
-      open-model providers, GPU-hour and serverless GPU hosting, hyperscaler managed APIs
-      with BAA, startup and education credit programs, speech providers), with monthly costs
-      for the expo, one-clinic, and ten-clinic scenarios. Decision document:
-      the AI runtime decision record. Finding: managed per-token
-      APIs are 5–100× cheaper than owned GPUs below ten-clinic scale; only a scale-to-zero L4
-      (≈ $46/month) breaks even at one clinic; NVIDIA's hosted catalogue has no price, SLA, or
-      BAA and prohibits personal data, so it is an evaluation source only; the cheaper managed
-      lanes (`gpt-oss-120b` on Bedrock, `gpt-5-nano` on Azure) are unmeasured on our harness.
-- [x] Verify model lifecycle, prices, capacity rules, and partner-model access against Google's
-      documentation (2026-09-15; hosting spec §9). Material corrections: Gemini 3.1 Flash-Lite
-      is $0.25 / $1.50 interactive, not the $0.125 / $0.75 batch price the earlier cost tables
-      used; Qwen3-Next, GLM 4.7, DeepSeek, and gpt-oss-20b managed endpoints retire on
-      2026-10-21, before the expo; Gemini 3.6 to 3.8 Flash are short-term-availability models;
-      Claude on Vertex is quota-restricted for this project.
-- [x] Expo model comparison on the Vertex models that survive past December (3.1 Flash-Lite,
-      3.5 Flash-Lite, 3.5 Flash, 3.7 Flash, 3.8 Flash, 3.1 Pro, gpt-oss-120b, Gemma 4 managed)
-      across the 70 scenarios, with thinking models at low effort. The harness gained a
-      per-provider reasoning-effort option and bounded exponential backoff for 429 and
-      transient 5xx responses, with retries recorded in telemetry.
-      Report `backend/reports/ai_eval_20260915_194824` (560 of 560 scored); decision in
-      a now-superseded proposed routing. The production routing was subsequently rebuilt in
-      AI-003 from the paired re-run rather than applying this preliminary recommendation.
-- [x] Replace the retired preview routing with the reviewed per-workload registry, explicit
-      fallback, and deterministic outcome. Current configuration is in the AI runtime decision
-      record; deployment acceptance remains tracked under AI-003 WS1.
-- [ ] Document reading is an OCR decision, not a model decision: the OCR spike
-      (`docs/document-intelligence-assessment.md`) recommends pypdfium2 plus PaddleOCR
-      PP-OCRv5 through RapidOCR with deterministic anchoring, and its prototype already
-      exists uncommitted under `backend/src/app/services/document_intelligence/`. The
-      routing evaluation only measures structuring of page-marked text; it must not be
-      used to pick a reader.
-- [x] Rebuild the evaluation harness so it measures models rather than the harness. Every call now ends in
-      one recorded disposition (answered / infra_error / truncated / unparseable /
-      refused); `finish_reason` and reasoning tokens are captured, so truncation is no
-      longer read as a wrong answer; HTTP 400 is `invalid_request`, not an outage;
-      providers run sequentially because firing eight at one project's quota made them
-      throttle each other; the schema is emitted in the one dialect all three serving
-      stacks accept, with evidence required and reasoning fields generated before verdict
-      fields; drug names match strictly (`insulin glargine` no longer matches `insulin
-      aspart`) with bilingual and brand synonyms and OCR-digit folding; negated safety
-      advice is no longer scored as a safety violation; abstention is read per workload;
-      a call that never answered no longer carries a safety verdict; precision and recall
-      are micro-averaged; documents are presented with `[Page N]` markers as production
-      does; and accuracy is reported on answered calls with a bootstrap interval beside
-      the answered rate. Statistics in `backend/src/app/services/eval_statistics.py`
-      (Wilson, bootstrap, paired McNemar; six one-sided disagreements are needed for
-      significance at this n). 1036 tests pass; the 3 failures in
-      `tests/unit/services/document_intelligence/` predate this work and are recorded in
-      `docs/document-intelligence-assessment.md` §13.
-- [x] Correct fixture ground truth that demanded forbidden inference: `lab_report`
-      required a "Hyperlipidemia" diagnosis the source never states, and
-      `diagnostic_report` required a route and two frequencies a CT report never gives.
-- [/] Cloud leg of the re-run is done: `backend/reports/ai_eval_20260917_172344.json`,
-      gpt-oss-120b and Gemini 3.8 Flash over all 70 scenarios, sequential, low effort.
-      Both answered 65 of 70 (3.8 Flash lost 5 calls to capacity, all in triage; gpt-oss
-      lost 3 and returned 2 replies that failed the schema). **Paired item-by-item, no
-      workload shows a measurable difference** — the closest is triage at p=0.07 — so at 8
-      to 28 scenarios these two cannot be ranked on clinical accuracy, and September's
-      confident ordering of nine models was noise plus harness defects. What does separate
-      them: gpt-oss costs roughly a tenth as much and answers triage in 2.2 s against
-      6.2 s, but breaks the output schema occasionally where Gemini never did. Details in
-      the historic evaluation record. The medical-model leg was subsequently completed and
-      ruled out below.
-- [x] Re-ran the expo comparison under the new protocol on all three finalists
-      (`ai_eval_20260917_172344`, `_183906`, `_192522`; 70 scenarios each, sequential).
-      Verdict: **MedGemma is out**, though not for the reason first written here. It
-      under-triaged urgent cases (79% and 75% against 100% for both cloud models) and
-      could not hold the output contract. The claim that it "missed every allergy
-      conflict" was wrong: unconstrained it found both and lost the points to our own
-      prompt template, copying the literal enum menu into a `type` field in 4 of 14
-      answers. Constrained, it genuinely produced neither. Its September "90% document field accuracy" was an artefact of the
-      lenient matcher and does not reproduce (75% unconstrained, 49% constrained). Its
-      endpoint cost about $3 of GPU for 91 minutes against 7 cents of tokens for the whole
-      cloud leg; endpoint deleted and independently verified gone. **gpt-oss-120b and
-      Gemini 3.8 Flash cannot be separated on clinical accuracy** at this sample size, so
-      choose on deployment properties: gpt-oss is ~10x cheaper, faster on triage, and
-      occasionally violates the output schema; 3.8 Flash never violated it, passes the 90%
-      recall bar on reconciliation where gpt-oss fails at 71%, and loses more calls to
-      shared capacity. The durable deployment choice is recorded in the AI runtime decision.
-- [ ] Re-run the expo comparison under the new protocol on the three finalists
-      with the rigour still missing: three trials per scenario for run-to-run variance,
-      the no-document and example-perturbation controls in protocol §5, per-class safety
-      recall with intervals, and a real language identifier for the es-MX scoring.
-- [ ] Treat gpt-oss-120b's format conformance as a deployment property, not a quality
-      score: on Vertex it honours a JSON schema only sometimes, measured at 3 schema
-      violations in 10 trials against Gemini 3.8 Flash's 0 in 10 (protocol §11), including
-      one on a real scenario that never asked for a different shape. If it is chosen for a
-      workload the caller must validate and retry. An earlier claim that `minLength` caused
-      this was written up after a single trial and is wrong; the repeat test refuted it.
-- [x] Treat historic price, availability, and benchmark figures as dated research, not current
-      decision evidence. The retired reports remain in Git history; the current decision record
-      records only the controls and limits that still govern the runtime.
-- [x] MedGemma 1.5 4B measurement on a temporary Vertex endpoint (two L4 GPUs, us-central1,
-      authorized 2026-09-15 as test-then-undeploy; report `backend/reports/ai_eval_20260915_201947`).
-      Endpoint existed about 17 minutes, about $0.60 of GPU time at the estimated rate; undeployed
-      and deleted, zero endpoints remain. Results with the schema in the prompt, because the
-      container rejects nullable JSON-schema types: symptom extraction 55% with red flags caught
-      6 of 10, documents 49% with 60% schema-valid output, explanations 89%; p50 7–14 s. It writes
-      its reasoning inline between `<unused94>` and `<unused95>`, which the adapter now strips.
-      `backend/scripts/model_garden_endpoint.py` adds `up`, `status`, and `down` so self-hosted
-      models are deployed only for a working session; `down` removes only endpoints the script
-      created unless an endpoint ID is given.
-- [ ] Team decision on the remaining budget, comparison-credential, GPU-host, and clinical
-      adjudication questions recorded in the AI runtime decision.
-- [ ] Execute migration steps 1–6 as separate PRs. The SAFE-002 P0 fix that gated this
-      shipped 2026-09-22 — see that row for the verified detail — so this is now unblocked
-      and ready to start.
-- [ ] Hand the harness and seed set to `EVA-001` for the remaining 50 scenarios and the 40
-      adjudications.
-
-**Acceptance criteria**
-
-- [x] Workload matrix, benchmark protocol and fixtures, results, primary/fallback
-      recommendation, ADR, and migration plan exist in one reviewed document.
-- [x] The harness runs offline in CI (`--dry-run` and unit tests) and live with credentials,
-      and never writes prompts to its reports.
-- [ ] The routing pins in the ADR are confirmed by a harness run that meets the thresholds
-      on adjudicated scenarios before any production re-route.
-
 ---
 
 ### AI-003 — Agent runtime overhaul
@@ -686,7 +594,7 @@ open for sandbox-specific diagnosis.
 
 **Owner:** Rajeev Chaurasia; safety review required before any workload defaults on
 
-**Why:** AI-002 ended with two finalists that cannot be separated on clinical accuracy, and
+**Why:** The September evaluation ended with two finalists that cannot be separated on clinical accuracy, and
 with four findings that are not model choices at all: the streaming chat path reached the
 emergency floor only when the model failed, the document pipeline cannot produce the
 page-anchored citations its release gate requires, a patient cannot ask a question about
@@ -839,6 +747,17 @@ model does not fix any of those. This task rebuilds the runtime around them.
       runner and model transports, so an over-budget call deterministically reaches the
       named fallback, and (2) retain evidence from a deployed synthetic request that
       `model_invocation_events` records the actual provider and model.
+- [/] **WS1-B — central background-workload routing.** The active legacy background
+      callers (document extraction, patient explanation, and evidence-only care-plan
+      classification) are being moved behind one registry-backed executor. It must enforce
+      the route's token and reasoning ceilings, wall-clock limit where one exists, named
+      distinct-model fallback, kill switch, and safe telemetry for every attempt. The
+      owning service, not an agent, remains responsible for the deterministic clinical
+      outcome: no extraction means evidence review, no explanation means its existing
+      retry/fallback state, and no care-plan classification keeps the approved plan intact
+      while the draft remains retryable. The work is claimed on
+      `codex/centralize-background-ai-routing`; direct client construction remains only for
+      evaluation or workloads that lack measured routing evidence.
 - [/] **WS2 — Agent runtime skeleton**, replacing the graph framework: one runner
       construction path that refuses to start unless every safety plugin is attached.
       **Dependencies landed.** `google-adk` 2.9.1 and `litellm` 1.101.0 are in
@@ -1278,6 +1197,13 @@ resources remain evidence-only and do not create local truth.
 
 ### REC-001 — Complete record ingestion lifecycle
 
+- [ ] Add content-derived document display titles after grounded extraction for future patient
+      and clinician uploads. Use only sourced document type, subject and date; never infer
+      missing diagnosis/date or rename the original file/storage key. Preserve the original
+      filename, document ID and provenance; show a neutral fallback and the original name
+      when uncertain. Reuse the display title consistently in document lists, chat catalog,
+      citations and care-plan review. Existing-document backfill is a separate opt-in step.
+      Ready for scoping with the evidence/portal owners; not part of PAT-005-G's generation fix.
 - [/] Establish one safe document-format and viewer contract. The generic clinical-document
       path supports PDF, JPEG, PNG, WebP, and TIFF only; it must render every supported source
       for the patient and assigned clinician, preserve the original artifact, and keep FHIR,
@@ -1496,6 +1422,10 @@ resources remain evidence-only and do not create local truth.
 - [/] Recover after refresh, websocket reconnect, provider timeout, and quota exhaustion.
       Existing chat reconnects, but the 2026-09-20 route-reuse defect proves that recovery is not
       complete for selected-document context.
+- [ ] Add durable terminal handling for each saved chat turn: persist `processing`, `completed`,
+      `failed`, or `interrupted`; enforce a bounded model deadline; reconcile unfinished turns on
+      reconnect; and retry the saved turn without duplicating the patient's message. Record only
+      safe outcome, duration, revision, and failure-category telemetry.
 - [ ] Prevent duplicate messages and duplicate tool actions.
 - [/] Show when an answer is based on approved records, general evidence, or insufficient
       information. The general contract exists; source visibility and focused-document behavior
@@ -1533,6 +1463,12 @@ drop its selected-document context and yield a generic chart answer.
       rendering, draft-only suggested question, refresh/reconnect, dismiss/replace behavior,
       patient/clinic isolation, expired/deleted documents, and audit linkage from each focused
       user message to its authorized document context.
+- [/] Answer a clear catalog question (for example, “What documents do you have on me?”) from
+      authenticated, patient-scoped portal metadata without invoking a model. The response lists
+      only documents available in MediAgent, never a signed URL, raw source text, or records from
+      another patient; it must not claim that the portal has no record access.
+- [/] Show the typing state immediately after a message is sent, rather than waiting for model
+      classification. A terminal completion, error, or connection close clears it.
 
 **Acceptance criteria**
 
@@ -1546,11 +1482,107 @@ drop its selected-document context and yield a generic chart answer.
 ### PAT-002 — Adherence, symptom, and barrier collection
 
 - [ ] Record medication adherence with patient confirmation.
-- [ ] Collect onset, duration, severity, related medication, and red flags for symptoms.
+- [ ] Collect onset, duration, severity, related medication, and red flags for symptoms through
+      the sequenced tasks below. A raw chat utterance is not itself a clinician report.
 - [ ] Capture barriers such as cost, side effects, access, confusion, and schedule.
 - [ ] Create clinician-approved follow-up tasks and care-gap state through PAT-005; an AI or
       unreviewed document must not create a patient-facing obligation directly.
 - [ ] Make structured reports visible in the clinician timeline.
+
+#### PAT-002-B — Guided chat symptom intake and patient-confirmed structured report
+
+**Status:** `[ ]` Backlog — sequenced after `PAT-005-C` live proof
+
+**Owner:** Unassigned; patient + backend lanes
+
+**Goal:** Make patient chat the intake surface for symptoms without treating free text as a
+clinical conclusion. The Care Coordinator first applies the deterministic safety floor, then
+uses bounded follow-up questions to collect only the details needed for a structured report. The
+patient reviews and confirms that report before it is visible as a report to the care team.
+
+**Evidence-aware interview contract:** The assistant may retrieve only the patient's authorized,
+grounded clinical context—such as approved medication state, relevant document-derived facts and
+their citations, and prior confirmed reports—to choose a useful next question. This is retrieval
+support, not a source of patient testimony: the report must distinguish patient-entered answers,
+document-grounded facts, AI-generated summary text, and later clinician decisions. Do not send an
+entire document corpus by default, infer a symptom from a document, or turn a retrieved fact into
+something the patient said.
+
+- [ ] Apply `SAFE-002` emergency/self-harm overrides before any symptom follow-up. The reviewed
+      escalation copy and required care-team notification take precedence over conversational
+      intake; do not ask questions that delay emergency direction.
+- [ ] For non-emergency symptom turns, collect only relevant missing fields: onset, duration,
+      severity, course, related medication or treatment when supplied by the patient, associated
+      symptoms, and red-flag answers. Never diagnose, assign causality, invent a medication link,
+      or tell the patient that an ADR has been established.
+- [ ] Build a versioned, clinician-approved question library rather than allowing an LLM to
+      improvise a medical interview. Its shared ADR fields cover event description and body
+      location, onset/course/severity, suspected-product exposure (name, strength, dose, route,
+      indication, start/stop/change dates), concomitant products, relevant history/tests, and
+      patient-reported outcome. Symptom-specific branches may ask only approved follow-ups (for
+      example skin, gastrointestinal, respiratory, neurologic, or medication-use-error details).
+- [ ] Create an auditable retrieval snapshot for each intake: retrieved fact/citation identifiers,
+      retrieval purpose, and rule/library version. The model receives the least context necessary;
+      it must preserve unknown or declined answers rather than filling gaps from a document or
+      model inference.
+- [ ] Persist a draft intake separately from a confirmed report. The patient can correct,
+      abandon, or confirm it; only confirmation creates the clinician-visible structured report.
+- [ ] Record the source conversation/turn references, locale, deterministic safety result,
+      patient-entered answers, confirmation actor/time, and safe report status needed for audit.
+      Do not persist private model reasoning, prompts, or provider traces.
+- [ ] Keep clinician notification and care-plan changes under existing review paths. The chat
+      agent must not autonomously create a patient-facing task, clinical recommendation, ADR
+      decision, or MedWatch record.
+- [ ] Enforce patient ownership, care-team assignment, RLS/grants, and API authorization for
+      drafts, confirmed reports, cancellation, and retrieval. Browser clients cannot directly
+      mutate clinician-facing report state.
+
+**Acceptance criteria**
+
+- [ ] A non-emergency patient can complete a bounded guided intake, see an accurate report
+      preview, correct it, and explicitly confirm it.
+- [ ] An emergency symptom follows the deterministic escalation path and is never obscured by a
+      symptom-worker acknowledgement or an intake questionnaire.
+- [ ] A confirmed report reconstructs the patient answers, source turns, safety result, and
+      confirmation without representing model output as clinical fact.
+- [ ] The patient-facing confirmation view identifies what they reported, what was retrieved from
+      their record, and what the assistant summarized; correcting the report never edits source
+      documents or prior confirmed reports.
+- [ ] An unrelated patient or unassigned clinician cannot list, read, alter, or infer a report.
+
+#### PAT-002-C — Patient symptom timeline and clinician-visible report detail
+
+**Status:** `[ ]` Backlog — depends on `PAT-002-B`
+
+**Owner:** Unassigned; patient + clinician portal lanes
+
+**Goal:** Render confirmed symptom reports as an understandable patient timeline and an
+authorized clinician detail record. This makes the report reviewable before pharmacovigilance
+work begins; it is not an ADR verdict or a MedWatch submission surface.
+
+- [ ] Show the patient a timeline of their confirmed reports, with timestamp, status, and the
+      patient-confirmed fields. Keep unconfirmed drafts private to the patient and clearly
+      distinguish them from reports shared with the care team.
+- [ ] Give assigned clinicians a detail view containing the structured report, conversation
+      provenance, patient confirmation, follow-up answers, safety result, retrieved
+      document/medication citations, and later clinician actions. Render patient-reported facts,
+      document-grounded context, AI summary, and clinician assessment as distinct sections; do
+      not expose hidden prompts or chain-of-thought.
+- [ ] Add report-status transitions for clinician review and information requests while retaining
+      the original confirmed report immutably. A correction or new patient report must be linked,
+      not silently overwrite history.
+- [ ] Add timeline/audit events and assignment-denial coverage for patient, clinician, and
+      cross-clinic access. Use the existing protected patient/document access patterns.
+
+**Acceptance criteria**
+
+- [ ] A patient sees only their own confirmed reports and can distinguish a draft from a shared
+      report.
+- [ ] An assigned clinician can inspect a report's patient-confirmed content and provenance;
+      an unassigned clinician receives a deny response and an audit event where applicable.
+- [ ] A later report or clinician information request preserves the original report history.
+- [ ] `PV-001` can consume this confirmed-report contract without scraping chat messages or
+      deriving an ADR from an unconfirmed draft.
 
 ### SAFE-002 — Deterministic triage overrides
 
@@ -1593,7 +1625,7 @@ drop its selected-document context and yield a generic chart answer.
       keywords, casing, and unaccented spellings.
 
 - [x] Run the safety floor before the model on the websocket streaming path. Found by the
-      AI-002 spike on 2026-09-10; P0. **Re-verified against the code on 2026-09-21, because
+      September 2026 evaluation; P0. **Re-verified against the code on 2026-09-21, because
       this row described a runtime that no longer exists:** it named
       `TriageAgent.process_stream` and `routers/chat.py:523`, and AI-003 has since rebuilt the
       runtime on the ADK care coordinator.
@@ -1623,11 +1655,11 @@ drop its selected-document context and yield a generic chart answer.
             `test_chat_emergency_copy.py` now check exact reviewed copy, not a substring;
             14 cases pass across both locales, self-harm, and medical emergency. Verified
             2026-09-22: 1,359 backend tests pass at 83.74% coverage, Ruff, Ruff format, mypy,
-            and migration validation clean. This closes the P0 and clears AI-002's gate.
+            and migration validation clean. This closes the original evaluation's P0 gate.
 - [ ] Close the inflected-keyword gap in the floor. "I've been thinking about ending my life"
       does not match `end my life` (substring matching, no stemming) while its Spanish mirror
       matches `quitarme la vida`; evolving anaphylaxis ("lips swelling, throat tight") and
-      stroke signs ("face droopy, words slurred") match nothing in either language. The AI-002
+      stroke signs ("face droopy, words slurred") match nothing in either language. The September
       harness reports `floor_fires` per scenario so keyword changes can be checked against the
       paired `en-US`/`es-MX` cases (`backend/tests/fixtures/eval/triage_classification.json`).
 
@@ -1730,7 +1762,68 @@ completion or report an adherence barrier, and that response becomes visible to 
       reporting where appropriate, and directs patients to their care team for changes.
 - [/] Handle plan changes safely: supersede or cancel stale tasks, avoid duplicate reminders,
       retain previously completed activity, update both portal views, and test concurrent edits,
-      reassignment, patient/clinic isolation, and stale browser state.
+      reassignment, patient/clinic isolation, and stale browser state. `PAT-005-D` adds an
+      assigned-clinician read-only active-versus-proposed comparison with linked document names,
+      all recorded citations, and an unsaved-edit approval guard. It does not yet reconcile a
+      new medication fact with a canonical medication, enforce patient-locale wording, or render
+      an exact Today preview; those remain required before the v1→v2 live acceptance test.
+- [x] `PAT-005-E` harden publication after Maya's review revealed repeated same-source
+      citations, Spanish draft wording for an `en-US` patient, and no visible canonical
+      medication match. The implementation deduplicates citation presentation, shows active
+      medication comparisons, requires a reviewed patient locale and explicit create/update
+      decision, and checks both in the atomic publication function. A checkbox records a
+      clinician's language verification; it does not machine-translate or prove that Spanish
+      text is English. PR #116 merged, migration 042 applied, and authorized synthetic Maya
+      review/save/reload/approval exercised on 2026-10-01. Whole PAT-005 acceptance is still open.
+- [/] `PAT-005-F` repair live closed-loop defects and repeat the deployed acceptance path.
+      Preserve the following acceptance gaps: legacy PRN/unknown cadence in daily totals,
+      incomplete TIFF extraction, clinician hydration-warning diagnosis, exact Today preview,
+      live isolation with separate accounts, and V1→V2 supersession/history proof.
+      Also verify conflict-detail presentation, bilingual parity, effective-date/timezone
+      edges, and rollback/audit reconstruction. For legacy PRN, inspect as-needed dosage
+      as well as `as recorded` frequency before counting daily due occurrences.
+      Do not treat optimistic UI state
+      as persisted adherence or count this historical Maya run as the fresh scenario proof.
+      Main repair implementation merged/deployed in PR #118; post-merge live acceptance
+      still needs verification. Patient naming and the CodeQL empty-except fix merged in
+      PR #119. Duplicate medication inputs are repaired with the oversized-evidence fix.
+      Includes failure-state visibility,
+      service/UI publication guards and pre-write field validation for partial generation.
+- [/] `PAT-005-G` repair the incomplete-evidence draft persistence contract. Missing source
+      wording must remain cited review blockers, not invented instructions or silently omitted
+      facts. Allow clinician edits/removal while publication enforces complete active items;
+      check generation state in the atomic SQL publication path. Test actual SQL constraints,
+      retry after partial writes, candidate provenance, draft uniqueness, and V1/history
+      preservation. Claimed by Rajeev on `codex/care-plan-oversized-evidence`. May start local
+      design/tests alongside F, but deployed V2 acceptance in C depends on both. Remote schema
+      changes require separate explicit authorization. Reproduction: Maya had 53 eligible
+      facts; 42 lacked frequency, while migration 040 required nonempty draft fields.
+      Keep those facts cited and blocked rather than filtering or fabricating instructions.
+      PR #119 implements missing-field review, transactional evidence/completion writes,
+      stale-claim guards and database publication/immutability checks. Seven disposable local
+      PostgreSQL cases pass (real constraints and approval function, rollback, permission
+      boundary and assignment denial). PR #119 merged/deployed and the user applied migration
+      043. The next retry failed because a source-derived title was 338 characters (limit 300).
+      Keep the complete fact/citation unchanged; abbreviate only the draft review heading,
+      require a reviewed replacement or removal (confirmation alone cannot resolve it), and
+      leave oversized instructions/frequency empty and blocked rather than truncating clinical
+      wording. Add boundary and real-SQL regression coverage. Deployed V2/reload/history proof
+      remains pending; do not mark G or PAT-005 complete from component tests.
+      Current fix verification: 1,449 backend tests passed (84.35% coverage; ten opt-in SQL
+      cases skipped in that run), all ten disposable SQL cases passed separately, and clinician
+      lint/typecheck/build plus 106 tests passed. Read-only preparation of Maya's 53 facts kept
+      all 53 items within storage bounds: one oversized heading and 42 review blockers; no model
+      call or remote write. This does not prove deployed model generation or publication.
+- [ ] `PAT-005-H` simplify patient reminder setup. Show a compact activity/saved-time summary,
+      then edit one item in a focused accessible panel reached from Today or settings. Keep
+      daily days implicit, show weekday choices only for a sourced weekly cadence, and show
+      only the required number of time inputs for a recognized frequency. Explain reminders
+      as optional preferences, not changes to instructions or delivered push notifications.
+      Preserve meal/event-based wording; ask for the patient's choice instead of assigning
+      clinical times. Keep timezone in an advanced control and surface unknown/PRN cadence
+      honestly. Test saved/reloaded preferences, cancellation, validation, error retention,
+      keyboard/mobile use and locale copy. Ready/unclaimed; design can run alongside G;
+      implementation must retain F's server-side cadence safeguards.
 
 **Acceptance criteria**
 
@@ -1766,22 +1859,58 @@ completion or report an adherence barrier, and that response becomes visible to 
 
 ### PV-001 — ADR and Naranjo workflow
 
+**Status:** `[/]` Partial — a read-only ADR evidence queue works, while the confirmed
+symptom-report contract still depends on `PAT-002-B` and `PAT-002-C`.
+
+**Owner:** Ganesh Thampi; pharmacovigilance + clinician lanes
+
+**Boundary:** This work begins from a patient-confirmed, clinician-visible symptom report—not
+from an unconfirmed chat message, model classification, or raw document text. It is clinician
+decision support, never autonomous ADR determination or external reporting.
+
 - [x] Replace empty pharmacovigilance modules with tested implementation.
-- [/] Collect ADR evidence and display missing information; clinician requests for additional evidence remain open.
+- [/] Consume the confirmed symptom-report contract with its patient answers, safety result, and
+      provenance; preserve the separation between patient testimony, document context, and
+      clinician assessment. Let a clinician request missing information without rewriting the
+      original report.
+- [/] Use the approved intake library and patient-confirmed report to identify missing ADR facts:
+      event/outcome, suspected product and therapy dates, concomitant products, relevant tests or
+      history, and reportable seriousness indicators. The clinician decides relevance, causality,
+      seriousness, and whether further information is needed.
 - [x] Calculate Naranjo assistance deterministically where possible.
 - [x] Keep model-generated classification separate from reviewer decision.
 - [ ] Support reassessment when evidence changes.
 
+**Acceptance criteria**
+
+- [/] A clinician can review a confirmed report, document an ADR decision or uncertainty, and
+      see the evidence/provenance used for each conclusion.
+- [x] Naranjo assistance exposes its inputs and is never presented as the clinician's final
+      decision.
+- [/] An unassigned clinician cannot access the report or ADR review, and all reviewer actions
+      are auditable.
+
 Verification evidence — 2026-10-02: synthetic patient chat produced two persisted draft ADR
 assessments with patient-grounded evidence and deterministic Naranjo score 3 (`Possible`). The
 assigned clinician API and portal queue display the score inputs and missing questions without
-private model reasoning. The queue is intentionally read-only until reviewed decision, evidence
-request, audit, and reassessment behavior are implemented.
+private model reasoning. The queue is intentionally read-only until the confirmed-report,
+reviewed-decision, evidence-request, audit, and reassessment behavior is implemented.
 
 ### PV-002 — MedWatch draft lifecycle
 
-- [ ] Generate an editable MedWatch-compatible draft.
-- [ ] Link every populated field to source evidence.
+**Status:** `[ ]` Backlog — depends on clinician ADR review (`PV-001`)
+
+**Owner:** Jeevan Kurian; clinician portal + pharmacovigilance lanes
+
+**Boundary:** The outcome is an editable, clinician-approved export artifact. This slice must
+never submit a report to FDA/MedWatch or portray a draft as filed.
+
+- [ ] Generate an editable MedWatch-compatible draft only from patient-confirmed facts,
+      document-grounded facts with citations, and clinician-approved assessments. Keep unknown,
+      declined, or unsupported fields empty rather than inferred.
+- [ ] Map populated patient, event/outcome, suspect-product/therapy-date, concomitant-product,
+      test/history, and reporter fields to their source evidence. A patient statement must remain
+      attributable to the patient; a document fact must retain its document citation.
 - [ ] Require clinician/pharmacist approval.
 - [ ] Export the approved draft without submitting it.
 - [ ] Audit edits and reviewer sign-off.
@@ -1965,9 +2094,10 @@ would still have to be constrained and verified first.
 | Jeevan Kurian | Clinician portal, review queues, messaging, continuity | FHIR workflow UX |
 
 - [x] Replace Engineer 1–4 with team-member names.
-- [ ] Assign an owner for pharmacovigilance (PV-001, PV-002). The superseded
-      placeholder table listed PV under the clinician-portal lane; `TEAM.md` does not,
-      so the whole R4 pharmacovigilance milestone is currently unowned.
+- [ ] Assign an owner for pharmacovigilance (`PV-001`, `PV-002`) before `PAT-002-C` hands off
+      the confirmed symptom-report contract. The superseded placeholder table listed PV under
+      the clinician-portal lane; `TEAM.md` does not, so this later sequenced work is currently
+      unowned.
 - [ ] Assign the first integration owner.
 - [ ] Assign a clinician/pharmacist review schedule.
 - [ ] Require one peer review for every PR.
@@ -1987,6 +2117,6 @@ would still have to be constrained and verified first.
 | 2026-08-18 | Product delivery outranks research publication | Evaluation supports engineering and safety decisions |
 | 2026-08-18 | REV-001 is the first engineering task | Trustworthy, bounded CI is required before feature delivery |
 | 2026-09-09 | ~~NVIDIA NIM is out of scope for provider comparison~~ | Superseded on 2026-09-11. The entry assumed no endpoint was reachable; NIM's cloud API is, and the premise was wrong |
-| 2026-09-10 | Provider routing is decided per workload from harness evidence, with a deterministic layer first and GA model IDs only in production defaults | The AI-002 spike found stale routing evidence, an unreachable medical-model endpoint, unsupported SDK paths, and missing telemetry/kill switches. The current implementation and its remaining limits are in `docs/decisions/ai-runtime-2026-09.md`. |
+| 2026-09-10 | Provider routing is decided per workload from harness evidence, with a deterministic layer first and GA model IDs only in production defaults | The September evaluation found stale routing evidence, an unreachable medical-model endpoint, unsupported SDK paths, and missing telemetry/kill switches. Active runtime work is in `AI-003`; current controls and limits are in `docs/decisions/ai-runtime-2026-09.md`. |
 | 2026-09-10 | Free-tier endpoints are for synthetic evaluation only and are not a deployment lane | AI Studio free-tier terms allow training and human review of inputs and carry no BAA; the project's key is also on depleted prepaid billing. Zero-cost serving means self-hosted open weights, which need a GPU host for anything beyond 4B-class models |
 | 2026-09-11 | NVIDIA NIM is the third comparison provider | It is reachable through NVIDIA's hosted catalog over an OpenAI-compatible API. It is also the only candidate not hosted by Google, so its failures are the least likely to correlate with MedGemma's and Gemini's — which is what makes a reliability comparison mean anything |

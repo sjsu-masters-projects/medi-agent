@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AdherenceChart } from "@/components/features/adherence-chart";
+import { AdherenceChart, toAdherenceChartData } from "@/components/features/adherence-chart";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { DocumentSummary } from "@/components/features/document-summary";
@@ -38,6 +38,18 @@ vi.mock("@/services/clinicians", () => ({
 // ── AdherenceChart tests ──────────────────────────────────────────────────────
 
 describe("AdherenceChart", () => {
+    it("renders gaps for unrecorded days but retains recorded zero completion", () => {
+        const data = [
+            { date: "2026-10-01", score: 0, completed: 0, expected: 0 },
+            { date: "2026-10-02", score: 0, completed: 0, expected: 1 },
+        ];
+        expect(toAdherenceChartData(data).map((point) => point.score)).toEqual([null, 0]);
+        expect(data[0]?.score).toBe(0);
+    });
+    it("handles a zero-filled reporting window as no data", () => {
+        render(<AdherenceChart data={[{ date: "2026-10-01", score: 0, completed: 0, expected: 0 }]} />);
+        expect(screen.getByText(/No adherence data available/i)).toBeInTheDocument();
+    });
     const mockData = Array.from({ length: 30 }, (_, i) => ({
         date: `2026-03-${String(i + 1).padStart(2, "0")}`,
         score: 0.7 + i * 0.005,

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
+
+from app.models.feed import TodayFeedResponse
 
 
 class CarePlanStatus(StrEnum):
@@ -46,12 +48,16 @@ class CarePlanDraftProposal(BaseModel):
 class CarePlanItemUpdate(BaseModel):
     id: UUID
     title: str = Field(min_length=1, max_length=300)
-    instructions: str = Field(min_length=1, max_length=2000)
-    frequency: str = Field(min_length=1, max_length=200)
+    # Incomplete evidence remains editable/removable in drafts. Publication,
+    # not review submission, owns the complete-instruction requirement.
+    instructions: str = Field(max_length=2000)
+    frequency: str = Field(max_length=200)
     schedule: dict[str, Any] = Field(default_factory=dict)
     medication: dict[str, Any] = Field(default_factory=dict)
     is_removed: bool = False
     clinician_confirmed: bool = False
+    language_verified: bool = False
+    verified_locale: Literal["en-US", "es-MX"] | None = None
 
 
 class CarePlanDraftUpdate(BaseModel):
@@ -60,6 +66,15 @@ class CarePlanDraftUpdate(BaseModel):
 
 class CarePlanApprovalRequest(BaseModel):
     note: str = Field(min_length=1, max_length=5000)
+
+
+class CarePlanTodayPreviewRead(BaseModel):
+    """Current-record snapshot, not a reservation or publication result."""
+
+    plan_id: UUID
+    version_number: int = Field(ge=1)
+    generated_at: datetime
+    feed: TodayFeedResponse
 
 
 class CarePlanItemRead(BaseModel):
@@ -75,6 +90,7 @@ class CarePlanItemRead(BaseModel):
     uncertainty: list[str] = Field(default_factory=list)
     conflict: dict[str, Any] = Field(default_factory=dict)
     blocker_reason: str | None = None
+    reviewed_locale: str | None = None
     is_removed: bool = False
     projection_type: str | None = None
     projection_id: UUID | None = None

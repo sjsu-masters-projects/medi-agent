@@ -8,13 +8,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
-from app.clients.model_router import TaskType, get_router
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
-from app.models.care_plan import CarePlanCategory, CarePlanDraftProposal, CarePlanDraftUpdate
+from app.models.care_plan import CarePlanCategory, CarePlanDraftUpdate, CarePlanItemUpdate
 from app.models.clinical_fact import (
     ClinicalFactCreate,
     ConfidenceBand,
@@ -23,12 +21,19 @@ from app.models.clinical_fact import (
     SourceProvenanceCreate,
 )
 from app.models.generation import GenerationErrorCode, GenerationProviderError
-from app.services.care_plan_prompts import CARE_PLAN_DRAFT_SYSTEM, CARE_PLAN_DRAFT_USER
+from app.services.care_plan_classification import (
+    CarePlanClassificationError,
+    classify_facts,
+)
+from app.services.care_plan_reconciliation import overlaps
 from app.services.clinical_fact_service import ClinicalFactService
 
 logger = logging.getLogger(__name__)
 
 _LOW_CONFIDENCE = 0.7
+_SOURCE_TITLE_REVIEW = (
+    "Source title exceeds the draft limit; replace it after reviewing the full evidence."
+)
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
 _TRANSIENT_PROVIDER_FAILURES = frozenset(
     {
@@ -37,6 +42,10 @@ _TRANSIENT_PROVIDER_FAILURES = frozenset(
         GenerationErrorCode.UNAVAILABLE,
     }
 )
+
+
+class CarePlanSourceFieldsError(Exception):
+    """Grounded wording cannot fit the current draft persistence contract."""
 
 
 class CarePlanService:
@@ -71,13 +80,33 @@ class CarePlanService:
             except Exception as error:  # noqa: BLE001 - classification owns the safe boundary
                 outcome, failure = self._record_generation_failure(claim, error)
                 counts[outcome] += 1
-                self._log_generation_outcome(claim, outcome=outcome, failure_code=failure)
+                diagnostics = (
+                    error.diagnostics if isinstance(error, CarePlanClassificationError) else None
+                )
+                self._log_generation_outcome(
+                    claim, outcome=outcome, failure_code=failure, diagnostics=diagnostics
+                )
         return counts
 
     def get_for_clinician(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any] | None:
         self._require_assignment(clinician_id, patient_id)
         plans = self._plans(patient_id)
         return self._hydrate_plan(plans[0]) if plans else None
+
+    def get_review_context_for_clinician(
+        self, clinician_id: UUID, patient_id: UUID
+    ) -> dict[str, Any]:
+        """Return both review states without exposing another patient's plan."""
+        self._require_assignment(clinician_id, patient_id)
+        plans = self._plans(patient_id)
+        active = next((plan for plan in plans if plan["status"] == "approved"), None)
+        latest = plans[0] if plans else None
+        return {
+            "latest": self._hydrate_plan(latest) if latest else None,
+            "active": self._hydrate_plan(active) if active and active != latest else None,
+            "patient_locale": self._patient_locale(patient_id),
+            "active_medications": self._active_medications(patient_id),
+        }
 
     def generation_for_clinician(
         self, clinician_id: UUID, patient_id: UUID
@@ -116,8 +145,30 @@ class CarePlanService:
         known = {str(row["id"]): row for row in self._items(UUID(str(plan["id"])))}
         if set(str(item.id) for item in update.items) != set(known):
             raise ValidationError("The draft changed; reload before saving your review")
+        locale = self._patient_locale(patient_id)
+        medications = self._active_medications(patient_id)
+        validated: list[tuple[UUID, dict[str, Any]]] = []
         for item in update.items:
             original = known[str(item.id)]
+            medication_error = None
+            if item.language_verified and item.verified_locale != locale:
+                raise ValidationError(
+                    "Patient language changed; reload before verifying this draft"
+                )
+            if original["category"] == "medication" and not item.is_removed:
+                try:
+                    self._validate_medication_decision(item.medication, medications)
+                    if (
+                        item.frequency.strip()
+                        != str(item.medication.get("frequency") or "").strip()
+                    ):
+                        raise ValidationError(
+                            "Medication frequency must match the patient-facing item"
+                        )
+                except ValidationError as exc:
+                    # Review must remain saveable before reconciliation is complete.
+                    # Publication validates the decision independently and still rejects it.
+                    medication_error = str(exc)
             blocker = self._blocker(
                 category=str(original["category"]),
                 title=item.title,
@@ -127,27 +178,85 @@ class CarePlanService:
                 confidence=original.get("confidence_score"),
                 conflict=cast(dict[str, Any], original.get("conflict") or {}),
                 removed=item.is_removed,
-                confirmed=item.clinician_confirmed,
+                confirmed=item.clinician_confirmed or self._retains_confirmation(original, item),
+                source_title_requires_edit=(
+                    _SOURCE_TITLE_REVIEW in (original.get("uncertainty") or [])
+                    and item.title.strip() == str(original["title"]).strip()
+                ),
             )
-            self.db.table("care_plan_items").update(
-                {
-                    "title": item.title.strip(),
-                    "instructions": item.instructions.strip(),
-                    "frequency": item.frequency.strip(),
-                    "schedule": item.schedule,
-                    "medication": item.medication,
-                    "is_removed": item.is_removed,
-                    "blocker_reason": blocker,
-                }
-            ).eq("id", str(item.id)).eq("plan_version_id", str(plan_id)).execute()
-        self._audit(plan_id, clinician_id, "draft_edited", {"item_count": len(update.items)})
+            blocker = medication_error or blocker
+            validated.append(
+                (
+                    item.id,
+                    {
+                        "title": item.title.strip(),
+                        "instructions": item.instructions.strip(),
+                        "frequency": item.frequency.strip(),
+                        "schedule": item.schedule,
+                        "medication": item.medication,
+                        "is_removed": item.is_removed,
+                        "blocker_reason": blocker,
+                        "uncertainty": [
+                            warning
+                            for warning in (original.get("uncertainty") or [])
+                            if warning != _SOURCE_TITLE_REVIEW
+                            or item.title.strip() == str(original["title"]).strip()
+                        ],
+                        "reviewed_locale": locale
+                        if item.language_verified and not item.is_removed
+                        else None,
+                    },
+                )
+            )
+        for item_id, payload in validated:
+            self.db.table("care_plan_items").update(payload).eq("id", str(item_id)).eq(
+                "plan_version_id", str(plan_id)
+            ).execute()
+        self._audit(
+            plan_id,
+            clinician_id,
+            "draft_edited",
+            {
+                "item_count": len(update.items),
+                "confirmed_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if item.clinician_confirmed and not item.is_removed
+                ],
+                "removed_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if item.is_removed and not known[str(item.id)].get("is_removed")
+                ],
+                "restored_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if not item.is_removed and known[str(item.id)].get("is_removed")
+                ],
+            },
+        )
         return self._hydrate_plan(self._plan(plan_id, patient_id))
+
+    @staticmethod
+    def _retains_confirmation(original: dict[str, Any], item: CarePlanItemUpdate) -> bool:
+        """A saved resolution applies only to exactly unchanged, active review content."""
+        return (
+            "blocker_reason" in original
+            and original["blocker_reason"] is None
+            and not original.get("is_removed")
+            and not item.is_removed
+            and all(
+                str(original.get(field) or "").strip() == getattr(item, field).strip()
+                for field in ("title", "instructions", "frequency")
+            )
+            and (original.get("schedule") or {}) == item.schedule
+            and (original.get("medication") or {}) == item.medication
+        )
 
     def approve(
         self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, note: str
     ) -> dict[str, Any]:
-        self._require_assignment(clinician_id, patient_id)
-        self._draft(plan_id, patient_id)
+        self.publication_snapshot(clinician_id, patient_id, plan_id)
         result = self.db.rpc(
             "approve_care_plan_version",
             {
@@ -157,6 +266,89 @@ class CarePlanService:
             },
         ).execute()
         return cast(dict[str, Any], result.data or {})
+
+    def publication_snapshot(
+        self, clinician_id: UUID, patient_id: UUID, plan_id: UUID
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Read-only publication preflight. The transaction rechecks these guards."""
+        self._require_assignment(clinician_id, patient_id)
+        plan = self._draft(plan_id, patient_id)
+        self._require_generation_complete(clinician_id, patient_id)
+        locale = self._patient_locale(patient_id)
+        medications = self._active_medications(patient_id)
+        items = self._items(plan_id)
+        for item in items:
+            if item.get("is_removed"):
+                continue
+            if item.get("reviewed_locale") != locale:
+                raise ValidationError("Verify every patient-facing item in the patient's language")
+            if item["category"] == "medication":
+                self._validate_medication_decision(item.get("medication") or {}, medications)
+                if (
+                    str(item.get("frequency") or "").strip()
+                    != str((item.get("medication") or {}).get("frequency") or "").strip()
+                ):
+                    raise ValidationError("Medication frequency must match the patient-facing item")
+        fact_ids = [str(item["source_fact_id"]) for item in items if item.get("source_fact_id")]
+        facts: list[dict[str, Any]] = []
+        if fact_ids:
+            facts = cast(
+                list[dict[str, Any]],
+                self.db.table("clinical_facts")
+                .select("id, fact_type, value")
+                .in_("id", fact_ids)
+                .execute()
+                .data
+                or [],
+            )
+        if overlaps(items, facts):
+            raise ValidationError("Resolve overlapping plan items before publication")
+        return plan, items
+
+    def _require_generation_complete(self, clinician_id: UUID, patient_id: UUID) -> None:
+        generation = self.generation_for_clinician(clinician_id, patient_id)
+        if generation and generation["status"] != "completed":
+            raise ValidationError(
+                "Automatic generation must complete before this draft can be published"
+            )
+
+    def _patient_locale(self, patient_id: UUID) -> str:
+        result = (
+            self.db.table("patients")
+            .select("preferred_language")
+            .eq("id", str(patient_id))
+            .single()
+            .execute()
+        )
+        patient = cast(dict[str, Any], result.data or {})
+        return str(patient.get("preferred_language") or "en-US")
+
+    def _active_medications(self, patient_id: UUID) -> list[dict[str, Any]]:
+        result = (
+            self.db.table("medications")
+            .select("id, name, dosage, frequency, route, instructions, care_plan_item_id")
+            .eq("patient_id", str(patient_id))
+            .eq("is_active", True)
+            .execute()
+        )
+        return cast(list[dict[str, Any]], result.data or [])
+
+    @staticmethod
+    def _validate_medication_decision(
+        medication: dict[str, Any], active: list[dict[str, Any]]
+    ) -> None:
+        decision = medication.get("decision")
+        name = str(medication.get("name") or "").strip().casefold()
+        target_id = str(medication.get("target_id") or "")
+        if decision == "create" and name and not target_id:
+            if any(str(row.get("name") or "").strip().casefold() == name for row in active):
+                raise ValidationError("An active medication with this name already exists")
+            return
+        if decision == "update" and target_id:
+            target = next((row for row in active if str(row.get("id")) == target_id), None)
+            if target and str(target.get("name") or "").strip().casefold() == name:
+                return
+        raise ValidationError("Choose an active matching medication to update or create a new one")
 
     def retry_failed_generation(self, clinician_id: UUID, patient_id: UUID) -> None:
         self._require_assignment(clinician_id, patient_id)
@@ -269,29 +461,27 @@ class CarePlanService:
             return
         categories = await self._select_categories(facts)
         conflicts = self._medication_conflicts(facts)
-        draft = self._open_draft(patient_id, str(claim["source_watermark"]))
-        plan_id = UUID(str(draft["id"]))
-        existing_fact_ids = {
-            str(item["source_fact_id"])
-            for item in self._items(plan_id)
-            if item.get("source_fact_id") is not None
-        }
-        for fact in facts:
-            if str(fact["id"]) in existing_fact_ids:
-                continue
-            item = self._item_from_fact(
+        proposed = [
+            self._item_from_fact(
                 fact,
                 category=categories[str(fact["id"])],
                 conflict=conflicts.get(str(fact["id"]), {}),
             )
-            self.db.table("care_plan_items").insert(
-                {"plan_version_id": str(draft["id"]), **item}
-            ).execute()
-        self.db.table("care_plan_versions").update(
-            {"source_watermark": str(claim["source_watermark"])}
-        ).eq("id", str(plan_id)).execute()
-        self._audit(plan_id, None, "generated", {"fact_count": len(facts)})
-        self._finish_request(claim, status="completed", plan_id=plan_id)
+            for fact in facts
+        ]
+        draft = self._open_draft(patient_id, str(claim["source_watermark"]))
+        plan_id = UUID(str(draft["id"]))
+        # All new evidence and the completion marker commit together. A retry
+        # retains already-reviewed items and cannot acknowledge a partial write.
+        self.db.rpc(
+            "complete_care_plan_generation",
+            {
+                "p_plan_version_id": str(plan_id),
+                "p_request_id": str(claim["request_id"]),
+                "p_source_watermark": str(claim["source_watermark"]),
+                "p_items": proposed,
+            },
+        ).execute()
 
     def _plan_facts(self, patient_id: UUID) -> list[dict[str, Any]]:
         result = (
@@ -303,41 +493,35 @@ class CarePlanService:
             .order("created_at", desc=True)
             .execute()
         )
-        return cast(list[dict[str, Any]], result.data or [])
+        facts = cast(list[dict[str, Any]], result.data or [])
+        if not facts:
+            return []
+        citations = cast(
+            list[dict[str, Any]],
+            self.db.table("evidence_citations")
+            .select("fact_id, source_provenances!inner(artifact_type, document_id, withdrawn_at)")
+            .in_("fact_id", [str(fact["id"]) for fact in facts])
+            .execute()
+            .data
+            or [],
+        )
+        eligible = {
+            str(row["fact_id"])
+            for row in citations
+            if (source := row.get("source_provenances"))
+            and not source.get("withdrawn_at")
+            and (
+                source.get("artifact_type") == "clinician_entry"
+                or (source.get("artifact_type") == "document" and source.get("document_id"))
+            )
+        }
+        # SMART/FHIR candidates stay in External records. Importing a resource is
+        # not an instruction to propose that historical therapy in today's plan.
+        return [fact for fact in facts if str(fact["id"]) in eligible]
 
     async def _select_categories(self, facts: list[dict[str, Any]]) -> dict[str, str]:
         """Let the model classify fixed evidence; it cannot author an instruction."""
-        prompt_facts = [
-            {
-                "source_fact_id": str(fact["id"]),
-                "fact_type": fact["fact_type"],
-                "value": fact.get("value") or {},
-                "confidence_score": fact.get("confidence_score"),
-                "uncertainty": fact.get("uncertainty") or [],
-            }
-            for fact in facts
-        ]
-        response, _telemetry = await get_router().generate_text_with_telemetry(
-            TaskType.CARE_PLAN_DRAFT,
-            prompt=CARE_PLAN_DRAFT_USER.format(facts_json=json.dumps(prompt_facts, sort_keys=True)),
-            system_instruction=CARE_PLAN_DRAFT_SYSTEM,
-            temperature=0,
-            max_tokens=1024,
-        )
-        proposal = CarePlanDraftProposal.model_validate_json(str(response))
-        expected_ids = {str(fact["id"]) for fact in facts}
-        selected_ids = [str(item.source_fact_id) for item in proposal.items]
-        if set(selected_ids) != expected_ids or len(selected_ids) != len(expected_ids):
-            raise ValueError("Care-plan draft must select every grounded source fact exactly once")
-
-        categories = {str(item.source_fact_id): item.category.value for item in proposal.items}
-        for fact in facts:
-            category = categories[str(fact["id"])]
-            if fact["fact_type"] == "medication" and category != CarePlanCategory.MEDICATION.value:
-                raise ValueError("Medication facts must remain medication plan items")
-            if fact["fact_type"] == "obligation" and category == CarePlanCategory.MEDICATION.value:
-                raise ValueError("Obligation facts cannot become medication plan items")
-        return categories
+        return await classify_facts(facts)
 
     @staticmethod
     def _medication_conflicts(facts: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -396,6 +580,24 @@ class CarePlanService:
             frequency = str(value.get("frequency") or "")
             instructions = title
             medication = {}
+        uncertainty = list(fact.get("uncertainty") or [])
+        oversized_title = len(title) > 300
+        if oversized_title:
+            # Only the review heading is abbreviated. Full wording remains in the
+            # linked fact/citations, and confirmation cannot publish this heading.
+            title = title[:299] + "…"
+            uncertainty.append(_SOURCE_TITLE_REVIEW)
+        if len(instructions) > 2000:
+            instructions = ""
+            uncertainty.append(
+                "Source instructions exceed the draft limit; review the full evidence."
+            )
+        if len(frequency) > 200:
+            frequency = ""
+            medication.pop("frequency", None)
+            uncertainty.append(
+                "Source frequency exceeds the draft limit; review the full evidence."
+            )
         return {
             "source_fact_id": str(fact["id"]),
             "category": category,
@@ -404,7 +606,7 @@ class CarePlanService:
             "frequency": frequency,
             "medication": medication,
             "confidence_score": fact.get("confidence_score"),
-            "uncertainty": fact.get("uncertainty") or [],
+            "uncertainty": uncertainty,
             "conflict": conflict,
             "blocker_reason": self._blocker(
                 category=category,
@@ -416,6 +618,7 @@ class CarePlanService:
                 conflict=conflict,
                 removed=False,
                 confirmed=False,
+                source_title_requires_edit=oversized_title,
             ),
         }
 
@@ -471,6 +674,12 @@ class CarePlanService:
                         "is_removed",
                     }
                 }
+                if item.get("projection_type") == "medication" and item.get("projection_id"):
+                    payload["medication"] = {
+                        **(item.get("medication") or {}),
+                        "decision": "update",
+                        "target_id": str(item["projection_id"]),
+                    }
                 self.db.table("care_plan_items").insert(
                     {
                         **payload,
@@ -493,7 +702,9 @@ class CarePlanService:
                     if self._retry(claim, failure=failure)
                     else ("care_plans_retry", failure)
                 )
-        elif isinstance(error, PydanticValidationError | ValueError):
+        elif isinstance(error, CarePlanSourceFieldsError):
+            failure = "source_fields_incomplete"
+        elif isinstance(error, CarePlanClassificationError | ValueError):
             failure = "invalid_model_response"
         else:
             failure = "generation_internal_error"
@@ -502,7 +713,11 @@ class CarePlanService:
 
     @staticmethod
     def _log_generation_outcome(
-        claim: dict[str, Any], *, outcome: str, failure_code: str | None = None
+        claim: dict[str, Any],
+        *,
+        outcome: str,
+        failure_code: str | None = None,
+        diagnostics: dict[str, int | str] | None = None,
     ) -> None:
         """Emit a Cloud Run-correlatable outcome without source or patient content."""
         event: dict[str, int | str] = {
@@ -513,6 +728,8 @@ class CarePlanService:
         }
         if failure_code is not None:
             event["failure_code"] = failure_code
+        if diagnostics is not None:
+            event.update(diagnostics)
         log = logger.warning if failure_code is not None else logger.info
         log("%s", json.dumps(event, sort_keys=True, separators=(",", ":")))
 
@@ -528,7 +745,9 @@ class CarePlanService:
                 "failure_code": failure,
                 "claimed_at": None,
             }
-        ).eq("id", str(claim["request_id"])).execute()
+        ).eq("id", str(claim["request_id"])).eq("status", "processing").eq(
+            "source_watermark", str(claim["source_watermark"])
+        ).execute()
         return False
 
     def _finish_request(
@@ -546,7 +765,9 @@ class CarePlanService:
                 "completed_at": datetime.now(UTC).isoformat(),
                 "failure_code": failure,
             }
-        ).eq("id", str(claim["request_id"])).execute()
+        ).eq("id", str(claim["request_id"])).eq("status", "processing").eq(
+            "source_watermark", str(claim["source_watermark"])
+        ).execute()
 
     @staticmethod
     def _blocker(
@@ -560,11 +781,12 @@ class CarePlanService:
         conflict: dict[str, Any] | None = None,
         removed: bool,
         confirmed: bool,
+        source_title_requires_edit: bool = False,
     ) -> str | None:
-        if removed or confirmed:
+        if removed:
             return None
-        if conflict:
-            return "Resolve conflicting medication instructions before approval."
+        if source_title_requires_edit:
+            return _SOURCE_TITLE_REVIEW
         if (
             not title.strip()
             or not instructions.strip()
@@ -572,12 +794,25 @@ class CarePlanService:
             or frequency.strip().lower() == "as directed"
         ):
             return "Clarify the patient-facing instruction and frequency before approval."
-        if confidence is None or float(confidence) < _LOW_CONFIDENCE:
-            return "Confirm this low-confidence source extraction before approval."
         if category == "medication" and not all(
             str(medication.get(k) or "").strip() for k in ("name", "dosage", "frequency", "route")
         ):
             return "Medication name, dose, route, and frequency are required before approval."
+        if category == "medication" and medication.get("route") not in {
+            "oral",
+            "topical",
+            "inhaled",
+            "iv",
+            "im",
+            "subcutaneous",
+        }:
+            return "Review and select a supported medication route before approval."
+        if confirmed:
+            return None
+        if conflict:
+            return "Resolve conflicting medication instructions before approval."
+        if confidence is None or float(confidence) < _LOW_CONFIDENCE:
+            return "Confirm this low-confidence source extraction before approval."
         return None
 
     def _plans(self, patient_id: UUID) -> list[dict[str, Any]]:
@@ -623,13 +858,25 @@ class CarePlanService:
     def _hydrate_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
         items = self._items(UUID(str(plan["id"])))
         fact_ids = [str(item["source_fact_id"]) for item in items if item.get("source_fact_id")]
-        sources: dict[str, dict[str, Any]] = {}
+        sources: dict[str, list[dict[str, Any]]] = {}
+        facts: list[dict[str, Any]] = []
+        origins: dict[str, set[str]] = {}
         if fact_ids:
+            facts = cast(
+                list[dict[str, Any]],
+                self.db.table("clinical_facts")
+                .select("id, fact_type, value")
+                .in_("id", fact_ids)
+                .execute()
+                .data
+                or [],
+            )
             citations = cast(
                 list[dict[str, Any]],
                 self.db.table("evidence_citations")
                 .select("fact_id, excerpt, location, provenance_id")
                 .in_("fact_id", fact_ids)
+                .order("created_at")
                 .execute()
                 .data
                 or [],
@@ -641,7 +888,7 @@ class CarePlanService:
                 cast(
                     list[dict[str, Any]],
                     self.db.table("source_provenances")
-                    .select("id, document_id, document_location")
+                    .select("id, document_id, document_location, artifact_type")
                     .in_("id", provenance_ids)
                     .execute()
                     .data
@@ -651,20 +898,70 @@ class CarePlanService:
                 else []
             )
             by_provenance = {str(row["id"]): row for row in provenance}
+            document_ids = list(
+                {
+                    str(row["document_id"])
+                    for row in provenance
+                    if row.get("document_id") is not None
+                }
+            )
+            documents = (
+                cast(
+                    list[dict[str, Any]],
+                    self.db.table("documents")
+                    .select("id, file_name")
+                    .in_("id", document_ids)
+                    .execute()
+                    .data
+                    or [],
+                )
+                if document_ids
+                else []
+            )
+            document_names = {str(row["id"]): row["file_name"] for row in documents}
+            seen_citations: set[tuple[str, str, str, str]] = set()
             for citation in citations:
                 source = by_provenance.get(str(citation.get("provenance_id")))
                 if source:
-                    sources[str(citation["fact_id"])] = {
-                        "document_id": source.get("document_id"),
-                        "excerpt": citation.get("excerpt"),
-                        "location": citation.get("location")
-                        or source.get("document_location")
-                        or {},
-                    }
+                    origins.setdefault(str(citation["fact_id"]), set()).add(
+                        str(source.get("artifact_type") or "unknown")
+                    )
+                    document_id = source.get("document_id")
+                    location = citation.get("location") or source.get("document_location") or {}
+                    excerpt = " ".join(str(citation.get("excerpt") or "").split())
+                    key = (
+                        str(citation["fact_id"]),
+                        str(document_id),
+                        json.dumps(location, sort_keys=True),
+                        excerpt,
+                    )
+                    if key in seen_citations:
+                        continue
+                    seen_citations.add(key)
+                    sources.setdefault(str(citation["fact_id"]), []).append(
+                        {
+                            "document_id": document_id,
+                            "file_name": document_names.get(str(document_id)),
+                            "excerpt": excerpt,
+                            "location": location,
+                        }
+                    )
+        peers = overlaps(items, facts) if plan.get("status") == "draft" else {}
         return {
             **plan,
             "items": [
-                {**item, "source": sources.get(str(item.get("source_fact_id")))} for item in items
+                {
+                    **item,
+                    "overlapping_item_ids": peers.get(str(item["id"]), []),
+                    "imported_evidence": bool(
+                        origins.get(str(item.get("source_fact_id")))
+                        and origins[str(item.get("source_fact_id"))]
+                        <= {"fhir_resource", "external_record"}
+                    ),
+                    "source": next(iter(sources.get(str(item.get("source_fact_id")), [])), None),
+                    "sources": sources.get(str(item.get("source_fact_id")), []),
+                }
+                for item in items
             ],
         }
 

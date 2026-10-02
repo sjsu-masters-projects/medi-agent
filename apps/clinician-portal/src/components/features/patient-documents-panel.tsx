@@ -558,6 +558,7 @@ export function PatientDocumentsPanel({
                                 {factsSourceError ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{factsSourceError}</p> : null}
                                 {factsSource ? (
                                     <DocumentSourceViewer
+                                        initialPage={facts.find((fact) => fact.id === selectedFactId)?.citations?.[0]?.location?.page ?? 1}
                                         fileName={factsSource.file_name}
                                         previewMimeType={factsSource.preview_mime_type}
                                         previewStatus={factsSource.preview_status}

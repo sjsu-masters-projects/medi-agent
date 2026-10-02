@@ -187,6 +187,16 @@ class DocumentReviewActionResponse(BaseModel):
     review_note: str | None = None
 
 
+class AdherenceBarrierRead(BaseModel):
+    """Patient-reported barrier retained in the assigned clinician response."""
+
+    target_type: Literal["medication", "obligation"]
+    target_id: UUID
+    barrier_code: Literal["side_effects", "cost", "access", "schedule", "confusion", "other"]
+    notes: str | None = None
+    logged_at: str
+
+
 class PatientDeepDive(BaseModel):
     """Aggregated patient data for the Patient Deep Dive view."""
 
@@ -206,6 +216,7 @@ class PatientDeepDive(BaseModel):
     # Sub-resources
     medications: list[dict[str, Any]] = Field(default_factory=list)
     adherence_series: list[AdherenceDataPoint] = Field(default_factory=list)
+    adherence_barriers: list[AdherenceBarrierRead] = Field(default_factory=list)
     symptom_reports: list[dict[str, Any]] = Field(default_factory=list)
     chat_messages: list[dict[str, Any]] = Field(default_factory=list)
     conditions: list[dict[str, Any]] = Field(default_factory=list)

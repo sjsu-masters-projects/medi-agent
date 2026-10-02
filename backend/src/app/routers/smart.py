@@ -29,6 +29,7 @@ from app.models.fhir_import import (
     SmartLaunchResponse,
 )
 from app.models.reconciliation import (
+    ReconciliationDecision,
     ReconciliationDecisionRead,
     ReconciliationDecisionRequest,
     ReconciliationPreviewRead,
@@ -274,7 +275,7 @@ async def approve_fact(
         patient_id=patient_id,
         actor_id=user.id,
         request=ReconciliationDecisionRequest(
-            decision="mark_reviewed",
+            decision=ReconciliationDecision.MARK_REVIEWED,
             note=request.note,
             idempotency_key=uuid4(),
         ),
@@ -339,7 +340,7 @@ async def reject_fact(
             patient_id=patient_id,
             actor_id=user.id,
             request=ReconciliationDecisionRequest(
-                decision="reject",
+                decision=ReconciliationDecision.REJECT,
                 note=request.note,
                 idempotency_key=uuid4(),
             ),

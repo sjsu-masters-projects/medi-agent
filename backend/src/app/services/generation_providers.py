@@ -66,13 +66,25 @@ class ClientTextProvider:
 
     async def generate(self, request: GenerationRequest) -> GenerationResponse:
         started = time.perf_counter()
+        generate_kwargs: dict[str, object] = {
+            "prompt": request.prompt,
+            "system_instruction": request.system_instruction,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+        }
+        # Only Gemini currently consumes a reasoning ceiling. Do not pass an unknown
+        # keyword to an adapter that does not support it when the caller did not ask.
+        if request.thinking_level is not None:
+            generate_kwargs["thinking_level"] = request.thinking_level
+        if request.response_schema is not None:
+            generate_kwargs["response_schema"] = request.response_schema
         try:
-            text = await self._generate(
-                prompt=request.prompt,
-                system_instruction=request.system_instruction,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-            )
+            text = await self._generate(**generate_kwargs)
+        except GenerationProviderError:
+            # The capability-specific client already classified this safely.  Preserving
+            # it lets background workflows distinguish a configuration fault from a
+            # recoverable outage without exposing provider messages.
+            raise
         except TimeoutError as exc:
             raise GenerationProviderError(
                 GenerationErrorCode.TIMEOUT, "Text generation timed out"

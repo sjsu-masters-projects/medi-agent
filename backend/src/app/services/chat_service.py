@@ -97,6 +97,17 @@ class ChatService:
             "document": document_context,
         }
 
+    async def get_document_catalog(self, patient_id: str, limit: int = 8) -> list[dict[str, Any]]:
+        """Return safe portal document metadata for an already-authorized chat patient."""
+        result = await self._execute(
+            self.db.table("documents")
+            .select("id, file_name, document_type, created_at")
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        return [row for row in (result.data or []) if isinstance(row, dict)]
+
     async def get_or_create_conversation_state(
         self,
         patient_id: str,

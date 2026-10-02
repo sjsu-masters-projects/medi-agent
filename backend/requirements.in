@@ -38,12 +38,14 @@ resend
 # -- Auth --
 # PyJWT uses the maintained cryptography backend and avoids python-jose's
 # unfixable transitive python-ecdsa advisory.
-PyJWT[crypto]>=2.11.0,<3.0.0
+PyJWT[crypto]>=2.14.0,<3.0.0
 cryptography>=50.0.0,<51.0.0
 passlib[bcrypt]
 
 # -- HTTP Client --
 httpx
+# Security floor for PYSEC-2026-4175, PYSEC-2026-4176, and PYSEC-2026-4177.
+urllib3>=2.8.0,<3.0.0
 
 # -- Logging --
 structlog
