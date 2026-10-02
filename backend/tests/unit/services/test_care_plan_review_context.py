@@ -309,3 +309,6 @@ def test_abbreviated_source_title_requires_edit_or_removal(edited: bool, removed
     assert bool(payload["blocker_reason"]) is (not edited and not removed)
     assert (_SOURCE_TITLE_REVIEW in payload["uncertainty"]) is (not edited)
     assert "Retain this other uncertainty" in payload["uncertainty"]
+    assert service._audit.call_args.args[3]["removed_item_ids"] == (
+        [str(PATIENT_ID)] if removed else []
+    )

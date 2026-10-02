@@ -204,7 +204,24 @@ class CarePlanService:
             self.db.table("care_plan_items").update(payload).eq("id", str(item_id)).eq(
                 "plan_version_id", str(plan_id)
             ).execute()
-        self._audit(plan_id, clinician_id, "draft_edited", {"item_count": len(update.items)})
+        self._audit(
+            plan_id,
+            clinician_id,
+            "draft_edited",
+            {
+                "item_count": len(update.items),
+                "removed_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if item.is_removed and not known[str(item.id)].get("is_removed")
+                ],
+                "restored_item_ids": [
+                    str(item.id)
+                    for item in update.items
+                    if not item.is_removed and known[str(item.id)].get("is_removed")
+                ],
+            },
+        )
         return self._hydrate_plan(self._plan(plan_id, patient_id))
 
     def approve(
