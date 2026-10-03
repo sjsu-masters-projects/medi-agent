@@ -55,6 +55,26 @@ describe("Reminder settings", () => {
         expect(screen.getByText("No routine reminder")).toBeInTheDocument();
     });
 
+    it("keeps explicitly prescribed weekdays selected and locked", async () => {
+        const entry = target("walk", "Walking");
+        get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/me")
+            ? { timezone: "America/Los_Angeles" }
+            : [{ ...entry, guidance: { ...entry.guidance, required_days_of_week: ["monday", "wednesday", "friday"] } }]));
+        render(<ReminderSettingsPage />);
+        fireEvent.click(await screen.findByRole("button", { name: "Set reminder" }));
+        for (const day of ["mon", "wed", "fri"]) {
+            expect(screen.getByRole("checkbox", { name: day })).toBeChecked();
+            expect(screen.getByRole("checkbox", { name: day })).toBeDisabled();
+        }
+        expect(screen.getByRole("checkbox", { name: "tue" })).not.toBeChecked();
+        expect(screen.getByRole("checkbox", { name: "tue" })).toBeDisabled();
+        fireEvent.change(screen.getByLabelText("Reminder time 1"), { target: { value: "18:30" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save reminder schedule" }));
+        await waitFor(() => expect(put).toHaveBeenCalledWith("/api/v1/reminders/obligation/walk",
+            expect.objectContaining({ days_of_week: ["monday", "wednesday", "friday"] }),
+            { token: "synthetic-token" }));
+    });
+
     it("requires patient-selected days and time and saves the exact choices", async () => {
         render(<ReminderSettingsPage />);
         fireEvent.click(await screen.findByRole("button", { name: "Set reminder" }));

@@ -792,6 +792,11 @@ export default function RecordsPage() {
                 </select>
               </div>
             </div>
+            <p className="mt-3 text-sm leading-6 text-slate-700">
+              {explanationLang === "es-MX"
+                ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
+                : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
+            </p>
             <p className="mt-3 text-base leading-7 text-[#30415f]">
               {explanationLoading
                 ? "Translating..."

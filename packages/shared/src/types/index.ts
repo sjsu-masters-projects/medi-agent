@@ -345,6 +345,7 @@ export interface ReminderGuidance {
     supportsAutomaticReminders: boolean;
     recommendedTimesPerDay?: number | null;
     recommendedDaysPerWeek?: number | null;
+    requiredDaysOfWeek?: ReminderDayOfWeek[] | null;
     guidanceText?: string | null;
 }
 

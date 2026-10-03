@@ -23,6 +23,18 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("CarePlanPanel", () => {
+    it("does not ask for a medication publication decision on an approved plan", async () => {
+        const plan = { id: "approved", patient_id: "p", version_number: 1, status: "approved" as const, items: [{
+            id: "med", category: "medication", title: "Metformin", instructions: "With dinner", frequency: "daily",
+            schedule: {}, medication: { name: "Metformin" }, uncertainty: [], conflict: {}, is_removed: false,
+        }] };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: plan, active: plan, patient_locale: "en-US", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        render(<CarePlanPanel patientId="p" />);
+        await screen.findByText("Metformin");
+        expect(screen.queryByText(/Choose whether each medication/)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Approve and publish plan" })).not.toBeInTheDocument();
+    });
     it("stages imported-record exclusions without changing approved carried items or publishing", async () => {
         const base = {category: "monitoring", title: "Imported record", instructions: "", frequency: "", schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false, imported_evidence: true};
         const historical = {...base, id: "history", source_fact_id: "old-import"};

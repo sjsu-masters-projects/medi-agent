@@ -289,7 +289,7 @@ function PatientDeepDivePageContent() {
                                     Allergies
                                 </h3>
                                 {patient.allergies.length === 0 ? (
-                                    <p className="text-sm text-gray-400 italic">NKDA</p>
+                                    <p className="text-sm text-gray-400 italic">Not documented</p>
                                 ) : (
                                     <ul className="space-y-1.5">
                                         {patient.allergies.map((a, i) => (

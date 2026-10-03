@@ -697,7 +697,7 @@ async def test_build_adherence_series_aggregates_recent_days(service):
         return_value=_response(
             data=[
                 {
-                    "status": "completed",
+                    "status": "taken",
                     "target_type": "medication",
                     "logged_at": f"{today.isoformat()}T08:00:00Z",
                 },

@@ -40,6 +40,7 @@ interface ReminderTargetResponse {
         supports_automatic_reminders: boolean;
         recommended_times_per_day?: number | null;
         recommended_days_per_week?: number | null;
+        required_days_of_week?: ReminderDayOfWeek[] | null;
         guidance_text?: string | null;
     };
 }
@@ -81,6 +82,7 @@ function normalizeTarget(target: ReminderTargetResponse): ReminderTarget {
             supportsAutomaticReminders: target.guidance.supports_automatic_reminders,
             recommendedTimesPerDay: target.guidance.recommended_times_per_day,
             recommendedDaysPerWeek: target.guidance.recommended_days_per_week,
+            requiredDaysOfWeek: target.guidance.required_days_of_week,
             guidanceText: target.guidance.guidance_text,
         },
     };
@@ -91,6 +93,7 @@ function makeTargetKey(target: Pick<ReminderTarget, "targetId" | "targetType">) 
 }
 
 function defaultDaysOfWeek(target: ReminderTarget): ReminderDayOfWeek[] {
+    if (target.guidance.requiredDaysOfWeek?.length) return [...target.guidance.requiredDaysOfWeek];
     const count = target.guidance.recommendedDaysPerWeek;
     if (count === DAYS.length) {
         return DAYS;
@@ -108,7 +111,9 @@ function buildDraft(target: ReminderTarget, timezone: string): ScheduleDraft {
         return {
             timezone: schedule.timezone,
             timesOfDay: schedule.timesOfDay.map((value) => value.slice(0, 5)),
-            daysOfWeek: schedule.daysOfWeek.length ? schedule.daysOfWeek : DAYS,
+            daysOfWeek: target.guidance.requiredDaysOfWeek?.length
+                ? [...target.guidance.requiredDaysOfWeek]
+                : schedule.daysOfWeek.length ? schedule.daysOfWeek : DAYS,
         };
     }
     return {
@@ -435,6 +440,7 @@ export default function ReminderSettingsPage() {
                                                             >
                                                                 <input
                                                                     checked={checked}
+                                                                    disabled={Boolean(target.guidance.requiredDaysOfWeek?.length)}
                                                                     className="h-5 w-5 accent-[#147465]"
                                                                     onChange={() =>
                                                                         updateDraft(target, (current) => ({

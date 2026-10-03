@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 
@@ -40,6 +41,17 @@ def overlaps(items: list[dict[str, Any]], facts: list[dict[str, Any]]) -> dict[s
         if item.get("is_removed"):
             continue
         keys = [publication_key(item)]
+        if item.get("category") == "medication":
+            # Review-only alias: never change the source name or choose a dose.
+            # Release markers (ER/XR), combinations, and brand names stay distinct.
+            name = " ".join(
+                str((item.get("medication") or {}).get("name") or "").split()
+            ).casefold()
+            alias = re.sub(
+                r"\s+\d+(?:\.\d+)?\s*(?:mg|mcg|g)(?:\s+(?:tablets?|capsules?))?$", "", name
+            )
+            if alias:
+                keys.append(f"medication-review:{alias}")
         if item.get("category") != "medication" and str(item.get("instructions") or "").strip():
             # Identical wording with different cadence needs a choice, not an
             # automatic merge. Keep event/schedule context distinct.

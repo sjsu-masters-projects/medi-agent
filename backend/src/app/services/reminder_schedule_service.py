@@ -108,6 +108,26 @@ def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
             "recommended_days_per_week": 7,
             "guidance_text": "Use three evenly spaced reminder times that fit the prescribed interval.",
         }
+    weekdays = "|".join(DAY_ORDER)
+    if re.fullmatch(
+        rf"(?:on )?(?:{weekdays})(?:(?:,\s*(?:and )?| and )(?:{weekdays}))*(?: after dinner)?",
+        value,
+    ):
+        days = [day for day in DAY_ORDER if re.search(rf"\b{day}\b", value)]
+        return {
+            "supports_automatic_reminders": True,
+            "recommended_times_per_day": 1,
+            "recommended_days_per_week": len(days),
+            "required_days_of_week": days,
+            "guidance_text": "Keep the days stated in your care instructions; choose the reminder time.",
+        }
+    if re.fullmatch(r"(?:with )?breakfast and dinner(?: (?:each day|every day|daily))?", value):
+        return {
+            "supports_automatic_reminders": True,
+            "recommended_times_per_day": 2,
+            "recommended_days_per_week": 7,
+            "guidance_text": "Choose breakfast and dinner reminder times that match your routine.",
+        }
     if value in {"3x per week", "three times per week"}:
         return {
             "supports_automatic_reminders": True,
@@ -151,7 +171,7 @@ def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
             "guidance_text": "Choose the time you usually wind down for the night.",
         }
     if re.fullmatch(
-        r"(?:once |1x |one time )?(?:daily|per day|a day)(?: (?:with|after|before) (?:breakfast|lunch|dinner|food))?",
+        r"(?:once |1x |one time )?(?:daily|per day|a day|each day|every day)(?: (?:with|after|before) (?:breakfast|lunch|dinner|food))?",
         value,
     ):
         return {
@@ -184,6 +204,9 @@ def schedule_matches_frequency(schedule: dict[str, Any], frequency: str) -> bool
         or len(times) != guidance["recommended_times_per_day"]
         or len(days) != guidance["recommended_days_per_week"]
     ):
+        return False
+    required_days = guidance.get("required_days_of_week")
+    if required_days and set(days) != set(required_days):
         return False
     if "every 8 hour" in frequency.lower():
         seconds = sorted(

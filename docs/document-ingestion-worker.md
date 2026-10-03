@@ -13,14 +13,17 @@ OCR, call extraction, and write candidate facts.
 2. Build the normal backend image. It now includes Tesseract plus `eng` and
    `spa` language data; the worker uses the same image with a different command.
 3. The `Deploy Backend to Cloud Run` workflow declares and updates the Job in
-   `us-central1` from that image. It pins 2 GiB memory, a 300-second task timeout,
+   `us-central1` from that image. It pins 2 GiB memory, a 1,800-second task timeout,
    one task, parallelism one, no platform retries, and the command
    `python -m app.workers.document_ingestion`. It also supplies only the worker's
    required Supabase secret references and Vertex settings; never copy credential
    values into source control or Cloud Scheduler payloads.
-4. Run one execution manually before creating a schedule. Start at
-   `DOCUMENT_INGESTION_BATCH_SIZE=1`; raise it only after observed execution
-   durations show the chosen schedule will not overlap.
+4. The deployment claims up to five pending documents per execution with
+   `DOCUMENT_INGESTION_BATCH_SIZE=5`. Fewer pending documents are processed immediately;
+   this is a maximum batch size, not a requirement to wait for five uploads. Processing
+   remains sequential and each document failure is isolated. The longer task timeout
+   accommodates ingestion plus the separate explanation and care-plan phases; it is
+   not a latency guarantee. Measure five-document execution duration after rollout.
 5. Schedule executions at a cadence that keeps the expected queue delay visible
    to patients (five minutes is the initial operating target). Use Cloud Scheduler
    or an equivalent job scheduler to execute the Job; it must not call the public

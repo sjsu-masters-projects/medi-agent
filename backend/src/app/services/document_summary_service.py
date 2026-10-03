@@ -26,7 +26,7 @@ from app.services.explanation_service import normalize_patient_summary
 
 logger = logging.getLogger(__name__)
 
-SUMMARY_PROMPT_VERSION = "patient-explanation/1"
+SUMMARY_PROMPT_VERSION = "patient-explanation/2"
 MAX_SUMMARY_ATTEMPTS = 3
 SUMMARY_RETRY_DELAYS = {
     1: timedelta(minutes=2),
