@@ -7,7 +7,23 @@ deleted along with the runtime that happened to host it.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.pharmacovigilance import NaranjoAnswer, NaranjoQuestion
+
+
+class ADREvidenceAnswer(BaseModel):
+    """One explicit answer extracted from patient-provided evidence."""
+
+    question: NaranjoQuestion
+    answer: NaranjoAnswer
+    evidence: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def require_evidence_for_known_answers(self) -> ADREvidenceAnswer:
+        if self.answer is not NaranjoAnswer.DO_NOT_KNOW and not (self.evidence or "").strip():
+            raise ValueError("Known Naranjo answers require patient-provided evidence")
+        return self
 
 
 class SymptomExtractionResult(BaseModel):
@@ -24,7 +40,17 @@ class SymptomExtractionResult(BaseModel):
     duration: str | None = None
     body_area: str | None = None
     related_medication_name: str | None = None
+    adr_evidence: list[ADREvidenceAnswer] = Field(default_factory=list, max_length=10)
     needs_follow_up: bool = False
     follow_up_question: str | None = None
+    # Retained while historical evaluation files migrate. Live routing ignores this
+    # model-authored flag and calculates the candidate signal from `adr_evidence`.
     flagged_for_adr: bool = False
     ai_assessment: str = Field(default="Patient reported symptom requires monitoring.")
+
+    @model_validator(mode="after")
+    def reject_duplicate_adr_answers(self) -> SymptomExtractionResult:
+        questions = [item.question for item in self.adr_evidence]
+        if len(questions) != len(set(questions)):
+            raise ValueError("Each Naranjo question may appear at most once")
+        return self

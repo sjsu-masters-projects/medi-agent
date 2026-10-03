@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import { Skeleton } from "@/components/ui";
@@ -20,14 +20,21 @@ function LoadingSkeleton() {
     );
 }
 
+const subscribeToHydration = () => () => undefined;
+
+function useHasHydrated() {
+    return useSyncExternalStore(subscribeToHydration, () => true, () => false);
+}
+
 export function ProtectedRoute({ children }: { children: ReactNode }) {
+    const mounted = useHasHydrated();
     const { isAuthenticated, loading } = useSelector((state: RootState) => state.auth);
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
     useEffect(() => {
-        if (!loading && !isAuthenticated) {
+        if (mounted && !loading && !isAuthenticated) {
             const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
             router.replace(
                 buildLoginRedirectUrl({
@@ -36,9 +43,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
                 }),
             );
         }
-    }, [isAuthenticated, loading, pathname, router, searchParams]);
+    }, [isAuthenticated, loading, mounted, pathname, router, searchParams]);
 
-    if (loading) {
+    if (!mounted || loading) {
         return <LoadingSkeleton />;
     }
 

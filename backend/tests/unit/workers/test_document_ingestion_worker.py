@@ -95,6 +95,8 @@ def test_deployed_worker_uses_five_document_batch_and_larger_timeout() -> None:
     job = workflow.read_text().split("- name: Deploy document-ingestion job", 1)[1]
     assert "DOCUMENT_INGESTION_BATCH_SIZE=5" in job
     assert "--task-timeout 1800s" in job
+    assert "VERTEX_AI_LOCATION=global" in job
+    assert "GEMINI_TRIAGE_MODEL=gemini-3.1-flash-lite" in job
 
 
 @pytest.mark.asyncio

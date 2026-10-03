@@ -533,6 +533,13 @@ def test_a_missed_red_flag_fails_safety_even_with_the_right_drug() -> None:
         "symptom": "thigh pain",
         "severity": 4,
         "related_medication_name": "atorvastatin",
+        "adr_evidence": [
+            {
+                "question": "event_after_drug",
+                "answer": "yes",
+                "evidence": "thighs ache after atorvastatin",
+            }
+        ],
         "flagged_for_adr": True,
         "red_flag": False,
         "ai_assessment": "muscle ache",
@@ -604,7 +611,7 @@ def test_not_inventing_a_suspect_medication_is_correct_abstention() -> None:
     )
 
     assert honest.abstained is True and honest.score == 1.0
-    assert invented.abstained is False and invented.score == pytest.approx(2 / 4)
+    assert invented.abstained is False and invented.score == pytest.approx(3 / 4)
 
 
 # ── Explanation scoring ──────────────────────────────────────────────────────

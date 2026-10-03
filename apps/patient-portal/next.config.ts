@@ -10,6 +10,9 @@ const workspaceRoot = path.resolve(currentDir, "../..");
 loadEnvConfig(workspaceRoot);
 
 const nextConfig: NextConfig = {
+  // Codex opens the local portal on 127.0.0.1, while Next initializes on localhost.
+  // Allow that development origin so client bundles and HMR can hydrate normally.
+  allowedDevOrigins: ["127.0.0.1"],
   outputFileTracingRoot: workspaceRoot,
   // Response headers for every route.
   //

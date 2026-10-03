@@ -26,7 +26,6 @@ class CronService:
         ("24h", 24, "Upcoming appointment tomorrow"),
         ("1h", 1, "Upcoming appointment soon"),
     )
-    ADR_FLAG_MIN_SEVERITY = 5
     RUNNING_STALE_AFTER_HOURS = 6
 
     def __init__(self, db: Client) -> None:
@@ -131,7 +130,7 @@ class CronService:
             "symptoms_scanned": 0,
             "patients_with_new_symptoms": 0,
             "candidate_flags_created": 0,
-            "high_severity_without_active_medications": 0,
+            "high_severity_without_medication_link": 0,
         }
 
         try:
@@ -145,25 +144,19 @@ class CronService:
             patient_ids = sorted({row["patient_id"] for row in symptom_rows})
             summary["patients_with_new_symptoms"] = len(patient_ids)
 
-            active_medications = await self._fetch_active_medication_map(patient_ids)
-
             candidate_ids: list[str] = []
-            high_severity_without_meds = 0
+            high_severity_without_link = 0
             for row in symptom_rows:
                 severity = int(row.get("severity") or 0)
                 has_related_medication = bool(row.get("related_medication_id"))
-                has_active_medications = bool(active_medications.get(row["patient_id"]))
-                should_flag = has_related_medication or (
-                    has_active_medications and severity >= self.ADR_FLAG_MIN_SEVERITY
-                )
 
-                if should_flag:
+                if has_related_medication:
                     candidate_ids.append(row["id"])
-                elif severity >= self.ADR_FLAG_MIN_SEVERITY:
-                    high_severity_without_meds += 1
+                elif severity >= 5:
+                    high_severity_without_link += 1
 
             summary["candidate_flags_created"] = len(candidate_ids)
-            summary["high_severity_without_active_medications"] = high_severity_without_meds
+            summary["high_severity_without_medication_link"] = high_severity_without_link
             summary["lookback_hours"] = round((self._utc_now() - since).total_seconds() / 3600, 2)
 
             if candidate_ids and not dry_run:
@@ -591,29 +584,6 @@ class CronService:
             retry_transient=True,
         )
         return list(response.data or [])
-
-    async def _fetch_active_medication_map(
-        self, patient_ids: list[str]
-    ) -> dict[str, list[dict[str, Any]]]:
-        if not patient_ids:
-            return {}
-
-        response = await execute_async(
-            self,
-            lambda db: (
-                db.table("medications")
-                .select("id, patient_id")
-                .eq("is_active", True)
-                .in_("patient_id", patient_ids)
-            ),
-            operation="fetch active medications for ADR scan",
-            retry_transient=True,
-        )
-        rows = list(response.data or [])
-        by_patient: dict[str, list[dict[str, Any]]] = {}
-        for row in rows:
-            by_patient.setdefault(str(row["patient_id"]), []).append(row)
-        return by_patient
 
     async def _flag_symptom_reports_for_adr(self, symptom_ids: list[str]) -> None:
         await execute_async(

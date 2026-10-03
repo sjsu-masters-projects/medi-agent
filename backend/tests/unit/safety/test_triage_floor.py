@@ -43,6 +43,27 @@ ORDINARY = [
     "",
 ]
 
+NEGATED_EMERGENCY_EN = [
+    "I do not have chest pain",
+    "I don't have any chest pain",
+    "No chest pain, just a dry cough",
+    "The cough occurs without shortness of breath",
+    "She denies having chest pain",
+    "I am not suicidal",
+    (
+        "I developed a dry cough. I do not have trouble breathing, facial swelling, "
+        "or chest pain."
+    ),
+]
+
+NEGATED_EMERGENCY_ES = [
+    "No tengo dolor de pecho",
+    "Solo tengo tos, sin falta de aire",
+    "Niega dolor de pecho",
+    "No quiero morir",
+    "Tengo tos, pero no tengo dificultad para respirar, hinchazón ni dolor de pecho",
+]
+
 
 class TestTheFloor:
     @pytest.mark.parametrize("message", EMERGENCY_EN + EMERGENCY_ES)
@@ -65,6 +86,29 @@ class TestTheFloor:
     @pytest.mark.parametrize("message", ORDINARY)
     def test_ordinary_messages_are_left_to_the_model(self, message: str) -> None:
         assert deterministic_safety_floor(message) is None
+
+    @pytest.mark.parametrize("message", NEGATED_EMERGENCY_EN + NEGATED_EMERGENCY_ES)
+    def test_explicitly_negated_emergency_phrases_are_left_to_the_model(
+        self, message: str
+    ) -> None:
+        assert deterministic_safety_floor(message) is None
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "No nausea, but I have chest pain now",
+            "I do not have chest pain, but I can't breathe",
+            "I am not sure whether this is chest pain",
+            "Not only chest pain but shortness of breath too",
+            "No tuve dolor de cabeza, pero tengo dolor de pecho",
+            "I do not have nausea, but I have chest pain",
+        ],
+    )
+    def test_a_nearby_negation_never_hides_a_positive_emergency(self, message: str) -> None:
+        verdict = deterministic_safety_floor(message)
+
+        assert verdict is not None
+        assert verdict.urgency == "emergency"
 
     def test_self_harm_outranks_a_co_occurring_medical_emergency(self) -> None:
         verdict = deterministic_safety_floor("I have chest pain and I want to kill myself")

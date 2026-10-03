@@ -2,15 +2,17 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from starlette.websockets import WebSocketState
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
+from app.routers.chat import _closed_websocket_error, _send_terminal_event
 
 
 @dataclass(frozen=True)
@@ -233,3 +235,27 @@ class TestChatWebSocketStability:
 
             websocket.send_json({"type": "ping"})
             assert websocket.receive_json()["type"] == "pong"
+
+
+@pytest.mark.asyncio
+async def test_terminal_events_are_not_sent_after_disconnect() -> None:
+    websocket = MagicMock(application_state=WebSocketState.DISCONNECTED)
+    websocket.send_json = AsyncMock()
+
+    sent = await _send_terminal_event(websocket, {"type": "error"})
+
+    assert sent is False
+    websocket.send_json.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_send_racing_disconnect_is_absorbed() -> None:
+    websocket = MagicMock(application_state=WebSocketState.CONNECTED)
+    websocket.send_json = AsyncMock(
+        side_effect=RuntimeError('Cannot call "send" once a close message has been sent.')
+    )
+
+    sent = await _send_terminal_event(websocket, {"type": "error"})
+
+    assert sent is False
+    assert _closed_websocket_error(websocket.send_json.side_effect)

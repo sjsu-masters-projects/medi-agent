@@ -51,8 +51,8 @@ function buildStats(summary: Omit<DashboardResponse, "patients">): DashboardStat
             change: "",
         },
         {
-            label: "FDA MedWatch Drafts",
-            value: `${summary.medwatch_pending} Pending`,
+            label: "ADR Reviews Pending",
+            value: `${summary.pending_adr_reviews} Pending`,
             trend: "neutral",
             change: "",
         },

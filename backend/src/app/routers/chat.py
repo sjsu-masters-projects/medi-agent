@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, WebSocketException
 from starlette import status
+from starlette.websockets import WebSocketState
 from supabase import Client
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
@@ -176,6 +177,26 @@ async def _emit_a2a_task_events(websocket: WebSocket, events: list[dict[str, Any
                 "status": event.get("status"),
             }
         )
+
+
+def _closed_websocket_error(error: BaseException) -> bool:
+    """Recognize Starlette's error for a send racing a client disconnect."""
+    return isinstance(error, RuntimeError) and (
+        "close message has been sent" in str(error)
+        or "websocket is not connected" in str(error).lower()
+    )
+
+
+async def _send_terminal_event(websocket: WebSocket, payload: dict[str, Any]) -> bool:
+    """Best-effort terminal send that never sends again after the socket closes."""
+    if websocket.application_state is not WebSocketState.CONNECTED:
+        return False
+    try:
+        await websocket.send_json(payload)
+    except (WebSocketDisconnect, RuntimeError):
+        logger.info("Chat websocket closed before its terminal event could be delivered")
+        return False
+    return True
 
 
 async def _send_document_catalog_reply(
@@ -803,6 +824,8 @@ async def chat_websocket_endpoint(
                                     "idempotency_key": f"symptom_event:{symptom_event_id}",
                                     "symptom_report": saved_report,
                                     "flagged_for_adr": True,
+                                    "naranjo_answers": symptom_result.naranjo_answers,
+                                    "adr_evidence": symptom_result.adr_evidence,
                                     "document_context": document_context,
                                     "conversation_state": conversation_state,
                                 },
@@ -927,23 +950,29 @@ async def chat_websocket_endpoint(
     except WebSocketDisconnect:
         logger.info("Chat websocket disconnected")
     except ValidationError as exc:
-        await websocket.send_json(
+        await _send_terminal_event(
+            websocket,
             {
                 "type": "error",
                 "code": "validation_error",
                 "message": exc.message,
-            }
+            },
         )
     except Exception as exc:
+        if _closed_websocket_error(exc):
+            logger.info("Chat websocket disconnected before a response was delivered")
+            return
         logger.exception("Chat websocket error: %s", exc)
-        await websocket.send_json(
+        sent = await _send_terminal_event(
+            websocket,
             {
                 "type": "error",
                 "code": "server_error",
                 "message": "Chat processing failed",
-            }
+            },
         )
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        if sent and websocket.application_state is WebSocketState.CONNECTED:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 
 # WebSocket routes are mounted in main.py.

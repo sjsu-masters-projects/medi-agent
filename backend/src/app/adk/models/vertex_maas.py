@@ -5,10 +5,11 @@ speaks the OpenAI dialect but authenticates with a Google bearer token. That com
 is why this goes through `OpenAICompatibleTextProvider` with an ADC token callable rather
 than through the Gen AI SDK, which does not front these models.
 
-Both the global and regional forms are supported, but the production MaaS transport uses
-the regional `VERTEX_AI_LOCATION` setting. Gemini has its own location setting because
-its serving availability differs; keeping the two explicit prevents either transport from
-being moved by an unrelated model configuration change.
+Both the global and regional forms are supported. Production MaaS uses the global
+`VERTEX_AI_LOCATION` setting so pay-as-you-go requests can draw from the broader shared
+capacity pool. Gemini retains its own location setting because its serving availability
+differs; keeping the two explicit prevents either transport from being moved by an
+unrelated model configuration change.
 """
 
 from __future__ import annotations

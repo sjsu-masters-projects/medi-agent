@@ -770,6 +770,14 @@ class TestChatWebSocket:
                 },
                 follow_up_question="When did this start?",
                 flagged_for_adr=True,
+                naranjo_answers={"event_after_drug": "yes"},
+                adr_evidence=[
+                    {
+                        "question": "event_after_drug",
+                        "answer": "yes",
+                        "evidence": "after taking medication",
+                    }
+                ],
             )
 
         # The stream is aborted once the route is known to be `symptom`, and the second,
@@ -786,6 +794,8 @@ class TestChatWebSocket:
         async def _mock_a2a(_self, patient_id, payload):
             assert payload["symptom_event_id"] == symptom_event_id
             assert payload["idempotency_key"] == f"symptom_event:{symptom_event_id}"
+            assert payload["naranjo_answers"] == {"event_after_drug": "yes"}
+            assert payload["adr_evidence"][0]["question"] == "event_after_drug"
             return {
                 "task_id": str(uuid4()),
                 "status": "completed",

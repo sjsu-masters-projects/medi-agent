@@ -27,6 +27,7 @@ authoritative text and is not re-emitted as a chunk.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -47,6 +48,7 @@ from app.adk.agents.care_coordinator import (
     build_care_coordinator,
     route_for_intent,
 )
+from app.adk.models.resilient import ResilientLlm
 from app.adk.plugins import LOCALE_STATE_KEY
 from app.adk.runner import build_runner
 from app.adk.tools import (
@@ -54,6 +56,7 @@ from app.adk.tools import (
     PATIENT_ID_STATE_KEY,
     TRIAGE_DECISION_STATE_KEY,
 )
+from app.config import settings
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.safety import TRIAGE_COPY, apply_safety_override, deterministic_safety_floor
@@ -89,6 +92,7 @@ def reset_chat_runner() -> None:
     """Drop the cached runner. For tests, which must not share one between cases."""
     global _runner
     _runner = None
+    ResilientLlm.reset_circuits()
 
 
 def _text_of(event: Any) -> str:
@@ -185,39 +189,40 @@ class CareCoordinatorRuntime:
                 ),
                 run_config=RunConfig(streaming_mode=StreamingMode.SSE),
             )
-            async for event in stream:
-                decision = _decision_from(event)
-                if decision is not None and not classified:
-                    intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
-                    classified = True
-                    yield _classification(intent, urgency, reason, escalate)
+            async with asyncio.timeout(settings.chat_turn_timeout_seconds):
+                async for event in stream:
+                    decision = _decision_from(event)
+                    if decision is not None and not classified:
+                        intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
+                        classified = True
+                        yield _classification(intent, urgency, reason, escalate)
 
-                if event.author == COORDINATOR_AGENT_NAME:
-                    # Internal working notes. Never shown to the patient.
-                    continue
+                    if event.author == COORDINATOR_AGENT_NAME:
+                        # Internal working notes. Never shown to the patient.
+                        continue
 
-                body = _text_of(event)
-                if not body:
-                    continue
+                    body = _text_of(event)
+                    if not body:
+                        continue
 
-                if not classified:
-                    # The model answered without recording a decision. The reply is still
-                    # grounded, so it ships; only the label is missing, and a neutral one
-                    # is honest about that. Escalation cannot be lost this way — it is
-                    # re-applied deterministically from the message itself.
-                    intent, urgency, reason, escalate = _apply_floor_rules(
-                        {"intent": "general", "urgency": "routine", "reason": ""}, text
-                    )
-                    classified = True
-                    yield _classification(intent, urgency, reason, escalate)
+                    if not classified:
+                        # The model answered without recording a decision. The reply is still
+                        # grounded, so it ships; only the label is missing, and a neutral one
+                        # is honest about that. Escalation cannot be lost this way — it is
+                        # re-applied deterministically from the message itself.
+                        intent, urgency, reason, escalate = _apply_floor_rules(
+                            {"intent": "general", "urgency": "routine", "reason": ""}, text
+                        )
+                        classified = True
+                        yield _classification(intent, urgency, reason, escalate)
 
-                if getattr(event, "partial", False):
-                    streamed = True
-                    yield {"type": "chunk", "content": body}
-                else:
-                    # The final event repeats the whole answer rather than the remainder,
-                    # so it becomes the authoritative text and is not re-sent as a chunk.
-                    answer = body
+                    if getattr(event, "partial", False):
+                        streamed = True
+                        yield {"type": "chunk", "content": body}
+                    else:
+                        # The final event repeats the whole answer rather than the remainder,
+                        # so it becomes the authoritative text and is not re-sent as a chunk.
+                        answer = body
         except Exception as exc:
             reason = categorize_llm_failure(exc)
             record_chat_fallback(layer="adk_turn", reason=reason)

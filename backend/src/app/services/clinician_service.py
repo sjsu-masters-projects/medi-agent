@@ -383,7 +383,10 @@ class ClinicianService:
 
         risk_service = RiskScoreService(self.db)
         patient_ids = await self._get_assigned_patient_ids(clinician_id)
-        medwatch_count = await self._get_pending_medwatch_count(patient_ids)
+        pending_adr_reviews, medwatch_count = await asyncio.gather(
+            self._get_pending_adr_review_count(patient_ids),
+            self._get_pending_medwatch_count(patient_ids),
+        )
 
         risk_results = await asyncio.gather(
             *(risk_service.get_patient_risk(pid) for pid in patient_ids),
@@ -450,7 +453,57 @@ class ClinicianService:
             "high_risk": high,
             "medium_risk": medium,
             "low_risk": low_count,
+            "pending_adr_reviews": pending_adr_reviews,
             "medwatch_pending": medwatch_count,
+        }
+
+    async def list_adr_review_queue(
+        self,
+        clinician_id: UUID,
+        *,
+        status_filter: ADRStatus = ADRStatus.DRAFT,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Return evidence-backed ADR drafts for the clinician's assigned patients."""
+        patient_ids = await self._get_assigned_patient_ids(clinician_id)
+        if not patient_ids:
+            return {"items": [], "total": 0}
+
+        result = await self._execute(
+            self.db.table("adr_assessments")
+            .select(
+                "id, patient_id, symptom_report_id, suspect_medication_id, "
+                "suspect_medication_name, naranjo_score, causality, naranjo_answers, "
+                "naranjo_assessment, evidence, status, created_at, "
+                "patients(first_name, last_name), "
+                "symptom_reports(symptom, severity, onset, created_at)"
+            )
+            .in_("patient_id", [str(patient_id) for patient_id in patient_ids])
+            .eq("status", status_filter.value)
+            .order("created_at", desc=True)
+            .limit(max(1, min(limit, 200)))
+        )
+
+        rows = cast(list[dict[str, Any]], result.data or [])
+        items = [self._normalize_adr_review_item(row) for row in rows]
+        return {"items": items, "total": len(items)}
+
+    @staticmethod
+    def _normalize_adr_review_item(row: dict[str, Any]) -> dict[str, Any]:
+        patient = cast(dict[str, Any], row.get("patients") or {})
+        symptom = cast(dict[str, Any], row.get("symptom_reports") or {})
+        return {
+            **{
+                key: value
+                for key, value in row.items()
+                if key not in {"patients", "symptom_reports"}
+            },
+            "patient_first_name": str(patient.get("first_name") or ""),
+            "patient_last_name": str(patient.get("last_name") or ""),
+            "symptom": str(symptom.get("symptom") or ""),
+            "severity": symptom.get("severity"),
+            "onset": symptom.get("onset"),
+            "symptom_created_at": symptom.get("created_at"),
         }
 
     async def get_patient_risk_snapshot(self, clinician_id: UUID, patient_id: UUID) -> Any:
@@ -750,8 +803,8 @@ class ClinicianService:
         if not assignment_rows:
             await self._raise_unassigned(clinician_id, patient_id)
 
-    async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:
-        """Count draft MedWatch assessments across all assigned patients."""
+    async def _get_pending_adr_review_count(self, patient_ids: list[UUID]) -> int:
+        """Count draft ADR assessments across all assigned patients."""
         if not patient_ids:
             return 0
         result = await self._execute(
@@ -759,6 +812,18 @@ class ClinicianService:
             .select("id", count="exact")  # type: ignore[arg-type]
             .in_("patient_id", [str(pid) for pid in patient_ids])
             .in_("status", [ADRStatus.DRAFT.value])
+        )
+        return result.count or 0
+
+    async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:
+        """Count actual draft MedWatch records across all assigned patients."""
+        if not patient_ids:
+            return 0
+        result = await self._execute(
+            self.db.table("medwatch_drafts")
+            .select("id", count="exact")  # type: ignore[arg-type]
+            .in_("patient_id", [str(pid) for pid in patient_ids])
+            .in_("status", ["draft"])
         )
         return result.count or 0
 

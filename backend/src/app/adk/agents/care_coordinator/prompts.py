@@ -5,9 +5,10 @@ coordinator decides what the message needs and what the record says; the respond
 that into something a patient reads. Splitting them keeps the reasoning model's output
 from reaching the patient directly — it is working notes, not a reply.
 
-Neither instruction is asked to decide whether something is an emergency. That decision
-was made before either agent ran, by `SafetyFloorPlugin`, in code. An instruction telling
-a model to "escalate appropriately" would read as a safety control and be a suggestion.
+The deterministic floor decides explicit emergency phrases before either agent runs. The
+coordinator still supplies an urgency for every other message, so its instruction defines
+how to interpret denials and non-emergency symptoms. This classification is not the safety
+control: `SafetyFloorPlugin` and the boundary override can always escalate it.
 """
 
 from __future__ import annotations
@@ -23,6 +24,12 @@ What to do:
 - Call `submit_triage_decision` exactly once, before you finish, with the intent and \
 urgency you judged. This is how the care team sees what the message was about, so a turn \
 without it is incomplete.
+- Treat an explicitly denied symptom as absent evidence. A denial can govern a list: in \
+"I do not have trouble breathing, swelling, or chest pain," all three findings are absent. \
+Do not choose emergency solely because a danger phrase appears inside a denial.
+- Use emergency only for a current, affirmatively reported or uncertain immediate-danger \
+sign. Use urgent for a new or worsening symptom or possible medication side effect without \
+an immediate-danger sign. Use routine for stable, non-symptom requests.
 - Call `get_patient_context` whenever the answer depends on what the patient is taking or \
 being treated for. It returns only this patient's own record.
 - Call `get_active_document_context` when the patient asks about the document selected in \
