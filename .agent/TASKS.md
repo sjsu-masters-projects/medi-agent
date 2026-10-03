@@ -21,6 +21,30 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-005 follow-through fixes — 2026-10-03 (ready for review).** Package the fresh
+Morgan QA findings with the five-document worker batch: count medication `taken`
+events, distinguish future doses, flag medication wording overlaps for review,
+and keep document explanations separate from approved instructions. Verify with
+focused backend and portal regressions; deployed acceptance remains a separate
+post-merge check. No remote reset or migration application is part of this PR.
+Verification: full backend `pytest --no-cov -q` passed 1,542 tests (20 opt-in
+PostgreSQL tests skipped); `ruff check src scripts`, `ruff format --check src scripts`,
+changed-test Ruff/format and `mypy src` passed. Patient `npm run test` passed 112
+tests; clinician passed 128. Both portals passed lint, typecheck and
+`npm run build -- --webpack`. Default Turbopack builds were blocked by local helper
+port permissions, including the permitted retry. Broad test-directory Ruff found
+pre-existing lint/format findings outside the changed files; these were not reformatted.
+No new migration. Cached explanations are not automatically regenerated. Gender
+discoverability, session-renewal diagnosis and barrier-note confirmation remain
+separate tracked follow-ups, not completed by this PR.
+
+PR #126 conflict resolution preserves main's global model routing and triage-model
+configuration alongside the five-document batch and 1,800-second worker timeout.
+The deployment contract test covers both settings; no remote deployment was performed.
+Merged-main verification: backend 1,612 passed (20 opt-in PostgreSQL skips), patient
+112 passed, clinician 131 passed; backend Ruff/format and both portal lint/typechecks
+passed. This supersedes the earlier pre-merge test counts, not deployed acceptance.
+
 | Area | Status | Evidence / risk |
 |---|---|---|
 | Repository | Main synchronized | Local `main` matches `origin/main`; current tracker verification is recorded on a separate documentation branch |
@@ -128,6 +152,7 @@ PAT-005.
 | `PAT-005-H` — patient reminder usability | **Done** | Rajeev — PR #124 | Compact schedule summaries, one editor with cancel, blank new times, patient-selected weekly days, contextual Today setup, and advanced timezone settings. | PR #124 backend deployment `37052584390` and frontend CI `37052584538` succeeded. Live QA on 2026-10-02 verified Mon/Wed/Fri 08:00, cadence-invalid Save disabled, Cancel preserved settings, and no routine reminder controls for albuterol/after-walking monitoring. No clinical timing was invented. Full fresh-scenario proof remains C. |
 | `PAT-005-K` — proposed Today preview | **Claimed** | Rajeev — `codex/care-plan-publication-preview` | Assigned-clinician read-only preview using the Today renderer, saved draft, current canonical records, patient-local date and reminders. | Implemented locally from main `1731fdf`; backend 1,536 passed, 85.01% coverage (20 opt-in PostgreSQL tests skipped); clinician 127 passed; full Python Ruff/format/mypy and clinician lint/typecheck passed. Clinician webpack production build passed; Turbopack was blocked by local helper-port permissions. Browser access restored: approved V2, seven Today activities and named clinician barrier are visible. The new preview still needs deployed UI proof; it never publishes or guarantees unchanged state at later approval. No migration. |
 | `AUTH-001` — resilient portal session renewal | **Ready** | Portal + backend lanes — unassigned | Diagnose the reported spontaneous logout; distinguish terminal refresh rejection from transient failure, coordinate refresh callers/rotated tokens, and recover expired authenticated requests before redirecting. | Refresh exists in both portals, but hook/storage catch-all paths clear sessions on any failure; base API clients redirect on authenticated 401 without renewal; backend refresh maps all provider exceptions to invalid-token authentication errors. Recent Cloud Run refresh requests succeeded (one took 36 seconds); no HTTP refresh failure found in the 24-hour check. The reported logout's exact cause is not yet reproduced. Can run parallel to K; do not relax MFA/session policy or replay clinical writes automatically. Verify transient outage, returning/sleeping tab, expiry, concurrent refresh, real revocation and role/MFA preservation. |
+| `PAT-PROFILE-001` — optional gender discoverability | **Ready** | Patient-portal lane — next QA-fix PR | Always show the gender row in the read-only profile; display "Not provided" when unset. Remove duplicate "Prefer not to say" choices in onboarding and profile editing. | Reported during Morgan Ellis fresh-scenario preparation on 2026-10-02. Gender exists in onboarding/profile editing, not initial signup. Keep unset distinct from an explicit prefer-not-to-say response; verify selection, save/reload and validation with regression tests. No new schema or required signup field. Morgan's fixture has no gender; the requester chose female for this synthetic run and will set it manually. Independent of care-plan generation. |
 | `PAT-005-I` — evidence applicability and overlap review | **Done** | Rajeev — PR #121 | Migration 044 applied and deployed controls verified: imported exclusions persist, overlap review soft-removes proposals without deleting evidence, and unresolved overlap blocks publication. | Synthetic Maya V2 approved on 2026-10-02 with four retained items and 49 excluded proposals. Fresh-scenario/denial proof remains C; review and continuity defects are J. |
 | `PAT-005-J` — review persistence and revision continuity | **Claimed** | Rajeev — PR #122 / `codex/care-plan-review-follow-up` | Save incomplete medication reconciliation as a publication blocker; retain unchanged conflict resolutions; serialize clinician barrier detail; preserve unchanged activity identities across approval. Include clinician adherence usability: response-based metrics, unknown-day gaps, daily counts, named barriers, and current activity context. | Live QA found all four defects. V2 has one Metformin and new monitoring; monitoring completion survives reload. Migration 045 is required for future unchanged-activity continuity, not retroactive repair of V2. Deploy and repeat clinician barrier/revision checks before closing F/C. Do not treat recorded-response counts as scheduled doses or infer ADRs from patient barriers. |
 | `PAT-002-B` — guided chat symptom intake | **Sequenced** | Patient + backend lanes — unassigned | Deliver an evidence-aware, deterministic-safe chat interview from an approved question library; require the patient to confirm the resulting structured report before it becomes clinician-visible. | Starts after `PAT-005-C` live proof. Retrieve only authorized grounded context; do not make document facts look like patient statements or autonomously diagnose, create a clinician task, decide an ADR, or start MedWatch. Blocks `PAT-002-C` and `PV-001`. |
@@ -188,6 +213,121 @@ Ruff, format, mypy and migration parsing passed. Clinician lint/typecheck, 111 V
 and `npm run build -- --webpack` passed. One unrelated review-queue test timed out in an
 intermediate run; the complete rerun passed. Live verification is still pending migration,
 merge/deployment and clinician review; no remote writes or automatic cleanup were performed.
+
+**PAT-005-C restart and batching — 2026-10-02:** Claimed by Rajeev on
+`codex/document-qa-batching`. The requester confirmed a scoped reset of Morgan's
+three test-document records and generated candidates/drafts, preserving her account,
+profile and care-team link. The normal application deletion returned HTTP 500:
+`withdraw_unapplied_document_source` attempted to delete a fact still referenced by
+`care_plan_items_source_fact_id_fkey`. The transaction rolled back; no document was
+removed. Direct database access is not configured in this agent shell. A reviewed,
+guarded reset is still required; do not upload the replacement bundle into the old draft.
+Revised local PDFs contain one consistent established Metformin 500 mg twice-daily
+regimen, no 1000 mg discrepancy and no application-workflow instructions. Missing
+allergies/laboratory details remain explicitly undocumented, not inferred normal.
+Deployment configuration changes the maximum document batch from one to five and
+task timeout from 300 to 1,800 seconds, retaining sequential processing, isolated
+failures and atomic claims. This change is local, not deployed; five-document live
+latency and restart acceptance remain unverified. No remote SQL or configuration
+change was performed. Verification: focused worker pytest passed 8 tests, including
+five-claim failure isolation and the deployment batch/timeout contract; changed-test
+Ruff/format/mypy and `git diff --check` passed. The three revised PDFs rendered as
+four visually inspected pages (2 + 1 + 1); no clipping or overflow was found.
+
+**Morgan reset prerequisite verification — 2026-10-03:** Both live portal sessions
+were accessible. Morgan's Today showed zero tasks; the original eight-item draft
+remained unpublished, with overlap and review blockers disabling publication.
+The clinician-only reconciliation instruction was incorrectly proposed as an
+`other` patient task; correcting the fixture alone does not resolve this extraction
+boundary defect. Supabase SQL Editor confirmed all three documents completed,
+their summaries ready, ten facts pending/unreconciled, and an unapproved draft with
+no recommendation or human audit actor. A narrowly guarded operator transaction
+removed the draft dependencies successfully in a rollback-only dry run, preserving
+the patient, care-team link, documents and facts. A disposable local PostgreSQL
+check could not initialize because the host exhausted shared-memory capacity;
+no system setting was changed. Permanent reset and replacement uploads remain
+pending; this is not end-to-end completion.
+
+**Morgan scoped reset and revised uploads — 2026-10-03:** Requester confirmed
+permanent removal immediately before execution. The guarded transaction committed
+removal of Morgan's one unapproved draft, eight items, generated audit event and
+completed request. All three original documents were then deleted successfully
+through the patient app's normal Storage/API path. SQL and the empty Records UI
+verified zero remaining documents, facts and plan versions, with the patient and
+one care-team link preserved. The corrected discharge was uploaded by the patient
+at `17:04:53Z`; the corrected medication order (Prescription) and care-transition
+note were uploaded by the clinician at `17:07:56Z` and `17:08:25Z`. Exactly three
+new IDs persisted with correct attribution. The discharge completed extraction
+and explanation; the remaining two were pending at the first status check.
+The new patient explanation still uses imperative medication wording before plan
+approval, so the candidate-versus-approved explanation boundary remains a defect.
+No plan was approved and no batch configuration was deployed during this reset.
+
+**Morgan revised extraction verification — 2026-10-03:** All three replacement
+documents reached `parse_status=completed` and `summary_status=ready`; the patient
+Records surface showed three stored records and three available explanations.
+Twelve pending-review facts preserve separate evidence across the three sources:
+three condition, three medication and six obligation candidates. Medication
+evidence consistently states 500 mg twice daily with meals; equivalent wording
+and source-level repetition still require draft reconciliation, not automatic
+publication. The protected follow-up PDF rendered correctly. Its explanation
+incorrectly calls unreviewed information "your plan" and gives direct instructions,
+confirming the explanation-boundary defect independently of the old discrepancy
+fixture. The generation request was pending with zero attempts and no failure;
+the final evidence timestamp was `17:17:08Z`, so the five-minute quiet window
+had not expired at the `17:21:22Z` check. Worker tests were rerun: eight passed.
+Publication and patient/clinician follow-through remain unverified.
+
+**Morgan revised closed-loop browser run — 2026-10-03:** Scheduled generation
+completed normally by `17:25:54Z`, producing nine draft proposals from the three
+replacement sources. Whole-plan publication and Today preview were disabled
+until review. Overlap selection staged duplicate removals; the medication-name
+variant `Metformin 500 mg tablet` was not grouped with `Metformin` and required
+explicit removal. Five proposals were removed with sources retained. The four
+retained instructions were source-checked, language-reviewed, saved and previewed
+through the clinician UI. Synthetic approval at `17:29:22Z` persisted one approved
+version, one medication, three activities and three audit events. Patient Today
+showed exactly four approved activities, matching the saved preview before reminders.
+The twice-daily medication schedule saved `08:00` and `18:00` on all seven days in
+`America/Los_Angeles` and survived reload; Today split the two scheduled doses.
+Marking the morning dose taken persisted a `taken` event at `17:32:40Z` for
+`15:00Z` (08:00 local), left the evening dose uncompleted, and showed 1/5 (20%).
+An access barrier on glucose monitoring persisted a skipped response at
+`17:33:26Z` and appeared in clinician follow-up. Selecting a predefined barrier
+submits immediately; the attempted subsequent note was not persisted.
+
+Remaining live defects: clinician completion reports 0/2 despite the persisted
+medication `taken` response (`clinician_service.py` counts only `completed`);
+the future 18:00 dose says `Due now` during the morning; explicit routine wording
+(`Each day before breakfast`, named weekly days, breakfast/dinner) is classified
+as unknown cadence and blocks routine reminders; medication-name variants can
+escape overlap grouping; unreviewed explanations imply approved treatment; the
+approved-plan UI still displays a medication-decision warning. Earlier unknown
+allergy and clinician-only extraction defects remain open. This proves a fresh
+synthetic happy-path loop, not complete acceptance or clinical readiness. No new
+deployment, migration, PR merge or notification-delivery claim was made. The
+five-document batching change remains local with eight passing worker tests.
+
+**PAT-005-C fresh Morgan run — 2026-10-02 (in progress):** PR #125 merge
+`0a7b302` passed backend deployment `37057321126`, frontend CI `37057321114`,
+and CI `37057321111`. The synthetic Morgan Ellis account was verified in both
+authenticated portals, linked to Elena Park, with female gender, `en-US`, UTC,
+zero documents, medications, obligations, and no approved plan. The patient
+uploaded the two-page synthetic discharge/after-visit PDF; the clinician uploaded
+the medication-order PDF as Prescription and the medication-discrepancy PDF as
+Clinical Note. All three persisted with correct uploader attribution. The
+discharge parsed, five pending candidates were visible with source-page evidence,
+and the protected two-page viewer rendered. Today remained empty before approval.
+The remaining documents and quiet-window generation are still pending; publication,
+preview, completion/barriers, revision continuity, and denial/audit are not yet proven.
+The replacement bundle is a local synthetic variant, not the unchanged catalogued
+manifest: discharge SHA-256 `ed9bf955c39e4b79bc0a07ed28b144d9cfa33a1e495463fe418062df3361234b`,
+order `d8ada1314f702fb35ea7508b48aeb9fd88ecaeb40062bb94fc58b7be239a1366`,
+discrepancy `ee7041327bd4047c2e6f934283801aeeeeb1359c6e25bdd65569d88099c3902a`.
+Two live defects require follow-up: an empty allergy list renders as `NKDA` rather
+than unknown/not documented; the unreviewed document explanation says "your current
+care plan" and directs medication taking despite unresolved source discrepancy.
+Do not treat that explanation as clinician-approved treatment or as acceptance success.
 
 ### Claim and handoff rules
 

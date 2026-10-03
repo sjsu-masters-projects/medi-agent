@@ -31,6 +31,19 @@ def activity(item_id="one", **changes):
     }
 
 
+def test_strength_and_form_suffixes_require_review_without_changing_source_names():
+    items = [
+        activity("one", category="medication", medication={"name": "Metformin"}),
+        activity("two", category="medication", medication={"name": "Metformin 500 mg tablet"}),
+        activity("three", category="medication", medication={"name": "Metformin ER 500 mg tablet"}),
+    ]
+    original = deepcopy(items)
+    assert overlaps(items, []) == {"one": ["two"], "two": ["one"]}
+    assert items == original
+    items[1]["is_removed"] = True
+    assert overlaps(items, []) == {}
+
+
 def test_generation_requires_live_document_or_clinician_entry_provenance():
     facts = [{"id": str(index)} for index in range(7)]
     sources = [

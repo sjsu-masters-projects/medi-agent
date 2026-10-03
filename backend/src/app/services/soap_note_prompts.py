@@ -64,7 +64,7 @@ def build_soap_prompt(patient_context: dict[str, Any]) -> str:
         ", ".join(
             f"{a.get('allergen', 'Unknown')} ({a.get('severity', 'unknown')})" for a in allergies
         )
-        or "NKDA"
+        or "Not documented"
     )
 
     # Format recent symptoms

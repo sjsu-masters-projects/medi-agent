@@ -133,6 +133,7 @@ describe("RecordsPage", () => {
 
     expect(await screen.findAllByText(/City Health/i)).toHaveLength(2);
     expect(screen.getByText(/Your lab values are stable/i)).toBeInTheDocument();
+    expect(screen.getByText(/not a newly approved care plan/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /ask about this document/i }),
     ).toBeInTheDocument();

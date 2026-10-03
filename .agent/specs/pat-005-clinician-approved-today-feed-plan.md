@@ -160,6 +160,33 @@ database transaction; the preview neither writes nor guarantees unchanged state 
 
 ## Acceptance checklist
 
+### Fresh-scenario follow-through safeguards
+
+Medication `taken` and activity `completed` responses both count in clinician
+response-based adherence. Future scheduled doses stay upcoming until their absolute
+`scheduledAt` timestamp; missing/invalid timestamps never establish that a dose is due.
+Explicit daily meal routines support reminders, and explicitly named clinical weekdays
+are returned as `required_days_of_week` and enforced by the API and feed cadence guard.
+Patient-selected clock times do not alter those clinical days. Unknown, PRN and
+event-based frequencies still require clarification rather than inferred routine times.
+
+Simple medication strength/form suffix variants are grouped for explicit overlap
+review. This is not clinical-equivalence matching: source names, doses, release markers,
+citations and decisions are retained. The API blocks unresolved groups; the existing
+atomic database guard still uses exact medication names. No new migration is required.
+
+New explanations use `patient-explanation/2`, source-attributed descriptions and no
+treatment-selection language. The Records warning also applies to previously cached
+explanations, which are not automatically regenerated. Extraction excludes clinician-only
+workflow instructions. These prompt contracts do not establish clinical correctness;
+new model output still needs live review. Empty allergy records mean "Not documented",
+not a documented absence of allergies. Approved plans do not show draft decision prompts.
+
+The fresh Morgan browser run proved patient and clinician uploads, source review,
+guarded approval, Today projection, medication completion and a clinician-visible access
+barrier. Post-deployment verification of these follow-through fixes, five-document live
+worker timing, v2 continuity and the complete denial/bilingual matrix remain open.
+
 - [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
       patient uploads.
 - [ ] Several completed documents inside the quiet window create one draft.

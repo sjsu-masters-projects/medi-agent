@@ -115,6 +115,7 @@ describe("TodayPage", () => {
             },
             requiresScheduleConfiguration: false,
             scheduledTime: "08:00",
+            scheduledAt: new Date(Date.now() - 60_000).toISOString(),
             status: FeedTaskStatus.PENDING,
             targetId: "medication-1",
             type: FeedTaskType.MEDICATION,
@@ -132,6 +133,19 @@ describe("TodayPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: /mark as taken/i }));
         expect(markComplete).toHaveBeenCalledWith(task);
+    });
+
+    it("keeps a future scheduled dose upcoming instead of due now", () => {
+        mockFeedData({ tasks: [{
+            id: "future-dose", targetId: "med-1", type: FeedTaskType.MEDICATION,
+            name: "Metformin 500 mg", description: "With dinner", frequency: "twice daily",
+            scheduledTime: "18:00", scheduledAt: new Date(Date.now() + 3_600_000).toISOString(),
+            status: FeedTaskStatus.PENDING,
+        }] });
+        render(<TodayPage />);
+        expect(screen.queryByText("Due now")).not.toBeInTheDocument();
+        expect(screen.queryByText(/• Now/)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /Mark as Taken/i })).not.toBeInTheDocument();
     });
 
     it("surfaces reminder schedule gaps with a direct setup link", () => {

@@ -12,6 +12,25 @@ from app.services.reminder_schedule_service import (
 
 
 @pytest.mark.parametrize(
+    "frequency,times",
+    [
+        ("Each day before breakfast", ["08:00"]),
+        ("with breakfast and dinner", ["08:00", "18:00"]),
+    ],
+)
+def test_explicit_daily_routines_support_matching_reminders(frequency, times):
+    assert schedule_matches_frequency({"times_of_day": times, "days_of_week": DAY_ORDER}, frequency)
+
+
+def test_explicit_weekdays_cannot_be_replaced_with_other_three_days():
+    frequency = "Monday, Wednesday, and Friday after dinner"
+    schedule = {"times_of_day": ["18:00"], "days_of_week": ["monday", "wednesday", "friday"]}
+    assert schedule_matches_frequency(schedule, frequency)
+    schedule["days_of_week"] = ["tuesday", "thursday", "saturday"]
+    assert not schedule_matches_frequency(schedule, frequency)
+
+
+@pytest.mark.parametrize(
     "frequency",
     [
         "biweekly",

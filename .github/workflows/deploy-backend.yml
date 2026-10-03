@@ -124,8 +124,8 @@ jobs:
             --memory 2Gi \
             --tasks 1 \
             --parallelism 1 \
-            --task-timeout 300s \
+            --task-timeout 1800s \
             --max-retries 0 \
             --service-account ${RUNTIME_SERVICE_ACCOUNT} \
-            --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.1-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,DOCUMENT_INGESTION_BATCH_SIZE=1 \
+            --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.1-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,DOCUMENT_INGESTION_BATCH_SIZE=5 \
             --set-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest

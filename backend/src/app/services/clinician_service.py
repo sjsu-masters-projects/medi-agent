@@ -847,7 +847,7 @@ class ClinicianService:
             if day not in by_date:
                 by_date[day] = {"completed": 0, "total": 0}
             by_date[day]["total"] += 1
-            if log.get("status") == "completed":
+            if log.get("status") in {"completed", "taken"}:
                 by_date[day]["completed"] += 1
 
         today = datetime.now(UTC).date()

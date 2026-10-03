@@ -378,7 +378,8 @@ class TestSoapPrompt:
 
     def test_no_allergies_is_stated_explicitly(self) -> None:
         """A blank where allergies belong reads as "not checked" rather than "none"."""
-        assert "NKDA" in build_soap_prompt(_context())
+        assert "Not documented" in build_soap_prompt(_context())
+        assert "NKDA" not in build_soap_prompt(_context())
 
     def test_patient_chat_is_delimited_as_untrusted(self) -> None:
         prompt = build_soap_prompt(

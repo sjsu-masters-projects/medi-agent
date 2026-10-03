@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
@@ -18,8 +18,12 @@ function splitMedicationName(name: string) {
     };
 }
 
-function mapTaskStatus(status: FeedTask["status"]): TaskCardStatus {
+function mapTaskStatus(task: FeedTask, now: number): TaskCardStatus {
+    const status = task.status;
     if (status === FeedTaskStatus.PENDING) {
+        if (task.scheduledTime && (!task.scheduledAt || !Number.isFinite(Date.parse(task.scheduledAt)) || Date.parse(task.scheduledAt) > now)) {
+            return "upcoming";
+        }
         return "active";
     }
 
@@ -32,7 +36,7 @@ function mapTaskStatus(status: FeedTask["status"]): TaskCardStatus {
 
 function formatTimeLabel(
     scheduledTime?: string,
-    status?: FeedTask["status"],
+    status?: TaskCardStatus,
     requiresScheduleConfiguration?: boolean,
 ) {
     if (!scheduledTime && requiresScheduleConfiguration) {
@@ -46,7 +50,7 @@ function formatTimeLabel(
     const value = new Date();
     value.setHours(Number(hours), Number(minutes), 0, 0);
     const label = value.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    return status === FeedTaskStatus.PENDING ? `${label} • Now` : label;
+    return status === "active" ? `${label} • Now` : label;
 }
 
 function carePlanLabel(task: FeedTask) {
@@ -62,6 +66,11 @@ function CarePlanDetails({ task }: { task: FeedTask }) {
 }
 
 export default function TodayPage() {
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 30_000);
+        return () => clearInterval(timer);
+    }, []);
     const {
         adherenceStats,
         actionError,
@@ -177,7 +186,7 @@ export default function TodayPage() {
                 {tasks.length > 0 ? (
                     <div className="ml-2 border-l-2 border-[#d7e5de] pl-6">
                         {tasks.map((task) => {
-                            const status = mapTaskStatus(task.status);
+                            const status = mapTaskStatus(task, now);
                             const dotClasses =
                                 status === "completed"
                                     ? "bg-[#147465] text-white"
@@ -197,7 +206,7 @@ export default function TodayPage() {
                                         <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                             {formatTimeLabel(
                                                 task.scheduledTime,
-                                                task.status,
+                                                status,
                                                 task.requiresScheduleConfiguration,
                                             )}
                                         </p>
@@ -228,7 +237,7 @@ export default function TodayPage() {
                                     <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                         {formatTimeLabel(
                                             task.scheduledTime,
-                                            task.status,
+                                            status,
                                             task.requiresScheduleConfiguration,
                                         )}
                                     </p>

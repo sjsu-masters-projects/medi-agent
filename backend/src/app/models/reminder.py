@@ -50,6 +50,7 @@ class ReminderGuidanceRead(BaseModel):
     supports_automatic_reminders: bool
     recommended_times_per_day: int | None = None
     recommended_days_per_week: int | None = None
+    required_days_of_week: list[DayOfWeek] | None = None
     guidance_text: str | None = None
 
 
