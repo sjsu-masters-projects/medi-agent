@@ -14,6 +14,7 @@ callers are covered by their own tests rather than trusting convention.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -96,6 +97,30 @@ ADVERSE_EFFECT_KEYWORDS = frozenset(
     }
 )
 
+# Only explicit, local denials suppress an emergency phrase. The expression must end
+# immediately before the matched phrase (apart from a small set of harmless fillers), so
+# text such as "no nausea, but chest pain" or "not sure whether this is chest pain" still
+# escalates. This is intentionally narrower than general language negation: a false
+# negative here is more dangerous than an unnecessary escalation.
+_NEGATED_SIGNAL_PREFIX = re.compile(
+    r"(?:\b(?:"
+    r"do not have|don't have|does not have|doesn't have|did not have|didn't have|"
+    r"not having|denies having|deny having|denied having|denies|deny|denied|"
+    r"no tengo|no tiene|no presento|no presenta|niego tener|niega tener|niego|niega|"
+    r"without|sin|no|not"
+    r")\s+(?:any\s+|currently\s+|ningun\s+|ninguna\s+|ningún\s+|ninguna\s+)?$)"
+)
+_NEGATED_LIST_START = re.compile(
+    r"\b(?:"
+    r"do not have|don't have|does not have|doesn't have|did not have|didn't have|"
+    r"denies having|deny having|denied having|denies|deny|denied|"
+    r"no tengo|no tiene|no presento|no presenta|niego tener|niega tener|niego|niega|"
+    r"without|sin|no"
+    r")\b"
+)
+_NEGATED_LIST_CONTINUATION = re.compile(r"(?:,\s*)?(?:or|nor|ni)\s*$")
+_CLAUSE_BREAK = re.compile(r"[.!?;]|\b(?:but|however|although|though|yet|except|pero|aunque)\b")
+
 
 @dataclass(frozen=True)
 class SafetyVerdict:
@@ -115,6 +140,39 @@ def matches_any(text: str, keywords: frozenset[str]) -> bool:
     return any(keyword in text for keyword in keywords)
 
 
+def matches_any_unnegated(text: str, keywords: frozenset[str]) -> bool:
+    """Whether any keyword occurs without a clear denial immediately before it.
+
+    Every occurrence is checked. A historical denial followed by a current positive
+    report ("no chest pain yesterday, but chest pain now") must still escalate.
+    """
+    for keyword in keywords:
+        offset = 0
+        while (index := text.find(keyword, offset)) >= 0:
+            if not _is_negated_signal(text, index):
+                return True
+            offset = index + len(keyword)
+    return False
+
+
+def _is_negated_signal(text: str, index: int) -> bool:
+    prefix = text[:index]
+    if _NEGATED_SIGNAL_PREFIX.search(prefix) is not None:
+        return True
+
+    # A denial commonly governs a short list: "I do not have trouble breathing,
+    # swelling, or chest pain." Extend the denial only when the target is introduced by
+    # an explicit list conjunction and no sentence or contrast boundary intervenes. This
+    # does not suppress "no nausea, but chest pain" or a comma-spliced positive report.
+    if _NEGATED_LIST_CONTINUATION.search(prefix) is None:
+        return False
+    starts = list(_NEGATED_LIST_START.finditer(prefix))
+    if not starts:
+        return False
+    tail = prefix[starts[-1].end() :]
+    return _CLAUSE_BREAK.search(tail) is None
+
+
 def contains_adverse_effect_signal(text: str) -> bool:
     return matches_any(text.lower(), ADVERSE_EFFECT_KEYWORDS)
 
@@ -127,7 +185,7 @@ def deterministic_safety_floor(message: str) -> SafetyVerdict | None:
     """
     normalized = message.lower()
 
-    if matches_any(normalized, MENTAL_HEALTH_EMERGENCY_KEYWORDS):
+    if matches_any_unnegated(normalized, MENTAL_HEALTH_EMERGENCY_KEYWORDS):
         return SafetyVerdict(
             intent="mental_health",
             urgency="emergency",
@@ -135,7 +193,7 @@ def deterministic_safety_floor(message: str) -> SafetyVerdict | None:
             safety_rule="emergency_mental_health_keyword",
         )
 
-    if matches_any(normalized, EMERGENCY_KEYWORDS):
+    if matches_any_unnegated(normalized, EMERGENCY_KEYWORDS):
         return SafetyVerdict(
             intent="symptom",
             urgency="emergency",

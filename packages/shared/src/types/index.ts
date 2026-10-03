@@ -560,6 +560,9 @@ export interface ADRAssessment {
     suspectMedicationName: string;
     naranjoScore: number;
     causality: NaranjoCausality;
+    naranjoAnswers: Record<string, "yes" | "no" | "do_not_know">;
+    naranjoAssessment: Record<string, unknown>;
+    evidence: Array<{ question: string; answer: string; evidence?: string }>;
     thinkingChain?: string;
     status: ADRStatus;
     reviewedBy?: string;

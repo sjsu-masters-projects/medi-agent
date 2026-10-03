@@ -15,7 +15,7 @@ const primaryNavigation = [
     { href: "/dashboard", icon: HiOutlineChartBarSquare, label: "Risk Radar" },
     { href: "/patients", icon: HiOutlineUsers, label: "Patient Roster" },
     { href: "/review-queue", icon: HiOutlineClipboardDocumentList, label: "Review Queue" },
-    { href: "/medwatch", icon: HiOutlineExclamationTriangle, label: "MedWatch Queue" },
+    { href: "/medwatch", icon: HiOutlineExclamationTriangle, label: "ADR Reviews" },
     { href: "/messages", icon: HiOutlineChatBubbleLeftRight, label: "Messages" },
 ];
 

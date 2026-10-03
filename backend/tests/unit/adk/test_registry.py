@@ -14,6 +14,7 @@ import pytest
 from app.adk.registry import (
     FLASH,
     GPT_OSS,
+    TRIAGE_LITE,
     ModelSpec,
     Transport,
     Workload,
@@ -62,10 +63,20 @@ def test_the_table_cannot_be_rerouted_at_runtime() -> None:
         routes[Workload.TRIAGE] = route_for(Workload.REPLY)  # type: ignore[index]
 
 
-def test_triage_leads_with_the_faster_measured_model() -> None:
-    """2.2 s median against 6.2 s, at equal accuracy, in the one path a patient waits on."""
-    assert route_for(Workload.TRIAGE).primary is GPT_OSS
+def test_triage_leads_with_the_low_cost_native_model() -> None:
+    """Classification stays on Vertex's native Gemini transport and global endpoint."""
+    assert route_for(Workload.TRIAGE).primary is TRIAGE_LITE
+    assert route_for(Workload.TRIAGE).fallback is FLASH
     assert route_for(Workload.TRIAGE).budget_seconds == 8.0
+    assert route_for(Workload.TRIAGE).max_output_tokens == 512
+
+
+def test_no_live_workload_routes_to_gpt_oss() -> None:
+    """MaaS remains evaluable, but patient traffic must not depend on its capacity pool."""
+    for workload in Workload:
+        route = route_for(workload)
+        assert route.primary is not GPT_OSS
+        assert route.fallback is not GPT_OSS
 
 
 def test_recall_sensitive_workloads_do_not_fall_back_to_the_lower_recall_model() -> None:
@@ -93,12 +104,14 @@ def test_extraction_runs_without_a_user_facing_budget() -> None:
 def test_schema_conformance_is_recorded_as_a_measured_property() -> None:
     """3 violations in 10 trials against 0 in 10; callers routed to gpt-oss must validate."""
     assert GPT_OSS.honours_response_schema is False
+    assert TRIAGE_LITE.honours_response_schema is True
     assert FLASH.honours_response_schema is True
 
 
 def test_transport_is_independent_of_the_model_id() -> None:
     """The defect just removed from the Gemini client was inferring one from the other."""
     assert FLASH.transport is Transport.VERTEX_GENAI
+    assert TRIAGE_LITE.transport is Transport.VERTEX_GENAI
     assert GPT_OSS.transport is Transport.VERTEX_MAAS_OPENAI
 
 
@@ -119,6 +132,7 @@ def test_the_genai_model_id_carries_no_publisher_prefix() -> None:
     through the OpenAI-compatible surface, so an id copied between transports breaks.
     """
     assert FLASH.model_id == "gemini-3.8-flash"
+    assert TRIAGE_LITE.model_id == "gemini-3.1-flash-lite"
 
 
 def test_interactive_workloads_all_carry_a_budget() -> None:
@@ -265,8 +279,8 @@ def test_model_specs_are_immutable() -> None:
         FLASH.model_id = "something-else"  # type: ignore[misc]
 
 
-def test_both_finalists_are_reachable_through_a_declared_transport() -> None:
-    for spec in (FLASH, GPT_OSS):
+def test_all_registered_models_are_reachable_through_a_declared_transport() -> None:
+    for spec in (FLASH, TRIAGE_LITE, GPT_OSS):
         assert isinstance(spec, ModelSpec)
         assert spec.transport in set(Transport)
         assert spec.model_id

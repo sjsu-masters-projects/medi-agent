@@ -44,9 +44,11 @@ Validate:
 |----------|---------|
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` | Supabase DB, Auth, RLS |
 | `GOOGLE_PROJECT_ID` | Vertex AI model and embedding paths |
-| `VERTEX_AI_LOCATION` | Regional MaaS endpoint location; production uses `us-central1` for GPT OSS |
+| `VERTEX_AI_LOCATION` | MaaS endpoint location; production uses `global` for GPT OSS shared capacity |
 | `GEMINI_VERTEX_AI_LOCATION` | Gemini Vertex endpoint location; Gemini 3.8 Flash uses `global` |
 | `GEMINI_FLASH_MODEL` | Gemini Flash model ID used by the agent runtime |
+| `CHAT_TURN_TIMEOUT_SECONDS` | Hard ceiling for the complete coordinator-and-responder chat turn |
+| `MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS` | How long MaaS is bypassed after a timeout or retriable provider failure |
 | `DEEPGRAM_API_KEY` | Voice STT/TTS |
 | `RESEND_API_KEY` | Transactional email (clinician invites; extend for other mail later) |
 | `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL` | From address for clinician invite mail (use a verified-domain sender in production) |

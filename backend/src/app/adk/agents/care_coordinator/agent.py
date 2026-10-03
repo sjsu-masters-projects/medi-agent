@@ -1,10 +1,9 @@
 """The Care Coordinator: reason over the patient's own record, then answer them.
 
-Two stages, as the plan's routing decision requires. The reasoning stage runs on gpt-oss,
-which answered triage at a 2.2 s median against Flash's 6.2 s and holds the tools; the
-responding stage runs on Flash, which writes better patient-facing prose and has the
-perfect schema record. Neither model is chosen here — both come from the registry, so a
-routing change stays a data change in one file.
+Two stages, as the plan's routing decision requires. The reasoning stage runs on the
+low-cost Gemini Flash-Lite route and holds the tools; the responding stage runs on the
+stronger Gemini Flash route, which writes patient-facing prose. Neither model is chosen
+here — both come from the registry, so a routing change stays a data change in one file.
 
 **The agent names are load-bearing.** `ToolPolicyPlugin` keys its allowlist on
 `tool_context.agent_name` and denies by default, so renaming the tool-holding agent

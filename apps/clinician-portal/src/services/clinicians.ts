@@ -7,12 +7,14 @@
 
 import {
     ChatRole,
+    type ADRStatus,
     type ClinicianPatientDocument,
     type DocumentReviewQueueItem,
     type DocumentReviewStatus,
     type DocumentReviewer,
     type DocumentType,
     type Medication,
+    type NaranjoCausality,
     type ReminderSchedule,
     type SymptomReport,
     type UploaderRole,
@@ -86,7 +88,62 @@ export interface DashboardResponse {
     high_risk: number;
     medium_risk: number;
     low_risk: number;
+    pending_adr_reviews: number;
     medwatch_pending: number;
+}
+
+export interface ADRReviewEvidence {
+    answer: string;
+    evidence?: string | null;
+    question: string;
+}
+
+export interface ADRReviewQueueItem {
+    id: string;
+    patientId: string;
+    patientFirstName: string;
+    patientLastName: string;
+    symptomReportId: string;
+    symptom: string;
+    severity: number;
+    onset?: string | null;
+    symptomCreatedAt: string;
+    suspectMedicationId: string;
+    suspectMedicationName: string;
+    naranjoScore: number;
+    causality: NaranjoCausality;
+    naranjoAnswers: Record<string, string>;
+    naranjoAssessment: {
+        missing_questions?: string[];
+        items?: Array<{ answer: string; points: number; question: string }>;
+    };
+    evidence: ADRReviewEvidence[];
+    status: ADRStatus;
+    createdAt: string;
+}
+
+interface ADRReviewQueueResponse {
+    items: Array<{
+        id: string;
+        patient_id: string;
+        patient_first_name: string;
+        patient_last_name: string;
+        symptom_report_id: string;
+        symptom: string;
+        severity: number;
+        onset?: string | null;
+        symptom_created_at: string;
+        suspect_medication_id: string;
+        suspect_medication_name: string;
+        naranjo_score: number;
+        causality: NaranjoCausality;
+        naranjo_answers: Record<string, string>;
+        naranjo_assessment: ADRReviewQueueItem["naranjoAssessment"];
+        evidence: ADRReviewEvidence[];
+        status: ADRStatus;
+        created_at: string;
+    }>;
+    total: number;
 }
 
 export interface SoapNote {
@@ -522,6 +579,33 @@ export async function fetchDashboard(params?: DashboardQueryParams): Promise<Das
 
     const qs = search.toString();
     return apiFetch<DashboardResponse>(`/api/v1/clinicians/me/dashboard${qs ? `?${qs}` : ""}`);
+}
+
+/** Fetch evidence-backed ADR assessments for the clinician's assigned patients. */
+export async function fetchADRReviewQueue(): Promise<ADRReviewQueueItem[]> {
+    const data = await apiFetch<ADRReviewQueueResponse>(
+        "/api/v1/clinicians/me/adr-assessments?status=draft",
+    );
+    return data.items.map((item) => ({
+        id: item.id,
+        patientId: item.patient_id,
+        patientFirstName: item.patient_first_name,
+        patientLastName: item.patient_last_name,
+        symptomReportId: item.symptom_report_id,
+        symptom: item.symptom,
+        severity: item.severity,
+        onset: item.onset,
+        symptomCreatedAt: item.symptom_created_at,
+        suspectMedicationId: item.suspect_medication_id,
+        suspectMedicationName: item.suspect_medication_name,
+        naranjoScore: item.naranjo_score,
+        causality: item.causality,
+        naranjoAnswers: item.naranjo_answers,
+        naranjoAssessment: item.naranjo_assessment,
+        evidence: item.evidence,
+        status: item.status,
+        createdAt: item.created_at,
+    }));
 }
 
 /** Fetch one patient's latest risk radar snapshot. */

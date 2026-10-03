@@ -12,6 +12,7 @@ turn labelled with the previous turn's classification.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -169,6 +170,12 @@ async def _turn(
 
 
 async def _empty_stream() -> AsyncGenerator[Any, None]:
+    if False:
+        yield None
+
+
+async def _stalled_stream() -> AsyncGenerator[Any, None]:
+    await asyncio.sleep(60)
     if False:
         yield None
 
@@ -353,6 +360,23 @@ async def test_a_failing_model_tells_the_patient_rather_than_guessing() -> None:
     complete = _first(events, "complete")
     expected = resolve_locale_resource(Language.EN.value, TRIAGE_COPY)["service_unavailable"]
 
+    assert complete["response_text"] == expected
+    assert complete["fallback_used"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_stalled_turn_is_bounded_and_returns_the_reviewed_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = MagicMock()
+    runner.session_service.get_session = AsyncMock(return_value=object())
+    runner.run_async.return_value = _stalled_stream()
+    monkeypatch.setattr("app.adk.chat_runtime.settings.chat_turn_timeout_seconds", 0.01)
+
+    events = await _turn(CareCoordinatorRuntime(runner=runner), "hello")
+
+    complete = _first(events, "complete")
+    expected = resolve_locale_resource(Language.EN.value, TRIAGE_COPY)["service_unavailable"]
     assert complete["response_text"] == expected
     assert complete["fallback_used"] is True
 

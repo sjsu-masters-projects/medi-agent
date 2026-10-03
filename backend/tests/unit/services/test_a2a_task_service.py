@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.exceptions import ValidationError
 from app.services.a2a_task_service import A2ATaskService
 
 
@@ -19,7 +20,7 @@ def mock_db():
     table = MagicMock()
     db.table.return_value = table
 
-    for method in ["select", "eq", "lte", "order", "limit", "insert", "update"]:
+    for method in ["select", "eq", "lte", "order", "limit", "insert", "update", "upsert"]:
         getattr(table, method).return_value = table
 
     return db
@@ -43,10 +44,14 @@ async def test_run_symptom_to_pharmacovigilance_completes_lifecycle(mock_db):
         "status": "completed",
         "target_agent": "pharmacovigilance",
     }
+    symptom_id = str(uuid4())
+    medication_id = str(uuid4())
+    assessment_id = str(uuid4())
     mock_db.table().execute.side_effect = [
         _response([]),
         _response([submitted]),
         _response([working]),
+        _response([{"id": assessment_id}]),
         _response([completed]),
     ]
 
@@ -56,11 +61,22 @@ async def test_run_symptom_to_pharmacovigilance_completes_lifecycle(mock_db):
         payload={
             "session_id": "s-1",
             "symptom_report": {
+                "id": symptom_id,
                 "symptom": "dizziness",
                 "severity": 8,
                 "flagged_for_adr": True,
+                "related_medication_id": medication_id,
+                "related_medication_name": "Metformin",
             },
             "flagged_for_adr": True,
+            "naranjo_answers": {"event_after_drug": "yes"},
+            "adr_evidence": [
+                {
+                    "question": "event_after_drug",
+                    "answer": "yes",
+                    "evidence": "I became dizzy after starting metformin.",
+                }
+            ],
         },
     )
 
@@ -68,6 +84,58 @@ async def test_run_symptom_to_pharmacovigilance_completes_lifecycle(mock_db):
     statuses = [event["status"] for event in result["events"]]
     assert statuses == ["submitted", "working", "completed"]
     assert result["output"]["requires_clinician_review"] is True
+    assert result["output"]["adr_assessment_id"] == assessment_id
+    assert result["output"]["naranjo_assistance"]["score"] == 2
+    assert len(result["output"]["naranjo_assistance"]["missing_questions"]) == 9
+    assessment_row = mock_db.table().upsert.call_args.args[0]
+    assert assessment_row["symptom_report_id"] == symptom_id
+    assert assessment_row["suspect_medication_id"] == medication_id
+    assert assessment_row["naranjo_answers"] == {"event_after_drug": "yes"}
+    assert assessment_row["evidence"][0]["evidence"].startswith("I became dizzy")
+
+
+def test_pharmacovigilance_result_scores_only_explicit_naranjo_answers(mock_db):
+    service = A2ATaskService(mock_db)
+
+    result = service._build_pharmacovigilance_result(
+        {
+            "symptom_report": {"symptom": "rash", "severity": 10},
+            "naranjo_answers": {
+                "previous_reports": "yes",
+                "event_after_drug": "yes",
+                "alternative_causes": "no",
+            },
+        }
+    )
+
+    assert result["naranjo_assistance"]["score"] == 5
+    assert result["naranjo_assistance"]["causality"] == "Probable"
+    assert len(result["naranjo_assistance"]["missing_questions"]) == 7
+
+
+def test_symptom_severity_never_changes_the_naranjo_score(mock_db):
+    service = A2ATaskService(mock_db)
+
+    result = service._build_pharmacovigilance_result(
+        {"symptom_report": {"symptom": "rash", "severity": 10}}
+    )
+
+    assert result["requires_clinician_review"] is False
+    assert result["naranjo_assistance"]["score"] == 0
+    assert result["naranjo_assistance"]["causality"] == "Doubtful"
+
+
+@pytest.mark.parametrize("answers", [[], "yes", 3])
+def test_naranjo_answers_must_be_a_json_object(mock_db, answers):
+    service = A2ATaskService(mock_db)
+
+    with pytest.raises(ValidationError, match="naranjo_answers must be a JSON object"):
+        service._build_pharmacovigilance_result(
+            {
+                "symptom_report": {"symptom": "rash", "severity": 7},
+                "naranjo_answers": answers,
+            }
+        )
 
 
 @pytest.mark.asyncio
@@ -173,16 +241,23 @@ async def test_mark_failed_moves_task_to_dead_letter_after_max_retries(mock_db):
 @pytest.mark.asyncio
 async def test_process_due_retries_completes_due_task(mock_db):
     task_id = str(uuid4())
+    patient_id = str(uuid4())
+    symptom_id = str(uuid4())
+    medication_id = str(uuid4())
     due_task = {
         "id": task_id,
+        "patient_id": patient_id,
         "task_type": "symptom_adr_screen",
         "retry_attempt": 1,
         "max_retries": 3,
         "input_payload": {
             "symptom_report": {
+                "id": symptom_id,
                 "symptom": "rash",
                 "severity": 8,
                 "flagged_for_adr": True,
+                "related_medication_id": medication_id,
+                "related_medication_name": "Metformin",
             }
         },
     }
@@ -200,6 +275,7 @@ async def test_process_due_retries_completes_due_task(mock_db):
         _response([due_task]),
         _response([due_task]),
         _response([working]),
+        _response([{"id": str(uuid4())}]),
         _response([completed]),
     ]
 

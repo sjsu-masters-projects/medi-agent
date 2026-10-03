@@ -23,7 +23,7 @@ from app.safety import IntentType, UrgencyType
 
 
 def _context() -> SimpleNamespace:
-    return SimpleNamespace(state={})
+    return SimpleNamespace(state={}, actions=SimpleNamespace(skip_summarization=None))
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +59,21 @@ async def test_a_valid_decision_is_recorded() -> None:
         "urgency": "routine",
         "reason": "Asked when to take metformin",
     }
+    assert context.actions.skip_summarization is True
+
+
+@pytest.mark.asyncio
+async def test_an_invalid_decision_keeps_the_correction_call_available() -> None:
+    context = _context()
+
+    await submit_triage_decision(
+        intent="not_an_intent",
+        urgency="routine",
+        reason="invalid",
+        tool_context=context,
+    )
+
+    assert context.actions.skip_summarization is None
 
 
 @pytest.mark.asyncio

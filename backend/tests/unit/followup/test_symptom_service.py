@@ -20,9 +20,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.config import settings
-from app.followup import FOLLOWUP_COPY, SymptomExtractionResult, analyse_symptom
+from app.followup import (
+    FOLLOWUP_COPY,
+    ADREvidenceAnswer,
+    SymptomExtractionResult,
+    analyse_symptom,
+)
 from app.followup import service as service_module
 from app.models.enums import Language
+from app.pharmacovigilance import NaranjoAnswer, NaranjoQuestion
 from app.utils.localization import resolve_locale_resource
 
 EXTRACTION = SymptomExtractionResult(
@@ -30,9 +36,16 @@ EXTRACTION = SymptomExtractionResult(
     severity=4,
     onset="this morning",
     related_medication_name="Metformin",
+    adr_evidence=[
+        ADREvidenceAnswer(
+            question=NaranjoQuestion.EVENT_AFTER_DRUG,
+            answer=NaranjoAnswer.YES,
+            evidence="I felt dizzy after starting metformin.",
+        )
+    ],
     needs_follow_up=True,
     follow_up_question="When did this start?",
-    flagged_for_adr=True,
+    flagged_for_adr=False,
     ai_assessment="Reported after a recent medication change.",
 )
 
@@ -58,6 +71,7 @@ def _client(
 
 
 async def _analyse(client: MagicMock, message: str = "I feel dizzy", **kwargs: Any) -> Any:
+    kwargs.setdefault("patient_context", {"medications": [{"id": "med-1", "name": "Metformin"}]})
     with patch.object(service_module, "_extraction_client", return_value=client):
         return await analyse_symptom(message=message, **kwargs)
 
@@ -75,15 +89,69 @@ async def test_a_read_symptom_is_recorded() -> None:
     assert result.symptom_report is not None
     assert result.symptom_report["symptom"] == "dizziness"
     assert result.symptom_report["severity"] == 4
+    assert result.symptom_report["related_medication_id"] == "med-1"
 
 
 @pytest.mark.asyncio
-async def test_the_adverse_event_flag_is_carried_through() -> None:
-    """This decides whether a clinician is asked to look, so it must not be dropped."""
+async def test_explicit_medication_timing_creates_an_adverse_event_candidate() -> None:
     result = await _analyse(_client())
 
     assert result.flagged_for_adr is True
     assert result.follow_up_question == "When did this start?"
+    assert result.naranjo_answers == {"event_after_drug": "yes"}
+    assert result.adr_evidence[0]["evidence"] == "I felt dizzy after starting metformin."
+
+
+@pytest.mark.asyncio
+async def test_a_model_authored_flag_without_evidence_is_ignored() -> None:
+    unsupported = EXTRACTION.model_copy(update={"adr_evidence": [], "flagged_for_adr": True})
+
+    result = await _analyse(_client(extraction=unsupported))
+
+    assert result.flagged_for_adr is False
+    assert result.symptom_report is not None
+    assert result.symptom_report["flagged_for_adr"] is False
+
+
+@pytest.mark.asyncio
+async def test_symptom_severity_is_not_adr_causality_evidence() -> None:
+    severe = EXTRACTION.model_copy(
+        update={"severity": 10, "adr_evidence": [], "flagged_for_adr": True}
+    )
+
+    result = await _analyse(_client(extraction=severe))
+
+    assert result.flagged_for_adr is False
+
+
+@pytest.mark.asyncio
+async def test_the_suspect_must_match_an_active_medication() -> None:
+    result = await _analyse(_client(), patient_context={"medications": [{"name": "Lisinopril"}]})
+
+    assert result.flagged_for_adr is False
+
+
+def test_known_naranjo_answers_require_patient_evidence() -> None:
+    with pytest.raises(ValueError, match="patient-provided evidence"):
+        ADREvidenceAnswer(
+            question=NaranjoQuestion.EVENT_AFTER_DRUG,
+            answer=NaranjoAnswer.YES,
+        )
+
+
+def test_duplicate_naranjo_questions_are_rejected() -> None:
+    duplicate = ADREvidenceAnswer(
+        question=NaranjoQuestion.EVENT_AFTER_DRUG,
+        answer=NaranjoAnswer.YES,
+        evidence="after starting the medication",
+    )
+
+    with pytest.raises(ValueError, match="at most once"):
+        SymptomExtractionResult(
+            symptom="dizziness",
+            severity=4,
+            adr_evidence=[duplicate, duplicate],
+        )
 
 
 @pytest.mark.asyncio
