@@ -57,6 +57,53 @@ documented in `.env.example`; do not commit a real `.env` file.
 
 ## Evidence and limits
 
+### Capacity controls — 2026-10-03 (not deployed)
+
+Interactive ADK routes allow one 429 retry with 200–400 ms jitter (or a valid
+`Retry-After` plus 0–100 ms jitter). Delays over one second, or without at least
+500 ms remaining for the response, immediately return the original error to the
+declared fallback. Admission, provider work, and retry sleep remain inside the
+existing route deadline. Other statuses do not gain retries. Failed response
+buffers and request mutations are discarded. SDK/LiteLLM automatic retries are
+explicitly disabled for these routes; the application owns the retry.
+
+Native Vertex chat and background text calls share process/event-loop-local
+endpoint/model gates: two in-flight calls and 250 ms between starts by default.
+Background text calls can occupy only one of those two slots. Retries re-enter
+admission. `MODEL_MAX_CONCURRENCY` and `MODEL_MIN_START_INTERVAL_SECONDS` are
+validated configuration; a concurrency setting of one cannot reserve a slot.
+Independent Cloud Run instances and worker Jobs do not share these gates, so
+these controls reduce local bursts, not aggregate project traffic or Google's
+shared-pool contention. Existing background retry limits remain unchanged.
+
+The `model_attempt` structured log contains only model, endpoint location, numeric
+status, retry count, latency, fallback-candidate role and safe failure category.
+No raw exception, prompt, response, patient identifier, credential, or endpoint
+URL is logged. This per-transport-attempt evidence supplements existing workload
+database telemetry; no database schema change is required.
+
+The first eight-call global synthetic probe yielded 7/8 first-attempt successes,
+zero 429s and zero retry recoveries, and one GPT OSS deadline/fallback (11.002 s
+total). Flash-Lite finished 4/4 first attempts (1.471–2.474 s); GPT OSS finished
+3/4 (0.662–3.732 s). Strict response-contract checks passed 7/8: the Spanish
+fallback translated JSON keys rather than only values. Emergency responses all
+included 911; routine responses contained generic, unverified contact suggestions.
+The preflight prompt now explicitly fixes key names and forbids invented contact
+details. This is a small transport/payload sanity check, not the production tool
+prompt, a clinical benchmark, or proof that 429s are eliminated. Controlled tests
+provide retry-recovery and bilingual unavailable-response evidence without
+forcing failures against a live service. GPT OSS remains evaluation-only.
+
+After tightening that synthetic prompt, a second global run passed 8/8 response
+contracts and first attempts, with no 429s, retries or fallbacks. Flash-Lite total
+latency was 1.198–3.004 s (median 1.959 s); GPT OSS 0.824–6.582 s (median 2.784 s).
+Manual inspection confirmed the requested English/Spanish language, secure-message
+contact instructions and 911 emergency advice. GPT OSS Spanish routine wording
+was understandable but less natural. Across both small runs, one of eight GPT OSS
+primary calls timed out; no live retry recovery can be claimed because no 429
+occurred. Keep production routing unchanged and collect post-deployment metrics
+before considering a model promotion or claiming reduced production fallback rates.
+
 The synthetic evaluation harness and fixtures are maintained in
 `backend/scripts/run_ai_eval.py` and `backend/tests/fixtures/eval/`. The September comparison
 supported the routing trade-offs but was not clinician-adjudicated and is not a release-quality

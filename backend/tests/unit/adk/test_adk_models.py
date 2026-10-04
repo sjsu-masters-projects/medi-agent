@@ -88,6 +88,7 @@ def test_gemini_is_built_against_vertex_explicitly() -> None:
     assert constructor.call_args.kwargs["vertexai"] is True
     assert constructor.call_args.kwargs["project"] == "test-project"
     assert constructor.call_args.kwargs["location"] == "global"
+    assert model.retry_options.attempts == 1
 
 
 def test_the_explicit_client_is_the_one_the_model_uses() -> None:
@@ -145,6 +146,7 @@ def test_the_managed_model_targets_the_openai_compatible_endpoint() -> None:
         "https://us-central1-aiplatform.googleapis.com"
         "/v1/projects/test-project/locations/us-central1/endpoints/openapi"
     )
+    assert model._additional_args["num_retries"] == 0
 
 
 def test_the_bearer_is_not_forwarded_as_a_completion_argument() -> None:
