@@ -150,7 +150,7 @@ export function mapClinicianMessageFromApi(message: ClinicianMessageApi): ChatMe
         id: `clinician-message-${message.id}`,
         language: normalizeLocale(undefined),
         patientId: message.patient_id,
-        role: "system" as ChatRole,
+        role: "clinician" as ChatRole,
     };
 }
 
