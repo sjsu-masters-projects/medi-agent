@@ -29,3 +29,10 @@ class ClinicianPatientMessageCreate(BaseModel):
     channel: MessageChannel = MessageChannel.IN_APP
     subject: str | None = Field(default=None, max_length=200)
     body: str = Field(..., min_length=1, max_length=5000)
+
+
+class ClinicianMessageInboxItem(ClinicianMessageRead):
+    """ClinicianMessageRead extended with the patient's name for inbox display."""
+
+    patient_first_name: str | None = None
+    patient_last_name: str | None = None

@@ -175,6 +175,44 @@ class ClinicianService:
         )
         return message
 
+    async def list_patient_messages(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+    ) -> list[dict[str, Any]]:
+        """List messages this clinician sent to an assigned patient, newest first."""
+        await self.get_patient_detail(clinician_id, patient_id)
+
+        result = await self._execute(
+            self.db.table("clinician_messages")
+            .select("*")
+            .eq("clinician_id", str(clinician_id))
+            .eq("patient_id", str(patient_id))
+            .order("created_at", desc=True)
+            .limit(50)
+        )
+        return cast(list[dict[str, Any]], result.data or [])
+
+    async def list_all_sent_messages(
+        self,
+        clinician_id: UUID,
+    ) -> list[dict[str, Any]]:
+        """List all messages sent by this clinician across all assigned patients."""
+        result = await self._execute(
+            self.db.table("clinician_messages")
+            .select("*, patients(first_name, last_name)")
+            .eq("clinician_id", str(clinician_id))
+            .order("created_at", desc=True)
+            .limit(100)
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        for row in rows:
+            patient = cast(dict[str, Any] | None, row.pop("patients", None))
+            if patient:
+                row["patient_first_name"] = patient.get("first_name")
+                row["patient_last_name"] = patient.get("last_name")
+        return rows
+
     # ── Invite Codes ────────────────────────────────────
 
     async def generate_invite_code(self, clinician_id: UUID) -> Any:

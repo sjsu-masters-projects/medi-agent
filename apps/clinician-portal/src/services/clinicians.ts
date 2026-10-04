@@ -8,12 +8,14 @@
 import {
     ChatRole,
     type ADRStatus,
+    type ClinicianMessage,
     type ClinicianPatientDocument,
     type DocumentReviewQueueItem,
     type DocumentReviewStatus,
     type DocumentReviewer,
     type DocumentType,
     type Medication,
+    MessageChannel,
     type NaranjoCausality,
     type ReminderSchedule,
     type SymptomReport,
@@ -847,4 +849,80 @@ export async function annotateDocument(
 /** Get all patients (patient list page). */
 export async function fetchMyPatients(): Promise<PatientRiskData[]> {
     return apiFetch<PatientRiskData[]>("/api/v1/clinicians/me/patients");
+}
+
+// ── Clinician messages ────────────────────────────────────────────────────────
+
+interface ClinicianMessageResponse {
+    id: string;
+    clinician_id: string;
+    patient_id: string;
+    channel: string;
+    subject?: string | null;
+    body: string;
+    is_read: boolean;
+    created_at: string;
+}
+
+interface ClinicianMessageInboxResponse extends ClinicianMessageResponse {
+    patient_first_name?: string | null;
+    patient_last_name?: string | null;
+}
+
+export interface ClinicianMessageInboxItem extends ClinicianMessage {
+    patientFirstName?: string | null;
+    patientLastName?: string | null;
+}
+
+function normalizeClinicianMessage(msg: ClinicianMessageResponse): ClinicianMessage {
+    return {
+        id: msg.id,
+        clinicianId: msg.clinician_id,
+        patientId: msg.patient_id,
+        channel: msg.channel as typeof MessageChannel[keyof typeof MessageChannel],
+        subject: msg.subject ?? undefined,
+        body: msg.body,
+        isRead: msg.is_read,
+        createdAt: msg.created_at,
+    };
+}
+
+function normalizeInboxItem(msg: ClinicianMessageInboxResponse): ClinicianMessageInboxItem {
+    return {
+        ...normalizeClinicianMessage(msg),
+        patientFirstName: msg.patient_first_name,
+        patientLastName: msg.patient_last_name,
+    };
+}
+
+/** List messages sent to a specific patient. */
+export async function fetchPatientMessages(patientId: string): Promise<ClinicianMessage[]> {
+    const data = await apiFetch<ClinicianMessageResponse[]>(
+        `/api/v1/clinicians/me/patients/${patientId}/messages`,
+    );
+    return data.map(normalizeClinicianMessage);
+}
+
+/** List all messages sent by this clinician (inbox). */
+export async function fetchAllSentMessages(): Promise<ClinicianMessageInboxItem[]> {
+    const data = await apiFetch<ClinicianMessageInboxResponse[]>(
+        "/api/v1/clinicians/me/messages",
+    );
+    return data.map(normalizeInboxItem);
+}
+
+/** Send an in-app message to an assigned patient. */
+export async function sendPatientMessage(
+    patientId: string,
+    body: string,
+    subject?: string,
+): Promise<ClinicianMessage> {
+    const msg = await apiFetch<ClinicianMessageResponse>(
+        `/api/v1/clinicians/me/patients/${patientId}/message`,
+        {
+            method: "POST",
+            body: JSON.stringify({ body, subject: subject || null }),
+        },
+    );
+    return normalizeClinicianMessage(msg);
 }

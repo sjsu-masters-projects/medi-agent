@@ -362,6 +362,79 @@ class TestClinicianPatientMessages:
         # because the check happens in sequence
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_list_patient_messages(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        override_service.list_patient_messages = AsyncMock(
+            return_value=[
+                {
+                    "id": str(uuid4()),
+                    "clinician_id": str(uuid4()),
+                    "patient_id": str(patient_id),
+                    "channel": "in_app",
+                    "subject": "Follow-up",
+                    "body": "Bring your medication list.",
+                    "is_read": False,
+                    "created_at": "2026-05-10T10:00:00Z",
+                },
+            ]
+        )
+
+        response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/messages")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["body"] == "Bring your medication list."
+        override_service.list_patient_messages.assert_awaited_once_with(
+            override_service.list_patient_messages.await_args.args[0],
+            patient_id,
+        )
+
+    def test_list_patient_messages_empty(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        override_service.list_patient_messages = AsyncMock(return_value=[])
+
+        response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/messages")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == []
+
+    def test_list_patient_messages_unassigned(self, client, override_auth, override_service):
+        patient_id = uuid4()
+        override_service.list_patient_messages = AsyncMock(
+            side_effect=AuthorizationError("You are not assigned to this patient")
+        )
+
+        response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/messages")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_list_all_sent_messages(self, client, override_auth, override_service):
+        override_service.list_all_sent_messages = AsyncMock(
+            return_value=[
+                {
+                    "id": str(uuid4()),
+                    "clinician_id": str(uuid4()),
+                    "patient_id": str(uuid4()),
+                    "channel": "in_app",
+                    "subject": "Reminder",
+                    "body": "Your labs are ready.",
+                    "is_read": False,
+                    "created_at": "2026-05-11T08:00:00Z",
+                    "patient_first_name": "Elena",
+                    "patient_last_name": "Park",
+                },
+            ]
+        )
+
+        response = client.get("/api/v1/clinicians/me/messages")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["patient_first_name"] == "Elena"
+        assert data[0]["body"] == "Your labs are ready."
+
 
 class TestGetPatientRiskSnapshot:
     """GET /api/v1/clinicians/me/patients/{patient_id}/risk - Risk card snapshot."""
