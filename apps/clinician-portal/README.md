@@ -79,3 +79,32 @@ Invite history is intentionally role-sensitive:
 
 - A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.
 - QA account expectations are documented in [docs/qa-auth-accounts.md](../../docs/qa-auth-accounts.md).
+
+
+## Appointments workflow
+
+Use **Appointments** in the sidebar to select an assigned patient and offer 2–4
+future appointment times. The roster supplies the care-team ID automatically.
+The patient profile supplies the explicitly labelled timezone for entry and display;
+missing/invalid values use UTC, and profile failures require retry before entry.
+
+History shows grouped choices, patient responses, and notes. **Refresh appointments**
+loads persisted responses. **Offer new times** creates a fresh offer after a decline
+or request for alternatives while preserving prior history. Time conversion rejects
+DST gaps and repeated hours rather than guessing. Failed writes preserve the draft;
+refresh to check whether an uncertain request saved before retrying.
+
+Slice 4 needs appointment migrations 038–041. Slice 5 adds response deadlines,
+Expired history, and re-proposal after all choices expire; it requires migrations
+042 then 043 and the updated backend. Confirmed/scheduled patient visits cannot
+overlap; pending offers reserve no time. Slice 6 adds **Add to calendar** to each
+confirmed/scheduled history row, including the chosen row of an offer. Each download
+rechecks active patient assignment and current appointment status. The one-time `.ics`
+copy contains exact start/end and location; changes/cancellations do not sync.
+Clinician cancellation/completion controls remain subsequent work. Full synthetic click-through steps and
+verification evidence are in
+[the scheduling design](../../.agent/specs/sch-001-appointment-scheduling.md#13-slice-4--clinician-appointments-screen).
+
+On Node 26, if existing auth-session tests fail because localStorage is unavailable,
+run `NODE_OPTIONS=--no-experimental-webstorage npm run test` so jsdom supplies browser
+storage. This is a test-runtime setting, not a change to portal authentication.

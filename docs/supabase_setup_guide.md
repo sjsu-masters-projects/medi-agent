@@ -26,7 +26,69 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This currently applies migrations `001` through `041`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, clinician review reads (`021`–`028`), safe external-record reconciliation (`029`), guarded document ingestion (`034`), model-invocation telemetry (`035`), the durable document-ingestion worker boundary (`036`), private derived TIFF previews (`037`), the independent patient-explanation lifecycle (`038`), fair delayed explanation retries (`039`), clinician-approved care plans (`040`), and the one-time document-grounded care-plan request backfill (`041`). The history contains two `011` filenames; the migration ledger uses full filenames and checksums, making the ordering unambiguous.
+This checkout contains migrations `001` through `043`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, clinician review reads (`021`–`028`), safe external-record reconciliation (`029`), guarded document ingestion (`034`), model-invocation telemetry (`035`), the durable document-ingestion worker boundary (`036`), private derived TIFF previews (`037`), the independent patient-explanation lifecycle (`038`), fair delayed explanation retries (`039`), clinician-approved care plans (`040`), and the one-time document-grounded care-plan request backfill (`041`). Scheduling includes appointment lifecycle/group/audit migrations `038`–`041`, expired status `042`, and booking/expiry guards `043`, bringing the local inventory to 48 SQL files. Duplicate prefixes coexist with the document/care-plan files, just as two `011` filenames coexist. The migration ledger uses full filenames and checksums; preserve already-applied names rather than renumbering them. Local inventory does not establish remote application.
+
+### Appointment Slice 5 rollout
+
+Before authorizing remote application, review this read-only preflight in the
+synthetic development database:
+
+```bash
+psql "$MEDIAGENT_DB_URL" -v ON_ERROR_STOP=1 -f backend/scripts/appointment-booking-preflight.sql
+```
+
+It must return zero overlap pairs. Resolve existing bookings through a separately
+reviewed workflow; migration 043 will stop rather than automatically cancel/delete
+them. The exclusion constraint scans and locks the appointments table during setup.
+The migration requires `btree_gist`; it creates the extension in `extensions` if absent.
+
+Apply `042_appointment_expired_status.sql` and commit before applying
+`043_appointment_booking_guards.sql`. Use the existing ledger command from the
+scheduling integration checkout so each full filename/checksum is recorded and
+each migration is transactional. Apply schema before starting the updated backend.
+Existing proposed rows receive a deadline from their original creation time, so
+old offers may appear expired on their first authorized read. Booked visits do not
+expire. The client refreshes at pending deadlines; no new background Job is required.
+
+Verify the valid `appointments_patient_no_overlap` exclusion constraint,
+`proposal_expires_at`, and service-role-only `expire_appointment_proposals` and
+`respond_to_appointment_offer` functions. Run the synthetic conflict and expiry
+journey in [the scheduling design](../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry).
+On 2026-10-03, the requester authorized the migration-only rollout against the
+selected synthetic Supabase project. Preflight returned zero overlap pairs; both
+042/043 scheduling migrations committed through the ledger script. All 52 remote
+ledger checksums matched their sources: 48 files in this checkout and four newer
+independent care-plan migrations checked against `origin/main` at `019598b`.
+The read-only Slice 5 verifier passed. Backend/portal activation and authenticated
+live acceptance remain pending; no server restart or seed/reset accompanied this
+operation. Do not compare this remote ledger to an older checkout's file count.
+
+The read-only structural verification script checks the expiry enum/column, valid
+overlap constraint, enabled booking/expiry/append-only triggers, RLS, and RPC grants:
+
+```bash
+psql "$MEDIAGENT_DB_URL" -v ON_ERROR_STOP=1 -f backend/scripts/verify-appointment-slice5.sql
+```
+
+It must print `Slice 5 schema and function permissions verified`. It does not mutate
+or expire appointments and does not replace the ledger checksum comparison or live
+patient/clinician acceptance steps.
+
+After authorized migration application, stop the existing local backend and start
+the integration code using the original virtual environment and configuration:
+
+```bash
+MEDIAGENT_ROOT=/path/to/medi-agent
+cd "$MEDIAGENT_ROOT" # use "$MEDIAGENT_ROOT/backend" if the existing .env is there
+PYTHONPATH="$MEDIAGENT_ROOT/.worktrees/clinician-scheduling/backend/src" \
+  "$MEDIAGENT_ROOT/backend/.venv/bin/uvicorn" app.main:app --reload \
+  --reload-dir "$MEDIAGENT_ROOT/.worktrees/clinician-scheduling/backend/src" \
+  --host 127.0.0.1 --port 8000
+```
+
+The working directory lets settings load the existing `.env`; do not copy or edit it.
+The original restart script points to the original checkout and will not activate
+the integration code. Both updated portal servers use the existing configuration.
 
 ## Configure SMART staging
 

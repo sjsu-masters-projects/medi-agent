@@ -3,16 +3,41 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from supabase import Client
 
 from app.core.security import get_current_user
 from app.db.connection import get_db
-from app.models import AppointmentCreate, AppointmentRead, AppointmentUpdate
+from app.models import (
+    AppointmentCreate,
+    AppointmentProposal,
+    AppointmentRead,
+    AppointmentResponse,
+    AppointmentUpdate,
+)
+from app.models.appointment import AppointmentCalendarExport
 from app.models.auth import CurrentUser
+from app.services.appointment_calendar import CalendarLocale
 from app.services.appointment_service import AppointmentService
 
 router = APIRouter()
+
+
+@router.get("/{appointment_id}/calendar", response_model=AppointmentCalendarExport)
+async def export_appointment_calendar(
+    appointment_id: UUID,
+    response: Response,
+    locale: CalendarLocale = "en-US",
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> AppointmentCalendarExport:
+    response.headers["Cache-Control"] = "private, no-store"
+    return await AppointmentService(db).export_calendar_for_user(
+        user_id=current_user.id,
+        role=current_user.role,
+        appointment_id=appointment_id,
+        locale=locale,
+    )
 
 
 @router.get("/", response_model=list[AppointmentRead])
@@ -36,6 +61,33 @@ async def create_appointment(
         user_id=current_user.id,
         role=current_user.role,
         data=data.model_dump(mode="json"),
+    )
+
+
+@router.post("/propose", response_model=list[AppointmentRead], status_code=201)
+async def propose_appointments(
+    data: AppointmentProposal,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    return await AppointmentService(db).propose_for_user(
+        user_id=current_user.id, role=current_user.role, data=data.model_dump(mode="json")
+    )
+
+
+@router.post("/{appointment_id}/respond", response_model=AppointmentRead)
+async def respond_to_appointment(
+    appointment_id: UUID,
+    data: AppointmentResponse,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    return await AppointmentService(db).respond_to_appointment(
+        user_id=current_user.id,
+        role=current_user.role,
+        appointment_id=appointment_id,
+        action=data.action,
+        note=data.note,
     )
 
 
