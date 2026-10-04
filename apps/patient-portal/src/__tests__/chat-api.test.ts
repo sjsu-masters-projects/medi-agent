@@ -70,7 +70,7 @@ describe("chat API helpers", () => {
             createdAt: "2026-04-17T10:00:00Z",
             id: "clinician-message-clinician-message-1",
             patientId: "patient-1",
-            role: "system",
+            role: "clinician",
         });
     });
 

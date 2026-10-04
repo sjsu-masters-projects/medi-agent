@@ -1,8 +1,8 @@
-import { HiMiniSpeakerWave } from "react-icons/hi2";
+import { HiMiniSpeakerWave, HiOutlineUser } from "react-icons/hi2";
 import { ChatRole, getLocaleBadgeLabel, type Locale } from "@/types";
 
 interface ChatBubbleProps {
-    role: typeof ChatRole.USER | typeof ChatRole.ASSISTANT;
+    role: typeof ChatRole.USER | typeof ChatRole.ASSISTANT | typeof ChatRole.CLINICIAN;
     content: string;
     timestamp: Date | string;
     language?: Locale;
@@ -35,21 +35,35 @@ export function ChatBubble({
     timestamp,
 }: ChatBubbleProps) {
     const isUser = role === ChatRole.USER;
+    const isClinician = role === ChatRole.CLINICIAN;
     const languageLabel = formatLanguage(language);
 
     return (
         <div className={`flex items-end gap-3 ${isUser ? "justify-end" : ""}`}>
             {!isUser ? (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[#b6d9d2] bg-[#e6f4f1] text-[10px] font-black uppercase tracking-[0.22em] text-[#147465] shadow-[0_10px_24px_rgba(20,116,101,0.10)]">
-                    M
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border shadow-[0_10px_24px_rgba(20,116,101,0.10)] ${
+                    isClinician
+                        ? "border-[#93c5fd] bg-[#dbeafe] text-[#1d4ed8]"
+                        : "border-[#b6d9d2] bg-[#e6f4f1] text-[#147465]"
+                }`}>
+                    {isClinician ? (
+                        <HiOutlineUser className="h-4 w-4" />
+                    ) : (
+                        <span className="text-[10px] font-black uppercase tracking-[0.22em]">M</span>
+                    )}
                 </span>
             ) : null}
             <div className={`max-w-[82%] space-y-1.5 ${isUser ? "items-end text-right" : ""}`}>
+                {isClinician && (
+                    <p className="px-1 text-[11px] font-semibold text-[#1d4ed8]">Your care team</p>
+                )}
                 <div
                     className={`rounded-[24px] px-4 py-3.5 text-base leading-7 shadow-[0_18px_40px_rgba(3,8,22,0.16)] ${
                         isUser
                             ? "rounded-br-[10px] border border-[#147465] bg-[#147465] text-white shadow-[0_16px_30px_rgba(20,116,101,0.20)]"
-                            : "rounded-bl-[10px] border border-[#eadfd4] bg-white/90 text-[#17233a] shadow-[0_12px_28px_rgba(42,58,84,0.10)]"
+                            : isClinician
+                              ? "rounded-bl-[10px] border border-[#93c5fd] bg-[#eff6ff] text-[#17233a] shadow-[0_12px_28px_rgba(29,78,216,0.10)]"
+                              : "rounded-bl-[10px] border border-[#eadfd4] bg-white/90 text-[#17233a] shadow-[0_12px_28px_rgba(42,58,84,0.10)]"
                     }`}
                 >
                     <div className="space-y-3">
