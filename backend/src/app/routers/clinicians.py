@@ -26,7 +26,11 @@ from app.models.adr import ADRReviewQueueResponse
 from app.models.auth import CurrentUser
 from app.models.care_plan import CarePlanVersionRead
 from app.models.clinician import ClinicianRead, ClinicianUpdate
-from app.models.clinician_message import ClinicianMessageRead, ClinicianPatientMessageCreate
+from app.models.clinician_message import (
+    ClinicianMessageInboxItem,
+    ClinicianMessageRead,
+    ClinicianPatientMessageCreate,
+)
 from app.models.dashboard import (
     A2ATimelineResponse,
     AnnotationCreate,
@@ -137,6 +141,31 @@ async def send_patient_email(
     payload = data.model_dump()
     payload["channel"] = "email"
     return await service.send_patient_message(user.id, patient_id, payload)
+
+
+@router.get(
+    "/me/patients/{patient_id}/messages",
+    response_model=list[ClinicianMessageRead],
+    summary="List messages sent to an assigned patient",
+)
+async def list_patient_messages(
+    patient_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.list_patient_messages(user.id, patient_id)
+
+
+@router.get(
+    "/me/messages",
+    response_model=list[ClinicianMessageInboxItem],
+    summary="List all messages sent by this clinician",
+)
+async def list_all_messages(
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.list_all_sent_messages(user.id)
 
 
 @router.post(
