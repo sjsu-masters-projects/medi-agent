@@ -20,6 +20,9 @@ google-genai
 google-generativeai
 google-cloud-aiplatform
 langgraph
+# Security floors for CVE-2026-104873 and CVE-2026-104874.
+langgraph-sdk>=0.4.4
+multidict>=6.9.1
 langchain-google-genai
 
 # -- Agent runtime --

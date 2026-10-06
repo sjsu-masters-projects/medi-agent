@@ -2171,6 +2171,12 @@ never submit a report to FDA/MedWatch or portray a draft as filed.
 
 ### EVA-001 — Internal model and safety evaluation
 
+**Review gate — 2026-10-05.** PR #130 packages workload tuning. Its dependency audit
+identified CVE-2026-104873 and CVE-2026-104874 in the inherited locks. Narrow upgrades
+to `langgraph-sdk` 0.4.5 and `multidict` 6.9.1 reproduce exactly with CI's uv 0.9.24;
+`uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt` reports no known
+vulnerabilities. These are patched, not suppressed. No remote deployment performed.
+
 **Gemini workload tuning — 2026-10-04 (local verification).** Select current native
 Gemini models without hosting MedGemma: 3.5 Flash-Lite for classification, 3.8 Flash
 for clinical text/evidence, and distinct 3.5 Flash for prose fallback. Intake has no
