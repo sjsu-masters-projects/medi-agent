@@ -227,7 +227,28 @@ describe("Patient chat page", () => {
         });
         fireEvent.click(screen.getByRole("button", { name: /send message/i }));
 
-        expect(screen.getByText("Maya is typing...")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "MediGuide" })).toBeInTheDocument();
+        expect(screen.getByText("AI care assistant")).toBeInTheDocument();
+        expect(screen.getByText("MediGuide is typing...")).toBeInTheDocument();
+        expect(screen.queryByText(/Maya/)).not.toBeInTheDocument();
+    });
+
+    it("keeps the assistant name consistent and localizes its identity and typing in Spanish", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+
+        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        expect(screen.getByRole("heading", { name: "MediGuide" })).toBeInTheDocument();
+        expect(screen.getByText("Asistente de cuidado con IA")).toBeInTheDocument();
+        fireEvent.change(screen.getByPlaceholderText(/Escribe o habla/i), {
+            target: { value: "Ayúdame a entender mis resultados" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+        expect(screen.getByText("MediGuide está escribiendo...")).toBeInTheDocument();
+        expect(screen.queryByText("MediGuide is typing...")).not.toBeInTheDocument();
+        expect(screen.queryByText(/Maya/)).not.toBeInTheDocument();
     });
 
     it("shows escalation as a dismissible safety notice instead of a chat error", async () => {

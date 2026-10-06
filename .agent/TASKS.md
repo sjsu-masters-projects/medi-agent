@@ -21,6 +21,16 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-004-A companion naming — 2026-10-05 (ready for review).** Replace the assistant's
+Maya identity with MediGuide in PR #131. Keep its name in one shared constant,
+identify it explicitly as an AI care assistant, and localize typing/identity copy
+for en-US and es-MX. Synthetic patient names and stored conversation content must
+remain unchanged. Patient `npm run test`: **113 passed** including English/Spanish
+identity and typing regressions; `npm run typecheck`, `npm run lint`, and
+`npm run build -- --webpack` passed (existing non-fatal Sentry warnings).
+Source search found no remaining assistant Maya identity; patient fixtures and
+historical QA references are intentionally retained. Live rename awaits deployment.
+
 **PAT-005 return after model selection — 2026-10-05.** Keep the EVA-001 Gemini
 lineup; do not expand provider research. The supplied PAT-005 plan matches the existing
 active specification and does not require a duplicate document. Pre-testing on the
