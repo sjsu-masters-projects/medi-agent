@@ -9,7 +9,12 @@ import {
 } from "react-icons/hi2";
 import { ADRReviewCard } from "@/components/features/adr-review-card";
 import { Card, EmptyState, ErrorState, Skeleton } from "@/components/ui";
-import { fetchADRReviewQueue, type ADRReviewQueueItem } from "@/services/clinicians";
+import {
+    fetchADRReviewQueue,
+    reviewADRAssessment,
+    type ADRReviewDecisionInput,
+    type ADRReviewQueueItem,
+} from "@/services/clinicians";
 
 function LoadingQueue() {
     return (
@@ -24,6 +29,8 @@ export default function MedWatchPage() {
     const [items, setItems] = useState<ADRReviewQueueItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [submittingId, setSubmittingId] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
 
     const loadQueue = useCallback(async () => {
         setLoading(true);
@@ -44,6 +51,32 @@ export default function MedWatchPage() {
     useEffect(() => {
         void loadQueue();
     }, [loadQueue]);
+
+    const reviewAssessment = useCallback(
+        async (assessmentId: string, input: ADRReviewDecisionInput) => {
+            setSubmittingId(assessmentId);
+            setError(null);
+            setNotice(null);
+            try {
+                await reviewADRAssessment(assessmentId, input);
+                setNotice(
+                    input.action === "request_information"
+                        ? "Information request saved and audited."
+                        : "ADR review saved and audited.",
+                );
+                await loadQueue();
+            } catch (reviewError) {
+                setError(
+                    reviewError instanceof Error
+                        ? reviewError.message
+                        : "Unable to save the ADR review.",
+                );
+            } finally {
+                setSubmittingId(null);
+            }
+        },
+        [loadQueue],
+    );
 
     return (
         <div className="mx-auto max-w-7xl space-y-6">
@@ -100,6 +133,12 @@ export default function MedWatchPage() {
                 </Card>
             </section>
 
+            {notice ? (
+                <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status">
+                    {notice}
+                </p>
+            ) : null}
+
             {loading ? <LoadingQueue /> : null}
             {!loading && error ? (
                 <ErrorState
@@ -118,7 +157,12 @@ export default function MedWatchPage() {
             {!loading && !error && items.length > 0 ? (
                 <section className="space-y-4" aria-label="ADR assessments awaiting review">
                     {items.map((item) => (
-                        <ADRReviewCard item={item} key={item.id} />
+                        <ADRReviewCard
+                            item={item}
+                            key={item.id}
+                            onReview={reviewAssessment}
+                            submitting={submittingId === item.id}
+                        />
                     ))}
                 </section>
             ) : null}

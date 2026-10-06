@@ -32,6 +32,7 @@ from app.core.exceptions import (
 )
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
+from app.models.adr import ADRReviewDecisionRequest
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
@@ -474,7 +475,8 @@ class ClinicianService:
             .select(
                 "id, patient_id, symptom_report_id, suspect_medication_id, "
                 "suspect_medication_name, naranjo_score, causality, naranjo_answers, "
-                "naranjo_assessment, evidence, status, created_at, "
+                "naranjo_assessment, evidence, status, last_review_action, review_note, "
+                "requested_information, reviewed_by, reviewed_at, created_at, "
                 "patients(first_name, last_name), "
                 "symptom_reports(symptom, severity, onset, created_at)"
             )
@@ -487,6 +489,45 @@ class ClinicianService:
         rows = cast(list[dict[str, Any]], result.data or [])
         items = [self._normalize_adr_review_item(row) for row in rows]
         return {"items": items, "total": len(items)}
+
+    async def review_adr_assessment(
+        self,
+        clinician_id: UUID,
+        assessment_id: UUID,
+        decision: ADRReviewDecisionRequest,
+    ) -> dict[str, Any]:
+        """Apply an atomic, assignment-scoped clinician action to an ADR draft."""
+        assessment_result = await self._execute(
+            self.db.table("adr_assessments")
+            .select("id, patient_id, status")
+            .eq("id", str(assessment_id))
+            .single()
+        )
+        assessment = cast(dict[str, Any] | None, assessment_result.data)
+        if not assessment:
+            raise NotFoundError("ADR assessment", str(assessment_id))
+
+        patient_id = UUID(str(assessment["patient_id"]))
+        await self._assert_patient_assignment(clinician_id, patient_id)
+        if assessment.get("status") != ADRStatus.DRAFT.value:
+            raise ValidationError("ADR assessment review has already been completed")
+
+        result = await self._execute(
+            self.db.rpc(
+                "review_adr_assessment",
+                {
+                    "p_assessment_id": str(assessment_id),
+                    "p_actor_id": str(clinician_id),
+                    "p_action": decision.action.value,
+                    "p_note": decision.note,
+                    "p_requested_information": decision.requested_information,
+                },
+            )
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows:
+            raise ValidationError("ADR assessment review could not be saved")
+        return rows[0]
 
     @staticmethod
     def _normalize_adr_review_item(row: dict[str, Any]) -> dict[str, Any]:

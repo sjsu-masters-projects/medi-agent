@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from app.models.adr import ADRReviewAction, ADRReviewDecisionRequest
 from app.models.dashboard import PatientRiskData
 from app.models.enums import DocumentReviewStatus
 from app.services.clinician_service import ClinicianService
@@ -242,6 +243,112 @@ async def test_list_adr_review_queue_returns_empty_without_assignments(service, 
 
     assert result == {"items": [], "total": 0}
     mock_db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_review_adr_assessment_calls_atomic_assignment_scoped_rpc(service, mock_db):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+    assessment_id = uuid4()
+    service._assert_patient_assignment = AsyncMock()  # type: ignore[method-assign]
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _response(
+                data={
+                    "id": str(assessment_id),
+                    "patient_id": str(patient_id),
+                    "status": "draft",
+                }
+            ),
+            _response(
+                data=[
+                    {
+                        "id": str(assessment_id),
+                        "patient_id": str(patient_id),
+                        "status": "reviewed",
+                        "last_review_action": "mark_reviewed",
+                    }
+                ]
+            ),
+        ]
+    )
+
+    result = await service.review_adr_assessment(
+        clinician_id,
+        assessment_id,
+        ADRReviewDecisionRequest(action=ADRReviewAction.MARK_REVIEWED, note="Reviewed evidence"),
+    )
+
+    assert result["status"] == "reviewed"
+    service._assert_patient_assignment.assert_awaited_once_with(clinician_id, patient_id)
+    mock_db.rpc.assert_called_once_with(
+        "review_adr_assessment",
+        {
+            "p_assessment_id": str(assessment_id),
+            "p_actor_id": str(clinician_id),
+            "p_action": "mark_reviewed",
+            "p_note": "Reviewed evidence",
+            "p_requested_information": [],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_review_adr_assessment_rejects_a_completed_review(service, mock_db):
+    assessment_id = uuid4()
+    patient_id = uuid4()
+    service._assert_patient_assignment = AsyncMock()  # type: ignore[method-assign]
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        return_value=_response(
+            data={
+                "id": str(assessment_id),
+                "patient_id": str(patient_id),
+                "status": "dismissed",
+            }
+        )
+    )
+
+    with pytest.raises(ValidationError, match="already been completed"):
+        await service.review_adr_assessment(
+            uuid4(),
+            assessment_id,
+            ADRReviewDecisionRequest(action=ADRReviewAction.MARK_REVIEWED),
+        )
+
+    mock_db.rpc.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_review_adr_assessment_denies_an_unassigned_clinician(service, mock_db):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+    assessment_id = uuid4()
+    service._assert_patient_assignment = AsyncMock(  # type: ignore[method-assign]
+        side_effect=AuthorizationError("You are not assigned to this patient")
+    )
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        return_value=_response(
+            data={
+                "id": str(assessment_id),
+                "patient_id": str(patient_id),
+                "status": "draft",
+            }
+        )
+    )
+
+    with pytest.raises(AuthorizationError, match="not assigned"):
+        await service.review_adr_assessment(
+            clinician_id,
+            assessment_id,
+            ADRReviewDecisionRequest(action=ADRReviewAction.MARK_REVIEWED),
+        )
+
+    mock_db.rpc.assert_not_called()
+
+
+def test_request_information_requires_a_note() -> None:
+    with pytest.raises(ValueError, match="review note is required"):
+        ADRReviewDecisionRequest(action=ADRReviewAction.REQUEST_INFORMATION)
 
 
 @pytest.mark.asyncio
