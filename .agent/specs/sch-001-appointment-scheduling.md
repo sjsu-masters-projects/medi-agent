@@ -553,10 +553,10 @@ It must report `Slice 5 schema and function permissions verified`; live acceptan
 remains necessary.
 
 Three regression tests check success and rejection of browser RPC grants or a
-disabled expiry audit trigger. Ruff lint/format and SQL parsing pass. The current
-31-test PostgreSQL run failed entirely at fixture startup because the temporary
-installation is missing `postgres.bki`; no feature assertion ran. Restore that
-local test dependency before claiming the added verifier is execution-tested.
+disabled expiry audit trigger. Ruff lint/format and SQL parsing pass. The October 2
+run was blocked at fixture startup by missing temporary PostgreSQL support files.
+After repairing the disposable installation, all **31 PostgreSQL transaction tests
+passed on October 5**, including these three verifier regressions.
 
 ## 15. Slice 6 — one-time calendar export
 
@@ -627,6 +627,27 @@ usage was found in these portals, but dependency remediation remains open. No de
 or lockfile change was made. Existing Node/Vite/Sentry/workspace warnings remain.
 The prior disposable PostgreSQL fixture failure is unchanged; this slice adds no
 migration and does not claim a fresh transaction-suite run. No deployment/merge occurred.
+
+### Integrated PR verification — 2026-10-05
+
+The scheduling branch integrates main through `4d9a469`, preserving the existing
+hydration implementation and newer care-plan, ADR and clinician messaging work.
+Full backend tests with the merged lock in isolated Python 3.12 and disposable
+PostgreSQL 18.6 passed **1,733 tests**, with **85.72% coverage**. All 31 appointment
+transaction tests executed; 20 unrelated opt-in care-plan PostgreSQL tests skipped.
+Backend Ruff/format, mypy, migration validation (53 files) and production-placeholder
+checks pass. Patient **200 tests / 38 files** and clinician **180 tests / 30 files**
+pass; both portals pass lint, typecheck and webpack production builds. Local Node 26
+test commands use `NODE_OPTIONS=--no-experimental-webstorage`.
+
+The repaired temporary PostgreSQL installation resolves the historical fixture
+failure above. Redacted Gitleaks branch-range scanning and whitespace checks pass.
+The October 5 production dependency audits report four existing findings per portal:
+critical Next.js, high brace-expansion/source-map-js and moderate fast-uri. Dependency
+remediation remains separate; this branch changes no dependency lock. No additional
+remote migration, seed/reset, deployment or PR merge occurred during preparation.
+Live UI/API evidence remains the October 3 acceptance described above; importing the
+download into an external calendar application remains a reviewer step.
 
 ### Steps to see the changes
 

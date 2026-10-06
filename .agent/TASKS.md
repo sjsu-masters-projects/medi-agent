@@ -47,7 +47,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 
 | Area | Status | Evidence / risk |
 |---|---|---|
-| Repository | Scheduling integration based on current main | `feature/clinician-appointment-offers` starts at `origin/main` `c2567cd`; the original checkout and its uncommitted changes are preserved |
+| Repository | Scheduling integration based on current main | `feature/clinician-appointment-offers` integrates `origin/main` through `4d9a469` on October 5; the original checkout and its uncommitted changes are preserved |
 | Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
 | Patient portal | Partial | Patients can view existing medications/obligations, documents, explanations, and basic feed/adherence statistics. The Today feed now guards plan-linked tasks by approved/effective plan state and shows plan provenance; live clinician-approved-plan acceptance remains unproven. |
 | Clinician portal | Partial | Roster, patient deep dive, document source viewer, extracted-fact review, and Care Plan draft/review surfaces exist; the fresh synthetic approval journey, consolidated action queues, and a longitudinal decision timeline remain incomplete. |
@@ -60,7 +60,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.3.0 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | Backend fix verified; portal audit follow-up open | PR #117 merged/deployed urllib3 2.8.0 minimum and both locks (`e81c9c1`), with main CI/deployment evidence preserved below. October 3 scheduling-checkout portal audits report critical Next.js (GHSA-vcvr-r3jv-pc5j), high brace-expansion and moderate fast-uri findings. Package audit does not establish deployment exposure; remediation is separate work. |
+| Dependency security | Backend fix verified; portal audit follow-up open | PR #117 merged/deployed urllib3 2.8.0 minimum and both locks (`e81c9c1`), with main CI/deployment evidence preserved below. October 5 scheduling-checkout portal audits report critical Next.js (GHSA-vcvr-r3jv-pc5j), high brace-expansion/source-map-js and moderate fast-uri findings. Package audit does not establish deployment exposure; remediation is separate work. |
 | Demo data | Functional baseline | Canonical fictional fixture and live patient/clinician isolation checks exist; the fresh end-to-end care-plan scenario is PAT-005 work |
 
 **Tracker reconciliation — 2026-09-26.** Every named primary task was reviewed for status
@@ -2296,14 +2296,37 @@ corrects the English-only, browser-timezone rendering defect. Merge/deployment r
 
 **Slice 6 — implemented and locally verified, 2026-10-03; review/merge pending**
 
-**PR preparation — in progress, 2026-10-03:** Requester authorized integrating
-current main, carefully resolving conflicts, validating the combined checkout,
-committing and opening the scheduling PR. A source-only backup preserves all 66
-changed/new worktree files before integration; the original checkout remains
-untouched. Restore disposable PostgreSQL support files, rerun real transaction
-tests, inspect the complete diff for secrets and unrelated changes, then publish
-the branch with exact verification and dependency follow-up evidence. No remote
-migration, seed/reset, deployment, or PR merge is included in this preparation.
+**PR preparation — verified locally, 2026-10-05; review/merge pending:** Requester
+authorized integrating current main, resolving conflicts, validating the combined
+checkout, committing and opening the scheduling PR. Integrated main through
+`4d9a469`, preserving its hydration implementation, ADR navigation, care-plan and
+clinician messaging changes. The original checkout remains untouched. The source-only
+backup preserves all 66 pre-integration changed/new files. No remote migration,
+seed/reset, deployment, or PR merge is included in this preparation.
+
+- Full backend verification with the merged dependency lock in isolated Python 3.12:
+  `PYTHONPATH=src python -m pytest tests/ --cov=app --cov-report=term -q --tb=short`
+  under synthetic CI settings and disposable PostgreSQL 18.6: **1,733 passed,
+  20 opt-in care-plan PostgreSQL tests skipped, 85.72% coverage**. All **31 appointment
+  transaction tests ran**, including verifier permissions/trigger rejection cases.
+  The earlier temporary PostgreSQL installation failure is resolved.
+- `ruff check src/ scripts/`, `ruff format --check src/ scripts/`,
+  `mypy src/ --ignore-missing-imports`, `python scripts/validate_migrations.py`,
+  and `python backend/scripts/check_production_placeholders.py` pass. The integrated
+  inventory is **53 migrations**; this does not imply the newer independent ADR
+  migration was applied remotely. Scheduling migration bytes remain unchanged.
+- Both portals: `npm run lint`, `npm run typecheck`,
+  `NODE_OPTIONS=--no-experimental-webstorage npm run test`, and
+  `npm run build -- --webpack` pass. Patient: **200 tests / 38 files**; clinician:
+  **180 tests / 30 files**. Node 26's storage flag is a local test-runner workaround.
+- Redacted Gitleaks scan of the branch commit range and `git diff --check` pass.
+  No environment files, generated portal instruction files or unrelated root-checkout
+  edits are included. Live API/browser evidence below was collected October 3;
+  external calendar-app import and review/merge remain pending.
+- Refreshed `npm audit --omit=dev --audit-level=high --json` on October 5 reports
+  **four advisories in each portal**: critical Next.js, high brace-expansion and
+  source-map-js, moderate fast-uri. These are existing dependency findings, separate
+  from passing feature checks; no dependency/lockfile change is included.
 
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed

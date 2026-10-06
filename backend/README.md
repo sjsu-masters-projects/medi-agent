@@ -122,7 +122,7 @@ mutation, external calendar call, or migration is needed for this endpoint.
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`. The repository currently has
-`001`–`043`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
+`001`–`045`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
 document-ingestion worker controls, private TIFF previews, the independent patient-explanation
 retry lifecycle, and the clinician-approved care-plan lifecycle with its one-time historical
 document-fact request backfill and care-plan publication review guards. The migration ledger records full filenames and checksums,
