@@ -50,9 +50,9 @@ def test_triage_lite_is_built_over_the_genai_sdk(no_real_credentials: MagicMock)
     provider = provider_for(TRIAGE_LITE)
 
     assert provider.name == "triage_lite"
-    assert provider.model == "gemini-3.1-flash-lite"
+    assert provider.model == "gemini-3.5-flash-lite"
     assert no_real_credentials.call_args.kwargs["use_vertex_ai"] is True
-    assert no_real_credentials.call_args.kwargs["model"] == "gemini-3.1-flash-lite"
+    assert no_real_credentials.call_args.kwargs["model"] == "gemini-3.5-flash-lite"
 
 
 def test_a_workload_provider_inherits_its_measured_budget(

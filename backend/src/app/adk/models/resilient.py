@@ -22,14 +22,21 @@ snapshot and rollback logic here.
 from __future__ import annotations
 
 import asyncio
+import math
+import random
 import time
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
+from copy import deepcopy
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from threading import Lock
 from typing import Any, ClassVar
 
 from google.adk.models import BaseLlm
 from pydantic import Field
+
+from app.core.model_traffic import model_slot, record_attempt
 
 _RETRIABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
@@ -59,6 +66,9 @@ class ResilientLlm(BaseLlm):
     timeout_seconds: float = Field(gt=0)
     circuit_breaker: bool = False
     cooldown_seconds: float = Field(default=60.0, gt=0)
+    retry_429: bool = False
+    endpoint: str = "global"
+    fallback_candidate: bool = False
 
     _open_until: ClassVar[dict[str, float]] = {}
     _circuit_lock: ClassVar[Lock] = Lock()
@@ -112,16 +122,13 @@ class ResilientLlm(BaseLlm):
     ) -> AsyncGenerator[Any, None]:
         """Return one complete attempt or a retriable failure—never a partial answer."""
         if self._is_open():
+            self._record(503, 0, "circuit_open", time.monotonic())
             raise ModelCircuitOpenError(self.model)
 
-        buffered: list[Any] = []
+        deadline = time.monotonic() + self.timeout_seconds
         try:
-            async with asyncio.timeout(self.timeout_seconds):
-                async with aclosing(
-                    self.delegate.generate_content_async(llm_request, stream=stream)
-                ) as responses:
-                    async for response in responses:
-                        buffered.append(response)
+            async with asyncio.timeout_at(deadline):
+                buffered = await self._attempts(llm_request, stream, deadline)
         except TimeoutError as error:
             self._open_circuit()
             raise ModelAttemptDeadlineError(self.model, self.timeout_seconds) from error
@@ -133,3 +140,80 @@ class ResilientLlm(BaseLlm):
         self._close_circuit()
         for response in buffered:
             yield response
+
+    def _record(self, status: int | None, retry: int, cause: str, started: float) -> None:
+        record_attempt(
+            model=self.model,
+            endpoint=self.endpoint,
+            status=status,
+            retry_count=retry,
+            cause=cause,
+            started=started,
+            fallback_candidate=self.fallback_candidate,
+        )
+
+    @staticmethod
+    def _retry_delay(error: Exception) -> float:
+        response = getattr(error, "response", None)
+        headers = getattr(response, "headers", None) or getattr(error, "headers", {})
+        if not hasattr(headers, "get"):
+            headers = {}
+        value = headers.get("Retry-After") or headers.get("retry-after")
+        if value is not None:
+            try:
+                delay = float(value)
+            except (ValueError, TypeError):
+                try:
+                    date = parsedate_to_datetime(str(value))
+                    delay = (date - datetime.now(UTC)).total_seconds()
+                except (ValueError, TypeError, OverflowError):
+                    delay = -1
+            if not math.isfinite(delay):
+                return float("inf")
+            if delay >= 0:
+                return delay + random.uniform(0.0, 0.1)
+        return random.uniform(0.2, 0.4)
+
+    async def _attempts(self, request: Any, stream: bool, deadline: float) -> list[Any]:
+        original = deepcopy(request)
+        for retry in range(2 if self.retry_429 else 1):
+            started = time.monotonic()
+            buffered: list[Any] = []
+            try:
+                async with (
+                    model_slot(self.model, self.endpoint),
+                    aclosing(
+                        self.delegate.generate_content_async(
+                            request if retry == 0 else deepcopy(original), stream=stream
+                        )
+                    ) as responses,
+                ):
+                    async for response in responses:
+                        buffered.append(response)
+            except asyncio.CancelledError:
+                expired = time.monotonic() >= deadline
+                self._record(
+                    504 if expired else None, retry, "deadline" if expired else "cancelled", started
+                )
+                raise
+            except Exception as error:
+                status = self._status_code(error)
+                delay = self._retry_delay(error) if status == 429 else 0
+                can_retry = (
+                    self.retry_429
+                    and retry == 0
+                    and status == 429
+                    and delay <= 1.0
+                    and delay + 0.5 < deadline - time.monotonic()
+                )
+                cause = "provider_error"
+                if status == 429:
+                    cause = "retry_exhausted" if retry else "retry_delay_exceeds_budget"
+                self._record(status, retry, "retry_429" if can_retry else cause, started)
+                if not can_retry:
+                    raise
+                await asyncio.sleep(delay)
+            else:
+                self._record(200, retry, "none", started)
+                return buffered
+        raise AssertionError("Unreachable retry state")

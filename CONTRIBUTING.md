@@ -47,6 +47,9 @@ Validate:
 | `VERTEX_AI_LOCATION` | MaaS endpoint location; production uses `global` for GPT OSS shared capacity |
 | `GEMINI_VERTEX_AI_LOCATION` | Gemini Vertex endpoint location; Gemini 3.8 Flash uses `global` |
 | `GEMINI_FLASH_MODEL` | Gemini Flash model ID used by the agent runtime |
+| `GEMINI_TRIAGE_MODEL` | Native Gemini classifier; separate from patient prose |
+| `GEMINI_FALLBACK_MODEL` | Distinct full-Flash fallback for replies and explanation; intake has no qualified backup |
+| `GEMINI_PRO_MODEL` | Pro compatibility/evaluation model, outside the interactive routing path |
 | `CHAT_TURN_TIMEOUT_SECONDS` | Hard ceiling for the complete coordinator-and-responder chat turn |
 | `MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS` | How long MaaS is bypassed after a timeout or retriable provider failure |
 | `DEEPGRAM_API_KEY` | Voice STT/TTS |

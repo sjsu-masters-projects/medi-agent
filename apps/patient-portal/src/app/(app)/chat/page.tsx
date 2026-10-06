@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { getPatientChatCopy } from "@/content/chat-copy";
+import { CARE_ASSISTANT_NAME, getPatientChatCopy } from "@/content/chat-copy";
 import {
     HiArrowUp,
     HiChevronDown,
@@ -95,8 +95,11 @@ export default function ChatPage() {
                             </div>
                             <div className="space-y-1">
                                 <h1 className="text-[1.45rem] font-black tracking-[-0.03em] text-[#17233a]">
-                                    Maya
+                                    {CARE_ASSISTANT_NAME}
                                 </h1>
+                                <p className="text-xs text-gray-500">
+                                    {chatCopy.assistantDescription}
+                                </p>
                                 <p className="inline-flex items-center gap-2 text-sm font-medium text-[#64748b]">
                                     <span
                                         className={`h-2 w-2 rounded-full ${
@@ -288,7 +291,7 @@ export default function ChatPage() {
 
                             {isTyping && !assistantDraft ? (
                                 <div className="w-fit rounded-full border border-[#eadfd4] bg-white/88 px-3 py-2 text-xs font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
-                                    Maya is typing...
+                                    {chatCopy.typingMessage}
                                 </div>
                             ) : null}
                             <div ref={bottomRef} />

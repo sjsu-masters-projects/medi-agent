@@ -24,8 +24,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.adk.registry import Transport, Workload, route_for
-from app.clients.gemini import GeminiClient
+from app.adk.background_generation import generate_for_workload
+from app.adk.registry import Workload, route_for
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.followup.followup_copy import FOLLOWUP_COPY
@@ -113,30 +113,6 @@ def _adr_evidence(extraction: SymptomExtractionResult) -> list[dict[str, str | N
     return [item.model_dump(mode="json") for item in extraction.adr_evidence]
 
 
-def _extraction_client() -> GeminiClient:
-    """Build the client the registry routes symptom extraction to.
-
-    The transport is checked rather than assumed. Routing this workload to a model reached
-    another way would otherwise send a bare model id to the wrong SDK and fail at call
-    time, which reads like an outage instead of a configuration mistake.
-    """
-    route = route_for(Workload.ADR_EXTRACTION)
-    if route.primary.transport is not Transport.VERTEX_GENAI:
-        # Formatted without `.value` on purpose. `Transport` is a `StrEnum`, so this
-        # renders identically for a real member — and this is the error path, which runs
-        # when something is already wrong. It should not be able to raise an error of its
-        # own on the way to reporting one.
-        raise ValueError(
-            f"Symptom extraction is routed to {route.primary.key}, which is reached over "
-            f"{route.primary.transport}. This path builds a Gen AI client only."
-        )
-    return GeminiClient(
-        model=route.primary.model_id,
-        use_vertex_ai=True,
-        timeout=int(route.budget_seconds or 30),
-    )
-
-
 async def _extract(
     *,
     language: str,
@@ -158,20 +134,20 @@ async def _extract(
     )
 
     try:
-        return await _extraction_client().generate_structured(
+        response = await generate_for_workload(
+            Workload.ADR_EXTRACTION,
             prompt=prompt,
-            response_model=SymptomExtractionResult,
+            response_schema=SymptomExtractionResult.model_json_schema(),
             system_instruction=SYMPTOM_EXTRACTION_SYSTEM_INSTRUCTION,
             temperature=0.1,
-            max_tokens=route.max_output_tokens,
-            thinking_level=route.thinking_level,
         )
+        return SymptomExtractionResult.model_validate_json(response.text)
     except Exception as exc:
         reason = categorize_llm_failure(exc)
         record_chat_fallback(layer="symptom_extraction", reason=reason)
         logger.warning(
             "Symptom extraction failed; no report will be written: %s",
-            exc,
+            reason,
             extra={
                 "chat_fallback_layer": "symptom_extraction",
                 "chat_fallback_reason": reason,
@@ -191,13 +167,13 @@ async def _respond(*, language: str, extraction: SymptomExtractionResult) -> str
     )
 
     try:
-        answer = await _extraction_client().generate(
+        response = await generate_for_workload(
+            Workload.REPLY,
             prompt=prompt,
             system_instruction=SYMPTOM_RESPONSE_SYSTEM_INSTRUCTION,
             temperature=0.3,
-            max_tokens=384,
         )
-        cleaned = answer.strip()
+        cleaned = response.text.strip()
         if cleaned:
             return cleaned
     except Exception as exc:
@@ -205,7 +181,7 @@ async def _respond(*, language: str, extraction: SymptomExtractionResult) -> str
         record_chat_fallback(layer="symptom_response", reason=reason)
         logger.warning(
             "Symptom response generation failed; composing from the extracted fields: %s",
-            exc,
+            reason,
             extra={
                 "chat_fallback_layer": "symptom_response",
                 "chat_fallback_reason": reason,

@@ -11,8 +11,10 @@ def test_production_model_defaults_use_global_vertex_endpoints() -> None:
         supabase_jwt_secret="jwt-secret",
     )
 
-    assert settings.gemini_triage_model == "gemini-3.1-flash-lite"
+    assert settings.gemini_triage_model == "gemini-3.5-flash-lite"
     assert settings.gemini_flash_model == "gemini-3.8-flash"
+    assert settings.gemini_fallback_model == "gemini-3.5-flash"
+    assert settings.gemini_pro_model == "gemini-3.1-pro-preview"
     assert settings.vertex_ai_location == "global"
     assert settings.gemini_vertex_ai_location == "global"
     assert settings.chat_turn_timeout_seconds == 30.0

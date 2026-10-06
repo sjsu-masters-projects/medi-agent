@@ -59,6 +59,7 @@ from app.adk.tools import (
 from app.config import settings
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
+from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.safety import TRIAGE_COPY, apply_safety_override, deterministic_safety_floor
 from app.utils.localization import resolve_locale_resource
 
@@ -206,15 +207,13 @@ class CareCoordinatorRuntime:
                         continue
 
                     if not classified:
-                        # The model answered without recording a decision. The reply is still
-                        # grounded, so it ships; only the label is missing, and a neutral one
-                        # is honest about that. Escalation cannot be lost this way — it is
-                        # re-applied deterministically from the message itself.
-                        intent, urgency, reason, escalate = _apply_floor_rules(
-                            {"intent": "general", "urgency": "routine", "reason": ""}, text
+                        # A prose answer does not prove triage occurred. Do not silently
+                        # invent a routine label for a missing decision; return the reviewed
+                        # localized outage response before any generated prose is exposed.
+                        raise GenerationProviderError(
+                            GenerationErrorCode.INVALID_RESPONSE,
+                            "Coordinator did not submit a triage decision",
                         )
-                        classified = True
-                        yield _classification(intent, urgency, reason, escalate)
 
                     if getattr(event, "partial", False):
                         streamed = True
