@@ -66,6 +66,7 @@ export {
     ObligationType,
     AdherenceStatus,
     NotificationType,
+    AppointmentType,
     AppointmentStatus,
     AllergySeverity,
 } from "../../../../packages/shared/src/types";
