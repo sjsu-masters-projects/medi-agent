@@ -88,6 +88,11 @@ New portal tabs share sign-in state (Daniel/Marcus); restoring Morgan/Elena is
 needed before live V2/barrier writes. V2 and the remaining four live barrier
 categories remain open. No remote plan changes, reset, migration or deployment.
 
+PR #131 is based on PR #130 to include its audited dependency patch without
+duplicating the routing diff. Combined-branch verification with patched packages:
+**1,660 passed, 20 opt-in PostgreSQL skipped, 85.45% coverage**. Merge/review order is
+#130 first, then retarget #131 to main. Neither PR has been merged or deployed here.
+
 **PAT-005 follow-through fixes — 2026-10-03 (ready for review).** Package the fresh
 Morgan QA findings with the five-document worker batch: count medication `taken`
 events, distinguish future doses, flag medication wording overlaps for review,
