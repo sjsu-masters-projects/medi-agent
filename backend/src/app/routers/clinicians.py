@@ -22,7 +22,11 @@ from supabase import Client
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.middleware.rate_limit import soap_note_rate_limiter
-from app.models.adr import ADRReviewQueueResponse
+from app.models.adr import (
+    ADRReviewDecisionRequest,
+    ADRReviewDecisionResponse,
+    ADRReviewQueueResponse,
+)
 from app.models.auth import CurrentUser
 from app.models.care_plan import CarePlanVersionRead
 from app.models.clinician import ClinicianRead, ClinicianUpdate
@@ -337,6 +341,24 @@ async def list_adr_assessments(
         status_filter=status_filter,
         limit=limit,
     )
+
+
+@router.post(
+    "/me/adr-assessments/{assessment_id}/review",
+    response_model=ADRReviewDecisionResponse,
+    summary="Review an assigned-patient ADR assessment",
+    description=(
+        "Atomically records a clinician review, dismissal, or information request "
+        "and writes an immutable audit event."
+    ),
+)
+async def review_adr_assessment(
+    assessment_id: UUID,
+    decision: ADRReviewDecisionRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.review_adr_assessment(user.id, assessment_id, decision)
 
 
 @router.get(

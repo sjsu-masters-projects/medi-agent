@@ -1,9 +1,10 @@
-"""ADR assessment and MedWatch draft schemas."""
+"""ADR assessment, clinician review, and MedWatch draft schemas."""
 
-from typing import Any
+from enum import StrEnum
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import ADRStatus, MedWatchStatus, NaranjoCausality
 
@@ -54,6 +55,11 @@ class ADRReviewQueueItem(BaseModel):
     naranjo_assessment: dict[str, Any] = Field(default_factory=dict)
     evidence: list[dict[str, Any]] = Field(default_factory=list)
     status: ADRStatus
+    last_review_action: str | None = None
+    review_note: str | None = None
+    requested_information: list[str] = Field(default_factory=list)
+    reviewed_by: UUID | None = None
+    reviewed_at: str | None = None
     created_at: str
 
 
@@ -62,6 +68,52 @@ class ADRReviewQueueResponse(BaseModel):
 
     items: list[ADRReviewQueueItem]
     total: int = Field(..., ge=0)
+
+
+class ADRReviewAction(StrEnum):
+    """Clinician actions supported by the ADR review queue."""
+
+    MARK_REVIEWED = "mark_reviewed"
+    DISMISS = "dismiss"
+    REQUEST_INFORMATION = "request_information"
+
+
+class ADRReviewDecisionRequest(BaseModel):
+    """A clinician decision or information request for a draft ADR assessment."""
+
+    action: ADRReviewAction
+    note: str | None = Field(default=None, max_length=2000)
+    requested_information: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(
+        default_factory=list, max_length=20
+    )
+
+    @model_validator(mode="after")
+    def validate_action_details(self) -> "ADRReviewDecisionRequest":
+        self.note = self.note.strip() if self.note else None
+        self.requested_information = list(
+            dict.fromkeys(item.strip() for item in self.requested_information if item.strip())
+        )
+        if (
+            self.action in {ADRReviewAction.DISMISS, ADRReviewAction.REQUEST_INFORMATION}
+            and not self.note
+        ):
+            raise ValueError("A review note is required for this action")
+        return self
+
+
+class ADRReviewDecisionResponse(BaseModel):
+    """Persisted result of an auditable clinician ADR review action."""
+
+    id: UUID
+    patient_id: UUID
+    status: ADRStatus
+    last_review_action: ADRReviewAction
+    review_note: str | None = None
+    requested_information: list[str] = Field(default_factory=list)
+    reviewed_by: UUID
+    reviewed_at: str
+    dismiss_reason: str | None = None
+    updated_at: str
 
 
 class MedWatchDraft(BaseModel):

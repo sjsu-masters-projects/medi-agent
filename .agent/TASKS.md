@@ -184,7 +184,7 @@ failure. It must not be presented as a completed closed-loop care product until 
 | Today feed and adherence | Deterministic medication/obligation feed, adherence statistics, completion/barrier capture, and plan-linked approved/effective-task guard | No live proof of the clinician-approved item through patient and clinician follow-up | PAT-002, PAT-005 |
 | Clinician action workspace | Roster, patient detail, source preview, extracted-facts review, care-plan draft/review, and basic document status | No consolidated queue, explainable risk, or unified timeline; live care-plan acceptance remains incomplete | PAT-005, CLN-001, CLN-002 |
 | Care closure | Document Job runs every five minutes; manual summary retry exists | No approved clinical messaging, appointment completion, notifications/retry, or care-gap follow-up loop | SCH-001, COM-001 |
-| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation, deterministic Naranjo assistance, and assigned-clinician ADR evidence queue | No completed multi-source reconciliation, patient-confirmed symptom-report flow, clinician ADR decision/reassessment flow, or MedWatch draft lifecycle | MED-001, MED-002, PAT-002-B/C, PV-001, PV-002 |
+| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation, deterministic Naranjo assistance, and audited assigned-clinician ADR review actions | No completed multi-source reconciliation, patient-confirmed symptom-report flow, evidence-driven ADR reassessment, or MedWatch draft lifecycle | MED-001, MED-002, PAT-002-B/C, PV-001, PV-002 |
 | Interoperability and continuity | Deployed SMART-on-FHIR sandbox import with candidate provenance | Export, CDS Hooks, official MCP/A2A, multi-provider timeline, and handoff remain incomplete | INT-002, STD-001–003, CON-001 |
 | Bilingual and voice experience | `en-US`/`es-MX` safety-floor coverage and localized fallback exist | End-to-end language parity, clinician content review, and text-first voice lifecycle are incomplete | PAT-003, VOI-001 |
 
@@ -2118,8 +2118,9 @@ completion or report an adherence barrier, and that response becomes visible to 
 
 ### PV-001 — ADR and Naranjo workflow
 
-**Status:** `[/]` Partial — a read-only ADR evidence queue works, while the confirmed
-symptom-report contract still depends on `PAT-002-B` and `PAT-002-C`.
+**Status:** `[/]` Partial — assigned clinicians can review, dismiss, or request information with
+an immutable audit event, while the confirmed symptom-report contract still depends on
+`PAT-002-B` and `PAT-002-C`.
 
 **Owner:** Ganesh Thampi; pharmacovigilance + clinician lanes
 
@@ -2146,14 +2147,15 @@ decision support, never autonomous ADR determination or external reporting.
       see the evidence/provenance used for each conclusion.
 - [x] Naranjo assistance exposes its inputs and is never presented as the clinician's final
       decision.
-- [/] An unassigned clinician cannot access the report or ADR review, and all reviewer actions
+- [x] An unassigned clinician cannot access the report or ADR review, and all reviewer actions
       are auditable.
 
-Verification evidence — 2026-10-02: synthetic patient chat produced two persisted draft ADR
+Verification evidence — 2026-10-06: synthetic patient chat produced two persisted draft ADR
 assessments with patient-grounded evidence and deterministic Naranjo score 3 (`Possible`). The
 assigned clinician API and portal queue display the score inputs and missing questions without
-private model reasoning. The queue is intentionally read-only until the confirmed-report,
-reviewed-decision, evidence-request, audit, and reassessment behavior is implemented.
+private model reasoning. Assigned clinicians can mark a draft reviewed, dismiss it with a reason,
+or request information; the assignment check and action/audit write are repeated atomically in
+Postgres. Confirmed-report intake and reassessment when evidence changes remain incomplete.
 
 ### PV-002 — MedWatch draft lifecycle
 

@@ -806,6 +806,49 @@ class TestADRReviewQueueRoutes:
             limit=25,
         )
 
+    def test_review_action_is_passed_to_the_clinician_service(
+        self, client, override_auth, override_service, clinician_id
+    ):
+        patient_id = uuid4()
+        assessment_id = uuid4()
+        override_service.review_adr_assessment = AsyncMock(
+            return_value={
+                "id": str(assessment_id),
+                "patient_id": str(patient_id),
+                "status": "draft",
+                "last_review_action": "request_information",
+                "review_note": "Please confirm whether symptoms recurred.",
+                "requested_information": ["reappeared_on_rechallenge"],
+                "reviewed_by": str(clinician_id),
+                "reviewed_at": "2026-10-06T10:00:00Z",
+                "dismiss_reason": None,
+                "updated_at": "2026-10-06T10:00:00Z",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/adr-assessments/{assessment_id}/review",
+            json={
+                "action": "request_information",
+                "note": "Please confirm whether symptoms recurred.",
+                "requested_information": ["reappeared_on_rechallenge"],
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["last_review_action"] == "request_information"
+        decision = override_service.review_adr_assessment.await_args.args[2]
+        assert decision.requested_information == ["reappeared_on_rechallenge"]
+
+    def test_dismiss_action_requires_a_reason(self, client, override_auth, override_service):
+        response = client.post(
+            f"/api/v1/clinicians/me/adr-assessments/{uuid4()}/review",
+            json={"action": "dismiss", "note": ""},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        override_service.review_adr_assessment.assert_not_called()
+
 
 class TestPatientDeepDiveRoutes:
     """GET /api/v1/clinicians/me/patients/{patient_id}/deep-dive"""

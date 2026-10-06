@@ -5,7 +5,8 @@ import {
     HiOutlineClipboardDocumentCheck,
 } from "react-icons/hi2";
 import { Badge, Card } from "@/components/ui";
-import type { ADRReviewQueueItem } from "@/services/clinicians";
+import { ADRReviewActions } from "@/components/features/adr-review-actions";
+import type { ADRReviewDecisionInput, ADRReviewQueueItem } from "@/services/clinicians";
 
 const QUESTION_LABELS: Record<string, string> = {
     alternative_causes: "Alternative causes",
@@ -62,7 +63,15 @@ function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
     );
 }
 
-export function ADRReviewCard({ item }: { item: ADRReviewQueueItem }) {
+export function ADRReviewCard({
+    item,
+    onReview,
+    submitting,
+}: {
+    item: ADRReviewQueueItem;
+    onReview: (assessmentId: string, input: ADRReviewDecisionInput) => Promise<void>;
+    submitting: boolean;
+}) {
     const missingQuestions = item.naranjoAssessment.missing_questions ?? [];
     const patientName = `${item.patientFirstName} ${item.patientLastName}`.trim();
 
@@ -129,6 +138,21 @@ export function ADRReviewCard({ item }: { item: ADRReviewQueueItem }) {
                     </div>
                 </section>
             ) : null}
+
+            {item.lastReviewAction === "request_information" ? (
+                <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                    <h3 className="text-sm font-semibold text-blue-900">Information requested</h3>
+                    {item.reviewNote ? (
+                        <p className="mt-1 text-sm text-blue-800">{item.reviewNote}</p>
+                    ) : null}
+                </section>
+            ) : null}
+
+            <ADRReviewActions
+                item={item}
+                onSubmit={(input) => onReview(item.id, input)}
+                submitting={submitting}
+            />
 
             <div className="flex flex-col justify-between gap-3 border-t border-gray-200 pt-4 md:flex-row md:items-center">
                 <p className="max-w-3xl text-xs text-gray-500">
