@@ -11,6 +11,7 @@ interface OfferProps {
   copy: VisitsCopy;
   locale: Locale;
   timezone: string;
+  now: number;
   responding: boolean;
   onRespond: (
     id: string,
@@ -24,6 +25,7 @@ export function VisitOfferCard({
   copy,
   locale,
   timezone,
+  now,
   responding,
   onRespond,
 }: OfferProps) {
@@ -40,6 +42,10 @@ export function VisitOfferCard({
   return (
     <Card>
       <h3 className="text-base font-bold text-slate-900">{copy.offerTitle}</h3>
+      <p className="mt-2 text-sm text-slate-600">
+        {copy.types[first.appointmentType]} · {first.durationMinutes}{" "}
+        {copy.minutes}
+      </p>
       {first.clinicianName ? (
         <p className="mt-2 text-sm text-slate-600">
           {copy.with} {first.clinicianName}
@@ -52,6 +58,13 @@ export function VisitOfferCard({
         <p className="text-sm text-slate-600">{first.location}</p>
       ) : null}
       <p className="mt-2 text-sm text-slate-600">{timezone}</p>
+      {first.notes &&
+      slots.some((slot) => Date.parse(slot.scheduledAt) >= now) ? (
+        <div className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-slate-700">
+          <p className="font-semibold">{copy.preparationNotes}</p>
+          <p className="mt-1 whitespace-pre-wrap">{first.notes}</p>
+        </div>
+      ) : null}
       <ul className="mt-3 space-y-3">
         {slots.map((slot) => {
           const when = formatVisitTime(slot.scheduledAt, locale, timezone);

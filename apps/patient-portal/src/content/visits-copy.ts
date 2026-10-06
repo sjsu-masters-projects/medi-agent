@@ -5,6 +5,16 @@ import {
 } from "@/types";
 
 const english = {
+  minutes: "min",
+  preparationNotes: "Preparation notes",
+  upcomingSummary: { one: "upcoming visit", other: "upcoming visits" },
+  types: {
+    follow_up: "Follow-up",
+    initial: "First visit",
+    routine: "Routine check",
+    urgent: "Urgent",
+    pre_op: "Pre-operative",
+  },
   offerTitle: "Your clinician offered these times",
   choose: "Choose this time",
   offerDecline: {
@@ -81,6 +91,16 @@ const english = {
 };
 export type VisitsCopy = typeof english;
 const spanish: VisitsCopy = {
+  minutes: "min",
+  preparationNotes: "Notas de preparación",
+  upcomingSummary: { one: "próxima cita", other: "próximas citas" },
+  types: {
+    follow_up: "Seguimiento",
+    initial: "Primera consulta",
+    routine: "Revisión de rutina",
+    urgent: "Urgente",
+    pre_op: "Preoperatoria",
+  },
   offerTitle: "Tu equipo de atención ofreció estos horarios",
   choose: "Elegir este horario",
   offerDecline: {
@@ -164,6 +184,16 @@ const resources: LocaleResourceMap<VisitsCopy> = {
 };
 export function getVisitsCopy(locale: Locale): VisitsCopy {
   return resolveLocaleResource(locale, resources);
+}
+
+export function formatUpcomingVisitCount(
+  count: number,
+  locale: Locale,
+): string {
+  const copy = getVisitsCopy(locale);
+  const label =
+    count === 1 ? copy.upcomingSummary.one : copy.upcomingSummary.other;
+  return `${new Intl.NumberFormat(locale).format(count)} ${label}.`;
 }
 
 export function resolveVisitsTimezone(value: string | undefined): {

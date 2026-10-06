@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { HiOutlineCalendarDays } from "react-icons/hi2";
 import { VisitOfferCard } from "@/components/features/visit-offer-card";
 import { CalendarExportButton } from "@/components/features/calendar-export-button";
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layouts";
 import { Badge, Button, Card, EmptyState, ErrorState } from "@/components/ui";
 import {
   getVisitsCopy,
+  formatUpcomingVisitCount,
   formatVisitTime,
   resolveVisitsTimezone,
   type VisitsCopy,
@@ -21,6 +22,7 @@ import {
   type Locale,
   type Appointment,
 } from "@/types";
+import { isUpcomingVisit, orderVisits } from "@/utils/visits-order";
 
 const PROPOSED_STATUSES: string[] = [AppointmentStatus.PROPOSED];
 const UPCOMING_STATUSES: string[] = [
@@ -50,6 +52,7 @@ function VisitCard({
   copy,
   locale,
   timezone,
+  now,
   onRespond,
   responding,
   token,
@@ -59,6 +62,7 @@ function VisitCard({
   copy: VisitsCopy;
   locale: Locale;
   timezone: string;
+  now: number;
   onRespond?: (action: AppointmentResponseAction, note?: string) => void;
   responding?: boolean;
 }) {
@@ -84,7 +88,6 @@ function VisitCard({
   function submitCompose() {
     if (composing) {
       onRespond?.(composing, note);
-      cancelCompose();
     }
   }
 
@@ -100,6 +103,10 @@ function VisitCard({
         </p>
         <Badge variant={variant}>{label}</Badge>
       </div>
+      <p className="mt-2 text-sm text-slate-600">
+        {copy.types[visit.appointmentType]} · {visit.durationMinutes}{" "}
+        {copy.minutes}
+      </p>
       <dl className="mt-2 space-y-1 text-sm text-[#5b6b83]">
         {visit.clinicianName ? (
           <dd>
@@ -109,6 +116,12 @@ function VisitCard({
         {visit.reason ? <dd>{visit.reason}</dd> : null}
         {visit.location ? <dd>{visit.location}</dd> : null}
       </dl>
+      {isUpcomingVisit(visit, now) && visit.notes ? (
+        <div className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-slate-700">
+          <p className="font-semibold">{copy.preparationNotes}</p>
+          <p className="mt-1 whitespace-pre-wrap">{visit.notes}</p>
+        </div>
+      ) : null}
       {visit.patientNote ? (
         <p className="mt-2 text-sm italic text-[#5b6b83]">
           {copy.note} {visit.patientNote}
@@ -146,6 +159,8 @@ function VisitCard({
             <textarea
               className="w-full rounded-2xl border border-[#d9cbc0] bg-white px-3 py-2 text-sm text-[#17233a] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus:border-[#147465] focus:outline-none"
               id={`note-${visit.id}`}
+              disabled={responding}
+              maxLength={1000}
               onChange={(event) => setNote(event.target.value)}
               placeholder={copy.compose[composing].placeholder}
               rows={3}
@@ -227,15 +242,17 @@ function VisitCard({
 
 function VisitGroup({
   title,
+  count,
   children,
 }: {
   title: string;
+  count: number;
   children: ReactNode;
 }) {
   return (
     <section className="space-y-3">
       <h2 className="px-1 text-sm font-black uppercase tracking-[0.16em] text-[#5b6b83]">
-        {title}
+        {title} ({count})
       </h2>
       {children}
     </section>
@@ -243,6 +260,16 @@ function VisitGroup({
 }
 
 export default function VisitsPage() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const updateClock = () => setNow(Date.now());
+    const timer = window.setInterval(updateClock, 60000);
+    window.addEventListener("focus", updateClock);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", updateClock);
+    };
+  }, []);
   const settings = usePatientProfileState();
   const locale = normalizeLocale(settings.profile?.preferredLanguage);
   const copy = getVisitsCopy(locale);
@@ -263,6 +290,7 @@ export default function VisitsPage() {
     copy,
     locale,
     timezone: zone.timezone,
+    now,
     token: accessToken,
   };
   const actionMessages: Record<string, string> = {
@@ -273,9 +301,11 @@ export default function VisitsPage() {
     APPOINTMENT_PAST: copy.pastError,
   };
   const actionMessage = actionMessages[actionError ?? ""] ?? copy.actionError;
+  const actionsDisabled = Boolean(respondingId) || loading || Boolean(error);
 
-  const proposed = visits.filter((visit) =>
-    PROPOSED_STATUSES.includes(visit.status),
+  const proposed = orderVisits(
+    visits.filter((visit) => PROPOSED_STATUSES.includes(visit.status)),
+    "ascending",
   );
   const offers = new Map<string, Appointment[]>();
   for (const visit of proposed) {
@@ -288,22 +318,34 @@ export default function VisitsPage() {
   const standaloneProposals = proposed.filter(
     (visit) => !visit.proposalGroupId,
   );
-  const upcoming = visits.filter((visit) =>
-    UPCOMING_STATUSES.includes(visit.status),
+  const upcoming = orderVisits(
+    visits.filter((visit) => isUpcomingVisit(visit, now)),
+    "ascending",
   );
-  const waiting = visits.filter((visit) =>
-    WAITING_STATUSES.includes(visit.status),
+  const waiting = orderVisits(
+    visits.filter((visit) => WAITING_STATUSES.includes(visit.status)),
+    "ascending",
   );
-  const past = visits.filter(
-    (visit) =>
-      !PROPOSED_STATUSES.includes(visit.status) &&
-      !UPCOMING_STATUSES.includes(visit.status) &&
-      !WAITING_STATUSES.includes(visit.status),
+  const past = orderVisits(
+    visits.filter(
+      (visit) =>
+        !PROPOSED_STATUSES.includes(visit.status) &&
+        !isUpcomingVisit(visit, now) &&
+        !WAITING_STATUSES.includes(visit.status),
+    ),
+    "descending",
   );
 
   return (
     <div className="patient-page space-y-4 pb-8" lang={locale}>
-      <PageHeader subtitle={copy.subtitle} title={copy.title} />
+      <PageHeader
+        subtitle={
+          upcoming.length
+            ? formatUpcomingVisitCount(upcoming.length, locale)
+            : copy.subtitle
+        }
+        title={copy.title}
+      />
 
       <div className="patient-stack -mt-4 space-y-6 px-5">
         {!settings.loading && zone.fallback ? (
@@ -314,13 +356,13 @@ export default function VisitsPage() {
             </Button>
           </Card>
         ) : null}
-        {loading || settings.loading ? (
+        {settings.loading || (loading && visits.length === 0) ? (
           <Card>
             <p className="text-base text-[#64748b]">
               {settings.loading ? copy.loadingSettings : copy.loading}
             </p>
           </Card>
-        ) : error ? (
+        ) : error && visits.length === 0 ? (
           <ErrorState
             description={copy.loadErrorDetail}
             action={<Button onClick={refresh}>{copy.retry}</Button>}
@@ -334,29 +376,45 @@ export default function VisitsPage() {
           />
         ) : (
           <>
+            {loading ? (
+              <p role="status" className="text-sm text-slate-600">
+                {copy.loading}
+              </p>
+            ) : error ? (
+              <Card>
+                <p role="alert">{copy.loadErrorDetail}</p>
+                <Button onClick={refresh} variant="ghost">
+                  {copy.retry}
+                </Button>
+              </Card>
+            ) : null}
             {actionError ? (
               <div
                 className="rounded-[20px] border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]"
                 role="alert"
               >
                 {actionMessage}
-                <Button onClick={refresh} variant="ghost">
+                <Button
+                  onClick={refresh}
+                  disabled={loading || Boolean(respondingId)}
+                  variant="ghost"
+                >
                   {copy.refreshVisits}
                 </Button>
               </div>
             ) : null}
 
             {proposed.length > 0 ? (
-              <VisitGroup title={copy.proposed}>
+              <VisitGroup
+                title={copy.proposed}
+                count={offers.size + standaloneProposals.length}
+              >
                 {Array.from(offers, ([groupId, slots]) => (
                   <VisitOfferCard
                     key={groupId}
                     {...cardSettings}
-                    slots={[...slots].sort(
-                      (a, b) =>
-                        Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt),
-                    )}
-                    responding={Boolean(respondingId)}
+                    slots={slots}
+                    responding={actionsDisabled}
                     onRespond={respond}
                   />
                 ))}
@@ -367,7 +425,7 @@ export default function VisitsPage() {
                     onRespond={(action, note) =>
                       respond(visit.id, action, note)
                     }
-                    responding={Boolean(respondingId)}
+                    responding={actionsDisabled}
                     visit={visit}
                   />
                 ))}
@@ -375,7 +433,7 @@ export default function VisitsPage() {
             ) : null}
 
             {upcoming.length > 0 ? (
-              <VisitGroup title={copy.upcoming}>
+              <VisitGroup title={copy.upcoming} count={upcoming.length}>
                 {upcoming.map((visit) => (
                   <VisitCard
                     {...cardSettings}
@@ -383,7 +441,7 @@ export default function VisitsPage() {
                     onRespond={(action, note) =>
                       respond(visit.id, action, note)
                     }
-                    responding={Boolean(respondingId)}
+                    responding={actionsDisabled}
                     visit={visit}
                   />
                 ))}
@@ -391,7 +449,7 @@ export default function VisitsPage() {
             ) : null}
 
             {waiting.length > 0 ? (
-              <VisitGroup title={copy.waiting}>
+              <VisitGroup title={copy.waiting} count={waiting.length}>
                 {waiting.map((visit) => (
                   <VisitCard {...cardSettings} key={visit.id} visit={visit} />
                 ))}
@@ -399,7 +457,7 @@ export default function VisitsPage() {
             ) : null}
 
             {past.length > 0 ? (
-              <VisitGroup title={copy.past}>
+              <VisitGroup title={copy.past} count={past.length}>
                 {past.map((visit) => (
                   <VisitCard {...cardSettings} key={visit.id} visit={visit} />
                 ))}

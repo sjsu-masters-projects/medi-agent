@@ -11,11 +11,15 @@ from app.main import app
 from app.models.auth import CurrentUser
 
 
+def _mock_db_dependency():
+    return MagicMock()
+
+
 @pytest.fixture(autouse=True)
 def proposal_dependencies():
     actor = CurrentUser(id=uuid4(), email="synthetic@example.com", role="clinician")
     app.dependency_overrides[get_current_user] = lambda: actor
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _mock_db_dependency
     yield actor
     app.dependency_overrides.clear()
 

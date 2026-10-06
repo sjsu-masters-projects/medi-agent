@@ -274,6 +274,15 @@ class AppointmentService:
         payload = {key: value for key, value in data.items() if value is not None}
         if not payload:
             return existing
+        if role == "patient":
+            raise AuthorizationError(
+                "Use the appointment response workflow to change your visit",
+                reason_code=reasons.ROLE_LACKS_CLINICAL_SCOPE,
+            )
+        # Standalone offers must use the same audited lifecycle as grouped offers.
+        # Generic edits must not reopen a declined/cancelled visit or confirm it.
+        if "status" in payload:
+            raise _booking_error("stale")
         result = await self._execute(
             self.db.table("appointments").update(payload).eq("id", str(appointment_id))
         )

@@ -50,7 +50,7 @@ export function useVisitsData() {
     try {
       const visits = await fetchVisits(accessToken);
       if (session === sessionVersion.current && request === loadVersion.current)
-        setState((current) => ({ ...current, visits }));
+        setState((current) => ({ ...current, visits, actionError: null }));
     } catch {
       if (session === sessionVersion.current && request === loadVersion.current)
         setState((current) => ({ ...current, error: "LOAD_FAILED" }));

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import VisitsPage from "@/app/(app)/visits/page";
 import { AppointmentStatus, type Appointment } from "@/types";
 
@@ -54,6 +54,7 @@ function makeVisit(overrides: Partial<Appointment> = {}): Appointment {
 }
 
 beforeEach(() => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-05-07T00:30:00Z"));
   respond.mockReset();
   retrySettings.mockReset();
   settings = {
@@ -72,6 +73,10 @@ beforeEach(() => {
     respondingId: null,
     refresh: vi.fn(),
   };
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("VisitsPage", () => {
@@ -386,8 +391,211 @@ describe("Spanish Visits states", () => {
     hookState.visits = [makeVisit({ status })];
     render(<VisitsPage />);
     expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: group })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: `${group} (1)` }),
+    ).toBeInTheDocument();
   });
+});
+
+describe("Visit details and chronological groups", () => {
+  it("moves an elapsed booking into history while Visits remains open", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-07T00:30:00Z"));
+    hookState.visits = [
+      makeVisit({
+        status: "confirmed",
+        scheduledAt: "2026-05-07T00:31:00Z",
+        notes: "Synthetic preparation",
+      }),
+    ];
+    render(<VisitsPage />);
+    expect(
+      screen.getByRole("heading", { name: "Upcoming (1)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Synthetic preparation")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(120000);
+    });
+    expect(
+      screen.queryByRole("heading", { name: "Upcoming (1)" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Past & other (1)" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Synthetic preparation")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cancel visit" }),
+    ).not.toBeInTheDocument();
+  });
+  it.each([
+    ["en-US", "follow_up", "Follow-up"],
+    ["en-US", "initial", "First visit"],
+    ["en-US", "routine", "Routine check"],
+    ["en-US", "urgent", "Urgent"],
+    ["en-US", "pre_op", "Pre-operative"],
+    ["es-MX", "follow_up", "Seguimiento"],
+    ["es-MX", "initial", "Primera consulta"],
+    ["es-MX", "routine", "Revisión de rutina"],
+    ["es-MX", "urgent", "Urgente"],
+    ["es-MX", "pre_op", "Preoperatoria"],
+  ] as const)(
+    "shows %s %s type and duration",
+    (locale, appointmentType, label) => {
+      settings.profile!.preferredLanguage = locale;
+      hookState.visits = [makeVisit({ appointmentType, durationMinutes: 45 })];
+      render(<VisitsPage />);
+      expect(screen.getByText(`${label} · 45 min`)).toBeInTheDocument();
+    },
+  );
+
+  it.each(["en-US", "es-MX"] as const)(
+    "shows authored preparation notes on future bookings and offers in %s",
+    (locale) => {
+      settings.profile!.preferredLanguage = locale;
+      hookState.visits = [
+        makeVisit({
+          status: "confirmed",
+          notes: "Bring the synthetic inhaler",
+        }),
+        makeVisit({
+          id: "offer",
+          proposalGroupId: "group",
+          notes: "Bring synthetic records",
+          durationMinutes: 60,
+        }),
+        makeVisit({
+          id: "past",
+          status: "confirmed",
+          scheduledAt: "2026-05-06T00:00:00Z",
+          notes: "Past preparation",
+        }),
+        makeVisit({ id: "no-notes", status: "scheduled", notes: undefined }),
+      ];
+      render(<VisitsPage />);
+      const label =
+        locale === "es-MX" ? "Notas de preparación" : "Preparation notes";
+      expect(screen.getAllByText(label)).toHaveLength(2);
+      expect(
+        screen.getByText("Bring the synthetic inhaler"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Bring synthetic records")).toBeInTheDocument();
+      expect(screen.queryByText("Past preparation")).not.toBeInTheDocument();
+      expect(
+        screen.getByText(
+          `${locale === "es-MX" ? "Seguimiento" : "Follow-up"} · 60 min`,
+        ),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("orders future bookings earliest first and history newest first by exact instant", () => {
+    hookState.visits = [
+      makeVisit({
+        id: "later",
+        status: "scheduled",
+        scheduledAt: "2026-05-08T17:00:00Z",
+        reason: "Later booking",
+      }),
+      makeVisit({
+        id: "old",
+        status: "confirmed",
+        scheduledAt: "2026-05-05T17:00:00Z",
+        reason: "Old booking",
+      }),
+      makeVisit({
+        id: "next",
+        status: "confirmed",
+        scheduledAt: "2026-05-07T01:00:00Z",
+        reason: "Next booking",
+      }),
+      makeVisit({
+        id: "recent",
+        status: "scheduled",
+        scheduledAt: "2026-05-07T00:00:00Z",
+        reason: "Recent booking",
+      }),
+      makeVisit({
+        id: "cancelled",
+        status: "cancelled",
+        scheduledAt: "2026-05-09T17:00:00Z",
+        reason: "Cancelled future booking",
+      }),
+      makeVisit({
+        id: "invalid",
+        status: "confirmed",
+        scheduledAt: "invalid",
+        reason: "Invalid timestamp",
+      }),
+    ];
+    render(<VisitsPage />);
+    expect(screen.getByText("2 upcoming visits.")).toBeInTheDocument();
+    const upcoming = within(
+      screen.getByRole("heading", { name: "Upcoming (2)" }).closest("section")!,
+    );
+    const history = within(
+      screen
+        .getByRole("heading", { name: "Past & other (4)" })
+        .closest("section")!,
+    );
+    expect(
+      upcoming
+        .getAllByText(/^(Next|Later) booking$/)
+        .map((node) => node.textContent),
+    ).toEqual(["Next booking", "Later booking"]);
+    expect(
+      history
+        .getAllByText(
+          /^(Cancelled future booking|Recent booking|Old booking|Invalid timestamp)$/,
+        )
+        .map((node) => node.textContent),
+    ).toEqual([
+      "Cancelled future booking",
+      "Recent booking",
+      "Old booking",
+      "Invalid timestamp",
+    ]);
+    expect(
+      upcoming.getByText(/Wednesday, May 6, 2026 at 6:00 PM/),
+    ).toBeInTheDocument();
+    expect(
+      history.queryByRole("button", { name: "Cancel visit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["en-US", 1, "1 upcoming visit."],
+    ["en-US", 2, "2 upcoming visits."],
+    ["es-MX", 1, "1 próxima cita."],
+    ["es-MX", 2, "2 próximas citas."],
+  ] as const)(
+    "counts %s future bookings with singular/plural copy",
+    (locale, count, summary) => {
+      settings.profile!.preferredLanguage = locale;
+      hookState.visits = [
+        ...Array.from({ length: count }, (_, index) =>
+          makeVisit({
+            id: `booked-${index}`,
+            status: index ? "confirmed" : "scheduled",
+          }),
+        ),
+        makeVisit({ id: "offer-a", proposalGroupId: "offer" }),
+        makeVisit({ id: "offer-b", proposalGroupId: "offer" }),
+        makeVisit({ id: "cancelled", status: "cancelled" }),
+        makeVisit({
+          id: "past",
+          status: "confirmed",
+          scheduledAt: "2026-05-06T00:00:00Z",
+        }),
+      ];
+      render(<VisitsPage />);
+      expect(screen.getByText(summary)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", {
+          name: `${locale === "es-MX" ? "Esperando tu respuesta" : "Awaiting your response"} (1)`,
+        }),
+      ).toBeInTheDocument();
+    },
+  );
 });
 
 describe("Grouped appointment offers", () => {
