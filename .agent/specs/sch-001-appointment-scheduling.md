@@ -644,10 +644,18 @@ The repaired temporary PostgreSQL installation resolves the historical fixture
 failure above. Redacted Gitleaks branch-range scanning and whitespace checks pass.
 The October 5 production dependency audits report four existing findings per portal:
 critical Next.js, high brace-expansion/source-map-js and moderate fast-uri. Dependency
-remediation remains separate; this branch changes no dependency lock. No additional
+remediation remains separate; this branch changes no portal dependency lock. No additional
 remote migration, seed/reset, deployment or PR merge occurred during preparation.
 Live UI/API evidence remains the October 3 acceptance described above; importing the
 download into an external calendar application remains a reviewer step.
+
+PR #133's first CI run exposed two inherited backend advisories. Security floors
+and both generated locks now require `multidict` 6.9.1 and `langgraph-sdk` 0.4.4;
+all other locked versions remain unchanged. Locks reproduce with CI's uv 0.9.24,
+Python 3.12 dependency compatibility passes, and pip-audit 2.10.1 reports no known
+vulnerabilities. The full backend suite rerun with these packages retains the same
+1,733 passes, 20 opt-in skips and 85.72% coverage above. Portal dependency findings
+remain open; no CI security gate was weakened.
 
 ### Steps to see the changes
 

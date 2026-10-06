@@ -20,6 +20,11 @@ uv pip compile requirements.in --universal --python-version 3.12 --output-file r
 uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt
 ```
 
+Security floors also cover [multidict's items-view reference leak](https://github.com/aio-libs/multidict/security/advisories/GHSA-54p9-h82j-f925)
+(`>=6.9.1`) and [LangGraph SDK resource authorization](https://github.com/langchain-ai/langgraph/security/advisories/GHSA-fvww-7h3r-vfhp)
+(`>=0.4.4`). Both locks retain these patched versions. Run the CI audit with Python
+3.12; system Python 3.14 cannot resolve all packages in this lock.
+
 ## Run
 
 ```bash

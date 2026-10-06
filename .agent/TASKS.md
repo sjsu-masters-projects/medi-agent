@@ -2296,7 +2296,7 @@ corrects the English-only, browser-timezone rendering defect. Merge/deployment r
 
 **Slice 6 — implemented and locally verified, 2026-10-03; review/merge pending**
 
-**PR preparation — verified locally, 2026-10-05; review/merge pending:** Requester
+**[PR #133](https://github.com/sjsu-masters-projects/medi-agent/pull/133) preparation — verified locally, 2026-10-05; review/merge pending:** Requester
 authorized integrating current main, resolving conflicts, validating the combined
 checkout, committing and opening the scheduling PR. Integrated main through
 `4d9a469`, preserving its hydration implementation, ADR navigation, care-plan and
@@ -2326,7 +2326,21 @@ seed/reset, deployment, or PR merge is included in this preparation.
 - Refreshed `npm audit --omit=dev --audit-level=high --json` on October 5 reports
   **four advisories in each portal**: critical Next.js, high brace-expansion and
   source-map-js, moderate fast-uri. These are existing dependency findings, separate
-  from passing feature checks; no dependency/lockfile change is included.
+  from passing feature checks; no portal dependency/lockfile change is included.
+
+**PR #133 backend audit correction — 2026-10-05:** The first GitHub run passed
+portal lint/tests/builds, policy, placeholder, secret scan and CodeQL checks, but
+the backend audit rejected inherited `multidict` 6.7.1 (CVE-2026-104874) and
+`langgraph-sdk` 0.4.2 (CVE-2026-104873), skipping dependent backend jobs. Add explicit
+minimums and regenerate both locks with CI's uv 0.9.24: only package versions
+`multidict` → **6.9.1** and `langgraph-sdk` → **0.4.4** change. Both locks reproduce
+byte-for-byte with the canonical compiler commands. Python 3.12 `pip check` passes;
+`uvx --python <python3.12> --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt`
+reports **no known vulnerabilities**. Full backend tests rerun with patched dependencies:
+**1,733 passed, 20 opt-in skips, 85.72% coverage**, including all 31 appointment
+transaction tests. The initial local audit used unsupported system Python 3.14;
+explicit Python 3.12 resolved that environment failure. Portal advisories remain
+separate follow-up work. No audit ignores or CI bypasses were added.
 
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed
