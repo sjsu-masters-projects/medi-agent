@@ -167,6 +167,7 @@ PAT-005.
 | `MED-001/002-A` — reconciliation scope | **Sequenced** | Platform + clinician-portal lanes — unassigned | Use PAT-005's medication-conflict scenario to scope reviewed candidate-versus-local comparison. | Reuse PAT-005 evidence/approval boundaries; do not duplicate a competing clinical-decision lifecycle. |
 | `PV-001` — clinician ADR/Naranjo review | **Sequenced** | Ganesh — pharmacovigilance + clinician lanes | Review a confirmed symptom report, request missing information, and provide deterministic Naranjo assistance separate from clinician judgment. | Starts after `PAT-002-C`. It must not infer an ADR report from raw chat or submit anything externally. Blocks `PV-002`. |
 | `PV-002` — clinician-approved MedWatch draft/export | **Sequenced** | Jeevan — clinician portal + pharmacovigilance lanes | Produce an editable, evidence-linked MedWatch-compatible draft from patient-confirmed and clinician-approved facts; export it only after clinician/pharmacist approval. | Starts after `PV-001`; export is not FDA submission. |
+| `COM-001-A` — clinician message send + inbox | **Claimed** | Jeevan Kurian — `feature/com-001-clinician-messages` | Backend list endpoints, clinician inbox page, and compose form on patient deep-dive. Tests pass. | Patient-to-clinician direction and outbound approval gate remain as separate slices. |
 
 **State meanings:** **Claimed** has one active owner and branch; **Ready** is safe to start in a
 separate branch; **Blocked** needs the stated external decision or evidence; **Sequenced** is
@@ -2416,7 +2417,11 @@ migration, seed/reset, deployment, or PR merge is included in this preparation.
 
 ### COM-001 — Care-team communication and notifications
 
-- [ ] Complete patient-to-care-team and clinician-to-patient message paths.
+- [/] Complete patient-to-care-team and clinician-to-patient message paths. Clinician-to-patient
+      send (in-app and email) existed as backend-only endpoints with no frontend. Added: backend
+      list endpoints (`GET /me/patients/{patient_id}/messages` and `GET /me/messages`), clinician
+      inbox page replacing the static placeholder, compose form on the patient deep-dive Chat tab,
+      and integration + component tests. Patient-to-clinician origination remains unbuilt.
 - [ ] Require approval for clinical outbound messages.
 - [ ] Support opted-in administrative reminders.
 - [ ] Add retry, deduplication, delivery state, and operations queue.

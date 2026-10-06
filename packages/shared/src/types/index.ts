@@ -247,7 +247,7 @@ export const AppointmentStatus = {
 } as const;
 export type AppointmentStatus = (typeof AppointmentStatus)[keyof typeof AppointmentStatus];
 
-export const ChatRole = { USER: "user", ASSISTANT: "assistant", SYSTEM: "system" } as const;
+export const ChatRole = { USER: "user", ASSISTANT: "assistant", SYSTEM: "system", CLINICIAN: "clinician" } as const;
 export type ChatRole = (typeof ChatRole)[keyof typeof ChatRole];
 
 export const NotificationType = {

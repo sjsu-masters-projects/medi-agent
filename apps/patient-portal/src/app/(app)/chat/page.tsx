@@ -271,7 +271,7 @@ export default function ChatPage() {
                                             ? () => handlePlayAssistantMessage(message)
                                             : undefined
                                     }
-                                    role={message.role === ChatRole.USER ? "user" : "assistant"}
+                                    role={message.role === ChatRole.USER ? "user" : message.role === ChatRole.CLINICIAN ? "clinician" : "assistant"}
                                     timestamp={message.createdAt}
                                 />
                             ))}
