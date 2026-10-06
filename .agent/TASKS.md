@@ -2465,9 +2465,14 @@ separate follow-up work. No audit ignores or CI bypasses were added.
 contained the same backend vulnerability floors, with `langgraph-sdk` **0.4.5** in
 both locks; the resolution uses main's three dependency files byte-for-byte. No
 backend dependency delta remains in the PR's final file diff. Preserve main's model
-capacity, care-plan access and chat changes alongside scheduling. Recheck the
-integrated full backend suite, static checks, lock/audit, portal tests/builds and CI
-before review; review/merge remains pending.
+capacity, care-plan access and chat changes alongside scheduling. The integrated
+Python 3.12 full backend suite passes **1,802 tests**, with **20 unrelated opt-in
+care-plan PostgreSQL skips** and **85.94% coverage**; all 31 appointment transaction
+tests run. Ruff check/format, mypy (209 files), migration validation (53 files),
+Python dependency compatibility and pip-audit pass. Portal lint/tests pass:
+**201 patient tests / 38 files** and **180 clinician tests / 30 files**.
+Both portals also pass typecheck and `npm run build -- --webpack` after the main
+integration. GitHub CI and peer review remain pending.
 
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed

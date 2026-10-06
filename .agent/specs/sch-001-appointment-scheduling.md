@@ -655,8 +655,13 @@ and both generated locks were first verified locally with `multidict` 6.9.1 and
 1,733 passes, 20 opt-in skips and 85.72% coverage. Main independently fixed the
 same advisories; after integrating `5203b28` on October 6, this PR uses main's
 three dependency files byte-for-byte, including `langgraph-sdk` 0.4.5. The final
-PR diff has no backend dependency change. Recheck the combined branch and CI before
-review. Portal dependency findings remain open; no CI security gate was weakened.
+PR diff has no backend dependency change. The combined branch passes 1,802 backend
+tests, with 20 unrelated opt-in skips and 85.94% coverage; all 31 appointment
+transaction cases execute. Ruff, mypy, migration validation, dependency compatibility,
+pip-audit, and 201 patient / 180 clinician portal tests pass. Both portal typechecks
+and webpack production builds pass. CI remains under verification. Portal dependency
+findings remain open; no CI security
+gate was weakened.
 
 ### Steps to see the changes
 
@@ -665,6 +670,8 @@ review. Portal dependency findings remain open; no CI security gate was weakened
    2026, **09:00–09:30 America/Los_Angeles**, at **Synthetic clinic, Suite 2**.
    Appointment `0fa4a1f9-0d9f-4e4d-8f07-7afac18f69fe` is confirmed and intentionally
    retained. Its exported UTC start/end are `20261006T160000Z` / `20261006T163000Z`.
+   This is now a past example; for a future calendar entry, accept a new synthetic
+   offer through the existing clinician/patient flow.
 3. Click **Add to calendar**, open/import the downloaded `.ics`, and check time,
    30-minute duration and location. Configure the calendar to Los Angeles to compare
    the same wall time; another calendar timezone represents the same UTC instant.
