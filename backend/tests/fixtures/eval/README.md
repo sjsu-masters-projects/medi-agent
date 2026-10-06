@@ -56,3 +56,25 @@ PYTHONPATH=src .venv/bin/python scripts/run_ai_eval.py --models flash --workload
 Reports are written to `backend/reports/ai_eval_<timestamp>.{json,md}` with the run's
 environment metadata. Prompts are never written to the report; model outputs on these
 synthetic scenarios are, because reviewers need them.
+
+For native Gemini checks using the registry's actual thinking, output ceiling and deadline:
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/check_gemini_workloads.py --dry-run
+PYTHONPATH=src .venv/bin/python scripts/check_gemini_workloads.py --production-contract --workload adr_extraction
+PYTHONPATH=src .venv/bin/python scripts/check_gemini_workloads.py --production-contract --fallback --workload patient_explanation --out reports/explanation-fallback.json
+PYTHONPATH=src .venv/bin/python scripts/check_gemini_workloads.py --chat --workload triage_classification --case tri-017 --case tri-018 --out reports/chat-check.json
+```
+
+Native fixture checks use `global`, one SDK attempt, sequential calls with 0.6-second
+pacing, and no automatic fallback. `--fallback` tests the backup independently.
+`--thinking LOW|MEDIUM|HIGH` and `--model` allow explicit comparisons, not promotions.
+By default the existing evaluation addenda/schema are used; `--production-contract`
+uses production prompts and the live symptom schema with its boundary validators.
+The discrepancy prompt is an evaluation contract; the Spanish explanation is a direct
+generation proxy for production's English-then-translation flow. Triage JSON is also a
+proxy, not the tool-calling coordinator. Use `--chat` for real chat models, tools and safety
+plugins with in-memory sessions, stubbed synthetic patient-context reads and database
+telemetry disabled. That mode uses registry settings and refuses ignored model overrides.
+Reports retain final synthetic answers, never private reasoning. A valid schema or a
+passing keyword score is not medical adjudication; read the raw answers.

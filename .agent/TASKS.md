@@ -21,6 +21,45 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-005 return after model selection — 2026-10-05.** Keep the EVA-001 Gemini
+lineup; do not expand provider research. The supplied PAT-005 plan matches the existing
+active specification and does not require a duplicate document. Pre-testing on the
+current working tree: backend full pytest **1,635 passed, 20 opt-in PostgreSQL skipped**;
+patient `npm run test` **112 passed**; clinician **137 passed**. Both portals passed
+`npm run typecheck`, `npm run lint` and `npm run build -- --webpack` (non-fatal existing
+Sentry configuration warnings; clinician also reports workspace-root ambiguity).
+Root `git diff --check` passed. Live acceptance is not inferred from these
+local checks: only the Supabase browser tab was visible, and opening the patient tab
+failed browser-session attachment. Request patient/assigned-clinician portal sessions
+before resuming live checks. No remote reset, migration, deployment or publication occurred.
+
+Next PAT-005 acceptance sequence: inspect Morgan's current evidence and approved/draft
+state without resetting; verify protected sources and approval blockers; compare saved
+Today preview with publication; verify patient completion and every barrier category
+in clinician follow-up; then verify new-evidence v2 continuity, unchanged history,
+assignment denial and audit reconstruction. Do not publish unreconciled historical
+medications or mark the full checklist complete from local tests alone.
+
+**Morgan live follow-up — 2026-10-05, approximately 21:52 Pacific.** Patient Morgan
+and assigned clinician Elena sessions were accessible. Navigated the clinician from
+Maya to Morgan's known test record. Approved V1 has one Metformin record and three
+activities; Today has two scheduled medication doses plus those activities. Source
+preview for the medication order opened successfully. A first medication-completion
+attempt displayed an unconfirmed-save warning; reload showed no completion. One retry
+then saved the morning dose as completed. A whitespace-only Other barrier note kept
+submission disabled. Submitted a clearly labeled synthetic hydration Other barrier;
+Elena's adherence view showed the correct activity and full note, with 2 completed /
+4 historical responses (50%). Patient reload retained both new response states.
+Screenshot evidence is local/ignored: `backend/reports/morgan-followup-20261005.jpg`.
+No documents deleted, plan revised/published, reminder changed or migration run.
+
+Open observations: the header shows 0% adherence while detailed recorded completion
+shows 50%; header reads the risk summary rather than the response-history metric, so
+do not label these equivalent or infer a failed response save. Initial transient-save
+failure cause is not established. V2 publication continuity, every barrier category,
+unassigned-account denial and audit reconstruction remain unverified in this run.
+This live deployed check does not verify the unmerged Gemini tuning branch.
+
 **PAT-005 follow-through fixes — 2026-10-03 (ready for review).** Package the fresh
 Morgan QA findings with the five-document worker batch: count medication `taken`
 events, distinguish future doses, flag medication wording overlaps for review,
@@ -2132,6 +2171,34 @@ never submit a report to FDA/MedWatch or portray a draft as filed.
 
 ### EVA-001 — Internal model and safety evaluation
 
+**Gemini workload tuning — 2026-10-04 (local verification).** Select current native
+Gemini models without hosting MedGemma: 3.5 Flash-Lite for classification, 3.8 Flash
+for clinical text/evidence, and distinct 3.5 Flash for prose fallback. Intake has no
+qualified backup: 3.5 Flash changed source timing and Pro missed 5/10 deadlines. Retain
+3.1 Pro preview only in compatibility/evaluation paths with explicit MEDIUM thinking.
+Connect symptom extraction/replies to bounded registry routes; reject missing chat
+decisions and tighten medication-experiment/imaginary-notification instructions.
+Acceptance includes bilingual raw-answer review, actual in-memory chat/tool calls,
+primary-429/fallback and localized no-report failure regressions, workflow setting parity,
+Ruff/format, mypy, and the full backend suite. No remote configuration, migration,
+patient writes or deployment is authorized by this task. Evidence and remaining
+medical-fidelity limitations are in the runtime decision record's October 4–5 section.
+
+**Final verification — 2026-10-05:** from `backend`,
+`PYTHONPATH=src .venv/bin/pytest --no-cov -q -o addopts='' --disable-warnings`
+passed **1,635 tests**, with **20 opt-in PostgreSQL tests skipped** (112 warnings).
+`.venv/bin/mypy src` passed on 207 source files. `.venv/bin/ruff check src scripts`
+plus all changed unit-test files passed; the matching `ruff format --check` invocation
+passed on 233 files. Root `git diff --check` passed. The broader
+`.venv/bin/ruff check src scripts tests/unit` also exposed four unrelated existing
+violations in `core/test_security.py`, `db/test_supabase_execute.py`, and
+`services/test_drug_knowledge_service.py`; those were not changed or represented as green.
+Global native probes totaled 144 attempts with 131 returned and 13 deadline expiries,
+not 131 medically adjudicated passes. Final actual bilingual ADK chat: 8/8 expected
+urgency and non-degraded answers. Pro intake rejected; historical medication, lab
+extraction, and composite-citation qualification gaps remain. No commit, pull request,
+deployment or migration was performed by this task.
+
 - [ ] Create 120 synthetic scenarios across all required risk classes.
 - [ ] Mirror high-risk scenarios in English and Spanish.
 - [ ] Obtain clinician/pharmacist adjudication for at least 40 high-risk cases.
@@ -2140,6 +2207,18 @@ never submit a report to FDA/MedWatch or portray a draft as filed.
       and NIM and reports latency and outcome per provider. First measurement recorded below.
 - [ ] Select default and fallback providers from results.
 - [ ] Store repeatable evaluation inputs, rubrics, results, and environment metadata.
+
+**Medical-capability evidence — 2026-10-03:** free-text global-endpoint comparison of five
+Gemini variants and GPT-OSS 120B/20B, using 16 existing fixtures and six additional bilingual
+medical challenges. Available raw final answers are reviewed for knowledge, source fidelity,
+locale, and authority boundaries; provider failures are tracked separately. Medical-model
+research covers MedGemma, MeditronFO, Med42-v2, and BioMistral, without provisioning compute
+or claiming those models were API-tested. See the [runtime pilot evidence](../docs/decisions/ai-runtime-2026-09.md#medical-capability-pilot--2026-10-03)
+and ignored local artifacts in `backend/reports/medical-knowledge-20261003/`.
+154 calls completed with 140 returned final answers inspected; GPT-OSS-120B had two
+rate-limit failures and eleven timeouts, while Gemini 3.8 Flash returned all 22 answers.
+This is not clinician-adjudicated, does not close the 120-case/40-adjudication milestones,
+and does not change production routing.
 
 **Provider evidence — 2026-09-11 — `openai/gpt-oss-20b` via NVIDIA NIM**
 

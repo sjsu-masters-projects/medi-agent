@@ -40,8 +40,9 @@ class Settings(BaseSettings):
     # is configuration and switching is a one-line change here plus a redeploy. Watch the
     # release notes: a retired id fails as a 404 at call time, which is how
     # `gemini-3.1-flash-lite-preview` once broke chat in production.
-    gemini_triage_model: str = "gemini-3.1-flash-lite"
+    gemini_triage_model: str = "gemini-3.5-flash-lite"
     gemini_flash_model: str = "gemini-3.8-flash"
+    gemini_fallback_model: str = "gemini-3.5-flash"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
     google_embedding_model: str = "gemini-embedding-001"
     rag_embedding_dimensions: int = 768

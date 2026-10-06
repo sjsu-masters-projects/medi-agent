@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.adk.registry import Workload
 from app.config import settings
 from app.followup import (
     FOLLOWUP_COPY,
@@ -28,6 +29,12 @@ from app.followup import (
 )
 from app.followup import service as service_module
 from app.models.enums import Language
+from app.models.generation import (
+    GenerationErrorCode,
+    GenerationProviderError,
+    GenerationResponse,
+    GenerationTelemetry,
+)
 from app.pharmacovigilance import NaranjoAnswer, NaranjoQuestion
 from app.utils.localization import resolve_locale_resource
 
@@ -72,7 +79,21 @@ def _client(
 
 async def _analyse(client: MagicMock, message: str = "I feel dizzy", **kwargs: Any) -> Any:
     kwargs.setdefault("patient_context", {"medications": [{"id": "med-1", "name": "Metformin"}]})
-    with patch.object(service_module, "_extraction_client", return_value=client):
+
+    async def generate(workload: Workload, **request: Any) -> GenerationResponse:
+        if workload is Workload.ADR_EXTRACTION:
+            assert request["response_schema"] == SymptomExtractionResult.model_json_schema()
+            extraction = await client.generate_structured(**request)
+            text = extraction.model_dump_json()
+        else:
+            assert workload is Workload.REPLY
+            text = await client.generate(**request)
+        return GenerationResponse(
+            text=text,
+            telemetry=GenerationTelemetry(provider="flash", model="synthetic", latency_ms=1),
+        )
+
+    with patch.object(service_module, "generate_for_workload", side_effect=generate):
         return await analyse_symptom(message=message, **kwargs)
 
 
@@ -287,11 +308,52 @@ async def test_the_kill_switch_records_nothing_rather_than_guessing() -> None:
     client.generate_structured.assert_not_awaited()
 
 
-def test_a_workload_routed_elsewhere_fails_loudly() -> None:
-    """Sending a bare model id to the wrong SDK reads like an outage, not a misconfig."""
-    route = MagicMock()
-    route.primary.transport = "invented-transport"
-    route.primary.key = "mystery"
+@pytest.mark.asyncio
+async def test_invalid_structured_response_records_nothing() -> None:
+    response = GenerationResponse(
+        text='{"symptom": "dizziness", "severity": 999}',
+        telemetry=GenerationTelemetry(provider="backup_flash", model="synthetic", latency_ms=1),
+    )
+    with patch.object(service_module, "generate_for_workload", AsyncMock(return_value=response)):
+        result = await analyse_symptom(message="I feel dizzy")
+    assert result.symptom_report is None
+    assert result.status == "degraded"
 
-    with patch.object(service_module, "route_for", return_value=route), pytest.raises(ValueError):
-        service_module._extraction_client()
+
+@pytest.mark.asyncio
+async def test_primary_429_records_nothing_without_an_unqualified_intake_backup() -> None:
+    primary = MagicMock(
+        generate=AsyncMock(
+            side_effect=GenerationProviderError(GenerationErrorCode.RATE_LIMITED, "rate limited")
+        )
+    )
+    with (
+        patch("app.adk.background_generation.provider_for", return_value=primary) as factory,
+        patch("app.adk.background_generation.schedule_generation_record"),
+    ):
+        result = await analyse_symptom(message="I feel dizzy")
+    assert factory.call_count == 1
+    assert result.symptom_report is None
+    assert result.status == "degraded"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("language", [Language.EN, Language.ES])
+async def test_intake_provider_failure_is_localized_without_writing_a_report(language) -> None:
+    provider = MagicMock(
+        generate=AsyncMock(
+            side_effect=GenerationProviderError(GenerationErrorCode.UNAVAILABLE, "unavailable")
+        )
+    )
+    with (
+        patch("app.adk.background_generation.provider_for", return_value=provider) as factory,
+        patch("app.adk.background_generation.schedule_generation_record"),
+    ):
+        result = await analyse_symptom(message="I feel dizzy", language=language.value)
+    assert factory.call_count == 1
+    assert result.symptom_report is None
+    assert result.status == "degraded"
+    assert (
+        result.response_text
+        == resolve_locale_resource(language.value, FOLLOWUP_COPY)["report_unavailable"]
+    )
