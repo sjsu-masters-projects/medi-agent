@@ -24,7 +24,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.models.dashboard import PatientRiskData, RiskLevel
-from app.models.enums import ADRStatus
+from app.models.enums import AdherenceStatus, ADRStatus
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,11 @@ class RiskScoreService:
     # ── Private helpers ──────────────────────────────────────────────────────
 
     async def _fetch_adherence_score(self, patient_id: UUID) -> float | None:
-        """Return 30-day overall adherence score (0.0–1.0), or None if no logs."""
+        """Return 30-day recorded-response completion, or None if no logs.
+
+        This is not completion against all expected doses. Medication `taken` and
+        activity `completed` must both match the detailed adherence view.
+        """
         cutoff = (datetime.now(UTC) - timedelta(days=30)).isoformat()
         logs = await self._execute(
             self.db.table("adherence_logs")
@@ -152,7 +156,11 @@ class RiskScoreService:
         if not log_data:
             return None
 
-        completed = sum(1 for log in log_data if log.get("status") == "completed")
+        completed = sum(
+            1
+            for log in log_data
+            if log.get("status") in {AdherenceStatus.TAKEN, AdherenceStatus.COMPLETED}
+        )
         total = len(log_data)
         return completed / total if total > 0 else None
 

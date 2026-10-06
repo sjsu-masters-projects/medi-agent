@@ -21,7 +21,17 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
-**PR #130/#131 integration review — 2026-10-05 (in progress).** Merge main's
+**PAT-004-A companion naming — 2026-10-05 (ready for review).** Replace the assistant's
+Maya identity with MediGuide in PR #131. Keep its name in one shared constant,
+identify it explicitly as an AI care assistant, and localize typing/identity copy
+for en-US and es-MX. Synthetic patient names and stored conversation content must
+remain unchanged. Patient `npm run test`: **113 passed** including English/Spanish
+identity and typing regressions; `npm run typecheck`, `npm run lint`, and
+`npm run build -- --webpack` passed (existing non-fatal Sentry warnings).
+Source search found no remaining assistant Maya identity; patient fixtures and
+historical QA references are intentionally retained. Live rename awaits deployment.
+
+**PR #130/#131 integration review — 2026-10-05 (locally verified, CI pending).** Merge main's
 capacity retry tests into the routing branch without rewriting history; retain
 both bilingual 429 fallback and missing-decision fail-closed regressions. Review
 symptom error diagnostics for patient-content leakage, then verify the integrated
@@ -31,6 +41,11 @@ verification: **1,660 backend tests passed, 20 opt-in PostgreSQL skipped, 85.43%
 coverage**; 67 focused capacity/chat/intake regressions passed; source/scripts Ruff
 and formatting, and source mypy passed. Symptom validation/provider failures now
 log only categorized reasons, with regression coverage against patient-content leaks.
+Combined #131: **1,685 passed, 20 opt-in PostgreSQL skipped, 85.55% coverage**;
+source/scripts Ruff/format and mypy passed. Patient portal: **113 tests passed**,
+typecheck/lint/webpack build passed with existing non-fatal Sentry warnings.
+Backend locked dependency audit found no known vulnerabilities. Peer approval,
+green pushed-commit CI and sequential #130 then #131 integration remain required.
 
 **PAT-005 return after model selection — 2026-10-05.** Keep the EVA-001 Gemini
 lineup; do not expand provider research. The supplied PAT-005 plan matches the existing
@@ -70,6 +85,39 @@ do not label these equivalent or infer a failed response save. Initial transient
 failure cause is not established. V2 publication continuity, every barrier category,
 unassigned-account denial and audit reconstruction remain unverified in this run.
 This live deployed check does not verify the unmerged Gemini tuning branch.
+
+**PAT-005 acceptance follow-up — 2026-10-05 (in progress).** Routing evaluation is
+separate in PR #130. Preserve Morgan's approved V1 and response history while checking
+V2 continuity, remaining barrier categories, unrelated-account denial and the audit
+timeline. The header discrepancy has a concrete defect: RiskScoreService counts
+`completed` but not medication `taken`, unlike the detailed adherence view. Fix the
+shared risk-summary calculation and cover mixed statuses without changing thresholds.
+The initial save failure remains unexplained; do not infer an authentication cause.
+Opt-in local PostgreSQL checks cannot initialize because macOS shared-memory IDs are
+exhausted; no database assertions ran. Do not change kernel settings or report them
+passed. Live isolation requires separate synthetic-account sessions.
+
+Verification: backend `pytest -q --disable-warnings` **1,641 passed, 20 opt-in
+PostgreSQL skipped**, **85.44% coverage**; source Ruff/format and mypy passed. Added
+13 router-level ownership/assignment denials using the real service guard, two
+foreign-target response denials and six barrier persistence contracts. These use
+mock database boundaries and do not establish deployed RLS coverage. Live Marcus
+direct navigation to Morgan was denied with no patient data or plan controls.
+Read-only Supabase audit shows worker generation, clinician edit/publication,
+four patient responses and the retained 08:00/18:00 medication reminder. There is
+no actor on automatic generation; its request ID identifies the worker operation.
+Historical edits retain counts/removal IDs, not full intermediate wording snapshots.
+Cloud Run request-status inspection found two successful POSTs (201), no failed
+POST in the checked initial-save window, and a successful preflight; the failure
+cause is still unknown. No payloads, tokens or private reasoning were logged.
+New portal tabs share sign-in state (Daniel/Marcus); restoring Morgan/Elena is
+needed before live V2/barrier writes. V2 and the remaining four live barrier
+categories remain open. No remote plan changes, reset, migration or deployment.
+
+PR #131 is based on PR #130 to include its audited dependency patch without
+duplicating the routing diff. Combined-branch verification with patched packages:
+**1,660 passed, 20 opt-in PostgreSQL skipped, 85.45% coverage**. Merge/review order is
+#130 first, then retarget #131 to main. Neither PR has been merged or deployed here.
 
 **PAT-005 follow-through fixes — 2026-10-03 (ready for review).** Package the fresh
 Morgan QA findings with the five-document worker batch: count medication `taken`

@@ -4,7 +4,11 @@ import {
   type LocaleResourceMap,
 } from "@/types";
 
+export const CARE_ASSISTANT_NAME = "MediGuide";
+
 interface PatientChatCopy {
+  assistantDescription: string;
+  typingMessage: string;
   documentContextIntro: string;
   documentContextSuffix: string;
   emptyStateIntro: string;
@@ -16,6 +20,8 @@ interface PatientChatCopy {
 
 const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
   default: {
+    assistantDescription: "AI care assistant",
+    typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
     documentContextSuffix: ".",
     emptyStateIntro:
@@ -32,6 +38,8 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "en-US": {
+    assistantDescription: "AI care assistant",
+    typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
     documentContextSuffix: ".",
     emptyStateIntro:
@@ -48,6 +56,8 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "es-MX": {
+    assistantDescription: "Asistente de cuidado con IA",
+    typingMessage: `${CARE_ASSISTANT_NAME} está escribiendo...`,
     documentContextIntro: "Consultando en",
     documentContextSuffix: ".",
     emptyStateIntro:
