@@ -2474,6 +2474,24 @@ Python dependency compatibility and pip-audit pass. Portal lint/tests pass:
 Both portals also pass typecheck and `npm run build -- --webpack` after the main
 integration. GitHub CI and peer review remain pending.
 
+**Cumulative scheduling integration review — 2026-10-06 (CI pending).** Preserve
+#97/#98's original history only after verifying their acceptance behavior in the
+expanded #133 implementation. Retain fixture-derived clinician names and visit
+type/duration/preparation notes with date-aware counts/order. Generic appointment
+PUT rejects patient edits and all non-null status writes; atomic response/audit
+guards remain authoritative. Clinician cancellation/completion/no-show remain future
+work. No remote migration, seed/reset or deployment command is authorized here.
+
+Fresh isolated backend verification excluding the failed local PostgreSQL setup:
+**1,788 passed, 20 unrelated opt-in skips, 85.99% coverage**. The 31 appointment
+transaction cases encountered macOS shared-memory-ID exhaustion before assertions;
+do not describe them as passed or silently skipped. Require the pushed head's Ubuntu
+CI to run every case with zero skips. Backend Ruff/format (226 files), mypy (209
+source files) and 53-file migration validation pass. Patient **224 tests** and
+clinician **180 tests**, portal lint/typecheck/webpack builds, backend dependency
+audit and both portal production audits pass. Six development-only high npm findings
+per portal remain. Merge and deployed acceptance are still pending.
+
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed
   duration and location; bilingual patient controls and generic inline failures;

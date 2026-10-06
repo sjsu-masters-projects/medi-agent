@@ -94,7 +94,8 @@ created as `proposed` with its own `scheduled_at`.
       │  ├──patient declines the offer────────► declined      (whole group)
       │  └──patient asks for different times──► alternative_requested (whole group)
       │
-   confirmed ──patient or clinician cancels──► cancelled
+   confirmed ──patient cancels──────────────► cancelled
+   confirmed ──clinician cancels (future)───► cancelled
    confirmed ──visit happens (future)────────► completed / no_show
 
    Legend: proposed/confirmed/declined/alternative_requested/cancelled = built (Slices 1–2, single-slot)
@@ -686,3 +687,28 @@ gate was weakened.
 Remaining scheduling work: clinician cancellation/completion/no-show controls,
 clinician-wide availability/capacity rules and notification delivery are separate
 future scopes. Calendar export does not complete the full SCH-001 lifecycle.
+
+### Integration review safeguards — 2026-10-06
+
+The generic `PUT /appointments/{id}` endpoint rejects patient edits and every
+non-null status change, including clinician completion/no-show. Assigned clinicians
+may still edit standalone appointment details; grouped offers must use their dedicated
+workflow. `AppointmentUpdate.status` remains schema-valid so forbidden writes receive
+an explicit service rejection rather than being silently ignored. Patient responses
+continue through the atomic, audited response RPC.
+
+The cumulative review retains PR #98's fixture-derived clinician names, appointment
+type/duration/preparation notes, and date-aware visit ordering/counts alongside PR
+#133's saved-timezone rendering, bilingual controls and transactional offer safeguards.
+Seed repair and idempotency are verified with an in-memory transport only.
+
+Fresh local verification excluding the unavailable macOS PostgreSQL fixture passed
+1,788 backend tests with 20 unrelated opt-in skips and 85.99% coverage. The 31
+appointment transaction cases failed during local cluster setup because shared-memory
+IDs were exhausted; this run establishes no fresh PostgreSQL assertions. Patient
+224 tests and clinician 180 tests pass, as do portal lint/typecheck/webpack builds,
+backend Ruff/format/mypy and 53-file migration validation. Backend and both portal
+production dependency audits are clean; each portal still has six development-only
+high findings. Historical PostgreSQL evidence above is not a substitute for the
+cumulative pushed head's CI transaction proof. CI now exposes server binaries and
+rejects missing, skipped or failing appointment transaction cases before merge.
