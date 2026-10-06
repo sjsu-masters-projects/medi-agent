@@ -145,7 +145,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 
 | Area | Status | Evidence / risk |
 |---|---|---|
-| Repository | Scheduling integration based on current main | `feature/clinician-appointment-offers` integrates `origin/main` through `4d9a469` on October 5; the original checkout and its uncommitted changes are preserved |
+| Repository | Scheduling integration based on current main | `feature/clinician-appointment-offers` integrates `origin/main` through `5203b28` on October 6; the original checkout and its uncommitted changes are preserved |
 | Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
 | Patient portal | Partial | Patients can view existing medications/obligations, documents, explanations, and basic feed/adherence statistics. The Today feed now guards plan-linked tasks by approved/effective plan state and shows plan provenance; live clinician-approved-plan acceptance remains unproven. |
 | Clinician portal | Partial | Roster, patient deep dive, document source viewer, extracted-fact review, and Care Plan draft/review surfaces exist; the fresh synthetic approval journey, consolidated action queues, and a longitudinal decision timeline remain incomplete. |
@@ -2450,15 +2450,29 @@ seed/reset, deployment, or PR merge is included in this preparation.
 portal lint/tests/builds, policy, placeholder, secret scan and CodeQL checks, but
 the backend audit rejected inherited `multidict` 6.7.1 (CVE-2026-104874) and
 `langgraph-sdk` 0.4.2 (CVE-2026-104873), skipping dependent backend jobs. Add explicit
-minimums and regenerate both locks with CI's uv 0.9.24: only package versions
-`multidict` → **6.9.1** and `langgraph-sdk` → **0.4.4** change. Both locks reproduce
-byte-for-byte with the canonical compiler commands. Python 3.12 `pip check` passes;
+minimums and regenerate both locks with CI's uv 0.9.24: local checks used
+`multidict` **6.9.1** and `langgraph-sdk` **0.4.4**. Both locks reproduced
+byte-for-byte with the canonical compiler commands. Python 3.12 `pip check` passed;
 `uvx --python <python3.12> --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt`
-reports **no known vulnerabilities**. Full backend tests rerun with patched dependencies:
+reported **no known vulnerabilities**. Full backend tests reran with patched dependencies:
 **1,733 passed, 20 opt-in skips, 85.72% coverage**, including all 31 appointment
 transaction tests. The initial local audit used unsupported system Python 3.14;
 explicit Python 3.12 resolved that environment failure. Portal advisories remain
 separate follow-up work. No audit ignores or CI bypasses were added.
+
+**Current-main integration — 2026-10-06:** PR #133 became conflicting when PRs
+#127, #130 and #131 reached main. Merge `origin/main` at `5203b28`. Main independently
+contained the same backend vulnerability floors, with `langgraph-sdk` **0.4.5** in
+both locks; the resolution uses main's three dependency files byte-for-byte. No
+backend dependency delta remains in the PR's final file diff. Preserve main's model
+capacity, care-plan access and chat changes alongside scheduling. The integrated
+Python 3.12 full backend suite passes **1,802 tests**, with **20 unrelated opt-in
+care-plan PostgreSQL skips** and **85.94% coverage**; all 31 appointment transaction
+tests run. Ruff check/format, mypy (209 files), migration validation (53 files),
+Python dependency compatibility and pip-audit pass. Portal lint/tests pass:
+**201 patient tests / 38 files** and **180 clinician tests / 30 files**.
+Both portals also pass typecheck and `npm run build -- --webpack` after the main
+integration. GitHub CI and peer review remain pending.
 
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed

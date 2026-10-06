@@ -49,8 +49,6 @@ passlib[bcrypt]
 httpx
 # Security floor for PYSEC-2026-4175, PYSEC-2026-4176, and PYSEC-2026-4177.
 urllib3>=2.8.0,<3.0.0
-# Security floor for CVE-2026-104874 (items-view reference leaks).
-multidict>=6.9.1
 
 # -- Logging --
 structlog
