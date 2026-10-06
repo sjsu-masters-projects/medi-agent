@@ -324,7 +324,8 @@ class ModelRouter:
                 system_instruction=system_instruction,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                thinking_level=thinking_level,
+                thinking_level=thinking_level
+                or ("MEDIUM" if TASK_MODEL_MAP.get(task_type) == "pro" else "LOW"),
                 task=task_type.value,
             )
         )

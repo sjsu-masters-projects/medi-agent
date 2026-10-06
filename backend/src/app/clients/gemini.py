@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncGenerator
 from typing import Any, TypeVar, cast
 
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.core.exceptions import LLMError
+from app.core.model_traffic import model_slot, record_attempt
 from app.models.generation import GenerationErrorCode, GenerationProviderError
 
 logger = logging.getLogger(__name__)
@@ -172,6 +174,7 @@ class GeminiClient:
             # was quietly routed through the legacy `vertexai` SDK. Changing a model name
             # in configuration must never change which client path runs.
             from google import genai
+            from google.genai import types
 
             logger.info(
                 "Initializing Gemini on Vertex: project=%s, location=%s, model=%s",
@@ -188,6 +191,7 @@ class GeminiClient:
                 vertexai=True,
                 project=settings.google_project_id,
                 location=settings.gemini_vertex_ai_location,
+                http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
             )
             self.model_name = model
             logger.info("Initialized GeminiClient on Vertex: %s", model)
@@ -312,11 +316,7 @@ class GeminiClient:
         for attempt in range(self.max_retries):
             try:
                 response = await asyncio.wait_for(
-                    self.genai_client.aio.models.generate_content(
-                        model=self.model_name,
-                        contents=contents,
-                        config=config,
-                    ),
+                    self._paced_genai_call(contents, config, attempt),
                     timeout=self.timeout,
                 )
 
@@ -396,6 +396,38 @@ class GeminiClient:
                 await asyncio.sleep(2**attempt)
 
         raise GenerationProviderError(GenerationErrorCode.UNAVAILABLE, "Gemini generation failed")
+
+    async def _paced_genai_call(self, contents: list[Any], config: Any, retry: int) -> Any:
+        started = time.monotonic()
+        endpoint = settings.gemini_vertex_ai_location
+        status: int | None = None
+        cause = "provider_error"
+        try:
+            async with model_slot(self.model_name, endpoint, background=True):
+                response = await self.genai_client.aio.models.generate_content(
+                    model=self.model_name, contents=contents, config=config
+                )
+            status, cause = 200, "none"
+            return response
+        except asyncio.CancelledError:
+            cause = "cancelled_or_deadline"
+            raise
+        except Exception as error:
+            for attribute in ("status_code", "code"):
+                candidate = getattr(error, attribute, None)
+                if isinstance(candidate, int):
+                    status = candidate
+                    break
+            raise
+        finally:
+            record_attempt(
+                model=self.model_name,
+                endpoint=endpoint,
+                status=status,
+                retry_count=retry,
+                cause=cause,
+                started=started,
+            )
 
     async def _generate_ai_studio(
         self,

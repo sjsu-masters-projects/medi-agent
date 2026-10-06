@@ -90,6 +90,26 @@ async def test_background_generation_records_primary_failure_then_uses_distinct_
 
 
 @pytest.mark.asyncio
+async def test_explanation_429_uses_the_current_full_flash_backup() -> None:
+    primary = MagicMock(
+        generate=AsyncMock(
+            side_effect=GenerationProviderError(GenerationErrorCode.RATE_LIMITED, "rate limited")
+        )
+    )
+    backup = MagicMock(generate=AsyncMock(return_value=_response(provider="backup_flash")))
+    with (
+        patch(
+            "app.adk.background_generation.provider_for", side_effect=[primary, backup]
+        ) as factory,
+        patch("app.adk.background_generation.schedule_generation_record"),
+    ):
+        response = await generate_for_workload(Workload.EXPLANATION, prompt="synthetic explanation")
+    assert factory.call_args_list[1].args[0].model_id == "gemini-3.5-flash"
+    assert backup.generate.await_args.args[0].thinking_level == "MEDIUM"
+    assert response.telemetry.fallback_path == ["flash:rate_limited", "backup_flash"]
+
+
+@pytest.mark.asyncio
 async def test_background_generation_normalizes_wall_clock_expiry() -> None:
     provider = MagicMock()
     provider.generate = AsyncMock(side_effect=TimeoutError())

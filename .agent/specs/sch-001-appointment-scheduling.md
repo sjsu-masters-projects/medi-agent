@@ -650,12 +650,13 @@ Live UI/API evidence remains the October 3 acceptance described above; importing
 download into an external calendar application remains a reviewer step.
 
 PR #133's first CI run exposed two inherited backend advisories. Security floors
-and both generated locks now require `multidict` 6.9.1 and `langgraph-sdk` 0.4.4;
-all other locked versions remain unchanged. Locks reproduce with CI's uv 0.9.24,
-Python 3.12 dependency compatibility passes, and pip-audit 2.10.1 reports no known
-vulnerabilities. The full backend suite rerun with these packages retains the same
-1,733 passes, 20 opt-in skips and 85.72% coverage above. Portal dependency findings
-remain open; no CI security gate was weakened.
+and both generated locks were first verified locally with `multidict` 6.9.1 and
+`langgraph-sdk` 0.4.4. The full backend suite rerun with those versions retained
+1,733 passes, 20 opt-in skips and 85.72% coverage. Main independently fixed the
+same advisories; after integrating `5203b28` on October 6, this PR uses main's
+three dependency files byte-for-byte, including `langgraph-sdk` 0.4.5. The final
+PR diff has no backend dependency change. Recheck the combined branch and CI before
+review. Portal dependency findings remain open; no CI security gate was weakened.
 
 ### Steps to see the changes
 

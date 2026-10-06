@@ -107,6 +107,15 @@ TRIAGE_LITE: Final = ModelSpec(
 )
 
 
+BACKUP_FLASH: Final = ModelSpec(
+    key="backup_flash",
+    # Patient-facing prose must not degrade to the classification-only Lite model.
+    model_id=settings.gemini_fallback_model,
+    transport=Transport.VERTEX_GENAI,
+    honours_response_schema=True,
+)
+
+
 THINKING_LEVELS: Final = frozenset({"LOW", "MEDIUM", "HIGH"})
 """Thinking ceilings this product may request.
 
@@ -168,9 +177,9 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         # else.
         deterministic="emergency safety floor, then the localized service-unavailable message",
         enabled_setting="triage_ai_enabled",
-        # The tool call is a small enum plus a bounded reason. Keep enough room for low
-        # thinking while preventing a classifier from spending reply-sized output.
-        max_output_tokens=512,
+        # Native tool calls can need a context read before the decision. The 512-token
+        # proxy check alone does not cover that multi-call path; allow thinking plus tools.
+        max_output_tokens=1024,
         thinking_level="LOW",
     ),
     # Patient-facing prose, where Flash's fluency and its perfect schema record matter
@@ -180,7 +189,7 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
     Workload.REPLY: WorkloadRoute(
         workload=Workload.REPLY,
         primary=FLASH,
-        fallback=TRIAGE_LITE,
+        fallback=BACKUP_FLASH,
         # Normal replies measured at 3-4 seconds in production. Ten seconds leaves enough
         # of the 30-second whole-turn ceiling for the declared fallback to answer.
         budget_seconds=10.0,
@@ -221,7 +230,9 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
     Workload.ADR_EXTRACTION: WorkloadRoute(
         workload=Workload.ADR_EXTRACTION,
         primary=FLASH,
-        fallback=TRIAGE_LITE,
+        # The backup changed source timelines; Pro missed half of the 15-second
+        # deadlines. Neither is qualified to persist an intake report on failure.
+        fallback=None,
         budget_seconds=15.0,
         # There used to be a rule-based extractor here, inferring the symptom from
         # substrings and inventing a severity when the model was unavailable — "worst
@@ -231,20 +242,23 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         # worse than one that does not, so nothing is recorded now and the patient is told.
         deterministic="no symptom report is written and the patient is told so",
         enabled_setting="adr_extraction_ai_enabled",
-        max_output_tokens=2048,
+        max_output_tokens=4096,
+        # MEDIUM exceeded the 15-second deadline in the bilingual intake check. This
+        # extracts stated fields, not an autonomous differential diagnosis.
         thinking_level="LOW",
     ),
     Workload.EXPLANATION: WorkloadRoute(
         workload=Workload.EXPLANATION,
         primary=FLASH,
-        fallback=TRIAGE_LITE,
+        fallback=BACKUP_FLASH,
         budget_seconds=20.0,
         deterministic="localized explanation template",
         enabled_setting="explanation_ai_enabled",
         # Measured: the bilingual explanation answer runs 950-1166 tokens and truncated
         # outright at 1024, so this is the workload that proved 1024 is too small.
-        max_output_tokens=2048,
-        thinking_level="LOW",
+        # Leave room for MEDIUM thinking as well as the complete bilingual explanation.
+        max_output_tokens=4096,
+        thinking_level="MEDIUM",
     ),
     # This is an evidence-only categorization. The service validates that every supplied
     # fact id returns exactly once and copies patient-facing wording from the source fact;
@@ -274,7 +288,13 @@ def _validate() -> None:
             raise ValueError(f"Route for {workload.value} is keyed as {route.workload.value}")
         if not route.deterministic.strip():
             raise ValueError(f"Workload {workload.value} has no deterministic path")
-        if route.fallback is not None and route.fallback.key == route.primary.key:
+        if route.fallback is not None and (
+            route.fallback.key == route.primary.key
+            or (
+                route.fallback.model_id == route.primary.model_id
+                and route.fallback.transport == route.primary.transport
+            )
+        ):
             raise ValueError(
                 f"Workload {workload.value} falls back to its own primary, which is a delay "
                 "rather than a fallback"

@@ -21,6 +21,104 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-004-A companion naming — 2026-10-05 (ready for review).** Replace the assistant's
+Maya identity with MediGuide in PR #131. Keep its name in one shared constant,
+identify it explicitly as an AI care assistant, and localize typing/identity copy
+for en-US and es-MX. Synthetic patient names and stored conversation content must
+remain unchanged. Patient `npm run test`: **113 passed** including English/Spanish
+identity and typing regressions; `npm run typecheck`, `npm run lint`, and
+`npm run build -- --webpack` passed (existing non-fatal Sentry warnings).
+Source search found no remaining assistant Maya identity; patient fixtures and
+historical QA references are intentionally retained. Live rename awaits deployment.
+
+**PR #130/#131 integration review — 2026-10-05 (locally verified, CI pending).** Merge main's
+capacity retry tests into the routing branch without rewriting history; retain
+both bilingual 429 fallback and missing-decision fail-closed regressions. Review
+symptom error diagnostics for patient-content leakage, then verify the integrated
+backend and patient naming change. Keep #131 stacked on #130 until #130 merges;
+no PR merge or deployment is authorized by this preparation task. Integrated #130
+verification: **1,660 backend tests passed, 20 opt-in PostgreSQL skipped, 85.43%
+coverage**; 67 focused capacity/chat/intake regressions passed; source/scripts Ruff
+and formatting, and source mypy passed. Symptom validation/provider failures now
+log only categorized reasons, with regression coverage against patient-content leaks.
+Combined #131: **1,685 passed, 20 opt-in PostgreSQL skipped, 85.55% coverage**;
+source/scripts Ruff/format and mypy passed. Patient portal: **113 tests passed**,
+typecheck/lint/webpack build passed with existing non-fatal Sentry warnings.
+Backend locked dependency audit found no known vulnerabilities. Peer approval,
+green pushed-commit CI and sequential #130 then #131 integration remain required.
+
+**PAT-005 return after model selection — 2026-10-05.** Keep the EVA-001 Gemini
+lineup; do not expand provider research. The supplied PAT-005 plan matches the existing
+active specification and does not require a duplicate document. Pre-testing on the
+current working tree: backend full pytest **1,635 passed, 20 opt-in PostgreSQL skipped**;
+patient `npm run test` **112 passed**; clinician **137 passed**. Both portals passed
+`npm run typecheck`, `npm run lint` and `npm run build -- --webpack` (non-fatal existing
+Sentry configuration warnings; clinician also reports workspace-root ambiguity).
+Root `git diff --check` passed. Live acceptance is not inferred from these
+local checks: only the Supabase browser tab was visible, and opening the patient tab
+failed browser-session attachment. Request patient/assigned-clinician portal sessions
+before resuming live checks. No remote reset, migration, deployment or publication occurred.
+
+Next PAT-005 acceptance sequence: inspect Morgan's current evidence and approved/draft
+state without resetting; verify protected sources and approval blockers; compare saved
+Today preview with publication; verify patient completion and every barrier category
+in clinician follow-up; then verify new-evidence v2 continuity, unchanged history,
+assignment denial and audit reconstruction. Do not publish unreconciled historical
+medications or mark the full checklist complete from local tests alone.
+
+**Morgan live follow-up — 2026-10-05, approximately 21:52 Pacific.** Patient Morgan
+and assigned clinician Elena sessions were accessible. Navigated the clinician from
+Maya to Morgan's known test record. Approved V1 has one Metformin record and three
+activities; Today has two scheduled medication doses plus those activities. Source
+preview for the medication order opened successfully. A first medication-completion
+attempt displayed an unconfirmed-save warning; reload showed no completion. One retry
+then saved the morning dose as completed. A whitespace-only Other barrier note kept
+submission disabled. Submitted a clearly labeled synthetic hydration Other barrier;
+Elena's adherence view showed the correct activity and full note, with 2 completed /
+4 historical responses (50%). Patient reload retained both new response states.
+Screenshot evidence is local/ignored: `backend/reports/morgan-followup-20261005.jpg`.
+No documents deleted, plan revised/published, reminder changed or migration run.
+
+Open observations: the header shows 0% adherence while detailed recorded completion
+shows 50%; header reads the risk summary rather than the response-history metric, so
+do not label these equivalent or infer a failed response save. Initial transient-save
+failure cause is not established. V2 publication continuity, every barrier category,
+unassigned-account denial and audit reconstruction remain unverified in this run.
+This live deployed check does not verify the unmerged Gemini tuning branch.
+
+**PAT-005 acceptance follow-up — 2026-10-05 (in progress).** Routing evaluation is
+separate in PR #130. Preserve Morgan's approved V1 and response history while checking
+V2 continuity, remaining barrier categories, unrelated-account denial and the audit
+timeline. The header discrepancy has a concrete defect: RiskScoreService counts
+`completed` but not medication `taken`, unlike the detailed adherence view. Fix the
+shared risk-summary calculation and cover mixed statuses without changing thresholds.
+The initial save failure remains unexplained; do not infer an authentication cause.
+Opt-in local PostgreSQL checks cannot initialize because macOS shared-memory IDs are
+exhausted; no database assertions ran. Do not change kernel settings or report them
+passed. Live isolation requires separate synthetic-account sessions.
+
+Verification: backend `pytest -q --disable-warnings` **1,641 passed, 20 opt-in
+PostgreSQL skipped**, **85.44% coverage**; source Ruff/format and mypy passed. Added
+13 router-level ownership/assignment denials using the real service guard, two
+foreign-target response denials and six barrier persistence contracts. These use
+mock database boundaries and do not establish deployed RLS coverage. Live Marcus
+direct navigation to Morgan was denied with no patient data or plan controls.
+Read-only Supabase audit shows worker generation, clinician edit/publication,
+four patient responses and the retained 08:00/18:00 medication reminder. There is
+no actor on automatic generation; its request ID identifies the worker operation.
+Historical edits retain counts/removal IDs, not full intermediate wording snapshots.
+Cloud Run request-status inspection found two successful POSTs (201), no failed
+POST in the checked initial-save window, and a successful preflight; the failure
+cause is still unknown. No payloads, tokens or private reasoning were logged.
+New portal tabs share sign-in state (Daniel/Marcus); restoring Morgan/Elena is
+needed before live V2/barrier writes. V2 and the remaining four live barrier
+categories remain open. No remote plan changes, reset, migration or deployment.
+
+PR #131 is based on PR #130 to include its audited dependency patch without
+duplicating the routing diff. Combined-branch verification with patched packages:
+**1,660 passed, 20 opt-in PostgreSQL skipped, 85.45% coverage**. Merge/review order is
+#130 first, then retarget #131 to main. Neither PR has been merged or deployed here.
+
 **PAT-005 follow-through fixes — 2026-10-03 (ready for review).** Package the fresh
 Morgan QA findings with the five-document worker batch: count medication `taken`
 events, distinguish future doses, flag medication wording overlaps for review,
@@ -47,7 +145,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 
 | Area | Status | Evidence / risk |
 |---|---|---|
-| Repository | Scheduling integration based on current main | `feature/clinician-appointment-offers` integrates `origin/main` through `4d9a469` on October 5; the original checkout and its uncommitted changes are preserved |
+| Repository | Scheduling integration based on current main | `feature/clinician-appointment-offers` integrates `origin/main` through `5203b28` on October 6; the original checkout and its uncommitted changes are preserved |
 | Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
 | Patient portal | Partial | Patients can view existing medications/obligations, documents, explanations, and basic feed/adherence statistics. The Today feed now guards plan-linked tasks by approved/effective plan state and shows plan provenance; live clinician-approved-plan acceptance remains unproven. |
 | Clinician portal | Partial | Roster, patient deep dive, document source viewer, extracted-fact review, and Care Plan draft/review surfaces exist; the fresh synthetic approval journey, consolidated action queues, and a longitudinal decision timeline remain incomplete. |
@@ -728,6 +826,26 @@ open for sandbox-specific diagnosis.
 ---
 
 ### AI-003 — Agent runtime overhaul
+
+**2026-10-03 capacity follow-up (implemented; not deployed):** One deadline-bounded
+interactive 429 retry, process-local endpoint/model admission and start pacing,
+background slot reservation, and sanitized per-attempt diagnostics are implemented.
+The global preflight checked Flash-Lite and evaluation-only GPT OSS in English and
+Spanish: initial run 7/8 first attempts, one deadline/fallback and one strict JSON-key
+failure; corrected synthetic prompt run 8/8 first attempts and response contracts.
+No live 429 occurred: recovery evidence comes from controlled regressions, not a
+production availability claim. Model routing remains unchanged. Exact verification
+and limits are in `docs/decisions/ai-runtime-2026-09.md`; deployment and sustained
+production metrics remain acceptance work. No migration or remote config changes.
+Verification from `backend/`: `PYTHONPATH=src .venv/bin/python -m pytest -q
+--disable-warnings` passed 1,636 tests, skipped 20 opt-in PostgreSQL tests, and
+reached 85.49% coverage. `.venv/bin/ruff check src scripts` and changed-test lint,
+`.venv/bin/ruff format --check src scripts` and changed-test formatting, and
+`.venv/bin/mypy src` passed. `git diff --check` passed. Paid operator check:
+`VERTEX_AI_LOCATION=global GEMINI_VERTEX_AI_LOCATION=global PYTHONPATH=src
+.venv/bin/python scripts/preflight_model_capacity.py --include-oss`; the final
+eight-case run passed. The first run's failed format check remains documented;
+no clinical-quality or deployed end-to-end acceptance claim follows from it.
 
 **Status:** `[/]` In progress
 
@@ -2332,15 +2450,24 @@ seed/reset, deployment, or PR merge is included in this preparation.
 portal lint/tests/builds, policy, placeholder, secret scan and CodeQL checks, but
 the backend audit rejected inherited `multidict` 6.7.1 (CVE-2026-104874) and
 `langgraph-sdk` 0.4.2 (CVE-2026-104873), skipping dependent backend jobs. Add explicit
-minimums and regenerate both locks with CI's uv 0.9.24: only package versions
-`multidict` → **6.9.1** and `langgraph-sdk` → **0.4.4** change. Both locks reproduce
-byte-for-byte with the canonical compiler commands. Python 3.12 `pip check` passes;
+minimums and regenerate both locks with CI's uv 0.9.24: local checks used
+`multidict` **6.9.1** and `langgraph-sdk` **0.4.4**. Both locks reproduced
+byte-for-byte with the canonical compiler commands. Python 3.12 `pip check` passed;
 `uvx --python <python3.12> --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt`
-reports **no known vulnerabilities**. Full backend tests rerun with patched dependencies:
+reported **no known vulnerabilities**. Full backend tests reran with patched dependencies:
 **1,733 passed, 20 opt-in skips, 85.72% coverage**, including all 31 appointment
 transaction tests. The initial local audit used unsupported system Python 3.14;
 explicit Python 3.12 resolved that environment failure. Portal advisories remain
 separate follow-up work. No audit ignores or CI bypasses were added.
+
+**Current-main integration — 2026-10-06:** PR #133 became conflicting when PRs
+#127, #130 and #131 reached main. Merge `origin/main` at `5203b28`. Main independently
+contained the same backend vulnerability floors, with `langgraph-sdk` **0.4.5** in
+both locks; the resolution uses main's three dependency files byte-for-byte. No
+backend dependency delta remains in the PR's final file diff. Preserve main's model
+capacity, care-plan access and chat changes alongside scheduling. Recheck the
+integrated full backend suite, static checks, lock/audit, portal tests/builds and CI
+before review; review/merge remains pending.
 
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed
@@ -2512,6 +2639,40 @@ separate follow-up work. No audit ignores or CI bypasses were added.
 
 ### EVA-001 — Internal model and safety evaluation
 
+**Review gate — 2026-10-05.** PR #130 packages workload tuning. Its dependency audit
+identified CVE-2026-104873 and CVE-2026-104874 in the inherited locks. Narrow upgrades
+to `langgraph-sdk` 0.4.5 and `multidict` 6.9.1 reproduce exactly with CI's uv 0.9.24;
+`uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt` reports no known
+vulnerabilities. These are patched, not suppressed. No remote deployment performed.
+
+**Gemini workload tuning — 2026-10-04 (local verification).** Select current native
+Gemini models without hosting MedGemma: 3.5 Flash-Lite for classification, 3.8 Flash
+for clinical text/evidence, and distinct 3.5 Flash for prose fallback. Intake has no
+qualified backup: 3.5 Flash changed source timing and Pro missed 5/10 deadlines. Retain
+3.1 Pro preview only in compatibility/evaluation paths with explicit MEDIUM thinking.
+Connect symptom extraction/replies to bounded registry routes; reject missing chat
+decisions and tighten medication-experiment/imaginary-notification instructions.
+Acceptance includes bilingual raw-answer review, actual in-memory chat/tool calls,
+primary-429/fallback and localized no-report failure regressions, workflow setting parity,
+Ruff/format, mypy, and the full backend suite. No remote configuration, migration,
+patient writes or deployment is authorized by this task. Evidence and remaining
+medical-fidelity limitations are in the runtime decision record's October 4–5 section.
+
+**Final verification — 2026-10-05:** from `backend`,
+`PYTHONPATH=src .venv/bin/pytest --no-cov -q -o addopts='' --disable-warnings`
+passed **1,635 tests**, with **20 opt-in PostgreSQL tests skipped** (112 warnings).
+`.venv/bin/mypy src` passed on 207 source files. `.venv/bin/ruff check src scripts`
+plus all changed unit-test files passed; the matching `ruff format --check` invocation
+passed on 233 files. Root `git diff --check` passed. The broader
+`.venv/bin/ruff check src scripts tests/unit` also exposed four unrelated existing
+violations in `core/test_security.py`, `db/test_supabase_execute.py`, and
+`services/test_drug_knowledge_service.py`; those were not changed or represented as green.
+Global native probes totaled 144 attempts with 131 returned and 13 deadline expiries,
+not 131 medically adjudicated passes. Final actual bilingual ADK chat: 8/8 expected
+urgency and non-degraded answers. Pro intake rejected; historical medication, lab
+extraction, and composite-citation qualification gaps remain. No commit, pull request,
+deployment or migration was performed by this task.
+
 - [ ] Create 120 synthetic scenarios across all required risk classes.
 - [ ] Mirror high-risk scenarios in English and Spanish.
 - [ ] Obtain clinician/pharmacist adjudication for at least 40 high-risk cases.
@@ -2520,6 +2681,18 @@ separate follow-up work. No audit ignores or CI bypasses were added.
       and NIM and reports latency and outcome per provider. First measurement recorded below.
 - [ ] Select default and fallback providers from results.
 - [ ] Store repeatable evaluation inputs, rubrics, results, and environment metadata.
+
+**Medical-capability evidence — 2026-10-03:** free-text global-endpoint comparison of five
+Gemini variants and GPT-OSS 120B/20B, using 16 existing fixtures and six additional bilingual
+medical challenges. Available raw final answers are reviewed for knowledge, source fidelity,
+locale, and authority boundaries; provider failures are tracked separately. Medical-model
+research covers MedGemma, MeditronFO, Med42-v2, and BioMistral, without provisioning compute
+or claiming those models were API-tested. See the [runtime pilot evidence](../docs/decisions/ai-runtime-2026-09.md#medical-capability-pilot--2026-10-03)
+and ignored local artifacts in `backend/reports/medical-knowledge-20261003/`.
+154 calls completed with 140 returned final answers inspected; GPT-OSS-120B had two
+rate-limit failures and eleven timeouts, while Gemini 3.8 Flash returned all 22 answers.
+This is not clinician-adjudicated, does not close the 120-case/40-adjudication milestones,
+and does not change production routing.
 
 **Provider evidence — 2026-09-11 — `openai/gpt-oss-20b` via NVIDIA NIM**
 

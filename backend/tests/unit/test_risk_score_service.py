@@ -208,6 +208,27 @@ class TestRiskSignalFetching:
         assert score == pytest.approx(2 / 3)
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("statuses", "expected"),
+        [
+            (["taken", "completed", "skipped", "missed"], 0.5),
+            (["taken", "taken"], 1.0),
+            (["skipped", "missed"], 0.0),
+            ([], None),
+        ],
+    )
+    async def test_risk_summary_counts_medication_and_activity_completion(
+        self, service, statuses, expected
+    ):
+        service._execute = AsyncMock(  # type: ignore[method-assign]
+            return_value=_response(data=[{"status": status} for status in statuses])
+        )
+
+        score = await service._fetch_adherence_score(uuid4())
+
+        assert score == expected
+
+    @pytest.mark.asyncio
     async def test_fetch_recent_symptom_severity_uses_max_and_defaults_missing_values(
         self, service
     ):

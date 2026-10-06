@@ -187,6 +187,17 @@ guarded approval, Today projection, medication completion and a clinician-visibl
 barrier. Post-deployment verification of these follow-through fixes, five-document live
 worker timing, v2 continuity and the complete denial/bilingual matrix remain open.
 
+The October 5 follow-up found that the risk-summary header still counted only
+`completed`, even though the detailed view also counted medication `taken`. The
+follow-up fix aligns these 30-day recorded-response ratios; neither is a measure
+of all expected doses. Risk thresholds are unchanged. Live unassigned-clinician
+navigation was denied; router regressions also exercise edit/approval/ownership
+guards. Mock database tests are not a substitute for deployed RLS checks.
+Read-only audit reconstruction verified generation request, editing/approval actor,
+publication linkage and subsequent responses for V1. Intermediate edit wording
+snapshots are not retained. V2 continuity, the full live barrier matrix and the
+initial unconfirmed-save cause remain acceptance work, not completed items.
+
 - [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
       patient uploads.
 - [ ] Several completed documents inside the quiet window create one draft.

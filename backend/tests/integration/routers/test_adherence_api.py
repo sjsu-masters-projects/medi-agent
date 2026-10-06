@@ -68,6 +68,68 @@ def override_db(mock_supabase_db):
 class TestLogAdherence:
     """POST /api/v1/adherence/ - Log adherence event."""
 
+    @pytest.mark.parametrize("target_type", ["medication", "obligation"])
+    def test_foreign_patient_target_is_rejected_before_insert(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id, target_type
+    ):
+        target_id = uuid4()
+        query = mock_supabase_db.table.return_value
+        query.execute.return_value = MagicMock(data=[])
+
+        response = client.post(
+            "/api/v1/adherence/",
+            json={
+                "target_type": target_type,
+                "target_id": str(target_id),
+                "status": "skipped",
+                "barrier_code": "cost",
+            },
+        )
+
+        assert response.status_code == 422
+        query.eq.assert_any_call("id", str(target_id))
+        query.eq.assert_any_call("patient_id", str(patient_id))
+        query.insert.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "barrier", ["side_effects", "cost", "access", "schedule", "confusion", "other"]
+    )
+    def test_every_barrier_is_persisted_and_returned_without_substitution(
+        self, client, override_auth, override_db, mock_supabase_db, patient_id, barrier
+    ):
+        target_id = uuid4()
+        note = f"Synthetic QA: {barrier}; not a clinical report."
+        query = mock_supabase_db.table.return_value
+        query.execute.return_value = MagicMock(data=[{"id": str(target_id)}])
+        saved = {
+            "id": str(uuid4()),
+            "patient_id": str(patient_id),
+            "target_type": "obligation",
+            "target_id": str(target_id),
+            "status": "skipped",
+            "barrier_code": barrier,
+            "notes": note,
+            "logged_at": "2026-10-05T18:00:00Z",
+        }
+        query.insert.return_value.execute.return_value = MagicMock(data=[saved])
+
+        response = client.post(
+            "/api/v1/adherence/",
+            json={
+                "target_type": "obligation",
+                "target_id": str(target_id),
+                "status": "skipped",
+                "barrier_code": barrier,
+                "notes": note,
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["barrier_code"] == barrier
+        assert response.json()["notes"] == note
+        assert query.insert.call_args.args[0]["patient_id"] == str(patient_id)
+        assert query.insert.call_args.args[0]["barrier_code"] == barrier
+
     @pytest.mark.parametrize("path", ["/api/v1/adherence", "/api/v1/adherence/"])
     def test_success_medication_completed(
         self, client, override_auth, override_db, mock_supabase_db, patient_id, path

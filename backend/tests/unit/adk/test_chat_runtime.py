@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from google.adk.agents import LlmAgent, SequentialAgent
-from google.adk.models import BaseLlm, LlmResponse
+from google.adk.models import BaseLlm, FallbackModel, LlmResponse
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService
 from google.genai import types
@@ -30,6 +30,7 @@ from app.adk.agents.care_coordinator import (
     TOOL_ALLOWLIST,
 )
 from app.adk.chat_runtime import APP_NAME, CareCoordinatorRuntime
+from app.adk.models.resilient import ResilientLlm
 from app.adk.runner import build_runner
 from app.adk.tools import DOCUMENT_CONTEXT_STATE_KEY, submit_triage_decision
 from app.models.enums import Language
@@ -389,15 +390,66 @@ async def test_an_outage_still_points_at_emergency_care() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_turn_without_a_decision_still_answers() -> None:
-    """A missed tool call costs the label, not the reply, which is grounded either way."""
-    events = await _turn(_runtime(decision=None), "when do I take my metformin")
+@pytest.mark.parametrize("language", [Language.EN.value, Language.ES.value])
+@pytest.mark.parametrize("backup_fails", [False, True])
+async def test_429_retry_then_backup_or_localized_unavailable(
+    language: str,
+    backup_fails: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapacityError(Exception):
+        status_code = 429
+        headers = {"Retry-After": "0"}
+
+    class CapacityModel(BaseLlm):
+        calls: int = 0
+
+        async def generate_content_async(self, llm_request: Any, stream: bool = False) -> Any:
+            self.calls += 1
+            raise CapacityError()
+            yield  # pragma: no cover
+
+    monkeypatch.setattr("app.adk.models.resilient.random.uniform", lambda a, b: 0)
+    monkeypatch.setattr("app.config.settings.model_min_start_interval_seconds", 0)
+    runner = _build_runner(decision=STANDARD_DECISION)
+    primary = CapacityModel(model="throttled-primary")
+    backup = CapacityModel(model="throttled-backup") if backup_fails else _Responder(model="backup")
+    responder = runner.agent.sub_agents[1]
+    responder.model = FallbackModel(
+        models=[
+            ResilientLlm(model=m.model, delegate=m, timeout_seconds=2, retry_429=True)
+            for m in [primary, backup]
+        ]
+    )
+    events = await _turn(CareCoordinatorRuntime(runner=runner), "hello", language=language)
+    assert primary.calls == 2
+    complete = _first(events, "complete")
+    expected = (
+        resolve_locale_resource(language, TRIAGE_COPY)["service_unavailable"]
+        if backup_fails
+        else REPLY
+    )
+    assert complete["response_text"] == expected
+    assert complete["fallback_used"] is backup_fails
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("language", [Language.EN, Language.ES])
+async def test_a_turn_without_a_decision_does_not_expose_generated_advice(language) -> None:
+    """A missing decision must not masquerade as successfully completed triage."""
+    events = await _turn(_runtime(decision=None), "when do I take my metformin", language=language)
 
     classification = _first(events, "classification")
 
     assert classification["intent"] == "general"
     assert classification["urgency"] == "routine"
-    assert _first(events, "complete")["response_text"] == REPLY
+    complete = _first(events, "complete")
+    assert (
+        complete["response_text"]
+        == resolve_locale_resource(language.value, TRIAGE_COPY)["service_unavailable"]
+    )
+    assert complete["fallback_used"] is True
+    assert REPLY not in _chunks(events)
 
 
 @pytest.mark.asyncio
