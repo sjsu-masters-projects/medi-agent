@@ -4,6 +4,7 @@ import VisitsPage from "@/app/(app)/visits/page";
 import { AppointmentStatus, type Appointment } from "@/types";
 
 const respond = vi.fn();
+const push = vi.fn();
 const retrySettings = vi.fn();
 let settings: {
   profile: { preferredLanguage: "en-US" | "es-MX"; timezone: string } | null;
@@ -30,7 +31,7 @@ interface VisitsHookState {
 let hookState: VisitsHookState;
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ back: vi.fn(), push }),
 }));
 
 vi.mock("@/hooks/use-visits-data", () => ({
@@ -56,6 +57,7 @@ function makeVisit(overrides: Partial<Appointment> = {}): Appointment {
 beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-05-07T00:30:00Z"));
   respond.mockReset();
+  push.mockReset();
   retrySettings.mockReset();
   settings = {
     profile: { preferredLanguage: "en-US", timezone: "America/Los_Angeles" },
@@ -80,6 +82,28 @@ afterEach(() => {
 });
 
 describe("VisitsPage", () => {
+  it.each([
+    ["en-US", "Open chat", false],
+    ["en-US", "Open chat", true],
+    ["es-MX", "Abrir chat", false],
+    ["es-MX", "Abrir chat", true],
+  ] as const)(
+    "opens %s chat using %s with visits present: %s",
+    (locale, label, hasVisits) => {
+      settings.profile!.preferredLanguage = locale;
+      hookState.visits = hasVisits ? [makeVisit()] : [];
+      render(<VisitsPage />);
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(push).toHaveBeenCalledWith("/chat");
+    },
+  );
+
+  it("prevents chat navigation while saving a visit response", () => {
+    hookState.visits = [makeVisit()];
+    hookState.respondingId = "appt-1";
+    render(<VisitsPage />);
+    expect(screen.getByRole("button", { name: "Open chat" })).toBeDisabled();
+  });
   it.each(["en-US", "es-MX"] as const)(
     "offers calendar export only for booked visits in %s",
     (locale) => {
@@ -151,7 +175,12 @@ describe("VisitsPage", () => {
       render(<VisitsPage />);
       expect(screen.getByText(label)).toBeInTheDocument();
       expect(screen.getByText(/As written/)).toBeInTheDocument();
-      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button")).toHaveLength(1);
+      expect(
+        screen.getByRole("button", {
+          name: locale === "en-US" ? "Open chat" : "Abrir chat",
+        }),
+      ).toBeInTheDocument();
     },
   );
 

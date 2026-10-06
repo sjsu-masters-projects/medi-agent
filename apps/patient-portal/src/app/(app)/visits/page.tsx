@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { HiOutlineCalendarDays } from "react-icons/hi2";
 import { VisitOfferCard } from "@/components/features/visit-offer-card";
 import { CalendarExportButton } from "@/components/features/calendar-export-button";
@@ -260,6 +261,7 @@ function VisitGroup({
 }
 
 export default function VisitsPage() {
+  const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const updateClock = () => setNow(Date.now());
@@ -465,6 +467,23 @@ export default function VisitsPage() {
             ) : null}
           </>
         )}
+        {!loading && !settings.loading && !error ? (
+          <Card>
+            <h2 className="font-semibold text-slate-900">
+              {copy.chatHelp.title}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              {copy.chatHelp.description}
+            </p>
+            <Button
+              className="mt-4"
+              onClick={() => router.push("/chat")}
+              disabled={Boolean(respondingId)}
+            >
+              {copy.chatHelp.open}
+            </Button>
+          </Card>
+        ) : null}
       </div>
     </div>
   );

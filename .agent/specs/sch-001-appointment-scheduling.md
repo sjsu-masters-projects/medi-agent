@@ -706,9 +706,16 @@ Fresh local verification excluding the unavailable macOS PostgreSQL fixture pass
 1,788 backend tests with 20 unrelated opt-in skips and 85.99% coverage. The 31
 appointment transaction cases failed during local cluster setup because shared-memory
 IDs were exhausted; this run establishes no fresh PostgreSQL assertions. Patient
-224 tests and clinician 180 tests pass, as do portal lint/typecheck/webpack builds,
+229 tests and clinician 180 tests pass, as do portal lint/typecheck/webpack builds,
 backend Ruff/format/mypy and 53-file migration validation. Backend and both portal
 production dependency audits are clean; each portal still has six development-only
 high findings. Historical PostgreSQL evidence above is not a substitute for the
 cumulative pushed head's CI transaction proof. CI now exposes server binaries and
 rejects missing, skipped or failing appointment transaction cases before merge.
+
+An independent run of the unchanged transaction file passed all 31 cases in a
+network-disabled disposable PostgreSQL 16.10 container with temporary command
+forwarding and Python 3.13.2. Final-head Ubuntu Python 3.12 CI remains the delivery
+gate. The Visits-to-chat shortcut is retained with localized general-guidance copy;
+it does not imply direct patient-to-care-team messaging. Original PR #97/#98 history
+is preserved without restoring the superseded response writer or Visits service.

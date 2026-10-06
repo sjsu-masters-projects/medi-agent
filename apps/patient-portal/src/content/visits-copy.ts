@@ -5,6 +5,12 @@ import {
 } from "@/types";
 
 const english = {
+  chatHelp: {
+    title: "Need help with a visit?",
+    description:
+      "Open chat for general guidance. Use Visits to choose or change appointment times.",
+    open: "Open chat",
+  },
   minutes: "min",
   preparationNotes: "Preparation notes",
   upcomingSummary: { one: "upcoming visit", other: "upcoming visits" },
@@ -91,6 +97,12 @@ const english = {
 };
 export type VisitsCopy = typeof english;
 const spanish: VisitsCopy = {
+  chatHelp: {
+    title: "¿Necesitas ayuda con una cita?",
+    description:
+      "Abre el chat para orientación general. Usa Citas para elegir o cambiar los horarios.",
+    open: "Abrir chat",
+  },
   minutes: "min",
   preparationNotes: "Notas de preparación",
   upcomingSummary: { one: "próxima cita", other: "próximas citas" },

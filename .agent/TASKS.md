@@ -2487,10 +2487,18 @@ Fresh isolated backend verification excluding the failed local PostgreSQL setup:
 transaction cases encountered macOS shared-memory-ID exhaustion before assertions;
 do not describe them as passed or silently skipped. Require the pushed head's Ubuntu
 CI to run every case with zero skips. Backend Ruff/format (226 files), mypy (209
-source files) and 53-file migration validation pass. Patient **224 tests** and
+source files) and 53-file migration validation pass. Patient **229 tests** and
 clinician **180 tests**, portal lint/typecheck/webpack builds, backend dependency
 audit and both portal production audits pass. Six development-only high npm findings
 per portal remain. Merge and deployed acceptance are still pending.
+
+Separate independent verification ran the unchanged 31 appointment transaction
+tests against disposable Docker PostgreSQL 16.10: **31 passed, 3 warnings, 27.06s**
+using Python 3.13.2 and temporary command forwarding. The container had no network,
+published ports or host mounts and was cleaned up. This establishes local SQL
+assertions, not final pushed-head Python 3.12 CI. The restored Visits-to-chat shortcut
+uses bilingual general-guidance copy rather than claiming direct care-team messaging.
+The latest requester instruction is to push for review and leave merges to humans.
 
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed
