@@ -434,15 +434,22 @@ async def test_429_retry_then_backup_or_localized_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_a_turn_without_a_decision_still_answers() -> None:
-    """A missed tool call costs the label, not the reply, which is grounded either way."""
-    events = await _turn(_runtime(decision=None), "when do I take my metformin")
+@pytest.mark.parametrize("language", [Language.EN, Language.ES])
+async def test_a_turn_without_a_decision_does_not_expose_generated_advice(language) -> None:
+    """A missing decision must not masquerade as successfully completed triage."""
+    events = await _turn(_runtime(decision=None), "when do I take my metformin", language=language)
 
     classification = _first(events, "classification")
 
     assert classification["intent"] == "general"
     assert classification["urgency"] == "routine"
-    assert _first(events, "complete")["response_text"] == REPLY
+    complete = _first(events, "complete")
+    assert (
+        complete["response_text"]
+        == resolve_locale_resource(language.value, TRIAGE_COPY)["service_unavailable"]
+    )
+    assert complete["fallback_used"] is True
+    assert REPLY not in _chunks(events)
 
 
 @pytest.mark.asyncio

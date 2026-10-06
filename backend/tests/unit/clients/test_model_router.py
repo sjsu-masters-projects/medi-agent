@@ -123,6 +123,25 @@ async def test_generate_text_falls_back_to_flash_provider():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("explicit, expected", [(None, "MEDIUM"), ("HIGH", "HIGH")])
+async def test_pro_compatibility_work_has_an_explicit_thinking_level(explicit, expected):
+    router = ModelRouter()
+    provider = MagicMock()
+    provider.generate = AsyncMock(
+        return_value=GenerationResponse(
+            text="Synthetic note",
+            telemetry=GenerationTelemetry(provider="pro", model="pro-test", latency_ms=1),
+        )
+    )
+    with (
+        patch.object(router, "get_text_provider_with_fallback", return_value=provider),
+        patch("app.clients.model_router.schedule_generation_record"),
+    ):
+        await router.generate_text(TaskType.SOAP_NOTE, prompt="Summarize", thinking_level=explicit)
+    assert provider.generate.call_args.args[0].thinking_level == expected
+
+
+@pytest.mark.asyncio
 async def test_generate_text_with_telemetry_reports_which_model_answered():
     """A caller writing a durable record needs the model that actually answered.
 

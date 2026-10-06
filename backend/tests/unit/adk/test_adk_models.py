@@ -123,7 +123,7 @@ def test_triage_lite_uses_the_same_native_vertex_transport() -> None:
         model = adk_model_for(TRIAGE_LITE)
 
     assert isinstance(model, Gemini)
-    assert model.model == "gemini-3.1-flash-lite"
+    assert model.model == "gemini-3.5-flash-lite"
     assert not isinstance(model, LiteLlm)
 
 
@@ -215,7 +215,7 @@ def test_a_workload_gets_the_model_the_registry_routes_it_to() -> None:
     """Triage uses the dedicated low-cost Gemini model, not the reply model."""
     model = adk_model_for_workload(Workload.TRIAGE)
 
-    assert model.model == "gemini-3.1-flash-lite"
+    assert model.model == "gemini-3.5-flash-lite"
 
 
 def test_a_workload_builds_its_declared_fallback_after_the_primary() -> None:
@@ -226,7 +226,7 @@ def test_a_workload_builds_its_declared_fallback_after_the_primary() -> None:
     assert isinstance(model, FallbackModel)
     assert all(isinstance(candidate, ResilientLlm) for candidate in model.models)
     assert [candidate.model for candidate in model.models] == [
-        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
         "gemini-3.8-flash",
     ]
     assert model.models[0].timeout_seconds == 8.0
@@ -240,6 +240,10 @@ def test_reply_timeout_leaves_room_for_its_fallback() -> None:
 
     assert isinstance(model, FallbackModel)
     assert all(candidate.timeout_seconds == 10.0 for candidate in model.models)
+    assert [candidate.model for candidate in model.models] == [
+        "gemini-3.8-flash",
+        "gemini-3.5-flash",
+    ]
 
 
 def test_a_workload_without_a_fallback_keeps_its_primary_model() -> None:

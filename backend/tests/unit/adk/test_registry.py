@@ -7,11 +7,12 @@ that retries the same saturated model, or a kill switch whose name no longer res
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
 from app.adk.registry import (
+    BACKUP_FLASH,
     FLASH,
     GPT_OSS,
     TRIAGE_LITE,
@@ -68,7 +69,7 @@ def test_triage_leads_with_the_low_cost_native_model() -> None:
     assert route_for(Workload.TRIAGE).primary is TRIAGE_LITE
     assert route_for(Workload.TRIAGE).fallback is FLASH
     assert route_for(Workload.TRIAGE).budget_seconds == 8.0
-    assert route_for(Workload.TRIAGE).max_output_tokens == 512
+    assert route_for(Workload.TRIAGE).max_output_tokens == 1024
 
 
 def test_no_live_workload_routes_to_gpt_oss() -> None:
@@ -132,7 +133,48 @@ def test_the_genai_model_id_carries_no_publisher_prefix() -> None:
     through the OpenAI-compatible surface, so an id copied between transports breaks.
     """
     assert FLASH.model_id == "gemini-3.8-flash"
-    assert TRIAGE_LITE.model_id == "gemini-3.1-flash-lite"
+    assert TRIAGE_LITE.model_id == "gemini-3.5-flash-lite"
+
+
+@pytest.mark.parametrize("workload", [Workload.REPLY, Workload.EXPLANATION])
+def test_clinical_prose_does_not_fall_back_to_lite(workload: Workload) -> None:
+    assert route_for(workload).fallback is BACKUP_FLASH
+    assert BACKUP_FLASH.model_id == "gemini-3.5-flash"
+
+
+def test_intake_does_not_use_an_unqualified_backup() -> None:
+    assert route_for(Workload.ADR_EXTRACTION).fallback is None
+
+
+def test_differently_named_specs_cannot_hide_a_same_model_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.adk import registry
+
+    route = route_for(Workload.REPLY)
+    monkeypatch.setitem(
+        registry._ROUTES,
+        Workload.REPLY,
+        replace(route, fallback=replace(route.primary, key="different-name")),
+    )
+    with pytest.raises(ValueError, match="own primary"):
+        registry._validate()
+
+
+@pytest.mark.parametrize(
+    "workload",
+    [Workload.EXTRACTION, Workload.DISCREPANCY, Workload.EXPLANATION],
+)
+def test_evidence_work_has_room_for_medium_thinking(workload: Workload) -> None:
+    route = route_for(workload)
+    assert route.thinking_level == "MEDIUM"
+    assert route.max_output_tokens >= 4096
+
+
+def test_interactive_intake_uses_low_thinking_with_room_for_the_full_record() -> None:
+    route = route_for(Workload.ADR_EXTRACTION)
+    assert route.thinking_level == "LOW"
+    assert route.max_output_tokens == 4096
 
 
 def test_interactive_workloads_all_carry_a_budget() -> None:
