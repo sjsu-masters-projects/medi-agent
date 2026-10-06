@@ -729,6 +729,26 @@ open for sandbox-specific diagnosis.
 
 ### AI-003 — Agent runtime overhaul
 
+**2026-10-03 capacity follow-up (implemented; not deployed):** One deadline-bounded
+interactive 429 retry, process-local endpoint/model admission and start pacing,
+background slot reservation, and sanitized per-attempt diagnostics are implemented.
+The global preflight checked Flash-Lite and evaluation-only GPT OSS in English and
+Spanish: initial run 7/8 first attempts, one deadline/fallback and one strict JSON-key
+failure; corrected synthetic prompt run 8/8 first attempts and response contracts.
+No live 429 occurred: recovery evidence comes from controlled regressions, not a
+production availability claim. Model routing remains unchanged. Exact verification
+and limits are in `docs/decisions/ai-runtime-2026-09.md`; deployment and sustained
+production metrics remain acceptance work. No migration or remote config changes.
+Verification from `backend/`: `PYTHONPATH=src .venv/bin/python -m pytest -q
+--disable-warnings` passed 1,636 tests, skipped 20 opt-in PostgreSQL tests, and
+reached 85.49% coverage. `.venv/bin/ruff check src scripts` and changed-test lint,
+`.venv/bin/ruff format --check src scripts` and changed-test formatting, and
+`.venv/bin/mypy src` passed. `git diff --check` passed. Paid operator check:
+`VERTEX_AI_LOCATION=global GEMINI_VERTEX_AI_LOCATION=global PYTHONPATH=src
+.venv/bin/python scripts/preflight_model_capacity.py --include-oss`; the final
+eight-case run passed. The first run's failed format check remains documented;
+no clinical-quality or deployed end-to-end acceptance claim follows from it.
+
 **Status:** `[/]` In progress
 
 **Priority:** P0 (contains the shipped SAFE-002 streaming fix)

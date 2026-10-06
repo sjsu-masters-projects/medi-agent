@@ -97,7 +97,13 @@ def adk_model_for(
     if spec.transport is Transport.VERTEX_GENAI:
         # The id stays bare; the transport is carried by the injected client rather than
         # by a prefix, which is why the same spec cannot be handed to the LiteLLM branch.
-        return Gemini(model=spec.model_id, client=_vertex_genai_client())
+        from google.genai import types
+
+        return Gemini(
+            model=spec.model_id,
+            client=_vertex_genai_client(),
+            retry_options=types.HttpRetryOptions(attempts=1),
+        )
 
     if spec.transport is Transport.VERTEX_MAAS_OPENAI:
         bearer = bearer_token or google_adc_bearer()
@@ -112,6 +118,7 @@ def adk_model_for(
             ),
             # Seeded so the object is coherent on its own; every call replaces it.
             api_key=bearer(),
+            num_retries=0,
         )
 
     # Exhaustive rather than defaulted, matching `provider_for`: a transport added to the
@@ -134,11 +141,15 @@ def adk_model_for_workload(workload: Workload) -> BaseLlm:
     primary = _bounded_model(route.primary, timeout_seconds=route.budget_seconds)
     if route.fallback is None:
         return primary
-    fallback = _bounded_model(route.fallback, timeout_seconds=route.budget_seconds)
+    fallback = _bounded_model(
+        route.fallback, timeout_seconds=route.budget_seconds, fallback_candidate=True
+    )
     return FallbackModel(models=[primary, fallback])
 
 
-def _bounded_model(spec: ModelSpec, *, timeout_seconds: float | None) -> BaseLlm:
+def _bounded_model(
+    spec: ModelSpec, *, timeout_seconds: float | None, fallback_candidate: bool = False
+) -> BaseLlm:
     delegate = adk_model_for(spec)
     if timeout_seconds is None:
         return delegate
@@ -148,4 +159,11 @@ def _bounded_model(spec: ModelSpec, *, timeout_seconds: float | None) -> BaseLlm
         timeout_seconds=timeout_seconds,
         circuit_breaker=spec.transport is Transport.VERTEX_MAAS_OPENAI,
         cooldown_seconds=settings.model_circuit_breaker_cooldown_seconds,
+        retry_429=True,
+        endpoint=(
+            settings.gemini_vertex_ai_location
+            if spec.transport is Transport.VERTEX_GENAI
+            else settings.vertex_ai_location
+        ),
+        fallback_candidate=fallback_candidate,
     )

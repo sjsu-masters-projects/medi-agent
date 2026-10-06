@@ -83,6 +83,24 @@ is an operator-run local check, not a CI or deployment gate. Deterministic
 contract tests run in PR CI without cloud
 credentials. Record the local preflight result with the PR verification evidence.
 
+## Model capacity preflight
+
+After offline tests, an operator may run this small paid, synthetic-only check:
+
+```bash
+VERTEX_AI_LOCATION=global GEMINI_VERTEX_AI_LOCATION=global PYTHONPATH=src \
+  .venv/bin/python scripts/preflight_model_capacity.py --include-oss
+```
+
+Omit `--include-oss` to check only the current triage primary. The probe reports
+per-attempt safe metadata, first-attempt success, retry recovery, fallback count,
+total latency and synthetic answers for manual English/Spanish review. It does
+not read/write the database, change routes or deploy. JSON/urgency checks must
+pass independently of HTTP success. Four cases per primary cannot establish
+clinical quality or availability under load. Offline tests simulate 429s;
+live checks do not deliberately overload providers. Per-process concurrency
+limits do not coordinate across Cloud Run replicas or Jobs.
+
 ## Package Layout
 
 ```

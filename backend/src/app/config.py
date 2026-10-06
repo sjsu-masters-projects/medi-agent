@@ -8,6 +8,7 @@ Searches for .env in:
 from pathlib import Path
 from typing import Any
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve project root:  config.py → app/ → src/ → backend/ → project root
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
     # burst of patients does not repeat the same throttled call.
     chat_turn_timeout_seconds: float = 30.0
     model_circuit_breaker_cooldown_seconds: float = 60.0
+    model_max_concurrency: int = Field(default=2, ge=1, le=32)
+    model_min_start_interval_seconds: float = Field(default=0.25, ge=0, le=10)
 
     # Per-workload kill switches. Turning one off routes that workload to the
     # deterministic path recorded beside it in `app/adk/registry.py`, which is why every
