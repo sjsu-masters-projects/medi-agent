@@ -147,7 +147,7 @@ async def _extract(
         record_chat_fallback(layer="symptom_extraction", reason=reason)
         logger.warning(
             "Symptom extraction failed; no report will be written: %s",
-            exc,
+            reason,
             extra={
                 "chat_fallback_layer": "symptom_extraction",
                 "chat_fallback_reason": reason,
@@ -181,7 +181,7 @@ async def _respond(*, language: str, extraction: SymptomExtractionResult) -> str
         record_chat_fallback(layer="symptom_response", reason=reason)
         logger.warning(
             "Symptom response generation failed; composing from the extracted fields: %s",
-            exc,
+            reason,
             extra={
                 "chat_fallback_layer": "symptom_response",
                 "chat_fallback_reason": reason,

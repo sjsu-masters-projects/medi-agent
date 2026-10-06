@@ -309,15 +309,32 @@ async def test_the_kill_switch_records_nothing_rather_than_guessing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_invalid_structured_response_records_nothing() -> None:
+async def test_invalid_structured_response_records_nothing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     response = GenerationResponse(
-        text='{"symptom": "dizziness", "severity": 999}',
+        text='{"symptom": "DO_NOT_LOG_PATIENT_CONTENT", "severity": 999}',
         telemetry=GenerationTelemetry(provider="backup_flash", model="synthetic", latency_ms=1),
     )
     with patch.object(service_module, "generate_for_workload", AsyncMock(return_value=response)):
         result = await analyse_symptom(message="I feel dizzy")
     assert result.symptom_report is None
     assert result.status == "degraded"
+    assert "DO_NOT_LOG_PATIENT_CONTENT" not in caplog.text
+    assert "parse_error" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_response_failure_diagnostics_do_not_log_patient_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = _client()
+    client.generate.side_effect = RuntimeError("DO_NOT_LOG_PATIENT_CONTENT")
+    result = await _analyse(client)
+    assert result.symptom_report is not None
+    assert "dizziness" in result.response_text
+    assert "DO_NOT_LOG_PATIENT_CONTENT" not in caplog.text
+    assert "unknown_error" in caplog.text
 
 
 @pytest.mark.asyncio
