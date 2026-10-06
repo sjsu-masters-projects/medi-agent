@@ -147,6 +147,26 @@ async def test_get_context_returns_patient_and_document_context(mock_db):
 
 
 @pytest.mark.asyncio
+async def test_get_document_catalog_returns_only_safe_document_metadata(mock_db):
+    patient_id = str(uuid4())
+    document_id = str(uuid4())
+    rows = [
+        {
+            "id": document_id,
+            "file_name": "follow-up.pdf",
+            "document_type": "discharge_summary",
+            "created_at": "2026-09-29T00:00:00Z",
+        }
+    ]
+    mock_db.table().select().eq().order().limit().execute.return_value = _response(rows)
+
+    catalog = await ChatService(mock_db).get_document_catalog(patient_id)
+
+    assert catalog == rows
+    assert mock_db.table().select.call_args.args == ("id, file_name, document_type, created_at",)
+
+
+@pytest.mark.asyncio
 async def test_save_symptom_report_returns_none_when_payload_invalid(mock_db):
     service = ChatService(mock_db)
     result = await service.save_symptom_report(str(uuid4()), {"symptom": "", "severity": 0})

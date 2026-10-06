@@ -16,7 +16,7 @@ const primaryNavigation = [
     { href: "/patients", icon: HiOutlineUsers, label: "Patient Roster" },
     { href: "/appointments", icon: HiOutlineCalendarDays, label: "Appointments" },
     { href: "/review-queue", icon: HiOutlineClipboardDocumentList, label: "Review Queue" },
-    { href: "/medwatch", icon: HiOutlineExclamationTriangle, label: "MedWatch Queue" },
+    { href: "/medwatch", icon: HiOutlineExclamationTriangle, label: "ADR Reviews" },
     { href: "/messages", icon: HiOutlineChatBubbleLeftRight, label: "Messages" },
 ];
 

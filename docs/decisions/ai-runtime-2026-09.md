@@ -10,11 +10,11 @@ and provenance rules run independently of a model response.
 
 | Workload | Primary | Fallback | Deterministic outcome |
 | --- | --- | --- | --- |
-| Triage | GPT OSS MaaS | Gemini Flash | Emergency floor, then localized unavailable response |
-| Patient reply and explanation | Gemini Flash | GPT OSS MaaS | Localized template |
+| Triage | Gemini 3.1 Flash-Lite | Gemini Flash | Emergency floor, then localized unavailable response |
+| Patient reply and explanation | Gemini Flash | Gemini 3.1 Flash-Lite | Localized template |
 | Document extraction | Gemini Flash | None | No candidate facts; mark for evidence review |
 | Medication discrepancy | Gemini Flash | None | Deterministic discrepancy engine only |
-| ADR extraction | Gemini Flash | GPT OSS MaaS | Do not write a symptom report |
+| ADR extraction | Gemini Flash | Gemini 3.1 Flash-Lite | Do not write a symptom report |
 
 The authoritative route definitions, output ceilings, thinking levels, kill switches, and
 latency budgets are in `backend/src/app/adk/registry.py`.
@@ -23,11 +23,11 @@ latency budgets are in `backend/src/app/adk/registry.py`.
 
 - **Gemini Flash** is called with the Google Gen AI SDK through Vertex's global endpoint:
   `GEMINI_VERTEX_AI_LOCATION=global`.
-- **GPT OSS MaaS** uses Vertex's OpenAI-compatible regional endpoint:
-  `VERTEX_AI_LOCATION=us-central1` and `openai/gpt-oss-120b-maas`.
-- The locations must remain separate. Moving MaaS to `global` breaks its approved regional
-  route; using the MaaS region for Gemini 3.8 Flash caused the responder's immediate client
-  error.
+- **Gemini 3.1 Flash-Lite** uses that same native transport and global endpoint. It has its
+  own `GEMINI_TRIAGE_MODEL` setting so classification can move independently of clinical
+  extraction and patient-facing prose.
+- **GPT OSS MaaS** remains in the evaluation harness through `VERTEX_AI_LOCATION`, but no
+  live workload route depends on its OpenAI-compatible endpoint or shared-capacity pool.
 
 Cloud Run owns the production settings. The deployment workflow uses an update operation, so
 it preserves separately managed variables and secret references. Local configuration is
@@ -44,6 +44,16 @@ documented in `.env.example`; do not commit a real `.env` file.
    fallback path. It deliberately records no patient identifier, prompt, or response text.
 6. Model-generated clinical data remains a reviewable candidate. A model cannot approve a
    medication change, diagnosis, or external clinical action.
+7. ADK agents construct the registry's complete primary/fallback route. Retriable provider
+   failures (including HTTP 429) move to the declared fallback before any response is emitted.
+8. Every interactive provider attempt has a registry-owned deadline. Its output is buffered
+   until the attempt completes, so a timeout can fall back without splicing two models' partial
+   answers together.
+9. Legacy MaaS evaluation calls retain a process-local circuit breaker. Interactive routes
+   stay on the native Gemini transport and use distinct Flash-Lite and Flash models for fallback.
+10. The complete coordinator-and-responder turn has a 30-second ceiling and returns reviewed,
+    localized unavailable copy when both routes cannot finish. The triage decision tool ends the
+    coordinator stage directly; no second model call narrates a decision whose prose is discarded.
 
 ## Evidence and limits
 

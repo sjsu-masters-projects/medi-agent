@@ -31,7 +31,8 @@ def service(mock_db):
 async def test_get_dashboard_data_filters_sorts_and_paginates(service):
     patient_ids = [uuid4(), uuid4(), uuid4()]
     service._get_assigned_patient_ids = AsyncMock(return_value=patient_ids)  # type: ignore[method-assign]
-    service._get_pending_medwatch_count = AsyncMock(return_value=4)  # type: ignore[method-assign]
+    service._get_pending_adr_review_count = AsyncMock(return_value=4)  # type: ignore[method-assign]
+    service._get_pending_medwatch_count = AsyncMock(return_value=1)  # type: ignore[method-assign]
 
     risk_rows = [
         PatientRiskData(
@@ -77,7 +78,8 @@ async def test_get_dashboard_data_filters_sorts_and_paginates(service):
     assert result["high_risk"] == 0
     assert result["medium_risk"] == 1
     assert result["low_risk"] == 1
-    assert result["medwatch_pending"] == 4
+    assert result["pending_adr_reviews"] == 4
+    assert result["medwatch_pending"] == 1
     assert len(result["patients"]) == 1
     assert result["patients"][0]["first_name"] == "Bea"
 
@@ -147,17 +149,99 @@ async def test_cross_clinic_patient_detail_is_denied_before_patient_query(servic
 
 
 @pytest.mark.asyncio
-async def test_pending_medwatch_count_queries_only_valid_draft_status(service, mock_db):
+async def test_pending_adr_review_count_queries_only_valid_draft_status(service, mock_db):
     chain = MagicMock()
     for method in ("select", "in_"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
     service._execute = AsyncMock(return_value=_response(count=2))  # type: ignore[method-assign]
 
-    count = await service._get_pending_medwatch_count([uuid4()])
+    count = await service._get_pending_adr_review_count([uuid4()])
 
     assert count == 2
+    mock_db.table.assert_called_once_with("adr_assessments")
     chain.in_.assert_any_call("status", ["draft"])
+
+
+@pytest.mark.asyncio
+async def test_pending_medwatch_count_queries_medwatch_drafts(service, mock_db):
+    chain = MagicMock()
+    for method in ("select", "in_"):
+        getattr(chain, method).return_value = chain
+    mock_db.table.return_value = chain
+    service._execute = AsyncMock(return_value=_response(count=1))  # type: ignore[method-assign]
+
+    count = await service._get_pending_medwatch_count([uuid4()])
+
+    assert count == 1
+    mock_db.table.assert_called_once_with("medwatch_drafts")
+    chain.in_.assert_any_call("status", ["draft"])
+
+
+@pytest.mark.asyncio
+async def test_list_adr_review_queue_returns_patient_grounded_evidence(service, mock_db):
+    patient_id = uuid4()
+    assessment_id = uuid4()
+    symptom_report_id = uuid4()
+    medication_id = uuid4()
+    service._get_assigned_patient_ids = AsyncMock(return_value=[patient_id])  # type: ignore[method-assign]
+    chain = MagicMock()
+    for method in ("select", "in_", "eq", "order", "limit"):
+        getattr(chain, method).return_value = chain
+    mock_db.table.return_value = chain
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        return_value=_response(
+            data=[
+                {
+                    "id": str(assessment_id),
+                    "patient_id": str(patient_id),
+                    "symptom_report_id": str(symptom_report_id),
+                    "suspect_medication_id": str(medication_id),
+                    "suspect_medication_name": "lisinopril",
+                    "naranjo_score": 3,
+                    "causality": "Possible",
+                    "naranjo_answers": {"event_after_drug": "yes"},
+                    "naranjo_assessment": {"missing_questions": ["alternative_causes"]},
+                    "evidence": [
+                        {
+                            "question": "event_after_drug",
+                            "answer": "yes",
+                            "evidence": "Cough began after the first dose.",
+                        }
+                    ],
+                    "status": "draft",
+                    "created_at": "2026-10-02T10:00:00Z",
+                    "patients": {"first_name": "Maya", "last_name": "Patel"},
+                    "symptom_reports": {
+                        "symptom": "dry cough",
+                        "severity": 2,
+                        "onset": "after first dose",
+                        "created_at": "2026-10-02T09:59:00Z",
+                    },
+                }
+            ]
+        )
+    )
+
+    result = await service.list_adr_review_queue(uuid4())
+
+    assert result["total"] == 1
+    assert result["items"][0]["patient_first_name"] == "Maya"
+    assert result["items"][0]["symptom"] == "dry cough"
+    assert "patients" not in result["items"][0]
+    mock_db.table.assert_called_once_with("adr_assessments")
+    chain.in_.assert_called_once_with("patient_id", [str(patient_id)])
+    chain.eq.assert_called_once_with("status", "draft")
+
+
+@pytest.mark.asyncio
+async def test_list_adr_review_queue_returns_empty_without_assignments(service, mock_db):
+    service._get_assigned_patient_ids = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    result = await service.list_adr_review_queue(uuid4())
+
+    assert result == {"items": [], "total": 0}
+    mock_db.table.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -697,7 +781,7 @@ async def test_build_adherence_series_aggregates_recent_days(service):
         return_value=_response(
             data=[
                 {
-                    "status": "completed",
+                    "status": "taken",
                     "target_type": "medication",
                     "logged_at": f"{today.isoformat()}T08:00:00Z",
                 },

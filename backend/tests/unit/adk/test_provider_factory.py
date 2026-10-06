@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.adk.models.factory import provider_for, provider_for_workload
-from app.adk.registry import FLASH, GPT_OSS, Workload, route_for
+from app.adk.registry import FLASH, GPT_OSS, TRIAGE_LITE, Workload, route_for
 from app.config import settings
 
 
@@ -46,12 +46,23 @@ def test_a_gemini_spec_is_built_over_the_genai_sdk(no_real_credentials: MagicMoc
     assert no_real_credentials.call_args.kwargs["model"] == "gemini-3.8-flash"
 
 
-def test_a_workload_provider_inherits_its_measured_budget() -> None:
+def test_triage_lite_is_built_over_the_genai_sdk(no_real_credentials: MagicMock) -> None:
+    provider = provider_for(TRIAGE_LITE)
+
+    assert provider.name == "triage_lite"
+    assert provider.model == "gemini-3.1-flash-lite"
+    assert no_real_credentials.call_args.kwargs["use_vertex_ai"] is True
+    assert no_real_credentials.call_args.kwargs["model"] == "gemini-3.1-flash-lite"
+
+
+def test_a_workload_provider_inherits_its_measured_budget(
+    no_real_credentials: MagicMock,
+) -> None:
     """The registry budget and the transport timeout must not be able to drift apart."""
-    provider = provider_for_workload(Workload.TRIAGE)
+    provider_for_workload(Workload.TRIAGE)
 
     assert route_for(Workload.TRIAGE).budget_seconds == 8.0
-    assert provider._client.timeout.read == 8.0  # type: ignore[attr-defined]
+    assert no_real_credentials.call_args.kwargs["timeout"] == 8
 
 
 def test_a_workload_without_a_budget_keeps_the_transport_default() -> None:

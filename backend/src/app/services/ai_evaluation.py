@@ -33,6 +33,7 @@ from app.followup.prompts import (
     SYMPTOM_EXTRACTION_SYSTEM_INSTRUCTION,
     build_symptom_extraction_prompt,
 )
+from app.followup.service import is_possible_adr_candidate
 from app.models.ai_evaluation import (
     SCORED_DISPOSITIONS,
     EvalScenario,
@@ -906,6 +907,11 @@ def _score_adr(scenario: EvalScenario, text: str, base: ScenarioScore) -> Scenar
         return base
     base.schema_valid = True
 
+    patient_context = scenario.inputs.get("patient_context")
+    if not isinstance(patient_context, dict):
+        patient_context = {}
+    calculated_adr_flag = is_possible_adr_candidate(parsed, patient_context)
+
     checks: dict[str, bool] = {}
     keywords = [str(k) for k in expected.get("symptom_keywords", [])]
     haystack = f"{parsed.symptom} {parsed.ai_assessment} {parsed.body_area or ''}"
@@ -925,7 +931,7 @@ def _score_adr(scenario: EvalScenario, text: str, base: ScenarioScore) -> Scenar
                 and _drug_names_match(str(expected_med), parsed.related_medication_name)
             )
     if "flagged_for_adr" in expected:
-        checks["flagged_for_adr"] = parsed.flagged_for_adr == bool(expected["flagged_for_adr"])
+        checks["flagged_for_adr"] = calculated_adr_flag == bool(expected["flagged_for_adr"])
     if "red_flag" in expected:
         checks["red_flag"] = parsed.red_flag == red_flag_expected
 
@@ -941,7 +947,8 @@ def _score_adr(scenario: EvalScenario, text: str, base: ScenarioScore) -> Scenar
         "predicted_severity": parsed.severity,
         "predicted_related_medication": parsed.related_medication_name,
         "predicted_red_flag": parsed.red_flag,
-        "predicted_flagged_for_adr": parsed.flagged_for_adr,
+        "predicted_flagged_for_adr": calculated_adr_flag,
+        "model_authored_flag_ignored": parsed.flagged_for_adr,
     }
     return base
 

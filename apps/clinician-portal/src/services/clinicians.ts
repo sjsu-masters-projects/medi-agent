@@ -7,12 +7,14 @@
 
 import {
     ChatRole,
+    type ADRStatus,
     type ClinicianPatientDocument,
     type DocumentReviewQueueItem,
     type DocumentReviewStatus,
     type DocumentReviewer,
     type DocumentType,
     type Medication,
+    type NaranjoCausality,
     type ReminderSchedule,
     type SymptomReport,
     type UploaderRole,
@@ -86,7 +88,62 @@ export interface DashboardResponse {
     high_risk: number;
     medium_risk: number;
     low_risk: number;
+    pending_adr_reviews: number;
     medwatch_pending: number;
+}
+
+export interface ADRReviewEvidence {
+    answer: string;
+    evidence?: string | null;
+    question: string;
+}
+
+export interface ADRReviewQueueItem {
+    id: string;
+    patientId: string;
+    patientFirstName: string;
+    patientLastName: string;
+    symptomReportId: string;
+    symptom: string;
+    severity: number;
+    onset?: string | null;
+    symptomCreatedAt: string;
+    suspectMedicationId: string;
+    suspectMedicationName: string;
+    naranjoScore: number;
+    causality: NaranjoCausality;
+    naranjoAnswers: Record<string, string>;
+    naranjoAssessment: {
+        missing_questions?: string[];
+        items?: Array<{ answer: string; points: number; question: string }>;
+    };
+    evidence: ADRReviewEvidence[];
+    status: ADRStatus;
+    createdAt: string;
+}
+
+interface ADRReviewQueueResponse {
+    items: Array<{
+        id: string;
+        patient_id: string;
+        patient_first_name: string;
+        patient_last_name: string;
+        symptom_report_id: string;
+        symptom: string;
+        severity: number;
+        onset?: string | null;
+        symptom_created_at: string;
+        suspect_medication_id: string;
+        suspect_medication_name: string;
+        naranjo_score: number;
+        causality: NaranjoCausality;
+        naranjo_answers: Record<string, string>;
+        naranjo_assessment: ADRReviewQueueItem["naranjoAssessment"];
+        evidence: ADRReviewEvidence[];
+        status: ADRStatus;
+        created_at: string;
+    }>;
+    total: number;
 }
 
 export interface SoapNote {
@@ -201,12 +258,22 @@ export interface CarePlanItem {
     uncertainty: string[];
     conflict: Record<string, unknown>;
     blocker_reason?: string | null;
+    reviewed_locale?: string | null;
     is_removed: boolean;
+    imported_evidence?: boolean;
+    overlapping_item_ids?: string[];
     source?: {
         document_id?: string;
+        file_name?: string | null;
         excerpt?: string;
         location?: { page?: number };
     } | null;
+    sources?: Array<{
+        document_id?: string;
+        file_name?: string | null;
+        excerpt?: string;
+        location?: { page?: number };
+    }>;
 }
 
 export interface CarePlanVersion {
@@ -218,6 +285,21 @@ export interface CarePlanVersion {
     generation_error_code?: string | null;
     approved_at?: string | null;
     items: CarePlanItem[];
+}
+
+export interface CarePlanReviewContext {
+    latest: CarePlanVersion | null;
+    active: CarePlanVersion | null;
+    patient_locale: string;
+    active_medications: Array<{
+        id: string;
+        name: string;
+        dosage: string;
+        frequency: string;
+        route: string;
+        instructions?: string | null;
+        care_plan_item_id?: string | null;
+    }>;
 }
 
 export interface CarePlanGeneration {
@@ -499,6 +581,33 @@ export async function fetchDashboard(params?: DashboardQueryParams): Promise<Das
     return apiFetch<DashboardResponse>(`/api/v1/clinicians/me/dashboard${qs ? `?${qs}` : ""}`);
 }
 
+/** Fetch evidence-backed ADR assessments for the clinician's assigned patients. */
+export async function fetchADRReviewQueue(): Promise<ADRReviewQueueItem[]> {
+    const data = await apiFetch<ADRReviewQueueResponse>(
+        "/api/v1/clinicians/me/adr-assessments?status=draft",
+    );
+    return data.items.map((item) => ({
+        id: item.id,
+        patientId: item.patient_id,
+        patientFirstName: item.patient_first_name,
+        patientLastName: item.patient_last_name,
+        symptomReportId: item.symptom_report_id,
+        symptom: item.symptom,
+        severity: item.severity,
+        onset: item.onset,
+        symptomCreatedAt: item.symptom_created_at,
+        suspectMedicationId: item.suspect_medication_id,
+        suspectMedicationName: item.suspect_medication_name,
+        naranjoScore: item.naranjo_score,
+        causality: item.causality,
+        naranjoAnswers: item.naranjo_answers,
+        naranjoAssessment: item.naranjo_assessment,
+        evidence: item.evidence,
+        status: item.status,
+        createdAt: item.created_at,
+    }));
+}
+
 /** Fetch one patient's latest risk radar snapshot. */
 export async function fetchPatientRiskSnapshot(patientId: string): Promise<PatientRiskData> {
     return apiFetch<PatientRiskData>(`/api/v1/clinicians/me/patients/${patientId}/risk`);
@@ -616,12 +725,47 @@ export async function fetchClinicianCarePlan(patientId: string): Promise<CarePla
     return apiFetch<CarePlanVersion | null>(`/api/v1/care-plans/clinician/patients/${patientId}`);
 }
 
+export async function fetchClinicianCarePlanReviewContext(
+    patientId: string,
+): Promise<CarePlanReviewContext> {
+    return apiFetch<CarePlanReviewContext>(
+        `/api/v1/care-plans/clinician/patients/${patientId}/review-context`,
+    );
+}
+
 export async function fetchClinicianCarePlanGeneration(
     patientId: string,
 ): Promise<CarePlanGeneration | null> {
     return apiFetch<CarePlanGeneration | null>(
         `/api/v1/care-plans/clinician/patients/${patientId}/generation`,
     );
+}
+
+export interface CarePlanTodayPreview {
+    plan_id: string;
+    version_number: number;
+    generated_at: string;
+    feed: {
+        date: string;
+        timezone: string;
+        tasks: Array<{
+            id: string;
+            name: string;
+            description: string | null;
+            frequency: string;
+            status: "pending" | "completed" | "skipped" | "missed";
+            scheduled_at: string | null;
+            requires_schedule_configuration: boolean;
+            care_plan: { version_number: number; category: string } | null;
+        }>;
+    };
+}
+
+export async function fetchCarePlanTodayPreview(
+    patientId: string,
+    planId: string,
+): Promise<CarePlanTodayPreview> {
+    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}/today-preview`);
 }
 
 export async function updateClinicianCarePlan(
@@ -636,6 +780,8 @@ export async function updateClinicianCarePlan(
         medication: Record<string, unknown>;
         is_removed: boolean;
         clinician_confirmed: boolean;
+        language_verified: boolean;
+        verified_locale: "en-US" | "es-MX" | null;
     }>,
 ): Promise<CarePlanVersion> {
     return apiFetch<CarePlanVersion>(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}`, {

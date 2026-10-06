@@ -2,6 +2,7 @@
 
 import json
 import logging
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
@@ -48,6 +49,54 @@ def _db(*, summary_claims: list[dict] | None = None) -> MagicMock:
         execute=MagicMock(return_value=responses[name])
     )
     return db
+
+
+@pytest.mark.asyncio
+async def test_five_document_batch_processes_every_claim_independently() -> None:
+    db = _db(summary_claims=[])
+    worker = DocumentIngestionWorker(db, batch_size=5)
+    claims = [
+        {
+            "document_id": str(UUID(int=index)),
+            "patient_id": str(UUID(int=100)),
+            "run_id": str(index),
+        }
+        for index in range(1, 6)
+    ]
+    worker._db.rpc.side_effect = lambda name, _params: MagicMock(
+        execute=MagicMock(
+            return_value=MagicMock(
+                data=claims if name == "claim_pending_document_ingestion" else []
+            )
+        )
+    )
+    worker._service.ingest_document = AsyncMock(
+        side_effect=[
+            {"status": "completed"},
+            RuntimeError("provider unavailable"),
+            {"status": "completed"},
+            {"status": "needs_evidence_review"},
+            {"status": "completed"},
+        ]
+    )
+
+    summary = await worker.process_batch()
+
+    assert summary["claimed"] == 5
+    assert summary["completed"] == 3
+    assert summary["failed"] == 1
+    assert summary["needs_review"] == 1
+    assert worker._service.ingest_document.await_count == 5
+    assert db.rpc.call_args_list[0].args == ("claim_pending_document_ingestion", {"p_limit": 5})
+
+
+def test_deployed_worker_uses_five_document_batch_and_larger_timeout() -> None:
+    workflow = Path(__file__).resolve().parents[4] / ".github/workflows/deploy-backend.yml"
+    job = workflow.read_text().split("- name: Deploy document-ingestion job", 1)[1]
+    assert "DOCUMENT_INGESTION_BATCH_SIZE=5" in job
+    assert "--task-timeout 1800s" in job
+    assert "VERTEX_AI_LOCATION=global" in job
+    assert "GEMINI_TRIAGE_MODEL=gemini-3.1-flash-lite" in job
 
 
 @pytest.mark.asyncio

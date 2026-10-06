@@ -23,10 +23,11 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from google.adk.models import BaseLlm, Gemini
+from google.adk.models import BaseLlm, FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 from pydantic import PrivateAttr
 
+from app.adk.models.resilient import ResilientLlm
 from app.adk.models.vertex_maas import litellm_model_id, vertex_openapi_base_url
 from app.adk.registry import ModelSpec, Transport, Workload, route_for
 from app.clients.vertex_auth import google_adc_bearer
@@ -120,5 +121,31 @@ def adk_model_for(
 
 
 def adk_model_for_workload(workload: Workload) -> BaseLlm:
-    """Build the primary model for a workload, as the registry routes it."""
-    return adk_model_for(route_for(workload).primary)
+    """Build the bounded model route for a workload, including its fallback.
+
+    ADK's fallback only advances on provider errors carrying a retriable status. Wrapping
+    each candidate gives a stalled call a 504-shaped deadline and buffers its partials,
+    so the next provider can take over without joining two answers together. The circuit
+    breaker is intentionally limited to MaaS: one shared-pool 429 should briefly bypass
+    GPT OSS everywhere in this process, while a slow Gemini call should still be retried
+    independently by the next patient turn.
+    """
+    route = route_for(workload)
+    primary = _bounded_model(route.primary, timeout_seconds=route.budget_seconds)
+    if route.fallback is None:
+        return primary
+    fallback = _bounded_model(route.fallback, timeout_seconds=route.budget_seconds)
+    return FallbackModel(models=[primary, fallback])
+
+
+def _bounded_model(spec: ModelSpec, *, timeout_seconds: float | None) -> BaseLlm:
+    delegate = adk_model_for(spec)
+    if timeout_seconds is None:
+        return delegate
+    return ResilientLlm(
+        model=delegate.model,
+        delegate=delegate,
+        timeout_seconds=timeout_seconds,
+        circuit_breaker=spec.transport is Transport.VERTEX_MAAS_OPENAI,
+        cooldown_seconds=settings.model_circuit_breaker_cooldown_seconds,
+    )

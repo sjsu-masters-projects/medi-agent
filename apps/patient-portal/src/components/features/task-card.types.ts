@@ -1,1 +1,1 @@
-export type TaskCardStatus = "completed" | "active" | "upcoming" | "missed";
+export type TaskCardStatus = "completed" | "active" | "upcoming" | "missed" | "skipped";

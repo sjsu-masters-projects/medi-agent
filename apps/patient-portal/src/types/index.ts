@@ -22,6 +22,7 @@ export type {
     AdherenceLog,
     AdherenceStats,
     FeedTask,
+    FeedCarePlanProvenance,
     FeedSummary,
     TodayFeedResponse,
     ReminderDayOfWeek,

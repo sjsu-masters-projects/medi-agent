@@ -347,6 +347,7 @@ export interface ReminderGuidance {
     supportsAutomaticReminders: boolean;
     recommendedTimesPerDay?: number | null;
     recommendedDaysPerWeek?: number | null;
+    requiredDaysOfWeek?: ReminderDayOfWeek[] | null;
     guidanceText?: string | null;
 }
 
@@ -499,6 +500,13 @@ export interface FeedProvider {
     clinicName: string;
 }
 
+export interface FeedCarePlanProvenance {
+    versionNumber: number;
+    category: string;
+    effectiveStartDate?: string;
+    effectiveEndDate?: string;
+}
+
 export interface FeedTask {
     id: string;
     type: FeedTaskType;
@@ -513,6 +521,7 @@ export interface FeedTask {
     requiresScheduleConfiguration?: boolean;
     provider?: FeedProvider;
     carePlanItemId?: string;
+    carePlan?: FeedCarePlanProvenance;
 }
 
 export interface FeedSummary {
@@ -554,6 +563,9 @@ export interface ADRAssessment {
     suspectMedicationName: string;
     naranjoScore: number;
     causality: NaranjoCausality;
+    naranjoAnswers: Record<string, "yes" | "no" | "do_not_know">;
+    naranjoAssessment: Record<string, unknown>;
+    evidence: Array<{ question: string; answer: string; evidence?: string }>;
     thinkingChain?: string;
     status: ADRStatus;
     reviewedBy?: string;

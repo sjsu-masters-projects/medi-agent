@@ -147,7 +147,7 @@ def test_no_stage_may_reach_a_tool_outside_the_allowlist(coordinator: LlmAgent) 
 
 
 def test_each_stage_asks_the_registry_for_its_own_workload(routed: Any) -> None:
-    """Triage leads with gpt-oss on latency; the reply leads with Flash on prose."""
+    """Triage uses Flash-Lite classification; reply uses stronger Flash prose."""
     _pipeline, requested = routed
 
     assert requested == [Workload.TRIAGE, Workload.REPLY]
@@ -189,15 +189,13 @@ def test_the_gemini_stage_carries_its_measured_thinking_ceiling(
     assert thinking.thinking_level == route_for(Workload.REPLY).thinking_level
 
 
-def test_the_managed_model_is_not_sent_a_gemini_thinking_config(
+def test_the_triage_model_carries_its_thinking_ceiling(
     coordinator: LlmAgent,
 ) -> None:
-    """The OpenAI-compatible surface has never seen this shape.
+    thinking = coordinator.generate_content_config.thinking_config
 
-    That model's reasoning ceiling is set as `reasoning_effort` where the model is built,
-    at the low level every measurement of it was taken at.
-    """
-    assert coordinator.generate_content_config.thinking_config is None
+    assert thinking is not None
+    assert thinking.thinking_level == route_for(Workload.TRIAGE).thinking_level
 
 
 # ---------------------------------------------------------------------------

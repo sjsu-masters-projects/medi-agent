@@ -62,6 +62,7 @@ Invite history is intentionally role-sensitive:
 - login flow: `src/app/(auth)/login/page.tsx`
 - admin bootstrap: `src/app/(auth)/signup/admin/page.tsx`
 - dashboard review queue: `src/app/(dashboard)/review-queue/page.tsx`
+- ADR evidence queue: `src/app/(dashboard)/medwatch/page.tsx`
 - patient deep dive: `src/app/(dashboard)/patients/[id]/page.tsx`
 - patient deep dive documents panel: `src/components/features/patient-documents-panel.tsx`
 - settings / invite history: `src/app/(dashboard)/settings/page.tsx`
@@ -75,7 +76,54 @@ Invite history is intentionally role-sensitive:
 - Review actions are surfaced in both the dedicated review queue and the patient deep dive documents tab.
 - The deep-dive documents experience is intentionally factored into `PatientDocumentsPanel` so document review state, modal flows, and refresh behavior stay isolated from the rest of the deep-dive page.
 
+## ADR Review Workflow
+
+- `GET /api/v1/clinicians/me/adr-assessments` returns draft assessments only for patients assigned to the authenticated clinician.
+- The ADR review queue shows the deterministic Naranjo score, patient-grounded evidence, and missing inputs. It never exposes private model reasoning or presents the score as a clinician decision.
+- MedWatch records remain a separate lifecycle and are not counted or presented as generated until a real `medwatch_drafts` record exists.
+
+## Care-plan revision review
+
+The Care Plan tab loads the latest version and the currently approved version through an
+assignment-scoped backend review endpoint. When a newer draft exists, the approved plan remains
+active in Today. The tab lists the source documents/citations attached to proposed items and
+labels an item as carried forward, edited, removed, or linked to new evidence by source-fact ID.
+“New evidence” does not establish a new therapy or reconcile medications. The publication
+summary lists plan instructions only. After resolving review requirements and saving the draft,
+**Preview Today** requests a read-only current-record snapshot from
+`GET /api/v1/care-plans/clinician/patients/{patient_id}/{plan_id}/today-preview`. It uses the
+live Today renderer with the patient-local date, valid reminders, existing medications,
+proposed projections and retained activity responses. New activity IDs are preview-only;
+new/changed activities do not inherit reminder times or completion. Edits and saves clear the
+preview. Refresh it if records or reminders change: it is not a transaction reservation or a
+guarantee of later publication. Errors discard the snapshot, not display an empty success.
+The backend must be deployed before the preview UI; no new migration is required.
+Save draft edits before approval. Clinical review of medication matching
+and locale wording, plus a live version-supersession proof, remain PAT-005 acceptance work.
+
+Care Plan review makes each proposed medication an explicit create-or-update
+decision against the assigned patient's active medication list. It shows one source action per
+document and collapses redundant same-page excerpts in the review display without deleting
+stored evidence. The clinician must edit patient-facing wording into the patient's preferred
+language and attest to reviewing the final text; the checkbox is not a translation service.
+The backend and publication transaction both reject missing locale or medication decisions.
+Apply migration `042_care_plan_publication_review_guards.sql` before deploying this contract.
+
+Overlap review groups flag identical source facts/instructions and same-name medications;
+they do not establish clinical equivalence. “Keep this proposal; remove its overlaps” stages
+explicit removals, and “Save review” persists them without changing the active approved plan.
+Historical imported proposals can be excluded together; approved carried items are protected
+from that bulk action. Removed rows and their evidence remain available under “Show removed
+items.” Migration 044 adds the atomic overlap publication guard. Existing completed drafts
+need review, not a generation retry; no automatic translation or medication choice is implied.
+
 ## Notes
+
+The Adherence tab shows response-based completion, coverage, daily counts, current activities,
+and the latest 20 patient-reported barriers (including historical versions). Its chart uses
+UTC daily buckets from the reporting API; barrier timestamps use the patient's timezone.
+Unrecorded days are gaps, not missed doses. Current activity counts are not the historical
+scheduled-dose denominator, and patient-reported side effects are not clinician-reviewed ADRs.
 
 - A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.
 - QA account expectations are documented in [docs/qa-auth-accounts.md](../../docs/qa-auth-accounts.md).

@@ -360,6 +360,87 @@ class TestChatWebSocket:
             assert captured_context["kwargs"]["patient_id"] == str(patient_id)
             assert captured_context["kwargs"]["message"] == "I feel dizzy"
 
+    def test_document_catalog_question_bypasses_model_and_returns_patient_portal_metadata(
+        self,
+        client,
+        override_db,
+        patient_id,
+        monkeypatch,
+    ):
+        token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
+        monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
+        async def _empty_history(_self, patient_id, limit=50, before=None):
+            return []
+
+        async def _empty_context(_self, patient_id, document_id=None):
+            return {"medications": [], "conditions": [], "recent_symptoms": [], "document": None}
+
+        async def _document_catalog(_self, patient_id, limit=8):
+            assert patient_id == str(token_user.id)
+            return [
+                {
+                    "id": str(uuid4()),
+                    "file_name": "my-follow-up.pdf",
+                    "document_type": "discharge_summary",
+                    "created_at": "2026-09-29T00:00:00Z",
+                }
+            ]
+
+        async def _save_message(_self, patient_id, data):
+            return {
+                "id": str(uuid4()),
+                "patient_id": patient_id,
+                "content": data["content"],
+                "role": data["role"],
+                "intent": data.get("intent"),
+                "language": data["language"],
+                "audio_url": None,
+                "created_at": "2026-09-29T00:00:00Z",
+            }
+
+        async def _model_must_not_run(_self, **_kwargs):
+            raise AssertionError("A document catalog question must not invoke the model")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr("app.routers.chat.ChatService.get_history", _empty_history)
+        monkeypatch.setattr("app.routers.chat.ChatService.get_context", _empty_context)
+        monkeypatch.setattr("app.routers.chat.ChatService.get_document_catalog", _document_catalog)
+        monkeypatch.setattr("app.routers.chat.ChatService.save_message", _save_message)
+        monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _model_must_not_run)
+
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        ) as websocket:
+            assert websocket.receive_json()["type"] == "chat_history"
+            websocket.send_json(
+                {
+                    "type": "user_message",
+                    "content": "What documents do you have on me?",
+                    "language": "en",
+                }
+            )
+
+            assert websocket.receive_json()["type"] == "user_message_saved"
+            assert websocket.receive_json() == {
+                "type": "assistant_start",
+                "intent": "document_catalog",
+                "urgency": "routine",
+            }
+            chunks: list[str] = []
+            while True:
+                event = websocket.receive_json()
+                if event["type"] == "assistant_complete":
+                    complete = event
+                    break
+                assert event["type"] == "assistant_chunk"
+                chunks.append(event["content"])
+
+            assert "my-follow-up.pdf" in "".join(chunks)
+            assert complete["type"] == "assistant_complete"
+            assert complete["intent"] == "document_catalog"
+            assert "my-follow-up.pdf" in complete["message"]["content"]
+
     def test_websocket_returns_error_for_unsupported_event(
         self,
         client,
@@ -689,6 +770,14 @@ class TestChatWebSocket:
                 },
                 follow_up_question="When did this start?",
                 flagged_for_adr=True,
+                naranjo_answers={"event_after_drug": "yes"},
+                adr_evidence=[
+                    {
+                        "question": "event_after_drug",
+                        "answer": "yes",
+                        "evidence": "after taking medication",
+                    }
+                ],
             )
 
         # The stream is aborted once the route is known to be `symptom`, and the second,
@@ -705,6 +794,8 @@ class TestChatWebSocket:
         async def _mock_a2a(_self, patient_id, payload):
             assert payload["symptom_event_id"] == symptom_event_id
             assert payload["idempotency_key"] == f"symptom_event:{symptom_event_id}"
+            assert payload["naranjo_answers"] == {"event_after_drug": "yes"}
+            assert payload["adr_evidence"][0]["question"] == "event_after_drug"
             return {
                 "task_id": str(uuid4()),
                 "status": "completed",

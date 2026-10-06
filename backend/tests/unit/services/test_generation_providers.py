@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from app.models.generation import (
@@ -14,6 +16,7 @@ from app.models.generation import (
     VoiceTranscriptionRequest,
 )
 from app.services.generation_providers import (
+    ClientTextProvider,
     DeepgramVoiceProvider,
     TextFallbackProvider,
     TextOnlyVoiceProvider,
@@ -50,6 +53,50 @@ async def test_text_provider_records_fallback_path() -> None:
 
     assert response.text == "ready"
     assert response.telemetry.fallback_path == ["primary:timeout", "secondary"]
+
+
+@pytest.mark.asyncio
+async def test_client_text_provider_preserves_a_typed_client_failure() -> None:
+    async def _fail(**_: object) -> str:
+        raise GenerationProviderError(GenerationErrorCode.CONFIGURATION, "safe test failure")
+
+    provider = ClientTextProvider(name="gemini", model="test", generate=_fail)
+
+    with pytest.raises(GenerationProviderError) as caught:
+        await provider.generate(GenerationRequest(prompt="test"))
+
+    assert caught.value.code is GenerationErrorCode.CONFIGURATION
+
+
+@pytest.mark.asyncio
+async def test_client_text_provider_passes_reasoning_ceiling_only_when_requested() -> None:
+    generate = AsyncMock(return_value="ready")
+    provider = ClientTextProvider(name="gemini", model="test", generate=generate)
+
+    await provider.generate(GenerationRequest(prompt="test", thinking_level="LOW"))
+
+    assert generate.await_args.kwargs["thinking_level"] == "LOW"
+
+
+@pytest.mark.asyncio
+async def test_client_text_provider_passes_native_json_schema_when_requested() -> None:
+    generate = AsyncMock(return_value='{"items": []}')
+    provider = ClientTextProvider(name="gemini", model="test", generate=generate)
+    schema = {"type": "object", "properties": {"items": {"type": "array"}}}
+
+    await provider.generate(GenerationRequest(prompt="classify", response_schema=schema))
+
+    assert generate.await_args.kwargs["response_schema"] == schema
+
+
+@pytest.mark.asyncio
+async def test_client_text_provider_does_not_add_schema_to_plain_text_requests() -> None:
+    generate = AsyncMock(return_value="plain text")
+    provider = ClientTextProvider(name="gemini", model="test", generate=generate)
+
+    await provider.generate(GenerationRequest(prompt="explain"))
+
+    assert "response_schema" not in generate.await_args.kwargs
 
 
 @pytest.mark.asyncio

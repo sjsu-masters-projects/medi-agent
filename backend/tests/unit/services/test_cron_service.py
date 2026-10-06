@@ -14,6 +14,60 @@ def cron_service():
     return CronService(db=None)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("kind", ["medication", "obligation"])
+@pytest.mark.parametrize(
+    "frequency", ["as-needed", "as recorded", "once after each walking session", ""]
+)
+def test_legacy_unsafe_schedule_cannot_create_a_notification(cron_service, kind, frequency):
+    schedule = {
+        "target_type": kind,
+        "target_id": "synthetic",
+        "timezone": "UTC",
+        "times_of_day": ["08:00"],
+        "days_of_week": ["monday"],
+    }
+    targets = {"synthetic": {"frequency": frequency}}
+    result = cron_service._build_schedule_notification_candidates(
+        schedule=schedule,
+        medication_map=targets if kind == "medication" else {},
+        obligation_map=targets if kind == "obligation" else {},
+        window_start=datetime(2026, 9, 28, 8, tzinfo=UTC),
+        window_end=datetime(2026, 9, 28, 9, tzinfo=UTC),
+    )
+    assert result == []
+
+
+@pytest.mark.parametrize("kind", ["medication", "obligation"])
+def test_matching_daily_schedule_still_creates_one_candidate(cron_service, kind):
+    from app.services.reminder_schedule_service import DAY_ORDER
+
+    schedule = {
+        "patient_id": "synthetic-patient",
+        "target_type": kind,
+        "target_id": "synthetic",
+        "timezone": "UTC",
+        "times_of_day": ["08:00"],
+        "days_of_week": DAY_ORDER,
+    }
+    targets = {
+        "synthetic": {
+            "frequency": "daily",
+            "name": "Synthetic medication",
+            "description": "Synthetic activity",
+        }
+    }
+    result = cron_service._build_schedule_notification_candidates(
+        schedule=schedule,
+        medication_map=targets if kind == "medication" else {},
+        obligation_map=targets if kind == "obligation" else {},
+        window_start=datetime(2026, 9, 28, 8, tzinfo=UTC),
+        window_end=datetime(2026, 9, 28, 9, tzinfo=UTC),
+    )
+    assert len(result) == 1
+    assert result[0]["metadata"]["target_id"] == "synthetic"
+    assert result[0]["metadata"]["scheduled_at"] == "2026-09-28T08:00:00+00:00"
+
+
 @pytest.mark.asyncio
 async def test_dispatch_reminders_summarizes_created_notifications(monkeypatch, cron_service):
     started_at = datetime.now(UTC).isoformat()
@@ -78,9 +132,6 @@ async def test_run_nightly_adr_scan_flags_candidates(monkeypatch, cron_service):
     async def _fetch_symptoms(*args, **kwargs):
         return symptom_rows
 
-    async def _fetch_active_med_map(*args, **kwargs):
-        return {"patient-1": [{"id": "med-1"}]}
-
     async def _flag(symptom_ids):
         flagged_ids.append(symptom_ids)
 
@@ -92,7 +143,6 @@ async def test_run_nightly_adr_scan_flags_candidates(monkeypatch, cron_service):
     monkeypatch.setattr(cron_service, "_finish_run", _finish_run)
     monkeypatch.setattr(cron_service, "_resolve_adr_scan_since", _resolve_since)
     monkeypatch.setattr(cron_service, "_fetch_symptom_reports_for_adr_scan", _fetch_symptoms)
-    monkeypatch.setattr(cron_service, "_fetch_active_medication_map", _fetch_active_med_map)
     monkeypatch.setattr(cron_service, "_flag_symptom_reports_for_adr", _flag)
 
     result = await cron_service.run_nightly_adr_scan(
@@ -102,5 +152,6 @@ async def test_run_nightly_adr_scan_flags_candidates(monkeypatch, cron_service):
     )
 
     assert result["job_name"] == "nightly_adr_scan"
-    assert result["summary"]["candidate_flags_created"] == 2
-    assert flagged_ids == [["symptom-1", "symptom-2"]]
+    assert result["summary"]["candidate_flags_created"] == 1
+    assert result["summary"]["high_severity_without_medication_link"] == 1
+    assert flagged_ids == [["symptom-2"]]

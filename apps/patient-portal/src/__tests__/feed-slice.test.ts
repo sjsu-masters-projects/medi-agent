@@ -28,6 +28,12 @@ describe("feedSlice", () => {
             },
             tasks: [
                 {
+                    care_plan: {
+                        category: "monitoring",
+                        effective_end_date: null,
+                        effective_start_date: "2026-05-01",
+                        version_number: 2,
+                    },
                     completed_at: null,
                     description: "Take with Food",
                     frequency: "twice daily",
@@ -55,6 +61,11 @@ describe("feedSlice", () => {
 
         expect(get).toHaveBeenCalledWith("/api/v1/feed/today", { token: "token" });
         expect(store.getState().tasks[0]).toMatchObject({
+            carePlan: {
+                category: "monitoring",
+                effectiveStartDate: "2026-05-01",
+                versionNumber: 2,
+            },
             description: "Take with Food",
             provider: { clinicName: "Document extraction demo" },
             requiresScheduleConfiguration: true,

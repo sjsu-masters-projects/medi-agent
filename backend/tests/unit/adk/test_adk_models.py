@@ -15,11 +15,12 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from google.adk.models import Gemini
+from google.adk.models import FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 
 from app.adk.models.adk_models import BearerLiteLlm, adk_model_for, adk_model_for_workload
-from app.adk.registry import FLASH, GPT_OSS, ModelSpec, Transport, Workload
+from app.adk.models.resilient import ResilientLlm
+from app.adk.registry import FLASH, GPT_OSS, TRIAGE_LITE, ModelSpec, Transport, Workload
 from app.config import settings
 
 
@@ -116,6 +117,15 @@ def test_gemini_does_not_go_through_litellm() -> None:
     assert not isinstance(model, LiteLlm)
 
 
+def test_triage_lite_uses_the_same_native_vertex_transport() -> None:
+    with _capturing_genai_client():
+        model = adk_model_for(TRIAGE_LITE)
+
+    assert isinstance(model, Gemini)
+    assert model.model == "gemini-3.1-flash-lite"
+    assert not isinstance(model, LiteLlm)
+
+
 # ---------------------------------------------------------------------------
 # gpt-oss — the prefix and the credential
 # ---------------------------------------------------------------------------
@@ -200,14 +210,47 @@ def test_the_managed_model_is_a_litellm_model() -> None:
 
 
 def test_a_workload_gets_the_model_the_registry_routes_it_to() -> None:
-    """Triage leads with gpt-oss on the measured latency, so this must not be Flash."""
+    """Triage uses the dedicated low-cost Gemini model, not the reply model."""
     model = adk_model_for_workload(Workload.TRIAGE)
 
-    assert model.model == "openai/openai/gpt-oss-120b-maas"
+    assert model.model == "gemini-3.1-flash-lite"
 
 
-def test_every_workload_can_build_its_primary_model() -> None:
-    """A routing table naming a model the runtime cannot construct is not a routing table."""
+def test_a_workload_builds_its_declared_fallback_after_the_primary() -> None:
+    """A registry fallback that never reaches the ADK model is only documentation."""
+    with _capturing_genai_client():
+        model = adk_model_for_workload(Workload.TRIAGE)
+
+    assert isinstance(model, FallbackModel)
+    assert all(isinstance(candidate, ResilientLlm) for candidate in model.models)
+    assert [candidate.model for candidate in model.models] == [
+        "gemini-3.1-flash-lite",
+        "gemini-3.8-flash",
+    ]
+    assert model.models[0].timeout_seconds == 8.0
+    assert model.models[0].circuit_breaker is False
+    assert model.models[1].circuit_breaker is False
+
+
+def test_reply_timeout_leaves_room_for_its_fallback() -> None:
+    with _capturing_genai_client():
+        model = adk_model_for_workload(Workload.REPLY)
+
+    assert isinstance(model, FallbackModel)
+    assert all(candidate.timeout_seconds == 10.0 for candidate in model.models)
+
+
+def test_a_workload_without_a_fallback_keeps_its_primary_model() -> None:
+    """A route that forbids substitution must not gain one in the runtime adapter."""
+    with _capturing_genai_client():
+        model = adk_model_for_workload(Workload.EXTRACTION)
+
+    assert isinstance(model, Gemini)
+    assert not isinstance(model, FallbackModel)
+
+
+def test_every_workload_can_build_its_complete_model_route() -> None:
+    """Every primary and fallback named by the registry must be constructible."""
     with _capturing_genai_client():
         for workload in Workload:
             assert adk_model_for_workload(workload) is not None
@@ -225,4 +268,5 @@ def test_an_unknown_transport_fails_loudly() -> None:
 def test_the_two_transports_stay_paired_with_their_builders() -> None:
     """Guards the pairing: the two branches are not interchangeable."""
     assert FLASH.transport is Transport.VERTEX_GENAI
+    assert TRIAGE_LITE.transport is Transport.VERTEX_GENAI
     assert GPT_OSS.transport is Transport.VERTEX_MAAS_OPENAI

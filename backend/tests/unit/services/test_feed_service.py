@@ -9,6 +9,91 @@ import pytest
 from app.services.feed_service import FeedService
 
 
+@pytest.mark.parametrize("target_type", ["medication", "obligation"])
+@pytest.mark.parametrize(
+    "frequency", ["as-needed", "as recorded", "once after each walking session", ""]
+)
+def test_unsafe_legacy_reminder_does_not_create_due_occurrences(
+    feed_service, target_type, frequency
+):
+    target = {
+        "id": "target",
+        "name": "Synthetic item",
+        "dosage": "test",
+        "description": "Synthetic activity",
+        "frequency": frequency,
+    }
+    schedule = {
+        "timezone": "UTC",
+        "times_of_day": ["08:00", "20:00"],
+        "days_of_week": ["monday"],
+        "is_enabled": True,
+    }
+    renderer = (
+        feed_service._medications_to_tasks
+        if target_type == "medication"
+        else feed_service._obligations_to_tasks
+    )
+    tasks = renderer([target], date(2026, 9, 28), {(target_type, "target"): schedule})
+    assert len(tasks) == 1
+    assert tasks[0]["scheduled_at"] is None
+    assert tasks[0]["requires_schedule_configuration"] is False
+
+
+@pytest.mark.parametrize("value", ["08:00", "not-a-timestamp", "2026-10-01T08:00:00"])
+def test_legacy_occurrence_keys_remain_exact(value):
+    assert FeedService._occurrence_key(value) == value
+
+
+def test_current_plan_projections_excludes_removed_unapproved_and_out_of_range_items(feed_service):
+    today = date(2026, 9, 29)
+    visible = feed_service._current_plan_projections(
+        [
+            {"id": "legacy", "care_plan_item_id": None},
+            {"id": "approved", "care_plan_item_id": "current"},
+            {"id": "expired", "care_plan_item_id": "expired"},
+            {"id": "unapproved", "care_plan_item_id": "missing"},
+        ],
+        {
+            "current": {
+                "version_number": 2,
+                "category": "monitoring",
+                "schedule": {"start_date": "2026-09-01", "end_date": "2026-10-01"},
+            },
+            "expired": {
+                "version_number": 1,
+                "category": "movement",
+                "schedule": {"end_date": "2026-09-28"},
+            },
+        },
+        today,
+    )
+
+    assert [row["id"] for row in visible] == ["legacy", "approved"]
+    assert visible[1]["care_plan"] == {
+        "version_number": 2,
+        "category": "monitoring",
+        "effective_start_date": "2026-09-01",
+        "effective_end_date": "2026-10-01",
+    }
+
+
+def test_current_plan_projections_excludes_malformed_effective_dates(feed_service):
+    visible = feed_service._current_plan_projections(
+        [{"id": "unsafe", "care_plan_item_id": "current"}],
+        {
+            "current": {
+                "version_number": 1,
+                "category": "other",
+                "schedule": {"start_date": "not-a-date"},
+            }
+        },
+        date(2026, 9, 29),
+    )
+
+    assert visible == []
+
+
 @pytest.fixture
 def mock_supabase_client():
     """Create a mock Supabase client."""
@@ -87,6 +172,35 @@ def test_build_adherence_map_empty_logs(feed_service):
     """Test building adherence map with empty logs."""
     result = feed_service._build_adherence_map([])
     assert result == {}
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    ["2026-10-01T15:00:00Z", "2026-10-01T15:00:00.000+00:00", "2026-10-01T08:00:00-07:00"],
+)
+def test_saved_scheduled_completion_survives_timestamp_serialization(feed_service, timestamp):
+    logs = [
+        {
+            "target_type": "obligation",
+            "target_id": "walk",
+            "scheduled_time": timestamp,
+            "logged_at": "2026-10-01T15:01:00+00:00",
+            "status": "completed",
+        }
+    ]
+    occurrences, _ = feed_service._build_adherence_maps(logs)
+    tasks = feed_service._scheduled_tasks_for_item(
+        target_type="obligation",
+        target={"id": "walk", "description": "Walk", "frequency": "daily"},
+        target_date=date(2026, 10, 1),
+        schedule={
+            "timezone": "America/Los_Angeles",
+            "times_of_day": ["08:00"],
+            "days_of_week": ["thursday"],
+        },
+        adherence_occurrence_map=occurrences,
+    )
+    assert tasks[0]["status"] == "completed"
 
 
 def test_build_adherence_map_single_log(feed_service, sample_adherence_log):
@@ -421,8 +535,9 @@ async def test_get_today_empty_feed(feed_service, mock_supabase_client):
     assert result["tasks"] == []
     assert result["summary"]["total"] == 0
 
-    assert mock_supabase_client.table.call_count == 5
-    assert mock_table.select.call_count == 5
+    # The feed also checks plan-item approval/effective state before returning projections.
+    assert mock_supabase_client.table.call_count == 6
+    assert mock_table.select.call_count == 6
     mock_table.eq.assert_any_call("patient_id", str(patient_id))
     assert mock_table.gte.call_count == 1
     assert mock_table.lt.call_count == 1
@@ -472,8 +587,8 @@ async def test_get_today_with_timezone(feed_service, mock_supabase_client):
 
     assert result["timezone"] == "America/New_York"
 
-    assert mock_supabase_client.table.call_count == 3
-    assert mock_table.select.call_count == 3
+    assert mock_supabase_client.table.call_count == 4
+    assert mock_table.select.call_count == 4
     mock_table.eq.assert_any_call("patient_id", str(patient_id))
     assert mock_table.gte.call_count == 1
     assert mock_table.lt.call_count == 1

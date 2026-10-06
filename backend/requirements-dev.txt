@@ -469,7 +469,7 @@ pygments==2.21.0
     # via
     #   pytest
     #   rich
-pyjwt==2.13.0
+pyjwt==2.15.1
     # via
     #   -r requirements.in
     #   supabase-auth
@@ -662,8 +662,9 @@ typing-inspection==0.4.4
     #   pydantic-settings
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.7.0
+urllib3==2.8.0
     # via
+    #   -r requirements.in
     #   botocore
     #   requests
     #   sentry-sdk

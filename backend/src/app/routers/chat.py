@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, WebSocketException
 from starlette import status
+from starlette.websockets import WebSocketState
 from supabase import Client
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
@@ -26,6 +27,10 @@ from app.models.auth import CurrentUser
 from app.models.enums import ChatRole, Language
 from app.safety import TRIAGE_COPY
 from app.services.a2a_task_service import A2ATaskService
+from app.services.chat_document_catalog import (
+    build_document_catalog_reply,
+    is_document_catalog_question,
+)
 from app.services.chat_service import ChatService, ConversationStateConflictError
 from app.services.drug_knowledge_service import DrugKnowledgeService
 from app.utils.localization import resolve_locale_resource
@@ -172,6 +177,88 @@ async def _emit_a2a_task_events(websocket: WebSocket, events: list[dict[str, Any
                 "status": event.get("status"),
             }
         )
+
+
+def _closed_websocket_error(error: BaseException) -> bool:
+    """Recognize Starlette's error for a send racing a client disconnect."""
+    return isinstance(error, RuntimeError) and (
+        "close message has been sent" in str(error)
+        or "websocket is not connected" in str(error).lower()
+    )
+
+
+async def _send_terminal_event(websocket: WebSocket, payload: dict[str, Any]) -> bool:
+    """Best-effort terminal send that never sends again after the socket closes."""
+    if websocket.application_state is not WebSocketState.CONNECTED:
+        return False
+    try:
+        await websocket.send_json(payload)
+    except (WebSocketDisconnect, RuntimeError):
+        logger.info("Chat websocket closed before its terminal event could be delivered")
+        return False
+    return True
+
+
+async def _send_document_catalog_reply(
+    *,
+    websocket: WebSocket,
+    service: ChatService,
+    patient_id: str,
+    incoming: ChatMessageCreate,
+    session_id: str,
+    document_context: dict[str, Any] | None,
+    conversation_history: list[dict[str, Any]],
+    conversation_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist and emit the deterministic answer to a portal-document catalog question."""
+    documents = await service.get_document_catalog(patient_id)
+    content = build_document_catalog_reply(documents, incoming.language)
+    await websocket.send_json(
+        {"type": "assistant_start", "intent": "document_catalog", "urgency": "routine"}
+    )
+    for chunk in _chunk_text(content):
+        await websocket.send_json({"type": "assistant_chunk", "content": chunk})
+
+    assistant_message = await service.save_message(
+        patient_id=patient_id,
+        data={
+            "content": content,
+            "role": ChatRole.ASSISTANT,
+            "intent": "document_catalog",
+            "language": incoming.language,
+        },
+    )
+    assistant_payload = _serialize_chat_message(assistant_message)
+    conversation_history.append(assistant_payload)
+    next_state = _build_conversation_state(
+        conversation_history,
+        prior_state=conversation_state,
+        last_intent="document_catalog",
+        last_urgency="routine",
+        last_route="triage",
+    )
+    await _persist_conversation_state_with_retry(
+        service,
+        patient_id=patient_id,
+        session_id=session_id,
+        language=incoming.language,
+        document_context=document_context,
+        conversation_history=conversation_history,
+        fallback_state=next_state,
+        last_intent="document_catalog",
+        last_urgency="routine",
+        last_route="triage",
+    )
+    await websocket.send_json(
+        {
+            "type": "assistant_complete",
+            "message": assistant_payload,
+            "intent": "document_catalog",
+            "urgency": "routine",
+            "escalation_required": False,
+        }
+    )
+    return next_state
 
 
 async def _persist_conversation_state_with_retry(
@@ -538,6 +625,19 @@ async def chat_websocket_endpoint(
             conversation_history.append(user_payload)
             await websocket.send_json({"type": "user_message_saved", "message": user_payload})
 
+            if is_document_catalog_question(incoming.content):
+                conversation_state = await _send_document_catalog_reply(
+                    websocket=websocket,
+                    service=service,
+                    patient_id=str(patient_id),
+                    incoming=incoming,
+                    session_id=session_id,
+                    document_context=document_context,
+                    conversation_history=conversation_history,
+                    conversation_state=conversation_state,
+                )
+                continue
+
             # Drug knowledge is best-effort; failures must NOT collapse the turn.
             try:
                 drug_knowledge_context = await drug_knowledge_service.retrieve_for_patient_message(
@@ -724,6 +824,8 @@ async def chat_websocket_endpoint(
                                     "idempotency_key": f"symptom_event:{symptom_event_id}",
                                     "symptom_report": saved_report,
                                     "flagged_for_adr": True,
+                                    "naranjo_answers": symptom_result.naranjo_answers,
+                                    "adr_evidence": symptom_result.adr_evidence,
                                     "document_context": document_context,
                                     "conversation_state": conversation_state,
                                 },
@@ -848,23 +950,29 @@ async def chat_websocket_endpoint(
     except WebSocketDisconnect:
         logger.info("Chat websocket disconnected")
     except ValidationError as exc:
-        await websocket.send_json(
+        await _send_terminal_event(
+            websocket,
             {
                 "type": "error",
                 "code": "validation_error",
                 "message": exc.message,
-            }
+            },
         )
     except Exception as exc:
+        if _closed_websocket_error(exc):
+            logger.info("Chat websocket disconnected before a response was delivered")
+            return
         logger.exception("Chat websocket error: %s", exc)
-        await websocket.send_json(
+        sent = await _send_terminal_event(
+            websocket,
             {
                 "type": "error",
                 "code": "server_error",
                 "message": "Chat processing failed",
-            }
+            },
         )
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        if sent and websocket.application_state is WebSocketState.CONNECTED:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 
 # WebSocket routes are mounted in main.py.

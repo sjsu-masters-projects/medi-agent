@@ -213,6 +213,23 @@ describe("Patient chat page", () => {
         });
     });
 
+    it("shows typing feedback as soon as a typed message is sent", async () => {
+        renderPage();
+
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+        });
+
+        fireEvent.change(screen.getByPlaceholderText(/Type or speak/i), {
+            target: { value: "What documents do you have on me?" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+
+        expect(screen.getByText("Maya is typing...")).toBeInTheDocument();
+    });
+
     it("shows escalation as a dismissible safety notice instead of a chat error", async () => {
         renderPage();
 

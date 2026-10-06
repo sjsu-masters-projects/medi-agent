@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+from app.core.exceptions import LLMError
 
 
 class GenerationCapability(StrEnum):
@@ -33,10 +35,19 @@ class GenerationErrorCode(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
-class GenerationProviderError(Exception):
+class GenerationProviderError(LLMError):
+    """A normalized provider failure that remains compatible with LLM callers.
+
+    Provider adapters need a machine-readable category so background work can retry
+    only failures that may recover.  It also remains an ``LLMError`` so legacy callers
+    that handle model failures as one family keep their existing behavior.
+    """
+
+    code: GenerationErrorCode
+
     def __init__(self, code: GenerationErrorCode, message: str) -> None:
+        super().__init__(message=message, code=code.value)
         self.code = code
-        super().__init__(message)
 
 
 MAX_OUTPUT_TOKENS = 32_768
@@ -56,6 +67,9 @@ class GenerationRequest(BaseModel):
     # thought tokens against the same budget, so a cap sized for a plain model truncates a
     # thinking one before it writes anything.
     max_tokens: int = Field(default=1024, ge=1, le=MAX_OUTPUT_TOKENS)
+    # Vertex reasoning consumes this same token budget. Workloads that do not need
+    # open-ended deliberation can request a bounded reasoning ceiling explicitly.
+    thinking_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None
     task: str = Field(default="general", min_length=1, max_length=100)
     # JSON Schema the caller wants the answer to satisfy. Providers with native
     # structured output enforce it; the others leave validation to the caller.

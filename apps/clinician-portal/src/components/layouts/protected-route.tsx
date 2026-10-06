@@ -8,10 +8,6 @@ import { Skeleton } from "@/components/ui";
 import type { RootState } from "@/store/store";
 import { buildLoginRedirectUrl } from "../../../../../packages/shared/src/utils/return-path";
 
-const subscribeToHydration = () => () => undefined;
-const clientHydrationSnapshot = () => true;
-const serverHydrationSnapshot = () => false;
-
 function LoadingSkeleton() {
     return (
         <div className="flex h-screen items-center justify-center bg-gray-50">
@@ -24,20 +20,21 @@ function LoadingSkeleton() {
     );
 }
 
+const subscribeToHydration = () => () => undefined;
+
+function useHasHydrated() {
+    return useSyncExternalStore(subscribeToHydration, () => true, () => false);
+}
+
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-    // A restored browser session must not replace the server skeleton during hydration.
-    const hydrated = useSyncExternalStore(
-        subscribeToHydration,
-        clientHydrationSnapshot,
-        serverHydrationSnapshot,
-    );
+    const mounted = useHasHydrated();
     const { isAuthenticated, loading } = useSelector((state: RootState) => state.auth);
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
     useEffect(() => {
-        if (hydrated && !loading && !isAuthenticated) {
+        if (mounted && !loading && !isAuthenticated) {
             const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
             router.replace(
                 buildLoginRedirectUrl({
@@ -46,9 +43,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
                 }),
             );
         }
-    }, [hydrated, isAuthenticated, loading, pathname, router, searchParams]);
+    }, [isAuthenticated, loading, mounted, pathname, router, searchParams]);
 
-    if (!hydrated || loading) {
+    if (!mounted || loading) {
         return <LoadingSkeleton />;
     }
 

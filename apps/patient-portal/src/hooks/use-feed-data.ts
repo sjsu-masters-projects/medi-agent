@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { api } from "@/services/api";
 import { redirectToLogin } from "@/services/auth-redirect";
@@ -92,6 +92,9 @@ export function useFeedData() {
     null,
   );
   const [documentImporting, setDocumentImporting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submissionInFlight = useRef(false);
 
   const refreshFeed = useCallback(() => {
     if (!accessToken) {
@@ -119,28 +122,47 @@ export function useFeedData() {
       .catch(() => setAdherenceStats(emptyAdherenceStats));
   }, [accessToken]);
 
-  async function markComplete(task: FeedTask) {
-    const completedAt = new Date().toISOString();
-    dispatch(markTaskComplete({ completedAt, taskId: task.id }));
-
+  async function submitAdherence(task: FeedTask, status: string, barrierCode?: string, notes?: string): Promise<boolean> {
+    if (submissionInFlight.current) return false;
+    setActionError(null);
     if (!accessToken) {
-      return;
+      setActionError("Please sign in again. Your response has not been saved.");
+      return false;
     }
-
+    submissionInFlight.current = true;
+    setSubmitting(true);
     try {
       await api.post(
-        "/api/v1/adherence",
+        "/api/v1/adherence/",
         {
           scheduled_time: task.scheduledAt,
-          status: task.type === FeedTaskType.MEDICATION ? "taken" : "completed",
+          status,
           target_id: task.targetId,
           target_type: task.type,
+          barrier_code: barrierCode,
+          notes: notes?.trim() || undefined,
         },
         { token: accessToken },
       );
+      // Only acknowledge a response that the service actually saved.
+      if (status === "skipped") dispatch(markTaskSkipped({ taskId: task.id }));
+      else dispatch(markTaskComplete({ completedAt: new Date().toISOString(), taskId: task.id }));
+      refreshFeed();
+      void api.get<ApiAdherenceStats>("/api/v1/adherence/stats", { token: accessToken })
+        .then((response) => setAdherenceStats(mapAdherenceStats(response)))
+        .catch(() => { /* A statistics refresh must not undo a saved response. */ });
+      return true;
     } catch {
-      // Keep optimistic UI state even when backend is unavailable.
+      setActionError("We couldn’t confirm that your response was saved. Refresh before retrying; your schedule has not been marked complete.");
+      return false;
+    } finally {
+      submissionInFlight.current = false;
+      setSubmitting(false);
     }
+  }
+
+  async function markComplete(task: FeedTask) {
+    return submitAdherence(task, task.type === FeedTaskType.MEDICATION ? "taken" : "completed");
   }
 
   async function reportBarrier(
@@ -148,20 +170,7 @@ export function useFeedData() {
     barrierCode: "side_effects" | "cost" | "access" | "schedule" | "confusion" | "other",
     notes?: string,
   ) {
-    dispatch(markTaskSkipped({ taskId: task.id }));
-    if (!accessToken) return;
-    try {
-      await api.post("/api/v1/adherence", {
-        scheduled_time: task.scheduledAt,
-        status: "skipped",
-        target_id: task.targetId,
-        target_type: task.type,
-        barrier_code: barrierCode,
-        notes: notes?.trim() || undefined,
-      }, { token: accessToken });
-    } catch {
-      // Preserve the patient's locally recorded barrier if the network drops.
-    }
+    return submitAdherence(task, "skipped", barrierCode, notes);
   }
 
   async function getDocumentImportSession(): Promise<ActivePatientSession | null> {
@@ -253,6 +262,8 @@ export function useFeedData() {
   }
 
   return {
+    actionError,
+    submitting,
     adherenceStats,
     documentImportError,
     documentImporting,

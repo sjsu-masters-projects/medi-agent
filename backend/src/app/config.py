@@ -40,17 +40,24 @@ class Settings(BaseSettings):
     # is configuration and switching is a one-line change here plus a redeploy. Watch the
     # release notes: a retired id fails as a 404 at call time, which is how
     # `gemini-3.1-flash-lite-preview` once broke chat in production.
+    gemini_triage_model: str = "gemini-3.1-flash-lite"
     gemini_flash_model: str = "gemini-3.8-flash"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
     google_embedding_model: str = "gemini-embedding-001"
     rag_embedding_dimensions: int = 768
     rag_min_similarity: float = 0.72
 
-    # Vertex AI transports use different serving locations. MaaS remains regional so its
-    # OpenAI-compatible endpoint stays in us-central1; Gemini 3.8 Flash is served from
-    # Vertex's global endpoint.
-    vertex_ai_location: str = "us-central1"
+    # Vertex AI transports keep separate settings so either can move independently.
+    # Interactive Gemini models use the global Gen AI endpoint. The MaaS location remains
+    # for evaluation of managed open-weight models; no patient chat route depends on it.
+    vertex_ai_location: str = "global"
     gemini_vertex_ai_location: str = "global"
+    # The chat pipeline makes two sequential model calls. Per-workload deadlines live in
+    # the registry; this outer ceiling prevents their fallbacks from accumulating into a
+    # minute-long websocket turn. MaaS failures open a short process-local cooldown so a
+    # burst of patients does not repeat the same throttled call.
+    chat_turn_timeout_seconds: float = 30.0
+    model_circuit_breaker_cooldown_seconds: float = 60.0
 
     # Per-workload kill switches. Turning one off routes that workload to the
     # deterministic path recorded beside it in `app/adk/registry.py`, which is why every
@@ -63,6 +70,7 @@ class Settings(BaseSettings):
     discrepancy_ai_enabled: bool = True
     adr_extraction_ai_enabled: bool = True
     explanation_ai_enabled: bool = True
+    care_plan_ai_enabled: bool = True
 
     # NVIDIA NIM (independent provider for evaluation comparison)
     nvidia_nim_api_key: str = ""

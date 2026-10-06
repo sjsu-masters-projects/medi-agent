@@ -22,6 +22,7 @@ from supabase import Client
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.middleware.rate_limit import soap_note_rate_limiter
+from app.models.adr import ADRReviewQueueResponse
 from app.models.auth import CurrentUser
 from app.models.care_plan import CarePlanVersionRead
 from app.models.clinician import ClinicianRead, ClinicianUpdate
@@ -43,6 +44,7 @@ from app.models.dashboard import (
     SoapNoteGenerationResponse,
     SoapNoteRequest,
 )
+from app.models.enums import ADRStatus
 from app.models.invite import (
     CurrentInviteCodeResponse,
     InviteCodeGenerateResponse,
@@ -283,6 +285,28 @@ async def get_dashboard(
         max_last_activity_days=max_last_activity_days,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.get(
+    "/me/adr-assessments",
+    response_model=ADRReviewQueueResponse,
+    summary="List assigned-patient ADR assessments",
+    description=(
+        "Returns deterministic Naranjo decision support and patient-grounded evidence "
+        "for ADR assessments belonging to assigned patients."
+    ),
+)
+async def list_adr_assessments(
+    status_filter: ADRStatus = Query(default=ADRStatus.DRAFT, alias="status"),
+    limit: int = Query(default=100, ge=1, le=200),
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.list_adr_review_queue(
+        user.id,
+        status_filter=status_filter,
+        limit=limit,
     )
 
 

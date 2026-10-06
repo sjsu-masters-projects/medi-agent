@@ -1,9 +1,10 @@
-"""Model Router — routes LLM tasks to a model client.
+"""Compatibility API for model callers that predates the ADK routing registry.
 
-This is the legacy routing path, kept working while the agent runtime in `app.adk`
-replaces it. New routing decisions belong in `app.adk.registry`, which records a
-fallback, a latency budget, and a deterministic path for each workload; this map can
-express none of those.
+Active background services still call this stable API, but document extraction,
+explanation, and care-plan classification now delegate to `app.adk.registry`. Their model
+choice, timeout, fallback, thinking ceiling, kill switch, and telemetry therefore live in
+one route table. The remaining direct-client methods exist only for evaluation and legacy
+callers without measured registry evidence.
 
 Every task that once routed to the retired medical-model experiment now routes to Flash. The
 experiment was measured and dropped; its client also raised unless a dedicated endpoint was
@@ -16,8 +17,10 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
+from app.adk.background_generation import generate_for_workload
+from app.adk.registry import Workload
 from app.clients.gemini import GeminiClient
 from app.config import settings
 from app.models.generation import GenerationRequest, GenerationTelemetry
@@ -76,6 +79,15 @@ TASK_MODEL_MAP = {
     # Clinician-visible structure only. The care-plan service validates source
     # fact IDs and copies all patient-facing wording from grounded evidence.
     TaskType.CARE_PLAN_DRAFT: "flash",
+}
+
+# The active background services retain their stable TaskType API while their actual
+# routing decision lives in the ADK registry. Unmapped values are compatibility paths
+# for legacy or evaluation callers, not production background workflows.
+_BACKGROUND_WORKLOADS = {
+    TaskType.DOCUMENT_PARSING: Workload.EXTRACTION,
+    TaskType.PATIENT_EXPLANATION: Workload.EXPLANATION,
+    TaskType.CARE_PLAN_DRAFT: Workload.CARE_PLAN_CLASSIFICATION,
 }
 
 
@@ -261,6 +273,7 @@ class ModelRouter:
         system_instruction: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        thinking_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None,
     ) -> str:
         """Generate plain text through the provider contract and return text only."""
         text, _telemetry = await self.generate_text_with_telemetry(
@@ -269,6 +282,7 @@ class ModelRouter:
             system_instruction=system_instruction,
             temperature=temperature,
             max_tokens=max_tokens,
+            thinking_level=thinking_level,
         )
         return text
 
@@ -280,6 +294,7 @@ class ModelRouter:
         system_instruction: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        thinking_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None,
     ) -> tuple[str, GenerationTelemetry]:
         """Generate text and return which model produced it, alongside the text.
 
@@ -293,12 +308,23 @@ class ModelRouter:
         router falls back, so the configured model is not necessarily the one that
         answered. A confidently wrong provenance stamp is worse than an absent one.
         """
+        workload = _BACKGROUND_WORKLOADS.get(task_type)
+        if workload is not None:
+            response = await generate_for_workload(
+                workload,
+                prompt=prompt,
+                system_instruction=system_instruction,
+                temperature=temperature,
+            )
+            return response.text, response.telemetry
+
         response = await self.get_text_provider_with_fallback(task_type).generate(
             GenerationRequest(
                 prompt=prompt,
                 system_instruction=system_instruction,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                thinking_level=thinking_level,
                 task=task_type.value,
             )
         )

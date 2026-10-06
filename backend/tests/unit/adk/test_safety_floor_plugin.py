@@ -77,6 +77,11 @@ async def test_an_ordinary_message_lets_the_agents_run() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_negated_emergency_phrase_does_not_halt_the_run() -> None:
+    assert await _run("I have a dry cough and do not have chest pain") is None
+
+
+@pytest.mark.asyncio
 async def test_an_empty_turn_is_not_treated_as_an_emergency() -> None:
     assert await _run("   ") is None
     assert await _run(None) is None

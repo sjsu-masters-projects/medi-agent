@@ -26,7 +26,15 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This checkout contains migrations `001` through `043`, including canonical clinical facts (`017`), SMART/FHIR import envelopes (`018`), clinical-action approval controls (`019`), database-security hardening (`020`), the least-privilege server-only grants used by the synthetic fixture, A2A retry worker, patient feed, reminder schedules, adherence statistics, SMART import review, clinician review reads (`021`–`028`), safe external-record reconciliation (`029`), guarded document ingestion (`034`), model-invocation telemetry (`035`), the durable document-ingestion worker boundary (`036`), private derived TIFF previews (`037`), the independent patient-explanation lifecycle (`038`), fair delayed explanation retries (`039`), clinician-approved care plans (`040`), and the one-time document-grounded care-plan request backfill (`041`). Scheduling includes appointment lifecycle/group/audit migrations `038`–`041`, expired status `042`, and booking/expiry guards `043`, bringing the local inventory to 48 SQL files. Duplicate prefixes coexist with the document/care-plan files, just as two `011` filenames coexist. The migration ledger uses full filenames and checksums; preserve already-applied names rather than renumbering them. Local inventory does not establish remote application.
+This integrated checkout contains 53 SQL migration files through prefix `045`.
+The newer main files include care-plan publication review guards (`042`), incomplete
+drafts (`043`), overlap publication guards (`044`), activity continuity (`045`), and
+an independent auditable ADR assessment migration (`042`). Scheduling adds appointment
+lifecycle/group/audit migrations `038`–`041`, expired status `042`, and booking/expiry
+guards `043`. These coexist with the document/care-plan migrations sharing those
+prefixes, just as the two `011` files coexist. The ledger identifies migrations by
+full filename and checksum; preserve applied names and bytes. A local file count
+does not establish remote application or authorize applying unrelated migrations.
 
 ### Appointment Slice 5 rollout
 

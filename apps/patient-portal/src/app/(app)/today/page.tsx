@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
@@ -18,13 +18,17 @@ function splitMedicationName(name: string) {
     };
 }
 
-function mapTaskStatus(status: FeedTask["status"]): TaskCardStatus {
+function mapTaskStatus(task: FeedTask, now: number): TaskCardStatus {
+    const status = task.status;
     if (status === FeedTaskStatus.PENDING) {
+        if (task.scheduledTime && (!task.scheduledAt || !Number.isFinite(Date.parse(task.scheduledAt)) || Date.parse(task.scheduledAt) > now)) {
+            return "upcoming";
+        }
         return "active";
     }
 
     if (status === FeedTaskStatus.SKIPPED) {
-        return "upcoming";
+        return "skipped";
     }
 
     return status;
@@ -32,7 +36,7 @@ function mapTaskStatus(status: FeedTask["status"]): TaskCardStatus {
 
 function formatTimeLabel(
     scheduledTime?: string,
-    status?: FeedTask["status"],
+    status?: TaskCardStatus,
     requiresScheduleConfiguration?: boolean,
 ) {
     if (!scheduledTime && requiresScheduleConfiguration) {
@@ -46,12 +50,31 @@ function formatTimeLabel(
     const value = new Date();
     value.setHours(Number(hours), Number(minutes), 0, 0);
     const label = value.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    return status === FeedTaskStatus.PENDING ? `${label} • Now` : label;
+    return status === "active" ? `${label} • Now` : label;
+}
+
+function carePlanLabel(task: FeedTask) {
+    if (!task.carePlan) {
+        return null;
+    }
+    return `Care-team approved • ${task.carePlan.category.replaceAll("_", " ")}`;
+}
+
+function CarePlanDetails({ task }: { task: FeedTask }) {
+    if (!task.carePlan) return null;
+    return <details className="mb-3 text-xs text-slate-600"><summary className="cursor-pointer">Care plan details</summary><p className="mt-1">Approved plan version {task.carePlan.versionNumber}. This activity is part of your approved care plan.</p></details>;
 }
 
 export default function TodayPage() {
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 30_000);
+        return () => clearInterval(timer);
+    }, []);
     const {
         adherenceStats,
+        actionError,
+        submitting,
         error,
         loading,
         markComplete,
@@ -65,11 +88,18 @@ export default function TodayPage() {
     const profile = usePatientProfile();
     const displayName = profile?.firstName ?? "";
     const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
-    const completionPercent = Number.isFinite(adherenceStats.overallScore)
-        ? Math.round(adherenceStats.overallScore * 100)
+    const completionPercent = summary.total > 0
+        ? Math.round(summary.completed / summary.total * 100)
         : 0;
     const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
     const hasScheduleGaps = tasks.some((task) => task.requiresScheduleConfiguration);
+
+    async function sendBarrier(code: "side_effects" | "cost" | "access" | "schedule" | "confusion" | "other") {
+        if (barrierTask && await reportBarrier(barrierTask, code, barrierNote)) {
+            setBarrierTask(null);
+            setBarrierNote("");
+        }
+    }
 
     if (loading && tasks.length === 0) {
         return (
@@ -123,6 +153,7 @@ export default function TodayPage() {
             </div>
 
             <div className="patient-stack space-y-5 px-5 pt-6">
+                {actionError && !barrierTask ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{actionError}</p> : null}
                 {hasScheduleGaps ? (
                     <Link href="/reminders">
                         <Card className="border-[#edd59a] bg-[#fff7dc]">
@@ -155,7 +186,7 @@ export default function TodayPage() {
                 {tasks.length > 0 ? (
                     <div className="ml-2 border-l-2 border-[#d7e5de] pl-6">
                         {tasks.map((task) => {
-                            const status = mapTaskStatus(task.status);
+                            const status = mapTaskStatus(task, now);
                             const dotClasses =
                                 status === "completed"
                                     ? "bg-[#147465] text-white"
@@ -175,10 +206,11 @@ export default function TodayPage() {
                                         <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                             {formatTimeLabel(
                                                 task.scheduledTime,
-                                                task.status,
+                                                status,
                                                 task.requiresScheduleConfiguration,
                                             )}
                                         </p>
+                                        {carePlanLabel(task) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task)}</p> : null}
                                         <MedicationCard
                                             dosage={medication.dosage}
                                             id={task.id}
@@ -186,10 +218,13 @@ export default function TodayPage() {
                                             name={medication.name}
                                             onMarkComplete={() => markComplete(task)}
                                             onReportBarrier={() => setBarrierTask(task)}
-                                            prescriber={task.provider?.name}
+                                            prescriber={task.carePlan ? undefined : task.provider?.name}
+                                            approvedBy={task.carePlan ? task.provider?.name : undefined}
                                             status={status}
+                                            submitting={submitting}
                                             time={task.scheduledTime ?? ""}
                                         />
+                                        <CarePlanDetails task={task} />
                                     </div>
                                 );
                             }
@@ -202,19 +237,24 @@ export default function TodayPage() {
                                     <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                         {formatTimeLabel(
                                             task.scheduledTime,
-                                            task.status,
+                                            status,
                                             task.requiresScheduleConfiguration,
                                         )}
                                     </p>
+                                    {carePlanLabel(task) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task)}</p> : null}
                                     <ObligationCard
                                         description={task.name}
+                                        instructions={task.description}
+                                        frequency={task.frequency}
                                         id={task.id}
                                         onMarkComplete={() => markComplete(task)}
                                         onReportBarrier={() => setBarrierTask(task)}
                                         status={status}
+                                        submitting={submitting}
                                         time={task.scheduledTime ?? ""}
-                                        type={task.frequency?.includes("walk") ? "exercise" : "custom"}
+                                        type={task.carePlan?.category === "movement" ? "exercise" : task.carePlan?.category === "nutrition" ? "diet" : task.carePlan?.category === "hydration" ? "hydration" : task.carePlan?.category === "monitoring" ? "monitoring" : task.carePlan?.category === "follow_up" ? "follow_up" : "custom"}
                                     />
+                                    <CarePlanDetails task={task} />
                                 </div>
                             );
                         })}
@@ -234,19 +274,20 @@ export default function TodayPage() {
                 </Link>
             </div>
             <Modal
-                onClose={() => { setBarrierTask(null); setBarrierNote(""); }}
+                onClose={() => { if (!submitting) { setBarrierTask(null); setBarrierNote(""); } }}
                 open={Boolean(barrierTask)}
                 title="I couldn’t do this"
             >
                 <div className="space-y-3">
+                    {actionError ? <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{actionError}</p> : null}
                     <p className="text-sm text-[#5b6b83]">Choose what got in the way. Your care team can use this to follow up.</p>
                     <div className="grid grid-cols-2 gap-2">
                         {(["side_effects", "cost", "access", "schedule", "confusion"] as const).map((code) => (
-                            <button className="rounded-lg border border-[#b6d9d2] px-3 py-2 text-sm font-semibold capitalize text-[#147465]" key={code} onClick={() => { if (barrierTask) void reportBarrier(barrierTask, code); setBarrierTask(null); }} type="button">{code.replace("_", " ")}</button>
+                            <button disabled={submitting} className="rounded-lg border border-[#b6d9d2] px-3 py-2 text-sm font-semibold capitalize text-[#147465]" key={code} onClick={() => void sendBarrier(code)} type="button">{code.replace("_", " ")}</button>
                         ))}
                     </div>
                     <label className="block text-sm font-semibold text-[#17233a]">Other (please describe)<textarea className="mt-1 min-h-20 w-full rounded-lg border border-[#b6d9d2] p-2 font-normal" value={barrierNote} onChange={(event) => setBarrierNote(event.target.value)} /></label>
-                    <button className="w-full rounded-lg bg-[#147465] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={!barrierNote.trim()} onClick={() => { if (barrierTask) void reportBarrier(barrierTask, "other", barrierNote); setBarrierTask(null); setBarrierNote(""); }} type="button">Send to care team</button>
+                    <button className="w-full rounded-lg bg-[#147465] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={submitting || !barrierNote.trim()} onClick={() => void sendBarrier("other")} type="button">{submitting ? "Saving…" : "Send to care team"}</button>
                 </div>
             </Modal>
         </div>

@@ -63,7 +63,7 @@ describe("Sidebar", () => {
         expect(screen.getByText("Patient Roster")).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("href", "/appointments");
         expect(screen.getByText("Review Queue")).toBeInTheDocument();
-        expect(screen.getByText("MedWatch Queue")).toBeInTheDocument();
+        expect(screen.getByText("ADR Reviews")).toBeInTheDocument();
         expect(screen.getByText("Messages")).toBeInTheDocument();
         expect(screen.getByText("Clinic Settings")).toBeInTheDocument();
         await waitFor(() => expect(profileGetMock).toHaveBeenCalled());
