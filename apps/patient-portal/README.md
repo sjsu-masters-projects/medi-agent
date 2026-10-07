@@ -20,6 +20,27 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Visits scheduling
+
+Visits shows appointment times and response deadlines in the patient's saved
+timezone and `en-US`/`es-MX` locale. Slice 5 adds expired history without response
+controls and translated overlap/expiry/past-time messages. Failed actions keep the
+list visible; a saved response followed by a failed refresh has a distinct notice.
+Visits refreshes at pending deadlines and on browser focus. The server/database
+remains authoritative for expiry and booking conflicts.
+
+Migrations 042 and 043 must be applied before activating the Slice 5 backend.
+See [the scheduling design](../../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry)
+for rollout order and synthetic acceptance steps.
+
+Confirmed/scheduled cards now include **Add to calendar / Agregar al calendario**.
+Each click checks the current appointment and authorization before downloading an
+`.ics` file. It contains a generic localized title, exact start/end and location;
+clinical reasons and notes are omitted. It is a one-time copy: later changes and
+cancellations do not sync, and the calendar app uses its own display timezone.
+Failed downloads keep the visit list visible with a translated retry notice.
+See [Slice 6 verification and click-through](../../.agent/specs/sch-001-appointment-scheduling.md#15-slice-6--one-time-calendar-export).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

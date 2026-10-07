@@ -62,3 +62,14 @@ fixture clinics.
 
 Use reset only for an approved synthetic environment. Do not use a production database
 URL or environment value.
+
+## Appointment offer audit retention
+
+After migrations `040` and `041`, grouped appointment offers create append-only
+`appointment_offer_events`. These retain their appointment and patient references.
+The existing reset script cannot delete fixture patients with offer events; do not run
+that reset after exercising grouped offers in a shared environment. Use the existing
+fixture without resetting, or a fresh isolated demo database. A purge/reset path for
+this audit history requires a separate retention review. Single-slot fixtures remain
+unchanged. See the scheduling design in `.agent/specs/sch-001-appointment-scheduling.md`
+for the grouped-offer API and manual acceptance steps.

@@ -20,6 +20,11 @@ uv pip compile requirements.in --universal --python-version 3.12 --output-file r
 uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt
 ```
 
+Security floors also cover [multidict's items-view reference leak](https://github.com/aio-libs/multidict/security/advisories/GHSA-54p9-h82j-f925)
+(`>=6.9.1`) and [LangGraph SDK resource authorization](https://github.com/langchain-ai/langgraph/security/advisories/GHSA-fvww-7h3r-vfhp)
+(`>=0.4.4`). Both locks retain these patched versions. Run the CI audit with Python
+3.12; system Python 3.14 cannot resolve all packages in this lock.
+
 ## Run
 
 ```bash
@@ -123,14 +128,35 @@ src/app/
 └── utils/            # Shared helpers
 ```
 
+## Appointment calendar export
+
+`GET /api/v1/appointments/{id}/calendar?locale=en-US` (or `es-MX`) returns
+`{ filename, content }` as authenticated JSON with `Cache-Control: private, no-store`.
+Portals turn this into a local `text/calendar` download without placing tokens in
+URLs. The service checks the owning patient or an actively assigned clinician and
+fresh `confirmed`/`scheduled` status on every request. Other statuses return
+`APPOINTMENT_UNAVAILABLE` (422); unauthorized users cannot export.
+
+The RFC 5545 serializer uses UTC start/end instants, elapsed duration, a stable event
+UID, localized generic title/one-time-copy notice, and safely escaped/folded location
+text. It omits clinical reasons, notes, and attendee/invitation fields. No state
+mutation, external calendar call, or migration is needed for this endpoint.
+
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`. The repository currently has
-`001`–`043`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
+`001`–`045`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
 document-ingestion worker controls, private TIFF previews, the independent patient-explanation
 retry lifecycle, and the clinician-approved care-plan lifecycle with its one-time historical
 document-fact request backfill and care-plan publication review guards. The migration ledger records full filenames and checksums,
 including the two distinct `011` files; do not maintain a second migration inventory here.
+
+Scheduling Slice 5 requires `042_appointment_expired_status.sql` to commit before
+`043_appointment_booking_guards.sql`. Run the read-only
+`scripts/appointment-booking-preflight.sql` first and review any existing overlap
+pairs. The migration does not repair them automatically. Apply schema before
+activating the new appointment service. It enforces patient booking overlaps and
+expires proposals on authorized reads/responses, with atomic audit events.
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 

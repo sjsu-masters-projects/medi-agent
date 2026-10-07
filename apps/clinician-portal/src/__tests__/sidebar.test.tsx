@@ -61,6 +61,7 @@ describe("Sidebar", () => {
 
         expect(screen.getByText("Risk Radar")).toBeInTheDocument();
         expect(screen.getByText("Patient Roster")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("href", "/appointments");
         expect(screen.getByText("Review Queue")).toBeInTheDocument();
         expect(screen.getByText("ADR Reviews")).toBeInTheDocument();
         expect(screen.getByText("Messages")).toBeInTheDocument();

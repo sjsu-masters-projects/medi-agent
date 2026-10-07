@@ -200,6 +200,15 @@ jobs:
             backend/requirements-dev.txt
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Expose PostgreSQL server binaries
+        if: matrix.name == 'integration-workflows'
+        run: |
+          pg_bin="$(pg_config --bindir)"
+          for tool in initdb pg_ctl psql postgres; do
+            test -x "$pg_bin/$tool" || { echo "Missing PostgreSQL server tool: $tool" >&2; exit 1; }
+          done
+          echo "$pg_bin" >> "$GITHUB_PATH"
+          "$pg_bin/postgres" --version
       - name: Test shard (pytest)
         env:
           SUPABASE_URL: "https://test.supabase.co"
@@ -240,6 +249,14 @@ jobs:
             backend/requirements-dev.txt
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Expose PostgreSQL server binaries
+        run: |
+          pg_bin="$(pg_config --bindir)"
+          for tool in initdb pg_ctl psql postgres; do
+            test -x "$pg_bin/$tool" || { echo "Missing PostgreSQL server tool: $tool" >&2; exit 1; }
+          done
+          echo "$pg_bin" >> "$GITHUB_PATH"
+          "$pg_bin/postgres" --version
       - name: Enforce full-suite coverage
         env:
           SUPABASE_URL: "https://test.supabase.co"
@@ -248,7 +265,24 @@ jobs:
           SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
         run: |
           mkdir -p test-results
-          pytest tests/ -v --tb=short --junitxml=test-results/full-suite.xml
+          pytest tests/ -v -rs --tb=short --junitxml=test-results/full-suite.xml
+      - name: Require real appointment transaction coverage
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          cases = [
+              case for case in ET.parse("test-results/full-suite.xml").iter("testcase")
+              if case.get("classname", "").endswith("test_appointment_offer_transactions")
+          ]
+          blocked = [
+              case.get("name") for case in cases
+              if any(case.find(tag) is not None for tag in ("skipped", "failure", "error"))
+          ]
+          if len(cases) < 31 or blocked:
+              raise SystemExit(f"Appointment PostgreSQL coverage incomplete: {len(cases)} cases; non-passing: {blocked}")
+          print(f"Verified {len(cases)} real appointment PostgreSQL transaction tests passed; zero skips.")
+          PY
       - name: Upload coverage result
         if: always()
         uses: actions/upload-artifact@v4

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
@@ -203,6 +204,49 @@ def test_reseeding_is_idempotent_for_all_persisted_rows() -> None:
     seed_adapter.seed(client, "synthetic-password")
 
     assert {table: len(rows) for table, rows in client.rows.items()} == first_counts
+
+
+def test_seed_appointments_use_assigned_provider_fixture_display_labels() -> None:
+    fixture = load_canonical_fixture()
+    client = InMemorySupabase()
+
+    seed_adapter.seed(client, "synthetic-password")
+
+    patient_ids = {row["email"]: row["id"] for row in client.rows["patients"]}
+    staff_names = {staff.source_id: staff.display_label for staff in fixture.staff}
+    expected = {
+        (patient_ids[seed_adapter.fixture_email(patient.source_id)], event.summary): staff_names[
+            patient.assigned_provider_source_id
+        ]
+        for patient in fixture.patients
+        for event in patient.timeline_events
+        if event.event_type == "appointment_scheduled"
+    }
+    assert expected
+    assert len(client.rows["appointments"]) == len(expected)
+    assert {
+        (row["patient_id"], row["reason"]): row["clinician_name"]
+        for row in client.rows["appointments"]
+    } == expected
+
+
+def test_reseeding_repairs_legacy_clinician_names_without_changing_rows() -> None:
+    client = InMemorySupabase()
+    seed_adapter.seed(client, "synthetic-password")
+    expected_rows = deepcopy(client.rows)
+    expected_users = list(client.auth.admin.users)
+    assert client.rows["appointments"]
+    assert all(not row["clinician_name"].startswith("SYN-") for row in client.rows["appointments"])
+    for row in client.rows["appointments"]:
+        row["clinician_name"] = "SYN-PROV-001"
+
+    seed_adapter.seed(client, "synthetic-password")
+    assert client.rows == expected_rows
+    assert client.auth.admin.users == expected_users
+
+    seed_adapter.seed(client, "synthetic-password")
+    assert client.rows == expected_rows
+    assert client.auth.admin.users == expected_users
 
 
 def test_clinic_codes_are_valid_for_the_clinician_login_contract() -> None:

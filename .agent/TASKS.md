@@ -145,7 +145,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 
 | Area | Status | Evidence / risk |
 |---|---|---|
-| Repository | Main synchronized | Local `main` matches `origin/main`; current tracker verification is recorded on a separate documentation branch |
+| Repository | Scheduling integration based on current main | `feature/clinician-appointment-offers` integrates `origin/main` through `5203b28` on October 6; the original checkout and its uncommitted changes are preserved |
 | Historical work | Needs reconciliation | One remote SMART work branch remains outside `main`; no local stashes or additional worktrees remain |
 | Patient portal | Partial | Patients can view existing medications/obligations, documents, explanations, and basic feed/adherence statistics. The Today feed now guards plan-linked tasks by approved/effective plan state and shows plan provenance; live clinician-approved-plan acceptance remains unproven. |
 | Clinician portal | Partial | Roster, patient deep dive, document source viewer, extracted-fact review, and Care Plan draft/review surfaces exist; the fresh synthetic approval journey, consolidated action queues, and a longitudinal decision timeline remain incomplete. |
@@ -158,7 +158,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
 | CI | Green baseline; Acquit enforcement evidence in progress | Required CI is green on `main`; Acquit 0.3.0 remains a non-blocking canary until 10 selective observations are collected |
-| Dependency security | Verified — PR #117 merged/deployed | urllib3 2.8.0 minimum and both locks merged at `e81c9c1`; main CI `36933661245` and deployment `36933661124` succeeded. Local audit found no known vulnerabilities. |
+| Dependency security | Backend fix verified; portal audit follow-up open | PR #117 merged/deployed urllib3 2.8.0 minimum and both locks (`e81c9c1`), with main CI/deployment evidence preserved below. October 5 scheduling-checkout portal audits report critical Next.js (GHSA-vcvr-r3jv-pc5j), high brace-expansion/source-map-js and moderate fast-uri findings. Package audit does not establish deployment exposure; remediation is separate work. |
 | Demo data | Functional baseline | Canonical fictional fixture and live patient/clinician isolation checks exist; the fresh end-to-end care-plan scenario is PAT-005 work |
 
 **Tracker reconciliation — 2026-09-26.** Every named primary task was reviewed for status
@@ -2186,11 +2186,452 @@ never submit a report to FDA/MedWatch or portray a draft as filed.
 
 ### SCH-001 — Appointment lifecycle
 
-- [ ] Clinician or approved workflow proposes slots.
-- [ ] Patient accepts, declines, or requests alternatives.
-- [ ] Confirmed appointment appears in both portals.
-- [ ] Support calendar export and timezone-safe rendering.
-- [ ] Handle conflicts, cancellation, rescheduling, expiration, and duplicate confirmation.
+**Status:** `[/]` In progress
+
+**Owner:** Tushar Singh
+
+**Design:** [`specs/sch-001-appointment-scheduling.md`](specs/sch-001-appointment-scheduling.md)
+defines the full end-to-end journey, the chosen UX (clinician offers 2–4 slots, patient
+picks one — "Option B"), the candidate-slot data model, the timezone/locale rules, and the
+reprioritized slice plan.
+
+**Approach:** Delivered in vertical slices. Slice 1 (propose → accept/decline) is on branch
+`feature/sch-001-appointment-proposal-lifecycle`; Slice 2 (patient request-alternative and
+cancel, with an optional note) is on branch `feature/sch-001-slice-2-visit-changes`
+(stacked on Slice 1). **Slice 3a** implements saved-timezone rendering and English/Spanish Visits copy
+(local verification below). **Slice 3b** implements locally (staging acceptance pending): generalizes the single proposed visit into a
+clinician-offered group of candidate slots the patient picks from (`proposal_group_id`,
+`withdrawn` status); **Slice 4** implements the clinician-portal scheduling screen locally (clinician
+review pending); Slice 5 conflict/expiration guards are migrated and live API-verified;
+Slice 6 calendar export is implemented and verified locally in both portals. Slice 3a
+corrects the English-only, browser-timezone rendering defect. Merge/deployment remain pending.
+
+- [/] Clinician or approved workflow proposes slots. A clinician-created appointment now
+      starts as `proposed` (migration `038` adds the `proposed`/`confirmed`/`declined`
+      statuses); an approved-workflow proposal path is not yet built.
+- [x] Patient accepts, declines, or requests alternatives. Accept (`confirmed`), decline
+      (`declined`), and request-alternative (`alternative_requested`, with an optional note)
+      are delivered via `POST /appointments/{id}/respond` and the patient-portal Visits page.
+      Slice 4 now supports a clinician creating a fresh offer after an alternative request.
+- [/] Confirmed appointment appears in both portals. The patient-portal Visits page renders
+      awaiting-response/upcoming/waiting/past groups; the clinician Appointments screen now
+      renders offers, responses, and notes. Authenticated synthetic cross-portal
+      calendar downloads and persisted booking/expiry API checks passed October 3.
+- [/] Support calendar export and timezone-safe rendering. Slice 3a implements patient
+      timezone/locale rendering; Slice 6 exports authenticated one-time calendar
+      files in both portals with English/Spanish patient controls. Review/merge pending.
+- [/] Handle conflicts, cancellation, rescheduling, expiration, and duplicate confirmation.
+      Patient-initiated cancellation (of a `proposed`, `confirmed`, or `scheduled` visit, with an optional
+      note) is delivered, and a server-side guard blocks two confirmations in one offer.
+      Slice 4 supports new offers after declines/alternative requests. Cross-visit overlap
+      guards and expiry are live API-verified in Slice 5; clinician
+      cancellation/completion remain later work.
+
+**Slice 1 verification — local**
+
+- Backend: `038_appointment_proposal_lifecycle.sql` validated (39 migrations); Ruff, mypy,
+  and the full backend suite pass (1,324 tests, 83.7% coverage). New tests:
+  `tests/unit/services/test_appointment_service.py` (transitions and guard rails) and
+  `tests/integration/routers/test_appointments_respond_api.py` (route + validation).
+- Patient portal: ESLint clean; new tests `__tests__/visits-page.test.tsx` and
+  `__tests__/appointments-service.test.ts` pass. Pre-existing `pdfjs-dist` install gap causes
+  four unrelated test files and the typecheck to fail; not caused by this change.
+- Migration `038` applied to `medi-agent-stage` and the propose → accept/decline flow was
+  exercised live in the patient portal.
+
+**Slice 2 verification — local**
+
+- Backend: `039_appointment_patient_changes.sql` validated (40 migrations); Ruff, mypy, and
+  the full backend suite pass (1,331 tests, 83.7% coverage). The response service now uses a
+  transition table (`accept`/`decline`/`request_alternative`/`cancel`) with per-action
+  allowed source states; new unit and route tests cover request-alternative (with note) and
+  cancel from both `proposed` and `confirmed`.
+- Patient portal: ESLint clean; `__tests__/visits-page.test.tsx` and
+  `__tests__/appointments-service.test.ts` pass (9 tests). The Visits page adds
+  request-different-time and cancel actions with an optional note, and a "Waiting on your
+  care team" group for `alternative_requested`.
+- At the original Slice 2 check, migration `039` still needed application. On
+  2026-09-28 the user supplied a database ledger listing that includes it; checksum,
+  schema, and action verification remain separate from this filename evidence.
+
+**Slice 3a verification — local, 2026-09-26**
+
+- Saved patient locale and timezone now drive all Visits copy and appointment dates,
+  with an explicit zone label. Loading settings hides dates; profile failure and missing
+  or invalid zones use labelled UTC with retry. User-authored text is preserved.
+- The profile state hook exposes loading/error/retry without changing the existing
+  profile-or-null hook; session changes clear stale settings and ignore late responses.
+- Patient portal commands: `npm ci` restored the pre-existing missing `pdfjs-dist`
+  dependency (zero vulnerabilities); `npm run lint` and `npm run typecheck` passed;
+  `npm run test` passed all 121 tests in 29 files; `npm run build -- --webpack` passed.
+- Regression coverage includes both locales, daylight-saving offsets, midnight rollover,
+  browser-timezone independence, fallback/retry, session isolation, translated states,
+  and the existing patient response actions. No backend API or schema changes.
+- User confirmed the live Slice 3a display changes on 2026-09-26. The automated
+  failure/session checks remain local verification. To repeat: sign in as a
+  synthetic patient, note Profile's timezone, open Visits, then edit Profile's preferred
+  language to Español (México), save, and return to Visits. Dates and page-owned copy
+  should change language while preserving the exact appointment instant.
+- Canonical seeded event `SYN-EVT-005-08` is `2026-09-29T08:30:00-07:00`:
+  `America/Los_Angeles` renders Tuesday, September 29, 2026 at 8:30 AM in English,
+  and martes, 29 de septiembre de 2026, 8:30 a.m. in Spanish. The seeded event may
+  differ from current staging rows; no staging data or migrations were changed.
+- Live request-alternative/note testing requires migration `039`, now present in the
+  user-supplied 2026-09-28 ledger listing. Its checksum and schema have not been
+  independently reverified. Multi-slot offers are implemented in Slice 3b below;
+  clinician UI, conflict/expiry rules, and calendar export remain open.
+
+**Slice 3b — grouped appointment offers, local implementation**
+
+- Clinician-only `POST /api/v1/appointments/propose` creates 2–4 distinct, future,
+  timezone-aware candidate slots for an active assigned care team. List/respond
+  responses expose the optional proposal group ID; legacy single-slot visits work.
+- The patient sees one offer card with sorted choices, group decline/request-alternative
+  with optional notes, and English/Spanish labels. Accept confirms one and withdraws
+  siblings immediately. Cancellation applies to the booked visit only.
+- Migrations `040`/`041` add grouping, a unique confirmed-slot constraint, service-only
+  transactional RPC functions, restrictive direct-write policies, and append-only audit
+  events. Concurrent accepts and failed audit inserts cannot partially change a group.
+- Verification on 2026-09-26: backend Ruff and mypy passed; all 42 migrations parsed;
+  the full backend suite passed 1,359 tests with 83.81% coverage in 33.48s, including
+  eight real PostgreSQL transaction/RLS tests. These use a temporary PostgreSQL 18.6
+  server under `/tmp` with no TCP listener and never connect to Supabase.
+- Patient portal: `npm run lint`, `npm run typecheck`, all 130 tests, and
+  `npm run build -- --webpack` passed. Clinician `npm run typecheck` passed after
+  `npm ci` restored its existing missing PDF library; that install reported zero
+  vulnerabilities and changed no manifests or lockfiles. Both dev portals are running.
+- Database test command: with server binaries on PATH,
+  `PYTHONPATH=src .venv/bin/python -m pytest tests/integration/test_appointment_offer_transactions.py -o addopts='' -q`.
+  Full backend verification used `pytest tests/ --cov=app --cov-report=term -q --tb=short`.
+- The user-supplied 2026-09-28 ledger listing records appointment migrations
+  `038`–`041`. Independent checksum/schema verification and named live grouped-offer
+  acceptance cases remain pending. The complete click-through steps and API example
+  are in the scheduling design's section 12.
+- Clinician scheduling UI/re-proposal is delivered locally in Slice 4 below; cross-visit
+  conflicts, expiry, and calendar export remain Slices 5–6. Demo reset must preserve the new audit references; a reviewed purge
+  path is not delivered by this slice.
+
+**Slice 4 — clinician scheduling screen, implemented locally, 2026-09-28**
+
+- Scope: assigned-patient selection supplies care-team IDs; offer 2–4 future times
+  in an explicitly displayed patient timezone; view response statuses and notes;
+  create a new offer after a decline or alternative request without changing history.
+- Acceptance: clinician proposes through the portal, patient chooses/responds in
+  Visits, clinician refreshes to see the persisted result. Validate date boundaries,
+  DST gaps/repeated times, authorization failures, retry, session isolation, and
+  preservation of drafts/history on failure. No new database migration is planned.
+- Integration checkout: `.worktrees/clinician-scheduling`, branch
+  `feature/clinician-appointment-offers`, based on current main at `c2567cd` with
+  existing scheduling changes carried forward. The original working tree is preserved.
+
+**Slice 4 verification and acceptance**
+
+- Hydration fix verified: a real `renderToString`/`hydrateRoot` regression reproduced
+  the reported mismatch before the fix. The auth guard now uses a hydration snapshot
+  to keep initial loading markup identical, then reveals the restored dashboard or
+  redirects to login with the return path. Auth loading also preserves the skeleton
+  without redirecting. Both restored authenticated and logged-out hydration pass.
+  Clinician `npm run lint`, `npm run typecheck`, and `npm run build -- --webpack`
+  pass; `NODE_OPTIONS=--no-experimental-webstorage npm run test` passes 122 tests
+  across 22 files. The Node 26 storage flag remains an environment workaround.
+  The local clinician server was restarted with the fix; `/appointments` returns
+  HTTP 200. The requester confirmed browser testing of the hydration fix on
+  2026-09-28. This confirmation does not establish the full cross-portal offer journey.
+- `/appointments` is linked in the clinician sidebar. Authenticated assigned-patient
+  selection supplies `care_team_id`; no clinician/patient UUID entry is required.
+  Patient profile reads supply an explicit entry/display timezone; missing/invalid
+  zones use labelled UTC, and failed reads block entry until retry succeeds.
+- Offer submission creates 2–4 distinct future instants. Spring-forward gaps and
+  fall-back repeated wall times are rejected rather than guessed. Pending submission
+  blocks patient switching, refreshing, and duplicate submissions. Failure keeps the
+  draft/history, with a reminder to refresh before retrying an uncertain save.
+- Grouped history shows proposed/confirmed/withdrawn/declined/alternative-requested/
+  cancelled/completed/no-show states and notes as written. Refresh reads persisted
+  patient responses. Re-proposing creates a fresh group with copied reason/location/
+  duration/type while leaving previous history and notes unchanged.
+- Both portals: `npm run lint`, `npm run typecheck`, and
+  `npm run build -- --webpack` pass. Patient `npm run test`: 132 tests pass.
+  Clinician tests: 119 pass using `NODE_OPTIONS=--no-experimental-webstorage npm run test`.
+  Initial ordinary clinician tests had two pre-existing auth-storage failures on
+  Node 26.8.2; disabling Node's experimental Web Storage lets jsdom supply storage.
+  All 32 focused scheduling/sidebar tests also pass with `TZ=Asia/Tokyo`.
+- Backend: Ruff check and format check pass; mypy passes for 198 source files.
+  With the workflow's synthetic Supabase settings and local PostgreSQL binaries,
+  `PYTHONPATH=src python -m pytest tests/ --cov=app --cov-report=term -q --tb=short`
+  passes all 1,416 tests with 83.47% coverage (20.23s), including eight real transaction
+  tests. Isolated-checkout missing settings and sandbox-blocked `initdb` were environment
+  setup failures; dummy settings and permission to run a disposable local cluster
+  resolved them. No remote database credentials were used for tests.
+- `python backend/scripts/validate_migrations.py`: 46 migrations parse. The integration
+  checkout contains current main's four document/care-plan migrations with their
+  original filenames. Remote checksum verification remains unperformed.
+- Local HTTP smoke checks: clinician `/appointments`, patient `/visits`, backend
+  `/health` each return 200. The clinician server on port 3001 now serves this worktree;
+  existing patient/backend servers remain running. No remote migration/deployment,
+  seed/reset, commit, or push was performed.
+- Manual acceptance pending: Elena offers Oct 5 09:00 and Oct 6 14:00 in
+  America/Los_Angeles; expected payload instants are 2026-10-05T16:00:00Z and
+  2026-10-06T21:00:00Z. Maya picks one; Elena refreshes to see confirmed/withdrawn.
+  Repeat a fresh offer for decline/request-alternative with note, then Offer new times.
+  The scheduling design section 13 contains the complete click-through path.
+- Peer review and authenticated live acceptance are still required. Overall SCH-001
+  remains in progress; overlap guards, expiry, calendar export, and clinician
+  cancellation/completion/no-show controls are not included in this slice.
+
+**Slice 5 — implemented locally; migration/live acceptance pending, 2026-09-28**
+
+- Enforce patient overlap protection for confirmed/scheduled visits across offers,
+  standalone responses, and direct writes. Adjacent visits remain allowed; pending
+  options do not reserve time. Clinician calendar capacity is outside this slice.
+- Use a seven-day offer deadline, capped per slot at its start time. Persist expired
+  slots with an audit event on authorized reads/responses; reject late acceptance
+  inside the transaction. Keep remaining future options usable until their deadline.
+- Add stable API error codes and English/Mexican Spanish messages; preserve lists,
+  notes, and re-proposal history. Verify concurrency, rollback, expiry boundaries,
+  direct-write guards, least-privilege grants, and both portal checks.
+- Add new migrations after the existing applied files. No remote migration, seed,
+  or external configuration change is authorized by this implementation task.
+- Verification: `PYTHONPATH=src python -m pytest tests/ --cov=app --cov-report=term
+  -q --tb=short` passes 1,453 tests with 83.55% coverage using synthetic CI settings
+  and disposable local PostgreSQL 18.6. All 28 real appointment transaction cases
+  run, including five competing-offer races, three direct-booking races, expiry
+  boundaries/backfill, audit rollback, RLS/grants, and the read-only overlap preflight.
+  A repeat caught an intermittent exclusion-check deadlock; patient-first response
+  locking and safe rollback handling fixed it before the final full verification.
+- Backend `ruff check src/ scripts/` and changed tests pass; `ruff format --check`
+  passes for 215 checked files; `mypy src/ --ignore-missing-imports` passes for 198
+  source files. `python scripts/validate_migrations.py` validates all 48 migrations.
+  Applied appointment migration files 038–041 were not edited.
+- Both portals pass `npm run lint`, `npm run typecheck`, and
+  `npm run build -- --webpack`. Patient `npm run test`: 165 pass in 32 files.
+  Clinician `NODE_OPTIONS=--no-experimental-webstorage npm run test`: 125 pass in
+  23 files. Existing Node 26 storage/deprecation warnings are environment issues.
+  Concurrent patient build/typecheck briefly removed generated `.next/types` files;
+  sequential typecheck after build passes, with no source change needed.
+- Both dev portals now serve the integration checkout and return HTTP 200 for
+  `/visits` and `/appointments`. Backend port 8000 still serves the preserved original
+  checkout until 042/043 are applied and the new backend can be activated. No remote
+  migration, seed/reset, deployment, commit, or push was performed. Live bilingual
+  conflict/expiry acceptance and peer review remain pending. Calendar export is Slice 6.
+
+**Slice 6 — implemented and locally verified, 2026-10-03; review/merge pending**
+
+**[PR #133](https://github.com/sjsu-masters-projects/medi-agent/pull/133) preparation — verified locally, 2026-10-05; review/merge pending:** Requester
+authorized integrating current main, resolving conflicts, validating the combined
+checkout, committing and opening the scheduling PR. Integrated main through
+`4d9a469`, preserving its hydration implementation, ADR navigation, care-plan and
+clinician messaging changes. The original checkout remains untouched. The source-only
+backup preserves all 66 pre-integration changed/new files. No remote migration,
+seed/reset, deployment, or PR merge is included in this preparation.
+
+- Full backend verification with the merged dependency lock in isolated Python 3.12:
+  `PYTHONPATH=src python -m pytest tests/ --cov=app --cov-report=term -q --tb=short`
+  under synthetic CI settings and disposable PostgreSQL 18.6: **1,733 passed,
+  20 opt-in care-plan PostgreSQL tests skipped, 85.72% coverage**. All **31 appointment
+  transaction tests ran**, including verifier permissions/trigger rejection cases.
+  The earlier temporary PostgreSQL installation failure is resolved.
+- `ruff check src/ scripts/`, `ruff format --check src/ scripts/`,
+  `mypy src/ --ignore-missing-imports`, `python scripts/validate_migrations.py`,
+  and `python backend/scripts/check_production_placeholders.py` pass. The integrated
+  inventory is **53 migrations**; this does not imply the newer independent ADR
+  migration was applied remotely. Scheduling migration bytes remain unchanged.
+- Both portals: `npm run lint`, `npm run typecheck`,
+  `NODE_OPTIONS=--no-experimental-webstorage npm run test`, and
+  `npm run build -- --webpack` pass. Patient: **200 tests / 38 files**; clinician:
+  **180 tests / 30 files**. Node 26's storage flag is a local test-runner workaround.
+- Redacted Gitleaks scan of the branch commit range and `git diff --check` pass.
+  No environment files, generated portal instruction files or unrelated root-checkout
+  edits are included. Live API/browser evidence below was collected October 3;
+  external calendar-app import and review/merge remain pending.
+- Refreshed `npm audit --omit=dev --audit-level=high --json` on October 5 reports
+  **four advisories in each portal**: critical Next.js, high brace-expansion and
+  source-map-js, moderate fast-uri. These are existing dependency findings, separate
+  from passing feature checks; no portal dependency/lockfile change is included.
+
+**PR #133 backend audit correction — 2026-10-05:** The first GitHub run passed
+portal lint/tests/builds, policy, placeholder, secret scan and CodeQL checks, but
+the backend audit rejected inherited `multidict` 6.7.1 (CVE-2026-104874) and
+`langgraph-sdk` 0.4.2 (CVE-2026-104873), skipping dependent backend jobs. Add explicit
+minimums and regenerate both locks with CI's uv 0.9.24: local checks used
+`multidict` **6.9.1** and `langgraph-sdk` **0.4.4**. Both locks reproduced
+byte-for-byte with the canonical compiler commands. Python 3.12 `pip check` passed;
+`uvx --python <python3.12> --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt`
+reported **no known vulnerabilities**. Full backend tests reran with patched dependencies:
+**1,733 passed, 20 opt-in skips, 85.72% coverage**, including all 31 appointment
+transaction tests. The initial local audit used unsupported system Python 3.14;
+explicit Python 3.12 resolved that environment failure. Portal advisories remain
+separate follow-up work. No audit ignores or CI bypasses were added.
+
+**Current-main integration — 2026-10-06:** PR #133 became conflicting when PRs
+#127, #130 and #131 reached main. Merge `origin/main` at `5203b28`. Main independently
+contained the same backend vulnerability floors, with `langgraph-sdk` **0.4.5** in
+both locks; the resolution uses main's three dependency files byte-for-byte. No
+backend dependency delta remains in the PR's final file diff. Preserve main's model
+capacity, care-plan access and chat changes alongside scheduling. The integrated
+Python 3.12 full backend suite passes **1,802 tests**, with **20 unrelated opt-in
+care-plan PostgreSQL skips** and **85.94% coverage**; all 31 appointment transaction
+tests run. Ruff check/format, mypy (209 files), migration validation (53 files),
+Python dependency compatibility and pip-audit pass. Portal lint/tests pass:
+**201 patient tests / 38 files** and **180 clinician tests / 30 files**.
+Both portals also pass typecheck and `npm run build -- --webpack` after the main
+integration. GitHub CI and peer review remain pending.
+
+**Cumulative scheduling integration review — 2026-10-06 (CI pending).** Preserve
+#97/#98's original history only after verifying their acceptance behavior in the
+expanded #133 implementation. Retain fixture-derived clinician names and visit
+type/duration/preparation notes with date-aware counts/order. Generic appointment
+PUT rejects patient edits and all non-null status writes; atomic response/audit
+guards remain authoritative. Clinician cancellation/completion/no-show remain future
+work. No remote migration, seed/reset or deployment command is authorized here.
+
+Fresh isolated backend verification excluding the failed local PostgreSQL setup:
+**1,788 passed, 20 unrelated opt-in skips, 85.99% coverage**. The 31 appointment
+transaction cases encountered macOS shared-memory-ID exhaustion before assertions;
+do not describe them as passed or silently skipped. Require the pushed head's Ubuntu
+CI to run every case with zero skips. Backend Ruff/format (226 files), mypy (209
+source files) and 53-file migration validation pass. Patient **229 tests** and
+clinician **180 tests**, portal lint/typecheck/webpack builds, backend dependency
+audit and both portal production audits pass. Six development-only high npm findings
+per portal remain. Merge and deployed acceptance are still pending.
+
+Separate independent verification ran the unchanged 31 appointment transaction
+tests against disposable Docker PostgreSQL 16.10: **31 passed, 3 warnings, 27.06s**
+using Python 3.13.2 and temporary command forwarding. The container had no network,
+published ports or host mounts and was cleaned up. This establishes local SQL
+assertions, not final pushed-head Python 3.12 CI. The restored Visits-to-chat shortcut
+uses bilingual general-guidance copy rather than claiming direct care-team messaging.
+Merge authorization is being reconfirmed before the final integration.
+
+**Current-main ADR integration — 2026-10-07 (CI pending).** Integrate merged PR
+#134 at `1e442e4` without changing its ADR migration or review implementation.
+Resolve only the setup-guide inventory conflict: this checkout now contains 54
+migrations through prefix 046. Fresh Python 3.12 verification excluding the
+machine-blocked local appointment cluster passes **1,797 tests, 20 opt-in skips,
+86.03% coverage**. The real appointment transaction gate remains mandatory on
+the pushed head. No remote migration, reset, seed or explicit deployment occurred.
+
+Pushed head `4b3cc56` passed CI run `37664325417`. Its saved full-suite JUnit
+artifact contains **1,828 passing cases, 20 opt-in care-plan skips**, including
+all **31 appointment transaction cases with zero skips, failures or errors**.
+Fresh backend and both portal production dependency audits are clean. Final review
+also identified ADR form draft loss after a failed save inherited from PR #134;
+Recovery now retains the note, chosen action and requested questions after failed
+saves or queue refreshes, hides raw errors, blocks duplicate/pending submissions,
+and enforces the API's 2,000-character note bound. A confirmed write followed by a
+failed refresh cannot be submitted again. Clinician verification: **16 focused
+ADR tests, 193 full tests**, lint, typecheck and webpack build pass. Patient
+verification remains **229 tests** with lint/typecheck/build passing. Require
+fresh-head CI and the PostgreSQL gate before integration.
+
+- Acceptance: patient and assigned clinician can download a one-time `.ics` for a
+  freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed
+  duration and location; bilingual patient controls and generic inline failures;
+  explain that calendar copies do not sync changes. No schema change or calendar
+  account integration. Omit clinical reasons and notes from the exported file.
+- Add a read-only authenticated export endpoint using existing appointment access
+  checks, server-generated RFC 5545 content, no-store responses, and stable event
+  identity. Reject cancelled/proposed/expired/history statuses on each request.
+- Slice 5 prerequisite: updated backend and both portals are running. Live API
+  acceptance through normal synthetic Maya/Elena login passed conflict rejection,
+  preserved existing booking/pending offer, free/adjacent acceptance, cancellation,
+  persisted partial expiry, expired acceptance rejection, future sibling acceptance,
+  and clinician history. Retained one confirmed demo visit on October 6, 2026,
+  09:00–09:30 America/Los_Angeles (`16:00–16:30Z`), Synthetic clinic, Suite 2.
+- Verify export authorization/status, exact UTC/DST/cross-midnight times, safe text
+  escaping/folding, bilingual controls, failure/retry and session cleanup. Run backend
+  focused tests/lint/types and both portal lint/typecheck/tests/production builds.
+  Live bilingual visual acceptance remains distinct from API evidence.
+- Verification passed: backend scoped appointment suite `PYTHONPATH=src python -m
+  pytest tests/unit/services/test_appointment_calendar.py
+  tests/unit/services/test_appointment_service.py
+  tests/integration/routers/test_appointment_calendar_api.py
+  tests/integration/routers/test_appointment_offers_api.py
+  tests/integration/routers/test_appointments_respond_api.py -o addopts='' -q --tb=short`
+  with synthetic test configuration: **86 passed**. Ruff check and format check pass
+  for the six changed backend/test files; `mypy src/ --ignore-missing-imports`
+  passes **199 source files**.
+- Both portals pass `npm run lint`, `npm run typecheck`, and
+  `npm run build -- --webpack` (dev servers stopped during builds). Patient
+  `npm run test`: **174 passed, 34 files**; clinician
+  `NODE_OPTIONS=--no-experimental-webstorage npm run test`: **132 passed, 24 files**.
+- Live normal-password API checks: own patient and actively assigned clinician
+  export in both locales (200); other synthetic patient denied (403); anonymous
+  denied (401); cancelled, expired, withdrawn rejected (422). No direct DB write
+  or extra migration was needed. Export does not alter appointment state.
+- Real Chromium acceptance through both login screens: English/Spanish patient
+  downloads and clinician download passed; downloaded times are `20261006T160000Z`
+  through `20261006T163000Z`. Browser timezone `Asia/Tokyo` still displays the saved
+  `America/Los_Angeles` 09:00 visit. Patient language restored after the check; no
+  hydration console errors. Screenshots inspected for both locales and clinician
+  history. External calendar-app import itself remains a manual acceptance step.
+- Environment/dependency findings are separate: both
+  `npm audit --omit=dev --audit-level=high` runs fail with critical Next.js, high
+  brace-expansion, and moderate fast-uri advisories. No `next/og`/`ImageResponse`
+  usage was found in either portal's source; this does not replace remediation.
+  No lockfile/dependency edits were made. Existing Node 26/Vite/Sentry/workspace
+  warnings persist. The earlier disposable PostgreSQL fixture dependency is still
+  unavailable; no claim of a fresh transaction-suite run is made.
+
+**Migration-only rollout — 2026-10-03**
+
+- Requester explicitly authorized executing only the migration steps against the
+  selected synthetic Supabase project. Read-only preflight found zero overlapping
+  booked visit pairs. All 50 existing ledger checksums matched: 46 files from this
+  checkout plus four newer care-plan migrations verified from `origin/main`
+  `019598b` after `git fetch origin main`. No checkout merge was performed.
+- Ran `bash scripts/apply-supabase-migrations.sh` from the scheduling worktree with
+  the selected connection supplied at runtime. Only
+  `042_appointment_expired_status.sql` and `043_appointment_booking_guards.sql` were
+  pending; both committed separately and received filename/checksum ledger entries.
+  The proposal deadline backfill updated zero rows.
+- Post-application checksum comparison: 52 applied entries, zero mismatches,
+  zero pending migrations. `psql -X -w -Atq -v ON_ERROR_STOP=1` executing
+  `backend/scripts/verify-appointment-slice5.sql` returned
+  `Slice 5 schema and function permissions verified`. This verifies structural
+  guards, RLS and RPC permissions; authenticated live behavior remains pending.
+- No backend/portal restart, seed/reset, live appointment mutation, deployment, or
+  Slice 6 implementation was performed. The earlier missing-connection blocker is
+  resolved for this execution; the separate local PostgreSQL test dependency issue
+  remains. The older checkout's migration count must not be used to reject the 52
+  ledger entries, which include four newer independent care-plan migrations.
+
+**Ordered rollout follow-up — 2026-10-02 (historical)**
+
+- Requester instructed Slice 5 rollout/live verification before Slice 6 calendar
+  export. Check the overlap preflight and migration ledger before applying 042/043,
+  verify schema/function grants, then activate the integration backend and portals.
+- `MEDIAGENT_DB_URL` is absent from the process and existing local configuration;
+  requester is configuring the connection locally. Do not reuse the old connection
+  embedded in the original checkout's scripts. No database call has been made.
+- All three local ports are currently stopped. Restore them after the schema
+  prerequisite is verified; calendar export implementation follows Slice 5 acceptance.
+- Added `backend/scripts/verify-appointment-slice5.sql` for read-only checks of
+  expiry schema, the overlap constraint, enabled guards/audit triggers, RLS, and
+  service-only invoker RPC permissions. Added three local PostgreSQL regression
+  cases covering the valid schema, accidental browser RPC access, and disabled audit.
+- Follow-up validation: Ruff check/format pass for
+  `tests/integration/test_appointment_offer_transactions.py`; pglast parses the
+  verifier SQL. `pytest tests/integration/test_appointment_offer_transactions.py
+  -o addopts='' -q` cannot execute its 31 tests because the disposable PostgreSQL
+  installation has lost `/tmp/offer-pg-share/postgres.bki`. All 31 errors occur
+  during the shared initdb fixture, before feature assertions. Restore the local
+  PostgreSQL installation and rerun; this does not supersede September 28 evidence
+  or establish verification of the new script.
+
+**Migration ledger reconciliation — 2026-09-28**
+
+- The verifier reported 45 ledger rows versus 42 local SQL files. The subsequent
+  user-supplied filename listing contains 46 entries: all 42 checkout migrations plus
+  `038_document_summary_lifecycle.sql`, `039_document_summary_retry_schedule.sql`,
+  `040_clinician_approved_care_plans.sql`, and
+  `041_backfill_document_grounded_care_plan_requests.sql`.
+- After `git fetch origin`, all four additional files are present on `origin/main`
+  at `c2567cd`; the scheduling branch predates that integration. The count mismatch
+  is a checkout/history difference, not evidence that appointment migrations failed.
+- Next: integrate current main while preserving unrelated and uncommitted work,
+  then compare full filenames/checksums and repeat schema/action verification.
+  Preserve applied filenames and ledger rows; do not rename or reapply migrations
+  merely to reconcile counts. No remote database query or mutation was performed.
 
 ### COM-001 — Care-team communication and notifications
 
