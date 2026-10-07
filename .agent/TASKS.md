@@ -2500,7 +2500,15 @@ using Python 3.13.2 and temporary command forwarding. The container had no netwo
 published ports or host mounts and was cleaned up. This establishes local SQL
 assertions, not final pushed-head Python 3.12 CI. The restored Visits-to-chat shortcut
 uses bilingual general-guidance copy rather than claiming direct care-team messaging.
-The latest requester instruction is to push for review and leave merges to humans.
+Merge authorization is being reconfirmed before the final integration.
+
+**Current-main ADR integration — 2026-10-07 (CI pending).** Integrate merged PR
+#134 at `1e442e4` without changing its ADR migration or review implementation.
+Resolve only the setup-guide inventory conflict: this checkout now contains 54
+migrations through prefix 046. Fresh Python 3.12 verification excluding the
+machine-blocked local appointment cluster passes **1,797 tests, 20 opt-in skips,
+86.03% coverage**. The real appointment transaction gate remains mandatory on
+the pushed head. No remote migration, reset, seed or explicit deployment occurred.
 
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed
