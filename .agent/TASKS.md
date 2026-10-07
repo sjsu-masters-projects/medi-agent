@@ -2510,6 +2510,19 @@ machine-blocked local appointment cluster passes **1,797 tests, 20 opt-in skips,
 86.03% coverage**. The real appointment transaction gate remains mandatory on
 the pushed head. No remote migration, reset, seed or explicit deployment occurred.
 
+Pushed head `4b3cc56` passed CI run `37664325417`. Its saved full-suite JUnit
+artifact contains **1,828 passing cases, 20 opt-in care-plan skips**, including
+all **31 appointment transaction cases with zero skips, failures or errors**.
+Fresh backend and both portal production dependency audits are clean. Final review
+also identified ADR form draft loss after a failed save inherited from PR #134;
+Recovery now retains the note, chosen action and requested questions after failed
+saves or queue refreshes, hides raw errors, blocks duplicate/pending submissions,
+and enforces the API's 2,000-character note bound. A confirmed write followed by a
+failed refresh cannot be submitted again. Clinician verification: **16 focused
+ADR tests, 193 full tests**, lint, typecheck and webpack build pass. Patient
+verification remains **229 tests** with lint/typecheck/build passing. Require
+fresh-head CI and the PostgreSQL gate before integration.
+
 - Acceptance: patient and assigned clinician can download a one-time `.ics` for a
   freshly authorized confirmed/scheduled visit. Preserve the exact instant, elapsed
   duration and location; bilingual patient controls and generic inline failures;
