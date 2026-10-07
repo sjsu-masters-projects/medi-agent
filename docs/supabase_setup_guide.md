@@ -26,10 +26,11 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This integrated checkout contains 53 SQL migration files through prefix `045`.
+This integrated checkout contains 54 SQL migration files through prefix `046`.
 The newer main files include care-plan publication review guards (`042`), incomplete
 drafts (`043`), overlap publication guards (`044`), activity continuity (`045`), and
-an independent auditable ADR assessment migration (`042`). Scheduling adds appointment
+an independent auditable ADR assessment migration (`042`) and atomic clinician ADR
+review actions (`046`). Scheduling adds appointment
 lifecycle/group/audit migrations `038`–`041`, expired status `042`, and booking/expiry
 guards `043`. These coexist with the document/care-plan migrations sharing those
 prefixes, just as the two `011` files coexist. The ledger identifies migrations by

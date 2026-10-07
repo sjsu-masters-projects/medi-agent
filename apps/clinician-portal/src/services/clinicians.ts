@@ -121,7 +121,33 @@ export interface ADRReviewQueueItem {
     };
     evidence: ADRReviewEvidence[];
     status: ADRStatus;
+    lastReviewAction?: ADRReviewAction | null;
+    reviewNote?: string | null;
+    requestedInformation: string[];
+    reviewedBy?: string | null;
+    reviewedAt?: string | null;
     createdAt: string;
+}
+
+export type ADRReviewAction = "mark_reviewed" | "dismiss" | "request_information";
+
+export interface ADRReviewDecisionInput {
+    action: ADRReviewAction;
+    note?: string;
+    requestedInformation?: string[];
+}
+
+export interface ADRReviewDecisionResult {
+    id: string;
+    patientId: string;
+    status: ADRStatus;
+    lastReviewAction: ADRReviewAction;
+    reviewNote?: string | null;
+    requestedInformation: string[];
+    reviewedBy: string;
+    reviewedAt: string;
+    dismissReason?: string | null;
+    updatedAt: string;
 }
 
 interface ADRReviewQueueResponse {
@@ -143,6 +169,11 @@ interface ADRReviewQueueResponse {
         naranjo_assessment: ADRReviewQueueItem["naranjoAssessment"];
         evidence: ADRReviewEvidence[];
         status: ADRStatus;
+        last_review_action?: ADRReviewAction | null;
+        review_note?: string | null;
+        requested_information?: string[];
+        reviewed_by?: string | null;
+        reviewed_at?: string | null;
         created_at: string;
     }>;
     total: number;
@@ -606,8 +637,51 @@ export async function fetchADRReviewQueue(): Promise<ADRReviewQueueItem[]> {
         naranjoAssessment: item.naranjo_assessment,
         evidence: item.evidence,
         status: item.status,
+        lastReviewAction: item.last_review_action,
+        reviewNote: item.review_note,
+        requestedInformation: item.requested_information ?? [],
+        reviewedBy: item.reviewed_by,
+        reviewedAt: item.reviewed_at,
         createdAt: item.created_at,
     }));
+}
+
+/** Persist an assigned clinician's auditable action on a draft ADR assessment. */
+export async function reviewADRAssessment(
+    assessmentId: string,
+    input: ADRReviewDecisionInput,
+): Promise<ADRReviewDecisionResult> {
+    const result = await apiFetch<{
+        id: string;
+        patient_id: string;
+        status: ADRStatus;
+        last_review_action: ADRReviewAction;
+        review_note?: string | null;
+        requested_information: string[];
+        reviewed_by: string;
+        reviewed_at: string;
+        dismiss_reason?: string | null;
+        updated_at: string;
+    }>(`/api/v1/clinicians/me/adr-assessments/${assessmentId}/review`, {
+        method: "POST",
+        body: JSON.stringify({
+            action: input.action,
+            note: input.note,
+            requested_information: input.requestedInformation ?? [],
+        }),
+    });
+    return {
+        id: result.id,
+        patientId: result.patient_id,
+        status: result.status,
+        lastReviewAction: result.last_review_action,
+        reviewNote: result.review_note,
+        requestedInformation: result.requested_information,
+        reviewedBy: result.reviewed_by,
+        reviewedAt: result.reviewed_at,
+        dismissReason: result.dismiss_reason,
+        updatedAt: result.updated_at,
+    };
 }
 
 /** Fetch one patient's latest risk radar snapshot. */

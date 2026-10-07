@@ -1,13 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MedWatchPage from "@/app/(dashboard)/medwatch/page";
 
-const { fetchADRReviewQueueMock } = vi.hoisted(() => ({
+const { fetchADRReviewQueueMock, reviewADRAssessmentMock } = vi.hoisted(() => ({
     fetchADRReviewQueueMock: vi.fn(),
+    reviewADRAssessmentMock: vi.fn(),
 }));
 
 vi.mock("@/services/clinicians", () => ({
     fetchADRReviewQueue: fetchADRReviewQueueMock,
+    reviewADRAssessment: reviewADRAssessmentMock,
 }));
 
 const assessment = {
@@ -50,6 +52,7 @@ const assessment = {
 describe("ADR review queue", () => {
     beforeEach(() => {
         fetchADRReviewQueueMock.mockReset();
+        reviewADRAssessmentMock.mockReset();
     });
 
     it("shows the Naranjo score and patient-grounded evidence", async () => {
@@ -88,5 +91,51 @@ describe("ADR review queue", () => {
         expect(await screen.findByText("Unable to load ADR reviews")).toBeInTheDocument();
         expect(screen.getByText("Service unavailable")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+    });
+
+    it("marks an assessment reviewed and refreshes the pending queue", async () => {
+        fetchADRReviewQueueMock.mockResolvedValueOnce([assessment]).mockResolvedValueOnce([]);
+        reviewADRAssessmentMock.mockResolvedValue({ status: "reviewed" });
+
+        render(<MedWatchPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+        fireEvent.change(screen.getByLabelText(/review note/i), {
+            target: { value: "Evidence reviewed with the medication history." },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+
+        await waitFor(() =>
+            expect(reviewADRAssessmentMock).toHaveBeenCalledWith("adr-1", {
+                action: "mark_reviewed",
+                note: "Evidence reviewed with the medication history.",
+                requestedInformation: [],
+            }),
+        );
+        expect(await screen.findByText("ADR review saved and audited.")).toBeInTheDocument();
+        expect(await screen.findByText("No ADR assessments awaiting review")).toBeInTheDocument();
+    });
+
+    it("requires a note and sends selected missing questions for information requests", async () => {
+        fetchADRReviewQueueMock.mockResolvedValue([assessment]);
+        reviewADRAssessmentMock.mockResolvedValue({ status: "draft" });
+
+        render(<MedWatchPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Request information" }));
+        const submit = screen.getByRole("button", { name: "Request information" });
+        expect(submit).toBeDisabled();
+        fireEvent.change(screen.getByLabelText(/review note/i), {
+            target: { value: "Please clarify other possible causes." },
+        });
+        fireEvent.click(submit);
+
+        await waitFor(() =>
+            expect(reviewADRAssessmentMock).toHaveBeenCalledWith("adr-1", {
+                action: "request_information",
+                note: "Please clarify other possible causes.",
+                requestedInformation: ["alternative_causes"],
+            }),
+        );
     });
 });
