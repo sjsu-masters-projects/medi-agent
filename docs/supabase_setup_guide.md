@@ -156,6 +156,31 @@ individual SQL file, records applied filenames and checksums.
 
 ## Verification checklist
 
+### Care-plan read-policy repair (047)
+
+`047_care_plan_private_rls_helpers.sql` repairs policies introduced after migration
+020's helper hardening. Apply it through the existing filename/checksum migration
+ledger only after explicit environment authorization; do not edit or rerun 020/040.
+The private helpers from 020 and tables/policies from 040 are prerequisites. No reset,
+seed, account change or new helper RPC is required.
+
+Policies are restricted to `authenticated`; clinician SELECT uses the existing private
+helpers. RLS-filtered SELECT is granted, browser writes/anonymous access are revoked.
+Patient reads still include only their approved/superseded plans and published
+nonremoved items; generation requests/audit are assigned-clinician-only. Service-role
+API authorization and publication guards remain mandatory because that role bypasses RLS.
+
+Local tests run real 020 helpers, 040 policies and 047 with publication/continuity guards:
+
+```bash
+cd backend
+CARE_PLAN_TEST_POSTGRES=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_care_plan_postgres.py --no-cov -q
+```
+
+Use normal test settings and local PostgreSQL, never a remote connection string.
+After authorized rollout, verify ledger checksum, owner vs assigned/unassigned clinician
+reads, and browser write/publication-RPC denial. Local tests do not prove remote application.
+
 - [ ] Every committed migration is recorded with its exact filename and SHA-256 checksum in `public.schema_migrations`.
 - [ ] Tables include `clinical_facts`, `source_provenances`, `fhir_imports`, `fhir_import_resources`, `external_patient_bindings`, `document_ingestion_runs`, and reconciliation-event tables.
 - [ ] RLS is enabled for clinical facts and FHIR import tables.

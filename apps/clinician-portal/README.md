@@ -120,6 +120,13 @@ need review, not a generation retry; no automatic translation or medication choi
 
 ## Notes
 
+Patient detail distinguishes 403 access denial and 404 missing records from transient
+load errors: roster navigation replaces Retry for denied/missing records. Account/route
+changes and refresh clear prior content; late responses cannot restore it. Both API
+wrappers preserve HTTP status and share bounded recovery: GET/HEAD may retry once after
+100–249 ms. HTTP errors and writes are never replayed. After an uncertain write, refresh
+to confirm persisted state before manual retry.
+
 The Adherence tab shows response-based completion, coverage, daily counts, current activities,
 and the latest 20 patient-reported barriers (including historical versions). Its chart uses
 UTC daily buckets from the reporting API; barrier timestamps use the patient's timezone.

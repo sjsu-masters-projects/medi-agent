@@ -2,6 +2,8 @@
  * Base API client — wraps fetch with auth headers and error handling.
  */
 
+import { fetchWithReadRecovery } from "../../../../packages/shared/src/utils/api-transport";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 interface RequestOptions extends RequestInit {
@@ -155,7 +157,7 @@ class ApiClient {
             headers["Authorization"] = `Bearer ${token}`;
         }
 
-        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        const response = await fetchWithReadRecovery(`${this.baseUrl}${endpoint}`, {
             ...fetchOptions,
             headers,
         });

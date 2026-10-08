@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
+import { Suspense, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import {
     HiOutlineArrowLeft,
     HiOutlineArrowPath,
@@ -23,12 +23,8 @@ import { PatientDocumentsPanel } from "@/components/features/patient-documents-p
 import { CarePlanPanel } from "@/components/features/care-plan-panel";
 import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import { sendPatientMessage } from "@/services/clinicians";
-import {
-    loadPatientDeepDive,
-    triggerSoapNote,
-    clearPatientDetail,
-} from "@/store/slices/patient-detail-slice";
-import type { AppDispatch, RootState } from "@/store/store";
+import { usePatientDetail } from "@/hooks/use-patient-detail";
+import type { RootState } from "@/store/store";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
@@ -76,12 +72,9 @@ function formatReminderSchedule(
 
 // ── Patient Deep Dive Page ─────────────────────────────────────────────────────
 
-function PatientDeepDivePageContent() {
-    const params = useParams();
+function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string; enabled: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const dispatch = useDispatch<AppDispatch>();
-    const patientId = params["id"] as string;
     const hasMounted = useSyncExternalStore(
         () => () => undefined,
         () => true,
@@ -92,9 +85,7 @@ function PatientDeepDivePageContent() {
         return isTabId(requestedTab) ? requestedTab : "profile";
     });
 
-    const { data: patient, loadingProfile, generatingSoap, error } = useSelector(
-        (state: RootState) => state.patientDetail,
-    );
+    const { patient, loadingProfile, generatingSoap, error, loadFailure, reload, generateSoap } = usePatientDetail(patientId, enabled);
 
     const [messageBody, setMessageBody] = useState("");
     const [messageSubject, setMessageSubject] = useState("");
@@ -102,17 +93,8 @@ function PatientDeepDivePageContent() {
     const [messageSent, setMessageSent] = useState(false);
     const [messageError, setMessageError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (patientId) {
-            void dispatch(loadPatientDeepDive(patientId));
-        }
-        return () => {
-            dispatch(clearPatientDetail());
-        };
-    }, [dispatch, patientId]);
-
     function handleGenerateSoap() {
-        void dispatch(triggerSoapNote({ patientId, lookbackDays: 30 }));
+        void generateSoap();
     }
 
     async function handleSendMessage() {
@@ -149,16 +131,33 @@ function PatientDeepDivePageContent() {
         );
     }
 
-    if (error && !patient) {
+    if (loadFailure && !patient) {
+        if (loadFailure !== "transient") {
+            return (
+                <div className="mx-auto max-w-6xl rounded-xl border border-gray-200 bg-white px-6 py-8 text-center" role="status">
+                    <h1 className="mb-2 text-lg font-semibold text-gray-900">
+                        {loadFailure === "denied" ? "Access denied" : "Patient not found"}
+                    </h1>
+                    <p className="mb-4 text-sm text-gray-700">
+                        {loadFailure === "denied"
+                            ? "You do not have access to this patient. Only assigned care-team members can view this record."
+                            : "This patient record could not be found."}
+                    </p>
+                    <button className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" onClick={() => router.push("/patients")} type="button">
+                        Return to patient roster
+                    </button>
+                </div>
+            );
+        }
         return (
             <div className="mx-auto max-w-6xl">
                 <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center">
                     <p className="mb-4 text-sm font-semibold text-red-700">
-                        Failed to load patient: {error}
+                        Unable to load patient data. Please try again.
                     </p>
                     <button
                         className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-100"
-                        onClick={() => void dispatch(loadPatientDeepDive(patientId))}
+                        onClick={() => void reload()}
                         type="button"
                     >
                         Retry
@@ -190,7 +189,7 @@ function PatientDeepDivePageContent() {
                 <button
                     aria-label="Refresh patient data"
                     className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-                    onClick={() => void dispatch(loadPatientDeepDive(patientId))}
+                    onClick={() => void reload()}
                     type="button"
                 >
                     <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
@@ -668,20 +667,23 @@ function PatientDeepDivePageContent() {
                 {activeTab === "documents" && (
                     <PatientDocumentsPanel
                         documents={patient.documents}
-                        onRefresh={() => void dispatch(loadPatientDeepDive(patientId))}
+                        onRefresh={() => void reload()}
                         patientId={patientId}
                     />
                 )}
-                {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void dispatch(loadPatientDeepDive(patientId))} />}
+                {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void reload()} />}
             </Card>
         </div>
     );
 }
 
 export default function PatientDeepDivePage() {
+    const params = useParams();
+    const patientId = params["id"] as string;
+    const userId = useSelector((state: RootState) => state.auth.user?.id);
     return (
         <Suspense fallback={null}>
-            <PatientDeepDivePageContent />
+            <PatientDeepDivePageContent key={`${patientId}:${userId ?? "signed-out"}`} patientId={patientId} enabled={Boolean(patientId && userId)} />
         </Suspense>
     );
 }

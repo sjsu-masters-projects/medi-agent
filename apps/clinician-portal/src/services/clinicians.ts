@@ -22,6 +22,8 @@ import {
     type UploaderRole,
 } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
+import { ApiClientError } from "@/services/api";
+import { fetchWithReadRecovery } from "../../../../packages/shared/src/utils/api-transport";
 
 // ── Base config ──────────────────────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
         throw new Error("Missing authorization header");
     }
 
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetchWithReadRecovery(`${API_BASE}${path}`, {
         ...options,
         headers: {
             "Content-Type": "application/json",
@@ -48,8 +50,10 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
     if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(
-            errorBody?.error?.message ?? `API error ${response.status}: ${path}`,
+        throw new ApiClientError(
+            errorBody?.error?.message ?? `API error ${response.status}`,
+            response.status,
+            errorBody,
         );
     }
 

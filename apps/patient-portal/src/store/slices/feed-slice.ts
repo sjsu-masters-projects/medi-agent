@@ -1,6 +1,8 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { api } from "@/services/api";
 import { FeedTaskStatus, type FeedSummary, type FeedTask, type TodayFeedResponse } from "@/types";
+import type { Locale } from "@/types";
+import { ApiTransportError, getTransportErrorMessage } from "../../../../../packages/shared/src/utils/api-transport";
 
 interface ApiFeedProvider {
     id: string;
@@ -122,7 +124,7 @@ function mapTodayFeedResponse(response: ApiTodayFeedResponse): TodayFeedResponse
 
 export const fetchTodayFeed = createAsyncThunk<
     TodayFeedResponse,
-    { token?: string | null } | undefined,
+    { token?: string | null; locale?: Locale } | undefined,
     { rejectValue: string }
 >("feed/fetchToday", async (payload, { rejectWithValue }) => {
     try {
@@ -131,7 +133,9 @@ export const fetchTodayFeed = createAsyncThunk<
         });
         return mapTodayFeedResponse(response);
     } catch (error) {
-        return rejectWithValue((error as Error).message);
+        return rejectWithValue(error instanceof ApiTransportError
+            ? getTransportErrorMessage(error.outcomeUnknown, payload?.locale)
+            : (error as Error).message);
     }
 });
 

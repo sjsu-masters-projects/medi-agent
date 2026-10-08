@@ -7,18 +7,28 @@ import { useFeedData } from "@/hooks/use-feed-data";
 import { authSlice, hydrateSession } from "@/store/slices/auth-slice";
 import { feedSlice } from "@/store/slices/feed-slice";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
+import { ApiTransportError } from "../../../../packages/shared/src/utils/api-transport";
 
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock("@/services/api", () => ({ api: { get, post } }));
 const task: FeedTask = { id: "task-1", targetId: "target-1", type: FeedTaskType.OBLIGATION, name: "Hydrate", frequency: "daily", status: FeedTaskStatus.PENDING, requiresScheduleConfiguration: false };
 const summary = { completed: 0, missed: 0, skipped: 0, pending: 1, total: 1 };
-function setup(authenticated = true) {
+function setup(authenticated = true, locale: "en-US" | "es-MX" = "en-US") {
     const store = configureStore({ reducer: { auth: authSlice.reducer, feed: feedSlice.reducer } });
     if (authenticated) store.dispatch(hydrateSession({ accessToken: "synthetic-token", refreshToken: "synthetic-refresh", expiresAt: 9999999999, user: { id: "patient-1", email: "test@example.test", role: "patient" } }));
     const wrapper = ({ children }: { children: ReactNode }) => <Provider store={store}>{children}</Provider>;
-    return { store, ...renderHook(() => useFeedData(), { wrapper }) };
+    return { store, ...renderHook(() => useFeedData(locale), { wrapper }) };
 }
 describe("saved adherence acknowledgement", () => {
+    it("localizes an uncertain Spanish save without replaying or acknowledging it", async () => {
+        post.mockRejectedValue(new ApiTransportError(true, 0));
+        const { result } = setup(true, "es-MX");
+        await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+        await act(async () => { expect(await result.current.markComplete(task)).toBe(false); });
+        expect(result.current.actionError).toContain("Actualiza");
+        expect(result.current.tasks[0].status).toBe(FeedTaskStatus.PENDING);
+        expect(post).toHaveBeenCalledTimes(1);
+    });
     beforeEach(() => {
         vi.resetAllMocks();
         get.mockImplementation((path: string) => Promise.resolve(path.includes("feed") ? { tasks: [task], summary, date: "2026-10-01", timezone: "UTC" } : { overall_score: 0 }));

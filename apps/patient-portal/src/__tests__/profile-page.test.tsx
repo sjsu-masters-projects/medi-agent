@@ -45,6 +45,20 @@ describe("Patient profile page", () => {
         searchParamGet.mockReturnValue(null);
     });
 
+    it.each([
+        ["en-US", "Assigned care provider", "Care team member"],
+        ["es-MX", "Profesional de atención asignado", "Integrante del equipo de atención"],
+    ])("renders translated care-team roles in %s without raw codes", async (locale, assigned, fallback) => {
+        get.mockImplementation(async (endpoint: string) => endpoint === "/api/v1/patients/me"
+            ? { id: "synthetic-patient", first_name: "Synthetic", last_name: "Patient", email: "synthetic@example.com", date_of_birth: "1985-03-15", created_at: "2026-01-10T00:00:00Z", preferred_language: locale }
+            : ["assigned_provider", "unknown_internal_role"].map((role, index) => ({ id: `synthetic-team-${index}`, clinician_first_name: "Synthetic", clinician_last_name: "Provider", role, status: "active" })));
+        render(<ProfilePage />);
+        expect(await screen.findByText(assigned!)).toBeInTheDocument();
+        expect(screen.getByText(fallback!)).toBeInTheDocument();
+        expect(screen.queryByText("assigned_provider")).not.toBeInTheDocument();
+        expect(screen.queryByText("unknown_internal_role")).not.toBeInTheDocument();
+    });
+
     it("loads profile details and the linked care team", async () => {
         get.mockImplementation(async (endpoint: string) => {
             if (endpoint === "/api/v1/patients/me") {

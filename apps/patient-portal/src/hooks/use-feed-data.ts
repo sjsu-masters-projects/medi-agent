@@ -28,6 +28,8 @@ import {
   type FeedTask,
 } from "@/types";
 import { getEffectiveSessionExpiresAt } from "../../../../packages/shared/src/utils/jwt-expiry";
+import { ApiTransportError, getTransportErrorMessage } from "../../../../packages/shared/src/utils/api-transport";
+import type { Locale } from "@/types";
 
 interface ApiAdherenceStats {
   current_streak_days?: number;
@@ -80,7 +82,7 @@ function mapAdherenceStats(stats: ApiAdherenceStats): AdherenceStats {
   };
 }
 
-export function useFeedData() {
+export function useFeedData(locale: Locale = "en-US") {
   const dispatch = useDispatch<AppDispatch>();
   const feed = useSelector((state: RootState) => state.feed);
   const { accessToken, expiresAt, refreshToken, user } = useSelector(
@@ -101,8 +103,8 @@ export function useFeedData() {
       return;
     }
 
-    void dispatch(fetchTodayFeed({ token: accessToken }));
-  }, [accessToken, dispatch]);
+    void dispatch(fetchTodayFeed({ token: accessToken, locale }));
+  }, [accessToken, dispatch, locale]);
 
   useEffect(() => {
     refreshFeed();
@@ -126,7 +128,7 @@ export function useFeedData() {
     if (submissionInFlight.current) return false;
     setActionError(null);
     if (!accessToken) {
-      setActionError("Please sign in again. Your response has not been saved.");
+      setActionError(locale === "es-MX" ? "Vuelve a iniciar sesión. Tu respuesta no se ha guardado." : "Please sign in again. Your response has not been saved.");
       return false;
     }
     submissionInFlight.current = true;
@@ -152,8 +154,12 @@ export function useFeedData() {
         .then((response) => setAdherenceStats(mapAdherenceStats(response)))
         .catch(() => { /* A statistics refresh must not undo a saved response. */ });
       return true;
-    } catch {
-      setActionError("We couldn’t confirm that your response was saved. Refresh before retrying; your schedule has not been marked complete.");
+    } catch (error) {
+      setActionError(error instanceof ApiTransportError
+        ? getTransportErrorMessage(error.outcomeUnknown, locale)
+        : locale === "es-MX"
+          ? "No pudimos confirmar que se guardó tu respuesta. Actualiza antes de volver a intentarlo; la actividad no se ha marcado como completada."
+          : "We couldn’t confirm that your response was saved. Refresh before retrying; your schedule has not been marked complete.");
       return false;
     } finally {
       submissionInFlight.current = false;

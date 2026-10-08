@@ -94,6 +94,20 @@ ADVERSE_EFFECT_KEYWORDS = frozenset(
         "vomit",
         "nausea",
         "reaction",
+        "efecto secundario",
+        "efectos secundarios",
+        "reacción",
+        "reaccion",
+        "sarpullido",
+        "erupción",
+        "erupcion",
+        "hinchazón",
+        "hinchazon",
+        "mareo",
+        "náusea",
+        "vómit",
+        "alérgic",
+        "alergic",
     }
 )
 
@@ -120,6 +134,31 @@ _NEGATED_LIST_START = re.compile(
 )
 _NEGATED_LIST_CONTINUATION = re.compile(r"(?:,\s*)?(?:or|nor|ni)\s*$")
 _CLAUSE_BREAK = re.compile(r"[.!?;]|\b(?:but|however|although|though|yet|except|pero|aunque)\b")
+
+# Educational wording is local to a clause, never a turn-wide opt-out. Report verbs
+# keep ambiguous mixed questions conservative, even when introduced as education/QA.
+_ADVERSE_CLAUSE_BREAK = re.compile(
+    r"[.!?;:\n]|\b(?:but|however|although|though|yet|except|pero|aunque)\b"
+)
+_EDUCATIONAL_PREFIX = re.compile(
+    r"^\s*[¿\"']?(?:please\s+)?(?:"
+    r"what (?:is|are|does|do)\b|(?:can you )?explain\b|define\b|"
+    r"is (?:it|that|this) (?:automatically|always)\b|"
+    r"(?:can|could) (?:a |an |the )?(?:medicine|medication|drug)\b|"
+    r"(?:por favor\s+)?(?:explica|explícame|explicame|explique|define)\b|"
+    r"qu[eé] (?:es|son|significa|significan)\b|"
+    r"(?:es|eso es) (?:autom[aá]ticamente|siempre)\b|"
+    r"(?:puede|podr[ií]a) (?:un |el )?(?:medicamento|f[aá]rmaco)\b"
+    r")"
+)
+_ADVERSE_REPORT_LANGUAGE = re.compile(
+    r"\b(?:have|has|had|got|getting|developed|developing|experiencing|feel|feeling|"
+    r"noticed|suffer|suffering|having|tengo|tiene|tenemos|tuve|tuvo|siento|sent[ií]|"
+    r"presento|presenta|not[eé]|apareci[oó]|dio|estoy|est[aá]|"
+    r"my|our|mi|mis|me|she|he|they|now|today|ahora|hoy|started|began|"
+    r"worsening|spreading|empez[oó]|empeorando)\b|"
+    r"\b(?:this|that|esta|este)\s+(?:rash|reaction|nausea|reacci[oó]n|erupci[oó]n)\b"
+)
 
 
 @dataclass(frozen=True)
@@ -174,7 +213,33 @@ def _is_negated_signal(text: str, index: int) -> bool:
 
 
 def contains_adverse_effect_signal(text: str) -> bool:
-    return matches_any(text.lower(), ADVERSE_EFFECT_KEYWORDS)
+    """Detect reported or ambiguous adverse signals, not explicit term education.
+
+    Check every mention independently. Neither general intent nor a disclaimer grants
+    an exemption, and this filtering never applies to emergency/self-harm rules.
+    """
+    for clause in _ADVERSE_CLAUSE_BREAK.split(text.lower()):
+        educational = (
+            _EDUCATIONAL_PREFIX.search(clause) is not None
+            and _ADVERSE_REPORT_LANGUAGE.search(clause) is None
+        )
+        for keyword in ADVERSE_EFFECT_KEYWORDS:
+            for match in re.finditer(r"\b" + re.escape(keyword), clause):
+                if not educational and not _is_negated_adverse_signal(clause, match.start()):
+                    return True
+    return False
+
+
+def _is_negated_adverse_signal(clause: str, index: int) -> bool:
+    prefix = clause[:index]
+    without_article = re.sub(r"\b(?:a|an|un|una)\s+$", "", prefix)
+    if _NEGATED_SIGNAL_PREFIX.search(without_article) is not None:
+        return True
+    if not _is_negated_signal(clause, index):
+        return False
+    starts = list(_NEGATED_LIST_START.finditer(prefix))
+    # A fresh report inside a denial's list ends its scope ("no rash or I feel dizzy").
+    return bool(starts) and _ADVERSE_REPORT_LANGUAGE.search(prefix[starts[-1].end() :]) is None
 
 
 def deterministic_safety_floor(message: str) -> SafetyVerdict | None:

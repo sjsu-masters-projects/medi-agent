@@ -56,5 +56,6 @@ export function clamp(value: number, min: number, max: number): number {
 
 export type { SharedAuthSession, SharedAuthUser } from "./auth-session";
 export { createAuthSessionStorage } from "./auth-session";
+export { ApiTransportError, fetchWithReadRecovery, getTransportErrorMessage } from "./api-transport";
 export type { BuildLoginRedirectUrlParams } from "./return-path";
 export { buildLoginRedirectUrl, sanitizeLoginPath, sanitizeReturnPath } from "./return-path";

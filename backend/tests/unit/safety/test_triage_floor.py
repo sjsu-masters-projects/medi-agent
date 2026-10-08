@@ -50,10 +50,7 @@ NEGATED_EMERGENCY_EN = [
     "The cough occurs without shortness of breath",
     "She denies having chest pain",
     "I am not suicidal",
-    (
-        "I developed a dry cough. I do not have trouble breathing, facial swelling, "
-        "or chest pain."
-    ),
+    ("I developed a dry cough. I do not have trouble breathing, facial swelling, or chest pain."),
 ]
 
 NEGATED_EMERGENCY_ES = [
@@ -88,9 +85,7 @@ class TestTheFloor:
         assert deterministic_safety_floor(message) is None
 
     @pytest.mark.parametrize("message", NEGATED_EMERGENCY_EN + NEGATED_EMERGENCY_ES)
-    def test_explicitly_negated_emergency_phrases_are_left_to_the_model(
-        self, message: str
-    ) -> None:
+    def test_explicitly_negated_emergency_phrases_are_left_to_the_model(self, message: str) -> None:
         assert deterministic_safety_floor(message) is None
 
     @pytest.mark.parametrize(
@@ -186,3 +181,110 @@ class TestEscalationIsMonotonic:
 def test_adverse_effect_detection_is_case_insensitive() -> None:
     assert contains_adverse_effect_signal("I had a REACTION to it")
     assert not contains_adverse_effect_signal("can I book an appointment")
+
+
+EDUCATIONAL_MESSAGES = [
+    (
+        "Synthetic QA only, not a symptom report: explain in plain English what a "
+        "patient-reported barrier means. Is it automatically a confirmed adverse drug "
+        "reaction? Do not change my care plan or medication."
+    ),
+    "What is an adverse drug reaction?",
+    "Explain rash and nausea as possible side effects.",
+    "Could a medication cause a rash or nausea?",
+    "What does allergic reaction mean? Is it always a confirmed side effect?",
+    "¿Qué es una reacción adversa a un medicamento?",
+    "Explica qué significa un efecto secundario y una erupción.",
+    "¿Podría un medicamento causar mareos o náuseas?",
+    "¿Que significa una reaccion adversa?",
+    (
+        "Solo QA sintética, no es un reporte de síntomas: explica qué significa una "
+        "barrera reportada por el paciente. ¿Es automáticamente una reacción adversa "
+        "confirmada? No cambies mi plan ni mi medicamento."
+    ),
+    "I do not have a rash or nausea.",
+    "No tengo sarpullido ni náuseas.",
+    "No nausea, no rash. Explain what a side effect means.",
+    "Sin mareos ni náuseas. ¿Qué es una reacción adversa?",
+    "What is a fraction?",  # No substring match inside another word.
+]
+
+ADVERSE_REPORTS = [
+    "I had a reaction to it",
+    "I feel dizzy",
+    "Tengo una reacción al medicamento",
+    "Me dio sarpullido después del medicamento",
+    "Tengo mareos y náuseas",
+    "Tengo hinchazon y vomitos",
+    "Mi madre tiene una erupción",
+    "Synthetic QA only, not a symptom report: I got a rash after my medication",
+    "Educational question: I am having nausea after my dose",
+    "Solo QA sintética, no es un reporte de síntomas: tengo una reacción",
+    "What is a side effect? I have a rash now",
+    "I have a rash now. What is a side effect?",
+    "Explain nausea, but I feel dizzy now",
+    "Explain nausea and I have a rash now",
+    "Could a medication cause nausea, and I have a rash now?",
+    "What does the rash I developed mean?",
+    "Explain my rash",
+    "Explain this rash",
+    "Explain nausea, she is dizzy",
+    "Could a medication cause a rash, the rash is spreading?",
+    "Explica mi reacción al medicamento",
+    "¿Qué significa esta erupción?",
+    "Explica náuseas, empezaron hoy",
+    "¿Qué significa una reacción? Tengo una erupción ahora",
+    "Explica los efectos secundarios y tengo mareos ahora",
+    "¿Podría un medicamento causar náuseas? Pero tengo sarpullido ahora",
+    "I do not have nausea, but I have a rash",
+    "No rash yesterday; rash today",
+    "No reaction yesterday, but a reaction now",
+    "No tuve reacción ayer, pero tengo una reacción hoy",
+    "I do not have a rash or I feel dizzy",
+    "No tengo náuseas, pero tengo mareos",
+    "No tengo sarpullido ni siento mareos ahora",
+    "Not only a rash but nausea too",
+    "I am not sure whether this is a reaction",
+    "No estoy seguro si es una reacción",
+    "Synthetic QA only: rash",
+    "Solo QA: reacción",
+]
+
+
+@pytest.mark.parametrize("message", EDUCATIONAL_MESSAGES)
+@pytest.mark.parametrize("intent", ["general", "medication_question", "symptom"])
+def test_explicit_education_and_denials_do_not_force_urgent(message: str, intent: str) -> None:
+    assert not contains_adverse_effect_signal(message)
+    assert apply_safety_override(
+        intent=intent, urgency="routine", reason="Educational question", message=message
+    ) == (intent, "routine", "Educational question")
+
+
+@pytest.mark.parametrize("message", ADVERSE_REPORTS)
+def test_reports_and_ambiguous_mentions_still_force_urgent(message: str) -> None:
+    assert contains_adverse_effect_signal(message)
+    assert (
+        apply_safety_override(
+            intent="general", urgency="routine", reason="Educational question", message=message
+        )[1]
+        == "urgent"
+    )
+
+
+@pytest.mark.parametrize("message", EDUCATIONAL_MESSAGES)
+@pytest.mark.parametrize("urgency", ["urgent", "emergency"])
+def test_education_never_lowers_model_urgency(message: str, urgency: str) -> None:
+    assert apply_safety_override(
+        intent="general", urgency=urgency, reason="Model concern", message=message
+    ) == ("general", urgency, "Model concern")
+
+
+@pytest.mark.parametrize("signal", EMERGENCY_EN + EMERGENCY_ES + SELF_HARM_EN + SELF_HARM_ES)
+def test_education_and_qa_disclaimers_never_hide_emergencies(signal: str) -> None:
+    message = f"Synthetic QA only: explain adverse reactions. {signal}"
+    assert (
+        apply_safety_override(
+            intent="general", urgency="routine", reason="Educational question", message=message
+        )[1]
+        == "emergency"
+    )
