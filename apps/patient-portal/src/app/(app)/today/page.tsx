@@ -66,6 +66,7 @@ function CarePlanDetails({ task }: { task: FeedTask }) {
 }
 
 export default function TodayPage() {
+    const profile = usePatientProfile();
     const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 30_000);
@@ -82,10 +83,9 @@ export default function TodayPage() {
         refreshFeed,
         summary,
         tasks,
-    } = useFeedData();
+    } = useFeedData(profile?.preferredLanguage);
     const [barrierTask, setBarrierTask] = useState<FeedTask | null>(null);
     const [barrierNote, setBarrierNote] = useState("");
-    const profile = usePatientProfile();
     const displayName = profile?.firstName ?? "";
     const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
     const completionPercent = summary.total > 0

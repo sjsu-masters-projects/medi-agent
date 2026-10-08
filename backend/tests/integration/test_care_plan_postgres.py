@@ -27,7 +27,7 @@ FACT = "00000000-0000-0000-0000-000000000004"
 
 @pytest.fixture
 def sql(tmp_path: Path):
-    """Create an isolated cluster and apply publication/generation migrations 042–045."""
+    """Create an isolated cluster with hardened helpers and care-plan migrations."""
     programs = {name: shutil.which(name) for name in ("initdb", "pg_ctl", "psql")}
     if not all(programs.values()):
         pytest.fail("initdb, pg_ctl and psql are required for this local check")
@@ -66,6 +66,7 @@ def sql(tmp_path: Path):
                 "-d",
                 "postgres",
                 "-At",
+                "-q",
                 "-v",
                 "ON_ERROR_STOP=1",
             ],
@@ -80,6 +81,10 @@ def sql(tmp_path: Path):
         execute("""
           CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
           CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
+          CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
+            SELECT (nullif(current_setting('request.jwt.claims', true), '')::jsonb->>'sub')::uuid;
+          $$;
+          GRANT USAGE ON SCHEMA auth TO authenticated, anon;
           CREATE TABLE public.patients(id uuid PRIMARY KEY, preferred_language text DEFAULT 'en-US');
           CREATE TABLE public.clinicians(id uuid PRIMARY KEY);
           CREATE TABLE public.clinical_recommendations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -115,6 +120,25 @@ def sql(tmp_path: Path):
         execute((MIGRATIONS / "043_incomplete_care_plan_drafts.sql").read_text())
         execute((MIGRATIONS / "044_care_plan_overlap_publication_guard.sql").read_text())
         execute((MIGRATIONS / "045_care_plan_activity_continuity.sql").read_text())
+        execute("""
+          CREATE FUNCTION public.is_clinician() RETURNS boolean LANGUAGE sql STABLE
+            AS $$ SELECT EXISTS (SELECT 1 FROM public.clinicians WHERE id=auth.uid()); $$;
+          CREATE FUNCTION public.is_assigned_clinician(uuid) RETURNS boolean LANGUAGE sql STABLE
+            AS $$ SELECT EXISTS (SELECT 1 FROM public.care_teams
+                  WHERE clinician_id=auth.uid() AND patient_id=$1 AND status='active'); $$;
+          REVOKE ALL ON FUNCTION public.is_clinician(), public.is_assigned_clinician(uuid)
+            FROM PUBLIC, anon, authenticated;
+        """)
+        hardening = (MIGRATIONS / "020_harden_database_security.sql").read_text()
+        execute(hardening.split("-- Public helper functions remain")[0])
+        execute(
+            foundation[
+                foundation.index(
+                    "ALTER TABLE public.care_plan_versions ENABLE ROW LEVEL SECURITY;"
+                ) :
+            ].split("CREATE OR REPLACE FUNCTION public.request_care_plan_generation")[0]
+        )
+        execute((MIGRATIONS / "047_care_plan_private_rls_helpers.sql").read_text())
         execute(f"""
           INSERT INTO patients(id) VALUES ('{PATIENT}');
           INSERT INTO auth.users VALUES ('{PATIENT}');
@@ -437,6 +461,102 @@ def test_browser_roles_cannot_execute_generation_or_guards(sql) -> None:
         )
         == "t"
     )
+
+
+def _authenticated_read(sql, actor: str, query: str) -> str:
+    return sql(
+        f"SET ROLE authenticated; SET request.jwt.claims='{json.dumps({'sub': actor})}'; {query}"
+    )
+
+
+def test_hardened_rls_allows_assigned_clinician_and_approved_plan_owner(sql) -> None:
+    owner = "00000000-0000-0000-0000-000000000021"
+    # A distinct owner avoids confusing the patient with the assigned clinician.
+    sql(f"INSERT INTO public.patients(id) VALUES ('{owner}');")
+    sql(f"UPDATE public.care_plan_versions SET patient_id='{owner}' WHERE id='{PLAN}';")
+    sql(f"UPDATE public.clinical_facts SET patient_id='{owner}';")
+    sql(f"UPDATE public.care_plan_generation_requests SET patient_id='{owner}';")
+    sql(
+        f"INSERT INTO public.care_teams(clinician_id,patient_id,status) VALUES ('{PATIENT}','{owner}','active');"
+    )
+    sql(
+        batch(
+            json.dumps(
+                [
+                    {
+                        "source_fact_id": FACT,
+                        "category": "movement",
+                        "title": "Walk",
+                        "instructions": "Synthetic walk",
+                        "frequency": "daily",
+                        "confidence_score": 1,
+                    }
+                ]
+            )
+        )
+    )
+    sql("UPDATE care_plan_items SET reviewed_locale='en-US'")
+    sql(f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')")
+    sql(
+        f"INSERT INTO public.care_plan_versions(patient_id,version_number,source_watermark) VALUES ('{owner}',2,now());"
+    )
+    assert _authenticated_read(sql, owner, "SELECT count(*) FROM care_plan_versions") == "1"
+    assert _authenticated_read(sql, owner, "SELECT count(*) FROM care_plan_items") == "1"
+    assert _authenticated_read(sql, owner, "SELECT count(*) FROM care_plan_audit_events") == "0"
+    assert (
+        _authenticated_read(sql, owner, "SELECT count(*) FROM care_plan_generation_requests") == "0"
+    )
+    assert _authenticated_read(sql, PATIENT, "SELECT count(*) FROM care_plan_versions") == "2"
+    assert _authenticated_read(sql, PATIENT, "SELECT count(*) FROM care_plan_items") == "1"
+    assert int(_authenticated_read(sql, PATIENT, "SELECT count(*) FROM care_plan_audit_events")) > 0
+    assert (
+        _authenticated_read(sql, PATIENT, "SELECT count(*) FROM care_plan_generation_requests")
+        == "1"
+    )
+
+
+@pytest.mark.parametrize("clinician", [False, True])
+def test_hardened_rls_hides_all_care_plan_rows_from_outsiders(sql, clinician) -> None:
+    outsider = "00000000-0000-0000-0000-000000000022"
+    table = "clinicians" if clinician else "patients"
+    sql(f"INSERT INTO public.{table}(id) VALUES ('{outsider}')")
+    sql(batch(f"[{item()}]"))
+    sql(
+        "UPDATE care_plan_items SET instructions='Synthetic activity', frequency='daily', blocker_reason=NULL, reviewed_locale='en-US'"
+    )
+    sql(f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')")
+    for resource in (
+        "care_plan_versions",
+        "care_plan_items",
+        "care_plan_generation_requests",
+        "care_plan_audit_events",
+    ):
+        assert int(sql(f"SELECT count(*) FROM {resource}")) > 0
+        assert _authenticated_read(sql, outsider, f"SELECT count(*) FROM {resource}") == "0"
+    if clinician:
+        sql(
+            f"INSERT INTO care_teams(patient_id,clinician_id,status) VALUES ('{PATIENT}','{outsider}','inactive')"
+        )
+        assert _authenticated_read(sql, outsider, "SELECT count(*) FROM care_plan_versions") == "0"
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+def test_hardened_rls_has_no_browser_writes_or_public_helper_execution(sql, role) -> None:
+    for resource in (
+        "care_plan_versions",
+        "care_plan_items",
+        "care_plan_generation_requests",
+        "care_plan_audit_events",
+    ):
+        for privilege in ("INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+            assert (
+                sql(f"SELECT has_table_privilege('{role}','public.{resource}','{privilege}')")
+                == "f"
+            )
+        error = sql(f"SET ROLE {role}; DELETE FROM public.{resource} WHERE false", succeeds=False)
+        assert "permission denied for table" in error
+    for helper in ("is_clinician()", "is_assigned_clinician(uuid)"):
+        assert sql(f"SELECT has_function_privilege('{role}','public.{helper}','EXECUTE')") == "f"
 
 
 def test_actual_publication_rolls_back_projections_then_publishes_reviewed_activity(sql) -> None:

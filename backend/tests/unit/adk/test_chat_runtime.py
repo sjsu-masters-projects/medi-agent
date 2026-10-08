@@ -505,3 +505,47 @@ async def test_a_model_cannot_talk_an_emergency_down() -> None:
     events = await _turn(understated, "I have crushing chest pain")
 
     assert _first(events, "classification")["urgency"] == "emergency"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "urgency", "expected"),
+    [
+        ("What is a confirmed adverse drug reaction?", "routine", "routine"),
+        ("¿Qué es una reacción adversa confirmada?", "routine", "routine"),
+        ("Explain side effects and I have a rash now", "routine", "urgent"),
+        ("Solo QA: explica efectos secundarios. Tengo mareos", "routine", "urgent"),
+        ("What is a side effect?", "urgent", "urgent"),
+        ("¿Qué es una reacción adversa?", "emergency", "emergency"),
+    ],
+)
+async def test_adverse_education_keeps_classification_and_responder_coherent(
+    message: str, urgency: str, expected: str
+) -> None:
+    runtime = _runtime(
+        decision={"intent": "general", "urgency": urgency, "reason": "Educational question"}
+    )
+    events = await _turn(runtime, message)
+    classification = _first(events, "classification")
+    assert classification["urgency"] == expected
+    assert classification["escalation_required"] is (expected != "routine")
+    # The responder remains reachable; education must not trigger the emergency halt.
+    assert _first(events, "complete")["response_text"] == REPLY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "copy_signal"),
+    [
+        ("Educational question: explain reactions. I have chest pain", "911"),
+        ("Solo QA: explica reacciones. Tengo dolor de pecho", "911"),
+        ("Explain side effects. I want to kill myself", "988"),
+        ("Solo QA: explica efectos secundarios. Quiero suicidarme", "988"),
+    ],
+)
+async def test_educational_disclaimers_never_bypass_the_runtime_halt(
+    message: str, copy_signal: str
+) -> None:
+    events = await _turn(_runtime(must_not_run=True), message)
+    assert _first(events, "classification")["urgency"] == "emergency"
+    assert copy_signal in _first(events, "complete")["response_text"]

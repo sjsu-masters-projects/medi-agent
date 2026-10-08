@@ -21,6 +21,53 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-005 live acceptance hardening — 2026-10-08 (ready for review).** One follow-up
+PR preserves the existing synthetic scenario and fixes the October 7 observations:
+neutral 403/404 patient-detail states, stale-content protection on patient/account
+changes, bilingual care-team role labels, clause-local adverse-effect education
+handling, private-helper care-plan RLS, and bounded read-transport recovery. Writes
+are never automatically replayed; uncertain saves require refresh before manual retry.
+The original fetch failure's cause remains unconfirmed; retry is a mitigation.
+
+October 7 deployed acceptance: V1 stayed active until Elena approved V2. Unchanged
+medication/movement/monitoring projections retained history and existing reminders;
+changed hydration received a new identity with no inherited responses/reminders,
+while old history remained available. All six barrier categories reached the clinician
+view. Header/detail agreed at 33% (3/9 recorded responses); Today uses a different
+daily denominator. Read-only audit reconstructed worker generation, Elena's review
+and approval, supersession, publication links and patient responses. Intermediate
+edit wording snapshots are not retained by the existing audit contract.
+
+Daniel's feed/records showed only his data after retry; Marcus's direct Morgan visit
+returned HTTP 403 without patient data/plan controls. This proves live read denial,
+not the complete cross-account write matrix. Authenticated care-plan SELECT failed
+closed because 040 policies called public helpers restricted by 020. Additive 047
+uses the existing private helpers and restricts browser roles to RLS-filtered SELECT,
+without reopening helper/publication RPCs. No remote migration, reset, deployment
+or merge was performed during this preparation.
+
+Fresh bilingual MediGuide education stayed within care-plan boundaries, but the
+English mention of "reaction" falsely forced urgent classification. New rules exempt
+only explicit educational clauses/local denials; actual or ambiguous reports and
+mixed clauses still escalate. Emergency/self-harm rules and monotonic urgency remain.
+
+Local verification on this branch: `CARE_PLAN_TEST_POSTGRES=1 PYTHONPATH=src
+.venv/bin/pytest tests/ --no-cov -q` **1,992 passed**, including 25 care-plan and 31
+appointment PostgreSQL tests with dummy CI settings. A sandboxed run initially hit
+local shared-memory exhaustion; the verified orphaned temporary entry was reclaimed
+without changing the active local database or kernel settings. Source Ruff/format,
+source mypy (**209 files**) and migration parser (**55 files**) passed. Both portals
+passed `npm run typecheck`, `npm run lint`, `NODE_OPTIONS=--no-experimental-webstorage
+npm run test` (**264 patient, 219 clinician**) and `npm run build -- --webpack`.
+Existing Sentry/Vite/dependency deprecation warnings remain non-fatal. No live model
+calls or real credentials were required for regression tests.
+
+Remaining before PAT-005 closure: authorized ledger rollout of 047 and deployed
+bilingual chat/role/error-state checks; full cross-account edit/approve/preview/response
+denial through an authorized harness without extracting browser credentials; full
+bilingual plan publication and live five-document worker timing. These are not passes
+merely because the local tests are green.
+
 **PAT-004-A companion naming — 2026-10-05 (ready for review).** Replace the assistant's
 Maya identity with MediGuide in PR #131. Keep its name in one shared constant,
 identify it explicitly as an AI care assistant, and localize typing/identity copy

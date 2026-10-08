@@ -2,6 +2,12 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Care-team roles are displayed as readable en-US/es-MX labels rather than raw stored
+codes; unknown roles use generic care-team copy. API transport recovery retries GET/HEAD
+once after 100–249 ms, honors cancellation, and never retries HTTP errors or writes.
+Today localizes connection/save errors using the loaded profile language. An uncertain
+save leaves the task pending; refresh to inspect persisted state before a manual retry.
+
 First, run the development server:
 
 ```bash

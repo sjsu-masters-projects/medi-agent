@@ -212,6 +212,31 @@ initial unconfirmed-save cause remain acceptance work, not completed items.
 - [ ] A clinician can compare active and proposed versions, identify all contributing documents,
       reconcile overlapping medications, and verify localized wording before v2 publication.
 
+## October 7 acceptance and October 8 hardening
+
+Morgan/Elena completed V2 publication: V1 stayed active during review, then superseded
+atomically. Unchanged projections retained responses/reminders; changed hydration
+received a new identity without old responses/reminders. All six barrier categories
+were clinician-visible. Header/detail agreed (3/9, 33%); Today's denominator differs.
+Worker requests, review/approval actors, publication and patient responses were
+reconstructed read-only; intermediate edit wording snapshots remain outside the payload.
+
+Marcus's live Morgan navigation returned 403 without data/controls, and Daniel's
+feed/records showed only his own data. Full deployed cross-account write/approval/response
+denial remains pending; local router/PostgreSQL regressions are not that complete proof.
+
+Follow-up hardening replaces expected denial/missing-record errors with neutral states,
+clears stale content across route/account changes, localizes care-team roles, and
+distinguishes explicit adverse-effect education from reported symptoms. Emergencies and
+model urgency remain protected. Additive 047 repairs the private-helper policy mismatch.
+
+Transient read/save fetch failures had no established cause in backend logs. Shared
+recovery retries GET/HEAD once with 100–249 ms jitter, respects cancellation, and never
+retries HTTP errors or writes. An unconfirmed response is not marked saved; refresh
+before manual retry. This is mitigation, not a verified transport root-cause fix.
+New deployed UI/chat/policy checks, full bilingual plan publication and live five-document
+worker timing remain open.
+
 ## Explicitly deferred
 
 - Spanish parity, appointment booking, external notifications, production capacity alerts,

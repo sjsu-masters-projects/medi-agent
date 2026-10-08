@@ -24,6 +24,7 @@ import {
     type Locale,
 } from "@/types";
 import type { CareTeamMember, Patient } from "@/types";
+import { careTeamRoleLabel } from "./care-team-labels";
 
 interface PatientProfileResponse {
     id: string;
@@ -447,7 +448,7 @@ function ProfilePageContent() {
                                                     <p className="font-semibold text-[#17233a]">
                                                         Dr. {member.clinicianFirstName} {member.clinicianLastName}
                                                     </p>
-                                                    <p className="mt-1 text-sm text-[#5b6b83]">{member.role}</p>
+                                                    <p className="mt-1 text-sm text-gray-500">{careTeamRoleLabel(member.role, patientProfile.preferredLanguage)}</p>
                                                 </div>
                                                 <Badge variant="success">Linked</Badge>
                                             </div>
