@@ -16,6 +16,13 @@ from uuid import UUID
 from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
+from app.db.supabase_execute import execute_async
+from app.models.adr import ADRInformationResponseRequest
+from app.pharmacovigilance import (
+    PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
+    NaranjoQuestion,
+    score_naranjo,
+)
 from app.services.reminder_schedule_service import validate_timezone_name
 
 logger = logging.getLogger(__name__)
@@ -169,3 +176,143 @@ class PatientService:
         row["specialty_context"] = clinician.get("specialty", "")
         row["clinic_name"] = clinician.get("clinic_name", "")
         return row
+
+    # ── ADR information requests ────────────────────────
+
+    async def list_adr_information_requests(self, patient_id: UUID) -> list[dict[str, Any]]:
+        """Return pending, patient-safe ADR follow-up requests for this patient."""
+        result = await execute_async(
+            self,
+            lambda db: (
+                db.table("adr_information_requests")
+                .select(
+                    "id, adr_assessment_id, requested_information, patient_message, status, "
+                    "created_at, adr_assessments(suspect_medication_name, naranjo_score, "
+                    "causality, symptom_reports(symptom, severity))"
+                )
+                .eq("patient_id", str(patient_id))
+                .eq("status", "pending")
+                .order("created_at", desc=True)
+            ),
+            operation="list patient ADR information requests",
+            retry_transient=True,
+        )
+
+        requests: list[dict[str, Any]] = []
+        for raw in cast(list[dict[str, Any]], result.data or []):
+            assessment = cast(dict[str, Any], raw.get("adr_assessments") or {})
+            symptom = cast(dict[str, Any], assessment.get("symptom_reports") or {})
+            questions = [
+                NaranjoQuestion(value)
+                for value in raw.get("requested_information") or []
+                if value in PATIENT_ANSWERABLE_NARANJO_QUESTIONS
+            ]
+            if not questions:
+                continue
+            requests.append(
+                {
+                    "id": raw["id"],
+                    "adr_assessment_id": raw["adr_assessment_id"],
+                    "symptom": symptom.get("symptom") or "Reported symptom",
+                    "symptom_severity": symptom.get("severity") or 1,
+                    "suspect_medication_name": assessment.get("suspect_medication_name") or "",
+                    "requested_information": questions,
+                    "patient_message": raw.get("patient_message") or "",
+                    "current_naranjo_score": assessment.get("naranjo_score") or 0,
+                    "current_causality": assessment.get("causality") or "Doubtful",
+                    "status": raw["status"],
+                    "created_at": raw["created_at"],
+                }
+            )
+        return requests
+
+    async def respond_to_adr_information_request(
+        self,
+        patient_id: UUID,
+        request_id: UUID,
+        response: ADRInformationResponseRequest,
+    ) -> dict[str, Any]:
+        """Validate confirmed patient evidence, rescore, and save it atomically."""
+        request_result = await execute_async(
+            self,
+            lambda db: (
+                db.table("adr_information_requests")
+                .select(
+                    "id, adr_assessment_id, patient_id, requested_information, status, "
+                    "adr_assessments(naranjo_answers, naranjo_assessment, evidence, status)"
+                )
+                .eq("id", str(request_id))
+                .single()
+            ),
+            operation="load ADR information request",
+            retry_transient=True,
+        )
+        raw_request = cast(dict[str, Any] | None, request_result.data)
+        if not raw_request or str(raw_request.get("patient_id")) != str(patient_id):
+            raise NotFoundError("ADR information request", str(request_id))
+        if raw_request.get("status") != "pending":
+            raise ValidationError("This information request has already been completed")
+
+        requested_questions = {
+            NaranjoQuestion(value)
+            for value in raw_request.get("requested_information") or []
+            if value in PATIENT_ANSWERABLE_NARANJO_QUESTIONS
+        }
+        answered_questions = {item.question for item in response.answers}
+        if answered_questions != requested_questions:
+            raise ValidationError("Answer every requested question before sending")
+
+        assessment = cast(dict[str, Any], raw_request.get("adr_assessments") or {})
+        if assessment.get("status") != "draft":
+            raise ValidationError("This ADR assessment is no longer awaiting information")
+
+        existing_answers = cast(dict[str, str], assessment.get("naranjo_answers") or {})
+        merged_answers = {
+            **existing_answers,
+            **{item.question.value: item.answer.value for item in response.answers},
+        }
+        rescored = score_naranjo(merged_answers)
+
+        existing_evidence = list(assessment.get("evidence") or [])
+        response_evidence = [
+            {
+                "question": item.question.value,
+                "answer": item.answer.value,
+                "evidence": item.evidence,
+                "source": "patient_follow_up",
+                "information_request_id": str(request_id),
+            }
+            for item in response.answers
+        ]
+        combined_evidence = [*existing_evidence, *response_evidence]
+        response_payload = [item.model_dump(mode="json") for item in response.answers]
+
+        result = await execute_async(
+            self,
+            lambda db: db.rpc(
+                "respond_to_adr_information_request",
+                {
+                    "p_request_id": str(request_id),
+                    "p_patient_id": str(patient_id),
+                    "p_responses": response_payload,
+                    "p_naranjo_answers": merged_answers,
+                    "p_naranjo_assessment": rescored.model_dump(mode="json"),
+                    "p_evidence": combined_evidence,
+                    "p_score": rescored.score,
+                    "p_causality": rescored.causality.value,
+                },
+            ),
+            operation="save ADR information response",
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows:
+            raise ValidationError("The information response could not be saved")
+        saved = rows[0]
+        return {
+            "request_id": saved["id"],
+            "adr_assessment_id": saved["adr_assessment_id"],
+            "status": saved["status"],
+            "naranjo_score": saved["resolved_naranjo_score"],
+            "causality": saved["resolved_causality"],
+            "responded_at": saved["responded_at"],
+        }

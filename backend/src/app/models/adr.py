@@ -1,12 +1,17 @@
 """ADR assessment, clinician review, and MedWatch draft schemas."""
 
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import ADRStatus, MedWatchStatus, NaranjoCausality
+from app.pharmacovigilance import (
+    PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
+    NaranjoAnswer,
+    NaranjoQuestion,
+)
 
 
 class ADRAssessmentRead(BaseModel):
@@ -60,6 +65,10 @@ class ADRReviewQueueItem(BaseModel):
     requested_information: list[str] = Field(default_factory=list)
     reviewed_by: UUID | None = None
     reviewed_at: str | None = None
+    information_request_id: UUID | None = None
+    information_request_status: str | None = None
+    patient_responses: list[dict[str, Any]] = Field(default_factory=list)
+    patient_responded_at: str | None = None
     created_at: str
 
 
@@ -83,21 +92,27 @@ class ADRReviewDecisionRequest(BaseModel):
 
     action: ADRReviewAction
     note: str | None = Field(default=None, max_length=2000)
-    requested_information: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(
-        default_factory=list, max_length=20
-    )
+    requested_information: list[NaranjoQuestion] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def validate_action_details(self) -> "ADRReviewDecisionRequest":
         self.note = self.note.strip() if self.note else None
-        self.requested_information = list(
-            dict.fromkeys(item.strip() for item in self.requested_information if item.strip())
-        )
+        self.requested_information = list(dict.fromkeys(self.requested_information))
         if (
             self.action in {ADRReviewAction.DISMISS, ADRReviewAction.REQUEST_INFORMATION}
             and not self.note
         ):
             raise ValueError("A review note is required for this action")
+        if self.action is ADRReviewAction.REQUEST_INFORMATION:
+            if not self.requested_information:
+                raise ValueError("Select at least one patient-answerable question")
+            unsafe = set(self.requested_information) - PATIENT_ANSWERABLE_NARANJO_QUESTIONS
+            if unsafe:
+                raise ValueError(
+                    "Information requests may contain only patient-answerable questions"
+                )
+        elif self.requested_information:
+            raise ValueError("Requested information is only valid for information requests")
         return self
 
 
@@ -114,6 +129,74 @@ class ADRReviewDecisionResponse(BaseModel):
     reviewed_at: str
     dismiss_reason: str | None = None
     updated_at: str
+
+
+class ADRInformationRequestStatus(StrEnum):
+    """Lifecycle for one clinician-to-patient ADR follow-up request."""
+
+    PENDING = "pending"
+    ANSWERED = "answered"
+    CANCELLED = "cancelled"
+
+
+class ADRInformationAnswer(BaseModel):
+    """One confirmed patient answer about an event that already happened."""
+
+    question: NaranjoQuestion
+    answer: NaranjoAnswer
+    evidence: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_patient_answer(self) -> "ADRInformationAnswer":
+        if self.question not in PATIENT_ANSWERABLE_NARANJO_QUESTIONS:
+            raise ValueError("This question cannot be answered through the patient follow-up")
+        self.evidence = self.evidence.strip() if self.evidence else None
+        if self.answer is not NaranjoAnswer.DO_NOT_KNOW and not self.evidence:
+            raise ValueError("Describe what happened for yes or no answers")
+        return self
+
+
+class ADRInformationResponseRequest(BaseModel):
+    """Patient-confirmed answers to one pending clinician information request."""
+
+    answers: list[ADRInformationAnswer] = Field(..., min_length=1, max_length=3)
+    confirmed: bool
+
+    @model_validator(mode="after")
+    def validate_confirmation(self) -> "ADRInformationResponseRequest":
+        if not self.confirmed:
+            raise ValueError("Confirm the answers before sending them to the care team")
+        questions = [item.question for item in self.answers]
+        if len(questions) != len(set(questions)):
+            raise ValueError("Each requested question may be answered once")
+        return self
+
+
+class ADRInformationRequestRead(BaseModel):
+    """Pending patient-safe ADR follow-up shown in the patient portal."""
+
+    id: UUID
+    adr_assessment_id: UUID
+    symptom: str
+    symptom_severity: int = Field(..., ge=1, le=10)
+    suspect_medication_name: str
+    requested_information: list[NaranjoQuestion]
+    patient_message: str
+    current_naranjo_score: int = Field(..., ge=-4, le=13)
+    current_causality: NaranjoCausality
+    status: ADRInformationRequestStatus
+    created_at: str
+
+
+class ADRInformationResponseRead(BaseModel):
+    """Updated deterministic assessment after confirmed patient answers."""
+
+    request_id: UUID
+    adr_assessment_id: UUID
+    status: ADRInformationRequestStatus
+    naranjo_score: int = Field(..., ge=-4, le=13)
+    causality: NaranjoCausality
+    responded_at: str
 
 
 class MedWatchDraft(BaseModel):

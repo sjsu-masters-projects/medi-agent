@@ -37,7 +37,7 @@ const assessment = {
         improved_on_dechallenge: "yes",
     },
     naranjoAssessment: {
-        missing_questions: ["alternative_causes"],
+        missing_questions: ["dose_response"],
     },
     evidence: [
         {
@@ -79,7 +79,7 @@ describe("ADR review queue", () => {
         expect(
             screen.getByText(/I became dizzy a few hours/),
         ).toBeInTheDocument();
-        expect(screen.getByText("Alternative causes")).toBeInTheDocument();
+        expect(screen.getByText("Dose-response relationship")).toBeInTheDocument();
         expect(
             screen.getByRole("link", { name: /open patient record/i }),
         ).toHaveAttribute("href", "/patients/patient-1");
@@ -166,15 +166,15 @@ describe("ADR review queue", () => {
         });
         expect(submit).toBeDisabled();
         fireEvent.change(screen.getByLabelText(/review note/i), {
-            target: { value: "Please clarify other possible causes." },
+            target: { value: "Please describe what happened after the prior dose change." },
         });
         fireEvent.click(submit);
 
         await waitFor(() =>
             expect(reviewADRAssessmentMock).toHaveBeenCalledWith("adr-1", {
                 action: "request_information",
-                note: "Please clarify other possible causes.",
-                requestedInformation: ["alternative_causes"],
+                note: "Please describe what happened after the prior dose change.",
+                requestedInformation: ["dose_response"],
             }),
         );
     });
@@ -190,10 +190,7 @@ describe("ADR review queue", () => {
                 {
                     ...assessment,
                     naranjoAssessment: {
-                        missing_questions: [
-                            "alternative_causes",
-                            "objective_evidence",
-                        ],
+                        missing_questions: ["dose_response", "similar_previous_reaction"],
                     },
                 },
             ]);
@@ -208,7 +205,7 @@ describe("ADR review queue", () => {
             if (action === "request_information")
                 fireEvent.click(
                     screen.getByRole("checkbox", {
-                        name: "objective evidence",
+                        name: "similar previous reaction",
                     }),
                 );
             fireEvent.click(screen.getByRole("button", { name: submit }));
@@ -224,12 +221,12 @@ describe("ADR review queue", () => {
             if (action === "request_information") {
                 expect(
                     screen.getByRole("checkbox", {
-                        name: "alternative causes",
+                        name: "dose response",
                     }),
                 ).toBeChecked();
                 expect(
                     screen.getByRole("checkbox", {
-                        name: "objective evidence",
+                        name: "similar previous reaction",
                     }),
                 ).not.toBeChecked();
             }
@@ -243,7 +240,7 @@ describe("ADR review queue", () => {
                 note: "Retain this clinical rationale.",
                 requestedInformation:
                     action === "request_information"
-                        ? ["alternative_causes"]
+                        ? ["dose_response"]
                         : [],
             };
             expect(reviewADRAssessmentMock).toHaveBeenNthCalledWith(
@@ -284,7 +281,7 @@ describe("ADR review queue", () => {
             target: { value: "Unsent clarification." },
         });
         fireEvent.click(
-            screen.getByRole("checkbox", { name: "alternative causes" }),
+            screen.getByRole("checkbox", { name: "dose response" }),
         );
         const note = screen.getByLabelText(/review note/i);
         fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
@@ -449,5 +446,33 @@ describe("ADR review queue", () => {
             expect(screen.queryByRole("textbox")).not.toBeInTheDocument(),
         );
         expect(reviewADRAssessmentMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows confirmed patient answers and the rescored decision support", async () => {
+        fetchADRReviewQueueMock.mockResolvedValue([
+            {
+                ...assessment,
+                naranjoScore: 4,
+                lastReviewAction: "request_information",
+                reviewNote: "Please describe the prior dose change.",
+                informationRequestStatus: "answered",
+                patientResponses: [
+                    {
+                        question: "dose_response",
+                        answer: "yes",
+                        evidence: "It improved after my clinician lowered the dose.",
+                    },
+                ],
+            },
+        ]);
+
+        render(<MedWatchPage />);
+
+        expect(await screen.findByText("Patient answered")).toBeInTheDocument();
+        expect(
+            screen.getByText(/It improved after my clinician lowered the dose/),
+        ).toBeInTheDocument();
+        expect(screen.getByText(/deterministic score above includes/i)).toBeInTheDocument();
+        expect(screen.getByText("Naranjo 4")).toBeInTheDocument();
     });
 });
