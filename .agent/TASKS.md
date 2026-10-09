@@ -200,7 +200,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 | Records ingestion | Demonstration-ready candidate pipeline | Secure document intake, evidence-backed candidates, TIFF previews, and retryable explanation lifecycle work; clinician review, reconciliation, and downstream approved-action projection remain incomplete |
 | Chat and triage | Partial | Deterministic emergency handling, the Care Coordinator, and WebSocket subprotocol authentication are live; document-focused chat, durable safety-rule audit, and terminal turn recovery remain open |
 | Document intelligence | Demonstration-ready | Synthetic PDF, scanned-Spanish, and multi-frame TIFF paths completed with evidence-backed candidates, private preview, expiry, and cross-user denial checks; the five-minute Job trigger is enabled for the master's-project demonstration |
-| Pharmacovigilance | Partial | Deterministic Naranjo scoring, auditable assigned-clinician decisions, and a patient-safe follow-up/reassessment implementation are in review; migration `047` is applied to staging, while application deployment/live proof, confirmed-report intake, and MedWatch drafting remain incomplete |
+| Pharmacovigilance | Partial | Deterministic Naranjo scoring, auditable assigned-clinician decisions, and the patient-safe follow-up/reassessment loop passed a local-branch acceptance run against staging; canonical application deployment, confirmed-report intake, and MedWatch drafting remain incomplete |
 | Scheduling and communication | Partial | Document ingestion is scheduled; appointments, approved clinical messaging, notification delivery/retry, and care-gap closure are incomplete |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
@@ -2188,7 +2188,8 @@ decision support, never autonomous ADR determination or external reporting.
 - [x] Keep model-generated classification separate from reviewer decision.
 - [/] Support reassessment when evidence changes. The patient-safe structured response and
       deterministic rescore are implemented and migration `047` is applied to staging; application
-      deployment and live acceptance remain.
+      deployment remains, while a locally served feature-branch acceptance run against staging
+      passed on 2026-10-09.
 
 **Acceptance criteria**
 
@@ -2216,8 +2217,18 @@ verification passed 95 backend tests, 14 patient tests, and 6 clinician tests pl
 and type checks. On 2026-10-09, the requester authorized staging application of migration `047`.
 The ledger advanced from 55 to 56 entries with the committed SHA-256 checksum; RLS, both select
 policies, all safety/audit constraints, service-role-only response RPC access, one backfilled
-three-question request, and its notification were verified. Application deployment and live
-end-to-end proof remain open; no MedWatch draft or external submission is created.
+three-question request, and its notification were verified. Canonical application deployment
+remains open; no MedWatch draft or external submission is created.
+
+Live acceptance evidence — 2026-10-09: using only synthetic Maya Patel and Elena Park accounts,
+the locally served feature branch loaded the backfilled fluticasone/salmeterol dizziness request
+from staging. Maya reviewed and confirmed all three retrospective answers; the patient endpoint
+returned HTTP 200 and removed the pending form with a success message. Elena's refreshed queue
+showed the patient-attributed evidence and a deterministic change from Naranjo 3 (`Possible`) to
+6 (`Probable`). A read-only database check confirmed request status `answered`, three stored
+responses, one `patient_information_provided` audit event, assessment/request score agreement, and
+zero MedWatch drafts for the assessment. No clinician decision, report draft, external submission,
+reset, or additional migration was performed. Canonical application deployment remains open.
 
 ### PV-002 — MedWatch draft lifecycle
 
