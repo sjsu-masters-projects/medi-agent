@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy } from "@/content/chat-copy";
 import {
     HiArrowUp,
@@ -45,6 +45,7 @@ function formatSessionTimeLabel(locale: ChatLocale): string {
 }
 
 export default function ChatPage() {
+    const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const {
         assistantDraft,
@@ -74,15 +75,20 @@ export default function ChatPage() {
     const sessionTimeLabel = formatSessionTimeLabel(selectedLanguage);
 
     const chatCopy = getPatientChatCopy(selectedLanguage);
+    const careTeamMessages = messages.filter((message) => message.role === ChatRole.CLINICIAN);
+    const visibleMessages = messages.filter((message) => conversation === "care-team"
+        ? message.role === ChatRole.CLINICIAN
+        : message.role !== ChatRole.CLINICIAN);
     const quickPrompts = chatCopy.quickPrompts;
     const showQuickPrompts =
-        !loading
+        conversation === "assistant"
+        && !loading
         && !documentContext
         && !messages.some((message) => message.role === ChatRole.USER);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [assistantDraft, isTyping, messages]);
+    }, [assistantDraft, isTyping, messages, conversation]);
 
     return (
         <div className="patient-page min-h-full px-3 py-4 text-[#17233a] sm:px-6 sm:py-6">
@@ -95,10 +101,10 @@ export default function ChatPage() {
                             </div>
                             <div className="space-y-1">
                                 <h1 className="text-[1.45rem] font-black tracking-[-0.03em] text-[#17233a]">
-                                    {CARE_ASSISTANT_NAME}
+                                    {conversation === "assistant" ? CARE_ASSISTANT_NAME : chatCopy.careTeamLabel}
                                 </h1>
                                 <p className="text-xs text-gray-500">
-                                    {chatCopy.assistantDescription}
+                                    {conversation === "assistant" ? chatCopy.assistantDescription : chatCopy.careTeamIntro}
                                 </p>
                                 <p className="inline-flex items-center gap-2 text-sm font-medium text-[#64748b]">
                                     <span
@@ -114,7 +120,7 @@ export default function ChatPage() {
                                 </p>
                             </div>
                         </div>
-                        <button
+                        {conversation === "assistant" ? <button
                             aria-label={
                                 handsFreeMode
                                     ? "Hands-free mode is on. Tap to turn off."
@@ -135,7 +141,7 @@ export default function ChatPage() {
                             type="button"
                         >
                             <HiSpeakerWave className="h-4 w-4" />
-                        </button>
+                        </button> : null}
                         <div
                             aria-label="Chat language"
                             className="inline-flex rounded-full border border-[#d9cbc0] bg-[#fffaf4] p-1 shadow-[0_10px_24px_rgba(42,58,84,0.08)]"
@@ -166,13 +172,26 @@ export default function ChatPage() {
                     </div>
                 </div>
 
+                <div className="mt-4 flex gap-2" role="group" aria-label={chatCopy.careTeamLabel}>
+                    <button type="button" aria-pressed={conversation === "assistant"}
+                        className={`rounded-lg border px-4 py-2 text-sm font-medium ${conversation === "assistant" ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 bg-white text-gray-900"}`}
+                        onClick={() => setConversation("assistant")}>
+                        {CARE_ASSISTANT_NAME} · {chatCopy.assistantDescription}
+                    </button>
+                    <button type="button" aria-pressed={conversation === "care-team"}
+                        disabled={voiceStatus === "listening" || voiceStatus === "processing" || voiceStatus === "playing"}
+                        className={`rounded-lg border px-4 py-2 text-sm font-medium ${conversation === "care-team" ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 bg-white text-gray-900"}`}
+                        onClick={() => setConversation("care-team")}>
+                        {chatCopy.careTeamLabel} ({careTeamMessages.length})
+                    </button>
+                </div>
                 <div className="mt-4 flex-1 px-1 pb-[260px]">
                     <div className="mx-auto w-fit rounded-full border border-[#eadfd4] bg-white/82 px-3 py-1 text-[11px] font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
                         {sessionTimeLabel}
                     </div>
 
                     <div className="mt-4 space-y-4">
-                        {documentContext ? (
+                        {documentContext && conversation === "assistant" ? (
                             <div className="rounded-[26px] border border-[#b6d9d2] bg-[#e6f4f1] p-4 shadow-[0_18px_40px_rgba(20,116,101,0.10)]">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-start gap-3">
@@ -257,17 +276,24 @@ export default function ChatPage() {
                         ) : null}
 
                         <div className="space-y-4">
+                            {conversation === "care-team" ? (
+                                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                                    <p>{chatCopy.careTeamIntro}</p>
+                                    {!loading && careTeamMessages.length === 0 ? <p>{chatCopy.careTeamEmpty}</p> : null}
+                                </div>
+                            ) : null}
                             {loading && messages.length === 0 ? (
                                 <div className="rounded-[20px] border border-[#eadfd4] bg-white/88 px-4 py-3 text-base text-[#64748b] shadow-[0_14px_30px_rgba(42,58,84,0.08)]">
                                     Loading conversation...
                                 </div>
                             ) : null}
 
-                            {messages.map((message) => (
+                            {visibleMessages.map((message) => (
                                 <ChatBubble
                                     content={message.content}
                                     key={message.id}
-                                    language={message.language}
+                                    language={message.role === ChatRole.CLINICIAN ? undefined : message.language}
+                                    clinicianLabel={chatCopy.careTeamLabel}
                                     onPlayAudio={
                                         message.role === ChatRole.ASSISTANT
                                         && (Boolean(message.audioUrl) || canPlayAssistantAudio)
@@ -279,7 +305,7 @@ export default function ChatPage() {
                                 />
                             ))}
 
-                            {assistantDraft ? (
+                            {assistantDraft && conversation === "assistant" ? (
                                 <ChatBubble
                                     content={assistantDraft}
                                     isStreaming
@@ -289,7 +315,7 @@ export default function ChatPage() {
                                 />
                             ) : null}
 
-                            {isTyping && !assistantDraft ? (
+                            {isTyping && !assistantDraft && conversation === "assistant" ? (
                                 <div className="w-fit rounded-full border border-[#eadfd4] bg-white/88 px-3 py-2 text-xs font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
                                     {chatCopy.typingMessage}
                                 </div>
@@ -299,7 +325,7 @@ export default function ChatPage() {
                     </div>
                 </div>
 
-                <form
+                {conversation === "assistant" ? <form
                     className="fixed bottom-[calc(94px+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
                     onSubmit={handleSend}
                 >
@@ -363,7 +389,7 @@ export default function ChatPage() {
                             </p>
                         ) : null}
                     </div>
-                </form>
+                </form> : null}
             </div>
         </div>
     );

@@ -110,7 +110,7 @@ def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
         }
     weekdays = "|".join(DAY_ORDER)
     if re.fullmatch(
-        rf"(?:on )?(?:{weekdays})(?:(?:,\s*(?:and )?| and )(?:{weekdays}))*(?: after dinner)?",
+        rf"(?:on )?(?:{weekdays})(?:(?:,\s*(?:and )?| and |\s*/\s*)(?:{weekdays}))*(?: after dinner)?",
         value,
     ):
         days = [day for day in DAY_ORDER if re.search(rf"\b{day}\b", value)]

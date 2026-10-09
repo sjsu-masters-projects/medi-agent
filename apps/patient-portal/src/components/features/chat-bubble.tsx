@@ -1,7 +1,9 @@
 import { HiMiniSpeakerWave, HiOutlineUser } from "react-icons/hi2";
 import { ChatRole, getLocaleBadgeLabel, type Locale } from "@/types";
+import { CARE_ASSISTANT_NAME } from "@/content/chat-copy";
 
 interface ChatBubbleProps {
+    clinicianLabel?: string;
     role: typeof ChatRole.USER | typeof ChatRole.ASSISTANT | typeof ChatRole.CLINICIAN;
     content: string;
     timestamp: Date | string;
@@ -27,6 +29,7 @@ function formatLanguage(language?: Locale): string | null {
 }
 
 export function ChatBubble({
+    clinicianLabel = "Care team messages",
     content,
     isStreaming = false,
     language,
@@ -49,13 +52,13 @@ export function ChatBubble({
                     {isClinician ? (
                         <HiOutlineUser className="h-4 w-4" />
                     ) : (
-                        <span className="text-[10px] font-black uppercase tracking-[0.22em]">M</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.22em]">{CARE_ASSISTANT_NAME.charAt(0)}</span>
                     )}
                 </span>
             ) : null}
             <div className={`max-w-[82%] space-y-1.5 ${isUser ? "items-end text-right" : ""}`}>
                 {isClinician && (
-                    <p className="px-1 text-[11px] font-semibold text-[#1d4ed8]">Your care team</p>
+                    <p className="px-1 text-[11px] font-semibold text-[#1d4ed8]">{clinicianLabel}</p>
                 )}
                 <div
                     className={`rounded-[24px] px-4 py-3.5 text-base leading-7 shadow-[0_18px_40px_rgba(3,8,22,0.16)] ${

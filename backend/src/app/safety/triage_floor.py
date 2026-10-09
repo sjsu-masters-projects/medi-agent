@@ -144,10 +144,12 @@ _EDUCATIONAL_PREFIX = re.compile(
     r"^\s*[¿\"']?(?:please\s+)?(?:"
     r"what (?:is|are|does|do)\b|(?:can you )?explain\b|define\b|"
     r"is (?:it|that|this) (?:automatically|always)\b|"
+    r"is (?:a|an) (?:patient[ -]reported )?barrier\b|"
     r"(?:can|could) (?:a |an |the )?(?:medicine|medication|drug)\b|"
     r"(?:por favor\s+)?(?:explica|explícame|explicame|explique|define)\b|"
     r"qu[eé] (?:es|son|significa|significan)\b|"
     r"(?:es|eso es) (?:autom[aá]ticamente|siempre)\b|"
+    r"(?:una|la) barrera (?:para seguir el plan de cuidado )?(?:significa|es)\b|"
     r"(?:puede|podr[ií]a) (?:un |el )?(?:medicamento|f[aá]rmaco)\b"
     r")"
 )

@@ -140,6 +140,11 @@ export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
     };
 }
 
+export function isInternalChatAlert(message: ClinicianMessageApi): boolean {
+    return message.subject === "Urgent patient chat escalation"
+        && message.body.startsWith("Chat escalation flagged (");
+}
+
 export function mapClinicianMessageFromApi(message: ClinicianMessageApi): ChatMessage {
     const subject = typeof message.subject === "string" && message.subject.trim()
         ? `${message.subject.trim()}\n\n`

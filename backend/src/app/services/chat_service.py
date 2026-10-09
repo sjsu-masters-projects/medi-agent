@@ -14,6 +14,17 @@ from app.services.explanation_service import normalize_patient_summary
 DEFAULT_CHAT_SESSION_ID = "default"
 
 
+def is_internal_chat_alert(message: dict[str, Any]) -> bool:
+    """Recognize reserved operational notices, including existing stored alerts.
+
+    Keep clinician-authored messages intact; a generic urgent subject alone is not
+    enough to identify an automated notice. Do not delete the underlying alert.
+    """
+    return message.get("subject") == "Urgent patient chat escalation" and str(
+        message.get("body") or ""
+    ).startswith("Chat escalation flagged (")
+
+
 class ConversationStateConflictError(Exception):
     """Raised when a conversation state update loses an optimistic-lock race."""
 
@@ -73,7 +84,8 @@ class ChatService:
             .limit(limit)
         )
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
-        return list(reversed(rows))
+        # These rows include clinician inbox alerts, not only clinician replies.
+        return list(reversed([row for row in rows if not is_internal_chat_alert(row)]))
 
     async def get_context(
         self,
@@ -256,10 +268,7 @@ class ChatService:
         urgency = str(payload.get("urgency", "urgent"))
         intent = str(payload.get("intent", "general"))
         excerpt = str(payload.get("message_excerpt", "")).strip()[:280]
-        body = (
-            f"Chat escalation flagged ({urgency}/{intent}) for patient {patient_id}. "
-            f"Latest message: {excerpt or 'n/a'}"
-        )
+        body = f"Chat escalation flagged ({urgency}/{intent}). Latest message: {excerpt or 'n/a'}"
         rows = [
             {
                 "clinician_id": clinician_id,

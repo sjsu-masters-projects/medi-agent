@@ -58,3 +58,40 @@ approves them; neither the generated files nor the AI worker may publish them.
 - Patient feed response after approval, one completion, one barrier, and the
   clinician adherence/barrier view.
 - Denial evidence for an unassigned clinician and an unrelated patient.
+
+## Chat and weekday regression checks
+
+The patient assistant is **Nora**, explicitly labeled "AI care assistant" in en-US
+and "Asistente de cuidado con IA" in es-MX. Its conversation and the read-only
+care-team message view are separate. The latter does not imply a two-way clinical
+messaging channel: replies still require direct contact with the clinic. Voice
+capture/processing/playback must finish before switching to that view.
+
+Clinician inbox escalation notices remain stored for clinician review. Their
+reserved subject/body signature is excluded from patient delivery and again
+filtered by the client during staggered rollout. Patient UUIDs remain structured
+metadata, not text in new operational alert bodies. Existing stored alerts and
+historical assistant conversations are not rewritten or deleted. The current
+delivery query remains bounded to the latest 20 inbox rows; alerts within that
+window can reduce the number of available clinician-authored messages.
+
+After deployment, verify the following using only this synthetic patient:
+
+1. Ask whether a patient-reported barrier automatically confirms an adverse drug
+   reaction, first in English and then in Spanish, while explicitly reporting no
+   symptoms. The educational question alone must not force urgent classification.
+   Genuine symptom reports, mixed questions/reports, emergency signals and a
+   model's higher urgency must retain their existing escalation behavior.
+2. Confirm automated escalation notices, internal IDs and internal routing text
+   never appear in either patient view. A genuine clinician-authored message must
+   appear only under care-team messages, including when its subject says urgent.
+3. Check an approved Monday/Wednesday/Friday walking instruction on Thursday and
+   Friday in the patient's timezone. It must be absent Thursday and present Friday,
+   even without reminders or with an incompatible reminder. Changing reminder
+   preferences must not change the approved clinical weekday eligibility.
+4. Confirm bilingual Nora labels/typing, care-team empty states, and switching back
+   to the AI composer without losing the conversation. Do not relabel an automated
+   notice as a human reply or invent a clinician response to make this test pass.
+
+Local regressions support these checks but do not establish deployed acceptance,
+clinical validation, or complete PAT-005 readiness.
