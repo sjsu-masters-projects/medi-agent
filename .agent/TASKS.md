@@ -200,7 +200,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 | Records ingestion | Demonstration-ready candidate pipeline | Secure document intake, evidence-backed candidates, TIFF previews, and retryable explanation lifecycle work; clinician review, reconciliation, and downstream approved-action projection remain incomplete |
 | Chat and triage | Partial | Deterministic emergency handling, the Care Coordinator, and WebSocket subprotocol authentication are live; document-focused chat, durable safety-rule audit, and terminal turn recovery remain open |
 | Document intelligence | Demonstration-ready | Synthetic PDF, scanned-Spanish, and multi-frame TIFF paths completed with evidence-backed candidates, private preview, expiry, and cross-user denial checks; the five-minute Job trigger is enabled for the master's-project demonstration |
-| Pharmacovigilance | Partial | Deterministic Naranjo scoring, auditable assigned-clinician decisions, and a patient-safe follow-up/reassessment implementation are in review; migration `047`, live proof, confirmed-report intake, and MedWatch drafting remain incomplete |
+| Pharmacovigilance | Partial | Deterministic Naranjo scoring, auditable assigned-clinician decisions, and a patient-safe follow-up/reassessment implementation are in review; migration `047` is applied to staging, while application deployment/live proof, confirmed-report intake, and MedWatch drafting remain incomplete |
 | Scheduling and communication | Partial | Document ingestion is scheduled; appointments, approved clinical messaging, notification delivery/retry, and care-gap closure are incomplete |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
@@ -2187,7 +2187,8 @@ decision support, never autonomous ADR determination or external reporting.
 - [x] Calculate Naranjo assistance deterministically where possible.
 - [x] Keep model-generated classification separate from reviewer decision.
 - [/] Support reassessment when evidence changes. The patient-safe structured response and
-      deterministic rescore are implemented locally; migration `047` and live acceptance remain.
+      deterministic rescore are implemented and migration `047` is applied to staging; application
+      deployment and live acceptance remain.
 
 **Acceptance criteria**
 
@@ -2212,8 +2213,11 @@ confirms every answer, and the backend atomically appends patient-attributed evi
 same draft, closes the matching notification, and writes a patient-actor audit event. Elena's queue
 shows pending/answered state, the confirmed response, and the updated deterministic score. Focused
 verification passed 95 backend tests, 14 patient tests, and 6 clinician tests plus both portal lint
-and type checks. Migration `047` is committed but intentionally not applied to the shared Supabase
-project; live end-to-end proof remains open and no MedWatch draft or external submission is created.
+and type checks. On 2026-10-09, the requester authorized staging application of migration `047`.
+The ledger advanced from 55 to 56 entries with the committed SHA-256 checksum; RLS, both select
+policies, all safety/audit constraints, service-role-only response RPC access, one backfilled
+three-question request, and its notification were verified. Application deployment and live
+end-to-end proof remain open; no MedWatch draft or external submission is created.
 
 ### PV-002 — MedWatch draft lifecycle
 
