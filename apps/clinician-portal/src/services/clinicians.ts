@@ -130,6 +130,10 @@ export interface ADRReviewQueueItem {
     requestedInformation: string[];
     reviewedBy?: string | null;
     reviewedAt?: string | null;
+    informationRequestId?: string | null;
+    informationRequestStatus?: "pending" | "answered" | "cancelled" | null;
+    patientResponses: ADRReviewEvidence[];
+    patientRespondedAt?: string | null;
     createdAt: string;
 }
 
@@ -178,6 +182,10 @@ interface ADRReviewQueueResponse {
         requested_information?: string[];
         reviewed_by?: string | null;
         reviewed_at?: string | null;
+        information_request_id?: string | null;
+        information_request_status?: "pending" | "answered" | "cancelled" | null;
+        patient_responses?: ADRReviewEvidence[];
+        patient_responded_at?: string | null;
         created_at: string;
     }>;
     total: number;
@@ -646,6 +654,10 @@ export async function fetchADRReviewQueue(): Promise<ADRReviewQueueItem[]> {
         requestedInformation: item.requested_information ?? [],
         reviewedBy: item.reviewed_by,
         reviewedAt: item.reviewed_at,
+        informationRequestId: item.information_request_id,
+        informationRequestStatus: item.information_request_status,
+        patientResponses: item.patient_responses ?? [],
+        patientRespondedAt: item.patient_responded_at,
         createdAt: item.created_at,
     }));
 }

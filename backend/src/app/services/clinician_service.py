@@ -35,6 +35,7 @@ from app.db.supabase_execute import execute_async
 from app.models.adr import ADRReviewDecisionRequest
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
+from app.pharmacovigilance import PATIENT_ANSWERABLE_NARANJO_QUESTIONS, NaranjoQuestion
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
 from app.services.notification_service import NotificationService
 from app.services.reminder_schedule_service import ReminderScheduleService
@@ -525,7 +526,24 @@ class ClinicianService:
         )
 
         rows = cast(list[dict[str, Any]], result.data or [])
-        items = [self._normalize_adr_review_item(row) for row in rows]
+        latest_requests: dict[str, dict[str, Any]] = {}
+        if rows:
+            request_result = await self._execute(
+                self.db.table("adr_information_requests")
+                .select("id, adr_assessment_id, status, responses, responded_at, created_at")
+                .in_("adr_assessment_id", [str(row["id"]) for row in rows])
+                .order("created_at", desc=True)
+            )
+            for request in cast(list[dict[str, Any]], request_result.data or []):
+                latest_requests.setdefault(str(request["adr_assessment_id"]), request)
+
+        items = [
+            self._normalize_adr_review_item(
+                row,
+                latest_request=latest_requests.get(str(row["id"])),
+            )
+            for row in rows
+        ]
         return {"items": items, "total": len(items)}
 
     async def review_adr_assessment(
@@ -537,7 +555,7 @@ class ClinicianService:
         """Apply an atomic, assignment-scoped clinician action to an ADR draft."""
         assessment_result = await self._execute(
             self.db.table("adr_assessments")
-            .select("id, patient_id, status")
+            .select("id, patient_id, status, naranjo_assessment")
             .eq("id", str(assessment_id))
             .single()
         )
@@ -550,6 +568,18 @@ class ClinicianService:
         if assessment.get("status") != ADRStatus.DRAFT.value:
             raise ValidationError("ADR assessment review has already been completed")
 
+        if decision.action.value == "request_information":
+            requested = set(decision.requested_information)
+            if not requested or not requested.issubset(PATIENT_ANSWERABLE_NARANJO_QUESTIONS):
+                raise ValidationError("Select at least one patient-answerable information request")
+            assessment_snapshot = cast(dict[str, Any], assessment.get("naranjo_assessment") or {})
+            missing = {
+                NaranjoQuestion(question)
+                for question in assessment_snapshot.get("missing_questions") or []
+            }
+            if not requested.issubset(missing):
+                raise ValidationError("Request only information that is still missing")
+
         result = await self._execute(
             self.db.rpc(
                 "review_adr_assessment",
@@ -558,7 +588,9 @@ class ClinicianService:
                     "p_actor_id": str(clinician_id),
                     "p_action": decision.action.value,
                     "p_note": decision.note,
-                    "p_requested_information": decision.requested_information,
+                    "p_requested_information": [
+                        item.value for item in decision.requested_information
+                    ],
                 },
             )
         )
@@ -568,7 +600,9 @@ class ClinicianService:
         return rows[0]
 
     @staticmethod
-    def _normalize_adr_review_item(row: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_adr_review_item(
+        row: dict[str, Any], *, latest_request: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         patient = cast(dict[str, Any], row.get("patients") or {})
         symptom = cast(dict[str, Any], row.get("symptom_reports") or {})
         return {
@@ -583,6 +617,14 @@ class ClinicianService:
             "severity": symptom.get("severity"),
             "onset": symptom.get("onset"),
             "symptom_created_at": symptom.get("created_at"),
+            "information_request_id": (latest_request.get("id") if latest_request else None),
+            "information_request_status": (
+                latest_request.get("status") if latest_request else None
+            ),
+            "patient_responses": (latest_request.get("responses") or [] if latest_request else []),
+            "patient_responded_at": (
+                latest_request.get("responded_at") if latest_request else None
+            ),
         }
 
     async def get_patient_risk_snapshot(self, clinician_id: UUID, patient_id: UUID) -> Any:

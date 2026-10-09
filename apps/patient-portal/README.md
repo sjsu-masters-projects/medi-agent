@@ -61,3 +61,17 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## ADR care-team follow-up
+
+The chat page also hosts structured follow-up requests for an existing draft ADR assessment.
+The patient may answer only retrospective questions about a prior clinician-directed dose change,
+a prior restart, or a similar prior reaction. The form explicitly says not to restart, stop, or
+change a medicine to answer, requires a description for known yes/no answers, and requires a final
+confirmation before sending.
+
+- `GET /api/v1/patients/me/adr-information-requests` loads pending patient-safe requests.
+- `POST /api/v1/patients/me/adr-information-requests/{request_id}/respond` saves the confirmed
+  answers and returns the deterministic Naranjo rescore.
+- The browser never writes ADR assessment or audit tables directly; the backend owns the atomic
+  response, reassessment, notification, and audit transaction.

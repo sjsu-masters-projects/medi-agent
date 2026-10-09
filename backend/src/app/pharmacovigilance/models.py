@@ -32,6 +32,18 @@ class NaranjoQuestion(StrEnum):
     OBJECTIVE_EVIDENCE = "objective_evidence"
 
 
+# These questions can be answered from events the patient already experienced. The
+# remaining Naranjo inputs require a clinician, chart, literature, laboratory result,
+# or a controlled exposure and must never be presented as an instruction to the patient.
+PATIENT_ANSWERABLE_NARANJO_QUESTIONS = frozenset(
+    {
+        NaranjoQuestion.REAPPEARED_ON_RECHALLENGE,
+        NaranjoQuestion.DOSE_RESPONSE,
+        NaranjoQuestion.SIMILAR_PREVIOUS_REACTION,
+    }
+)
+
+
 class NaranjoItemScore(BaseModel):
     """One recorded answer and its deterministic contribution to the score."""
 

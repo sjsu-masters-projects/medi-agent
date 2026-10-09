@@ -200,7 +200,7 @@ passed. This supersedes the earlier pre-merge test counts, not deployed acceptan
 | Records ingestion | Demonstration-ready candidate pipeline | Secure document intake, evidence-backed candidates, TIFF previews, and retryable explanation lifecycle work; clinician review, reconciliation, and downstream approved-action projection remain incomplete |
 | Chat and triage | Partial | Deterministic emergency handling, the Care Coordinator, and WebSocket subprotocol authentication are live; document-focused chat, durable safety-rule audit, and terminal turn recovery remain open |
 | Document intelligence | Demonstration-ready | Synthetic PDF, scanned-Spanish, and multi-frame TIFF paths completed with evidence-backed candidates, private preview, expiry, and cross-user denial checks; the five-minute Job trigger is enabled for the master's-project demonstration |
-| Pharmacovigilance | Partial | Deterministic Naranjo scoring, auditable evidence, and an assigned-clinician read-only ADR queue work; clinician decisions, evidence requests, reassessment, and MedWatch drafting remain incomplete |
+| Pharmacovigilance | Partial | Deterministic Naranjo scoring, auditable assigned-clinician decisions, and a patient-safe follow-up/reassessment implementation are in review; migration `047`, live proof, confirmed-report intake, and MedWatch drafting remain incomplete |
 | Scheduling and communication | Partial | Document ingestion is scheduled; appointments, approved clinical messaging, notification delivery/retry, and care-gap closure are incomplete |
 | Interoperability | Functional sandbox foundation | A deployed, EHR-initiated SMART Health IT R4 sandbox flow imports synthetic records as provenance-backed pending candidates; conformance and reconciliation remain |
 | MCP/A2A | Partial | Existing MCP is custom. The A2A task service and retry worker are implemented and the worker starts with the application; `/.well-known/agent-card.json` and the delegation flow are still absent |
@@ -231,7 +231,7 @@ failure. It must not be presented as a completed closed-loop care product until 
 | Today feed and adherence | Deterministic medication/obligation feed, adherence statistics, completion/barrier capture, and plan-linked approved/effective-task guard | No live proof of the clinician-approved item through patient and clinician follow-up | PAT-002, PAT-005 |
 | Clinician action workspace | Roster, patient detail, source preview, extracted-facts review, care-plan draft/review, and basic document status | No consolidated queue, explainable risk, or unified timeline; live care-plan acceptance remains incomplete | PAT-005, CLN-001, CLN-002 |
 | Care closure | Document Job runs every five minutes; manual summary retry exists | No approved clinical messaging, appointment completion, notifications/retry, or care-gap follow-up loop | SCH-001, COM-001 |
-| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation, deterministic Naranjo assistance, and audited assigned-clinician ADR review actions | No completed multi-source reconciliation, patient-confirmed symptom-report flow, evidence-driven ADR reassessment, or MedWatch draft lifecycle | MED-001, MED-002, PAT-002-B/C, PV-001, PV-002 |
+| Medication and safety workflow | Provenance model, candidate-only import boundary, DailyMed/RxNorm foundation, deterministic Naranjo assistance, audited assigned-clinician ADR review actions, and a patient-safe reassessment implementation in review | No completed multi-source reconciliation, patient-confirmed symptom-report intake, deployed/live-proven ADR follow-up, or MedWatch draft lifecycle | MED-001, MED-002, PAT-002-B/C, PV-001, PV-002 |
 | Interoperability and continuity | Deployed SMART-on-FHIR sandbox import with candidate provenance | Export, CDS Hooks, official MCP/A2A, multi-provider timeline, and handoff remain incomplete | INT-002, STD-001–003, CON-001 |
 | Bilingual and voice experience | `en-US`/`es-MX` safety-floor coverage and localized fallback exist | End-to-end language parity, clinician content review, and text-first voice lifecycle are incomplete | PAT-003, VOI-001 |
 
@@ -2186,7 +2186,8 @@ decision support, never autonomous ADR determination or external reporting.
       seriousness, and whether further information is needed.
 - [x] Calculate Naranjo assistance deterministically where possible.
 - [x] Keep model-generated classification separate from reviewer decision.
-- [ ] Support reassessment when evidence changes.
+- [/] Support reassessment when evidence changes. The patient-safe structured response and
+      deterministic rescore are implemented locally; migration `047` and live acceptance remain.
 
 **Acceptance criteria**
 
@@ -2202,7 +2203,17 @@ assessments with patient-grounded evidence and deterministic Naranjo score 3 (`P
 assigned clinician API and portal queue display the score inputs and missing questions without
 private model reasoning. Assigned clinicians can mark a draft reviewed, dismiss it with a reason,
 or request information; the assignment check and action/audit write are repeated atomically in
-Postgres. Confirmed-report intake and reassessment when evidence changes remain incomplete.
+Postgres. Confirmed-report intake remains incomplete.
+
+Implementation evidence — 2026-10-08: the clinician can request only missing retrospective
+`reappeared_on_rechallenge`, `dose_response`, or `similar_previous_reaction` inputs. Maya sees a
+structured form in chat with an explicit no-restart/no-stop/no-dose-change warning, reviews and
+confirms every answer, and the backend atomically appends patient-attributed evidence, rescores the
+same draft, closes the matching notification, and writes a patient-actor audit event. Elena's queue
+shows pending/answered state, the confirmed response, and the updated deterministic score. Focused
+verification passed 95 backend tests, 14 patient tests, and 6 clinician tests plus both portal lint
+and type checks. Migration `047` is committed but intentionally not applied to the shared Supabase
+project; live end-to-end proof remains open and no MedWatch draft or external submission is created.
 
 ### PV-002 — MedWatch draft lifecycle
 

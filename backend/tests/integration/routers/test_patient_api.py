@@ -3,7 +3,7 @@
 Uses FastAPI dependency overrides for proper authentication mocking.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -13,6 +13,7 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
+from app.routers.patients import _get_service
 
 
 @pytest.fixture
@@ -63,6 +64,15 @@ def override_db(mock_supabase_db):
     app.dependency_overrides[get_db] = _get_db_override
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def override_patient_service():
+    """Override the patient service for focused route-contract tests."""
+    service = MagicMock()
+    app.dependency_overrides[_get_service] = lambda: service
+    yield service
+    app.dependency_overrides.pop(_get_service, None)
 
 
 class TestGetMyProfile:
@@ -345,6 +355,106 @@ class TestJoinClinic:
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
         assert "already active" in response.json()["error"]["message"].lower()
+
+
+class TestADRInformationRequestRoutes:
+    """Patient endpoints for safe ADR follow-up questions and responses."""
+
+    def test_list_pending_requests(
+        self,
+        client,
+        override_auth,
+        override_patient_service,
+        patient_id,
+    ):
+        request_id = uuid4()
+        assessment_id = uuid4()
+        override_patient_service.list_adr_information_requests = AsyncMock(
+            return_value=[
+                {
+                    "id": str(request_id),
+                    "adr_assessment_id": str(assessment_id),
+                    "symptom": "dizziness",
+                    "symptom_severity": 4,
+                    "suspect_medication_name": "lisinopril",
+                    "requested_information": ["dose_response"],
+                    "patient_message": "Tell us about the prior dose change.",
+                    "current_naranjo_score": 3,
+                    "current_causality": "Possible",
+                    "status": "pending",
+                    "created_at": "2026-10-06T10:00:00Z",
+                }
+            ]
+        )
+
+        response = client.get("/api/v1/patients/me/adr-information-requests")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()[0]["requested_information"] == ["dose_response"]
+        override_patient_service.list_adr_information_requests.assert_awaited_once_with(patient_id)
+
+    def test_submit_confirmed_response(
+        self,
+        client,
+        override_auth,
+        override_patient_service,
+        patient_id,
+    ):
+        request_id = uuid4()
+        assessment_id = uuid4()
+        override_patient_service.respond_to_adr_information_request = AsyncMock(
+            return_value={
+                "request_id": str(request_id),
+                "adr_assessment_id": str(assessment_id),
+                "status": "answered",
+                "naranjo_score": 4,
+                "causality": "Possible",
+                "responded_at": "2026-10-06T10:05:00Z",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/patients/me/adr-information-requests/{request_id}/respond",
+            json={
+                "confirmed": True,
+                "answers": [
+                    {
+                        "question": "similar_previous_reaction",
+                        "answer": "yes",
+                        "evidence": "The same symptom happened last year.",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["status"] == "answered"
+        args = override_patient_service.respond_to_adr_information_request.await_args.args
+        assert args[0] == patient_id
+        assert args[1] == request_id
+        assert args[2].answers[0].evidence == "The same symptom happened last year."
+
+    def test_rejects_unconfirmed_response_without_calling_service(
+        self,
+        client,
+        override_auth,
+        override_patient_service,
+    ):
+        response = client.post(
+            f"/api/v1/patients/me/adr-information-requests/{uuid4()}/respond",
+            json={
+                "confirmed": False,
+                "answers": [
+                    {
+                        "question": "dose_response",
+                        "answer": "do_not_know",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        override_patient_service.respond_to_adr_information_request.assert_not_called()
 
 
 class TestAuthorization:

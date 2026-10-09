@@ -12,6 +12,7 @@ import {
     HiStop,
 } from "react-icons/hi2";
 import { ChatBubble } from "@/components/features";
+import { ADRFollowUpPanel } from "@/components/features/adr-follow-up-panel";
 import { Input } from "@/components/ui";
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
 import {
@@ -172,6 +173,7 @@ export default function ChatPage() {
                     </div>
 
                     <div className="mt-4 space-y-4">
+                        <ADRFollowUpPanel />
                         {documentContext ? (
                             <div className="rounded-[26px] border border-[#b6d9d2] bg-[#e6f4f1] p-4 shadow-[0_18px_40px_rgba(20,116,101,0.10)]">
                                 <div className="flex items-start justify-between gap-3">

@@ -140,10 +140,58 @@ export function ADRReviewCard({
             ) : null}
 
             {item.lastReviewAction === "request_information" ? (
-                <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                    <h3 className="text-sm font-semibold text-blue-900">Information requested</h3>
+                <section
+                    className={`rounded-lg border p-4 ${
+                        item.informationRequestStatus === "answered"
+                            ? "border-green-200 bg-green-50"
+                            : "border-blue-200 bg-blue-50"
+                    }`}
+                >
+                    <h3
+                        className={`text-sm font-semibold ${
+                            item.informationRequestStatus === "answered"
+                                ? "text-green-900"
+                                : "text-blue-900"
+                        }`}
+                    >
+                        {item.informationRequestStatus === "answered"
+                            ? "Patient answered"
+                            : "Information requested"}
+                    </h3>
                     {item.reviewNote ? (
-                        <p className="mt-1 text-sm text-blue-800">{item.reviewNote}</p>
+                        <p
+                            className={`mt-1 text-sm ${
+                                item.informationRequestStatus === "answered"
+                                    ? "text-green-800"
+                                    : "text-blue-800"
+                            }`}
+                        >
+                            {item.reviewNote}
+                        </p>
+                    ) : null}
+                    {item.informationRequestStatus === "answered" ? (
+                        <div className="mt-3 space-y-2">
+                            {item.patientResponses.map((response) => (
+                                <div
+                                    className="rounded-lg border border-green-200 bg-white p-3"
+                                    key={response.question}
+                                >
+                                    <p className="text-sm font-medium text-gray-900">
+                                        {questionLabel(response.question)}:{" "}
+                                        {response.answer.replaceAll("_", " ")}
+                                    </p>
+                                    {response.evidence ? (
+                                        <p className="mt-1 text-sm text-gray-700">
+                                            “{response.evidence}”
+                                        </p>
+                                    ) : null}
+                                </div>
+                            ))}
+                            <p className="text-xs text-green-800">
+                                The deterministic score above includes these confirmed answers.
+                                Clinician judgment is still required.
+                            </p>
+                        </div>
                     ) : null}
                 </section>
             ) : null}
