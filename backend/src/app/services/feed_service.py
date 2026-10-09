@@ -455,6 +455,10 @@ class FeedService:
 
         tasks: list[dict[str, Any]] = []
         for med in medications:
+            guidance = infer_frequency_guidance(str(med.get("frequency") or ""))
+            required_days = guidance.get("required_days_of_week")
+            if required_days and target_date.strftime("%A").lower() not in required_days:
+                continue
             schedule = effective_reminder_map.get(("medication", str(med["id"])))
             if schedule and schedule_matches_frequency(schedule, str(med.get("frequency") or "")):
                 tasks.extend(
@@ -522,6 +526,10 @@ class FeedService:
 
         tasks: list[dict[str, Any]] = []
         for obl in obligations:
+            guidance = infer_frequency_guidance(str(obl.get("frequency") or ""))
+            required_days = guidance.get("required_days_of_week")
+            if required_days and target_date.strftime("%A").lower() not in required_days:
+                continue
             schedule = effective_reminder_map.get(("obligation", str(obl["id"])))
             if schedule and schedule_matches_frequency(schedule, str(obl.get("frequency") or "")):
                 tasks.extend(

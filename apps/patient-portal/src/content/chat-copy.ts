@@ -4,9 +4,12 @@ import {
   type LocaleResourceMap,
 } from "@/types";
 
-export const CARE_ASSISTANT_NAME = "MediGuide";
+export const CARE_ASSISTANT_NAME = "Nora";
 
 interface PatientChatCopy {
+  careTeamLabel: string;
+  careTeamIntro: string;
+  careTeamEmpty: string;
   assistantDescription: string;
   typingMessage: string;
   documentContextIntro: string;
@@ -20,6 +23,9 @@ interface PatientChatCopy {
 
 const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
   default: {
+    careTeamLabel: "Care team messages",
+    careTeamIntro: "Messages from your clinic, separate from your AI conversation. To reply, contact your clinic directly.",
+    careTeamEmpty: "No care-team messages yet.",
     assistantDescription: "AI care assistant",
     typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
@@ -38,6 +44,9 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "en-US": {
+    careTeamLabel: "Care team messages",
+    careTeamIntro: "Messages from your clinic, separate from your AI conversation. To reply, contact your clinic directly.",
+    careTeamEmpty: "No care-team messages yet.",
     assistantDescription: "AI care assistant",
     typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
@@ -56,6 +65,9 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "es-MX": {
+    careTeamLabel: "Mensajes del equipo clínico",
+    careTeamIntro: "Mensajes de tu clínica, separados de tu conversación con IA. Para responder, comunícate directamente con tu clínica.",
+    careTeamEmpty: "Todavía no hay mensajes de tu equipo clínico.",
     assistantDescription: "Asistente de cuidado con IA",
     typingMessage: `${CARE_ASSISTANT_NAME} está escribiendo...`,
     documentContextIntro: "Consultando en",

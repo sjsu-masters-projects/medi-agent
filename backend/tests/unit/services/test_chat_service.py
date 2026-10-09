@@ -175,16 +175,39 @@ async def test_save_symptom_report_returns_none_when_payload_invalid(mock_db):
 
 @pytest.mark.asyncio
 async def test_notify_assigned_clinicians_creates_in_app_messages(mock_db):
+    patient_id = str(uuid4())
     assignments = [{"clinician_id": str(uuid4())}, {"clinician_id": str(uuid4())}]
     mock_db.table().execute.side_effect = [_response(assignments), _response([])]
 
     service = ChatService(mock_db)
     created_count = await service.notify_assigned_clinicians(
-        patient_id=str(uuid4()),
+        patient_id=patient_id,
         payload={"urgency": "urgent", "intent": "symptom", "message_excerpt": "Severe dizziness"},
     )
 
     assert created_count == 2
+    rows = mock_db.table().insert.call_args.args[0]
+    assert all(row["patient_id"] == patient_id for row in rows)
+    assert all(patient_id not in row["body"] for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_patient_messages_exclude_internal_alerts_but_preserve_real_replies(mock_db):
+    internal = {
+        "id": "internal",
+        "subject": "Urgent patient chat escalation",
+        "body": "Chat escalation flagged (urgent/general) for patient private-id.",
+    }
+    reply = {"id": "reply", "subject": "Visit prep", "body": "Bring your medication list."}
+    urgent_reply = {
+        "id": "urgent-reply",
+        "subject": "Urgent patient chat escalation",
+        "body": "Please contact the clinic today.",
+    }
+    mock_db.table().execute.return_value = _response([internal, urgent_reply, reply])
+    result = await ChatService(mock_db).get_recent_clinician_messages("synthetic-patient")
+    assert result == [reply, urgent_reply]
+    mock_db.table().select().eq.assert_called_once_with("patient_id", "synthetic-patient")
 
 
 @pytest.mark.asyncio

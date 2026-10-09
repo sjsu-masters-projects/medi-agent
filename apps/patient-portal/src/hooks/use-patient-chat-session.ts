@@ -22,6 +22,7 @@ import {
     buildChatWebSocketUrl,
     fetchChatHistory,
     isChatSocketEvent,
+    isInternalChatAlert,
     mapClinicianMessageFromApi,
     mapChatMessageFromApi,
     type ChatDocumentContextApi,
@@ -722,7 +723,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     return;
                 }
                 case "clinician_message":
-                    dispatch(addMessage(mapClinicianMessageFromApi(payload.message)));
+                    // Also protect clients during staggered backend/frontend rollout.
+                    if (!isInternalChatAlert(payload.message)) {
+                        dispatch(addMessage(mapClinicianMessageFromApi(payload.message)));
+                    }
                     return;
                 case "appointment_proposal": {
                     const clinician = payload.proposal.clinician_name

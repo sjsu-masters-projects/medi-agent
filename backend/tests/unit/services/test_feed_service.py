@@ -11,6 +11,56 @@ from app.services.feed_service import FeedService
 
 @pytest.mark.parametrize("target_type", ["medication", "obligation"])
 @pytest.mark.parametrize(
+    "frequency",
+    [
+        "Monday / Wednesday / Friday after dinner",
+        "Monday, Wednesday, and Friday after dinner",
+    ],
+)
+@pytest.mark.parametrize("day, expected", [(date(2026, 10, 8), 0), (date(2026, 10, 9), 1)])
+def test_explicit_weekdays_apply_without_reminders(
+    feed_service, target_type, frequency, day, expected
+):
+    target = {
+        "id": "weekday-target",
+        "name": "Synthetic item",
+        "dosage": "test",
+        "description": "Synthetic activity",
+        "frequency": frequency,
+    }
+    renderer = (
+        feed_service._medications_to_tasks
+        if target_type == "medication"
+        else feed_service._obligations_to_tasks
+    )
+    assert len(renderer([target], day)) == expected
+
+
+@pytest.mark.parametrize("target_type", ["medication", "obligation"])
+def test_invalid_reminder_cannot_bypass_prescribed_weekdays(feed_service, target_type):
+    target = {
+        "id": "weekday-target",
+        "name": "Synthetic item",
+        "dosage": "test",
+        "description": "Synthetic activity",
+        "frequency": "Monday / Wednesday / Friday after dinner",
+    }
+    schedule = {
+        "timezone": "America/Los_Angeles",
+        "times_of_day": ["18:00"],
+        "days_of_week": ["thursday"],
+        "is_enabled": True,
+    }
+    renderer = (
+        feed_service._medications_to_tasks
+        if target_type == "medication"
+        else feed_service._obligations_to_tasks
+    )
+    assert renderer([target], date(2026, 10, 8), {(target_type, target["id"]): schedule}) == []
+
+
+@pytest.mark.parametrize("target_type", ["medication", "obligation"])
+@pytest.mark.parametrize(
     "frequency", ["as-needed", "as recorded", "once after each walking session", ""]
 )
 def test_unsafe_legacy_reminder_does_not_create_due_occurrences(

@@ -227,9 +227,9 @@ describe("Patient chat page", () => {
         });
         fireEvent.click(screen.getByRole("button", { name: /send message/i }));
 
-        expect(screen.getByRole("heading", { name: "MediGuide" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
         expect(screen.getByText("AI care assistant")).toBeInTheDocument();
-        expect(screen.getByText("MediGuide is typing...")).toBeInTheDocument();
+        expect(screen.getByText("Nora is typing...")).toBeInTheDocument();
         expect(screen.queryByText(/Maya/)).not.toBeInTheDocument();
     });
 
@@ -240,14 +240,14 @@ describe("Patient chat page", () => {
         await act(async () => { socket.emitOpen(); });
 
         fireEvent.click(screen.getByRole("button", { name: "ES" }));
-        expect(screen.getByRole("heading", { name: "MediGuide" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
         expect(screen.getByText("Asistente de cuidado con IA")).toBeInTheDocument();
         fireEvent.change(screen.getByPlaceholderText(/Escribe o habla/i), {
             target: { value: "Ayúdame a entender mis resultados" },
         });
         fireEvent.click(screen.getByRole("button", { name: /send message/i }));
-        expect(screen.getByText("MediGuide está escribiendo...")).toBeInTheDocument();
-        expect(screen.queryByText("MediGuide is typing...")).not.toBeInTheDocument();
+        expect(screen.getByText("Nora está escribiendo...")).toBeInTheDocument();
+        expect(screen.queryByText("Nora is typing...")).not.toBeInTheDocument();
         expect(screen.queryByText(/Maya/)).not.toBeInTheDocument();
     });
 
@@ -438,9 +438,48 @@ describe("Patient chat page", () => {
             });
         });
 
+        expect(screen.getByText(/Appointment request noted with Emily Smith/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Visit prep/i)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages (1)" }));
         expect(await screen.findByText(/Visit prep/i)).toBeInTheDocument();
         expect(screen.getByText(/Please bring your medication list/i)).toBeInTheDocument();
-        expect(screen.getByText(/Appointment request noted with Emily Smith/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Appointment request noted with Emily Smith/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(screen.queryByText(/Visit prep/i)).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
+    });
+
+    it("separates the read-only care-team view in Spanish", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico (0)" }));
+        expect(screen.getByRole("heading", { name: "Mensajes del equipo clínico" })).toBeInTheDocument();
+        expect(screen.getByText("Todavía no hay mensajes de tu equipo clínico.")).toBeInTheDocument();
+        expect(screen.queryByPlaceholderText(/Escribe o habla/i)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · Asistente de cuidado con IA" }));
+        expect(screen.getByPlaceholderText(/Escribe o habla/i)).toBeInTheDocument();
+    });
+
+    it("never renders internal escalation alerts from an older backend", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        await act(async () => {
+            MockWebSocket.instances[0].emitMessage({
+                type: "clinician_message",
+                message: {
+                    id: "internal-1", clinician_id: "clinician-1", patient_id: "patient-1",
+                    channel: "in_app", subject: "Urgent patient chat escalation",
+                    body: "Chat escalation flagged (urgent/general) for patient private-id. Latest message: test",
+                    created_at: "2026-10-09T04:00:00Z",
+                },
+            });
+        });
+        expect(screen.queryByText(/private-id|Chat escalation flagged/i)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages (0)" }));
+        expect(screen.getByText("No care-team messages yet.")).toBeInTheDocument();
+        expect(screen.queryByText(/Urgent patient chat escalation/i)).not.toBeInTheDocument();
     });
 
     it("reconnects the chat websocket after a transient close", async () => {

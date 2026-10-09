@@ -21,6 +21,30 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-005 chat and weekday acceptance follow-up — October 9 (in progress).** Fix
+reproduced educational ADR false escalation in both locales, weekday eligibility
+without reminders, and operational alerts appearing as care-team replies. Separate
+patient AI/care-team views and rename the explicitly labeled AI assistant to Nora.
+Preserve clinician alerts, genuine symptom escalation, source records and history;
+no remote reset or migration is authorized by this task.
+
+Local verification: patient `npm run typecheck`, `npm run lint`,
+`NODE_OPTIONS=--no-experimental-webstorage npm run test` (**266 passed**) and
+`npm run build -- --webpack` passed. Focused chat tests passed again after the
+voice-switch guard. Backend `PYTHONPATH=src .venv/bin/pytest tests
+--ignore=tests/integration/test_appointment_offer_transactions.py --no-cov -q`
+with dummy CI settings passed **1,971 tests**, with 25 opt-in database tests skipped.
+The attempted full database-enabled suite could not initialize its disposable
+clusters: macOS `shmget` reported shared-memory exhaustion. **56 PostgreSQL tests
+remain unverified on this branch**; no database assertions failed. The default
+Turbopack build hit a local dependency-symlink boundary; the webpack production
+build succeeded without source/configuration workarounds. No existing patient
+history, clinical truth, care-team assignments or reminder configuration was changed.
+Ruff check/format passed for all seven changed Python files; mypy passed for the
+four changed source files.
+Deployed bilingual chat separation, false-escalation and weekday checks remain
+pending; see `docs/pat-005-synthetic-scenario.md` for the acceptance procedure.
+
 **PAT-005 live acceptance hardening — 2026-10-08 (ready for review).** One follow-up
 PR preserves the existing synthetic scenario and fixes the October 7 observations:
 neutral 403/404 patient-detail states, stale-content protection on patient/account
