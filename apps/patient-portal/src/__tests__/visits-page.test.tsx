@@ -175,7 +175,8 @@ describe("VisitsPage", () => {
       render(<VisitsPage />);
       expect(screen.getByText(label)).toBeInTheDocument();
       expect(screen.getByText(/As written/)).toBeInTheDocument();
-      expect(screen.getAllByRole("button")).toHaveLength(1);
+      expect(screen.getAllByRole("button")).toHaveLength(2);
+      expect(screen.getByRole("button", { name: locale === "en-US" ? "Refresh visits" : "Actualizar citas" })).toBeInTheDocument();
       expect(
         screen.getByRole("button", {
           name: locale === "en-US" ? "Open chat" : "Abrir chat",

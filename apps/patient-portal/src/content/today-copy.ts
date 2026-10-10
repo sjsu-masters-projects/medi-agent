@@ -3,6 +3,8 @@ import { normalizeLocale, resolveLocaleResource, type Locale, type LocaleResourc
 const english = {
     today: "Today", hello: "Hi there", greeting: (name: string) => `Hi, ${name}`,
     progress: "Daily progress", completed: (done: number, total: number) => `${done} of ${total} tasks completed`,
+    progressHelp: "About this progress", progressDetail: "Completed activities out of the activities shown for today, including upcoming ones. It is not a health score.",
+    refresh: "Refresh schedule", refreshing: "Refreshing schedule…", loading: "Loading today's activities…",
     streak: (days: number) => `${days}-day streak`, schedule: "Today's schedule",
     count: (count: number) => `${count} tasks`, setup: "Set reminder times",
     setupDetail: "Some care-plan items still need your preferred days and times.",
@@ -28,6 +30,8 @@ export type TodayCopy = typeof english;
 const spanish: TodayCopy = {
     today: "Hoy", hello: "Hola", greeting: (name) => `Hola, ${name}`,
     progress: "Progreso diario", completed: (done, total) => `${done} de ${total} tareas completadas`,
+    progressHelp: "Sobre este progreso", progressDetail: "Actividades completadas de las que se muestran hoy, incluidas las próximas. No es una calificación de salud.",
+    refresh: "Actualizar actividades", refreshing: "Actualizando actividades…", loading: "Cargando las actividades de hoy…",
     streak: (days) => `Racha de ${days} días`, schedule: "Actividades de hoy",
     count: (count) => `${count} ${count === 1 ? "tarea" : "tareas"}`, setup: "Configurar horarios de recordatorios",
     setupDetail: "Algunas actividades de tu plan de atención aún necesitan tus días y horarios preferidos.",

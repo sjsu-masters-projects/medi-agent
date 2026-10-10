@@ -194,7 +194,7 @@ function ClinicianSignupPageContent() {
                         Create your clinician account, connect your clinic identity, and begin managing patient follow-up from a shared dashboard.
                     </p>
                 </div>
-                <p className="text-sm text-gray-400">Supabase-backed auth with role-aware access through the backend API.</p>
+                <p className="text-sm text-gray-400">Access is limited to your clinic role and assigned care team.</p>
             </div>
 
             <div className="flex flex-1 items-center justify-center px-6 py-12">

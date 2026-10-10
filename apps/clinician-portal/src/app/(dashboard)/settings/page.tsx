@@ -420,10 +420,11 @@ export default function SettingsPage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-8">
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+            <div role="group" aria-label="Settings views" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1">
                 {settingsTabs.map((tab) => (
                     <button
-                        className={`rounded-lg px-5 py-2.5 text-sm ${tab === activeTab ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-600"}`}
+                        aria-pressed={tab === activeTab}
+                        className={`shrink-0 whitespace-nowrap rounded-lg px-5 py-2.5 text-sm ${tab === activeTab ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-600"}`}
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         type="button"
@@ -433,8 +434,8 @@ export default function SettingsPage() {
                 ))}
             </div>
 
-            {error ? <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-            {inviteStatus ? <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{inviteStatus}</p> : null}
+            {error ? <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+            {inviteStatus ? <p role="status" className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{inviteStatus}</p> : null}
 
             {activeTab === "General Profile" ? (
                 <div className="grid gap-6 lg:grid-cols-2">
@@ -496,7 +497,7 @@ export default function SettingsPage() {
                                 <div>
                                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Role</p>
                                     <p className="mt-1 font-semibold text-slate-900">
-                                        {getRoleLabel(profile?.role || ClinicianRole.PROVIDER)}
+                                        {profile ? getRoleLabel(profile.role) : "Loading profile…"}
                                     </p>
                                 </div>
                                 <div className="mt-3">
@@ -504,10 +505,10 @@ export default function SettingsPage() {
                                     <p className="mt-1 font-medium text-slate-800">{profile?.email || "—"}</p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <Button onClick={() => void handleSaveProfile()}>{profileSaving ? "Saving…" : "Save Profile"}</Button>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <Button disabled={profileSaving || !profile} onClick={() => void handleSaveProfile()}>{profileSaving ? "Saving…" : "Save Profile"}</Button>
                                 <Button onClick={() => setActiveTab("Team & Roles")} variant="secondary">
-                                    Register a doctor now
+                                    Manage team
                                 </Button>
                             </div>
                         </div>
@@ -571,13 +572,14 @@ export default function SettingsPage() {
                     </Card>
 
                     <Card className="overflow-visible px-0 py-0" padding="sm">
-                        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-6 py-5">
                             <h3 className="text-xl font-bold text-slate-900">
                                 {loading ? "Loading staff..." : `Active Staff (${staffList.length})`}
                             </h3>
                             <div className="flex items-center gap-3">
                                 <Button
                                     className="px-3 py-2 text-xs"
+                                    disabled={loading}
                                     onClick={() => void loadStaff()}
                                     size="sm"
                                     variant="secondary"
@@ -587,7 +589,8 @@ export default function SettingsPage() {
                                 <label className="relative block">
                                     <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                     <input
-                                        className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        aria-label="Search team"
+                                        className="w-full max-w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                         onChange={(event) => setStaffQuery(event.target.value)}
                                         placeholder="Search team..."
                                         value={staffQuery}
@@ -595,7 +598,7 @@ export default function SettingsPage() {
                                 </label>
                             </div>
                         </div>
-                        <div className="grid grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        <div className="hidden grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 md:grid">
                             <span>Name &amp; Email</span>
                             <span>Role</span>
                             <span>Status</span>
@@ -603,14 +606,14 @@ export default function SettingsPage() {
                         </div>
                         {filteredStaffList.map((member, index) => (
                             <div
-                                className={`grid grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 px-6 py-4 ${index > 0 ? "border-t border-slate-100" : ""}`}
+                                className={`grid grid-cols-2 gap-4 px-6 py-4 md:grid-cols-[1.6fr_1fr_1fr_0.5fr] ${index > 0 ? "border-t border-slate-100" : ""}`}
                                 key={member.id}
                             >
-                                <div className="flex items-center gap-3">
+                                <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
                                     <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${getRoleTone(member.role)}`}>
                                         {getInitials(member.first_name, member.last_name)}
                                     </div>
-                                    <div>
+                                    <div className="min-w-0 break-words">
                                         <p className="text-sm font-bold text-slate-900">
                                             {member.first_name} {member.last_name}
                                         </p>
@@ -628,6 +631,8 @@ export default function SettingsPage() {
                                         <span className="text-xs font-medium text-slate-400">You</span>
                                     ) : null}
                                     <button
+                                        aria-label={`Actions for ${member.first_name} ${member.last_name}`}
+                                        aria-expanded={actionMenuId === member.id}
                                         className="rounded-md px-2 py-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:text-slate-300"
                                         disabled={Boolean(profile?.id && member.id === profile.id)}
                                         onClick={() => setActionMenuId(actionMenuId === member.id ? null : member.id)}

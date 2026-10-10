@@ -4,6 +4,11 @@ import { MedicationCard } from "@/components/features/medication-card";
 import { ObligationCard } from "@/components/features/obligation-card";
 
 describe("Unscheduled task status", () => {
+    it("shows identical activity title and instructions once and leaves the clock to the schedule", () => {
+        render(<ObligationCard id="synthetic" description="Reviewed source instruction" instructions="Reviewed source instruction" type="hydration" time="08:00:00" status="active" onMarkComplete={vi.fn()} />);
+        expect(screen.getAllByText("Reviewed source instruction")).toHaveLength(1);
+        expect(screen.queryByText("08:00:00")).not.toBeInTheDocument();
+    });
     it.each([
         ["active", "", "Disponible"], ["active", "08:00", "Para ahora"],
         ["upcoming", "08:00", "Próxima"], ["completed", "", "Completada"],

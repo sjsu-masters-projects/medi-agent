@@ -298,14 +298,14 @@ export function PatientDocumentsPanel({
                 <div className="space-y-4">
                     {documents.map((doc) => (
                         <div className="scroll-mt-24 rounded-xl border border-gray-200 bg-white target:ring-2 target:ring-blue-500" id={`document-${doc.id}`} key={doc.id}>
-                            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-                                <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+                                <div className="flex min-w-0 items-center gap-3">
                                     <HiOutlineDocumentText
                                         aria-hidden="true"
                                         className="h-5 w-5 text-blue-500"
                                     />
-                                    <div>
-                                        <p className="text-sm font-semibold text-gray-900">
+                                    <div className="min-w-0">
+                                        <p className="break-words text-sm font-semibold text-gray-900">
                                             {doc.fileName}
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">

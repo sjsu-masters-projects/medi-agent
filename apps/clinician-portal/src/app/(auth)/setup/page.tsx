@@ -46,13 +46,14 @@ export default function ClinicSetupPage() {
         <div className="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-12">
             <Card className="w-full max-w-xl space-y-6" padding="lg">
                 <div>
-                    <p className="text-sm font-medium text-blue-600">Clinic setup</p>
-                    <h1 className="mt-1 text-3xl font-bold text-gray-900">Configure your workspace</h1>
+                    <p className="text-sm font-medium text-blue-600">Clinician profile</p>
+                    <h1 className="mt-1 text-3xl font-bold text-gray-900">Complete your profile</h1>
+                    <p className="mt-2 text-sm text-gray-500">Add your specialty and individual NPI, if available.</p>
                 </div>
                 <form className="space-y-4" onSubmit={handleSubmit}>
                     <Input label="NPI number" onChange={(event) => setNpiNumber(event.target.value)} value={npiNumber} />
                     <Input label="Specialty" onChange={(event) => setSpecialty(event.target.value)} value={specialty} />
-                    {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                    {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
                     <Button disabled={submitting} fullWidth type="submit">
                         {submitting ? "Saving..." : "Save and continue"}
                     </Button>

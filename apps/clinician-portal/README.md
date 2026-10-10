@@ -120,6 +120,14 @@ need review, not a generation retry; no automatic translation or medication choi
 
 ## Conversations and operational alerts
 
+Interface controls remain English regardless of patient preference. Care-plan
+review identifies the patient language with a readable label and preserves source
+and reviewed wording. Expand supporting evidence for filenames/page references;
+extraction confidence is not medical certainty. Review blockers and explicit
+publication decisions remain visible and enforced. Clinical text containing numbers
+is not formatted as a date unless its field is explicitly a date field.
+UI review evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
+
 **Messages** opens an assignment-scoped conversation inbox. Choose one linked
 patient to start or resume a thread, or select an existing conversation to reply.
 Sender and clinic names come from the server. An explicit send is the clinician's

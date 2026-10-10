@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useSharedPatientProfile } from "@/contexts/patient-profile-context";
 import {
     HiOutlineCalendarDays,
     HiOutlineChatBubbleLeftRight,
@@ -48,6 +49,8 @@ function NavItem({
 }
 
 export function BottomNav({ currentPath }: BottomNavProps) {
+    const spanish = useSharedPatientProfile()?.profile?.preferredLanguage === "es-MX";
+    const labels: Record<string, string> = spanish ? { Today: "Hoy", Records: "Registros", Visits: "Citas", Profile: "Perfil" } : {};
     return (
         <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[480px] -translate-x-1/2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="relative flex min-h-[82px] items-center justify-around rounded-[30px] border border-white/80 bg-white/92 px-2 shadow-[0_-18px_60px_rgba(31,45,69,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur-xl">
@@ -55,17 +58,17 @@ export function BottomNav({ currentPath }: BottomNavProps) {
                     active={currentPath === "/today"}
                     href="/today"
                     icon={<HiOutlineHome />}
-                    label="Today"
+                    label={labels.Today ?? "Today"}
                 />
                 <NavItem
                     active={currentPath === "/records"}
                     href="/records"
                     icon={<HiOutlineFolder />}
-                    label="Records"
+                    label={labels.Records ?? "Records"}
                 />
                 <Link
                     aria-current={currentPath === "/chat" ? "page" : undefined}
-                    aria-label="Open care chat"
+                    aria-label={spanish ? "Abrir conversaciones" : "Open care chat"}
                     className={`flex h-[66px] w-[66px] -translate-y-5 items-center justify-center rounded-[26px] border-4 border-white text-3xl text-white shadow-[0_18px_38px_rgba(20,116,101,0.28)] transition-all active:scale-95 ${
                         currentPath === "/chat" ? "bg-[#0f5f53]" : "bg-[#147465]"
                     }`}
@@ -82,7 +85,7 @@ export function BottomNav({ currentPath }: BottomNavProps) {
                             href={item.href}
                             icon={<Icon />}
                             key={item.href}
-                            label={item.label}
+                            label={labels[item.label] ?? item.label}
                         />
                     );
                 })}

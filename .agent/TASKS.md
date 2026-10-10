@@ -21,6 +21,23 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**UX-001 — bilingual portal polish (in progress, October 10).** Review every
+patient and clinician route for readable information hierarchy, appropriate
+clinical/admin visibility, honest states, and language consistency. Patient UI
+uses one saved en-US/es-MX preference; clinician controls stay English and reviewed
+clinical content retains its verified locale. Do not silently translate approved
+instructions or publish a plan because a preference changes. Preserve Nora/human
+message separation and review gates. Deliver one combined UI-focused PR after
+route inventory, visible-browser review, accessibility/error-state regressions,
+lint/type/tests/build and documented remaining limits. PR #140 is merged;
+no remote migration, deployment, approval or merge is authorized by this task.
+Local integrated verification: 372 patient tests and 260 clinician tests passed;
+both portals passed ESLint, TypeScript and webpack builds. Four parallel reviews
+and cross-review findings are integrated. Local responsive checks covered 320,
+768 and 1280 pixels, with Spanish sign-in at 320 pixels and dialog focus recovery.
+Combined PR review and post-deployment authenticated-screen checks remain open.
+Evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
+
 **PAT-005 final acceptance follow-up — October 10 (in progress).** The source-approved
 patient upload produced V4 on the first worker attempt at 18:33:16 UTC; V3 remains
 active. Live review flags the repeated hydration evidence as overlap and disables

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { HiOutlineCalendarDays } from "react-icons/hi2";
+import { HiOutlineCalendarDays, HiOutlineArrowPath } from "react-icons/hi2";
 import { VisitOfferCard } from "@/components/features/visit-offer-card";
 import { CalendarExportButton } from "@/components/features/calendar-export-button";
 import { PageHeader } from "@/components/layouts";
@@ -94,8 +94,8 @@ function VisitCard({
 
   return (
     <Card>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-base font-bold text-[#17233a]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="min-w-0 break-words text-base font-bold text-[#17233a]">
           {formatVisitTime(visit.scheduledAt, locale, timezone) ??
             copy.invalidDate}
           <span className="block text-sm font-normal text-slate-600">
@@ -108,7 +108,7 @@ function VisitCard({
         {copy.types[visit.appointmentType]} · {visit.durationMinutes}{" "}
         {copy.minutes}
       </p>
-      <dl className="mt-2 space-y-1 text-sm text-[#5b6b83]">
+      <dl className="mt-2 space-y-1 break-words text-sm text-[#5b6b83]">
         {visit.clinicianName ? (
           <dd>
             {copy.with} {visit.clinicianName}
@@ -339,8 +339,9 @@ export default function VisitsPage() {
   );
 
   return (
-    <div className="patient-page space-y-4 pb-8" lang={locale}>
+    <div className="patient-page space-y-4 pb-8" lang={locale} aria-busy={loading || settings.loading}>
       <PageHeader
+        rightAction={!actionError ? <Button disabled={loading || settings.loading || Boolean(respondingId)} onClick={refresh} size="sm" variant="secondary"><HiOutlineArrowPath aria-hidden="true" className={loading ? "animate-spin motion-reduce:animate-none" : ""} />{copy.refreshVisits}</Button> : undefined}
         subtitle={
           upcoming.length
             ? formatUpcomingVisitCount(upcoming.length, locale)
@@ -360,7 +361,7 @@ export default function VisitsPage() {
         ) : null}
         {settings.loading || (loading && visits.length === 0) ? (
           <Card>
-            <p className="text-base text-[#64748b]">
+            <p role="status" className="text-base text-[#64748b]">
               {settings.loading ? copy.loadingSettings : copy.loading}
             </p>
           </Card>

@@ -16,6 +16,15 @@ Records distinguishes duplicate-skipped uploads from empty successful extraction
 The duplicate explanation is static en-US/es-MX copy; switching its language does
 not invoke a model or carry that reason into Nora as a clinical summary.
 
+The authenticated layout shares one patient profile and language selector across
+all screens. Saving a language updates navigation, controls and explanatory UI;
+it does not translate clinical instructions or historical messages. Failed saves
+retain the prior preference. Guest entry screens carry a separate language choice
+until a profile exists; chat has no competing persisted language setting.
+Symptoms currently links to Nora for reporting and explicitly says that patient
+symptom history is not connected; it must not display invented example reports.
+UI review evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
+
 First, run the development server:
 
 ```bash

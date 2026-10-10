@@ -21,7 +21,7 @@ export default function ClinicianUploadPage() {
                 <button
                     aria-label="Back to patient"
                     className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
-                    onClick={() => router.back()}
+                    onClick={() => router.push(`/patients/${patientId}?tab=documents`)}
                     type="button"
                 >
                     <HiOutlineArrowLeft aria-hidden="true" className="h-4 w-4" />
@@ -46,14 +46,14 @@ export default function ClinicianUploadPage() {
                 {uploadedDocIds.length > 0 && (
                     <div className="mt-4 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
                         <HiOutlineCheckCircle aria-hidden="true" className="h-5 w-5" />
-                        {uploadedDocIds.length} document(s) uploaded and queued for AI parsing.
+                        {uploadedDocIds.length} document{uploadedDocIds.length === 1 ? "" : "s"} uploaded. Check Documents for processing results.
                     </div>
                 )}
             </Card>
 
             {/* Care-plan publication boundary */}
             <Card padding="lg">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h2 className="text-base font-semibold text-gray-900">Review care plan</h2>
                         <p className="text-sm text-gray-500">
@@ -76,7 +76,7 @@ export default function ClinicianUploadPage() {
                 <button
                     className="rounded-xl border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     id="upload-done-btn"
-                    onClick={() => router.back()}
+                    onClick={() => router.push(`/patients/${patientId}?tab=documents`)}
                     type="button"
                 >
                     Done

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import {
+  HiArrowPath,
   HiMiniSpeakerWave,
   HiOutlineBeaker,
   HiOutlineClipboardDocumentList,
@@ -12,14 +13,10 @@ import {
   HiOutlineFolder,
 } from "react-icons/hi2";
 import { DocumentCard, DocumentSourceViewer } from "@/components/features";
+import { usePatientProfile } from "@/hooks/use-patient-profile";
+import { recordsCopy } from "@/components/features/records-copy";
 import { PageHeader } from "@/components/layouts";
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  Modal,
-  ProgressBar,
-} from "@/components/ui";
+import { Button, EmptyState, ErrorState, Modal } from "@/components/ui";
 import { api } from "@/services/api";
 import { redirectToLogin } from "@/services/auth-redirect";
 import { refreshPatientSession } from "@/services/auth-refresh";
@@ -45,6 +42,7 @@ import {
   Locale,
   SUPPORTED_LOCALES,
   getLocaleLabel,
+  getDocumentTypeLabel,
   normalizeLocale,
   type Document,
 } from "@/types";
@@ -63,7 +61,7 @@ type PortalDocument = Document & {
 const EXPLANATION_UNAVAILABLE_MESSAGE =
   "Translation is currently unavailable. Please try again later.";
 const PARSING_IN_PROGRESS_MESSAGE =
-  "Processing this document. AI summary will appear when parsing completes.";
+  "We are preparing this document. Its explanation will appear when ready.";
 const PARSING_FAILED_FALLBACK_MESSAGE = "This document could not be processed.";
 
 /**
@@ -90,8 +88,14 @@ const PARSE_FAILURE_MESSAGES: Record<string, string> = {
     "This file could not be opened. It may be damaged, or password protected.",
 };
 
-function describeParseFailure(code?: string): string {
-  return (code && PARSE_FAILURE_MESSAGES[code]) || PARSING_FAILED_FALLBACK_MESSAGE;
+function describeParseFailure(
+  code?: string,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  return recordsCopy(
+    locale,
+    (code && PARSE_FAILURE_MESSAGES[code]) || PARSING_FAILED_FALLBACK_MESSAGE,
+  );
 }
 
 /**
@@ -111,10 +115,15 @@ const SUMMARY_UNAVAILABLE_MESSAGES: Record<string, string> = {
     "The plain-language explanation is still being prepared. You can read the original document above and check back shortly.",
 };
 
-function describeMissingSummary(document: PortalDocument): string {
+function describeMissingSummary(
+  document: PortalDocument,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
   const status = document.summaryStatus ?? "pending";
-  return (
-    SUMMARY_UNAVAILABLE_MESSAGES[status] ?? SUMMARY_UNAVAILABLE_MESSAGES.pending
+  return recordsCopy(
+    locale,
+    SUMMARY_UNAVAILABLE_MESSAGES[status] ??
+      SUMMARY_UNAVAILABLE_MESSAGES.pending,
   );
 }
 
@@ -221,29 +230,45 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
   };
 }
 
-function getDocumentStatus(document: PortalDocument) {
+function getDocumentStatus(document: PortalDocument, locale: Locale) {
+  const copy = (text: string) => recordsCopy(locale, text);
   if (document.parseStatus === DocumentParseStatus.DUPLICATE) {
-    return { label: "Duplicate upload", variant: "info" as const };
+    return { label: copy("Duplicate upload"), variant: "info" as const };
   }
   if (isDocumentProcessing(document.parseStatus)) {
-    return { label: "Processing...", variant: "warning" as const };
+    return { label: copy("Processing..."), variant: "warning" as const };
   }
   if (needsHumanDocumentReview(document.parseStatus)) {
-    return { label: "Needs care-team review", variant: "warning" as const };
+    return {
+      label: copy("Needs care-team review"),
+      variant: "warning" as const,
+    };
   }
   if (document.parseStatus === "failed") {
-    return { label: "Parse failed", variant: "danger" as const };
+    return {
+      label: copy("This document could not be processed."),
+      variant: "danger" as const,
+    };
   }
   if (document.parsed && document.aiSummary) {
-    return { label: "AI Summary", variant: "info" as const };
+    return { label: copy("AI Summary"), variant: "info" as const };
   }
   if (document.summaryStatus === "failed") {
-    return { label: "Explanation unavailable", variant: "warning" as const };
+    return {
+      label: copy("Explanation unavailable"),
+      variant: "warning" as const,
+    };
   }
   return null;
 }
 
 export default function RecordsPage() {
+  const profile = usePatientProfile();
+  const locale = profile?.preferredLanguage ?? DEFAULT_LOCALE;
+  const copy = useCallback(
+    (text: string) => recordsCopy(locale, text),
+    [locale],
+  );
   const dispatch = useDispatch<AppDispatch>();
   const router = useRouter();
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
@@ -266,7 +291,6 @@ export default function RecordsPage() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [readbackActive, setReadbackActive] = useState(false);
   const [parsingDocIds, setParsingDocIds] = useState<Set<string>>(new Set());
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activePollsRef = useRef(new Set<string>());
@@ -288,25 +312,25 @@ export default function RecordsPage() {
       });
       setDocuments(result.map(mapDocument));
       setPageError(null);
-    } catch (error) {
-      setPageError((error as Error).message);
+    } catch {
+      setPageError(copy("We could not load your documents. Please try again."));
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, copy]);
 
   const openDocument = useCallback(
     (document: PortalDocument) => {
       setSelectedDocument(document);
       setDeleteConfirming(false);
       setDeleteError(null);
-      setExplanationLang(DEFAULT_LOCALE);
+      setExplanationLang(locale);
       setExplanationLoading(false);
 
       setExplanationAvailable(false);
 
       if (document.parseStatus === DocumentParseStatus.DUPLICATE) {
-        setExplanationText(duplicateUploadMessage(DEFAULT_LOCALE));
+        setExplanationText(duplicateUploadMessage(locale));
         return;
       }
 
@@ -314,7 +338,9 @@ export default function RecordsPage() {
         document.parseStatus === "failed" ||
         needsHumanDocumentReview(document.parseStatus)
       ) {
-        setExplanationText(describeParseFailure(document.parseFailureCode));
+        setExplanationText(
+          describeParseFailure(document.parseFailureCode, locale),
+        );
         return;
       }
 
@@ -322,19 +348,21 @@ export default function RecordsPage() {
         isDocumentProcessing(document.parseStatus) ||
         parsingDocIds.has(document.id)
       ) {
-        setExplanationText(PARSING_IN_PROGRESS_MESSAGE);
+        setExplanationText(copy(PARSING_IN_PROGRESS_MESSAGE));
         return;
       }
 
       if (!document.aiSummary) {
-        setExplanationText(describeMissingSummary(document));
+        setExplanationText(describeMissingSummary(document, locale));
         return;
       }
 
+      // Cached source explanations retain their original language until explicitly requested.
+      setExplanationLang(DEFAULT_LOCALE);
       setExplanationAvailable(true);
       setExplanationText(document.aiSummary);
     },
-    [parsingDocIds],
+    [parsingDocIds, locale, copy],
   );
 
   const closeDocumentModal = useCallback(() => {
@@ -377,12 +405,19 @@ export default function RecordsPage() {
               document.id === docId ? nextDocument : document,
             ),
           );
-          if (nextDocument.parsed || nextDocument.parseStatus === "completed") return;
+          if (
+            nextDocument.parsed ||
+            nextDocument.parseStatus === "completed" ||
+            nextDocument.parseStatus === DocumentParseStatus.DUPLICATE
+          )
+            return;
           if (
             nextDocument.parseStatus === "failed" ||
             needsHumanDocumentReview(nextDocument.parseStatus)
           ) {
-            setParseError(describeParseFailure(nextDocument.parseFailureCode));
+            setParseError(
+              describeParseFailure(nextDocument.parseFailureCode, locale),
+            );
             return;
           }
         } catch {
@@ -398,7 +433,7 @@ export default function RecordsPage() {
 
   async function getUploadSession() {
     if (!accessToken || !user) {
-      setPageError("Please sign in again before uploading a document.");
+      setPageError(copy("Please sign in again before uploading a document."));
       return null;
     }
 
@@ -419,7 +454,7 @@ export default function RecordsPage() {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
       setPageError(
-        "Your session expired. Please sign in again before uploading.",
+        copy("Your session expired. Please sign in again before uploading."),
       );
       return null;
     }
@@ -433,7 +468,7 @@ export default function RecordsPage() {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
       setPageError(
-        "Your session expired. Please sign in again before uploading.",
+        copy("Your session expired. Please sign in again before uploading."),
       );
       return null;
     }
@@ -447,7 +482,7 @@ export default function RecordsPage() {
 
     const validationError = getUploadValidationError(file);
     if (validationError) {
-      setPageError(validationError);
+      setPageError(copy(validationError));
       event.target.value = "";
       return;
     }
@@ -455,10 +490,6 @@ export default function RecordsPage() {
     setPageError(null);
     setParseError(null);
     setUploading(true);
-    for (const value of [20, 45, 70, 100]) {
-      setUploadProgress(value);
-      await new Promise((resolve) => window.setTimeout(resolve, 150));
-    }
 
     try {
       const session = await getUploadSession();
@@ -493,13 +524,12 @@ export default function RecordsPage() {
       // Candidate-only ingestion runs in the background. It never updates
       // the patient's canonical profile until a clinician reconciles it.
       void pollForParsedStatus(nextDocument.id);
-    } catch (error) {
+    } catch {
       setPageError(
-        (error as Error).message || "Upload failed. Please try again.",
+        copy("Upload failed. Please refresh your records before trying again."),
       );
     } finally {
       setUploading(false);
-      setUploadProgress(0);
       event.target.value = "";
     }
   }
@@ -513,7 +543,8 @@ export default function RecordsPage() {
     ) {
       setExplanationAvailable(Boolean(selectedDocument.aiSummary));
       setExplanationText(
-        selectedDocument.aiSummary ?? describeMissingSummary(selectedDocument),
+        selectedDocument.aiSummary ??
+          describeMissingSummary(selectedDocument, nextLocale),
       );
       return;
     }
@@ -528,6 +559,11 @@ export default function RecordsPage() {
     }
 
     if (selectedDocument.parseStatus !== DocumentParseStatus.COMPLETED) {
+      setExplanationText(
+        isDocumentProcessing(selectedDocument.parseStatus)
+          ? recordsCopy(nextLocale, PARSING_IN_PROGRESS_MESSAGE)
+          : describeParseFailure(selectedDocument.parseFailureCode, nextLocale),
+      );
       return;
     }
 
@@ -549,11 +585,14 @@ export default function RecordsPage() {
       setExplanationText(
         available
           ? result.summary
-          : (result.message ?? EXPLANATION_UNAVAILABLE_MESSAGE),
+          : (result.message ??
+              recordsCopy(nextLocale, EXPLANATION_UNAVAILABLE_MESSAGE)),
       );
     } catch {
       setExplanationAvailable(false);
-      setExplanationText(EXPLANATION_UNAVAILABLE_MESSAGE);
+      setExplanationText(
+        recordsCopy(nextLocale, EXPLANATION_UNAVAILABLE_MESSAGE),
+      );
     } finally {
       setExplanationLoading(false);
     }
@@ -591,7 +630,9 @@ export default function RecordsPage() {
     }
 
     if (!accessToken) {
-      setDeleteError("Please sign in again before deleting this document.");
+      setDeleteError(
+        copy("Please sign in again before deleting this document."),
+      );
       return;
     }
 
@@ -608,9 +649,9 @@ export default function RecordsPage() {
         removeTrackedDocumentId(current, selectedDocument.id),
       );
       closeDocumentModal();
-    } catch (error) {
+    } catch {
       setDeleteError(
-        (error as Error).message || "Delete failed. Please try again.",
+        copy("Delete failed. Please refresh your records before trying again."),
       );
     } finally {
       setDeletingDocumentId(null);
@@ -647,15 +688,36 @@ export default function RecordsPage() {
     <div className="patient-page space-y-4 pb-8">
       <PageHeader
         rightAction={
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            variant="secondary"
-          >
-            Upload
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={loading || uploading}
+              onClick={() => void loadDocuments()}
+              variant="secondary"
+              className="gap-2"
+            >
+              <HiArrowPath
+                aria-hidden="true"
+                className={
+                  loading
+                    ? "h-5 w-5 shrink-0 motion-safe:animate-spin"
+                    : "h-5 w-5 shrink-0"
+                }
+              />
+              {copy(loading ? "Refreshing..." : "Refresh records")}
+            </Button>
+            <Button
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              variant="secondary"
+            >
+              {copy("Upload")}
+            </Button>
+          </div>
         }
-        subtitle="View clinical records and plain-language explanations."
-        title="My Records"
+        subtitle={copy(
+          "View clinical records and plain-language explanations.",
+        )}
+        title={copy("My Records")}
       />
       <input
         accept={UPLOAD_ACCEPT_ATTRIBUTE}
@@ -665,96 +727,106 @@ export default function RecordsPage() {
         type="file"
       />
       <div className="patient-stack -mt-4 space-y-4 px-5">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-[1.4rem] bg-white/90 px-4 py-4 shadow-[0_12px_28px_rgba(37,52,82,0.08)] ring-1 ring-[#eaded3]">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">
-              Stored
-            </p>
-            <p className="mt-1 text-3xl font-bold text-[#17233a]">
-              {documents.length}
-            </p>
-            <p className="text-sm text-[#5b6b83]">Secure records</p>
-          </div>
-          <div className="rounded-[1.4rem] bg-[#e7f4f1] px-4 py-4 shadow-[0_12px_28px_rgba(20,116,101,0.10)] ring-1 ring-[#b9ded6]">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#147465]">
-              {processingCount > 0 ? "Parsing" : "AI Ready"}
-            </p>
-            <p className="mt-1 text-3xl font-bold text-[#17233a]">
-              {processingCount > 0
-                ? processingCount
-                : documents.filter(
-                    (document) => document.parsed && document.aiSummary,
-                  ).length}
-            </p>
-            <p className="text-sm text-[#48627c]">
-              {processingCount > 0
-                ? "Documents in progress"
-                : "Summaries available"}
-            </p>
-          </div>
-        </div>
-        {uploading ? <ProgressBar value={uploadProgress} /> : null}
+        <p className="text-sm text-gray-700" role="status">
+          {locale === "es-MX"
+            ? `${documents.length} documentos · ${processingCount} en proceso`
+            : `${documents.length} records · ${processingCount} processing`}
+        </p>
+        {uploading ? (
+          <p
+            role="status"
+            className="rounded-xl bg-blue-100 p-4 text-sm text-blue-800"
+          >
+            {locale === "es-MX"
+              ? "Subiendo documento..."
+              : "Uploading document..."}
+          </p>
+        ) : null}
         {pageError && documents.length === 0 ? (
           <ErrorState
             description={pageError}
-            onRetry={() => void loadDocuments()}
-            title="Could not load records"
+            action={
+              <Button
+                disabled={loading}
+                onClick={() => void loadDocuments()}
+                variant="secondary"
+              >
+                {copy("Try again")}
+              </Button>
+            }
+            title={copy("Could not load records")}
           />
         ) : null}
         {pageError && documents.length > 0 ? (
           <ErrorState
             description={pageError}
-            onRetry={() => {
-              setPageError(null);
-              void loadDocuments();
-            }}
-            title="Action failed"
+            action={
+              <Button
+                onClick={() => {
+                  setPageError(null);
+                  void loadDocuments();
+                }}
+                variant="secondary"
+              >
+                {copy("Try again")}
+              </Button>
+            }
+            title={copy("Action failed")}
           />
         ) : null}
         {parseError ? (
           <ErrorState
             description={parseError}
-            onRetry={() => {
-              setParseError(null);
-              fileInputRef.current?.click();
-            }}
-            title="Document processing failed"
+            action={
+              <Button
+                onClick={() => {
+                  setParseError(null);
+                  fileInputRef.current?.click();
+                }}
+                variant="secondary"
+              >
+                {copy("Try again")}
+              </Button>
+            }
+            title={copy("Document processing failed")}
           />
         ) : null}
         {loading ? (
-          <p className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-medium text-[#5b6b83] shadow-sm ring-1 ring-[#eaded3]">
-            Loading documents...
+          <p className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200">
+            {copy("Loading documents...")}
           </p>
         ) : null}
         {!loading && !pageError && documents.length === 0 ? (
           <EmptyState
-            description="Upload PDFs or images from your clinic visits."
+            description={copy("Upload PDFs or images from your clinic visits.")}
             icon={<HiOutlineFolder />}
-            title="No records yet"
+            title={copy("No records yet")}
           />
         ) : null}
         {documents.map((document) => {
           const displayDocument = parsingDocIds.has(document.id)
             ? { ...document, parseStatus: "processing" as const }
             : document;
-          const status = getDocumentStatus(displayDocument);
+          const status = getDocumentStatus(displayDocument, locale);
 
           return (
             <DocumentCard
-              date={new Date(document.createdAt).toLocaleDateString(
-                explanationLang,
-                { month: "short", day: "numeric", year: "numeric" },
-              )}
+              date={new Date(document.createdAt).toLocaleDateString(locale, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                timeZone: profile?.timezone ?? "UTC",
+              })}
               hasAiSummary={document.parsed && Boolean(document.aiSummary)}
               icon={document.icon}
               id={document.id}
               key={document.id}
               name={document.fileName}
               onClick={() => openDocument(document)}
-              provider={document.provider}
+              provider={copy(document.provider)}
               statusLabel={status?.label}
               statusVariant={status?.variant}
-              type={document.documentType.replaceAll("_", " ")}
+              type={getDocumentTypeLabel(document.documentType, locale)}
             />
           );
         })}
@@ -762,43 +834,51 @@ export default function RecordsPage() {
       <Modal
         onClose={closeDocumentModal}
         open={Boolean(selectedDocument)}
+        closeLabel={locale === "es-MX" ? "Cerrar ventana" : "Close modal"}
         size="wide"
-        title={selectedDocument?.fileName ?? "Record details"}
+        title={selectedDocument?.fileName ?? copy("Record details")}
       >
         <div className="space-y-4">
-          <div className="rounded-2xl bg-[#fff7ed] px-4 py-3 ring-1 ring-[#eaded3]">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#7b8798]">
-              Source
-            </p>
-            <p className="mt-1 text-sm font-semibold text-[#30415f]">
-              {selectedDocument?.provider}
-            </p>
-          </div>
-          <DocumentSourceViewer
-            fileName={selectedDocument?.fileName ?? "Document"}
-            previewMimeType={selectedDocument?.previewMimeType}
-            previewStatus={selectedDocument?.previewStatus}
-            previewUrl={selectedDocument?.previewUrl}
-            sourceMimeType={selectedDocument?.mimeType}
-            sourceUrl={selectedDocument?.fileUrl}
-          />
-          <div className="rounded-3xl border border-[#b9ded6] bg-[#e7f4f1] p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#147465]">
-                Explain this to me
+          <details className="rounded-xl border border-gray-200 p-4">
+            <summary className="min-h-11 cursor-pointer py-2 font-semibold text-gray-900">
+              {copy("Source document")}
+            </summary>
+            {selectedDocument?.sourceClinic ? (
+              <p className="mb-2 break-words text-sm text-gray-700">
+                {copy("Source")}: {copy(selectedDocument.sourceClinic)}
+              </p>
+            ) : null}
+            <DocumentSourceViewer
+              locale={locale}
+              fileName={selectedDocument?.fileName ?? copy("Document")}
+              previewMimeType={selectedDocument?.previewMimeType}
+              previewStatus={selectedDocument?.previewStatus}
+              previewUrl={selectedDocument?.previewUrl}
+              sourceMimeType={selectedDocument?.mimeType}
+              sourceUrl={selectedDocument?.fileUrl}
+            />
+          </details>
+          <div className="rounded-3xl border border-blue-100 bg-blue-100 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                {copy("Explain this to me")}
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  aria-label="Read summary aloud"
-                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#b9ded6] bg-white text-[#147465] transition hover:bg-[#f8fffd] disabled:cursor-not-allowed disabled:text-[#8aa39e]"
-                  disabled={!explanationText && !selectedDocument?.aiSummary}
+                  aria-label={copy("Read summary aloud")}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-blue-100 bg-white text-blue-600 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:text-blue-600"
+                  disabled={
+                    explanationLoading ||
+                    (!explanationText && !selectedDocument?.aiSummary)
+                  }
                   onClick={handleReadSummary}
                   type="button"
                 >
                   <HiMiniSpeakerWave className="h-5 w-5" />
                 </button>
                 <select
-                  className="min-h-11 rounded-xl border border-[#b9ded6] bg-white px-3 py-2 text-sm font-medium text-[#147465] outline-none focus:ring-4 focus:ring-[#147465]/15"
+                  aria-label={copy("Explanation language")}
+                  className="min-h-11 rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-medium text-blue-600 outline-none focus:ring-4 focus:ring-blue-500"
                   onChange={(event) =>
                     handleLanguageChange(event.target.value as Locale)
                   }
@@ -813,54 +893,69 @@ export default function RecordsPage() {
               </div>
             </div>
             <p className="mt-3 text-sm leading-6 text-slate-700">
-              {explanationLang === "es-MX"
+              {locale === "es-MX"
                 ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
                 : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
             </p>
-            <p className="mt-3 text-base leading-7 text-[#30415f]">
+            <p
+              aria-live="polite"
+              className="mt-3 whitespace-pre-wrap break-words text-base leading-7 text-gray-700"
+            >
               {explanationLoading
-                ? "Translating..."
+                ? copy("Translating...")
                 : readbackActive
-                  ? `Reading in ${getLocaleLabel(explanationLang)}...`
+                  ? locale === "es-MX"
+                    ? `Escuchando en ${getLocaleLabel(explanationLang)}...`
+                    : `Reading in ${getLocaleLabel(explanationLang)}...`
                   : (explanationText ??
-                    "A plain-language explanation will appear here once it is ready.")}
+                    copy(
+                      "A plain-language explanation will appear here once it is ready.",
+                    ))}
             </p>
           </div>
           <div className="space-y-3">
             <Button fullWidth onClick={handleAskAboutDocument} size="lg">
-              Ask about this document
+              {copy("Ask about this document")}
             </Button>
             <div className="grid grid-cols-2 gap-3">
               <Button
                 fullWidth
-                onClick={() => setSelectedDocument(null)}
+                onClick={closeDocumentModal}
                 variant="secondary"
               >
-                Close
+                {copy("Close")}
               </Button>
               <Button
                 fullWidth
                 onClick={() => fileInputRef.current?.click()}
                 variant="secondary"
               >
-                Upload another
+                {copy("Upload another")}
               </Button>
             </div>
             {deleteError ? (
               <ErrorState
                 description={deleteError}
-                onRetry={() => void handleDeleteDocument()}
-                title="Could not delete document"
+                action={
+                  <Button
+                    onClick={() => void handleDeleteDocument()}
+                    variant="secondary"
+                  >
+                    {copy("Try again")}
+                  </Button>
+                }
+                title={copy("Could not delete document")}
               />
             ) : null}
             {deleteConfirming ? (
-              <div className="rounded-3xl border border-[#f0b8ae] bg-[#fff2ef] p-4">
-                <p className="text-base font-bold text-[#7f2c23]">
-                  Delete this document?
+              <div className="rounded-3xl border border-red-100 bg-red-100 p-4">
+                <p className="text-base font-bold text-red-800">
+                  {copy("Delete this document?")}
                 </p>
-                <p className="mt-1 text-sm leading-6 text-[#9b4539]">
-                  This removes the record from your documents. Existing
-                  care-plan items created from prior parsing are not removed.
+                <p className="mt-1 text-sm leading-6 text-red-800">
+                  {copy(
+                    "This removes the record from your documents. Existing care-plan items created from prior parsing are not removed.",
+                  )}
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <Button
@@ -869,7 +964,7 @@ export default function RecordsPage() {
                     onClick={() => setDeleteConfirming(false)}
                     variant="secondary"
                   >
-                    Cancel
+                    {copy("Cancel")}
                   </Button>
                   <Button
                     disabled={isDeletingSelectedDocument}
@@ -878,8 +973,8 @@ export default function RecordsPage() {
                     variant="danger"
                   >
                     {isDeletingSelectedDocument
-                      ? "Deleting"
-                      : "Delete permanently"}
+                      ? copy("Deleting")
+                      : copy("Delete permanently")}
                   </Button>
                 </div>
               </div>
@@ -890,7 +985,7 @@ export default function RecordsPage() {
                 onClick={() => setDeleteConfirming(true)}
                 variant="danger"
               >
-                Delete document
+                {copy("Delete document")}
               </Button>
             )}
           </div>

@@ -202,11 +202,11 @@ export default function MFASetupPage() {
                 </button>
                 <h1 className="text-2xl font-bold text-slate-900">Multi-Factor Authentication</h1>
                 <p className="mt-1 text-sm text-slate-500">
-                    Add an extra layer of security to your account using a TOTP authenticator app.
+                    Add an extra layer of security using an authenticator app that generates one-time codes.
                 </p>
             </div>
 
-            {error ? <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+            {error ? <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
             {step === "already_enrolled" ? (
                 <Card className="space-y-4">

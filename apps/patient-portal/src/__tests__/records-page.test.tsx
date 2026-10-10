@@ -75,8 +75,20 @@ vi.mock("@/services/browser-voice", () => ({
   playAssistantVoiceResponse,
 }));
 
+const profileSettings = vi.hoisted(() => ({
+  locale: "en-US" as "en-US" | "es-MX",
+}));
+vi.mock("@/hooks/use-patient-profile", () => ({
+  usePatientProfile: () => ({
+    preferredLanguage: profileSettings.locale,
+    timezone: "America/Los_Angeles",
+  }),
+  useSharedPatientProfile: () => null,
+}));
+
 describe("RecordsPage", () => {
   beforeEach(() => {
+    profileSettings.locale = "en-US";
     authState.value = {
       accessToken: "access-token",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
@@ -133,7 +145,9 @@ describe("RecordsPage", () => {
 
     expect(await screen.findAllByText(/City Health/i)).toHaveLength(2);
     expect(screen.getByText(/Your lab values are stable/i)).toBeInTheDocument();
-    expect(screen.getByText(/not a newly approved care plan/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/not a newly approved care plan/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /ask about this document/i }),
     ).toBeInTheDocument();
@@ -148,27 +162,51 @@ describe("RecordsPage", () => {
   });
 
   it("shows a duplicate explanation in both languages without asking the model to reprocess it", async () => {
-    get.mockResolvedValue([{
-      id: "duplicate-doc", patient_id: "patient-1", uploaded_by: "patient-1",
-      uploaded_by_role: "patient", document_type: DocumentType.OTHER,
-      file_name: "duplicate.pdf", file_url: "https://example.test/duplicate.pdf",
-      file_size_bytes: 1024, mime_type: "application/pdf", parsed: true,
-      parse_status: DocumentParseStatus.DUPLICATE, summary_status: "not_required",
-      ai_summary: "Stale duplicate summary must not be shown",
-      visibility: "shared", created_at: "2026-10-10T18:00:00Z",
-    }]);
+    get.mockResolvedValue([
+      {
+        id: "duplicate-doc",
+        patient_id: "patient-1",
+        uploaded_by: "patient-1",
+        uploaded_by_role: "patient",
+        document_type: DocumentType.OTHER,
+        file_name: "duplicate.pdf",
+        file_url: "https://example.test/duplicate.pdf",
+        file_size_bytes: 1024,
+        mime_type: "application/pdf",
+        parsed: true,
+        parse_status: DocumentParseStatus.DUPLICATE,
+        summary_status: "not_required",
+        ai_summary: "Stale duplicate summary must not be shown",
+        visibility: "shared",
+        created_at: "2026-10-10T18:00:00Z",
+      },
+    ]);
     render(<RecordsPage />);
     await screen.findByText("duplicate.pdf");
     expect(screen.getByText("Duplicate upload")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /duplicate.pdf/ }));
-    expect(screen.getByText(/These exact file contents were already processed/)).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "es-MX" } });
-    expect(screen.getByText(/Este mismo archivo ya se procesó/)).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "en-US" } });
-    expect(screen.getByText(/These exact file contents were already processed/)).toBeInTheDocument();
-    expect(screen.queryByText(/Stale duplicate summary/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/These exact file contents were already processed/),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "es-MX" },
+    });
+    expect(
+      screen.getByText(/Este mismo archivo ya se procesó/),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "en-US" },
+    });
+    expect(
+      screen.getByText(/These exact file contents were already processed/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Stale duplicate summary/),
+    ).not.toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
-    expect(screen.queryByText(/There is no extracted information/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/There is no extracted information/),
+    ).not.toBeInTheDocument();
   });
 
   it("says why a parsed document has no explanation instead of showing nothing", async () => {
@@ -203,7 +241,9 @@ describe("RecordsPage", () => {
     // The document parsed fine, so the old "after parsing completes" placeholder
     // would have promised something that was never coming.
     expect(
-      await screen.findByText(/explanation is not available for this document/i),
+      await screen.findByText(
+        /explanation is not available for this document/i,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/after parsing completes/i),
@@ -356,9 +396,8 @@ describe("RecordsPage", () => {
     get.mockResolvedValue([]);
 
     const { container } = render(<RecordsPage />);
-    const input = container.querySelector<HTMLInputElement>(
-      'input[type="file"]',
-    );
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
     const textFile = new File(["synthetic QA"], "prescription.txt", {
       type: "text/plain",
     });
@@ -505,5 +544,97 @@ describe("RecordsPage", () => {
         text: "Your lab values are stable and no urgent action is needed.",
       }),
     );
+  });
+
+  it("uses the saved Spanish locale for records chrome and preserves cached clinical wording without translation", async () => {
+    profileSettings.locale = "es-MX";
+    get.mockResolvedValue([
+      {
+        id: "source-record",
+        patient_id: "patient-1",
+        uploaded_by: "patient-1",
+        uploaded_by_role: "patient",
+        document_type: DocumentType.PRESCRIPTION,
+        file_name: "Morgan-Ellis-Hidratacion-Reviewed.pdf",
+        mime_type: "image/png",
+        file_url: "https://example.test/source.png",
+        parsed: true,
+        parse_status: DocumentParseStatus.COMPLETED,
+        summary_status: "completed",
+        ai_summary: "Exact reviewed source wording.",
+        visibility: "shared",
+        created_at: "2026-10-10T18:00:00Z",
+      },
+    ]);
+    render(<RecordsPage />);
+    expect(await screen.findByText("Mis documentos")).toBeInTheDocument();
+    expect(await screen.findByText("receta médica")).toBeInTheDocument();
+    const file = screen.getByRole("button", {
+      name: /Morgan-Ellis-Hidratacion-Reviewed.pdf/,
+    });
+    expect(file.querySelector("h3")).toHaveClass("break-words");
+    expect(file.querySelector("h3")).not.toHaveClass("truncate");
+    fireEvent.click(file);
+    expect(
+      screen.getByText("Exact reviewed source wording."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Idioma de la explicación")).toHaveValue(
+      "en-US",
+    );
+    expect(
+      screen.getByRole("button", { name: "Preguntar sobre este documento" }),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByText("Documento original", { selector: "summary" })
+        .closest("details"),
+    ).not.toHaveAttribute("open");
+    expect(
+      screen.getByRole("button", { name: "Cerrar ventana" }),
+    ).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.queryByText("Secure records")).not.toBeInTheDocument();
+  });
+
+  it("localizes a missing explanation and processing status without exposing failure codes", async () => {
+    profileSettings.locale = "es-MX";
+    get.mockResolvedValue([
+      {
+        id: "failed-record",
+        document_type: DocumentType.OTHER,
+        file_name: "source-unreadable.pdf",
+        created_at: "2026-10-10T18:00:00Z",
+        parsed: false,
+        parse_status: DocumentParseStatus.NEEDS_OCR,
+        parse_failure_code: "needs_ocr",
+        ai_summary: null,
+        summary_status: "failed",
+      },
+    ]);
+    render(<RecordsPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /source-unreadable.pdf/ }),
+    );
+    expect(screen.getByText(/No pudimos leer esta imagen/)).toBeInTheDocument();
+    expect(screen.queryByText("needs_ocr")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Necesita revisión del equipo de atención"),
+    ).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("shows a neutral Spanish recovery state instead of a raw request error", async () => {
+    profileSettings.locale = "es-MX";
+    get.mockRejectedValue(new Error("internal_schema private.patient_id"));
+    render(<RecordsPage />);
+    expect(
+      await screen.findByText(
+        "No pudimos cargar sus documentos. Inténtelo de nuevo.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Intentar de nuevo" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/internal_schema/)).not.toBeInTheDocument();
   });
 });

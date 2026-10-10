@@ -124,7 +124,7 @@ export default function ClinicAdminSignupPage() {
                         Create the clinic, register the first admin account, and start onboarding your care team from the dashboard.
                     </p>
                 </div>
-                <p className="text-sm text-gray-400">No manual SQL promotion required for the first clinic admin.</p>
+                <p className="text-sm text-gray-400">Your account will manage clinic settings and team access.</p>
             </div>
 
             <div className="flex flex-1 items-center justify-center px-6 py-12">

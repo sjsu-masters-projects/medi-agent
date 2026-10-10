@@ -5,8 +5,9 @@ import ChatPage from "@/app/(app)/chat/page";
 import { store } from "@/store/store";
 import { clearChatState, setMessages } from "@/store/slices/chat-slice";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
-import { ChatRole, Language } from "@/types";
+import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
+import { getPatientChatCopy } from "@/content/chat-copy";
 
 const {
     buildChatWebSocketUrl,
@@ -27,6 +28,15 @@ vi.mock("@/services/care-conversations", () => ({
 }));
 
 let searchParamsValue = new URLSearchParams();
+const profile: { preferredLanguage: Locale } = { preferredLanguage: Language.EN };
+vi.mock("@/hooks/use-patient-profile", () => ({
+    usePatientProfile: () => profile,
+}));
+let renderedPage: ReturnType<typeof render>;
+function changePreferredLanguage(locale: Locale) {
+    profile.preferredLanguage = locale;
+    renderedPage.rerender(<Provider store={store}><ChatPage /></Provider>);
+}
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace }),
@@ -96,15 +106,17 @@ class MockWebSocket {
 }
 
 function renderPage() {
-    return render(
+    renderedPage = render(
         <Provider store={store}>
             <ChatPage />
         </Provider>,
     );
+    return renderedPage;
 }
 
 describe("Patient chat page", () => {
     beforeEach(() => {
+        profile.preferredLanguage = Language.EN;
         buildChatWebSocketUrl.mockReset();
         fetchChatHistory.mockReset();
         getVoiceCapabilities.mockReset();
@@ -138,6 +150,58 @@ describe("Patient chat page", () => {
         buildChatWebSocketUrl.mockReturnValue("ws://chat.test/patient-1");
         fetchChatHistory.mockResolvedValue([]);
         getVoiceCapabilities.mockReturnValue({ recording: false, recognition: false, synthesis: false });
+    });
+
+    it("uses the patient preference instead of the old chat picker and preserves original message language", async () => {
+        window.localStorage.setItem("patient-portal.chat.language", "en-US");
+        profile.preferredLanguage = Language.ES;
+        fetchChatHistory.mockResolvedValue([{
+            id: "original-en", patientId: "patient-1", role: ChatRole.USER,
+            content: "My original English question", createdAt: "2026-04-17T10:00:00Z", language: Language.EN,
+        }]);
+        renderPage();
+        expect(await screen.findByText("My original English question")).toHaveAttribute("lang", "en-US");
+        expect(screen.getByText(/Idioma original: English/)).toBeInTheDocument();
+        expect(screen.queryByRole("group", { name: "Chat language" })).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Online$/)).not.toBeInTheDocument();
+        const sockets = MockWebSocket.instances.length;
+        changePreferredLanguage(Language.EN);
+        expect(screen.getByText("My original English question")).toBeInTheDocument();
+        expect(MockWebSocket.instances).toHaveLength(sockets);
+        expect(screen.getByText(/Original language: English/)).toBeInTheDocument();
+    });
+
+    it("plays the displayed welcome text and locale after the patient language changes", async () => {
+        renderPage();
+        await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+        changePreferredLanguage(Language.ES);
+        expect(screen.getByText(getPatientChatCopy(Language.ES).welcomeMessage)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Escuchar" }));
+        const voiceSocket = MockWebSocket.instances[1];
+        await act(async () => voiceSocket.emitOpen());
+        expect(voiceSocket.sent.map((event) => JSON.parse(event))).toContainEqual({
+            type: "tts_request", message_id: "welcome-message",
+            text: getPatientChatCopy(Language.ES).welcomeMessage, language: Language.ES,
+        });
+        expect(store.getState().chat.messages[0]).toMatchObject({
+            content: getPatientChatCopy(Language.EN).welcomeMessage, language: Language.EN,
+        });
+    });
+
+    it("keeps historical assistant playback in the original language after an interface switch", async () => {
+        fetchChatHistory.mockResolvedValue([{
+            id: "original-assistant", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "Original English reply", createdAt: "2026-04-17T10:00:00Z", language: Language.EN,
+        }]);
+        renderPage();
+        await screen.findByText("Original English reply");
+        changePreferredLanguage(Language.ES);
+        fireEvent.click(screen.getByRole("button", { name: "Escuchar" }));
+        const voiceSocket = MockWebSocket.instances[1];
+        await act(async () => voiceSocket.emitOpen());
+        expect(voiceSocket.sent.map((event) => JSON.parse(event))).toContainEqual({
+            type: "tts_request", message_id: "original-assistant", text: "Original English reply", language: Language.EN,
+        });
     });
 
     it("renders assistant chunks progressively before completion", async () => {
@@ -193,13 +257,13 @@ describe("Patient chat page", () => {
         await act(async () => {
             socket.emitOpen();
         });
-        await screen.findByText(/Online/i);
+        await screen.findByText(/AI chat connected/i);
 
-        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        changePreferredLanguage(Language.ES);
         fireEvent.change(screen.getByPlaceholderText(/Escribe o habla/i), {
             target: { value: "Tengo mareos" },
         });
-        const sendButton = screen.getByRole("button", { name: /send message/i });
+        const sendButton = screen.getByRole("button", { name: /send message|enviar mensaje/i });
 
         await waitFor(() => {
             expect(sendButton).not.toHaveAttribute("disabled");
@@ -229,7 +293,7 @@ describe("Patient chat page", () => {
         fireEvent.change(screen.getByPlaceholderText(/Type or speak/i), {
             target: { value: "What documents do you have on me?" },
         });
-        fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+        fireEvent.click(screen.getByRole("button", { name: /send message|enviar mensaje/i }));
 
         expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
         expect(screen.getByText("AI care assistant")).toBeInTheDocument();
@@ -243,13 +307,13 @@ describe("Patient chat page", () => {
         const socket = MockWebSocket.instances[0];
         await act(async () => { socket.emitOpen(); });
 
-        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        changePreferredLanguage(Language.ES);
         expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
         expect(screen.getByText("Asistente de cuidado con IA")).toBeInTheDocument();
         fireEvent.change(screen.getByPlaceholderText(/Escribe o habla/i), {
             target: { value: "Ayúdame a entender mis resultados" },
         });
-        fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+        fireEvent.click(screen.getByRole("button", { name: /send message|enviar mensaje/i }));
         expect(screen.getByText("Nora está escribiendo...")).toBeInTheDocument();
         expect(screen.queryByText("Nora is typing...")).not.toBeInTheDocument();
         expect(screen.queryByText(/Maya/)).not.toBeInTheDocument();
@@ -307,10 +371,8 @@ describe("Patient chat page", () => {
             await screen.findByText(/Lab Report April\.pdf/i),
         ).toBeInTheDocument();
         expect(screen.getByDisplayValue(/Ayúdame a entender este informe\./i)).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "ES" })).toHaveAttribute(
-            "aria-pressed",
-            "true",
-        );
+        expect(screen.getByPlaceholderText(/Type or speak/i)).toBeInTheDocument();
+        expect(screen.queryByRole("group", { name: "Chat language" })).not.toBeInTheDocument();
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
             { documentId: "doc-1" },
@@ -458,7 +520,7 @@ describe("Patient chat page", () => {
     it("separates human conversations from Nora in Spanish", async () => {
         renderPage();
         await screen.findByText(/I can help explain results/i);
-        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        changePreferredLanguage(Language.ES);
         fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
         expect(screen.getByRole("heading", { name: "Mensajes del equipo clínico" })).toBeInTheDocument();
         expect(await screen.findByText("Todavía no hay conversaciones.")).toBeInTheDocument();
@@ -505,7 +567,7 @@ describe("Patient chat page", () => {
         expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
         expect(screen.queryByText(/Hi Morgan/)).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        changePreferredLanguage(Language.ES);
         fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
         expect(screen.getByRole("button", { name: "Mensajes históricos del equipo clínico (1)" })).toBeInTheDocument();
         expect(screen.getByText(/Mensajes anteriores de solo lectura/)).toBeInTheDocument();
@@ -521,7 +583,7 @@ describe("Patient chat page", () => {
             socket.close();
         });
 
-        expect(await screen.findByText(/Offline/i)).toBeInTheDocument();
+        expect(await screen.findByText(/AI chat disconnected/i)).toBeInTheDocument();
 
         await waitFor(() => {
             expect(MockWebSocket.instances.length).toBe(2);
@@ -529,7 +591,7 @@ describe("Patient chat page", () => {
         await act(async () => {
             MockWebSocket.instances[1].emitOpen();
         });
-        expect(await screen.findByText(/Online/i)).toBeInTheDocument();
+        expect(await screen.findByText(/AI chat connected/i)).toBeInTheDocument();
     });
 
     it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {
