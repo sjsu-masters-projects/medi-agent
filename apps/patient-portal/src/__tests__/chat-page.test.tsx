@@ -5,7 +5,7 @@ import ChatPage from "@/app/(app)/chat/page";
 import { store } from "@/store/store";
 import { clearChatState, setMessages } from "@/store/slices/chat-slice";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
-import { Language } from "@/types";
+import { ChatRole, Language } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
 
 const {
@@ -20,6 +20,10 @@ const {
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
     playAssistantVoiceResponse: vi.fn(() => null),
     replace: vi.fn(),
+}));
+
+vi.mock("@/services/care-conversations", () => ({
+    careConversations: { recipients: vi.fn().mockResolvedValue([]), list: vi.fn().mockResolvedValue([]) },
 }));
 
 let searchParamsValue = new URLSearchParams();
@@ -405,7 +409,7 @@ describe("Patient chat page", () => {
         expect(playAssistantVoiceResponse).not.toHaveBeenCalled();
     });
 
-    it("renders clinician message and appointment proposal websocket events", async () => {
+    it("keeps legacy clinician events out of human threads and shows appointment events in Nora", async () => {
         renderPage();
 
         await screen.findByText(/I can help explain results/i);
@@ -440,9 +444,10 @@ describe("Patient chat page", () => {
 
         expect(screen.getByText(/Appointment request noted with Emily Smith/i)).toBeInTheDocument();
         expect(screen.queryByText(/Visit prep/i)).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Care team messages (1)" }));
-        expect(await screen.findByText(/Visit prep/i)).toBeInTheDocument();
-        expect(screen.getByText(/Please bring your medication list/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+        expect(await screen.findByText("No conversations yet.")).toBeInTheDocument();
+        expect(screen.queryByText(/Visit prep/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Please bring your medication list/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Appointment request noted with Emily Smith/i)).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
@@ -450,13 +455,13 @@ describe("Patient chat page", () => {
         expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
     });
 
-    it("separates the read-only care-team view in Spanish", async () => {
+    it("separates human conversations from Nora in Spanish", async () => {
         renderPage();
         await screen.findByText(/I can help explain results/i);
         fireEvent.click(screen.getByRole("button", { name: "ES" }));
-        fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico (0)" }));
+        fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
         expect(screen.getByRole("heading", { name: "Mensajes del equipo clínico" })).toBeInTheDocument();
-        expect(screen.getByText("Todavía no hay mensajes de tu equipo clínico.")).toBeInTheDocument();
+        expect(await screen.findByText("Todavía no hay conversaciones.")).toBeInTheDocument();
         expect(screen.queryByPlaceholderText(/Escribe o habla/i)).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Nora · Asistente de cuidado con IA" }));
         expect(screen.getByPlaceholderText(/Escribe o habla/i)).toBeInTheDocument();
@@ -477,9 +482,33 @@ describe("Patient chat page", () => {
             });
         });
         expect(screen.queryByText(/private-id|Chat escalation flagged/i)).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Care team messages (0)" }));
-        expect(screen.getByText("No care-team messages yet.")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+        expect(await screen.findByText("No conversations yet.")).toBeInTheDocument();
         expect(screen.queryByText(/Urgent patient chat escalation/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /Historical care-team messages/ })).not.toBeInTheDocument();
+    });
+
+    it("keeps genuine old human messages accessible in a read-only archive, separate from Nora and addressed threads", async () => {
+        fetchChatHistory.mockResolvedValue([{
+            id: "legacy-human", patientId: "patient-1", role: ChatRole.CLINICIAN,
+            content: "Hi Morgan, please bring your medication list.",
+            createdAt: "2026-04-17T10:00:00Z", language: Language.EN,
+        }]);
+        await act(async () => { renderPage(); });
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
+        expect(screen.queryByText(/Hi Morgan/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Historical care-team messages (1)" }));
+        expect(screen.getByText("Hi Morgan, please bring your medication list.")).toBeInTheDocument();
+        expect(screen.getByText(/Read-only prior messages/)).toBeInTheDocument();
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(screen.queryByText(/Hi Morgan/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
+        expect(screen.getByRole("button", { name: "Mensajes históricos del equipo clínico (1)" })).toBeInTheDocument();
+        expect(screen.getByText(/Mensajes anteriores de solo lectura/)).toBeInTheDocument();
     });
 
     it("reconnects the chat websocket after a transient close", async () => {

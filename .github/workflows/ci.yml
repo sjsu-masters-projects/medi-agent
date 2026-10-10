@@ -257,12 +257,15 @@ jobs:
           done
           echo "$pg_bin" >> "$GITHUB_PATH"
           "$pg_bin/postgres" --version
+      - name: Prepare isolated conversation PostgreSQL checks
+        run: docker pull postgres:16
       - name: Enforce full-suite coverage
         env:
           SUPABASE_URL: "https://test.supabase.co"
           SUPABASE_ANON_KEY: "test-anon-key"
           SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key"
           SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
+          CARE_CONVERSATION_TEST_POSTGRES_DOCKER: "1"
         run: |
           mkdir -p test-results
           pytest tests/ -v -rs --tb=short --junitxml=test-results/full-suite.xml
@@ -282,6 +285,23 @@ jobs:
           if len(cases) < 31 or blocked:
               raise SystemExit(f"Appointment PostgreSQL coverage incomplete: {len(cases)} cases; non-passing: {blocked}")
           print(f"Verified {len(cases)} real appointment PostgreSQL transaction tests passed; zero skips.")
+          PY
+      - name: Require real conversation transaction coverage
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          cases = [
+              case for case in ET.parse("test-results/full-suite.xml").iter("testcase")
+              if case.get("classname", "").endswith("test_care_conversation_postgres")
+          ]
+          blocked = [
+              case.get("name") for case in cases
+              if any(case.find(tag) is not None for tag in ("skipped", "failure", "error"))
+          ]
+          if len(cases) < 33 or blocked:
+              raise SystemExit(f"Conversation PostgreSQL coverage incomplete: {len(cases)} cases; non-passing: {blocked}")
+          print(f"Verified {len(cases)} real conversation PostgreSQL transaction tests passed; zero skips.")
           PY
       - name: Upload coverage result
         if: always()
