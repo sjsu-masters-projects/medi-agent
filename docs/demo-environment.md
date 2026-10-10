@@ -48,6 +48,28 @@ not a domain-wide deletion rule. After a reset, verify that the Auth user invent
 and the `patients` and `clinicians` profiles contain only the sixteen current
 `accounts.mediagent.live` fixture addresses.
 
+## Auth-account QA
+
+Use fictional patient, clinic-admin and non-admin clinician accounts in the
+intended local/demo/staging environment. Existing fixture accounts are preferred
+for ongoing tests; use normal signup flows for an explicitly scoped new scenario.
+Never commit passwords or live credentials; share them out of band only.
+
+- Patient: verify signup/onboarding/login, document upload and invite-code join.
+- Clinic admin: verify clinic bootstrap `/signup/admin`, clinic profile, MFA
+  enrollment/login where required, clinic-wide invite history and code provenance.
+- Non-admin clinician: verify signup/login, clinic profile, required MFA, dashboard,
+  personal-only invite history and patient linking without admin visibility.
+- Linking: issue a code from the intended clinician/admin, join from patient
+  onboarding/profile, then verify actual assignment and the admin/non-admin
+  visibility distinction. A clinic affiliation is not proof of assignment.
+- Recovery: inspect the session/profile/assignment problem first. Do not recreate
+  accounts or reset the shared fixture merely because an account drifts. Any
+  reset/recreation needs explicit authorization and the audit-retention checks below.
+
+This incorporates the retired `qa-auth-accounts.md` checklist. It is a repeatable
+QA contract, not permission to create accounts, enroll MFA or reset remotely.
+
 ## Reset
 
 Reset is guarded: it refuses environments outside development, demo, or staging;

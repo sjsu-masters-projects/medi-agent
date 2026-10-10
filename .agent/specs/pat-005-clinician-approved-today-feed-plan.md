@@ -1,5 +1,12 @@
 # PAT-005 — Clinician-Approved Care Plan to Today Feed
 
+**Current acceptance:** The synthetic controlled-care core journey is verified,
+including Spanish publication, revision continuity and five-document consolidation.
+Use [TASKS.md](../TASKS.md) for current issue state and
+[acceptance evidence](../../docs/pat-005-final-acceptance-2026-10-10.md) for verification
+boundaries. Earlier staged rollout/pending notes below describe implementation
+history, not instructions to reopen accepted checks or reapply migrations.
+
 ## Outcome
 
 PAT-005 closes MediAgent's first controlled-care loop:
@@ -198,18 +205,18 @@ publication linkage and subsequent responses for V1. Intermediate edit wording
 snapshots are not retained. V2 continuity, the full live barrier matrix and the
 initial unconfirmed-save cause remain acceptance work, not completed items.
 
-- [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
+- [x] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
       patient uploads.
-- [ ] Several completed documents inside the quiet window create one draft.
-- [ ] The clinician can inspect a candidate and plan item beside its protected source preview.
-- [ ] A blocker prevents approval until it is resolved.
-- [ ] Approval atomically creates or updates medications and publishes non-medication items.
-- [ ] Only approved effective items appear in the correct patient-local Today feed.
-- [ ] Completion and each barrier category become clinician-visible.
-- [ ] Unassigned users cannot read, draft, approve, preview, or report against the plan.
-- [ ] Plan version, citations, approval, projections, and adherence outcome are reconstructable
+- [x] Several completed documents inside the quiet window create one draft.
+- [x] The clinician can inspect a candidate and plan item beside its protected source preview.
+- [x] A blocker prevents approval until it is resolved.
+- [x] Approval atomically creates or updates medications and publishes non-medication items.
+- [x] Only approved effective items appear in the correct patient-local Today feed.
+- [x] Completion and each barrier category become clinician-visible.
+- [x] Unassigned users cannot read, draft, approve, preview, or report against the plan (requester-confirmed closure, plus recorded denial/regression evidence).
+- [x] Plan version, citations, approval, projections, and adherence outcome are reconstructable
       from audit records.
-- [ ] A clinician can compare active and proposed versions, identify all contributing documents,
+- [x] A clinician can compare active and proposed versions, identify all contributing documents,
       reconcile overlapping medications, and verify localized wording before v2 publication.
 
 ## October 7 acceptance and October 8 hardening
