@@ -25,6 +25,7 @@ from app.services.care_plan_classification import (
     CarePlanClassificationError,
     classify_facts,
 )
+from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_reconciliation import overlaps
 from app.services.clinical_fact_service import ClinicalFactService
 
@@ -289,18 +290,35 @@ class CarePlanService:
                     != str((item.get("medication") or {}).get("frequency") or "").strip()
                 ):
                     raise ValidationError("Medication frequency must match the patient-facing item")
-        fact_ids = [str(item["source_fact_id"]) for item in items if item.get("source_fact_id")]
+        fact_ids = [
+            str(item["source_fact_id"])
+            for item in items
+            if not item.get("is_removed") and item.get("source_fact_id")
+        ]
+        if any(
+            not item.get("source_fact_id") for item in items if not item.get("is_removed")
+        ) or set(fact_ids) - eligible_fact_ids(self.db, patient_id, fact_ids):
+            raise ValidationError(
+                "Review and approve patient-uploaded source documents before preview or publication; "
+                "rejected, missing or withdrawn sources must be removed from the draft"
+            )
         facts: list[dict[str, Any]] = []
         if fact_ids:
             facts = cast(
                 list[dict[str, Any]],
                 self.db.table("clinical_facts")
                 .select("id, fact_type, value")
+                .eq("patient_id", str(patient_id))
                 .in_("id", fact_ids)
+                .in_("review_state", ["pending_review", "approved"])
                 .execute()
                 .data
                 or [],
             )
+            if set(fact_ids) - {str(fact["id"]) for fact in facts}:
+                raise ValidationError(
+                    "Remove missing or rejected source facts before preview or publication"
+                )
         if overlaps(items, facts):
             raise ValidationError("Resolve overlapping plan items before publication")
         return plan, items
@@ -496,25 +514,7 @@ class CarePlanService:
         facts = cast(list[dict[str, Any]], result.data or [])
         if not facts:
             return []
-        citations = cast(
-            list[dict[str, Any]],
-            self.db.table("evidence_citations")
-            .select("fact_id, source_provenances!inner(artifact_type, document_id, withdrawn_at)")
-            .in_("fact_id", [str(fact["id"]) for fact in facts])
-            .execute()
-            .data
-            or [],
-        )
-        eligible = {
-            str(row["fact_id"])
-            for row in citations
-            if (source := row.get("source_provenances"))
-            and not source.get("withdrawn_at")
-            and (
-                source.get("artifact_type") == "clinician_entry"
-                or (source.get("artifact_type") == "document" and source.get("document_id"))
-            )
-        }
+        eligible = eligible_fact_ids(self.db, patient_id, [str(fact["id"]) for fact in facts])
         # SMART/FHIR candidates stay in External records. Importing a resource is
         # not an instruction to propose that historical therapy in today's plan.
         return [fact for fact in facts if str(fact["id"]) in eligible]
@@ -653,8 +653,9 @@ class CarePlanService:
         approved = next((plan for plan in latest if plan.get("status") == "approved"), None)
         if approved:
             for item in self._items(UUID(str(approved["id"]))):
-                if item.get("is_removed"):
-                    continue
+                # Preserve exclusions for these exact source facts. Otherwise a
+                # new document makes generation resurrect already-rejected
+                # proposals; genuinely new facts still need fresh review.
                 payload = {
                     key: value
                     for key, value in item.items()
@@ -674,7 +675,11 @@ class CarePlanService:
                         "is_removed",
                     }
                 }
-                if item.get("projection_type") == "medication" and item.get("projection_id"):
+                if (
+                    not item.get("is_removed")
+                    and item.get("projection_type") == "medication"
+                    and item.get("projection_id")
+                ):
                     payload["medication"] = {
                         **(item.get("medication") or {}),
                         "decision": "update",
@@ -909,7 +914,7 @@ class CarePlanService:
                 cast(
                     list[dict[str, Any]],
                     self.db.table("documents")
-                    .select("id, file_name")
+                    .select("id, file_name, uploaded_by_role, review_status")
                     .in_("id", document_ids)
                     .execute()
                     .data
@@ -919,6 +924,7 @@ class CarePlanService:
                 else []
             )
             document_names = {str(row["id"]): row["file_name"] for row in documents}
+            document_reviews = {str(row["id"]): row for row in documents}
             seen_citations: set[tuple[str, str, str, str]] = set()
             for citation in citations:
                 source = by_provenance.get(str(citation.get("provenance_id")))
@@ -942,6 +948,15 @@ class CarePlanService:
                         {
                             "document_id": document_id,
                             "file_name": document_names.get(str(document_id)),
+                            "upload_review_status": (
+                                document_reviews.get(str(document_id), {}).get("review_status")
+                                or "pending"
+                                if document_reviews.get(str(document_id), {}).get(
+                                    "uploaded_by_role"
+                                )
+                                == "patient"
+                                else None
+                            ),
                             "excerpt": excerpt,
                             "location": location,
                         }

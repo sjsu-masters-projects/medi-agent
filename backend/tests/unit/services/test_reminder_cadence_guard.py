@@ -31,6 +31,51 @@ def test_explicit_weekdays_cannot_be_replaced_with_other_three_days():
 
 
 @pytest.mark.parametrize(
+    "frequency,english",
+    [
+        ("todos los días", "daily"),
+        ("Dos veces al día", "twice daily"),
+        ("tres veces al día", "three times daily"),
+        ("todos los días antes del desayuno", "each day before breakfast"),
+        ("con el desayuno y la cena", "with breakfast and dinner"),
+        ("los lunes, miércoles y viernes", "Monday, Wednesday, and Friday"),
+        (
+            "lunes / miércoles / viernes después de cenar",
+            "Monday / Wednesday / Friday after dinner",
+        ),
+    ],
+)
+def test_supported_spanish_cadence_matches_english_semantics(frequency, english):
+    assert infer_frequency_guidance(frequency) == infer_frequency_guidance(english)
+
+
+@pytest.mark.parametrize(
+    "frequency",
+    [
+        "diariamente si hay sintomas",
+        "después de cada sesión de ejercicio",
+        "cada dos semanas",
+        "cuatro veces al día",
+        "lunes o viernes",
+        "según sea necesario",
+    ],
+)
+def test_ambiguous_spanish_is_not_silently_scheduled(frequency):
+    assert not infer_frequency_guidance(frequency)["supports_automatic_reminders"]
+
+
+def test_spanish_interval_still_requires_even_spacing():
+    assert schedule_matches_frequency(
+        {"times_of_day": ["06:00", "14:00", "22:00"], "days_of_week": DAY_ORDER},
+        "cada 8 horas",
+    )
+    assert not schedule_matches_frequency(
+        {"times_of_day": ["08:00", "12:00", "20:00"], "days_of_week": DAY_ORDER},
+        "cada 8 horas",
+    )
+
+
+@pytest.mark.parametrize(
     "frequency",
     [
         "biweekly",

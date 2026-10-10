@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -74,9 +75,50 @@ def normalize_days_of_week(days: list[str]) -> list[str]:
     return deduped
 
 
+def normalize_supported_frequency(frequency: str) -> str:
+    """Recognize bounded Spanish cadence, never translate arbitrary instructions."""
+    value = " ".join(frequency.strip().lower().replace("-", " ").split())
+    value = "".join(c for c in unicodedata.normalize("NFD", value) if not unicodedata.combining(c))
+    aliases = {
+        "todos los dias": "daily",
+        "cada dia": "daily",
+        "diariamente": "daily",
+        "una vez al dia": "once daily",
+        "dos veces al dia": "twice daily",
+        "tres veces al dia": "three times daily",
+        "cada 8 horas": "every 8 hours",
+        "una vez por semana": "once weekly",
+        "tres veces por semana": "three times per week",
+        "con el desayuno y la cena": "with breakfast and dinner",
+        "con cada comida": "with each meal",
+        "antes de acostarse": "before bed",
+        "todos los dias antes del desayuno": "each day before breakfast",
+        "cada dia antes del desayuno": "each day before breakfast",
+    }
+    if value in aliases:
+        return aliases[value]
+    spanish_days = dict(
+        zip(
+            ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"],
+            DAY_ORDER,
+            strict=True,
+        )
+    )
+    names = "|".join(spanish_days)
+    if re.fullmatch(
+        rf"(?:los |cada )?(?:{names})(?:(?:,\s*(?:y )?| y |\s*/\s*)(?:{names}))*"
+        r"(?: despues de (?:cenar|la cena))?",
+        value,
+    ):
+        return ", ".join(
+            day for name, day in spanish_days.items() if re.search(rf"\b{name}\b", value)
+        )
+    return value
+
+
 def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
     """Infer scheduling guidance from a human-readable regimen frequency."""
-    value = frequency.strip().lower().replace("-", " ")
+    value = normalize_supported_frequency(frequency)
     if not value:
         return {
             "supports_automatic_reminders": False,
@@ -84,7 +126,7 @@ def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
             "recommended_days_per_week": None,
             "guidance_text": "Ask your care team to clarify the frequency before setting routine reminders.",
         }
-    if "as needed" in value or re.search(r"\bprn\b", value):
+    if "as needed" in value or "segun sea necesario" in value or re.search(r"\bprn\b", value):
         return {
             "supports_automatic_reminders": False,
             "recommended_times_per_day": 0,
@@ -208,7 +250,7 @@ def schedule_matches_frequency(schedule: dict[str, Any], frequency: str) -> bool
     required_days = guidance.get("required_days_of_week")
     if required_days and set(days) != set(required_days):
         return False
-    if "every 8 hour" in frequency.lower():
+    if "every 8 hour" in normalize_supported_frequency(frequency):
         seconds = sorted(
             time.fromisoformat(value).hour * 3600
             + time.fromisoformat(value).minute * 60

@@ -81,3 +81,9 @@ Broader backend regressions: **2,010 passed, 58 opt-in skips** with
 --no-cov -q` and synthetic settings. This is not a complete database-suite pass:
 the native appointment fixture remains excluded for the known host shared-memory
 limit, and the conversation database suite was run separately with Docker above.
+
+After integrating PR #138 on October 10: 72 focused chat/API/database tests
+passed again, clinician suite 246 passed with typecheck/lint/webpack build,
+broader backend 2,049 passed/98 opt-in skips with the same native appointment
+fixture exclusion. Migration validation accepted 57 files. Only tracker content
+conflicted; both status histories were retained. New-head CI remains required.
