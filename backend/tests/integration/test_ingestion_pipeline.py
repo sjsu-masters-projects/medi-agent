@@ -109,6 +109,21 @@ async def test_full_ingestion_pipeline_creates_only_grounded_candidates() -> Non
 
 
 @pytest.mark.asyncio
+async def test_duplicate_skips_extraction_and_does_not_queue_an_explanation() -> None:
+    db = _make_db()
+    intelligence = MagicMock()
+    service = IngestionService(db, intelligence=intelligence)
+    claim = {"run_id": "run", "attempt": 1, "content_hash": "same-source"}
+    with patch.object(service, "_has_completed_source_hash", return_value=True):
+        result = await service.ingest_document(DOCUMENT_ID, PATIENT_ID, claim=claim)
+    assert result["status"] == "duplicate"
+    assert result["candidate_facts_created"] == 0
+    intelligence.extract.assert_not_called()
+    db.storage.from_.assert_not_called()
+    assert db.table("documents").update.call_args.args[0]["summary_status"] == "not_required"
+
+
+@pytest.mark.asyncio
 async def test_ingestion_records_source_failure() -> None:
     db = _make_db()
     intelligence = MagicMock()

@@ -253,6 +253,10 @@ async def explain_document(
 ) -> Any:
     locale = coerce_locale(body.language if body else Language.EN).value
     document = await service.get_document(document_id, user.id)
+    if document.get("parse_status") == "duplicate":
+        return _unavailable_explanation_response(
+            status="duplicate", failure_code=None, locale=locale
+        )
     cached = str(document.get("ai_summary") or "").strip()
 
     if not cached:

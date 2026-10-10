@@ -253,6 +253,9 @@ export function PatientDocumentsPanel({
     }
 
     function parseMessage(document: ClinicianPatientDocument): string | null {
+        if (document.parseStatus === "duplicate") {
+            return "These exact file contents were already processed for this patient. This copy is stored, but it created no new extracted facts or care-plan proposals. Its upload review is separate; approval does not copy another document's evidence.";
+        }
         if (document.parseStatus === "needs_ocr") {
             return "This document has no usable embedded text. It is stored safely; OCR review is required and no candidate was generated.";
         }
@@ -421,7 +424,7 @@ export function PatientDocumentsPanel({
                                     </div>
                                 )}
 
-                            {doc.aiSummary ? (
+                            {doc.aiSummary && doc.parseStatus !== "duplicate" ? (
                                 <div className="px-5 py-4">
                                     <DocumentSummary
                                         documentId={doc.id}

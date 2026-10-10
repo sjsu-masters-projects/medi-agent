@@ -27,6 +27,18 @@ FALLBACK_MESSAGE = (
 # cannot tell "this document had nothing to explain" from "the service is down", and the
 # second one is the case where asking the care team is the right next step.
 SUMMARY_UNAVAILABLE_MESSAGES: dict[str, dict[str, str]] = {
+    "duplicate": {
+        Language.EN.value: (
+            "These exact file contents were already processed. This upload was kept, "
+            "but extraction was skipped to avoid duplicate information. "
+            "You can still open the original document or ask your care team about it."
+        ),
+        Language.ES.value: (
+            "Este mismo archivo ya se procesó. Se conservó esta carga, "
+            "pero no se volvió a extraer información para evitar duplicados. "
+            "Puede abrir el documento original o preguntarle a su equipo de atención."
+        ),
+    },
     "not_required": {
         Language.EN.value: (
             "There is no extracted information in this document to explain. "

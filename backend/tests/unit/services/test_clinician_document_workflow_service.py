@@ -65,6 +65,7 @@ async def test_fetch_patient_documents_hydrates_reviewer_metadata(service, execu
                 }
             ]
         ),
+        _response(data=[]),  # Latest ingestion outcomes, read separately from reviewers.
         _response(
             data=[
                 {
@@ -80,7 +81,7 @@ async def test_fetch_patient_documents_hydrates_reviewer_metadata(service, execu
 
     assert documents[0]["review_note"] == "Looks valid"
     assert documents[0]["reviewer"]["first_name"] == "Mina"
-    assert execute.await_count == 2
+    assert execute.await_count == 3
 
 
 @pytest.mark.asyncio

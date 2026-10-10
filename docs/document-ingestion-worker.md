@@ -121,6 +121,23 @@ not diagnosing, prescribing, or adding facts that were absent from the extractio
 
 ## The patient explanation has its own lifecycle
 
+### Duplicate uploads are skipped extraction, not empty clinical results
+
+A byte-identical upload retains its own source document and review state, but the
+worker records a terminal `duplicate` ingestion run and creates no new facts or
+care-plan proposals. Its explanation is `not_required`; this does not mean the
+original clinical document contains no information.
+
+Authenticated document reads present `parse_status = 'duplicate'` when the latest
+run for an already-authorized, stored-completed document is duplicate. The stored
+parse state remains compatible with the existing database constraint. Reads are
+batched and do not expose hashes, copy evidence, change review eligibility, or
+attach another upload's summary. Newer successful attempts take precedence.
+Both portals show the skipped-extraction reason. The patient explanation endpoint
+returns a static reason in en-US or es-MX without invoking a model, even if a stale
+summary exists. Source review and care-plan publication remain separate gates.
+This presentation change requires backend and portal rollout, but no migration.
+
 Ingestion does not generate the patient explanation. It records the clinical result and
 leaves `summary_status = 'pending'`; the same Job execution then claims owed explanations
 separately through `claim_pending_document_summary` and builds each one from the candidate

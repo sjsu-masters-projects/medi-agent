@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 
@@ -29,7 +29,7 @@ function baseFeedData() {
             currentStreakDays: 4,
             overallScore: 0.5,
         },
-        error: null,
+        error: null as string | null,
         loading: false,
         markComplete,
         reportBarrier,
@@ -45,6 +45,7 @@ function baseFeedData() {
 }
 
 describe("TodayPage", () => {
+    afterEach(() => vi.useRealTimers());
     beforeEach(() => {
         markComplete.mockReset();
         reportBarrier.mockReset();
@@ -52,6 +53,111 @@ describe("TodayPage", () => {
         useFeedData.mockReset();
         usePatientProfile.mockReset();
         usePatientProfile.mockReturnValue(null);
+    });
+
+    it("localizes Spanish chrome and uses the saved timezone at a UTC day boundary", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-10-10T01:00:00Z"));
+        usePatientProfile.mockReturnValue({ firstName: "Morgan", preferredLanguage: "es-MX", timezone: "America/Los_Angeles" });
+        mockFeedData();
+        render(<TodayPage />);
+        expect(useFeedData).toHaveBeenCalledWith("es-MX");
+        expect(screen.getByRole("heading", { name: "Hola, Morgan" })).toBeInTheDocument();
+        expect(screen.getByText("viernes, 9 de octubre")).toBeInTheDocument();
+        expect(screen.getByText("Progreso diario")).toBeInTheDocument();
+        expect(screen.getByText("1 de 2 tareas completadas")).toBeInTheDocument();
+        expect(screen.getByText("Racha de 4 días")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Actividades de hoy" })).toBeInTheDocument();
+        expect(screen.getByText("No hay actividades programadas")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /Reportar un síntoma/ })).toHaveAttribute("href", "/symptoms");
+    });
+
+    it("uses UTC for an invalid saved timezone and keeps errors and retry localized", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-10-10T01:00:00Z"));
+        usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX", timezone: "Invalid/Zone" });
+        mockFeedData({ error: "No se pudieron cargar tus actividades." });
+        render(<TodayPage />);
+        expect(screen.getByText("sábado, 10 de octubre")).toBeInTheDocument();
+        expect(screen.getByText("No se pudieron cargar las actividades")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Intentar de nuevo" }));
+        expect(refreshFeed).toHaveBeenCalledOnce();
+        expect(screen.queryByText("Try again")).not.toBeInTheDocument();
+    });
+
+    it("localizes reminder and plan labels while retaining clinical wording and completion semantics", () => {
+        usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX", timezone: "America/Los_Angeles" });
+        const task = { id: "synthetic", targetId: "synthetic-activity", type: FeedTaskType.OBLIGATION, name: "Source title", description: "Keep this source instruction unchanged.", frequency: "Every Monday", status: FeedTaskStatus.PENDING, requiresScheduleConfiguration: true, carePlan: { category: "follow_up", versionNumber: 3 } } as FeedTask;
+        mockFeedData({ tasks: [task] });
+        render(<TodayPage />);
+        expect(screen.getByRole("link", { name: /Configurar horarios de recordatorios/ })).toHaveAttribute("href", "/reminders");
+        expect(screen.getByText("Configurar horario del recordatorio")).toBeInTheDocument();
+        expect(screen.getByText("Aprobado por tu equipo de atención • seguimiento")).toBeInTheDocument();
+        expect(screen.getByText("Detalles del plan de atención")).toBeInTheDocument();
+        expect(screen.getByText(/Versión 3 del plan aprobado/)).toBeInTheDocument();
+        expect(screen.getByText(task.name)).toBeInTheDocument();
+        expect(screen.getByText(task.description!)).toBeInTheDocument();
+        expect(screen.getByText(task.frequency!)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Marcar como completada" }));
+        expect(markComplete).toHaveBeenCalledWith(task);
+    });
+
+    it.each([
+        ["side_effects", "Efectos secundarios"], ["cost", "Costo"], ["access", "Acceso"],
+        ["schedule", "Horario"], ["confusion", "Confusión"], ["other", "Enviar al equipo de atención"],
+    ])("submits the original %s barrier code from Spanish controls and retains failed notes", async (code, label) => {
+        usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX" });
+        reportBarrier.mockResolvedValue(false);
+        const task = { id: "synthetic", name: "Source activity", type: FeedTaskType.OBLIGATION, status: FeedTaskStatus.PENDING } as FeedTask;
+        mockFeedData({ tasks: [task], actionError: "No pudimos confirmar que se guardó tu respuesta." });
+        render(<TodayPage />);
+        fireEvent.click(screen.getByRole("button", { name: "No pude hacer esto" }));
+        expect(screen.getByRole("button", { name: "Cerrar ventana" })).toBeInTheDocument();
+        expect(screen.getByLabelText("Otro (describe el motivo)")).toBeInTheDocument();
+        fireEvent.change(screen.getByRole("textbox"), { target: { value: "Synthetic note" } });
+        fireEvent.click(screen.getByRole("button", { name: label }));
+        await waitFor(() => expect(reportBarrier).toHaveBeenCalledWith(task, code, "Synthetic note"));
+        expect(screen.getByRole("textbox")).toHaveValue("Synthetic note");
+        expect(screen.getByRole("alert")).toHaveTextContent("No pudimos confirmar");
+        fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    });
+
+    it("keeps a Spanish future dose upcoming without completion controls", () => {
+        usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX" });
+        mockFeedData({ tasks: [{ id: "synthetic", name: "Source medication 500 mg", type: FeedTaskType.MEDICATION, status: FeedTaskStatus.PENDING, scheduledTime: "18:00", scheduledAt: new Date(Date.now() + 3_600_000).toISOString() } as FeedTask] });
+        render(<TodayPage />);
+        expect(screen.getByText("Próxima")).toBeInTheDocument();
+        expect(screen.queryByText("Para ahora")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Marcar como tomado" })).not.toBeInTheDocument();
+    });
+
+    it.each([
+        ["medication", "medicamento"], ["nutrition", "nutrición"], ["movement", "movimiento"],
+        ["hydration", "hidratación"], ["monitoring", "monitoreo"], ["follow_up", "seguimiento"],
+        ["other", "otra actividad"], ["unknown", "Actividad de atención"],
+    ])("localizes the %s approved category", (category, label) => {
+        usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX" });
+        mockFeedData({ tasks: [{ id: "synthetic", name: "Source activity", type: FeedTaskType.OBLIGATION, status: FeedTaskStatus.PENDING, carePlan: { category, versionNumber: 1 } } as FeedTask] });
+        render(<TodayPage />);
+        expect(screen.getByText(`Aprobado por tu equipo de atención • ${label}`)).toBeInTheDocument();
+    });
+
+    it("localizes due-now clock and saving copy while keeping controls disabled during submission", () => {
+        usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX" });
+        const task = { id: "synthetic", name: "Source medication 500 mg", type: FeedTaskType.MEDICATION, status: FeedTaskStatus.PENDING, scheduledTime: "08:00", scheduledAt: new Date(Date.now() - 60_000).toISOString() } as FeedTask;
+        mockFeedData({ tasks: [task] });
+        const { rerender } = render(<TodayPage />);
+        expect(screen.getByText(/8:00.*• Ahora/)).toBeInTheDocument();
+        expect(screen.getByText("Para ahora")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "No pude hacer esto" }));
+        mockFeedData({ tasks: [task], submitting: true });
+        rerender(<TodayPage />);
+        expect(screen.getByRole("button", { name: "Guardando…" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Efectos secundarios" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Marcar como tomado" })).toBeDisabled();
+        fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
+        expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
     it("uses the logged-in patient profile for the greeting and avatar", () => {

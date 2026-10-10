@@ -16,6 +16,7 @@ from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.enums import DocumentReviewStatus, UploaderRole
+from app.services.document_processing_status import attach_duplicate_status
 from app.services.document_summary_service import is_missing_summary_column_error
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,7 @@ class DocumentService:
         )
         # Refresh signed URLs for each document
         data = cast(list[dict[str, Any]], result.data or [])
+        await attach_duplicate_status(self.db, data)
         for doc in data:
             self._attach_view_urls(doc)
         return data
@@ -141,6 +143,7 @@ class DocumentService:
     async def get_document(self, document_id: UUID, patient_id: UUID) -> Any:
         """Get a single document with a fresh signed URL."""
         data = self._get_document_row(document_id, patient_id)
+        await attach_duplicate_status(self.db, [data])
 
         # Refresh the signed URL
         self._attach_view_urls(data)

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getCarePlanCategoryLabel, getTodayCopy, type TodayCopy } from "@/content/today-copy";
+import { resolveVisitsTimezone } from "@/content/visits-copy";
 import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
 import { Card, EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui";
 import { useFeedData } from "@/hooks/use-feed-data";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
-import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
+import { FeedTaskStatus, FeedTaskType, normalizeLocale, type Locale, type FeedTask } from "@/types";
 
 function splitMedicationName(name: string) {
     const match = name.match(/^(.*?)(\s+\d.*)$/);
@@ -35,38 +37,44 @@ function mapTaskStatus(task: FeedTask, now: number): TaskCardStatus {
 }
 
 function formatTimeLabel(
+    locale: Locale,
+    copy: TodayCopy,
     scheduledTime?: string,
     status?: TaskCardStatus,
     requiresScheduleConfiguration?: boolean,
 ) {
     if (!scheduledTime && requiresScheduleConfiguration) {
-        return "Set reminder time";
+        return copy.setTime;
     }
     if (!scheduledTime) {
-        return "Any time";
+        return copy.anyTime;
     }
 
     const [hours = "0", minutes = "0"] = scheduledTime.split(":");
-    const value = new Date();
-    value.setHours(Number(hours), Number(minutes), 0, 0);
-    const label = value.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    return status === "active" ? `${label} • Now` : label;
+    // The feed already supplies the patient-local clock time; avoid browser DST shifts.
+    const value = new Date(0);
+    value.setUTCHours(Number(hours), Number(minutes), 0, 0);
+    const label = value.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+    return status === "active" ? `${label} • ${copy.now}` : label;
 }
 
-function carePlanLabel(task: FeedTask) {
+function carePlanLabel(task: FeedTask, copy: TodayCopy) {
     if (!task.carePlan) {
         return null;
     }
-    return `Care-team approved • ${task.carePlan.category.replaceAll("_", " ")}`;
+    return `${copy.approved} • ${getCarePlanCategoryLabel(task.carePlan.category, copy)}`;
 }
 
-function CarePlanDetails({ task }: { task: FeedTask }) {
+function CarePlanDetails({ task, copy }: { task: FeedTask; copy: TodayCopy }) {
     if (!task.carePlan) return null;
-    return <details className="mb-3 text-xs text-slate-600"><summary className="cursor-pointer">Care plan details</summary><p className="mt-1">Approved plan version {task.carePlan.versionNumber}. This activity is part of your approved care plan.</p></details>;
+    return <details className="mb-3 text-xs text-slate-600"><summary className="cursor-pointer">{copy.details}</summary><p className="mt-1">{copy.planDetail(task.carePlan.versionNumber)}</p></details>;
 }
 
 export default function TodayPage() {
     const profile = usePatientProfile();
+    const locale = normalizeLocale(profile?.preferredLanguage);
+    const copy = getTodayCopy(locale);
+    const { timezone } = resolveVisitsTimezone(profile?.timezone);
     const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 30_000);
@@ -83,7 +91,7 @@ export default function TodayPage() {
         refreshFeed,
         summary,
         tasks,
-    } = useFeedData(profile?.preferredLanguage);
+    } = useFeedData(locale);
     const [barrierTask, setBarrierTask] = useState<FeedTask | null>(null);
     const [barrierNote, setBarrierNote] = useState("");
     const displayName = profile?.firstName ?? "";
@@ -91,7 +99,7 @@ export default function TodayPage() {
     const completionPercent = summary.total > 0
         ? Math.round(summary.completed / summary.total * 100)
         : 0;
-    const completedLabel = `${summary.completed} of ${summary.total || tasks.length} tasks completed`;
+    const completedLabel = copy.completed(summary.completed, summary.total || tasks.length);
     const hasScheduleGaps = tasks.some((task) => task.requiresScheduleConfiguration);
 
     async function sendBarrier(code: "side_effects" | "cost" | "access" | "schedule" | "confusion" | "other") {
@@ -118,12 +126,13 @@ export default function TodayPage() {
                 <div className="absolute -bottom-20 left-5 h-56 w-56 rounded-full bg-[#d8aa57]/18" />
                 <div className="relative flex items-start justify-between gap-4">
                     <div>
-                        <p className="text-xs font-black uppercase tracking-[0.24em] text-white/68">Today</p>
+                        <p className="text-xs font-black uppercase tracking-[0.24em] text-white/68">{copy.today}</p>
                         <h1 className="mt-2 text-[2.35rem] font-black leading-none tracking-[-0.04em]">
-                            {displayName ? `Hi, ${displayName}` : "Hi there"}
+                            {displayName ? copy.greeting(displayName) : copy.hello}
                         </h1>
                         <p className="mt-2 text-base text-white/82">
-                            {new Date().toLocaleDateString(undefined, {
+                            {new Date(now).toLocaleDateString(locale, {
+                                timeZone: timezone,
                                 day: "numeric",
                                 month: "long",
                                 weekday: "long",
@@ -137,9 +146,9 @@ export default function TodayPage() {
 
                 <div className="relative mt-6 flex items-center justify-between gap-4 rounded-[28px] border border-white/18 bg-white/15 p-5 backdrop-blur">
                     <div className="space-y-1">
-                        <p className="text-xl font-black text-white">Daily progress</p>
+                        <p className="text-xl font-black text-white">{copy.progress}</p>
                         <p className="text-base text-white/82">{completedLabel}</p>
-                        <p className="text-sm font-semibold text-white/76">{adherenceStats.currentStreakDays}-day streak</p>
+                        <p className="text-sm font-semibold text-white/76">{copy.streak(adherenceStats.currentStreakDays)}</p>
                     </div>
                     <div className="space-y-2 text-right">
                         <CircularProgress
@@ -157,9 +166,9 @@ export default function TodayPage() {
                 {hasScheduleGaps ? (
                     <Link href="/reminders">
                         <Card className="border-[#edd59a] bg-[#fff7dc]">
-                            <p className="text-base font-black text-[#6f4b00]">Set reminder times</p>
+                            <p className="text-base font-black text-[#6f4b00]">{copy.setup}</p>
                             <p className="mt-1 text-base leading-7 text-[#7a5a15]">
-                                Some care-plan items still need your preferred days and times.
+                                {copy.setupDetail}
                             </p>
                         </Card>
                     </Link>
@@ -168,19 +177,19 @@ export default function TodayPage() {
                 {error ? (
                     <ErrorState
                         description={error}
-                        onRetry={refreshFeed}
-                        title={tasks.length > 0 ? "Schedule may be stale" : "Could not load schedule"}
+                        action={<button className="min-h-11 rounded-2xl border border-[#efbeb5] bg-white px-4 py-2 text-sm font-semibold text-[#b94032] transition hover:bg-[#fff2ef]" onClick={refreshFeed} type="button">{copy.retry}</button>}
+                        title={tasks.length > 0 ? copy.stale : copy.loadError}
                     />
                 ) : null}
                 <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-black text-[#17233a]">Today&apos;s schedule</h2>
-                    <p className="rounded-full bg-white/80 px-3 py-1 text-sm font-bold text-[#64748b]">{tasks.length} tasks</p>
+                    <h2 className="text-xl font-black text-[#17233a]">{copy.schedule}</h2>
+                    <p className="rounded-full bg-white/80 px-3 py-1 text-sm font-bold text-[#64748b]">{copy.count(tasks.length)}</p>
                 </div>
                 {!error && tasks.length === 0 ? (
                     <EmptyState
-                        description="Your clinicians have not assigned anything for today."
+                        description={copy.emptyDetail}
                         icon={<HiOutlineCalendarDays />}
-                        title="Nothing scheduled"
+                        title={copy.empty}
                     />
                 ) : null}
                 {tasks.length > 0 ? (
@@ -205,13 +214,16 @@ export default function TodayPage() {
                                         </span>
                                         <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                             {formatTimeLabel(
+                                                locale,
+                                                copy,
                                                 task.scheduledTime,
                                                 status,
                                                 task.requiresScheduleConfiguration,
                                             )}
                                         </p>
-                                        {carePlanLabel(task) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task)}</p> : null}
+                                        {carePlanLabel(task, copy) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task, copy)}</p> : null}
                                         <MedicationCard
+                                            locale={locale}
                                             dosage={medication.dosage}
                                             id={task.id}
                                             instructions={task.description}
@@ -224,7 +236,7 @@ export default function TodayPage() {
                                             submitting={submitting}
                                             time={task.scheduledTime ?? ""}
                                         />
-                                        <CarePlanDetails task={task} />
+                                        <CarePlanDetails task={task} copy={copy} />
                                     </div>
                                 );
                             }
@@ -236,13 +248,16 @@ export default function TodayPage() {
                                     </span>
                                     <p className={`mb-2 text-sm font-bold ${status === "active" ? "text-[#147465]" : "text-[#8090a5]"}`}>
                                         {formatTimeLabel(
+                                            locale,
+                                            copy,
                                             task.scheduledTime,
                                             status,
                                             task.requiresScheduleConfiguration,
                                         )}
                                     </p>
-                                    {carePlanLabel(task) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task)}</p> : null}
+                                    {carePlanLabel(task, copy) ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#5b6b83]">{carePlanLabel(task, copy)}</p> : null}
                                     <ObligationCard
+                                        locale={locale}
                                         description={task.name}
                                         instructions={task.description}
                                         frequency={task.frequency}
@@ -254,7 +269,7 @@ export default function TodayPage() {
                                         time={task.scheduledTime ?? ""}
                                         type={task.carePlan?.category === "movement" ? "exercise" : task.carePlan?.category === "nutrition" ? "diet" : task.carePlan?.category === "hydration" ? "hydration" : task.carePlan?.category === "monitoring" ? "monitoring" : task.carePlan?.category === "follow_up" ? "follow_up" : "custom"}
                                     />
-                                    <CarePlanDetails task={task} />
+                                    <CarePlanDetails task={task} copy={copy} />
                                 </div>
                             );
                         })}
@@ -266,28 +281,29 @@ export default function TodayPage() {
                 <Link href="/symptoms">
                     <Card className="flex items-center justify-between border-[#b6d9d2] bg-[#e6f4f1]">
                         <div>
-                            <p className="text-base font-black text-[#17233a]">Report a symptom</p>
-                            <p className="text-base leading-7 text-[#5b6b83]">Log how you feel and share updates with your care team.</p>
+                            <p className="text-base font-black text-[#17233a]">{copy.symptom}</p>
+                            <p className="text-base leading-7 text-[#5b6b83]">{copy.symptomDetail}</p>
                         </div>
                         <span className="text-2xl text-[#147465]">→</span>
                     </Card>
                 </Link>
             </div>
             <Modal
+                closeLabel={copy.close}
                 onClose={() => { if (!submitting) { setBarrierTask(null); setBarrierNote(""); } }}
                 open={Boolean(barrierTask)}
-                title="I couldn’t do this"
+                title={copy.barrierTitle}
             >
                 <div className="space-y-3">
                     {actionError ? <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{actionError}</p> : null}
-                    <p className="text-sm text-[#5b6b83]">Choose what got in the way. Your care team can use this to follow up.</p>
+                    <p className="text-sm text-[#5b6b83]">{copy.barrierDetail}</p>
                     <div className="grid grid-cols-2 gap-2">
                         {(["side_effects", "cost", "access", "schedule", "confusion"] as const).map((code) => (
-                            <button disabled={submitting} className="rounded-lg border border-[#b6d9d2] px-3 py-2 text-sm font-semibold capitalize text-[#147465]" key={code} onClick={() => void sendBarrier(code)} type="button">{code.replace("_", " ")}</button>
+                            <button disabled={submitting} className="rounded-lg border border-[#b6d9d2] px-3 py-2 text-sm font-semibold capitalize text-[#147465]" key={code} onClick={() => void sendBarrier(code)} type="button">{copy.barriers[code]}</button>
                         ))}
                     </div>
-                    <label className="block text-sm font-semibold text-[#17233a]">Other (please describe)<textarea className="mt-1 min-h-20 w-full rounded-lg border border-[#b6d9d2] p-2 font-normal" value={barrierNote} onChange={(event) => setBarrierNote(event.target.value)} /></label>
-                    <button className="w-full rounded-lg bg-[#147465] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={submitting || !barrierNote.trim()} onClick={() => void sendBarrier("other")} type="button">{submitting ? "Saving…" : "Send to care team"}</button>
+                    <label className="block text-sm font-semibold text-[#17233a]">{copy.barriers.other}<textarea className="mt-1 min-h-20 w-full rounded-lg border border-[#b6d9d2] p-2 font-normal" value={barrierNote} onChange={(event) => setBarrierNote(event.target.value)} /></label>
+                    <button className="w-full rounded-lg bg-[#147465] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={submitting || !barrierNote.trim()} onClick={() => void sendBarrier("other")} type="button">{submitting ? copy.saving : copy.send}</button>
                 </div>
             </Modal>
         </div>
