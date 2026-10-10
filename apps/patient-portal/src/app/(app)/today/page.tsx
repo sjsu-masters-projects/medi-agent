@@ -284,7 +284,7 @@ export default function TodayPage() {
             </div>
 
             <div className="px-5 pt-2">
-                <Link href="/symptoms">
+                <Link href="/chat">
                     <Card className="flex items-center justify-between border-[#b6d9d2] bg-[#e6f4f1]">
                         <div>
                             <p className="text-base font-black text-[#17233a]">{copy.symptom}</p>

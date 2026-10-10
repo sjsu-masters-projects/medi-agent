@@ -21,8 +21,10 @@ all screens. Saving a language updates navigation, controls and explanatory UI;
 it does not translate clinical instructions or historical messages. Failed saves
 retain the prior preference. Guest entry screens carry a separate language choice
 until a profile exists; chat has no competing persisted language setting.
-Symptoms currently links to Nora for reporting and explicitly says that patient
-symptom history is not connected; it must not display invented example reports.
+Today's symptom shortcut opens Nora directly, without an intermediate timeline.
+The existing Symptoms URL remains a compact mobile-friendly handoff and explicitly
+says that patient symptom history is not connected; it must not display invented
+example reports or imply that opening chat saves or escalates a report.
 UI review evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
 
 First, run the development server:

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { HiOutlineClipboardDocumentList } from "react-icons/hi2";
+import { HiOutlineChatBubbleLeftRight } from "react-icons/hi2";
 import { PageHeader } from "@/components/layouts";
-import { Card, EmptyState } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 
 export default function SymptomsPage() {
@@ -14,7 +14,7 @@ export default function SymptomsPage() {
     <div className="patient-page space-y-4 pb-8">
       <PageHeader
         backButton
-        title={spanish ? "Síntomas" : "Symptoms"}
+        title={spanish ? "Reportar un síntoma" : "Report a symptom"}
         subtitle={
           spanish
             ? "Comparta cómo se siente y cuándo empezó."
@@ -23,7 +23,10 @@ export default function SymptomsPage() {
       />
       <div className="patient-stack -mt-4 space-y-4 px-5">
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <div aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e6f4f1] text-[#147465]">
+            <HiOutlineChatBubbleLeftRight className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-semibold text-[#17233a]">
             {spanish
               ? "Reportar un síntoma con Nora"
               : "Report a symptom with Nora"}
@@ -34,7 +37,7 @@ export default function SymptomsPage() {
               : "Nora is an AI care assistant. In chat, describe what you feel, when it started, and how strong it is. Review the questions and confirm details when asked."}
           </p>
           <Link
-            className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-3 text-center font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:outline-offset-2"
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#147465] px-4 py-3 text-center font-semibold text-white hover:bg-[#0f5f53] focus-visible:outline-2 focus-visible:outline-[#147465] focus-visible:outline-offset-2"
             href="/chat"
           >
             {spanish ? "Abrir chat con Nora" : "Open chat with Nora"}
@@ -60,19 +63,22 @@ export default function SymptomsPage() {
             ? "Este chat no se monitorea continuamente. En una emergencia, llame al 911."
             : "This chat is not continuously monitored. In an emergency, call 911."}
         </p>
-        <EmptyState
-          icon={<HiOutlineClipboardDocumentList />}
-          title={
+        <details className="rounded-2xl border border-[#eadfd4] bg-white/80 px-4">
+          <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-[#30415f]">
+            {
             spanish
               ? "Historial de síntomas no disponible aquí"
               : "Symptom history is not available here"
-          }
-          description={
+            }
+          </summary>
+          <p className="pb-4 text-sm leading-6 text-[#5b6b83]">
+            {
             spanish
               ? "Esta pantalla aún no está conectada a sus reportes guardados. Puede usar el chat para reportar un síntoma o consultar a su equipo de atención."
               : "This screen is not yet connected to your saved reports. You can use chat to report a symptom or ask your care team."
-          }
-        />
+            }
+          </p>
+        </details>
       </div>
     </div>
   );

@@ -37,6 +37,8 @@ and cross-review findings are integrated. Local responsive checks covered 320,
 768 and 1280 pixels, with Spanish sign-in at 320 pixels and dialog focus recovery.
 Combined PR review and post-deployment authenticated-screen checks remain open.
 Evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
+Symptom-screen follow-up in #141: Today now opens Nora directly; the existing
+Symptoms URL uses a compact mobile reporting handoff, not a fabricated timeline.
 
 **PAT-005 final acceptance follow-up — October 10 (in progress).** The source-approved
 patient upload produced V4 on the first worker attempt at 18:33:16 UTC; V3 remains

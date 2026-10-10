@@ -29,6 +29,13 @@ describe("SymptomsPage", () => {
         ),
       ).toBeInTheDocument();
       expect(screen.getByRole("note")).toHaveTextContent("911");
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        spanish ? "Reportar un síntoma" : "Report a symptom",
+      );
+      expect(screen.getByText(spanish
+        ? "Historial de síntomas no disponible aquí"
+        : "Symptom history is not available here").closest("details"))
+        .not.toHaveAttribute("open");
       expect(
         screen
           .getByText(

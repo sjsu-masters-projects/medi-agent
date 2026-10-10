@@ -28,6 +28,9 @@ responsive layouts and one persisted patient interface language.
 - Remove invented symptom history and unconnected Save controls. Until a patient
   symptom-history API is connected, explicitly explain the limitation and link
   to the existing Nora reporting workflow.
+  Today opens Nora directly rather than routing through an unnecessary timeline.
+  Existing symptom links still open a compact, patient-branded reporting handoff;
+  history limitations are in a disclosure rather than a second oversized panel.
 
 ## Language decision
 
