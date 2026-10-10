@@ -9,6 +9,7 @@ interface ModalProps {
     title: string;
     children: ReactNode;
     size?: "default" | "wide";
+    closeLabel?: string;
 }
 
 const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
@@ -21,7 +22,7 @@ const overlayClasses: Record<NonNullable<ModalProps["size"]>, string> = {
     wide: "justify-end md:items-center md:justify-center md:p-6",
 };
 
-export function Modal({ children, onClose, open, size = "default", title }: ModalProps) {
+export function Modal({ children, closeLabel = "Close modal", onClose, open, size = "default", title }: ModalProps) {
     if (!open || typeof document === "undefined") {
         return null;
     }
@@ -35,7 +36,7 @@ export function Modal({ children, onClose, open, size = "default", title }: Moda
                 <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-xl font-bold text-[#17233a]">{title}</h3>
                     <button
-                        aria-label="Close modal"
+                        aria-label={closeLabel}
                         className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#64748b] shadow-sm transition hover:bg-[#f4f0ea] hover:text-[#17233a]"
                         onClick={onClose}
                         type="button"

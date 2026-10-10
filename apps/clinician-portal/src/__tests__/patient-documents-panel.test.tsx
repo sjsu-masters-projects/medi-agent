@@ -31,6 +31,20 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("PatientDocumentsPanel", () => {
+    it("explains skipped duplicates without promising facts or an explanation retry", () => {
+        render(<PatientDocumentsPanel documents={[{
+            id: "duplicate-doc", fileName: "duplicate.pdf", documentType: "other",
+            parseStatus: "duplicate", summaryStatus: "not_required",
+            createdAt: "2026-10-10T18:00:00Z", uploadedByRole: "patient", reviewStatus: "pending",
+        }]} onRefresh={vi.fn()} patientId="synthetic-patient" />);
+        expect(screen.getByText("Duplicate upload — extraction skipped")).toBeInTheDocument();
+        expect(screen.getByText(/created no new extracted facts or care-plan proposals/)).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Review extracted facts" })).not.toBeInTheDocument();
+        expect(screen.queryByText(/No extracted information in this document/)).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Open source document" })).toBeInTheDocument();
+    });
+
     beforeEach(() => {
         vi.mocked(approveDocumentReview).mockReset();
         vi.mocked(fetchExtractedDocumentFacts).mockReset();

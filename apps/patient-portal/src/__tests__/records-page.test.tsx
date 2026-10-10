@@ -147,6 +147,30 @@ describe("RecordsPage", () => {
     });
   });
 
+  it("shows a duplicate explanation in both languages without asking the model to reprocess it", async () => {
+    get.mockResolvedValue([{
+      id: "duplicate-doc", patient_id: "patient-1", uploaded_by: "patient-1",
+      uploaded_by_role: "patient", document_type: DocumentType.OTHER,
+      file_name: "duplicate.pdf", file_url: "https://example.test/duplicate.pdf",
+      file_size_bytes: 1024, mime_type: "application/pdf", parsed: true,
+      parse_status: DocumentParseStatus.DUPLICATE, summary_status: "not_required",
+      ai_summary: "Stale duplicate summary must not be shown",
+      visibility: "shared", created_at: "2026-10-10T18:00:00Z",
+    }]);
+    render(<RecordsPage />);
+    await screen.findByText("duplicate.pdf");
+    expect(screen.getByText("Duplicate upload")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /duplicate.pdf/ }));
+    expect(screen.getByText(/These exact file contents were already processed/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "es-MX" } });
+    expect(screen.getByText(/Este mismo archivo ya se procesó/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "en-US" } });
+    expect(screen.getByText(/These exact file contents were already processed/)).toBeInTheDocument();
+    expect(screen.queryByText(/Stale duplicate summary/)).not.toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.queryByText(/There is no extracted information/)).not.toBeInTheDocument();
+  });
+
   it("says why a parsed document has no explanation instead of showing nothing", async () => {
     get.mockResolvedValue([
       {

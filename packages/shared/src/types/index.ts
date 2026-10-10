@@ -127,6 +127,7 @@ export const DocumentParseStatus = {
     PENDING: "pending",
     PROCESSING: "processing",
     COMPLETED: "completed",
+    DUPLICATE: "duplicate",
     FAILED: "failed",
     NEEDS_OCR: "needs_ocr",
     NEEDS_EVIDENCE_REVIEW: "needs_evidence_review",

@@ -76,7 +76,9 @@ class IngestionService:
             patient_id=patient_id, source_hash=str(source_hash)
         ):
             self._finish(run_id, status="duplicate")
-            self._set_document(document_id, parse_status="completed", parsed=True)
+            self._set_document(
+                document_id, parse_status="completed", parsed=True, summary_status="not_required"
+            )
             return self._outcome("duplicate")
 
         try:

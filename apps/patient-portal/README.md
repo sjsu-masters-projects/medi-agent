@@ -7,6 +7,14 @@ codes; unknown roles use generic care-team copy. API transport recovery retries 
 once after 100–249 ms, honors cancellation, and never retries HTTP errors or writes.
 Today localizes connection/save errors using the loaded profile language. An uncertain
 save leaves the task pending; refresh to inspect persisted state before a manual retry.
+Today also localizes its schedule, progress, task actions, approved-plan details,
+and all barrier choices. Dates use the saved patient timezone; feed clock values
+are already patient-local and are not shifted into the browser timezone. Clinical
+titles, instructions and doses remain exactly as reviewed, not translated by UI copy.
+
+Records distinguishes duplicate-skipped uploads from empty successful extraction.
+The duplicate explanation is static en-US/es-MX copy; switching its language does
+not invoke a model or carry that reason into Nora as a clinical summary.
 
 First, run the development server:
 

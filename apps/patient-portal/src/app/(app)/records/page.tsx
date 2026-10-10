@@ -117,6 +117,12 @@ function describeMissingSummary(document: PortalDocument): string {
     SUMMARY_UNAVAILABLE_MESSAGES[status] ?? SUMMARY_UNAVAILABLE_MESSAGES.pending
   );
 }
+
+function duplicateUploadMessage(locale: Locale): string {
+  return locale === "es-MX"
+    ? "Este mismo archivo ya se procesó para usted. Se guardó esta copia, pero no se extrajeron datos nuevos ni se agregaron instrucciones al plan de cuidado. Puede abrir el original o consultar a su equipo de atención."
+    : "These exact file contents were already processed for you. This copy is stored, but no new facts or care-plan instructions were created. You can open the original or ask your care team about it.";
+}
 const INITIAL_POLL_DELAY_MS = 3_000;
 const MAX_POLL_DELAY_MS = 30_000;
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
@@ -216,6 +222,9 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
 }
 
 function getDocumentStatus(document: PortalDocument) {
+  if (document.parseStatus === DocumentParseStatus.DUPLICATE) {
+    return { label: "Duplicate upload", variant: "info" as const };
+  }
   if (isDocumentProcessing(document.parseStatus)) {
     return { label: "Processing...", variant: "warning" as const };
   }
@@ -295,6 +304,11 @@ export default function RecordsPage() {
       setExplanationLoading(false);
 
       setExplanationAvailable(false);
+
+      if (document.parseStatus === DocumentParseStatus.DUPLICATE) {
+        setExplanationText(duplicateUploadMessage(DEFAULT_LOCALE));
+        return;
+      }
 
       if (
         document.parseStatus === "failed" ||
@@ -504,6 +518,12 @@ export default function RecordsPage() {
       return;
     }
     if (!selectedDocument) {
+      return;
+    }
+
+    if (selectedDocument.parseStatus === DocumentParseStatus.DUPLICATE) {
+      setExplanationAvailable(false);
+      setExplanationText(duplicateUploadMessage(nextLocale));
       return;
     }
 

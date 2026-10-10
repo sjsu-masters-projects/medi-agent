@@ -21,6 +21,24 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-005 final acceptance follow-up — October 10 (in progress).** The source-approved
+patient upload produced V4 on the first worker attempt at 18:33:16 UTC; V3 remains
+active. Live review flags the repeated hydration evidence as overlap and disables
+preview/publication. Spanish V3 publication, Saturday cadence absence and the
+pending/rejected/approved evidence handoff are verified. Remaining code work:
+localize Today chrome/actions with saved profile locale and timezone; distinguish
+duplicate-skipped uploads from completed empty extraction in both document surfaces.
+No additional schema, remote migration or clinical publication is required.
+Local implementation verified: 2,056 backend regressions passed (98 opt-in database
+skips); 322 patient and 247 clinician tests passed; both portals passed lint,
+typecheck and webpack build. Focused rechecks after final shared-modal reuse passed
+55 patient and 9 clinician tests. Python Ruff and mypy passed. The separate native
+appointment PostgreSQL fixture could not initialize because host shared-memory
+allocation is exhausted (31 setup errors), including outside the sandbox; it must
+pass in CI. Evidence and remaining rollout gates:
+`docs/pat-005-final-acceptance-2026-10-10.md`. Peer review and deployed recheck of
+the Spanish chrome and duplicate presentation remain open; no readiness claim.
+
 **COM-001-B — two-way human conversations (locally verified, review pending).** Implement explicit
 patient/linked-clinician threads, separate from Nora and operational alerts,
 without multi-team broadcasting. Acceptance and API contract:

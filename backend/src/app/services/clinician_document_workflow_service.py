@@ -19,6 +19,7 @@ from app.core.exceptions import AuthorizationError, NotFoundError, ValidationErr
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus, UploaderRole
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.document_processing_status import attach_duplicate_status
 from app.services.document_summary_service import (
     is_missing_summary_column_error,
     is_missing_summary_schedule_column_error,
@@ -58,6 +59,7 @@ class ClinicianDocumentWorkflowService:
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
         )
+        await attach_duplicate_status(self.db, docs, self._execute)
         return await self._attach_document_reviewers(docs)
 
     async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
@@ -93,6 +95,7 @@ class ClinicianDocumentWorkflowService:
             .order("created_at", desc=True)
         )
 
+        await attach_duplicate_status(self.db, docs, self._execute)
         queue_items: list[dict[str, Any]] = []
         for row in docs:
             patient = patients_by_id.get(str(row.get("patient_id")))
