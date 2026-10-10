@@ -30,6 +30,10 @@ approved snapshots and patient history. Remote repair is not authorized.
 On October 10, the requester separately authorized and applied migration 048 to
 medi-agent-staging. The checksum and eight installed-guard/unchanged-plan checks
 passed; backend/UI deployment and Spanish publication remain open.
+October 10 review follow-up: make the intentional Docker readiness command
+explicit outside the subprocess argument list. Ruff lint/format passed; all 65
+isolated PostgreSQL care-plan tests passed again (233.36 seconds). No SQL or
+remote state changed as part of this review cleanup.
 
 Implementation and rollout contract: `docs/patient-upload-care-plan-review-gate.md`.
 October 9 verification update: service/router regressions **1,034 passed**;
@@ -59,7 +63,8 @@ mypy passed for changed backend source; migration validator accepted all 56 SQL
 files. Native initdb encountered macOS shared-memory exhaustion, so the opt-in
 Docker fixture ran the complete **65-test PostgreSQL suite successfully** in
 227.76 seconds. Containers were isolated without network, host ports or volumes
-and cleaned up after each test. Migration 048 has not been applied remotely. The deployed
+and cleaned up after each test. These original test checks preceded the separately
+authorized October 10 migration application recorded above. The deployed
 deep-dive link preserves the Documents destination but redirects to expired-session
 login; live acceptance needs clinician sign-in and deployment of this branch.
 

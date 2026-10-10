@@ -62,6 +62,10 @@ def sql(tmp_path: Path):
             timeout=30,
         )
         try:
+            readiness_command = (
+                'test "$(head -n 1 /var/lib/postgresql/data/postmaster.pid)" = 1 '
+                "&& pg_isready -U postgres"
+            )
             for _ in range(100):
                 ready = subprocess.run(
                     [
@@ -70,8 +74,7 @@ def sql(tmp_path: Path):
                         container,
                         "sh",
                         "-c",
-                        'test "$(head -n 1 /var/lib/postgresql/data/postmaster.pid)" = 1 '
-                        "&& pg_isready -U postgres",
+                        readiness_command,
                     ],
                     capture_output=True,
                     timeout=5,

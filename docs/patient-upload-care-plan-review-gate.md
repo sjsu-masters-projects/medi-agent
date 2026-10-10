@@ -88,3 +88,8 @@ guards, service-role-only public RPCs, invoker-security helpers, pending-evidenc
 exclusion, unchanged approved V2 and unchanged draft V3. No plan approval or
 history rewrite occurred. Backend/UI deployment and live Spanish/non-scheduled-day
 acceptance remain open; this is not a production-readiness claim.
+
+October 10 inline-review cleanup extracts the intentional Docker readiness
+command from the subprocess argument list, without changing its value or
+database behavior. Ruff lint/format and all 65 isolated PostgreSQL tests passed
+again (233.36 seconds). No migration change or remote operation was performed.
