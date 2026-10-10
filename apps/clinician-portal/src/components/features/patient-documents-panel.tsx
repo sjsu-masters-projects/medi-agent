@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HiOutlineDocumentText } from "react-icons/hi2";
 import { Modal } from "@/components/ui";
 import { DocumentSummary } from "@/components/features/document-summary";
@@ -78,6 +78,12 @@ export function PatientDocumentsPanel({
     patientId,
     onRefresh,
 }: PatientDocumentsPanelProps) {
+    useEffect(() => {
+        const target = window.location.hash.slice(1);
+        if (documents.some((doc) => target === `document-${doc.id}`)) {
+            document.getElementById(target)?.scrollIntoView?.({ block: "center" });
+        }
+    }, [documents]);
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [reviewingDocumentId, setReviewingDocumentId] = useState<string | null>(null);
     const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
@@ -288,7 +294,7 @@ export function PatientDocumentsPanel({
             ) : (
                 <div className="space-y-4">
                     {documents.map((doc) => (
-                        <div className="rounded-xl border border-gray-200 bg-white" key={doc.id}>
+                        <div className="scroll-mt-24 rounded-xl border border-gray-200 bg-white target:ring-2 target:ring-blue-500" id={`document-${doc.id}`} key={doc.id}>
                             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
                                 <div className="flex items-center gap-3">
                                     <HiOutlineDocumentText

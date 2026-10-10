@@ -260,9 +260,12 @@ class ClinicianDocumentWorkflowService:
             .update(update_payload)
             .eq("id", str(document_id))
             .eq("patient_id", str(patient_id))
+            .eq("review_status", DocumentReviewStatus.PENDING.value)
         )
         updated_rows = cast(list[dict[str, Any]], result.data or [])
-        updated = updated_rows[0] if updated_rows else {**document, **update_payload}
+        if not updated_rows:
+            raise ValidationError("Document review changed; reload before trying again")
+        updated = updated_rows[0]
 
         return {
             "status": "reviewed",

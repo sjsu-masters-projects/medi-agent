@@ -13,7 +13,7 @@ function getCurrentReturnPath(): string {
         return "/";
     }
 
-    return `${window.location.pathname}${window.location.search}`;
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
 
 export function redirectToLogin({ reason, returnPath }: RedirectToLoginParams = {}) {

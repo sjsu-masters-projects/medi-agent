@@ -35,7 +35,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (mounted && !loading && !isAuthenticated) {
-            const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
+            const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}${window.location.hash}`;
             router.replace(
                 buildLoginRedirectUrl({
                     loginPath: "/login",
