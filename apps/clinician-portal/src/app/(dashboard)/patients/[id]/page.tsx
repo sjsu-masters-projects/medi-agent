@@ -55,7 +55,7 @@ function formatReminderSchedule(
         | undefined,
 ) {
     if (!schedule?.timesOfDay?.length) {
-        return "Not configured";
+        return "Reminders not configured";
     }
 
     const timeLabel = schedule.timesOfDay
@@ -158,11 +158,11 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                     aria-label="Back to patients"
                     className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
                     id="back-to-patients-btn"
-                    onClick={() => router.back()}
+                    onClick={() => router.push("/patients")}
                     type="button"
                 >
                     <HiOutlineArrowLeft aria-hidden="true" className="h-4 w-4" />
-                    Back to Dashboard
+                    Patient roster
                 </button>
 
                 <button
@@ -196,12 +196,12 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                 </div>
 
                 {/* Risk + adherence summary */}
-                <div className="flex items-center gap-6">
+                <div className="flex flex-wrap items-center gap-4">
                     <RiskBadge level={patient.risk_level} />
 
                     <div className="text-center">
-                        <p className="text-2xl font-bold text-gray-900">{adherencePct}%</p>
-                        <p className="text-xs text-gray-400">Adherence</p>
+                        <p className="text-2xl font-bold text-gray-900">{patient.adherence_series.some((day) => day.expected > 0) ? `${adherencePct}%` : "—"}</p>
+                        <p className="text-xs text-gray-500">Recorded completion</p>
                     </div>
 
                     <div className="text-center">
@@ -223,14 +223,14 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
             {/* Tab navigation */}
             <div
                 aria-label="Patient data tabs"
-                className="flex gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1"
+                className="flex gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-1"
                 role="tablist"
             >
                 {TABS.map(({ id, label, icon: Icon }) => (
                     <button
                         aria-controls={`tab-panel-${id}`}
                         aria-selected={activeTab === id}
-                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                        className={`flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                             activeTab === id
                                 ? "bg-white text-blue-600 shadow-sm"
                                 : "text-gray-500 hover:bg-white/60 hover:text-gray-700"
@@ -238,11 +238,23 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         id={`tab-btn-${id}`}
                         key={id}
                         onClick={() => setActiveTab(id)}
+                        tabIndex={activeTab === id ? 0 : -1}
+                        onKeyDown={(event) => {
+                            const index = TABS.findIndex((tab) => tab.id === id);
+                            const nextIndex = event.key === "ArrowRight" ? (index + 1) % TABS.length
+                                : event.key === "ArrowLeft" ? (index - 1 + TABS.length) % TABS.length
+                                : event.key === "Home" ? 0 : event.key === "End" ? TABS.length - 1 : null;
+                            if (nextIndex === null) return;
+                            event.preventDefault();
+                            const nextTab = TABS[nextIndex];
+                            setActiveTab(nextTab.id);
+                            document.getElementById(`tab-btn-${nextTab.id}`)?.focus();
+                        }}
                         role="tab"
                         type="button"
                     >
                         <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                        <span className="hidden sm:inline">{label}</span>
+                        <span>{label}</span>
                     </button>
                 ))}
             </div>
@@ -378,7 +390,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
 
                             <div className="md:col-span-2">
                                 <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
-                                    Active Obligations
+                                    Active care activities
                                 </h3>
                                 {patient.obligations?.length ? (
                                     <div className="space-y-2">
@@ -387,19 +399,20 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                 className="rounded-xl border border-gray-200 px-4 py-3"
                                                 key={obligation.id}
                                             >
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div>
+                                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                                    <div className="min-w-0 flex-1 basis-48 break-words">
                                                         <p className="font-medium text-gray-900">
                                                             {obligation.description}
                                                         </p>
                                                         <p className="mt-1 text-sm text-gray-500">
                                                             {obligation.frequency}
-                                                            {obligation.notes
+                                                            {obligation.notes && obligation.notes.trim().replace(/\s+/g, " ") !== obligation.description.trim().replace(/\s+/g, " ")
                                                                 ? ` · ${obligation.notes}`
                                                                 : ""}
                                                         </p>
                                                     </div>
                                                     <p className="text-sm text-gray-500">
+                                                        <span className="sr-only">Reminders: </span>
                                                         {formatReminderSchedule(
                                                             obligation.reminder_schedule,
                                                         )}
@@ -409,7 +422,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-gray-400 italic">No active obligations</p>
+                                    <p className="text-sm text-gray-500 italic">No active care activities</p>
                                 )}
                             </div>
                         </div>
@@ -438,7 +451,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                             Symptom Timeline
                         </h2>
                         <p className="mb-6 text-sm text-gray-500">
-                            Patient-reported symptoms with severity ratings
+                            Patient-reported symptoms with severity ratings. ADR flags require clinician review and do not establish an adverse drug reaction.
                         </p>
                         <SymptomTimeline data={patient.symptom_reports} />
 
@@ -498,6 +511,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         <h2 className="mb-4 text-lg font-semibold text-gray-900">
                             Chat Transcript
                         </h2>
+                        <p className="mb-4 text-sm text-gray-500">Patient conversations with Nora, the AI care assistant. Messages retain their original language. Care-team conversations are in Messages.</p>
                         <ChatTranscript messages={patient.chat_messages} />
 
                         <Link href="/messages" className="mt-6 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
@@ -513,13 +527,13 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         id="tab-panel-soap"
                         role="tabpanel"
                     >
-                        <div className="mb-6 flex items-center justify-between">
+                        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <h2 className="text-lg font-semibold text-gray-900">
-                                    AI SOAP Note
+                                    AI SOAP draft
                                 </h2>
                                 <p className="text-sm text-gray-500">
-                                    Generated by Gemini 3.1 Pro Preview from last 30 days of data
+                                    AI-assisted draft based on available recent records · clinician review required.
                                 </p>
                             </div>
                             <button
@@ -574,13 +588,12 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                     ),
                                 )}
 
-                                <p className="text-right text-xs text-gray-400">
+                                <details className="text-xs text-gray-500"><summary className="min-h-11 cursor-pointer py-2 font-medium">Generation details</summary><p>
                                     Generated{" "}
                                     {patient.latest_soap_note?.generated_at
                                         ? new Date(patient.latest_soap_note.generated_at).toLocaleString()
-                                        : "recently"}{" "}
-                                    · Model: {patient.latest_soap_note?.model_used}
-                                </p>
+                                        : "recently"}
+                                </p></details>
                             </div>
                         )}
 

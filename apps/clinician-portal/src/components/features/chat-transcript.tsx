@@ -15,7 +15,7 @@ interface ChatTranscriptProps {
 
 function formatTime(isoString: string): string {
     const date = new Date(isoString);
-    return date.toLocaleString(undefined, {
+    return date.toLocaleString("en-US", {
         month: "short",
         day: "numeric",
         hour: "numeric",
@@ -48,15 +48,15 @@ export function ChatTranscript({ messages }: ChatTranscriptProps) {
                     >
                         {/* Sender label */}
                         <span className="px-1 text-xs text-gray-400">
-                            {isUser ? "Patient" : "AI Assistant"} · {formatTime(msg.created_at)}
+                            {isUser ? "Patient" : "Nora · AI care assistant"} · {formatTime(msg.created_at)}
                         </span>
 
                         {/* Message bubble — DESIGN_SYSTEM.md styles */}
                         <div
                             className={
                                 isUser
-                                    ? "max-w-[80%] rounded-2xl rounded-tr-sm border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900"
-                                    : "max-w-[80%] rounded-2xl rounded-tl-sm border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800"
+                                    ? "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900"
+                                    : "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800"
                             }
                         >
                             {msg.content}

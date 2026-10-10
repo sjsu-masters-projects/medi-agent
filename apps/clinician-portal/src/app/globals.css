@@ -16,3 +16,12 @@ body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+button, summary {
+  min-height: 44px;
+}
+
+:focus-visible {
+  outline: 2px solid theme("colors.blue.600");
+  outline-offset: 3px;
+}

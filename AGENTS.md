@@ -9,8 +9,9 @@ it here.
 
 1. Inspect the branch and working tree. Preserve unrelated user changes.
 2. Read [`.agent/TASKS.md`](.agent/TASKS.md), then the active plan named at its
-   top. Select an existing task or create a scoped task entry before expanding
-   the product surface.
+   top. Select an existing task, then read its linked specification or its section
+   in `.agent/specs/project-backlog-acceptance.md` before editing. Create a scoped
+   task entry before expanding the product surface.
 3. Read the relevant routing documents below and inspect adjacent code and
    tests before editing.
 4. State the acceptance path, assumptions, and any missing decision. Implement

@@ -46,7 +46,7 @@ The current chat runtime is implemented under `backend/src/app/adk/`: a Care Coo
 uses a registry with explicit model transports, budgets, fallback, deterministic outcomes,
 and safety/tool-policy plugins. The older `app/agents` modules are compatibility paths,
 not the starting point for new agent work. The empty pre-visit, scheduling,
-pharmacovigilance, and A2A shells were removed in REV-004.
+pharmacovigilance, and unused delegation shells were removed in REV-004.
 
 Scheduling, notification delivery, authentication/authorization, database access,
 retry/idempotency, and approval enforcement are deterministic services. Model output
@@ -77,7 +77,7 @@ review handoff; SMART identity never grants local clinical authority. Imported r
 are bound to an assigned synthetic patient and become pending provenance-backed facts.
 Canonical clinical-fact provenance retains citations, confidence/uncertainty, review
 state, lineage queries, and lifecycle audit events. Exact public-sandbox and Inferno
-conformance, FHIR export, CDS Hooks, and action-approval infrastructure remain
+conformance, FHIR export, and action-approval infrastructure remain
 acceptance work rather than completed integrations.
 
 Safety rules are deterministic before probabilistic routing for emergency signals,
@@ -97,18 +97,16 @@ private source URL, or the original file. See
 The current model decision is recorded in
 [`docs/decisions/ai-runtime-2026-09.md`](../docs/decisions/ai-runtime-2026-09.md).
 
-## MCP and A2A status
+## Internal tools and worker delegation
 
-`backend/src/app/mcp` currently contains in-process provider adapters; it is **not**
-an official MCP server or a published `/mcp` endpoint. The backend also persists an
-internal delegated-task lifecycle (`a2a_tasks`) with status, retry, idempotency, and
-clinician timeline support for the symptom-to-medication-safety handoff. It is **not**
-a published A2A Agent Card or externally conformant A2A service.
+In-process provider adapters expose validated tools to MediAgent's runtime. The
+backend persists delegated-task status, retries, duplicate protection and clinician
+timeline support for the symptom-to-medication-safety handoff. These are internal
+application capabilities, not externally published agent services.
 
-The target is one authenticated Care Coordinator → Medication Safety delegation with
-request IDs, authorization, artifacts, cancellation, idempotency, failures, and
-end-to-end tests. Add an official MCP surface and an A2A Agent Card only when that
-conformance work is complete.
+Care Coordinator → Medication Safety work retains request identity, authorization,
+evidence/results, bounded failures and audit. External discovery or protocol servers
+are not required by the product and are not planned delivery work.
 
 ## Deployment and verification
 

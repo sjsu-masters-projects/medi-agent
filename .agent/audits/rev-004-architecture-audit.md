@@ -9,7 +9,7 @@
 | --- | --- |
 | Five registered ADR route handlers raised `NotImplementedError` | Removed the router registration and module; no client or backend caller referenced the route |
 | Four ADR service methods raised `NotImplementedError` | Removed with the unreachable router surface |
-| Empty A2A package modules (`agent_card`, `router`, `task_manager`) | Removed; actual task lifecycle is `services/a2a_task_service.py` |
+| Empty discovery/router/task-manager package shells | Removed; the actual internal delegated-task service remains |
 | Empty agent shells for pharmacovigilance, pre-visit, and scheduling | Removed; they had no imports or callers |
 | Empty ingestion class module | Removed; the active ingestion graph remains |
 | Empty seed, tool, and utility modules | Removed; none had imports or callers |

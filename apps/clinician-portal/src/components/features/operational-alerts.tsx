@@ -54,22 +54,23 @@ export function OperationalAlerts() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+                    <h2 className="text-lg font-semibold text-slate-900">
                         Operational alerts
-                    </h1>
+                    </h2>
                     <p className="mt-1 text-sm text-slate-500">
                         Legacy operational notifications, separate from patient conversations.
                     </p>
                 </div>
                 <button
+                    disabled={loading}
                     className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
                     onClick={() => void loadMessages()}
                     type="button"
                 >
-                    <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
-                    Refresh
+                    <HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                    {loading ? "Refreshing…" : "Refresh"}
                 </button>
             </div>
 
@@ -130,6 +131,8 @@ export function OperationalAlerts() {
                             <Skeleton className="h-24 w-full" key={index} />
                         ))}
                     </div>
+                ) : error && messages.length === 0 ? (
+                    <p className="px-6 py-10 text-sm text-slate-600">Alert history is unavailable. Refresh to check for notifications.</p>
                 ) : messages.length === 0 ? (
                     <div className="flex h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-slate-500">
                         <HiOutlineChatBubbleLeftRight className="h-10 w-10 text-slate-300" />
@@ -161,11 +164,12 @@ export function OperationalAlerts() {
                                                 {msg.subject}
                                             </p>
                                         )}
-                                        <p className="max-w-3xl text-sm text-slate-600">
+                                        <p className="max-w-3xl break-words text-sm text-slate-600">
                                             {msg.body.length > 200
                                                 ? `${msg.body.slice(0, 200)}…`
                                                 : msg.body}
                                         </p>
+                                        {msg.body.length > 200 ? <details className="max-w-3xl text-sm text-slate-600"><summary className="cursor-pointer py-2 font-medium">Read full alert</summary><p className="whitespace-pre-wrap break-words">{msg.body}</p></details> : null}
                                         <p className="text-xs text-slate-400">
                                             {new Date(msg.createdAt).toLocaleString()}
                                         </p>

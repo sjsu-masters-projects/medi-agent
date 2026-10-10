@@ -49,7 +49,6 @@ omit = [
 backend/tests/
 ├── unit/                    # Unit tests (isolated, mocked dependencies)
 │   ├── services/           # Service layer tests
-│   └── test_mcp_servers.py # MCP server tests
 └── integration/            # Integration tests (multiple components)
     ├── routers/           # API endpoint tests
     ├── test_middleware.py # Middleware tests

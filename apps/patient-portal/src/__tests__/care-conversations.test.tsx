@@ -37,6 +37,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("human conversations", () => {
+  it("preserves human text across interface locale changes without inventing a language or exposing IDs", async () => {
+    const view = render(<CareConversations />);
+    await select();
+    expect(screen.getByText(/Messages appear as written/)).toBeInTheDocument();
+    view.rerender(<CareConversations locale="es-MX" />);
+    expect(screen.getByText("Newest reply")).toBeInTheDocument();
+    expect(screen.getByText(/sin traducción automática/)).toBeInTheDocument();
+    expect(screen.queryByText(/thread-one|clinician-one|newest/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Online$/)).not.toBeInTheDocument();
+  });
+
   it("requires one explicit recipient and opens only that clinician's thread", async () => {
     render(<CareConversations />);
     await screen.findByRole("option", { name: /Dr. Two/ });

@@ -83,3 +83,22 @@ The AI Medical Assistant interface is a critical part of the UI.
 ---
 
 > **Rule:** Do NOT use arbitrary hex colors or inline styles in frontend code. Always map back to these Tailwind utilities to maintain the cohesive MediAgent aesthetic.
+
+## Portal content and interaction rules
+
+- Preserve the established patient brand and clinician workspace styling; polish
+  hierarchy rather than introducing unrelated visual themes.
+- Put the instruction, status and primary action first. Show supporting source
+  inventories and audit metadata in labelled disclosures. Within expanded
+  evidence, retain visible source identity and page references.
+- Remove exact repeated wording and repeated timestamps, never distinct clinical
+  instructions. Do not display fabricated metrics, symptoms or notification states.
+- Use one saved patient interface locale across the portal. Clinician controls
+  stay English; approved clinical text and historical messages keep their original
+  wording. Interface translation is not clinical translation or publication.
+- Icon controls need accessible names; essential help must work on tap and keyboard,
+  not hover alone. Use visible loading/refresh feedback and honest empty/error states.
+- Reflow cards/actions on narrow screens, contain tables/navigation scrolling, and
+  keep dialogs keyboard operable with Escape, focus containment and focus return.
+
+Review evidence and remaining limits: `docs/portal-ui-ux-review-2026-10-10.md`.

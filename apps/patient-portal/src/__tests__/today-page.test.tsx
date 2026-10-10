@@ -69,7 +69,7 @@ describe("TodayPage", () => {
         expect(screen.getByText("Racha de 4 días")).toBeInTheDocument();
         expect(screen.getByRole("heading", { name: "Actividades de hoy" })).toBeInTheDocument();
         expect(screen.getByText("No hay actividades programadas")).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /Reportar un síntoma/ })).toHaveAttribute("href", "/symptoms");
+        expect(screen.getByRole("link", { name: /Reportar un síntoma/ })).toHaveAttribute("href", "/chat");
     });
 
     it("uses UTC for an invalid saved timezone and keeps errors and retry localized", () => {

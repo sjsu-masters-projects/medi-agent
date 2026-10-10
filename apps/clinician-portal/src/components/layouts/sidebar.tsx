@@ -95,55 +95,57 @@ export function Sidebar() {
     };
 
     return (
-        <aside className="flex w-64 flex-col bg-slate-950 text-white">
-            <div className="border-b border-slate-800 px-6 py-5">
+        <aside className="flex shrink-0 flex-col bg-slate-900 text-white md:w-64 md:overflow-y-auto">
+            <div className="hidden border-b border-slate-800 px-6 py-5 md:block">
                 <p className="text-xl font-semibold tracking-tight">
                     MediAgent<span className="text-blue-400">Pro</span>
                 </p>
             </div>
 
-            <nav className="flex-1 space-y-2 px-4 py-6">
+            <nav aria-label="Clinician navigation" className="flex gap-2 overflow-x-auto px-3 py-2 md:block md:flex-1 md:space-y-2 md:px-4 md:py-6">
                 {primaryNavigation.map((item) => {
                     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                     const Icon = item.icon;
 
                     return (
                         <Link
-                            className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition ${active ? "bg-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}
+                            aria-current={active ? "page" : undefined}
+                            className={`flex shrink-0 items-center gap-3 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-medium transition ${active ? "bg-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}
                             href={item.href}
                             key={item.href}
                         >
-                            <Icon className="h-5 w-5" />
+                            <Icon aria-hidden="true" className="h-5 w-5" />
                             <span>{item.label}</span>
                         </Link>
                     );
                 })}
 
-                <div className="border-t border-slate-800 pt-4">
-                    <p className="px-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Administration</p>
+                <div className="shrink-0 md:border-t md:border-slate-800 md:pt-4">
+                    <p className="hidden px-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-400 md:block">Administration</p>
                     <Link
-                        className={`mt-3 flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition ${pathname === "/settings" ? "bg-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}
+                        aria-current={pathname.startsWith("/settings") ? "page" : undefined}
+                        className={`flex items-center gap-3 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-medium transition md:mt-3 ${pathname.startsWith("/settings") ? "bg-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}
                         href="/settings"
                     >
-                        <HiOutlineCog6Tooth className="h-5 w-5" />
+                        <HiOutlineCog6Tooth aria-hidden="true" className="h-5 w-5" />
                         <span>Clinic Settings</span>
                     </Link>
                 </div>
             </nav>
 
-            <div className="border-t border-slate-800 px-4 py-4">
-                <div className="flex items-center gap-3 rounded-xl bg-slate-800 px-3 py-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700 text-sm font-semibold">
+            <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-3 py-1 md:block md:px-4 md:py-4">
+                <div role="group" aria-label="Signed-in clinician" className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 md:bg-slate-800 md:px-3 md:py-3">
+                    <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 text-sm font-semibold md:flex">
                         {initials}
                     </div>
-                    <div>
-                        <p className="text-sm font-medium text-white">{displayName || "Clinician"}</p>
+                    <div className="min-w-0">
+                        <p className="break-words text-sm font-medium text-white">{displayName || "Clinician"}</p>
                         <p className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${roleMeta.tone}`}>{roleMeta.label}</p>
-                        <p className="mt-1 truncate text-[11px] text-slate-400">{email}</p>
+                        <p className="mt-1 hidden truncate text-[11px] text-slate-400 md:block">{email}</p>
                     </div>
                 </div>
                 <button
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white"
+                    className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white md:mt-3 md:w-full md:border md:border-slate-700"
                     onClick={handleLogout}
                     type="button"
                 >

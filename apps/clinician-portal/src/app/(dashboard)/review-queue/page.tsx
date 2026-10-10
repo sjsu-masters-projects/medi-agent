@@ -111,23 +111,23 @@ export default function ReviewQueuePage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900">
                         Patient Upload Review Queue
                     </h1>
                     <p className="mt-1 text-sm text-slate-500">
-                        Review patient-uploaded documents without blocking record storage or AI
-                        parsing.
+                        Review patient-uploaded sources before they can support a new care plan. Document approval does not publish instructions; the complete plan requires separate approval.
                     </p>
                 </div>
                 <button
+                    disabled={loading || busyDocumentId !== null}
                     className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
                     onClick={() => void loadQueue()}
                     type="button"
                 >
-                    <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
-                    Refresh
+                    <HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                    {loading ? "Refreshing…" : "Refresh"}
                 </button>
             </div>
 
@@ -138,7 +138,7 @@ export default function ReviewQueuePage() {
                     </div>
                     <div>
                         <p className="text-sm text-slate-500">Pending reviews</p>
-                        <p className="text-2xl font-bold text-slate-900">{pendingCount}</p>
+                        <p className="text-2xl font-bold text-slate-900">{loading || error ? "—" : pendingCount}</p>
                     </div>
                 </Card>
                 <Card className="flex items-center gap-3 px-5 py-4" padding="sm">
@@ -185,6 +185,8 @@ export default function ReviewQueuePage() {
                             <Skeleton className="h-28 w-full" key={index} />
                         ))}
                     </div>
+                ) : error && items.length === 0 ? (
+                    <p className="px-6 py-10 text-sm text-slate-600">The review queue could not be loaded. Refresh to check pending uploads.</p>
                 ) : items.length === 0 ? (
                     <div className="flex h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-slate-500">
                         <HiOutlineCheckCircle className="h-10 w-10 text-emerald-500" />
@@ -193,7 +195,7 @@ export default function ReviewQueuePage() {
                                 Review queue is clear
                             </p>
                             <p className="text-sm">
-                                New patient uploads will appear here automatically.
+                                Refresh to check for new patient uploads.
                             </p>
                         </div>
                     </div>

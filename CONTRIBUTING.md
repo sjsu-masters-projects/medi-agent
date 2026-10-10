@@ -240,8 +240,8 @@ Request → Router → Service → DB / external client / Agent → Response
 | `adk/` | Current agent runtime and plugins |
 | `agents/` | Legacy compatibility paths |
 | `tools/` | Reusable agent tools |
-| `mcp/` | MCP server adapters |
-| `a2a/` | Agent-to-agent protocol pieces |
+| Provider adapters | In-process tools used by the application runtime |
+| Delegated-task services | Internal worker handoff, retry and audit behavior |
 | `clients/` | External APIs |
 | `db/` | Migrations / DB access |
 | `middleware/` | CORS, logging, etc. |

@@ -10,7 +10,8 @@ export function DataTable({ children, columns, headers }: DataTableProps) {
     const gridTemplate = columns ?? `repeat(${headers.length}, minmax(0, 1fr))`;
 
     return (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm" role="region" aria-label="Scrollable data table" tabIndex={0}>
+            <div className="min-w-[640px]">
             <div
                 className="grid gap-4 border-y border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500"
                 style={{ gridTemplateColumns: gridTemplate }}
@@ -20,6 +21,7 @@ export function DataTable({ children, columns, headers }: DataTableProps) {
                 ))}
             </div>
             <div>{children}</div>
+            </div>
         </div>
     );
 }

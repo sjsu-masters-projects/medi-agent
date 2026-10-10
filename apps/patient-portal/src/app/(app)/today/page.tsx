@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getCarePlanCategoryLabel, getTodayCopy, type TodayCopy } from "@/content/today-copy";
 import { resolveVisitsTimezone } from "@/content/visits-copy";
-import { HiOutlineCalendarDays, HiOutlineCheck } from "react-icons/hi2";
+import { HiOutlineArrowPath, HiOutlineCalendarDays, HiOutlineCheck, HiOutlineInformationCircle } from "react-icons/hi2";
 import { CircularProgress, MedicationCard, ObligationCard } from "@/components/features";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
 import { Card, EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui";
@@ -111,7 +111,8 @@ export default function TodayPage() {
 
     if (loading && tasks.length === 0) {
         return (
-            <div className="patient-page space-y-4 px-5 py-10">
+            <div className="patient-page space-y-4 px-5 py-10" aria-busy="true">
+                <p role="status" className="sr-only">{copy.loading}</p>
                 <Skeleton className="h-24 w-full" variant="rect" />
                 <Skeleton className="h-28 w-full" variant="rect" />
                 <Skeleton className="h-28 w-full" variant="rect" />
@@ -148,7 +149,7 @@ export default function TodayPage() {
                     <div className="space-y-1">
                         <p className="text-xl font-black text-white">{copy.progress}</p>
                         <p className="text-base text-white/82">{completedLabel}</p>
-                        <p className="text-sm font-semibold text-white/76">{copy.streak(adherenceStats.currentStreakDays)}</p>
+                        {adherenceStats.currentStreakDays > 0 ? <p className="text-sm font-semibold text-white/76">{copy.streak(adherenceStats.currentStreakDays)}</p> : null}
                     </div>
                     <div className="space-y-2 text-right">
                         <CircularProgress
@@ -159,6 +160,10 @@ export default function TodayPage() {
                         />
                     </div>
                 </div>
+                <details className="relative mt-3 text-sm text-white/90">
+                    <summary className="flex min-h-11 cursor-pointer items-center gap-2"><HiOutlineInformationCircle aria-hidden="true" className="h-5 w-5" />{copy.progressHelp}</summary>
+                    <p className="mt-1 max-w-prose">{copy.progressDetail}</p>
+                </details>
             </div>
 
             <div className="patient-stack space-y-5 px-5 pt-6">
@@ -181,8 +186,9 @@ export default function TodayPage() {
                         title={tasks.length > 0 ? copy.stale : copy.loadError}
                     />
                 ) : null}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                     <h2 className="text-xl font-black text-[#17233a]">{copy.schedule}</h2>
+                    <button aria-label={loading ? copy.refreshing : copy.refresh} aria-busy={loading} disabled={loading || submitting} className="flex min-h-11 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50" onClick={refreshFeed} type="button"><HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span>{loading ? copy.refreshing : copy.refresh}</span></button>
                     <p className="rounded-full bg-white/80 px-3 py-1 text-sm font-bold text-[#64748b]">{copy.count(tasks.length)}</p>
                 </div>
                 {!error && tasks.length === 0 ? (
@@ -278,7 +284,7 @@ export default function TodayPage() {
             </div>
 
             <div className="px-5 pt-2">
-                <Link href="/symptoms">
+                <Link href="/chat">
                     <Card className="flex items-center justify-between border-[#b6d9d2] bg-[#e6f4f1]">
                         <div>
                             <p className="text-base font-black text-[#17233a]">{copy.symptom}</p>

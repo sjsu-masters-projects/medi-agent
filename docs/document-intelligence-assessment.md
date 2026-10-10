@@ -1,7 +1,8 @@
 # Document intelligence decision record
 
-**Status:** The bounded ingestion worker is implemented. Production synthetic-job acceptance
-evidence is still required.
+**Status:** The bounded worker and scheduled synthetic-demo operation are verified.
+Current issue status is in [TASKS.md](../.agent/TASKS.md); full capacity/production
+qualification is outside this demonstrated scope.
 
 ## Decision
 
@@ -39,7 +40,8 @@ authorized clinical update.
 
 The HTTP service accepts and queues work; it does not perform unbounded OCR/model work in a
 request. A Cloud Run Job runs `python -m app.workers.document_ingestion` with one task,
-parallelism/concurrency limited to one, at least 2 GiB memory, and a 300-second task timeout.
+parallelism/concurrency limited to one, at least 2 GiB memory, a maximum five-document
+batch and a 1,800-second task timeout in the current deployment workflow.
 The same runtime identity and relevant configuration as the backend are required. PDFs and
 browser-safe images retain their original source for portal viewing; the worker derives a bounded
 PDF preview for TIFF because browsers cannot safely render TIFF consistently. That preview is not
@@ -50,15 +52,19 @@ in [the document-ingestion worker guide](document-ingestion-worker.md). Queue an
 security guarantees are defined by migrations 034 and 036; invocation telemetry is migration
 035.
 
-## Acceptance evidence still needed
+## Repeatable acceptance path
 
-1. Deploy the Cloud Run Job and scheduler with the documented identity, secrets, and runtime
-   configuration.
+1. Verify the Job/scheduler release and documented identity/runtime configuration;
+   deployment or configuration changes require separate authorization.
 2. Queue one synthetic supported document and observe one successful job execution.
 3. Verify the candidate facts retain the document hash and page/excerpt provenance, while no
    unapproved candidate becomes canonical clinical truth.
 4. Verify a malformed, duplicate, or unverifiable source fails safely and leaves an auditable
    review state.
+
+The scheduled demo operation and five-document consolidation are recorded in the
+[worker guide](document-ingestion-worker.md) and [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md).
+Do not treat older pending-deployment notes as the current board.
 
 Historic tool comparisons, price snapshots, and preliminary benchmark narratives are retained
 in Git history rather than maintained as operating documentation. They are not current product

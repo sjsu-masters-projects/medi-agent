@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { useSharedPatientProfile } from "@/contexts/patient-profile-context";
 
 interface PageHeaderProps {
     title: string;
@@ -12,16 +13,17 @@ interface PageHeaderProps {
 
 export function PageHeader({ backButton = false, rightAction, subtitle, title }: PageHeaderProps) {
     const router = useRouter();
+    const spanish = useSharedPatientProfile()?.profile?.preferredLanguage === "es-MX";
 
     return (
         <div className="relative overflow-hidden rounded-b-[34px] bg-[#147465] px-5 pt-11 pb-7 text-white shadow-[0_22px_60px_rgba(20,116,101,0.24)]">
             <div className="pointer-events-none absolute -top-16 -right-14 h-44 w-44 rounded-full bg-white/12" />
             <div className="pointer-events-none absolute -bottom-20 left-8 h-48 w-48 rounded-full bg-[#d8aa57]/18" />
-            <div className="flex items-start justify-between gap-4">
-                <div className="relative flex items-start gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="relative flex min-w-0 flex-1 items-start gap-3">
                     {backButton ? (
                         <button
-                            aria-label="Go back"
+                            aria-label={spanish ? "Volver" : "Go back"}
                             className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-lg text-white backdrop-blur transition hover:bg-white/25"
                             onClick={() => router.back()}
                             type="button"

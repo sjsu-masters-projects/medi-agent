@@ -108,8 +108,7 @@ export default function MedWatchPage() {
                         ADR Review Queue
                     </h1>
                     <p className="mt-1 text-sm text-gray-500">
-                        Review deterministic Naranjo assistance and the
-                        patient’s source evidence.
+                        Review possible adverse drug reactions against patient evidence. Naranjo scores support your review; they do not make a clinical decision.
                     </p>
                 </div>
                 <button
@@ -136,7 +135,7 @@ export default function MedWatchPage() {
                             Pending ADR reviews
                         </p>
                         <p className="text-2xl font-bold text-gray-900">
-                            {items.length}
+                            {loading || error ? "—" : items.length}
                         </p>
                     </div>
                 </Card>
@@ -147,7 +146,7 @@ export default function MedWatchPage() {
                     <div>
                         <p className="text-sm text-gray-500">Scoring</p>
                         <p className="text-sm font-semibold text-gray-900">
-                            Deterministic Naranjo assistance
+                            Naranjo assessment support
                         </p>
                     </div>
                 </Card>
@@ -158,7 +157,7 @@ export default function MedWatchPage() {
                     <div>
                         <p className="text-sm text-gray-500">MedWatch status</p>
                         <p className="text-sm font-semibold text-gray-900">
-                            Generated only after review
+                            ADR review does not create a report
                         </p>
                     </div>
                 </Card>

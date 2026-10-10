@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "@/components/layouts/sidebar";
@@ -71,6 +71,8 @@ describe("Sidebar", () => {
         expect(screen.getByText("Clinic Admin")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
         expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-blue-600");
+        expect(screen.getByRole("link", { name: /risk radar/i })).toHaveAttribute("aria-current", "page");
+        expect(screen.getByRole("navigation", { name: "Clinician navigation" })).toBeInTheDocument();
     });
 
     it("does not invent an invalid fallback email when the session is unavailable", () => {
@@ -84,5 +86,15 @@ describe("Sidebar", () => {
 
         expect(screen.getByText("Email unavailable")).toBeInTheDocument();
         expect(screen.queryByText("clinician@mediagent.local")).not.toBeInTheDocument();
+    });
+
+    it("keeps the actual clinician name and role in the compact account row", async () => {
+        render(<Provider store={store}><Sidebar /></Provider>);
+        const identity = screen.getByRole("group", { name: "Signed-in clinician" });
+        expect(await within(identity).findByText("Rajeevranjan Chaurasia")).toBeInTheDocument();
+        expect(within(identity).getByText("Clinic Admin")).toBeInTheDocument();
+        expect(identity).not.toHaveClass("hidden");
+        expect(identity).toHaveClass("flex", "min-w-0");
+        expect(within(identity).getByText("dr.smith@cityhealth.org")).toHaveClass("hidden", "md:block");
     });
 });

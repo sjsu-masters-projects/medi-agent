@@ -16,9 +16,9 @@ no longer true.
 `.agent/TASKS.md` is authoritative for status, but individual rows go stale between
 updates. Two examples found on 2026-09-09, both of which had been repeated as fact:
 
-- The MCP/A2A row said "A2A implementation files are empty". The task service and retry
-  worker were 545 lines and the worker started with the application. What is genuinely
-  missing is `/.well-known/agent-card.json` and the delegation flow.
+- An internal delegation row incorrectly said the implementation was empty. The
+  task service and retry worker existed and the worker started with the application.
+  Inspect the actual service and callers before treating a capability as absent.
 - A finding circulated that the committed env templates pointed at a deleted Supabase
   project. The reference had already been removed; the templates carry empty placeholders,
   which is the normal convention.

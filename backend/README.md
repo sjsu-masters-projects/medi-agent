@@ -119,8 +119,6 @@ src/app/
 ├── adk/              # Current agent runtime, registry, and safety plugins
 ├── agents/           # Legacy compatibility paths; no new product work
 ├── tools/            # Standalone tools agents can call
-├── mcp/              # In-process adapters; not a published MCP endpoint
-├── a2a/              # Internal delegated-task lifecycle; not an external A2A service
 ├── clients/          # SDK wrappers (Gemini, Deepgram, etc.)
 ├── db/               # Supabase connection helpers, repositories, migrations, seed data
 │   └── migrations/   # SQL files — run in order (001_, 002_, ...)

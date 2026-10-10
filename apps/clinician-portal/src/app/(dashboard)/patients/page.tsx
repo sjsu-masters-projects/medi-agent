@@ -64,14 +64,15 @@ export default function PatientsPage() {
                     <h2 className="text-lg font-semibold text-gray-900">Patient roster</h2>
                     <p className="text-sm text-gray-500">Sort by risk, adherence, or recent activity.</p>
                 </div>
-                <div className="flex gap-2">
-                    <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" onChange={(event) => setFilter(event.target.value as typeof filter)} value={filter}>
+                <div className="flex flex-wrap gap-2">
+                    <select aria-label="Filter patients by risk" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" onChange={(event) => setFilter(event.target.value as typeof filter)} value={filter}>
                         <option value="all">All risks</option>
                         <option value="high">High</option>
                         <option value="medium">Medium</option>
                         <option value="low">Low</option>
+                        <option value="unknown">Unknown</option>
                     </select>
-                    <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" onChange={(event) => setSortBy(event.target.value as typeof sortBy)} value={sortBy}>
+                    <select aria-label="Sort patients" className="rounded-lg border border-gray-300 px-3 py-2 text-sm" onChange={(event) => setSortBy(event.target.value as typeof sortBy)} value={sortBy}>
                         <option value="risk">Sort by risk</option>
                         <option value="adherence">Sort by adherence</option>
                         <option value="activity">Sort by last activity</option>
@@ -101,14 +102,14 @@ export default function PatientsPage() {
                             {patient.first_name} {patient.last_name}
                         </span>
                         <RiskBadge level={patient.risk_level} />
-                        <span className="text-gray-600">{Math.round(patient.adherence_score * 100)}%</span>
+                        <span className="text-gray-600">{patient.risk_level === "unknown" ? "Not enough data" : `${Math.round(patient.adherence_score * 100)}%`}</span>
                         <span className="text-gray-600">{patient.active_med_count}</span>
                         <span className="text-gray-600">{patient.last_activity}</span>
                         <span className="text-gray-600">{patient.open_adr_count}</span>
                     </button>
                     ))}
                     {visiblePatients.length === 0 && (
-                        <p className="px-4 py-8 text-center text-sm text-gray-500">No assigned patients match these filters.</p>
+                        <p className="px-4 py-8 text-center text-sm text-gray-500">{error ? "The roster is unavailable. Retry to check assigned patients." : patients.length ? "No assigned patients match these filters." : "No patients assigned yet."}</p>
                     )}
                 </DataTable>
             )}

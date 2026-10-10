@@ -178,8 +178,10 @@ const FACT_FIELDS: Record<string, Array<[string, string]>> = {
   ],
 };
 
+const DATE_FIELDS = new Set(["birthDate", "birth_date", "date_of_birth", "onset", "recorded", "authored", "effective", "issued", "performed", "period", "date", "start", "end"]);
+
 function formatFhirDateTime(value: string, timezone: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return value;
 
   const timestamp = new Date(value);
   if (Number.isNaN(timestamp.getTime())) return value;
@@ -199,7 +201,7 @@ function formatFhirDateTime(value: string, timezone: string): string {
   }
 }
 
-function formatValue(value: unknown, timezone: string): string {
+function formatValue(value: unknown, timezone: string, field = ""): string {
   if (value === null || value === undefined || value === "")
     return "Not supplied";
   if (
@@ -207,19 +209,19 @@ function formatValue(value: unknown, timezone: string): string {
     typeof value === "number" ||
     typeof value === "boolean"
   )
-    return typeof value === "string"
+    return typeof value === "string" && DATE_FIELDS.has(field)
       ? formatFhirDateTime(value, timezone)
       : String(value);
   if (Array.isArray(value))
     return value.length
-      ? value.map((item) => formatValue(item, timezone)).join("; ")
+      ? value.map((item) => formatValue(item, timezone, field)).join("; ")
       : "Not supplied";
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
     if (typeof record.text === "string") return record.text;
     if (typeof record.display === "string") return record.display;
     if (typeof record.code === "string") return record.code;
-    if (typeof record.start === "string" || typeof record.end === "string") {
+    if (DATE_FIELDS.has(field) && (typeof record.start === "string" || typeof record.end === "string")) {
       return [record.start, record.end]
         .filter((item): item is string => typeof item === "string")
         .map((item) => formatFhirDateTime(item, timezone))
@@ -262,7 +264,7 @@ function FactDetails({
             {label}
           </dt>
           <dd className="mt-0.5 break-words text-sm text-slate-800">
-            {formatValue(fact.value[key], patientTimezone)}
+            {formatValue(fact.value[key], patientTimezone, key)}
           </dd>
         </div>
       ))}
@@ -659,11 +661,12 @@ export function SmartImportReviewPanel({
           </p>
         </div>
         <button
+          disabled={loading || busyFactId !== null}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           onClick={() => void load()}
           type="button"
         >
-          <HiOutlineArrowPath className="h-4 w-4" /> Refresh
+          <HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
@@ -682,7 +685,7 @@ export function SmartImportReviewPanel({
             >
               <p className="text-sm text-slate-600">{stateLabel(state)}</p>
               <p className="mt-1 text-2xl font-bold text-slate-900">
-                {review?.state_counts[state] ?? 0}
+                {loading || error ? "—" : review?.state_counts[state] ?? 0}
               </p>
             </button>
           ),
@@ -842,11 +845,11 @@ export function SmartImportReviewPanel({
                           </span>
                         )}
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <details className="mt-1 text-xs text-slate-500"><summary className="cursor-pointer py-2 font-medium">Source identifiers</summary><p className="break-words">
                       {fact.source
                         ? `${fact.source.resource_type}${fact.source.external_resource_id ? ` · ${fact.source.external_resource_id}` : ""}${fact.source.version_id ? ` · version ${fact.source.version_id}` : ""}`
                         : "Source metadata unavailable"}
-                    </p>
+                    </p></details>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -1027,7 +1030,7 @@ export function SmartImportReviewPanel({
                           {field.replaceAll("_", " ")}
                         </dt>
                         <dd className="break-words text-slate-800">
-                          {formatValue(value, patientTimezone ?? "UTC")}
+                          {formatValue(value, patientTimezone ?? "UTC", field)}
                         </dd>
                       </div>
                     ),
@@ -1087,6 +1090,7 @@ export function SmartImportReviewPanel({
                                       {formatValue(
                                         value,
                                         patientTimezone ?? "UTC",
+                                        field,
                                       )}
                                     </dd>
                                   </div>
@@ -1111,6 +1115,7 @@ export function SmartImportReviewPanel({
                                           {formatValue(
                                             match.record[field],
                                             patientTimezone ?? "UTC",
+                                            field,
                                           )}
                                         </span>{" "}
                                         <span aria-hidden="true">→</span>{" "}
@@ -1119,6 +1124,7 @@ export function SmartImportReviewPanel({
                                             reconciling.preview
                                               .candidate_fields[field],
                                             patientTimezone ?? "UTC",
+                                            field,
                                           )}
                                         </span>
                                       </dd>
@@ -1258,7 +1264,7 @@ export function SmartImportReviewPanel({
                         <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
                           {field.replaceAll("_", " ")}
                         </dt>
-                        <dd>{formatValue(value, patientTimezone ?? "UTC")}</dd>
+                        <dd>{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
                       </div>
                     ),
                   )}
@@ -1275,7 +1281,7 @@ export function SmartImportReviewPanel({
                         <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
                           {field.replaceAll("_", " ")}
                         </dt>
-                        <dd>{formatValue(value, patientTimezone ?? "UTC")}</dd>
+                        <dd>{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
                       </div>
                     ),
                   )}

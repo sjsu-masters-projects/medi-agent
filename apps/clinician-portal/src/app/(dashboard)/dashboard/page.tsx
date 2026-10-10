@@ -268,10 +268,10 @@ export default function DashboardPage() {
                                   </div>
                                   <div>
                                       <p className="text-sm font-medium text-slate-500">
-                                          {stat.label}
+                                          {stat.label.replace(/\s+Pending$/i, "")}
                                       </p>
                                       <p className={`text-3xl font-bold ${valueColor}`}>
-                                          {stat.value}
+                                          {String(stat.value).replace(/\s+Pending$/i, "")}
                                       </p>
                                   </div>
                               </Card>
@@ -281,10 +281,10 @@ export default function DashboardPage() {
 
             {/* Patient alerts table */}
             <Card className="overflow-hidden px-0 py-0" padding="sm">
-                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-5 sm:px-6">
                     <div className="flex items-center gap-3">
                         <h2 className="text-xl font-bold text-slate-900">
-                            Active Patient Alerts
+                            Assigned patient overview
                         </h2>
                         {loading && (
                             <HiOutlineArrowPath
@@ -301,7 +301,7 @@ export default function DashboardPage() {
                         <div className="relative">
                             <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
-                                className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                className="w-full max-w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 id="dashboard-patient-search"
                                 onChange={(e) => setQuery(e.target.value)}
                                 placeholder="Search patients…"
@@ -311,12 +311,13 @@ export default function DashboardPage() {
 
                         <button
                             aria-label="Refresh dashboard"
-                            className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+                            disabled={loading}
+                            className="min-h-11 min-w-11 rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:opacity-60"
                             id="dashboard-refresh-btn"
                             onClick={reloadDashboard}
                             type="button"
                         >
-                            <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
+                            <HiOutlineArrowPath aria-hidden="true" className={`mx-auto h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         </button>
                     </div>
                 </div>
@@ -361,7 +362,7 @@ export default function DashboardPage() {
                         </select>
                     </label>
                     <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Min Med Count
+                        Minimum medications
                         <input
                             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
                             min={0}
@@ -372,6 +373,12 @@ export default function DashboardPage() {
                     </label>
                 </div>
 
+                <details className="border-b border-slate-200 px-6 py-3 text-sm text-slate-600">
+                    <summary className="min-h-11 cursor-pointer py-2 font-medium">How to read these metrics</summary>
+                    <p className="pb-3">Adherence is the share of recorded responses marked taken or completed in the last 30 days. It does not measure all expected doses. Unknown risk means there is not enough information to classify risk; an absent response does not establish a missed dose. ADR flags need clinician review.</p>
+                </details>
+                <div role="region" aria-label="Scrollable patient overview" tabIndex={0} className="overflow-x-auto">
+                <div className="min-w-[800px]">
                 {/* Table header */}
                 <div className="grid grid-cols-[1.25fr_0.7fr_1fr_1.4fr_1.4fr_0.8fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                     <span>Patient</span>
@@ -394,7 +401,7 @@ export default function DashboardPage() {
                     </div>
                 ) : visiblePatients.length === 0 ? (
                     <div className="flex h-40 items-center justify-center text-sm text-slate-400">
-                        {patients.length === 0 ? "No patients assigned yet" : "No results found"}
+                        {error && patients.length === 0 ? "Patient overview is unavailable. Retry to check assigned patients." : patients.length === 0 ? "No patients assigned yet" : "No results found"}
                     </div>
                 ) : (
                     visiblePatients.map((patient, index) => {
@@ -413,16 +420,13 @@ export default function DashboardPage() {
                                     <p className="text-sm font-bold text-slate-900">
                                         {patient.first_name} {patient.last_name}
                                     </p>
-                                    <p className="text-xs text-slate-400">
-                                        ID: {patient.patient_id.slice(0, 8)}
-                                    </p>
                                 </div>
 
                                 {/* Risk badge */}
                                 <RiskBadge level={patient.risk_level} />
 
                                 {/* Adherence bar */}
-                                <div className="flex items-center gap-2">
+                                {patient.risk_level === "unknown" ? <span className="text-sm text-slate-500">Not enough data</span> : <div className="flex items-center gap-2">
                                     <div className="h-2 w-16 rounded-full bg-slate-200">
                                         <div
                                             className={`h-2 rounded-full ${config.progressBar}`}
@@ -432,7 +436,7 @@ export default function DashboardPage() {
                                     <span className="text-sm font-semibold text-slate-700">
                                         {adherencePct}%
                                     </span>
-                                </div>
+                                </div>}
 
                                 {/* Recent flag */}
                                 <div>
@@ -441,9 +445,7 @@ export default function DashboardPage() {
                                     >
                                         {patient.recent_symptom_severity > 0
                                             ? `Symptom severity ${patient.recent_symptom_severity}/10`
-                                            : patient.risk_level === "low"
-                                              ? "On Track"
-                                              : "Missed Doses"}
+                                            : "No recent symptom report"}
                                     </span>
                                     <p className="mt-1.5 truncate text-xs text-slate-400">
                                         {patient.last_activity}
@@ -457,7 +459,7 @@ export default function DashboardPage() {
                                             ⚠ {patient.open_adr_count} ADR
                                         </span>
                                     ) : (
-                                        <span className="text-xs text-slate-400">No ADRs</span>
+                                        <span className="text-xs text-slate-500">No open ADR flags</span>
                                     )}
                                     <span className="text-xs text-slate-400">
                                         {patient.active_med_count} meds
@@ -481,6 +483,8 @@ export default function DashboardPage() {
                         );
                     })
                 )}
+                </div>
+                </div>
             </Card>
         </div>
     );

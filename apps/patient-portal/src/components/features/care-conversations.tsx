@@ -4,11 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import { careConversations } from "@/services/care-conversations";
+import { getChatControlsCopy } from "@/content/chat-copy";
+import { normalizeLocale } from "@/types";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages } from "../../../../../packages/shared/src/utils/care-conversations";
 
-const button = "rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50";
-const input = "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500";
+const button = "min-h-11 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-50";
+const input = "min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500";
 
 export function CareConversations({ locale = "en-US", audience = "patient", visible = true }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean }) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
@@ -126,17 +128,17 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
 
   const active = threads.find((thread) => thread.id === selected);
   const name = (thread: CareConversation) => audience === "patient" ? thread.clinician_name : thread.patient_name;
-  return <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 text-sm text-gray-700">
+  return <section className="min-w-0 space-y-4 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 sm:p-5" aria-busy={loading}>
     <p className="rounded-lg bg-yellow-100 p-3 text-yellow-800">{copy.notice}</p>
     <div className="flex flex-wrap items-end gap-3">
-      <label className="min-w-0 flex-1 font-medium">{copy.recipient}
+      <label className="min-w-0 basis-full font-medium sm:flex-1 sm:basis-auto">{copy.recipient}
         <select className={input} value={recipient} disabled={loading || opening || sending} onChange={(event) => setRecipient(event.target.value)}>
           <option value="">{copy.choose}</option>
           {recipients.map((person) => <option key={person.id} value={person.id}>{person.name} · {conversationRoleLabel(person.role, locale)} · {person.clinic_name}</option>)}
         </select>
       </label>
       <button className={button} disabled={!recipient || loading || opening || sending} onClick={() => void open()} type="button">{opening ? copy.loading : copy.open}</button>
-      <button className={button} disabled={loading || opening || sending} onClick={() => setAttempt((value) => value + 1)} type="button">{copy.refresh}</button>
+      <button className={button} disabled={loading || opening || sending} onClick={() => setAttempt((value) => value + 1)} type="button">{loading ? copy.loading : copy.refresh}</button>
     </div>
     {error && <p role="alert">{copy[error]}</p>}
     {pollFailed && <p role="alert">{copy.loadError}</p>}
@@ -288,10 +290,11 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
     }
   }
 
-  return <div className="space-y-4 border-t border-gray-200 pt-4">
-    <h3 className="font-semibold text-gray-900">{thread.patient_name} · {thread.clinician_name} · {thread.clinic_name}</h3>
+  return <div className="min-w-0 space-y-4 border-t border-gray-200 pt-4" aria-busy={loading}>
+    <h3 className="break-words font-semibold text-gray-900">{thread.patient_name} · {thread.clinician_name} · {thread.clinic_name}</h3>
+    <p className="text-xs text-gray-500">{getChatControlsCopy(normalizeLocale(locale)).humanOriginal}</p>
     {error && <p role="alert">{copy[error]}</p>}
-    <button className={button} disabled={sending || loading || denied} onClick={() => void load().catch(() => undefined)} type="button">{copy.refresh}</button>
+    <button className={button} disabled={sending || loading || denied} onClick={() => void load().catch(() => undefined)} type="button">{loading ? copy.loading : copy.refresh}</button>
     {loading && <p role="status">{copy.loading}</p>}
     {cursor && !denied && <button className={button} disabled={loading || sending} onClick={() => void load(cursor).catch(() => undefined)} type="button">{copy.older}</button>}
     {!loading && !denied && !messages.length && <p>{copy.noMessages}</p>}
@@ -316,7 +319,7 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
           onChange={(event) => onDraft({ body: event.target.value })} />
       </label>
       {draft.clientMessageId && !sending && draft.failure !== "mismatch" && <p>{copy.locked}</p>}
-      <button className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+      <button className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50"
         disabled={sending || loading || draft.failure === "mismatch" || !draft.body.trim() || draft.body.trim().length > 4000} type="submit">{sending ? copy.sending : draft.clientMessageId ? copy.retry : copy.send}</button>
     </form>}
     {!thread.writable && !denied && <p>{copy.denied}</p>}

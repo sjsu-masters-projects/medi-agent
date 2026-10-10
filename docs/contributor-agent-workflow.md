@@ -25,7 +25,9 @@ diff as an ordinary documentation change. Do not add the deprecated
 
 Before asking an assistant to implement anything, make the task concrete:
 
-1. Name the existing `.agent/TASKS.md` item or create a small, testable task.
+1. Name the existing `.agent/TASKS.md` item or create a small, testable task;
+   read its linked specification or acceptance section in
+   `.agent/specs/project-backlog-acceptance.md` before implementation.
 2. State the user outcome and acceptance checks, not merely an implementation
    idea.
 3. Point to the relevant screen, API, migration, or specification if one is
@@ -53,7 +55,9 @@ routing, and delivery rules. Put detail where it belongs:
 
 | Need | Location |
 | --- | --- |
-| Current priority, owner, and acceptance evidence | `.agent/TASKS.md` |
+| Current priority, owner, status and next acceptance step | `.agent/TASKS.md` |
+| Detailed issue requirements without a dedicated spec | `.agent/specs/project-backlog-acceptance.md` (required by the start-of-task workflow) |
+| Commands, screenshots, rollout checks and dated acceptance evidence | The feature's linked document under `docs/`; not chronological logs in the board |
 | Product thesis and clinical boundaries | `.agent/PROJECT.md` |
 | Architecture and cross-cutting decisions | `.agent/ARCHITECTURE.md` |
 | Code conventions | `.agent/CODING_STANDARDS.md` |
