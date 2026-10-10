@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import MessagesPage from "@/app/(dashboard)/messages/page";
+import { OperationalAlerts as MessagesPage } from "@/components/features/operational-alerts";
 import { fetchAllSentMessages } from "@/services/clinicians";
 
 vi.mock("@/services/clinicians", () => ({
@@ -19,9 +19,9 @@ describe("MessagesPage", () => {
 
         render(<MessagesPage />);
 
-        expect(screen.getByText("Sent messages")).toBeInTheDocument();
+        expect(screen.getByText("Operational alert history")).toBeInTheDocument();
         // Skeletons are rendered during load
-        expect(screen.queryByText("No messages sent yet")).not.toBeInTheDocument();
+        expect(screen.queryByText("No operational alerts yet")).not.toBeInTheDocument();
     });
 
     it("renders the empty state when no messages exist", async () => {
@@ -29,9 +29,9 @@ describe("MessagesPage", () => {
 
         render(<MessagesPage />);
 
-        expect(await screen.findByText("No messages sent yet")).toBeInTheDocument();
+        expect(await screen.findByText("No operational alerts yet")).toBeInTheDocument();
         expect(
-            screen.getByText(/Send a message from a patient/i),
+            screen.getByText(/Operational notification history/i),
         ).toBeInTheDocument();
     });
 
@@ -88,7 +88,7 @@ describe("MessagesPage", () => {
 
         render(<MessagesPage />);
 
-        await screen.findByText("No messages sent yet");
+        await screen.findByText("No operational alerts yet");
         expect(fetchAllSentMessages).toHaveBeenCalledTimes(1);
 
         vi.mocked(fetchAllSentMessages).mockResolvedValue([

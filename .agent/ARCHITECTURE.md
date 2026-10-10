@@ -53,6 +53,21 @@ retry/idempotency, and approval enforcement are deterministic services. Model ou
 may suggest or draft; it must not decide authority, bypass rules, or write an approved
 clinical fact without review.
 
+## Human conversation increment (implementation in progress)
+
+COM-001-B adds deterministic in-app conversations partitioned by patient and
+individual linked clinician, not by AI session. Explicit recipient selection
+prevents broadcast across multiple care teams. Sender identity comes from the
+authenticated actor; clinic labels and permissions come from current assignment.
+Message writes, idempotency and audit commit atomically, and assignment revocation
+blocks further access. Nora transcripts and legacy operational notifications are
+separate stores and UI views. A clinician explicitly sending their own text is the
+approval action; the model does not generate or send human conversation messages.
+
+The contract is `.agent/specs/com-001-two-way-conversations.md`. This increment
+requires reviewed migration/API/portal rollout and deployed acceptance before it
+is represented as available. No real-PHI production readiness is claimed.
+
 ## Evidence, FHIR, and safety
 
 The codebase validates a supported import subset with maintained FHIR R4B models and

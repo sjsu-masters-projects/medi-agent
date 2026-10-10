@@ -118,6 +118,32 @@ from that bulk action. Removed rows and their evidence remain available under ‚Ä
 items.‚Äù Migration 044 adds the atomic overlap publication guard. Existing completed drafts
 need review, not a generation retry; no automatic translation or medication choice is implied.
 
+## Conversations and operational alerts
+
+**Messages** opens an assignment-scoped conversation inbox. Choose one linked
+patient to start or resume a thread, or select an existing conversation to reply.
+Sender and clinic names come from the server. An explicit send is the clinician's
+approval; no AI transcript composer or automatic clinical send is provided.
+The patient AI transcript links to Messages.
+
+**Operational alerts** retains legacy notification history as a separate view.
+It is not a human conversation or evidence of a patient reply.
+
+The conversation API is `/api/v1/care-conversations`. Pages contain at most 50
+messages; older pages use the server cursor. The visible inbox and selected thread
+poll every 15 seconds. Inbox refresh updates recipients and removes revoked choices
+while preserving selection and drafts; unread counts
+come from the server, including after marking read through the last displayed ID. Unconfirmed sends
+retain their text and UUID for manual retry, including thread/view switches;
+pending text is locked until retry resolves. Drafts are in memory and clear on
+reload or account change. Saved sends followed by failed refresh have distinct copy.
+Definitive validation rejection preserves text for editing. Idempotency mismatch
+requires explicit confirmation to prepare a new send key and warns that the previous
+message may already exist. Preparation does not send it.
+
+The matching backend and conversation migration are rollout dependencies.
+Local frontend checks do not establish live assignment, audit or transaction behavior.
+
 ## Notes
 
 Patient detail distinguishes 403 access denial and 404 missing records from transient

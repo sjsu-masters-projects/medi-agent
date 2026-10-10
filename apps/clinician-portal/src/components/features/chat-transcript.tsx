@@ -24,6 +24,7 @@ function formatTime(isoString: string): string {
 }
 
 export function ChatTranscript({ messages }: ChatTranscriptProps) {
+    messages = messages.filter((message) => message.role !== ChatRole.CLINICIAN);
     if (messages.length === 0) {
         return (
             <div className="flex h-40 items-center justify-center text-sm text-gray-400">
@@ -54,10 +55,9 @@ export function ChatTranscript({ messages }: ChatTranscriptProps) {
                         <div
                             className={
                                 isUser
-                                    ? "rounded-2xl rounded-tr-sm border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900"
-                                    : "rounded-2xl rounded-tl-sm border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800"
+                                    ? "max-w-[80%] rounded-2xl rounded-tr-sm border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900"
+                                    : "max-w-[80%] rounded-2xl rounded-tl-sm border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800"
                             }
-                            style={{ maxWidth: "80%" }}
                         >
                             {msg.content}
                         </div>

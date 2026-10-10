@@ -22,7 +22,7 @@ import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
 import { CarePlanPanel } from "@/components/features/care-plan-panel";
 import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
-import { sendPatientMessage } from "@/services/clinicians";
+import Link from "next/link";
 import { usePatientDetail } from "@/hooks/use-patient-detail";
 import type { RootState } from "@/store/store";
 
@@ -87,37 +87,10 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
 
     const { patient, loadingProfile, generatingSoap, error, loadFailure, reload, generateSoap } = usePatientDetail(patientId, enabled);
 
-    const [messageBody, setMessageBody] = useState("");
-    const [messageSubject, setMessageSubject] = useState("");
-    const [sendingMessage, setSendingMessage] = useState(false);
-    const [messageSent, setMessageSent] = useState(false);
-    const [messageError, setMessageError] = useState<string | null>(null);
-
     function handleGenerateSoap() {
         void generateSoap();
     }
 
-    async function handleSendMessage() {
-        const body = messageBody.trim();
-        if (!body) return;
-        setSendingMessage(true);
-        setMessageError(null);
-        setMessageSent(false);
-        try {
-            await sendPatientMessage(patientId, body, messageSubject.trim() || undefined);
-            setMessageBody("");
-            setMessageSubject("");
-            setMessageSent(true);
-        } catch (sendError) {
-            setMessageError(
-                sendError instanceof Error
-                    ? sendError.message
-                    : "Unable to send message.",
-            );
-        } finally {
-            setSendingMessage(false);
-        }
-    }
 
     // Patient detail includes charts and locale-aware dates. Keep the server and
     // initial client render identical; render the interactive data only after mount.
@@ -521,57 +494,9 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         </h2>
                         <ChatTranscript messages={patient.chat_messages} />
 
-                        {/* ── Send message to patient ── */}
-                        <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
-                            <h3 className="mb-3 text-sm font-semibold text-gray-900">
-                                Send a message to this patient
-                            </h3>
-                            {messageError && (
-                                <div
-                                    className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-                                    role="alert"
-                                >
-                                    {messageError}
-                                </div>
-                            )}
-                            {messageSent && (
-                                <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                                    Message sent. It will appear in the patient&apos;s chat.
-                                </div>
-                            )}
-                            <label className="mb-2 block text-sm font-medium text-gray-700">
-                                Subject (optional)
-                                <input
-                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                    maxLength={200}
-                                    onChange={(e) => setMessageSubject(e.target.value)}
-                                    placeholder="Brief subject line"
-                                    type="text"
-                                    value={messageSubject}
-                                />
-                            </label>
-                            <label className="mb-3 block text-sm font-medium text-gray-700">
-                                Message
-                                <textarea
-                                    className="mt-1 min-h-24 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                    maxLength={5000}
-                                    onChange={(e) => {
-                                        setMessageBody(e.target.value);
-                                        setMessageSent(false);
-                                    }}
-                                    placeholder="Type your message to the patient…"
-                                    value={messageBody}
-                                />
-                            </label>
-                            <button
-                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={sendingMessage || !messageBody.trim()}
-                                onClick={() => void handleSendMessage()}
-                                type="button"
-                            >
-                                {sendingMessage ? "Sending…" : "Send message"}
-                            </button>
-                        </div>
+                        <Link href="/messages" className="mt-6 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                            Open Messages to contact this patient
+                        </Link>
                     </div>
                 )}
 

@@ -21,6 +21,19 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**COM-001-B — two-way human conversations (locally verified, review pending).** Implement explicit
+patient/linked-clinician threads, separate from Nora and operational alerts,
+without multi-team broadcasting. Acceptance and API contract:
+`specs/com-001-two-way-conversations.md`. Local implementation only; rollout and
+deployed acceptance remain separately authorized gates. October 10 checks: 72
+focused backend/database tests (33 real PostgreSQL), 289 patient tests and 242
+clinician tests passed; both portals passed lint, typecheck and webpack builds.
+Broader backend regressions: 2,010 passed/58 opt-in database skips, excluding the
+existing native appointment transaction fixture affected by host shared-memory
+exhaustion. The separate conversation PostgreSQL run passed all 33 cases; CI must
+run and enforce them without skips. Reassignment creates a new binding-specific
+thread without transferring prior history. No remote chat migration was applied.
+
 **PAT-005 chat and weekday acceptance follow-up — October 9 (in progress).** Fix
 reproduced educational ADR false escalation in both locales, weekday eligibility
 without reminders, and operational alerts appearing as care-team replies. Separate
