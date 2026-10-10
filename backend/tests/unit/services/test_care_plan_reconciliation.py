@@ -59,7 +59,11 @@ def test_generation_requires_live_document_or_clinician_entry_provenance():
         for index, source in enumerate(sources)
     ]
     db = MagicMock()
-    chains = {"clinical_facts": query(facts), "evidence_citations": query(citations)}
+    chains = {
+        "clinical_facts": query(facts),
+        "evidence_citations": query(citations),
+        "documents": query([{"id": "doc", "uploaded_by_role": "clinician"}]),
+    }
     db.table.side_effect = chains.__getitem__
     assert CarePlanService(db)._plan_facts(UUID(int=1)) == facts[:2]
     chains["clinical_facts"].eq.assert_called_with("patient_id", str(UUID(int=1)))
@@ -112,15 +116,21 @@ def test_same_medication_name_groups_even_incompatible_doses_for_review():
     assert publication_key(activity(instructions="")) is None
 
 
-def test_approval_denies_identical_activity_without_writing_projection():
+def test_approval_denies_identical_activity_without_writing_projection(monkeypatch):
+    monkeypatch.setattr("app.services.care_plan_service.eligible_fact_ids", lambda *args: {"fact"})
     db = MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.in_.return_value.in_.return_value.execute.return_value.data = [
+        {"id": "fact", "fact_type": "obligation", "value": {}}
+    ]
     service = CarePlanService(db)
     service._require_assignment = MagicMock()
     service._draft = MagicMock()
     service._patient_locale = MagicMock(return_value="en-US")
     service._active_medications = MagicMock(return_value=[])
     service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
-    service._items = MagicMock(return_value=[activity(), activity("two")])
+    service._items = MagicMock(
+        return_value=[activity(source_fact_id="fact"), activity("two", source_fact_id="fact")]
+    )
     with pytest.raises(ValidationError, match="overlapping"):
         service.approve(UUID(int=1), UUID(int=2), UUID(int=3), "Reviewed")
     db.rpc.assert_not_called()
@@ -160,6 +170,36 @@ def test_revision_links_carried_medication_to_approved_projection():
     assert medication["decision"] == "update"
     assert medication["target_id"] == str(UUID(int=4))
     assert service._items.return_value[0]["medication"]["decision"] == "create"
+
+
+def test_revision_retains_exact_source_exclusions_without_projection_or_attestation():
+    db = MagicMock()
+    existing = query([])
+    created = query([{"id": str(UUID(int=3))}])
+    db.table.side_effect = (
+        lambda name: existing
+        if name == "care_plan_versions" and not existing.select.called
+        else created
+    )
+    service = CarePlanService(db)
+    service._plans = MagicMock(
+        return_value=[{"id": str(UUID(int=2)), "status": "approved", "version_number": 2}]
+    )
+    original = activity(
+        source_fact_id=str(UUID(int=4)),
+        is_removed=True,
+        reviewed_locale="en-US",
+        projection_type="obligation",
+        projection_id=str(UUID(int=5)),
+    )
+    service._items = MagicMock(return_value=[original])
+    service._open_draft(UUID(int=1), "2026-10-09T00:00:00Z")
+    payload = created.insert.call_args_list[-1].args[0]
+    assert payload["source_fact_id"] == original["source_fact_id"]
+    assert payload["is_removed"] is True
+    assert payload["projection_id"] is None
+    assert "reviewed_locale" not in payload
+    assert original["projection_id"] == str(UUID(int=5))
 
 
 def test_unsupported_route_cannot_be_confirmed_past_publication_boundary():

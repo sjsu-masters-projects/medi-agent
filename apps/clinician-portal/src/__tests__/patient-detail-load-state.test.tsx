@@ -6,11 +6,12 @@ import type { PatientDeepDive } from "@/services/clinicians";
 
 const mocks = vi.hoisted(() => ({
     patientId: "synthetic-a", userId: "synthetic-clinician-a",
+    tab: null as string | null,
     fetch: vi.fn(), soap: vi.fn(), push: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: mocks.patientId }),
-    useSearchParams: () => ({ get: () => null }),
+    useSearchParams: () => ({ get: () => mocks.tab }),
     useRouter: () => ({ push: mocks.push }),
 }));
 vi.mock("react-redux", () => ({
@@ -34,6 +35,7 @@ function deferred() {
 describe("patient detail load states", () => {
     beforeEach(() => {
         mocks.patientId = "synthetic-a";
+        mocks.tab = null;
         mocks.userId = "synthetic-clinician-a";
         mocks.fetch.mockReset();
         mocks.soap.mockReset();
@@ -114,5 +116,16 @@ describe("patient detail load states", () => {
         mocks.fetch.mockResolvedValue(patient());
         view.rerender(<PatientPage />);
         await waitFor(() => expect(mocks.fetch).toHaveBeenCalledOnce());
+    });
+
+    it("opens Documents when the review link changes the query on the same patient", async () => {
+        mocks.fetch.mockResolvedValue(patient());
+        const view = render(<PatientPage />);
+        await screen.findByRole("heading", { name: "Synthetic synthetic-a" });
+        expect(screen.getByRole("tab", { name: "Profile" })).toHaveAttribute("aria-selected", "true");
+        mocks.tab = "documents";
+        view.rerender(<PatientPage />);
+        expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
+        expect(mocks.push).not.toHaveBeenCalled();
     });
 });

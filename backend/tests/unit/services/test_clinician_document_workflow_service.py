@@ -124,6 +124,22 @@ async def test_approve_document_review_updates_pending_patient_upload(
 
     assert result["review_status"] == DocumentReviewStatus.APPROVED.value
     chain.update.assert_called_once()
+    assert (("review_status", "pending"), {}) in [
+        (call.args, call.kwargs) for call in chain.eq.call_args_list
+    ]
+
+
+@pytest.mark.asyncio
+async def test_review_race_does_not_report_success(service, care_team_repo, execute):
+    care_team_repo.find_active_assignment = AsyncMock(return_value=[{"id": str(uuid4())}])
+    execute.side_effect = [
+        _response(
+            data={"id": str(uuid4()), "uploaded_by_role": "patient", "review_status": "pending"}
+        ),
+        _response(data=[]),
+    ]
+    with pytest.raises(ValidationError, match="review changed"):
+        await service.approve_document_review(uuid4(), uuid4(), uuid4())
 
 
 @pytest.mark.asyncio

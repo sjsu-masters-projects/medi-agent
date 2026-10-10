@@ -179,6 +179,19 @@ CARE_PLAN_TEST_POSTGRES=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test
 This starts and stops disposable local clusters, never uses the configured remote
 database or cloud credentials, and remains opt-in rather than a live CI preflight.
 
+If macOS shared-memory limits prevent `initdb` from starting, a cached official
+PostgreSQL 16 Docker image can run the same tests without changing kernel limits:
+
+```bash
+CARE_PLAN_TEST_POSTGRES=1 CARE_PLAN_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src \
+  .venv/bin/pytest tests/integration/test_care_plan_postgres.py --no-cov
+```
+
+Docker mode creates a uniquely named, disposable container per test, with no
+network or published ports. It never pulls an image automatically and removes
+only containers created by this fixture. Synthetic test database contents are
+discarded afterward; no existing container or remote database is modified.
+
 ## DailyMed Medication RAG Ingestion
 
 Run migration `015_drug_knowledge_rag.sql` before ingesting labels. The migration creates
