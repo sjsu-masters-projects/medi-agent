@@ -8,6 +8,12 @@ part of them. Inspect code/tests before assuming a missing implementation.
 
 Dedicated specifications take precedence for PAT-005, SCH-001, COM-001-B and
 INT-002/003. Clinical safety requirements are not relaxed by the demo scope.
+The delivery target is a university expo with fictional patient and clinician
+accounts. No real-patient recruitment, professional-clinician recruitment, VC
+pitch or production certification is an acceptance gate. In-app clinician
+approval means the demonstrator uses the authorized synthetic clinician role;
+it does not establish independent clinical validation. Earlier research/release
+targets in the revival plan are optional extensions where they exceed this scope.
 Do not execute historical migrations, seeds or remote actions merely because a
 requirement mentions them; use the current operator guide and explicit approval.
 
@@ -241,7 +247,7 @@ requirement mentions them; use the current operator guide and explicit approval.
 - Preserve clinical terminology and evidence meaning across languages.
 - Test language switching mid-session.
 - Validate voice transcript, error, consent, and emergency flows in both languages.
-- Complete clinician/pharmacist review of high-risk bilingual content.
+- Peer-review high-risk bilingual demo wording against its sources and deterministic safety tests; disclose that it is not professionally validated. Do not require recruiting a clinician/pharmacist for expo acceptance.
 
 ## CLN-001 — Consolidated review workspace
 
@@ -345,9 +351,16 @@ requirement mentions them; use the current operator guide and explicit approval.
 
 ## EVA-001 — Internal model and safety evaluation
 
+- Define a repeatable rubric and synthetic cases covering the tasks actually shown: grounded extraction, simple explanations, symptom capture, unavailable responses and safety boundaries.
+- Inspect raw model responses as well as structured output; compare English and Spanish, provenance, omitted/invented details and provider failures.
+- Record results and limitations without claiming medical competence or clinical validation. A larger 120-case/40-professionally-adjudicated research study is optional, not required for the expo.
 
 
-## QUA-001 — Release hardening
+## QUA-001 — Optional broader qualification
+
+These broader targets are not expo completion gates. Core authorization,
+source integrity, approval, responsive usability and honest failure behavior
+remain required for the demonstrated flows.
 
 - Test RBAC, RLS, object ownership, clinic isolation, and privilege escalation.
 - Test timeouts, quotas, network loss, duplicate requests, malformed FHIR, and provider outage.
@@ -357,13 +370,13 @@ requirement mentions them; use the current operator guide and explicit approval.
 - Confirm no secret, PHI, hardcoded identity, or production mock state is exposed.
 - Safety, interoperability, protocol, security, and product thresholds pass.
 
-## REL-001 — Release qualification
+## REL-001 — Expo snapshot and rehearsal
 
 - Freeze features on 2026-12-04.
 - Run clean-install and migration rehearsal.
-- Run full unit, integration, browser, voice, bilingual, security, and recovery suites.
-- Resolve all release-blocking defects.
-- Tag the final release candidate and production demonstration release.
+- Run relevant automated checks and rehearse selected demo flows on patient mobile and clinician desktop, including bilingual display, persistence and recovery.
+- Resolve demo-blocking defects and explicitly record unavailable/optional capabilities.
+- Tag the final expo snapshot; do not describe it as a production release or clinical qualification.
 
 ## REL-002 — Demonstration deployment
 
@@ -372,21 +385,22 @@ requirement mentions them; use the current operator guide and explicit approval.
 - Validate demo accounts and reset workflow.
 - Prepare a fallback recording for external-service outages.
 
-## REL-003 — Product delivery package
+## REL-003 — University-expo delivery package
 
 - Prepare the complete clinic care-loop demonstration script.
 - Prepare architecture, interoperability, safety, and operations briefs.
 - Prepare installation, deployment, reset, and troubleshooting guides.
-- Prepare startup product narrative and concise pitch materials.
+- Prepare an academic project explanation: problem, demonstrated workflow, architecture, results and limitations. Startup/VC pitch materials are out of scope.
 - Record limitations honestly: synthetic data, supervised CDS, public sandbox, and no HIPAA-production claim.
-- All eight product journeys pass end to end.
-- Emergency red-flag recall is 100% on the deterministic suite.
-- Unauthorized clinical actions are zero.
-- Approval and audit coverage are 100% for clinical actions.
-- Evidence-to-source validity is at least 95%.
-- Required-field extraction accuracy is at least 90%.
-- Medication-discrepancy precision and recall are each at least 90% on the internal set.
-- No material English/Spanish safety disparity remains.
-- Full CI completes in 20 minutes or less.
-- No critical dependency vulnerability remains.
-- No empty functional module, reachable `NotImplementedError`, production mock success, or hardcoded patient identity remains.
+- Selected demo journeys pass end to end; unsupported journeys are omitted or honestly labeled, never shown as fabricated success.
+- Preserve authorization, clinical approval, attributable history and evidence-source links in every demonstrated clinical flow.
+- Disclose observed model/translation limitations; professional adjudication, exhaustive benchmarks and production qualification are not expo requirements.
+
+## DEMO-001 — Fresh synthetic expo scenario
+
+- After selected features are implemented and verified, prepare one blank fictional patient and one blank fictional clinician with an explicit clinic/assignment.
+- Build a coherent history through supported flows: appointments, clinician-authored synthetic documents, patient upload review, reviewed care-plan versions, reminders/adherence/barriers, confirmed symptom/ADR workflows where supported, and private human replies.
+- Distinguish historical rehearsal data from events performed live. Use valid timestamps and real application audit actions; do not fabricate backdated approvals, signatures or reports through direct database edits.
+- Preserve QA accounts and history. Provisioning/reset is a separately authorized, scoped operation; this specification does not authorize remote changes.
+- Prepare a stable baseline, a bounded live segment, bilingual/mobile rehearsal, expected results, recovery instructions and outage recording in [the demo guide](../../docs/demo-environment.md#university-expo-scenario).
+- The presenter operates both synthetic roles. No real patients, clinicians, medical records, recruitment or investor materials are required.

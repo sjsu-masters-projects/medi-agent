@@ -16,9 +16,16 @@ retain the result in the patient's longitudinal timeline.
 
 ## Focus and boundaries
 
+The current delivery is a university-expo master's-project demonstration, not a
+commercial launch or investor pitch. Use fictional patient and clinician accounts;
+the presenter may operate both roles. Recruiting real patients or healthcare
+professionals is not required. Approval and evidence boundaries remain functional
+requirements, not a claim of independent clinical validation. The target workflow
+below describes the modeled setting, not a requirement to obtain a buyer or pilot.
+
 | Area | Decision |
 | --- | --- |
-| Buyer and setting | Outpatient clinic or small clinic network |
+| Modeled setting | Outpatient clinic or small clinic network |
 | Evaluated cohort | Polypharmacy chronic care: diabetes, hypertension, hyperlipidemia, and related comorbidities |
 | Users | Patients, clinicians, pharmacists/reviewers, and clinic staff |
 | Languages | American English (`en-US`) and Mexican Spanish (`es-MX`) |

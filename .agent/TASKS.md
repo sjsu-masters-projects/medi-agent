@@ -4,7 +4,7 @@
 >
 > **Updated:** October 10, 2026 · **Feature freeze:** December 4, 2026
 >
-> **Target:** A working, polished master's-project prototype using synthetic or rigorously de-identified data.
+> **Target:** A working, polished university-expo master's project using fictional patient and clinician accounts. No real-patient or real-clinician recruitment, VC pitch, or production qualification is required.
 
 This is a Jira-style execution board, not a chronological work log. Detailed
 requirements are mandatory context: read the selected issue in its dedicated
@@ -26,7 +26,7 @@ architecture in [ARCHITECTURE.md](ARCHITECTURE.md), ownership in [TEAM.md](TEAM.
 
 Done applies to the named slice, not every future feature in an epic. Branch tests,
 deployment success and live functional acceptance are different evidence levels.
-P1 = next demo increment; P2 = subsequent product work; P3 = later qualification.
+P1 = next demo increment; P2 = subsequent demo work; P3 = optional extension, not an expo blocker.
 No remote migration, deployment, merge or clinical publication is authorized by
 editing this board.
 
@@ -61,6 +61,19 @@ This is prototype acceptance, not clinical/compliance/production certification.
 | PAT-001-A — Terminal chat-turn recovery | P2 | Ready | Unassigned; Ganesh + patient lane | Persist bounded processing/completed/failed/interrupted outcomes; retry/reconnect without duplicate messages/actions. |
 | PAT-004 — Focused-document chat | P2 | In progress | Rajeev + Ganesh/Tushar | Verify focus identity, route reuse, dismiss/replace, refresh/reconnect and unavailable-source behavior. |
 | DOC-001 — Board and documentation cleanup | P2 | In review | Rajeev | Board/spec routing, consolidated evidence and obsolete auth checklist retirement prepared in #141; review before merging. |
+| DEMO-001 — Expo patient/clinician journey | P1 | Backlog | Rajeev + team | After selected features pass, create a fresh fictional patient and clinician, link them, build an attributable history through supported flows, and rehearse the same accounts. No account creation/reset is authorized by this row. |
+
+### DEMO-001 acceptance
+
+- Start with one blank fictional patient and one blank fictional clinician; record the intended clinic and assignment. No real people or health records are required.
+- Build a coherent synthetic history: appointments, clinician documents, patient-upload review, approved care-plan revisions, Today reminders/completions/barriers, confirmed symptoms/ADR review where implemented, and private two-way messages.
+- Use normal application flows for approvals, responses and audit events. Do not fabricate completed features, clinician signatures, audit history or backdated encounters through ad hoc SQL.
+- Prepare a stable historical baseline plus a small live demonstration segment; show which events happened during rehearsal versus the live expo.
+- Rehearse patient mobile and clinician desktop, English/Spanish UI and reviewed clinical content, persistence and source links. Clearly label any unavailable/optional flow.
+- Keep a demo script, expected screen states, recovery steps and fallback recording in the linked demo guide. Preserve existing QA accounts/history; any remote creation/reset needs separately scoped authorization.
+
+The demonstrator operates both fictional roles. Portal approval boundaries remain;
+this is functional demonstration, not independent clinical validation.
 
 ### UX-001 acceptance
 
@@ -170,24 +183,24 @@ not a claim that every task is personally claimed.
 | INT-002 | P2 | In progress | Rajeev | Identifier quality, approved export/round-trip fixtures; supported import exists. [Spec](specs/int-002-003-interoperability-plan.md). |
 | INT-003-V | P2 | Ready | Rajeev | Standalone sandbox Invalid launch options diagnosis; passed EHR launch not reopened. |
 | SAFE-001 | P2 | In progress | Rajeev; safety/clinical review | Future executor tiers and fixture actions/proxies with no supported route; feature guards/audit exist. |
-| SAFE-002 | P1 | In progress | Ganesh; clinical reviewer needed | Reviewed rule coverage/wording and durable per-turn rule/outcome audit; inspect existing fixes before expanding. [Runtime contract](../docs/decisions/ai-runtime-2026-09.md). |
+| SAFE-002 | P1 | In progress | Ganesh; peer safety review | Synthetic rule/wording tests and durable per-turn rule/outcome audit; no professional recruitment required and no clinical-validation claim. [Runtime contract](../docs/decisions/ai-runtime-2026-09.md). |
 | AI-003 | P2 | In progress | Rajeev + Ganesh | Durable recovery/context/evidence gaps and bounded availability metrics. [Runtime contract](../docs/decisions/ai-runtime-2026-09.md). |
-| EVA-001 | P2 | In progress | Ganesh; adjudication needed | Repeatable rubric, 120 scenarios, paired locales and 40 adjudicated high-risk cases; raw-answer pilots not clinical validation. |
+| EVA-001 | P2 | In progress | Ganesh + team | Repeatable synthetic checks for selected demo tasks, paired locales and raw responses. Professional adjudication/120-case research expansion optional, not an expo gate. |
 | CI-001 | P3 | Backlog | Unassigned | Ten safe selective observations before enforcement; archived evidence records one; retain full-suite safety. |
 | STD-001 | P3 | Backlog | Unassigned | Actual CDS Hooks discovery/cards and auth/failure/conformance tests. |
 | STD-002 | P3 | Backlog | Unassigned | Official MCP endpoint/tools/auth/audit and conformance; custom ABC is not protocol proof. |
 | STD-003 | P3 | Backlog | Unassigned | Official A2A card/lifecycle/conformance; internal delegation not interoperability proof. |
 | QUA-001 | P3 | Backlog | Team | Broader browser/accessibility/security/load qualification if scheduled; not current production-certification exercise. |
-| REL-001 | P3 | Backlog | Rajeev + team | Freeze/rehearsal/final checks and tagged release; no current readiness claim. |
+| REL-001 | P2 | Backlog | Rajeev + team | Selected demo-flow checks, rehearsal, known limitations and tagged expo snapshot; no production qualification. |
 | REL-002 | P2 | In progress | Rajeev | Final reproducible demo/reset rehearsal and outage recording; deployments/accounts already exist. |
-| REL-003 | P2 | Backlog | Team | Unified demo script, architecture/safety briefs, installation/troubleshooting and delivery materials. |
+| REL-003 | P2 | Backlog | Team | University-expo demo script, academic architecture/limitations brief and recovery materials; no startup/VC pitch. |
 
 ## Workflow and documentation maintenance
 
 1. Claim an issue and record owner/branch/PR before coding.
 2. Read its linked specification or acceptance-requirements section, adjacent code/tests and routed operating docs.
 3. Update the row/card when state changes. Put commands/screenshots/checksums and dated observations in the evidence document, not a second tracker.
-4. Require peer review and safety/clinical review where applicable; distinguish tested, merged, deployed and live-verified.
+4. Require peer and safety review where applicable, preserving in-app clinician-role approvals; distinguish tested, merged, deployed and live-verified. Recruiting a healthcare professional is not an expo acceptance gate.
 5. Do not weaken requirements because logs are retired. Historical work remains recoverable in Git; specifications are active workflow inputs.
 
 [Documentation map](../docs/README.md) routes durable specs, runbooks and acceptance

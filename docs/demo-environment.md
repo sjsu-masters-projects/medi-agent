@@ -5,6 +5,43 @@ data and must never be pointed at a production project. The canonical source is
 [synthetic_ca_portal_demo_2026_08.json](../backend/src/app/db/seed/fixtures/synthetic_ca_portal_demo_2026_08.json);
 its source IDs and display labels replace the previous hand-authored demo personas.
 
+## University-expo scenario
+
+The current delivery is a master's-project expo, not a commercial pilot. The
+presenter operates both fictional roles; no real patients, healthcare-professional
+recruitment, real medical records or investor materials are required. See
+[DEMO-001 requirements](../.agent/specs/project-backlog-acceptance.md#demo-001--fresh-synthetic-expo-scenario)
+and [the task board](../.agent/TASKS.md) before provisioning.
+
+Prepare this scenario **after the selected features work**, separately from the
+existing Morgan/Elena QA history:
+
+1. Start with a blank synthetic patient and clinician, a named fictional clinic
+   and a verified assignment. Scope and authorize account creation beforehand;
+   do not reset the shared fixture to obtain blank accounts.
+2. Build a coherent historical baseline through normal supported application
+   flows: appointment offers/responses, synthetic clinician documents, patient
+   upload review, plan approval/revision, Today reminders and completion/barriers.
+3. Add confirmed symptom reporting, clinician ADR review, and private two-way
+   messages only when those implementations have passed their acceptance checks.
+   A Nora conversation alone is not a confirmed report or an ADR diagnosis.
+4. Keep source previews, attribution, plan continuity and audit evidence intact.
+   Let timestamps reflect actual rehearsal actions. Do not forge professional
+   signatures or invent backdated clinical approvals/history with ad hoc SQL.
+5. Reuse the same accounts for the expo: show the prepared history, then perform
+   a small live segment. Document its expected results and avoid accumulating
+   duplicate plans/medications while rehearsing.
+6. Rehearse English/Spanish patient UI, reviewed clinical wording, mobile patient
+   and desktop clinician layouts, refresh/persistence and an unavailable-service
+   response. Keep a fallback recording and concise recovery instructions.
+
+The eventual run sheet must identify the accounts by fictional display name,
+baseline documents/approved plan, appointments, adherence/barriers, supported
+symptom/ADR state, human conversation, live actions and expected screen states.
+Never store passwords in it. Clearly distinguish prepared history, live actions
+and unavailable features. This plan is not evidence that the scenario is already
+provisioned or rehearsed, and it does not authorize remote creation or deletion.
+
 ## Provision
 
 Apply migrations before changing fixture data. The adapter verifies every committed

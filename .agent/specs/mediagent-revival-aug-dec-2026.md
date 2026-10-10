@@ -3,7 +3,15 @@
 **Status:** Approved for execution  
 **Approved:** 2026-08-18  
 **Feature freeze:** 2026-12-04  
-**Primary outcome:** A working, startup-quality product prototype. Research and benchmarking support internal engineering decisions.
+**Primary outcome:** A working, polished university-expo master's-project prototype using fictional patient and clinician accounts.
+
+**Scope reconciliation — October 10, 2026:** The current requester-approved
+delivery is an academic demonstration, not a startup pitch, real-patient pilot
+or production qualification. Real-patient/clinician recruitment and professional
+adjudication are not completion gates. Older broad research/release targets below
+are optional where they exceed selected demo-flow acceptance. Follow TASKS.md,
+the backlog requirements and DEMO-001 for current scope. In-app clinician-role
+approval, source integrity, authorization and honest limitations still apply.
 
 ## Product thesis
 
@@ -262,16 +270,16 @@ Shared domain types will include `ClinicalFact`, `EvidenceCitation`, `SourceProv
 
 - Complete CDS Hooks, MCP, and one A2A delegation.
 - Run provider and architecture comparisons.
-- Conduct clinician/pharmacist review.
+- Conduct peer/safety review of synthetic demo cases; professional clinical validation is outside required expo scope.
 - Complete security, accessibility, performance, and failure-mode testing.
 
 ### Weeks 15–16: Freeze and delivery
 
 - Freeze features by 2026-12-04.
 - Fix release-blocking defects only.
-- Run full release qualification.
+- Rehearse the selected demo flows and relevant recovery/authorization checks.
 - Deploy a reproducible synthetic-data demonstration.
-- Produce demo accounts, script, fallback recording, architecture/safety brief, operating guide, and startup presentation.
+- Produce fictional demo accounts/history, an expo script, fallback recording, academic architecture/limitations brief and operating guide.
 
 ## Team ownership
 
@@ -282,13 +290,13 @@ Shared domain types will include `ClinicalFact`, `EvidenceCitation`, `SourceProv
 | Engineer 3 | Patient portal, bilingual companion, adherence, voice | Scheduling |
 | Engineer 4 | Clinician portal, review queues, PV, messaging, continuity | FHIR workflow UX |
 
-Every sprint must deliver a vertical slice. Every pull request requires one peer reviewer. Safety-sensitive changes require AI/safety-owner review plus clinician or pharmacist validation. One engineer rotates as integration owner each sprint.
+Every sprint must deliver a vertical slice. Every pull request requires one peer reviewer. Safety-sensitive changes require safety-owner review and synthetic approval-boundary tests; recruiting a clinician or pharmacist is not an expo gate. One engineer rotates as integration owner each sprint.
 
 ## Internal evaluation and release gates
 
-Build 120 synthetic scenarios covering medication discrepancies, allergies, adherence, ADRs, urgent and non-urgent symptoms, incomplete records, provider contradictions, low-risk controls, and English/Spanish interactions. At least 40 high-risk cases receive clinician or pharmacist adjudication.
+For expo acceptance, use repeatable synthetic cases for the selected demonstrated workflows and inspect raw responses in both locales. A broader 120-scenario study with 40 professionally adjudicated high-risk cases is an optional research extension, not a delivery dependency or claim of clinical validation.
 
-Release thresholds:
+Historical broader research targets (not expo release gates):
 
 - 100% recall on deterministic emergency red-flag cases
 - Zero unauthorized medication changes, diagnoses, or external clinical actions
