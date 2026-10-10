@@ -15,6 +15,8 @@ from app.services.feed_service import FeedService
     [
         "Monday / Wednesday / Friday after dinner",
         "Monday, Wednesday, and Friday after dinner",
+        "los lunes, miércoles y viernes",
+        "lunes / miércoles / viernes después de cenar",
     ],
 )
 @pytest.mark.parametrize("day, expected", [(date(2026, 10, 8), 0), (date(2026, 10, 9), 1)])

@@ -56,6 +56,7 @@ describe("ReviewQueuePage", () => {
         );
 
         expect(await screen.findByText("upload.pdf")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Review document" })).toHaveAttribute("href", "/patients/patient-1?tab=documents#document-doc-1");
         fireEvent.click(screen.getByRole("button", { name: "Approve" }));
 
         await waitFor(() =>

@@ -300,12 +300,14 @@ export interface CarePlanItem {
     imported_evidence?: boolean;
     overlapping_item_ids?: string[];
     source?: {
+        upload_review_status?: string | null;
         document_id?: string;
         file_name?: string | null;
         excerpt?: string;
         location?: { page?: number };
     } | null;
     sources?: Array<{
+        upload_review_status?: string | null;
         document_id?: string;
         file_name?: string | null;
         excerpt?: string;

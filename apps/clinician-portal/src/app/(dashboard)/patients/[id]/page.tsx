@@ -84,6 +84,12 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
         const requestedTab = searchParams.get("tab");
         return isTabId(requestedTab) ? requestedTab : "profile";
     });
+    const requestedTab = searchParams.get("tab");
+    const [previousRequestedTab, setPreviousRequestedTab] = useState(requestedTab);
+    if (previousRequestedTab !== requestedTab) {
+        setPreviousRequestedTab(requestedTab);
+        setActiveTab(isTabId(requestedTab) ? requestedTab : "profile");
+    }
 
     const { patient, loadingProfile, generatingSoap, error, loadFailure, reload, generateSoap } = usePatientDetail(patientId, enabled);
 

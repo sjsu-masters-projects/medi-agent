@@ -239,9 +239,9 @@ export default function ReviewQueuePage() {
                                     <div className="flex flex-wrap items-center gap-3 lg:justify-end">
                                         <Link
                                             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                                            href={`/patients/${item.patientId}?tab=documents`}
+                                            href={`/patients/${item.patientId}?tab=documents#document-${item.id}`}
                                         >
-                                            Open deep dive
+                                            Review document
                                         </Link>
                                         <button
                                             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"

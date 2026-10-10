@@ -281,7 +281,10 @@ def test_approval_denies_unmatched_medication_before_rpc() -> None:
     db.rpc.assert_not_called()
 
 
-def test_approval_calls_transaction_for_reviewed_matching_medication() -> None:
+def test_approval_calls_transaction_for_reviewed_matching_medication(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.care_plan_service.eligible_fact_ids", lambda *args: {str(PATIENT_ID)}
+    )
     db = MagicMock()
     service = CarePlanService(db)
     service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
@@ -309,6 +312,10 @@ def test_approval_calls_transaction_for_reviewed_matching_medication() -> None:
         ]
     )
     db.rpc.return_value.execute.return_value.data = {"status": "approved"}
+    db.table.return_value.select.return_value.eq.return_value.in_.return_value.in_.return_value.execute.return_value.data = [
+        {"id": str(PATIENT_ID), "fact_type": "medication", "value": {}}
+    ]
+    service._items.return_value[0]["source_fact_id"] = str(PATIENT_ID)
 
     result = service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, "Reviewed source")
 
@@ -326,6 +333,37 @@ def test_approval_calls_transaction_for_reviewed_matching_medication() -> None:
     service._items.return_value[0]["frequency"] = "twice daily"
     with pytest.raises(ValidationError, match="frequency must match"):
         service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, "Reviewed source")
+    db.rpc.assert_not_called()
+
+
+@pytest.mark.parametrize("cause", ["missing", "rejected", "foreign_patient"])
+def test_publication_preflight_denies_ineligible_fact_before_rpc(monkeypatch, cause):
+    monkeypatch.setattr("app.services.care_plan_service.eligible_fact_ids", lambda *args: {"fact"})
+    db = MagicMock()
+    chain = db.table.return_value.select.return_value.eq.return_value.in_.return_value.in_
+    chain.execute.return_value.data = []
+    service = CarePlanService(db)
+    service._require_assignment = MagicMock()
+    service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
+    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
+    service._patient_locale = MagicMock(return_value="en-US")
+    service._active_medications = MagicMock(return_value=[])
+    service._items = MagicMock(
+        return_value=[
+            {
+                "id": "item",
+                "source_fact_id": "fact",
+                "category": "movement",
+                "reviewed_locale": "en-US",
+            }
+        ]
+    )
+    with pytest.raises(ValidationError, match="missing or rejected source facts"):
+        service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, cause)
+    db.table.return_value.select.return_value.eq.assert_called_with("patient_id", str(PATIENT_ID))
+    db.table.return_value.select.return_value.eq.return_value.in_.return_value.in_.assert_called_with(
+        "review_state", ["pending_review", "approved"]
+    )
     db.rpc.assert_not_called()
 
 

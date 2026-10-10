@@ -21,6 +21,48 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**PAT-005 patient-upload evidence gate — October 9 (in progress).** Parsing remains
+non-blocking, but pending/rejected patient uploads must not supply new care-plan
+proposals or permit publication/preview of stale drafts. Add a fail-closed API
+preflight and atomic database gate, queue eligible evidence after document approval,
+and make the review-queue link identify the exact document. Preserve existing
+approved snapshots and patient history. Remote repair is not authorized.
+On October 10, the requester separately authorized and applied migration 048 to
+medi-agent-staging. The checksum and eight installed-guard/unchanged-plan checks
+passed; backend/UI deployment and Spanish publication remain open.
+
+Implementation and rollout contract: `docs/patient-upload-care-plan-review-gate.md`.
+October 9 verification update: service/router regressions **1,034 passed**;
+clinician suite **223 passed**; four changed services pass mypy, and focused
+cadence source/tests pass Ruff. Preserve exact-source exclusions when opening a
+new draft, reject missing/foreign/rejected source facts in preview, preserve the
+document fragment through session renewal, and support bounded Spanish cadence
+phrases. All **65 real PostgreSQL tests passed** against isolated Docker PostgreSQL
+16, including concurrency and evidence-fencing assertions; not deployed.
+
+Live Morgan acceptance: five-document worker run claimed/completed **5/5**,
+failed **0**, followed by a quiet-window run with **1** ready care plan. The same
+V3 draft consolidated the three actionable Spanish facts. SQL verified the
+reconciled V3 remains draft with **4 active / 10 removed**; approved V2 is unchanged.
+Morgan's saved locale is now es-MX. Spanish publication awaits user review and cadence deployment;
+deployed non-scheduled-day absence remains open. Access isolation is already
+requester-confirmed and is not reopened. Two-way human chat is a separate task.
+
+Local verification: backend service/router suite **1,005 passed** (`pytest
+tests/unit/services tests/integration/routers --no-cov -q`).
+The dedicated evidence-gate file subsequently passed **12 tests**, including three
+additional stale-draft approval denials (pending, rejected and unset decisions).
+Clinician portal
+**56 passed** across review, document, care-plan, detail, login and return-path
+tests. Typecheck, focused ESLint and webpack production build passed. Ruff and
+mypy passed for changed backend source; migration validator accepted all 56 SQL
+files. Native initdb encountered macOS shared-memory exhaustion, so the opt-in
+Docker fixture ran the complete **65-test PostgreSQL suite successfully** in
+227.76 seconds. Containers were isolated without network, host ports or volumes
+and cleaned up after each test. Migration 048 has not been applied remotely. The deployed
+deep-dive link preserves the Documents destination but redirects to expired-session
+login; live acceptance needs clinician sign-in and deployment of this branch.
+
 **PAT-005 chat and weekday acceptance follow-up — October 9 (in progress).** Fix
 reproduced educational ADR false escalation in both locales, weekday eligibility
 without reminders, and operational alerts appearing as care-team replies. Separate
