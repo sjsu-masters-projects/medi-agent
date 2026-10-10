@@ -142,6 +142,61 @@ UID, localized generic title/one-time-copy notice, and safely escaped/folded loc
 text. It omits clinical reasons, notes, and attendee/invitation fields. No state
 mutation, external calendar call, or migration is needed for this endpoint.
 
+## Human care-team conversations
+
+Authenticated `/api/v1/care-conversations` routes implement explicitly addressed
+patient/linked-clinician threads, separately from Nora and operational alerts.
+Apply `048_care_team_conversations.sql` only with environment-specific approval
+before deploying the API and portals. No legacy notification is converted into
+a human message. Existing assignment and current clinic authorization are checked
+inside the same transaction as each read, send and audit operation.
+
+Threads are unique to `(care_team_id, patient_id, clinician_id, clinic_id)`.
+Reassigning a pair or clinic permits a fresh thread for the current binding;
+historical threads, messages and audit remain stored but are inaccessible while
+their binding differs from the active assignment. Inbox presentation uses latest
+message time descending (NULL last), then conversation ID, independently of the
+UUID-ordered assignment locks.
+
+Message retries reuse a sender-scoped UUID key; a changed body or thread rejects
+reuse. Pagination uses `(created_at, id)`, and read markers advance only through
+the specified message. Browser database grants are intentionally absent; callers
+use the API. Message bodies must not be logged. See
+`../.agent/specs/com-001-two-way-conversations.md` for the full contract and rollout
+boundary. This is not authorization for real-PHI use or a clinical-readiness claim.
+
+Run the isolated database contract suite with synthetic CI settings and an
+already available official `postgres:16` image:
+
+```sh
+CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src \
+  .venv/bin/pytest tests/integration/test_care_conversation_postgres.py --no-cov -q
+```
+
+The disposable container has no network, published ports or host volumes and
+is removed after the tests. The suite loads actual migrations 001, 002, 006, 007,
+the private-helper bootstrap of 020, and full 022/048. This exercises real enum
+types, profile/assignment RLS, pending-invite columns and service-role grants.
+Auth is a minimal platform stub; unrelated storage/vector/Auth-hook portions of
+020 and the remaining migration chain are not rehearsed. These tests do not prove
+deployment, PostgREST integration or live acceptance.
+
+Before a separately authorized rollout, run this read-only, count-only preflight
+in the chosen environment. It prints no patient, clinician or assignment IDs:
+
+```sql
+SELECT count(*) AS active_assignments,
+       count(*) FILTER (WHERE c.clinic_id IS NULL) AS active_assignments_without_clinic,
+       count(*) FILTER (WHERE t.patient_id IS NULL) AS active_assignments_without_patient
+FROM public.care_teams t
+JOIN public.clinicians c ON c.id = t.clinician_id
+WHERE t.status = 'active';
+```
+
+Review nonzero missing-binding counts before rollout. The conversation API
+fails closed for those assignments; this preflight does not repair, backfill or
+authorize changing them.
+
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`. The repository currently has

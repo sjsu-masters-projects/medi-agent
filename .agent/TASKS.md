@@ -21,6 +21,25 @@ A task is done only when its implementation, authorization, error handling, audi
 
 ## Current release status
 
+**COM-001-B — two-way human conversations (locally verified, review pending).** Implement explicit
+patient/linked-clinician threads, separate from Nora and operational alerts,
+without multi-team broadcasting. Acceptance and API contract:
+`specs/com-001-two-way-conversations.md`. Local implementation only; rollout and
+deployed acceptance remain separately authorized gates. October 10 checks: 72
+focused backend/database tests (33 real PostgreSQL), 289 patient tests and 242
+clinician tests passed; both portals passed lint, typecheck and webpack builds.
+Broader backend regressions: 2,010 passed/58 opt-in database skips, excluding the
+existing native appointment transaction fixture affected by host shared-memory
+exhaustion. The separate conversation PostgreSQL run passed all 33 cases; CI must
+run and enforce them without skips. Reassignment creates a new binding-specific
+thread without transferring prior history. No remote chat migration was applied.
+After integrating merged PR #138, preserved both release-status entries and the
+document deep-link behavior alongside the separate human inbox. Reverification:
+72 focused chat/backend/PostgreSQL tests passed; 246 clinician tests plus
+typecheck/lint/webpack build passed; broader backend 2,049 passed/98 opt-in skips
+with the known native appointment fixture excluded. All 57 migrations parse.
+New-head CI and peer approval remain required; no rollout was performed.
+
 **PAT-005 patient-upload evidence gate — October 9 (in progress).** Parsing remains
 non-blocking, but pending/rejected patient uploads must not supply new care-plan
 proposals or permit publication/preview of stale drafts. Add a fail-closed API

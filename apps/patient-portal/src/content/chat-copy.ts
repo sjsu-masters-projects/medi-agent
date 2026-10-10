@@ -10,6 +10,8 @@ interface PatientChatCopy {
   careTeamLabel: string;
   careTeamIntro: string;
   careTeamEmpty: string;
+  historicalCareTeamLabel: string;
+  historicalCareTeamIntro: string;
   assistantDescription: string;
   typingMessage: string;
   documentContextIntro: string;
@@ -24,8 +26,10 @@ interface PatientChatCopy {
 const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
   default: {
     careTeamLabel: "Care team messages",
-    careTeamIntro: "Messages from your clinic, separate from your AI conversation. To reply, contact your clinic directly.",
+    careTeamIntro: "Choose a linked clinician to exchange messages, separate from your AI conversation.",
     careTeamEmpty: "No care-team messages yet.",
+    historicalCareTeamLabel: "Historical care-team messages",
+    historicalCareTeamIntro: "Read-only prior messages. Sender and recipient routing is not available for these records. They are separate from addressed conversations and cannot be replied to here.",
     assistantDescription: "AI care assistant",
     typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
@@ -45,8 +49,10 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
   },
   "en-US": {
     careTeamLabel: "Care team messages",
-    careTeamIntro: "Messages from your clinic, separate from your AI conversation. To reply, contact your clinic directly.",
+    careTeamIntro: "Choose a linked clinician to exchange messages, separate from your AI conversation.",
     careTeamEmpty: "No care-team messages yet.",
+    historicalCareTeamLabel: "Historical care-team messages",
+    historicalCareTeamIntro: "Read-only prior messages. Sender and recipient routing is not available for these records. They are separate from addressed conversations and cannot be replied to here.",
     assistantDescription: "AI care assistant",
     typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
@@ -66,8 +72,10 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
   },
   "es-MX": {
     careTeamLabel: "Mensajes del equipo clínico",
-    careTeamIntro: "Mensajes de tu clínica, separados de tu conversación con IA. Para responder, comunícate directamente con tu clínica.",
+    careTeamIntro: "Elige a un profesional clínico vinculado para intercambiar mensajes, separados de tu conversación con IA.",
     careTeamEmpty: "Todavía no hay mensajes de tu equipo clínico.",
+    historicalCareTeamLabel: "Mensajes históricos del equipo clínico",
+    historicalCareTeamIntro: "Mensajes anteriores de solo lectura. Estos registros no incluyen información sobre quién envió o recibió el mensaje. Están separados de las conversaciones dirigidas y no se pueden responder aquí.",
     assistantDescription: "Asistente de cuidado con IA",
     typingMessage: `${CARE_ASSISTANT_NAME} está escribiendo...`,
     documentContextIntro: "Consultando en",

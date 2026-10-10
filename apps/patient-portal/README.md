@@ -26,6 +26,32 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Care team conversations
+
+In Chat, choose **Care team messages**, then explicitly select a linked clinician.
+Each clinician has a separate thread labelled with their clinic. Nora remains a
+separate AI conversation; operational alerts are not human replies. The chooser,
+composer, notices and recovery states support en-US and es-MX.
+Genuine older human messages remain in a separately labelled, read-only historical
+archive. They are not migrated into addressed threads, attributed to the selected
+clinician, or given a reply route. Operational alerts remain filtered out.
+
+Conversation requests use the authenticated `/api/v1/care-conversations` contract.
+Messages load in pages of 50 with server cursors. The visible inbox and selected
+thread poll every 15 seconds. Inbox refresh updates recipients and removes revoked
+choices while preserving selection and drafts; unread
+counts come from the server. Read markers reference the last displayed message ID.
+An uncertain send preserves its text and UUID for an explicit retry, including
+thread/view switches. The pending body is locked until that retry resolves.
+Definitive validation rejection preserves text for editing. An idempotency mismatch
+warns that the prior message may exist and requires confirmation to prepare a new
+send key; preparation does not send the message.
+Drafts are held in memory; reloading or signing out clears them.
+These messages are not continuously monitored; the screen carries a 911 notice.
+
+Requires the matching backend and conversation migration before rollout.
+No deployed or browser acceptance is implied by local component tests.
+
 ## Visits scheduling
 
 Visits shows appointment times and response deadlines in the patient's saved

@@ -11,6 +11,7 @@ import {
     HiSpeakerWave,
     HiStop,
 } from "react-icons/hi2";
+import { CareConversations } from "@/components/features/care-conversations";
 import { ChatBubble } from "@/components/features";
 import { Input } from "@/components/ui";
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
@@ -46,6 +47,8 @@ function formatSessionTimeLabel(locale: ChatLocale): string {
 
 export default function ChatPage() {
     const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
+    const [careTeamOpened, setCareTeamOpened] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const {
         assistantDraft,
@@ -75,10 +78,8 @@ export default function ChatPage() {
     const sessionTimeLabel = formatSessionTimeLabel(selectedLanguage);
 
     const chatCopy = getPatientChatCopy(selectedLanguage);
-    const careTeamMessages = messages.filter((message) => message.role === ChatRole.CLINICIAN);
-    const visibleMessages = messages.filter((message) => conversation === "care-team"
-        ? message.role === ChatRole.CLINICIAN
-        : message.role !== ChatRole.CLINICIAN);
+    const visibleMessages = messages.filter((message) => message.role !== ChatRole.CLINICIAN);
+    const historicalMessages = messages.filter((message) => message.role === ChatRole.CLINICIAN);
     const quickPrompts = chatCopy.quickPrompts;
     const showQuickPrompts =
         conversation === "assistant"
@@ -106,7 +107,7 @@ export default function ChatPage() {
                                 <p className="text-xs text-gray-500">
                                     {conversation === "assistant" ? chatCopy.assistantDescription : chatCopy.careTeamIntro}
                                 </p>
-                                <p className="inline-flex items-center gap-2 text-sm font-medium text-[#64748b]">
+                                {conversation === "assistant" ? <p className="inline-flex items-center gap-2 text-sm font-medium text-[#64748b]">
                                     <span
                                         className={`h-2 w-2 rounded-full ${
                                             connectionStatus === "connected"
@@ -117,7 +118,7 @@ export default function ChatPage() {
                                         }`}
                                     />
                                     {getConnectionLabel(connectionStatus)}
-                                </p>
+                                </p> : null}
                             </div>
                         </div>
                         {conversation === "assistant" ? <button
@@ -181,11 +182,26 @@ export default function ChatPage() {
                     <button type="button" aria-pressed={conversation === "care-team"}
                         disabled={voiceStatus === "listening" || voiceStatus === "processing" || voiceStatus === "playing"}
                         className={`rounded-lg border px-4 py-2 text-sm font-medium ${conversation === "care-team" ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 bg-white text-gray-900"}`}
-                        onClick={() => setConversation("care-team")}>
-                        {chatCopy.careTeamLabel} ({careTeamMessages.length})
+                        onClick={() => { setCareTeamOpened(true); setConversation("care-team"); }}>
+                        {chatCopy.careTeamLabel}
                     </button>
                 </div>
-                <div className="mt-4 flex-1 px-1 pb-[260px]">
+                {careTeamOpened && <div hidden={conversation !== "care-team"} className="mt-4 space-y-4 pb-28">
+                    <CareConversations locale={selectedLanguage} visible={conversation === "care-team"} />
+                    {historicalMessages.length > 0 && <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-5">
+                        <button className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
+                            type="button" aria-expanded={showHistory} onClick={() => setShowHistory((current) => !current)}>
+                            {chatCopy.historicalCareTeamLabel} ({historicalMessages.length})
+                        </button>
+                        {showHistory && conversation === "care-team" && <>
+                            <p className="text-sm text-gray-500">{chatCopy.historicalCareTeamIntro}</p>
+                            {historicalMessages.map((message) => <ChatBubble key={message.id} role="clinician"
+                                content={message.content} timestamp={message.createdAt}
+                                clinicianLabel={chatCopy.historicalCareTeamLabel} />)}
+                        </>}
+                    </section>}
+                </div>}
+                {conversation === "assistant" ? <div className="mt-4 flex-1 px-1 pb-[260px]">
                     <div className="mx-auto w-fit rounded-full border border-[#eadfd4] bg-white/82 px-3 py-1 text-[11px] font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
                         {sessionTimeLabel}
                     </div>
@@ -276,12 +292,6 @@ export default function ChatPage() {
                         ) : null}
 
                         <div className="space-y-4">
-                            {conversation === "care-team" ? (
-                                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                                    <p>{chatCopy.careTeamIntro}</p>
-                                    {!loading && careTeamMessages.length === 0 ? <p>{chatCopy.careTeamEmpty}</p> : null}
-                                </div>
-                            ) : null}
                             {loading && messages.length === 0 ? (
                                 <div className="rounded-[20px] border border-[#eadfd4] bg-white/88 px-4 py-3 text-base text-[#64748b] shadow-[0_14px_30px_rgba(42,58,84,0.08)]">
                                     Loading conversation...
@@ -323,7 +333,7 @@ export default function ChatPage() {
                             <div ref={bottomRef} />
                         </div>
                     </div>
-                </div>
+                </div> : null}
 
                 {conversation === "assistant" ? <form
                     className="fixed bottom-[calc(94px+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
