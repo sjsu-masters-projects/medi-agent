@@ -26,7 +26,10 @@ non-blocking, but pending/rejected patient uploads must not supply new care-plan
 proposals or permit publication/preview of stale drafts. Add a fail-closed API
 preflight and atomic database gate, queue eligible evidence after document approval,
 and make the review-queue link identify the exact document. Preserve existing
-approved snapshots and patient history. No remote migration or repair is authorized.
+approved snapshots and patient history. Remote repair is not authorized.
+On October 10, the requester separately authorized and applied migration 048 to
+medi-agent-staging. The checksum and eight installed-guard/unchanged-plan checks
+passed; backend/UI deployment and Spanish publication remain open.
 
 Implementation and rollout contract: `docs/patient-upload-care-plan-review-gate.md`.
 October 9 verification update: service/router regressions **1,034 passed**;

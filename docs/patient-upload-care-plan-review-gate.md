@@ -75,3 +75,16 @@ CARE_PLAN_TEST_POSTGRES=1 CARE_PLAN_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src \
 Docker mode requires an already available official `postgres:16` image. Each
 test creates and removes its own network-isolated container, without host
 ports, volumes or connection to Supabase.
+
+## Authorized staging application — October 10
+
+The requester separately authorized only
+`048_patient_upload_care_plan_review_gate.sql` for medi-agent-staging
+(`yprctrscrtaeqadhjdkj`). It committed at `2026-10-10 16:18:01.436642+00`
+through the advisory-lock and filename/checksum-ledger protocol. Recorded SHA-256:
+`2e07f7ef955b0002a3b158f4dae6cc0fe1f0039ec5795f5559d13abac3e0d375`.
+Eight read-only checks passed: checksum, six evidence fences, publication/queue
+guards, service-role-only public RPCs, invoker-security helpers, pending-evidence
+exclusion, unchanged approved V2 and unchanged draft V3. No plan approval or
+history rewrite occurred. Backend/UI deployment and live Spanish/non-scheduled-day
+acceptance remain open; this is not a production-readiness claim.
