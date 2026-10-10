@@ -63,8 +63,8 @@ store or present private chain-of-thought.
    Medication Safety, and Follow-up. Scheduling, notifications, authentication,
    authorization, and database operations are deterministic services.
 3. Demonstrate FHIR R4 and SMART-on-FHIR with a public sandbox, not merely docs.
-4. Treat MCP and A2A as interoperability commitments, not labels. Claim compatibility
-   only after an official endpoint, conformance coverage, and end-to-end flow exist.
+4. Keep tool access and worker delegation internal to MediAgent, with authorization,
+   validated inputs, bounded failures and audit. External agent-protocol endpoints are not product scope.
 5. Keep provider choices replaceable and task-benchmarked. No free consumer endpoint
    receives real PHI.
 
@@ -86,8 +86,6 @@ they conflict with the August 2026 revival plan**, not deleted.
 | D9 | Monorepo | Retained |
 | D10 | FHIR-aligned model | Strengthened to validated FHIR R4 import/export and provenance |
 | D11 | In-app and email messaging | Retained; clinical content requires approval |
-| D12 | MCP for tool access | Superseded by official MCP server and conformance proof |
-| D13 | A2A Agent Cards and external discovery | Superseded by one authenticated, tested internal delegation first |
 | D15 | Native-audio exploration | Optional experiment with text/transcript fallback |
 | D16 | Medical-model evaluation | Retained as task-specific evaluation, not a dependency |
 

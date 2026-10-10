@@ -326,29 +326,6 @@ requirement mentions them; use the current operator guide and explicit approval.
 - Respect care-team visibility and patient restrictions.
 - The completed clinic care loop works through normal authorized application paths.
 
-## STD-001 — CDS Hooks integration
-
-- Implement service discovery.
-- Implement `patient-view` risk/continuity cards.
-- Implement `medication-prescribe` medication-safety cards.
-- Include source links, evidence, and override-safe suggestions.
-- Add conformance, malformed-context, timeout, and authorization tests.
-
-## STD-002 — Real MCP server
-
-- Replace the custom tool ABC with an official protocol server.
-- Expose approved document, evidence, medication, follow-up, and scheduling tools.
-- Enforce schemas, authorization, audit context, request IDs, and safe errors.
-- Add protocol and security conformance tests.
-
-## STD-003 — Focused A2A delegation
-
-- Publish `/.well-known/agent-card.json`.
-- Implement Care Coordinator to Medication Safety Worker delegation.
-- Support submit, status, artifacts, cancellation, idempotency, and failure.
-- Remove obsolete `/.well-known/agent.json` claims.
-- Add end-to-end delegation and authorization tests.
-
 ## EVA-001 — Internal model and safety evaluation
 
 - Define a repeatable rubric and synthetic cases covering the tasks actually shown: grounded extraction, simple explanations, symptom capture, unavailable responses and safety boundaries.

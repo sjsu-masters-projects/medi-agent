@@ -110,7 +110,6 @@ The system must not diagnose, prescribe, autonomously change medication, or dire
 - Combine multi-provider history while preserving source provenance.
 - Launch from a public SMART-on-FHIR sandbox with patient and encounter context.
 - Import and export required FHIR R4 resources.
-- Return evidence-backed CDS Hooks cards for patient review and medication prescribing.
 - Generate clinician-reviewed handoff summaries and portable patient care summaries.
 
 ## Action authority
@@ -191,19 +190,17 @@ Implement:
 - SMART launch and OAuth callback
 - Patient and encounter launch context
 - FHIR R4 import/export for Patient, Practitioner, Organization, CareTeam, Condition, AllergyIntolerance, MedicationRequest, MedicationStatement, Observation, DocumentReference, Appointment, Communication, CarePlan, Provenance, and AuditEvent
-- CDS Hooks `patient-view` and `medication-prescribe`
 - Public-sandbox conformance tests
 - Safe handling of missing and unsupported resources
 
-### MCP and A2A
+### Internal tools and delegation
 
-- Replace the custom MCP abstraction with an official MCP server.
+- Reuse in-process provider adapters and existing application services.
 - Expose structured document extraction, evidence lookup, medication reconciliation, follow-up, and appointment tools.
 - Add authorization, request IDs, audit context, validation, and safe errors.
-- Publish the A2A Agent Card at `/.well-known/agent-card.json`.
-- Implement one genuine delegation: Care Coordinator to Medication Safety Worker.
+- Preserve internal Care Coordinator to Medication Safety Worker delegation.
 - Support task submission, status, artifacts, cancellation, idempotency, and failure states.
-- Do not claim protocol compatibility until conformance and end-to-end tests pass.
+- Test the supported internal handoff end to end; external agent-protocol services are outside product scope.
 
 ### Public interfaces
 
@@ -211,11 +208,6 @@ Implement:
 - `/api/v1/smart/callback`
 - `/api/v1/fhir/import`
 - `/api/v1/fhir/export/{patient_id}`
-- `/cds-services`
-- `/cds-services/mediagent-patient-view`
-- `/cds-services/mediagent-medication-safety`
-- `/.well-known/agent-card.json`
-- `/mcp`
 - Versioned agent-task, clinician-review, and action-approval endpoints
 
 Shared domain types will include `ClinicalFact`, `EvidenceCitation`, `SourceProvenance`, `MedicationDiscrepancy`, `RiskSignal`, `ClinicalRecommendation`, `ApprovalDecision`, `ActionEnvelope`, `AgentTask`, and `AuditRecord`.
@@ -268,7 +260,7 @@ Shared domain types will include `ClinicalFact`, `EvidenceCitation`, `SourceProv
 
 ### Weeks 13–14: Standards, evaluation, and hardening
 
-- Complete CDS Hooks, MCP, and one A2A delegation.
+- Verify internal tool authorization and worker-delegation outcomes.
 - Run provider and architecture comparisons.
 - Conduct peer/safety review of synthetic demo cases; professional clinical validation is outside required expo scope.
 - Complete security, accessibility, performance, and failure-mode testing.
@@ -324,9 +316,6 @@ The April stash is based on an older snapshot and removes later reminder and cli
 - FDA Clinical Decision Support guidance: https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-decision-support-software
 - ONC HTI-1: https://healthit.gov/regulations/hti-rules/hti-1-final-rule/
 - SMART App Launch: https://hl7.org/fhir/smart-app-launch/
-- CDS Hooks: https://cds-hooks.hl7.org/2.0/
-- MCP 2026-07-28: https://blog.modelcontextprotocol.io/posts/2026-07-28/
-- A2A specification: https://a2a-protocol.org/latest/specification/
 - MedGemma: https://developers.google.com/health-ai-developer-foundations/medgemma
 - NVIDIA NeMo Agent Toolkit: https://developer.nvidia.com/agentiq
 - HHS cloud guidance: https://www.hhs.gov/hipaa/for-professionals/special-topics/health-information-technology/cloud-computing/index.html

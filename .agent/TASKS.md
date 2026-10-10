@@ -187,9 +187,6 @@ not a claim that every task is personally claimed.
 | AI-003 | P2 | In progress | Rajeev + Ganesh | Durable recovery/context/evidence gaps and bounded availability metrics. [Runtime contract](../docs/decisions/ai-runtime-2026-09.md). |
 | EVA-001 | P2 | In progress | Ganesh + team | Repeatable synthetic checks for selected demo tasks, paired locales and raw responses. Professional adjudication/120-case research expansion optional, not an expo gate. |
 | CI-001 | P3 | Backlog | Unassigned | Ten safe selective observations before enforcement; archived evidence records one; retain full-suite safety. |
-| STD-001 | P3 | Backlog | Unassigned | Actual CDS Hooks discovery/cards and auth/failure/conformance tests. |
-| STD-002 | P3 | Backlog | Unassigned | Official MCP endpoint/tools/auth/audit and conformance; custom ABC is not protocol proof. |
-| STD-003 | P3 | Backlog | Unassigned | Official A2A card/lifecycle/conformance; internal delegation not interoperability proof. |
 | QUA-001 | P3 | Backlog | Team | Broader browser/accessibility/security/load qualification if scheduled; not current production-certification exercise. |
 | REL-001 | P2 | Backlog | Rajeev + team | Selected demo-flow checks, rehearsal, known limitations and tagged expo snapshot; no production qualification. |
 | REL-002 | P2 | In progress | Rajeev | Final reproducible demo/reset rehearsal and outage recording; deployments/accounts already exist. |
