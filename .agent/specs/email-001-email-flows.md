@@ -216,7 +216,7 @@ Installed both portal locks with `npm ci --no-audit --no-fund`.
 - Mypy: **17 changed source files passed**. Changed-file Ruff passed; migration
   naming/syntax validator passed for **67 files**. Git diff whitespace checks passed.
 - Offline PostgreSQL full email suite: **14 passed**; invitation/membership subset
-  rerun after final transaction-lock changes. No remote DB or outbound mail used.
+  **3 passed** after final transaction-lock changes. No remote DB or outbound mail used.
 - The pre-commit hook expects a worktree-local `backend/.venv`, which this checkout
   does not have. Equivalent checks used the existing base virtualenv; commit hook
   was skipped with `HUSKY=0`, not CI. Keep this reproducibility limitation explicit.
@@ -224,3 +224,4 @@ Installed both portal locks with `npm ci --no-audit --no-fund`.
 The repository handoff is this section plus the rollout checklist above, reachable
 from TASKS.md, architecture, contributor and Supabase guides. The next contributor
 does not need chat history or access to any credential pasted into earlier chats.
+Pull request: [#152](https://github.com/sjsu-masters-projects/medi-agent/pull/152).
