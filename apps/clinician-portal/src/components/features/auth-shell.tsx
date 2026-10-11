@@ -20,7 +20,7 @@ export function SupervisedFlowStack() {
     const plane = "absolute left-[80px] flex h-[240px] w-[240px] flex-col gap-3.5 rounded-[28px] p-[30px] [transform:rotateX(60deg)_rotateZ(-45deg)]";
 
     return (
-        <div aria-hidden="true" className="relative h-[420px] w-[640px] origin-top-left scale-[.86] 2xl:scale-100">
+        <div aria-hidden="true" className="relative h-[420px] w-[640px] origin-top-left scale-[.68] xl:scale-[.84] 2xl:scale-100">
             {/* 01 Documents */}
             <div className={`${plane} top-[210px] border border-[rgba(148,163,184,.35)] bg-[rgba(148,163,184,.08)]`}>
                 <div className="flex h-full gap-3">{[0, 1, 2].map((index) => <div key={index} className="flex-1 rounded-lg border border-[rgba(148,163,184,.3)] bg-[rgba(148,163,184,.18)]" />)}</div>
@@ -91,7 +91,7 @@ export function AuthShell({ headline, subcopy, footer, children, wide = false }:
                     <h1 className="text-[40px] font-semibold leading-[1.06] tracking-[-0.03em] text-rail-ink xl:text-[44px]">{headline}</h1>
                     <p className="text-[17px] leading-[1.55] text-rail-muted">{subcopy}</p>
                 </div>
-                <div className="relative mt-8 hidden xl:block">
+                <div className="relative mt-8 h-[286px] xl:h-[353px] 2xl:h-[420px]">
                     <SupervisedFlowStack />
                 </div>
                 {footer ? <p className="relative mt-auto pt-8 text-sm text-[#8B9AB3]">{footer}</p> : null}
