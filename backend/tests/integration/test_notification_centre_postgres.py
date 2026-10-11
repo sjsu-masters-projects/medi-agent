@@ -184,6 +184,8 @@ def sql(postgres):
         "052_notification_source_times.sql",
         "053_account_deletion_conversations_and_offers.sql",
         "054_notification_page_proportional_reads.sql",
+        "055_notification_one_response_per_offer.sql",
+        "056_notification_prepare_waits.sql",
     ):
         execute((MIGRATIONS / name).read_text())
     try:
@@ -523,6 +525,18 @@ def test_snapshot_concurrent_arrival_and_idempotent_audit(sql):
     assert sql("SELECT count(*) FROM notification_read_audit WHERE action='read'") == str(
         len(page["read_ids"])
     )
+
+
+def test_parallel_request_sees_what_a_concurrent_prepare_delivered(sql):
+    send(sql, thread(sql))
+    # A refresh sends the summary and the lists together; the summary delivers first.
+    summary = sql.start(f"BEGIN; {operation('summary')} SELECT pg_sleep(1); COMMIT;", "summary")
+    wait_event(sql, "summary")
+    items = call(sql)["items"]
+    counted = next(line for line in finish(summary).splitlines() if line.startswith("{"))
+    unread = [r["event_type"] for r in items if not r["is_read"]]
+    assert "message_received" in unread
+    assert len(unread) == json.loads(counted)["unread_count"]
 
 
 def test_draft_waits_for_items_and_generation_completion(sql):
@@ -1017,13 +1031,15 @@ def test_request_for_another_time_needs_attention_until_acknowledged(sql):
         f"INSERT INTO care_teams(patient_id,clinician_id,role) VALUES('{PATIENT}','{OTHER}','reviewer');"
     )
     answer(sql, offer(sql, slots=3), "request_alternative")
-    # Every slot of the offer changed; the offer is one item to act on.
-    assert (
-        sql("SELECT count(*) FROM notification_events WHERE event_type='appointment_response'")
-        == "3"
-    )
+    # Every slot of the offer changed; the answer is one notification, on the lowest-ID slot.
+    events = "SELECT string_agg(source_id::text,',') FROM notification_events WHERE event_type='appointment_response'"
+    assert sql(events) == sql("SELECT min(id::text) FROM appointments")
+    history = [r for r in clinician(sql)["items"] if r["event_type"] == "appointment_response"]
+    assert len(history) == 1 and not history[0]["is_read"]
+    assert clinician(sql, "summary") == {"unread_count": 1, "action_item_count": 1}
     items = clinician(sql, "action_items")["items"]
     assert len(items) == 1 and items[0]["event_type"] == "appointment_response"
+    assert items[0]["id"] == history[0]["id"]
     assert items[0]["can_acknowledge"] and items[0]["metadata"]["status"] == "alternative_requested"
     assert clinician(sql, "summary")["action_item_count"] == 1
     assert clinician(sql, "action_items", actor=OTHER)["items"] == []

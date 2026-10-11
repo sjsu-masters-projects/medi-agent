@@ -73,15 +73,18 @@ Appointment responses in Needs attention (requester decision, October 11):
 - A decline, a request for another time or a cancellation is an action item for the
   responsible clinician until they acknowledge it, or until a newer appointment for that
   patient and care team exists.
-- A multi-slot offer contributes one item, however many slots it had.
+- A multi-slot offer contributes one item, however many slots it had. From migration 055 the
+  answer is also one notification in History and one unread; responses captured before 055
+  keep one History row per slot (append only).
 
 "Mark all read" marks every item in the signed snapshot that the reader may still see. It
 skips the rest and returns `{"updated_count", "skipped_count"}`; both portals show how
 many were skipped, so a revoked item no longer fails the batch.
 
 Reads are proportional to the page shown, as in fan-out-on-write systems:
-- Prepare touches only the reader's active patients and is skipped if one is already
-  running for that person.
+- Prepare touches only the reader's active patients. A request that finds one already
+  running for that person waits for it, so the summary and lists of one refresh agree
+  (migration 056).
 - Lists walk the reader's receipts from the cursor in bounded windows.
 - Unread and action counts come from indexes.
 - Conversation read markers and legacy read flags keep `read_at` current.
