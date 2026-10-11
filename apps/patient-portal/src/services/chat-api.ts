@@ -208,10 +208,13 @@ export function todayConversationId(now: Date = new Date()): string {
     return `day-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-/** A conversation started with "New chat", or from a document in Records. */
+/**
+ * A conversation started with "New chat", or from a document in Records. The id is
+ * unguessable (a random UUID), although the server also scopes every conversation to
+ * the signed-in patient.
+ */
 export function newConversationId(): string {
-    const random = Math.random().toString(36).slice(2, 8);
-    return `chat-${Date.now().toString(36)}${random}`;
+    return `chat-${crypto.randomUUID()}`;
 }
 
 export interface ChatWebSocketOptions {

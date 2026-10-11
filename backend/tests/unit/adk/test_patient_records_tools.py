@@ -55,7 +55,8 @@ async def test_document_details_need_a_patient_and_a_server_selected_document(
 @pytest.mark.asyncio
 async def test_rejected_facts_are_never_returned(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Facts:
-        def __init__(self, _db: Any) -> None: ...
+        def __init__(self, db: Any) -> None:
+            self.db = db
 
         def list_facts_for_document(self, *_: Any) -> list[dict[str, Any]]:
             return [
