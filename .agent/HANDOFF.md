@@ -44,7 +44,7 @@ Egress is policy-controlled and varies between environments. Verify rather than 
 the previous handoff recorded Supabase over HTTPS as working, and in a later session the
 proxy refused it.
 
-| Operation | Observed 2026-09-09 |
+| Operation | Observed 2026-09-09 (one hosted environment) |
 |---|---|
 | `git clone` / `fetch` / `pull` / `push` | works once the repository is authorized for the session |
 | npm, PyPI, crates, Go proxy | works |
@@ -124,19 +124,18 @@ stash an id somewhere, and they are the ones a scanner catches.
 |---|---|---|
 | A clinic admin can obtain a patient invite code, and a patient redeeming it makes the admin an active care-team member recorded as `provider`. `SYN-NEG-004` expects admins denied on role grounds first. | Changes authorization semantics on a live product | Clinician authorization |
 | Three fixture actions have no endpoint that owns them: `list_patient_documents`, `view_medication_timeline`, `view_document_metadata`. Their negative-access cases are reported as unverified rather than pointed at an unrelated route. | Needs a product decision on which route owns each action | Product + clinician portal |
-| Triage safety rules need clinical sign-off on wording and coverage in both locales. | Not an engineering step | Safety owner + clinical reviewer |
-| Pharmacovigilance (`PV-001`, `PV-002`) has no owner in `TEAM.md`. | The whole R4 milestone is unassigned | Team allocation |
+| Triage safety rules need peer safety review of wording and coverage in both locales under `SAFE-002`; professional sign-off is optional. | Not an engineering step | Safety owner + peer reviewer |
 
 ## Long-lead items that cannot be compressed
 
-`EVA-001` needs clinician or pharmacist adjudication of 40 high-risk cases, and `PAT-003`
-needs clinical review of high-risk bilingual content. The review schedule is still
-unassigned. Neither can start in the final weeks before the 2026-12-04 freeze.
+`EVA-001`'s professional adjudication of 40 high-risk cases is an optional research
+extension, not an expo gate. `PAT-003` still needs review of high-risk bilingual content;
+schedule it well before the 2026-12-04 freeze.
 
 ## Credentials
 
 Never in this repository, and never pasted into a tool that keeps a transcript. Obtain
-them from the team out-of-band. `docs/qa-auth-accounts.md` covers the fixture accounts;
+them from the team out-of-band. [Auth-account QA](../docs/demo-environment.md#auth-account-qa) covers the fixture accounts;
 `DEMO_ACCOUNT_PASSWORD` gates them.
 
 Secret scanning runs in CI and cannot see a chat window.

@@ -54,9 +54,8 @@ Records, Chat, Visits, Profile, Reminders); clinician screens at 1440px and
 1024px. Tests that asserted old class names or exact split text were updated
 to the new presentation only.
 
-## Known follow-up
+## Follow-up (resolved)
 
-Clinical wording is stored once in the source document language, so English
-patients can see Spanish care-plan text (and the clinician review shows the
-same). A separate task will add per-locale approved wording with clinician
-review for each language before Today serves it.
+Resolved by LOC-001 (#145): care-plan wording is drafted and approved in en-US and
+es-MX together; see
+[the LOC-001 spec](../.agent/specs/loc-001-bilingual-approved-wording.md).

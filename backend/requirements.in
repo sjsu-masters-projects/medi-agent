@@ -17,8 +17,13 @@ supabase
 
 # -- AI / LLM --
 google-genai
-google-generativeai
-google-cloud-aiplatform
+# The legacy AI Studio SDK pins protobuf<6, which cannot coexist with a patched
+# google-cloud-aiplatform on Python 3.14. Docker and CI run 3.12, so the 3.14 lock
+# branch omits it and keeps protobuf 6; otherwise the universal lock falls back to
+# vulnerable 3.14-only pins. Security floor for GHSA-wh2j-26j7-9728 (bucket naming).
+google-generativeai ; python_version < "3.14"
+google-cloud-aiplatform>=1.133.0
+protobuf>=6.33.5 ; python_version >= "3.14"
 langgraph
 # Security floors for CVE-2026-104873 and CVE-2026-104874.
 langgraph-sdk>=0.4.4

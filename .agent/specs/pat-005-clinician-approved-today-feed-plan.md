@@ -17,8 +17,9 @@ synthetic documents → grounded facts → automatic AI draft → clinician revi
 ```
 
 The model drafts. It never publishes a patient-facing clinical instruction. An assigned
-clinician approves the complete plan version. The first complete scenario is `en-US`; `es-MX`
-parity is a follow-up task.
+clinician approves the complete plan version. The first complete scenario was `en-US`;
+`es-MX` publication was later accepted (PAT-005-S), and care-plan wording is now drafted
+and approved in both languages together under LOC-001.
 
 ## Product contract
 
@@ -132,7 +133,8 @@ eight-hour intervals are enforced by the backend, independently of UI validation
 Rollout: apply `044_care_plan_overlap_publication_guard.sql` with the existing migration
 runner before deploying. Reload the existing draft, explicitly exclude imported proposals,
 review overlap groups, save, then verify publication/Today and historical adherence. Do not
-retry completed generation to clean up an existing draft. Full PAT-005 live proof remains open.
+retry completed generation to clean up an existing draft. Full PAT-005 live proof is closed —
+see [final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
 
 When new documents register grounded facts, the approved version remains active while a newer
 draft is prepared. The assigned clinician needs both snapshots in one review: the current
@@ -244,9 +246,9 @@ recovery retries GET/HEAD once with 100–249 ms jitter, respects cancellation, 
 retries HTTP errors or writes. An unconfirmed response is not marked saved; refresh
 before manual retry. This is mitigation, not a verified transport root-cause fix.
 New deployed UI/chat/policy checks, full bilingual plan publication and live five-document
-worker timing remain open.
+worker timing are closed — see [final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
 
 ## Explicitly deferred
 
-- Spanish parity, appointment booking, external notifications, production capacity alerts,
+- Appointment booking, external notifications, production capacity alerts,
   generic wellness advice, autonomous medication changes, and production-readiness claims.

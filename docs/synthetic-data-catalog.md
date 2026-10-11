@@ -27,9 +27,8 @@ that exact split when loading the file.
 `backend/tests/fixtures/document_evaluation/` contains only short synthetic source
 text and gold candidate JSON for offline extraction evaluation. It is not seed data and
 must never be uploaded to a shared environment. The scorer accepts recorded output
-only; it never calls a model or uses credentials. OCR vendor selection remains deferred,
-so scanned/image fixtures are expected to stop in `needs_ocr` until a reviewed OCR
-capability is approved.
+only; it never calls a model or uses credentials. Tesseract OCR runs in the worker;
+scanned fixtures produce OCR text, or `needs_ocr` only when no usable text is recovered.
 
 ## PAT-005 controlled-care journey
 

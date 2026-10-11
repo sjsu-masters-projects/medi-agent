@@ -26,7 +26,7 @@ Document scenarios may reuse the existing golden fixtures one directory up throu
 - `locale`: `en-US` or `es-MX`. High-risk cases are authored in both and linked by
   `pair_id` so English and Spanish safety behaviour can be compared directly.
 - `risk`: `low`, `medium`, or `high`. Every `high` scenario needs clinician or
-  pharmacist adjudication before it counts toward a release decision.
+  pharmacist adjudication before it counts toward a research claim.
 - `inputs`: what the provider sees. `expected`: the gold label the scorer checks.
 - `adjudication`: `pending` until a clinician or pharmacist signs off. Record the
   reviewer role and date; do not adjudicate your own scenario.
@@ -42,8 +42,9 @@ Document scenarios may reuse the existing golden fixtures one directory up throu
 | ADR extraction | 6 | 4 | 3 | red-flag cases, a non-ADR case that must not be attributed to a drug |
 | Patient explanation | 4 | 4 | 4 | safety wording and language parity |
 
-Seventy scenarios in total. `EVA-001` requires at least 120 scenarios and at least 40
-adjudicated high-risk cases; the tracker records the remaining authoring and review work.
+Seventy scenarios in total. Growing this to 120 scenarios with 40 professionally
+adjudicated high-risk cases is an optional research expansion, not an expo gate
+(`EVA-001` in the tracker).
 
 ## Running
 

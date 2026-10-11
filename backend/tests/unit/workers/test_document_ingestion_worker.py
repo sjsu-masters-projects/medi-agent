@@ -206,54 +206,81 @@ async def test_worker_counts_each_patient_explanation_outcome() -> None:
 
 
 @pytest.mark.asyncio
-async def test_main_emits_non_phi_execution_lifecycle_logs(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+async def test_main_writes_one_started_and_one_finished_run_line(
+    monkeypatch: pytest.MonkeyPatch, job_logs
 ) -> None:
+    counts = {
+        "claimed": 0,
+        "completed": 0,
+        "needs_review": 0,
+        "failed": 0,
+        "summaries_claimed": 1,
+        "summaries_ready": 1,
+    }
     batch = MagicMock()
-    batch.process_batch = AsyncMock(
-        return_value={
-            "claimed": 0,
-            "completed": 0,
-            "needs_review": 0,
-            "failed": 0,
-            "summaries_claimed": 1,
-            "summaries_ready": 1,
-        }
-    )
+    batch.process_batch = AsyncMock(return_value=dict(counts))
     monkeypatch.setattr(
         document_ingestion, "DocumentIngestionWorker", MagicMock(return_value=batch)
     )
     monkeypatch.setattr(document_ingestion, "get_admin_client", MagicMock())
     monkeypatch.setenv("CLOUD_RUN_EXECUTION", "test-execution")
-    monkeypatch.setenv("CLOUD_RUN_TASK_INDEX", "0")
 
-    with caplog.at_level("INFO"):
-        assert await document_ingestion.main() == 0
+    assert await document_ingestion.main() == 0
 
-    events = [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.getMessage().startswith("{")
-    ]
-    assert events == [
-        {
-            "batch_size": document_ingestion.settings.document_ingestion_batch_size,
-            "event": "document_ingestion_started",
-            "execution": "test-execution",
-            "task_index": "0",
-        },
-        {
-            "claimed": 0,
-            "completed": 0,
-            "event": "document_ingestion_finished",
-            "execution": "test-execution",
-            "failed": 0,
-            "needs_review": 0,
-            "summaries_claimed": 1,
-            "summaries_ready": 1,
-            "task_index": "0",
-        },
-    ]
+    started, finished = job_logs.lines
+    assert started["event"] == "scheduled_job.started"
+    assert started["job"] == finished["job"] == "document_ingestion"
+    assert started["execution"] == finished["execution"] == "test-execution"
+    assert started["parameters"] == {
+        "batch_size": document_ingestion.settings.document_ingestion_batch_size
+    }
+    assert started["run_id"] is None  # runs are tracked per document, not in cron_job_runs
+    assert finished["event"] == "scheduled_job.finished"
+    assert finished["status"] == "success" and finished["severity"] == "INFO"
+    assert finished["summary"] == counts
+
+
+@pytest.mark.asyncio
+async def test_main_exits_non_zero_and_logs_an_error_when_a_document_fails(
+    monkeypatch: pytest.MonkeyPatch, job_logs
+) -> None:
+    batch = MagicMock()
+    batch.process_batch = AsyncMock(
+        return_value={"claimed": 2, "completed": 1, "needs_review": 0, "failed": 1}
+    )
+    monkeypatch.setattr(
+        document_ingestion, "DocumentIngestionWorker", MagicMock(return_value=batch)
+    )
+    monkeypatch.setattr(document_ingestion, "get_admin_client", MagicMock())
+
+    assert await document_ingestion.main() == 1
+
+    finished = job_logs.lines[-1]
+    assert finished["status"] == "failed" and finished["severity"] == "ERROR"
+    assert finished["reason"] == "documents_failed"
+    assert finished["summary"]["failed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_main_exits_non_zero_with_a_sanitized_line_when_the_batch_cannot_run(
+    monkeypatch: pytest.MonkeyPatch, job_logs
+) -> None:
+    batch = MagicMock()
+    batch.process_batch = AsyncMock(
+        side_effect=RuntimeError("claim failed for Synthetic Patient lab_results.pdf")
+    )
+    monkeypatch.setattr(
+        document_ingestion, "DocumentIngestionWorker", MagicMock(return_value=batch)
+    )
+    monkeypatch.setattr(document_ingestion, "get_admin_client", MagicMock())
+
+    assert await document_ingestion.main() == 1
+
+    finished = job_logs.lines[-1]
+    assert finished["status"] == "failed" and finished["severity"] == "ERROR"
+    assert finished["error_type"] == "RuntimeError"
+    assert "Synthetic Patient" not in json.dumps(finished)
+    assert "lab_results" not in json.dumps(finished)
 
 
 def test_worker_does_not_emit_http_request_urls_at_info_level() -> None:

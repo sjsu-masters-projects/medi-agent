@@ -26,8 +26,9 @@ and authenticated patient chat/voice WebSockets; it also has health and version
 endpoints.
 
 Implemented route groups include auth/MFA, clinics, patients, clinicians, documents,
-medications, obligations, adherence, chat, feed, appointments, notifications,
-reminders, staff, and cron. The previous standalone ADR REST group was removed because every
+medications, obligations, adherence, chat, care plans, care conversations, feed,
+appointments, notifications, the notification centre, reminders, staff, SMART, and cron;
+chat and voice also have patient WebSockets. The previous standalone ADR REST group was removed because every
 handler was an unimplemented placeholder. Assigned clinicians can now inspect deterministic
 Naranjo evidence and atomically mark a draft reviewed, dismiss it, or request information. Every
 review action writes an immutable ADR audit event. Confirmed-report intake, evidence-driven
@@ -68,7 +69,7 @@ to a conversation (`session_id`): one per day by default, plus any the patient s
 model's recap is built from stored messages, so a restart loses nothing. Design and
 checks: [NORA-002](specs/nora-002-grounded-answers.md).
 
-## Human conversation increment (implementation in progress)
+## Human conversations (COM-001-B)
 
 COM-001-B adds deterministic in-app conversations partitioned by patient and
 individual linked clinician, not by AI session. Explicit recipient selection
@@ -79,11 +80,11 @@ blocks further access. Nora transcripts and legacy operational notifications are
 separate stores and UI views. A clinician explicitly sending their own text is the
 approval action; the model does not generate or send human conversation messages.
 
-The contract is `.agent/specs/com-001-two-way-conversations.md`. This increment
-requires reviewed migration/API/portal rollout and deployed acceptance before it
-is represented as available. No real-PHI production readiness is claimed.
+The contract is `.agent/specs/com-001-two-way-conversations.md`. Merged in #139 and
+deployed; live acceptance is recorded in TASKS (COM-001-B Done). No real-PHI production
+readiness is claimed.
 
-## Evidence, FHIR, and safety
+## Notifications (NOT-001/NOT-002)
 
 NOT-001 extends deterministic notifications with role-scoped event receipts and
 current clinician work. Source transitions capture events in the source transaction;
@@ -91,9 +92,10 @@ recipient delivery is retryable and duplicate-safe. Notification reads are perso
 presentation state, not approval or clinical resolution. Private-message events stay
 bound to the addressed patient/clinician thread; shared work follows current clinical
 assignment and source state. Signed bulk-read snapshots exclude later arrivals.
-The new portal API and migration require reviewed rollout and deployed verification.
-See `.agent/specs/not-001-notification-centre.md` for the contract.
+Merged in #148 and #149 and deployed; `051_notification_centre.sql` and 052–056 were
+applied October 11. See `.agent/specs/not-001-notification-centre.md` for the contract.
 
+## Evidence, FHIR, and safety
 
 The codebase validates a supported import subset with maintained FHIR R4B models and
 emits R4-compatible payload fields. SMART authorization-code + PKCE handling stores
@@ -135,7 +137,11 @@ are not required by the product and are not planned delivery work.
 
 ## Deployment and verification
 
-The deployment structure is FastAPI on Cloud Run and the portals on Vercel. CI checks
+The deployment structure is FastAPI on Cloud Run and the portals on Vercel. Two Cloud
+Run Jobs share the backend image: `mediagent-document-ingestion` (triggered every 5
+minutes) and `mediagent-health-knowledge-refresh` (weekly). Cloud Scheduler also calls
+the backend's reminder dispatch route. Triggers, auth and run logs are in
+[CLOUD_INFRASTRUCTURE_GUIDE.md §5](CLOUD_INFRASTRUCTURE_GUIDE.md#5-scheduled-jobs-cloud-scheduler-and-run-logs). CI checks
 dependency locks/audit, backend lint/format/type/tests/coverage, migrations, secrets,
 portal lint/type/tests/build, and production placeholder protection. CI configuration
 is the authoritative source for exact jobs.

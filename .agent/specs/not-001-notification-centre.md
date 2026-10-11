@@ -1,10 +1,13 @@
 # NOT-001 — Role-aware in-app notifications and clinician work
 
+> **Status:** Done — deployed recheck October 11 (docs/deployed-recheck-2026-10-11.md); #148 (`e1ad3f4`) and NOT-002 #149 (`8b93b48`) merged and
+> deployed; `051_notification_centre.sql` and 052–056 applied to the synthetic Supabase
+> project on October 11.
+
 ## Authority and delivery
 
 University-expo synthetic workflows only. In-app first; no new email/SMS/push,
-clinical decisions, automatic approval or changes to reminder timing. Preserve
-Nora work on other branches. Read is not review, approval or clinical resolution.
+clinical decisions, automatic approval or changes to reminder timing. Read is not review, approval or clinical resolution.
 Shared tasks follow current assignment; private messages follow their addressed
 conversation only. Clinician controls are English; patient copy follows saved
 en-US/es-MX preference, never translating human messages or clinical instructions.
@@ -127,14 +130,11 @@ deployed acceptance. Record exact checks and remaining boundaries before review.
 
 ### Rollout dependency
 
-Migration `051_notification_centre.sql` must be reviewed and applied before the
-new API/UI deployment. Its full filename is distinct from Nora's
-`051_health_knowledge_and_chat_sessions.sql` (merged in #147 and already applied); the
-ledger keys on full filenames, and the two touch no shared objects. The two were
-verified together in disposable PostgreSQL 16. No remote application is authorized
-by this specification. Until the
-database is available, the UI shows unavailable/retry rather than fabricated
-counts. Existing patient notification endpoints remain compatible.
+Applied: `051_notification_centre.sql`, then 052–056 (October 11); none pending. Its
+full filename is distinct from Nora's `051_health_knowledge_and_chat_sessions.sql`; the
+ledger keys on full filenames, and the two touch no shared objects. When the database is
+unavailable, the UI shows unavailable/retry rather than fabricated counts. Existing
+patient notification endpoints remain compatible.
 
 Pagination and viewing cutoffs are signed, short-lived, actor/role-bound tokens;
 the client cannot manufacture a bulk-read cutoff. Each loaded page retains its

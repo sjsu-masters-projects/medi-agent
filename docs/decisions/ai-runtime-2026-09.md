@@ -64,7 +64,7 @@ documented in `.env.example`; do not commit a real `.env` file.
 
 ## Evidence and limits
 
-### Capacity controls — 2026-10-03 (not deployed)
+### Capacity controls — 2026-10-03 (deployed; merged #127)
 
 Interactive ADK routes allow one 429 retry with 200–400 ms jitter (or a valid
 `Retry-After` plus 0–100 ms jitter). Delays over one second, or without at least
@@ -248,8 +248,8 @@ readiness claim, or medical-model deployment follows from this small single-run 
 
 The routing table above now specifies thinking per task, not one setting for every model.
 The native service and ingestion-job deployment definitions pin the same Gemini model IDs
-and global endpoint; this workflow has **not** been deployed as part of this task. No database
-or external configuration was changed. No dedicated medical-model hosting is required.
+and global endpoint; they were deployed by `deploy-backend.yml` when #130 merged.
+Post-deployment metrics are still pending. No database or external configuration was changed. No dedicated medical-model hosting is required.
 Model support and thinking choices were checked against Google's
 [model-version guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)
 and [thinking guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking).

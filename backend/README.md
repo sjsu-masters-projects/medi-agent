@@ -22,8 +22,12 @@ uv pip compile requirements-dev.in --universal --python-version 3.12 --output-fi
 
 Security floors also cover [multidict's items-view reference leak](https://github.com/aio-libs/multidict/security/advisories/GHSA-54p9-h82j-f925)
 (`>=6.9.1`) and [LangGraph SDK resource authorization](https://github.com/langchain-ai/langgraph/security/advisories/GHSA-fvww-7h3r-vfhp)
-(`>=0.4.4`). Both locks retain these patched versions. Run the CI audit with Python
-3.12; system Python 3.14 cannot resolve all packages in this lock.
+(`>=0.4.4`), and [Vertex AI predictable bucket naming](https://github.com/advisories/GHSA-wh2j-26j7-9728)
+(`google-cloud-aiplatform>=1.133.0`). Both locks retain these patched versions. Run the
+CI audit with Python 3.12; system Python 3.14 cannot resolve all packages in this lock.
+The universal lock omits the legacy `google-generativeai` SDK on Python 3.14: its
+`protobuf<6` pin cannot coexist with a patched Vertex AI SDK there, and Docker and CI
+run 3.12.
 
 ## Run
 
@@ -61,8 +65,7 @@ open backend/htmlcov/index.html
 ```
 
 **Coverage Requirements:**
-- Minimum: 80% (enforced in CI/CD)
-- Current: 89.62%
+- Minimum: 80% (`--cov-fail-under=80` in `pyproject.toml`, enforced in CI)
 - All external APIs must be mocked in tests
 
 See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing documentation.
@@ -153,11 +156,16 @@ src/app/
 ├── services/         # Business logic — no FastAPI imports, testable
 ├── adk/              # Current agent runtime, registry, and safety plugins
 ├── agents/           # Legacy compatibility paths; no new product work
-├── tools/            # Standalone tools agents can call
+├── tools/            # FHIR builder and medication normalizer
 ├── clients/          # SDK wrappers (Gemini, Deepgram, etc.)
 ├── db/               # Supabase connection helpers, repositories, migrations, seed data
 │   └── migrations/   # SQL files — run in order (001_, 002_, ...)
-├── middleware/        # Shared middleware helpers such as endpoint rate limiting
+├── workers/          # Cloud Run Job entry points (document ingestion, reference refresh)
+├── safety/           # Deterministic triage floor and escalation
+├── followup/         # Symptom follow-up and ADR candidate rules
+├── pharmacovigilance/ # Naranjo scoring
+├── mcp/              # In-process provider adapters (Supabase, Deepgram)
+├── middleware/       # Shared middleware helpers such as endpoint rate limiting
 └── utils/            # Shared helpers
 ```
 
@@ -177,24 +185,10 @@ mutation, external calendar call, or migration is needed for this endpoint.
 
 ## Human care-team conversations
 
-### In-app notification centre (NOT-001)
-
-The role-scoped `/api/v1/notification-centre` API presents saved events and
-current clinician work; its read operations never perform clinical approval.
-See [the notification contract](../.agent/specs/not-001-notification-centre.md)
-for recipient rules, endpoints, migration/acceptance boundaries and portal behaviour.
-Short-lived actor-bound read snapshots contain exact receipt IDs, so a concurrent
-arrival is not consumed by a bulk read. Human conversation read markers remain
-authoritative. Events are captured atomically; browser event creation is denied.
-The legacy patient `/notifications` endpoints remain compatible. No new push,
-email or SMS channel is introduced. Remote migration/deployment is separately
-authorized; local test success is not deployed acceptance.
-
-
 Authenticated `/api/v1/care-conversations` routes implement explicitly addressed
 patient/linked-clinician threads, separately from Nora and operational alerts.
-Apply `048_care_team_conversations.sql` only with environment-specific approval
-before deploying the API and portals. No legacy notification is converted into
+Migration `048_care_team_conversations.sql` backs these routes (merged in #139 and
+deployed). No legacy notification is converted into
 a human message. Existing assignment and current clinic authorization are checked
 inside the same transaction as each read, send and audit operation.
 
@@ -244,21 +238,25 @@ Review nonzero missing-binding counts before rollout. The conversation API
 fails closed for those assignments; this preflight does not repair, backfill or
 authorize changing them.
 
+## In-app notification centre (NOT-001)
+
+The role-scoped `/api/v1/notification-centre` API presents saved events and
+current clinician work; its read operations never perform clinical approval.
+See [the notification contract](../.agent/specs/not-001-notification-centre.md)
+for recipient rules, endpoints, migration/acceptance boundaries and portal behaviour.
+Short-lived actor-bound read snapshots contain exact receipt IDs, so a concurrent
+arrival is not consumed by a bulk read. Human conversation read markers remain
+authoritative. Events are captured atomically; browser event creation is denied.
+The legacy patient `/notifications` endpoints remain compatible. No new push,
+email or SMS channel is introduced. Merged in #148/#149 and deployed; migrations
+`051_notification_centre.sql` and 052–056 are applied to the synthetic project.
+
 ## Database Migrations
 
-Migrations are plain SQL files in `src/app/db/migrations/`. The repository currently has
-`001`–`045`, including provenance, SMART/FHIR review, authorization audit, model telemetry,
-document-ingestion worker controls, private TIFF previews, the independent patient-explanation
-retry lifecycle, and the clinician-approved care-plan lifecycle with its one-time historical
-document-fact request backfill and care-plan publication review guards. The migration ledger records full filenames and checksums,
-including the two distinct `011` files; do not maintain a second migration inventory here.
-
-Scheduling Slice 5 requires `042_appointment_expired_status.sql` to commit before
-`043_appointment_booking_guards.sql`. Run the read-only
-`scripts/appointment-booking-preflight.sql` first and review any existing overlap
-pairs. The migration does not repair them automatically. Apply schema before
-activating the new appointment service. It enforces patient booking overlaps and
-expires proposals on authorized reads/responses, with atomic audit events.
+Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`056`. Some
+prefixes are shared by independent files; the migration ledger records full filenames and
+checksums, so do not maintain a second migration inventory here. New-environment order for
+the appointment booking guards (042/043) is in the setup guide.
 
 Full setup guide: **[docs/supabase_setup_guide.md](../docs/supabase_setup_guide.md)**
 
@@ -268,11 +266,9 @@ Validate migration naming, sequence continuity, and PostgreSQL syntax before app
 python scripts/validate_migrations.py
 ```
 
-Before deploying the incomplete-evidence care-plan contract, apply migration
-`043_incomplete_care_plan_drafts.sql` using the repository migration procedure.
-Drafts may retain missing instructions/frequency as review blockers; approval still
-requires complete active items and completed generation. Run the deterministic local
-PostgreSQL check with `initdb`, `pg_ctl`, and `psql` installed:
+Care-plan drafts may retain missing instructions/frequency as review blockers
+(`043_incomplete_care_plan_drafts.sql`); approval still requires complete active items and
+completed generation. Run the deterministic local PostgreSQL check with `initdb`, `pg_ctl`, and `psql` installed:
 
 ```bash
 CARE_PLAN_TEST_POSTGRES=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_care_plan_postgres.py --no-cov
@@ -301,7 +297,9 @@ shared by every patient and cached in `health_knowledge` (migration 051): Medlin
 plain-language summaries in English and Spanish, DailyMed label sections (never dosage),
 and RxNorm for name resolution. A chat lookup fetches on a miss within a short time budget;
 the `mediagent-health-knowledge-refresh` Cloud Run Job re-checks the cache weekly and
-records each run in `cron_job_runs`. Run it locally against your configured project with:
+records each run in `cron_job_runs`. A subject is due six days after its last check; active
+medications and documented conditions with no cached text are added. Run it locally against
+your configured project with:
 
 ```bash
 cd backend
@@ -309,6 +307,16 @@ PYTHONPATH=src .venv/bin/python -m app.workers.health_knowledge_refresh
 ```
 
 Design, checks and failure behaviour: `.agent/specs/nora-002-grounded-answers.md`.
+
+## Scheduled jobs
+
+Document ingestion (every 5 minutes), the reference refresh (Sundays 03:00
+America/Los_Angeles) and reminder dispatch (every 15 minutes, via
+`POST /api/v1/cron/reminders/dispatch` with `X-Cron-Auth`) each write one
+`scheduled_job.started` and one `scheduled_job.finished` JSON line per run
+(`app/core/job_logging.py`). The finished line carries `status`, `duration_ms` and the same
+`summary` as `cron_job_runs`. The nightly ADR scan is retired. Triggers, auth, healthy-run
+signals and Cloud Logging queries: `.agent/CLOUD_INFRASTRUCTURE_GUIDE.md`, section 5.
 
 ## Key Conventions
 

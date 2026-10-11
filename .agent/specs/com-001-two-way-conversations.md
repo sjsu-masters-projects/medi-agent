@@ -1,5 +1,8 @@
 # COM-001-B — Explicitly routed human conversations
 
+> **Status:** Done — #128/#129 (A) and #139 (B) merged and deployed; live bilingual
+> persistence verified (see `.agent/TASKS.md`).
+
 Implement two-way in-app conversations between one patient and one currently
 linked clinician. A patient explicitly chooses a recipient; never broadcast to
 every linked team. Show clinic and actual sender. Nora and operational alerts
@@ -41,8 +44,9 @@ Patient Care team view: explicit recipient chooser, thread list, actual sender
 and clinic, message composer, unread badge, bounded pagination, loading/error/
 retry states and stable client idempotency key for uncertain send retry. English
 and Mexican Spanish copy, with emergency/not-continuously-monitored notice.
-Clinician Messages: conversation inbox and compose/reply; operational alerts
-are a separate view. Remove human composer from AI transcript. Refresh sends
+Clinician Messages: conversation inbox and compose/reply. Notifications live in
+Alerts (NOT-001); one-way messages from before conversations appear in a collapsed
+**Earlier messages** section in Messages (NOT-002). Remove human composer from AI transcript. Refresh sends
 and bounded inbox/thread polling only while the corresponding view is visible; no fake online,
 delivered or read claims. Never render message text as HTML.
 
@@ -74,7 +78,8 @@ typecheck, lint and `npm run build -- --webpack`. Tests cover explicit recipient
 routing, stale polling protection, unread refresh, retained uncertain-send keys,
 editable definitive failures and separately labeled legacy notifications.
 CI now runs the opt-in PostgreSQL conversation suite in its full coverage job and
-rejects skipped/absent/failing database cases. CI and live acceptance remain open.
+rejects skipped/absent/failing database cases. CI and live acceptance were later
+completed with #139.
 
 Broader backend regressions: **2,010 passed, 58 opt-in skips** with
 `pytest tests --ignore=tests/integration/test_appointment_offer_transactions.py
@@ -86,4 +91,4 @@ After integrating PR #138 on October 10: 72 focused chat/API/database tests
 passed again, clinician suite 246 passed with typecheck/lint/webpack build,
 broader backend 2,049 passed/98 opt-in skips with the same native appointment
 fixture exclusion. Migration validation accepted 57 files. Only tracker content
-conflicted; both status histories were retained. New-head CI remains required.
+conflicted; both status histories were retained.

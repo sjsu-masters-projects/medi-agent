@@ -240,6 +240,20 @@ async def test_a_slow_source_returns_within_the_budget(
     assert result.status == "unavailable"
 
 
+def _condition_fetcher(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Answer every condition search with a topic; record (name, locale) per request."""
+    asked: list[tuple[str, str]] = []
+
+    async def fetch(_client: Any, name: str, locale: str) -> SourceText:
+        asked.append((name, locale))
+        return SourceText(
+            title=name, url="https://medlineplus.gov/diabetestype2.html", summary="Topic."
+        )
+
+    monkeypatch.setattr(module.sources, "medlineplus_condition", fetch)
+    return asked
+
+
 @pytest.mark.asyncio
 async def test_the_weekly_refresh_seeds_uncached_patient_medications(
     calls: dict[str, Any],
@@ -250,13 +264,116 @@ async def test_the_weekly_refresh_seeds_uncached_patient_medications(
         {"name": "Lisinopril 10 mg", "is_active": False},
     ]
     counts = await _service(db, clock).refresh_due(limit=10)
-    assert counts == {"subjects_checked": 1, "subjects_unavailable": 0, "subjects_failed": 0}
+    assert counts == {
+        "subjects_total": 0,
+        "subjects_due": 0,
+        "subjects_new_medications": 1,
+        "subjects_new_conditions": 0,
+        "subjects_checked": 1,
+        "subjects_updated": 1,
+        "subjects_unavailable": 0,
+        "subjects_failed": 0,
+        "subjects_deferred": 0,
+        "next_due_at": None,
+        "sources": {"dailymed": {"updated": 1}, "medlineplus": {"updated": 2}},
+    }
     assert [row["name_key"] for row in db.tables["medication_name_resolutions"]] == ["metformin"]
-    # Nothing is due a week later minus a day; everything is due after it.
+    # Nothing is due within six days; everything is due after it.
     clock.now += timedelta(days=6)
-    assert (await _service(db, clock).refresh_due(limit=10))["subjects_checked"] == 0
+    idle = await _service(db, clock).refresh_due(limit=10)
+    assert idle["subjects_checked"] == 0
     clock.now += timedelta(days=2)
-    assert (await _service(db, clock).refresh_due(limit=10))["subjects_checked"] == 1
+    again = await _service(db, clock).refresh_due(limit=10)
+    assert again["subjects_checked"] == 1 and again["subjects_due"] == 1
+    assert again["subjects_updated"] == 0  # same text: re-checked, not rewritten
+    assert again["sources"] == {"dailymed": {"unchanged": 1}, "medlineplus": {"unchanged": 2}}
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_checks_nothing_says_how_many_are_cached_and_when_the_next_is_due(
+    calls: dict[str, Any],
+) -> None:
+    db, clock = _Db(), _Clock()
+    db.tables["medications"] = [{"name": "Metformin 500 mg", "is_active": True}]
+    await _service(db, clock).refresh_due(limit=10)
+    clock.now += timedelta(hours=2)
+    counts = await _service(db, clock).refresh_due(limit=10)
+    assert counts["subjects_checked"] == 0
+    assert counts["subjects_total"] == 1 and counts["subjects_due"] == 0
+    assert counts["next_due_at"] == (NOW + module.REFRESH_DUE_AFTER).isoformat()
+
+
+@pytest.mark.asyncio
+async def test_rows_the_last_weekly_run_checked_are_due_at_the_next_weekly_run(
+    calls: dict[str, Any],
+) -> None:
+    """A run's own writes land after its start; a 7-day cutoff skipped them for a week."""
+    db, clock = _Db(), _Clock()
+    db.tables["medications"] = [{"name": "Metformin 500 mg", "is_active": True}]
+    clock.now = NOW + timedelta(seconds=40)
+    await _service(db, clock).refresh_due(limit=10)
+    # Next Sunday's run starts at the same time, or an hour earlier after a clock change.
+    clock.now = NOW + timedelta(days=7) - timedelta(hours=1)
+    counts = await _service(db, clock).refresh_due(limit=10)
+    assert counts["subjects_due"] == 1 and counts["subjects_checked"] == 1
+    assert calls["gather"] == 2
+
+
+@pytest.mark.asyncio
+async def test_the_weekly_refresh_seeds_documented_conditions_in_both_languages(
+    calls: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _condition_fetcher(monkeypatch)
+    db, clock = _Db(), _Clock()
+    db.tables["conditions"] = [
+        {"name": "Type 2 diabetes", "status": "active"},
+        {"name": "type 2  Diabetes", "status": "active"},
+        {"name": "Resolved sprain", "status": "resolved"},
+    ]
+    counts = await _service(db, clock).refresh_due(limit=10)
+    assert counts["subjects_new_conditions"] == 1 and counts["subjects_checked"] == 1
+    assert sorted(locale for _name, locale in asked) == ["en-US", "es-MX"]
+    assert {(row["subject_key"], row["locale"]) for row in db.tables["health_knowledge"]} == {
+        ("type 2 diabetes", "en-US"),
+        ("type 2 diabetes", "es-MX"),
+    }
+    # Cached now: a second run the same day neither seeds nor re-checks it.
+    again = await _service(db, clock).refresh_due(limit=10)
+    assert again["subjects_new_conditions"] == 0 and again["subjects_checked"] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_resolved_medication_with_no_cached_text_is_seeded_again(
+    calls: dict[str, Any],
+) -> None:
+    """An outage after resolution left no rows; the name is no longer 'uncached' by name."""
+    calls["medication"] = {key: SourceUnavailableError("down") for key in calls["medication"]}
+    db, clock = _Db(), _Clock()
+    db.tables["medications"] = [{"name": "Metformin 500 mg", "is_active": True}]
+    first = await _service(db, clock).refresh_due(limit=10)
+    assert first["subjects_unavailable"] == 1
+    assert first["sources"] == {"dailymed": {"unavailable": 1}, "medlineplus": {"unavailable": 2}}
+    calls["medication"] = {
+        ("medlineplus", "en-US"): _summary(),
+        ("medlineplus", "es-MX"): _summary("Metformina", "La metformina trata la diabetes."),
+        ("dailymed", "en-US"): _label(),
+    }
+    clock.now += timedelta(hours=1)
+    second = await _service(db, clock).refresh_due(limit=10)
+    assert second["subjects_new_medications"] == 1 and second["subjects_updated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_subjects_beyond_the_limit_are_reported_as_deferred(
+    calls: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _condition_fetcher(monkeypatch)
+    db = _Db()
+    db.tables["conditions"] = [
+        {"name": f"Condition {index}", "status": "active"} for index in range(3)
+    ]
+    counts = await _service(db, _Clock()).refresh_due(limit=2)
+    assert counts["subjects_checked"] == 2 and counts["subjects_deferred"] == 1
 
 
 def test_name_keys_ignore_case_and_spacing() -> None:

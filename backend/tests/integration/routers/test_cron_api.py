@@ -55,9 +55,7 @@ class TestReminderDispatchCron:
     def test_dispatches_with_auth_header(
         self, client, cron_auth_token, mock_cron_service, override_cron_service
     ):
-        mock_cron_service.dispatch_reminders.return_value = _sample_response(
-            "reminders_dispatch"
-        )
+        mock_cron_service.dispatch_reminders.return_value = _sample_response("reminders_dispatch")
 
         response = client.post(
             "/api/v1/cron/reminders/dispatch",
@@ -71,28 +69,4 @@ class TestReminderDispatchCron:
         mock_cron_service.dispatch_reminders.assert_awaited_once_with(
             dry_run=True,
             window_minutes=30,
-        )
-
-
-class TestNightlyAdrCron:
-    def test_runs_with_auth_header(
-        self, client, cron_auth_token, mock_cron_service, override_cron_service
-    ):
-        mock_cron_service.run_nightly_adr_scan.return_value = _sample_response(
-            "nightly_adr_scan"
-        )
-
-        response = client.post(
-            "/api/v1/cron/adr/nightly-scan",
-            headers={"X-Cron-Auth": cron_auth_token},
-            json={"dry_run": True, "lookback_hours": 48, "limit": 250},
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        payload = response.json()
-        assert payload["job_name"] == "nightly_adr_scan"
-        mock_cron_service.run_nightly_adr_scan.assert_awaited_once_with(
-            dry_run=True,
-            lookback_hours=48,
-            limit=250,
         )
