@@ -158,3 +158,47 @@ async def test_a_successful_probe_closes_an_existing_circuit() -> None:
 
     assert responses[-1].content.parts[0].text == "ok"
     assert delegate.calls == 2
+
+
+class _OffsetClockLoop(asyncio.SelectorEventLoop):
+    """An event loop whose clock is not time.monotonic(), as uvloop's is not."""
+
+    def time(self) -> float:
+        return super().time() + 1_000_000.0
+
+
+def _run_on_offset_clock(coroutine: Any) -> Any:
+    loop = _OffsetClockLoop()
+    try:
+        return loop.run_until_complete(coroutine)
+    finally:
+        loop.close()
+
+
+def test_a_fast_answer_succeeds_when_the_loop_clock_differs_from_monotonic() -> None:
+    """Regression: an absolute monotonic deadline expired instantly under uvicorn's uvloop."""
+    wrapper = ResilientLlm(
+        model="fast", delegate=_StubModel(model="fast", text="answer"), timeout_seconds=8
+    )
+
+    async def collect() -> list[Any]:
+        return [response async for response in wrapper.generate_content_async(_request())]
+
+    (response,) = _run_on_offset_clock(collect())
+    assert response.content.parts[0].text == "answer"
+
+
+def test_the_deadline_still_fires_when_the_loop_clock_differs() -> None:
+    wrapper = ResilientLlm(
+        model="slow",
+        delegate=_StubModel(model="slow", delay_seconds=1),
+        timeout_seconds=0.05,
+    )
+
+    async def collect() -> None:
+        _ = [response async for response in wrapper.generate_content_async(_request())]
+
+    started = time.monotonic()
+    with pytest.raises(ModelAttemptDeadlineError):
+        _run_on_offset_clock(collect())
+    assert time.monotonic() - started < 0.9
