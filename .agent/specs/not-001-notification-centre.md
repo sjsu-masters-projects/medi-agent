@@ -59,6 +59,8 @@ Appointments are classified by transition, not by the resulting status alone:
 - Siblings withdrawn when one slot is accepted, completion and no-show create
   nothing.
 - An offer stops asking for a response once it is answered.
+- A slot that is still proposed creates no event if its time changes; the app offers
+  no way to edit a pending offer, so a new offer is the supported path.
 
 History items keep their exact-source link (labelled "View") after they stop being
 actionable, and following a link marks the item read.
