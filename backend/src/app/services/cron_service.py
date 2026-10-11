@@ -1,4 +1,4 @@
-"""Internal cron jobs: reminders, the nightly ADR scan and the weekly reference refresh."""
+"""Internal cron jobs: reminder dispatch and the weekly reference refresh."""
 
 from __future__ import annotations
 
@@ -81,87 +81,6 @@ class CronService:
             )
             for key, value in scheduled_result.items():
                 summary[key] = value
-
-            finished = await self._finish_run(
-                run_id,
-                status="success",
-                summary=summary,
-            )
-            return {
-                "run_id": run_id,
-                "job_name": job_name,
-                "status": "success",
-                "dry_run": dry_run,
-                "started_at": started_at,
-                "finished_at": finished["finished_at"],
-                "summary": summary,
-            }
-        except Exception as exc:
-            await self._finish_run(
-                run_id,
-                status="failed",
-                summary=summary,
-                error=str(exc),
-            )
-            raise
-
-    async def run_nightly_adr_scan(
-        self,
-        *,
-        dry_run: bool = False,
-        lookback_hours: int | None = None,
-        limit: int = 500,
-    ) -> dict[str, Any]:
-        """Flag newly reported symptoms that should enter the ADR pipeline."""
-        job_name = "nightly_adr_scan"
-        await self._ensure_job_not_running(job_name)
-        run = await self._start_run(
-            job_name,
-            metadata={
-                "dry_run": dry_run,
-                "lookback_hours": lookback_hours,
-                "limit": limit,
-            },
-        )
-
-        started_at = run["started_at"]
-        run_id = run["id"]
-        summary: dict[str, Any] = {
-            "lookback_hours": lookback_hours or 24,
-            "symptoms_scanned": 0,
-            "patients_with_new_symptoms": 0,
-            "candidate_flags_created": 0,
-            "high_severity_without_medication_link": 0,
-        }
-
-        try:
-            since = await self._resolve_adr_scan_since(job_name, lookback_hours)
-            symptom_rows = await self._fetch_symptom_reports_for_adr_scan(
-                since=since,
-                limit=limit,
-            )
-            summary["symptoms_scanned"] = len(symptom_rows)
-
-            patient_ids = sorted({row["patient_id"] for row in symptom_rows})
-            summary["patients_with_new_symptoms"] = len(patient_ids)
-
-            candidate_ids: list[str] = []
-            high_severity_without_link = 0
-            for row in symptom_rows:
-                severity = int(row.get("severity") or 0)
-                has_related_medication = bool(row.get("related_medication_id"))
-
-                if has_related_medication:
-                    candidate_ids.append(row["id"])
-                elif severity >= 5:
-                    high_severity_without_link += 1
-
-            summary["candidate_flags_created"] = len(candidate_ids)
-            summary["high_severity_without_medication_link"] = high_severity_without_link
-            summary["lookback_hours"] = round((self._utc_now() - since).total_seconds() / 3600, 2)
-
-            if candidate_ids and not dry_run:
-                await self._flag_symptom_reports_for_adr(candidate_ids)
 
             finished = await self._finish_run(
                 run_id,
@@ -566,57 +485,6 @@ class CronService:
                 "display_name": display_name,
             },
         }
-
-    async def _resolve_adr_scan_since(self, job_name: str, lookback_hours: int | None) -> datetime:
-        if lookback_hours is not None:
-            return self._utc_now() - timedelta(hours=lookback_hours)
-
-        response = await execute_async(
-            self,
-            lambda db: (
-                db.table("cron_job_runs")
-                .select("finished_at, started_at")
-                .eq("job_name", job_name)
-                .eq("status", "success")
-                .order("started_at", desc=True)
-                .limit(1)
-            ),
-            operation=f"fetch last successful cron job {job_name}",
-            retry_transient=True,
-        )
-        last_run = (response.data or [None])[0]
-        if last_run is None:
-            return self._utc_now() - timedelta(hours=24)
-
-        return self._parse_timestamp(str(last_run.get("finished_at") or last_run["started_at"]))
-
-    async def _fetch_symptom_reports_for_adr_scan(
-        self, *, since: datetime, limit: int
-    ) -> list[dict[str, Any]]:
-        response = await execute_async(
-            self,
-            lambda db: (
-                db.table("symptom_reports")
-                .select("id, patient_id, severity, related_medication_id, created_at")
-                .eq("flagged_for_adr", False)
-                .gte("created_at", self._iso(since))
-                .order("created_at")
-                .limit(limit)
-            ),
-            operation="fetch symptom reports for ADR scan",
-            retry_transient=True,
-        )
-        return list(response.data or [])
-
-    async def _flag_symptom_reports_for_adr(self, symptom_ids: list[str]) -> None:
-        await execute_async(
-            self,
-            lambda db: (
-                db.table("symptom_reports").update({"flagged_for_adr": True}).in_("id", symptom_ids)
-            ),
-            operation="flag symptom reports for ADR review",
-            retry_transient=True,
-        )
 
     def _build_appointment_notification(
         self,

@@ -16,14 +16,6 @@ class ReminderDispatchRequest(BaseModel):
     window_minutes: int = Field(default=15, ge=1, le=120)
 
 
-class NightlyAdrScanRequest(BaseModel):
-    """Manual override inputs for the nightly ADR scan."""
-
-    dry_run: bool = False
-    lookback_hours: int | None = Field(default=None, ge=1, le=168)
-    limit: int = Field(default=500, ge=1, le=5000)
-
-
 class CronJobRunResponse(BaseModel):
     """Standard response for internal cron job runs."""
 
