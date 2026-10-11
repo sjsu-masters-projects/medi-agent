@@ -5,11 +5,12 @@ from typing import Any, cast
 from uuid import UUID
 
 from postgrest.exceptions import APIError
+from pydantic import ValidationError as ModelValidationError
 from supabase import Client
 
 from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.models.auth import CurrentUser
-from app.models.notification_centre import CentrePage, CentreSummary
+from app.models.notification_centre import CentrePage, CentreReadThroughResult, CentreSummary
 from app.services.notification_centre_presentation import present_item
 from app.services.notification_centre_tokens import issue_token, read_token
 
@@ -52,11 +53,18 @@ class NotificationCentreService:
     async def mark_read(self, item_id: UUID) -> Any:
         return await self._call("read", {"id": str(item_id)})
 
-    async def read_through(self, token: str) -> Any:
+    async def read_through(self, token: str) -> CentreReadThroughResult:
+        """Marks what the caller may still see in the signed view; the rest is skipped."""
         ids = read_token(self.actor, "read", token)
         if not isinstance(ids, list) or len(ids) > 1000:
             raise ValidationError("Invalid notification view")
-        return await self._call("read_through", {"ids": ids})
+        result = await self._call("read_through", {"ids": ids})
+        try:
+            return CentreReadThroughResult.model_validate(result)
+        except ModelValidationError:
+            raise ExternalServiceError(
+                "Supabase", "Notifications unavailable. Refresh to try again."
+            ) from None
 
     async def acknowledge(self, item_id: UUID, note: str | None) -> Any:
         self._clinician_only()

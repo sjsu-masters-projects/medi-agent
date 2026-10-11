@@ -180,7 +180,12 @@ def sql(postgres):
       INSERT INTO clinician_messages(clinician_id,patient_id,channel,subject,body) VALUES
       ('{CLINICIAN}','{PATIENT}','in_app','Urgent patient chat escalation','Chat escalation flagged (urgent/general). Historical');""")
     execute((MIGRATIONS / "051_notification_centre.sql").read_text())
-    execute((MIGRATIONS / "052_notification_source_times.sql").read_text())
+    for name in (
+        "052_notification_source_times.sql",
+        "053_account_deletion_conversations_and_offers.sql",
+        "054_notification_page_proportional_reads.sql",
+    ):
+        execute((MIGRATIONS / name).read_text())
     try:
         yield execute
     finally:
@@ -379,9 +384,14 @@ def test_revoked_foreign_and_wrong_role_denied(sql):
     )
     sql(f"UPDATE care_teams SET status='inactive' WHERE id='{TEAM}';")
     assert clinician(sql)["items"] == []
+    assert clinician(sql, "summary") == {"unread_count": 0, "action_item_count": 0}
+    assert clinician(sql, "read_through", {"ids": [row["id"]]}) == {
+        "updated_count": 0,
+        "skipped_count": 1,
+    }
+    assert sql(f"SELECT read_at IS NULL FROM notification_receipts WHERE id='{row['id']}'") == "t"
     assert "Notification unavailable" in sql(
-        operation("read_through", {"ids": [row["id"]]}, actor=CLINICIAN, role="clinician"),
-        succeeds=False,
+        operation("read", {"id": row["id"]}, actor=CLINICIAN, role="clinician"), succeeds=False
     )
     assert sql(f"SELECT count(*) FROM notification_events WHERE source_id='{key}'") == "1"
 
@@ -768,3 +778,283 @@ def test_malformed_source_values_do_not_break_the_centre(sql):
     assert next(r for r in items if r["event_type"] == "appointment_changed")["actionable"]
     assert call(sql, payload={"unread": True})["items"]
     assert clinician(sql)["items"] == []
+
+
+def read_thread(sql, conversation, message, *, actor=PATIENT, role="patient"):
+    payload = json.dumps({"conversation_id": conversation, "last_message_id": message})
+    sql(
+        f"SET ROLE service_role; SELECT care_conversation_operation('{actor}','{role}','read','{payload}');"
+    )
+
+
+def test_read_through_marks_authorized_and_skips_the_rest(sql):
+    """Mark all read keeps going when one item in the snapshot is no longer visible."""
+    foreign_team = str(uuid4())
+    sql(f"""INSERT INTO care_teams(id,patient_id,clinician_id,role) VALUES('{foreign_team}','{FOREIGN}','{CLINICIAN}','reviewer');
+      INSERT INTO care_teams(patient_id,clinician_id,role) VALUES('{PATIENT}','{OTHER}','reviewer');""")
+    mine = {document(sql), document(sql)}
+    revoked = document(sql, patient=FOREIGN)
+    page = clinician(sql)
+    by_source = {r["source_id"]: r["id"] for r in page["items"]}
+    assert set(by_source) == mine | {revoked} and len(page["read_ids"]) == 3
+    others = [r["id"] for r in clinician(sql, actor=OTHER)["items"]]
+    sql(f"UPDATE care_teams SET status='inactive' WHERE id='{foreign_team}';")
+    snapshot = {"ids": page["read_ids"]}
+    assert clinician(sql, "read_through", snapshot) == {"updated_count": 2, "skipped_count": 1}
+    read = "SELECT string_agg(e.source_id||':'||(r.read_at IS NOT NULL),',' ORDER BY e.source_id) FROM notification_receipts r JOIN notification_events e ON e.id=r.event_id WHERE r.recipient_id='{0}'"
+    expected = ",".join(
+        f"{key}:{'true' if key in mine else 'false'}" for key in sorted(mine | {revoked})
+    )
+    assert sql(read.format(CLINICIAN)) == expected
+    # Idempotent: nothing new is marked or audited on retry.
+    assert clinician(sql, "read_through", snapshot) == {"updated_count": 0, "skipped_count": 1}
+    assert sql("SELECT count(*) FROM notification_read_audit WHERE action='read'") == "2"
+    # Another person's receipt is never marked, even inside a snapshot.
+    result = clinician(sql, "read_through", {"ids": [*page["read_ids"], *others]})
+    assert result == {"updated_count": 0, "skipped_count": 1 + len(others)}
+    assert sql(read.format(OTHER)).count(":true") == 0
+
+
+def test_read_markers_and_legacy_reads_keep_the_unread_index_current(sql):
+    conv = thread(sql)
+    first = send(sql, conv)
+    call(sql)
+    read_thread(sql, conv, first["id"])
+    second = send(sql, conv)
+    read_thread(sql, conv, second["id"])  # read before the centre ever loaded it
+    unread_messages = f"""SELECT count(*) FROM notification_receipts r JOIN notification_events e ON e.id=r.event_id
+      WHERE r.recipient_id='{PATIENT}' AND e.event_type='message_received' AND r.read_at IS NULL"""
+    assert sql(unread_messages) == "0"
+    assert all(r["is_read"] for r in call(sql)["items"] if r["event_type"] == "message_received")
+    assert sql(unread_messages) == "0"
+    legacy = next(r for r in call(sql)["items"] if r["event_type"] == "legacy_update")
+    sql(f"UPDATE notifications SET is_read=true WHERE id='{legacy['source_id']}';")
+    assert (
+        sql(f"SELECT read_at IS NOT NULL FROM notification_receipts WHERE id='{legacy['id']}'")
+        == "t"
+    )
+    assert call(sql, "summary")["unread_count"] == 0
+    # Reads made elsewhere are not notification-centre reads, so they write no audit row.
+    assert sql("SELECT count(*) FROM notification_read_audit") == "0"
+
+
+def test_unread_group_appears_once_across_cursor_pages(sql):
+    conv = thread(sql)
+    for index in range(3):
+        send(sql, conv)
+        if index < 2:
+            sql(f"""INSERT INTO notifications(patient_id,notification_type,title,body)
+              VALUES('{PATIENT}','adr_alert','Synthetic {index}','Synthetic');""")
+    whole = call(sql)["items"]
+    pages, page = [], call(sql, payload={"limit": 1})
+    pages.extend(page["items"])
+    while page["next_cursor"]:
+        page = call(sql, payload={"limit": 1, "before": page["next_cursor"]})
+        pages.extend(page["items"])
+    assert [r["id"] for r in pages] == [r["id"] for r in whole]
+    groups = [r for r in pages if r["event_type"] == "message_received"]
+    assert len(groups) == 1 and len(groups[0]["receipt_ids"]) == 3
+    unread = call(sql, payload={"unread": True, "limit": 2})
+    assert [r["id"] for r in unread["items"]] == [r["id"] for r in whole if not r["is_read"]][:2]
+
+
+def test_reads_scale_with_the_page_not_the_history(sql):
+    """2,000 history items: the first page and the counts evaluate only what they show."""
+    sql(f"""INSERT INTO documents(patient_id,uploaded_by,uploaded_by_role,document_type,file_name,file_url,file_size_bytes,review_status)
+      SELECT '{PATIENT}','{PATIENT}','patient','other','synthetic-'||n||'.pdf','synthetic',10,'pending'
+      FROM generate_series(1,2000) n;""")
+    clinician(sql, "summary")  # first load turns 2,000 deliveries into receipts
+    sql(f"""UPDATE documents SET review_status='approved';
+      UPDATE notification_receipts SET read_at=clock_timestamp() WHERE recipient_id='{CLINICIAN}';""")
+    newest = document(sql)
+
+    def measured(action, payload=None):
+        encoded = json.dumps(payload or {})
+        out = sql(f"""BEGIN; SET LOCAL track_functions='all'; SET ROLE service_role;
+          SELECT clock_timestamp()::text;
+          SELECT notification_centre_operation('{CLINICIAN}','clinician','{action}','{encoded}'::jsonb);
+          SELECT clock_timestamp()::text;
+          SELECT pg_stat_get_xact_function_calls('private.notification_row(public.notification_receipts,uuid,text)'::regprocedure);
+          COMMIT;""").splitlines()
+        started, result, ended, rows = out
+        elapsed = sql(f"SELECT extract(epoch FROM '{ended}'::timestamptz-'{started}'::timestamptz)")
+        return json.loads(result), int(rows or 0), float(elapsed)
+
+    page, rows, elapsed = measured("list")
+    expected = sql(f"""SELECT string_agg(id::text,',' ORDER BY created_at DESC,id DESC) FROM (SELECT id,created_at
+      FROM notification_receipts WHERE recipient_id='{CLINICIAN}' ORDER BY created_at DESC,id DESC LIMIT 100) q""")
+    expected = expected.split(",")
+    assert (
+        sql(f"SELECT count(*) FROM notification_receipts WHERE recipient_id='{CLINICIAN}'")
+        == "2001"
+    )
+    assert [r["id"] for r in page["items"]] == expected[:50]
+    assert page["items"][0]["source_id"] == newest and page["items"][0]["actionable"]
+    assert rows <= 60 and elapsed < 5, (rows, elapsed)
+    second, rows, _ = measured("list", {"before": page["next_cursor"]})
+    assert [r["id"] for r in second["items"]] == expected[50:100] and rows <= 60
+    summary, rows, _ = measured("summary")
+    assert summary == {"unread_count": 1, "action_item_count": 1} and rows <= 5, rows
+    actions, rows, _ = measured("action_items")
+    assert [r["source_id"] for r in actions["items"]] == [newest] and rows <= 5, rows
+    assert clinician(sql, "summary", actor=OTHER) == {"unread_count": 0, "action_item_count": 0}
+
+
+def conversation_with_offers(sql):
+    """A thread both people wrote in and read, plus an answered offer, via the real RPCs."""
+    conv = thread(sql)
+    send(sql, conv, actor=PATIENT, role="patient")
+    reply = send(sql, conv)
+    read_thread(sql, conv, reply["id"])
+    read_thread(sql, conv, reply["id"], actor=CLINICIAN, role="clinician")
+    sql(f"""SELECT propose_appointment_slots('{CLINICIAN}','{TEAM}',ARRAY[clock_timestamp()+interval '1 day',
+      clock_timestamp()+interval '2 days'],30,'follow_up','Synthetic room','Synthetic');""")
+    slot = sql("SELECT id FROM appointments ORDER BY scheduled_at LIMIT 1")
+    assert "error" not in sql(
+        f"SELECT respond_to_appointment_offer('{PATIENT}','{slot}','accept',NULL);"
+    )
+    call(sql)
+    clinician(sql)
+    return conv
+
+
+HISTORY = """SELECT (SELECT count(*) FROM care_conversations)||','||(SELECT count(*) FROM care_conversation_messages)
+  ||','||(SELECT count(*) FROM care_conversation_reads)||','||(SELECT count(*) FROM care_conversation_audit_events)
+  ||','||(SELECT count(*) FROM appointment_offer_events)"""
+
+
+def test_patient_with_conversations_and_offer_history_can_be_deleted(sql):
+    conversation_with_offers(sql)
+    assert sql(HISTORY) == "1,2,2,5,4"  # opened, 2 sent, 2 read; 2 proposed, accept, withdraw
+    sql(f"DELETE FROM auth.users WHERE id='{PATIENT}';")
+    assert sql(f"SELECT count(*) FROM patients WHERE id='{PATIENT}'") == "0"
+    assert sql(HISTORY) == "0,0,0,0,0"
+    assert sql(f"SELECT count(*) FROM clinicians WHERE id='{CLINICIAN}'") == "1"
+    assert clinician(sql)["items"] == []
+
+
+def test_clinician_deletion_keeps_the_patients_thread_readable_in_storage(sql):
+    conv = conversation_with_offers(sql)
+    sql(f"DELETE FROM auth.users WHERE id='{CLINICIAN}';")
+    # The thread, both messages and the patient's marker stay; the clinician's own read
+    # marker goes, and references to them become NULL with the sender name kept.
+    assert sql(HISTORY) == "1,2,1,5,0"
+    assert (
+        sql(
+            f"SELECT clinician_id IS NULL AND care_team_id IS NULL FROM care_conversations WHERE id='{conv}'"
+        )
+        == "t"
+    )
+    assert (
+        sql(
+            "SELECT string_agg(sender_role||':'||sender_name||':'||(sender_id IS NULL),',' ORDER BY created_at) FROM care_conversation_messages"
+        )
+        == "patient:Synthetic Patient:false,clinician:First Clinician:true"
+    )
+    assert (
+        sql(f"SELECT actor_id FROM care_conversation_reads WHERE conversation_id='{conv}'")
+        == PATIENT
+    )
+    assert (
+        sql("SELECT count(*) FROM care_conversation_audit_events WHERE actor_id IS NULL") == "2"
+    )  # its send and read
+    # Appointments already go with the care team (001), and their offer audit with them.
+    assert sql("SELECT count(*) FROM appointments") == "0"
+    assert not any(r["event_type"] == "message_received" for r in call(sql)["items"])
+
+
+def test_history_tables_keep_no_delete_privilege_and_reject_updates(sql):
+    conversation_with_offers(sql)
+    for table in (
+        "care_conversations",
+        "care_conversation_messages",
+        "care_conversation_reads",
+        "care_conversation_audit_events",
+        "appointment_offer_events",
+    ):
+        for role in ("anon", "authenticated", "service_role"):
+            assert sql(f"SELECT has_table_privilege('{role}','{table}','DELETE')") == "f"
+        assert "permission denied" in sql(
+            f"SET ROLE service_role; DELETE FROM {table};", succeeds=False
+        )
+    assert "append-only" in sql(
+        "UPDATE appointment_offer_events SET action='cancel';", succeeds=False
+    )
+    assert sql("SELECT count(*) FROM appointment_offer_events") == "4"
+
+
+def offer(sql, slots=2):
+    times = ",".join(f"clock_timestamp()+interval '{n} days'" for n in range(1, slots + 1))
+    sql(f"""SELECT propose_appointment_slots('{CLINICIAN}','{TEAM}',ARRAY[{times}],30,'follow_up',
+      'Synthetic room','Synthetic');""")
+    return sql(
+        "SELECT id FROM appointments WHERE status='proposed' ORDER BY created_at DESC,scheduled_at LIMIT 1"
+    )
+
+
+def answer(sql, slot, action):
+    result = json.loads(
+        sql(f"SELECT respond_to_appointment_offer('{PATIENT}','{slot}','{action}',NULL);")
+    )
+    assert "error" not in result, result
+
+
+def test_confirmed_response_is_news_not_needs_attention(sql):
+    answer(sql, offer(sql), "accept")
+    response = next(r for r in clinician(sql)["items"] if r["event_type"] == "appointment_response")
+    assert not response["actionable"] and not response["can_acknowledge"]
+    assert not response["is_read"]
+    assert clinician(sql, "action_items")["items"] == []
+    assert clinician(sql, "summary") == {"unread_count": 1, "action_item_count": 0}
+    assert "cannot be acknowledged" in sql(
+        operation("acknowledge", {"id": response["id"]}, actor=CLINICIAN, role="clinician"),
+        succeeds=False,
+    )
+
+
+def test_request_for_another_time_needs_attention_until_acknowledged(sql):
+    sql(
+        f"INSERT INTO care_teams(patient_id,clinician_id,role) VALUES('{PATIENT}','{OTHER}','reviewer');"
+    )
+    answer(sql, offer(sql, slots=3), "request_alternative")
+    # Every slot of the offer changed; the offer is one item to act on.
+    assert (
+        sql("SELECT count(*) FROM notification_events WHERE event_type='appointment_response'")
+        == "3"
+    )
+    items = clinician(sql, "action_items")["items"]
+    assert len(items) == 1 and items[0]["event_type"] == "appointment_response"
+    assert items[0]["can_acknowledge"] and items[0]["metadata"]["status"] == "alternative_requested"
+    assert clinician(sql, "summary")["action_item_count"] == 1
+    assert clinician(sql, "action_items", actor=OTHER)["items"] == []
+    note = {"id": items[0]["id"], "note": "Calling the patient"}
+    clinician(sql, "acknowledge", note)
+    clinician(sql, "acknowledge", note)  # idempotent retry
+    assert clinician(sql, "action_items")["items"] == []
+    assert clinician(sql, "summary")["action_item_count"] == 0
+    history = next(r for r in clinician(sql)["items"] if r["id"] == items[0]["id"])
+    assert not history["actionable"] and not history["can_acknowledge"]
+    assert sql("SELECT count(*) FROM notification_read_audit WHERE action='acknowledge'") == "1"
+    assert sql("SELECT string_agg(DISTINCT status::text,',') FROM appointments") == (
+        "alternative_requested"
+    )
+
+
+def test_a_later_offer_answers_a_declined_response(sql):
+    answer(sql, offer(sql), "decline")
+    assert [r["event_type"] for r in clinician(sql, "action_items")["items"]] == [
+        "appointment_response"
+    ]
+    offer(sql)
+    assert clinician(sql, "action_items")["items"] == []
+    assert clinician(sql, "summary")["action_item_count"] == 0
+    assert any(r["event_type"] == "appointment_response" for r in clinician(sql)["items"])
+
+
+def test_cancelled_visit_needs_attention_whatever_its_time(sql):
+    sql("ALTER TABLE appointments DISABLE TRIGGER appointments_booking_guard;")
+    key = appointment(sql, "confirmed", when="-1 hour")
+    sql(f"UPDATE appointments SET status='cancelled' WHERE id='{key}';")
+    sql("ALTER TABLE appointments ENABLE TRIGGER appointments_booking_guard;")
+    items = clinician(sql, "action_items")["items"]
+    assert [(r["source_id"], r["can_acknowledge"]) for r in items] == [(key, True)]

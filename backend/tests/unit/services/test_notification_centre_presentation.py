@@ -115,3 +115,19 @@ def test_reviewed_information_questions_are_shown_as_written_not_translated():
     result = present_item(raw, "patient", "es-MX")
     assert question in result.body and "texto original" in result.body
     assert "internal" not in result.body
+
+
+@pytest.mark.parametrize(
+    ("role", "actionable", "expected"),
+    [("clinician", True, True), ("clinician", False, False), ("patient", True, False)],
+)
+def test_appointment_response_acknowledgement_flows_only_while_actionable(
+    role, actionable, expected
+):
+    raw = item(
+        event_type="appointment_response",
+        category="appointments",
+        actionable=actionable,
+        can_acknowledge=True,
+    )
+    assert present_item(raw, role, "en-US").can_acknowledge is expected
