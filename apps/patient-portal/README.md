@@ -110,7 +110,7 @@ clinical instructions use only approved wording. Opening the sheet does not mark
 everything read or approve care. Exact-resource links open Records, Visits, Today
 or the addressed private care-team conversation.
 
-One shared cache refreshes every 15 seconds while visible and on focus, preserving
+One shared cache refreshes once a minute while visible and on focus, preserving
 lists after network failure. Unavailable counts are not shown as zero. Each loaded
 page retains a server-signed viewing cutoff; marking displayed items read excludes
 concurrent arrivals. No new email, SMS or push delivery is introduced. See

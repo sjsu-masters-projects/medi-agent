@@ -31,7 +31,7 @@ patient_name?: string|null, clinic_name?: string|null}`. Links are server-built
 local routes with authorized resource identity; private IDs are never copy.
 Patient dates use saved timezone. A missing summary is unavailable, not zero.
 
-One portal-level cache polls every 15 seconds while visible, refreshes on focus,
+One portal-level cache polls once a minute while visible, refreshes on focus,
 stops on teardown, preserves lists on failure and rejects stale responses. Bell
 opens accessible sheet/panel with All/Unread, mark read/all read and full screen.
 Patient `/notifications`; clinician `/alerts` Needs attention/History with
@@ -49,6 +49,27 @@ urgent history as fresh work. Group unread message/reminder previews, preserve
 events/history. Conversation read markers clear corresponding message unread.
 Current source state removes resolved review tasks; newly assigned reviewers see
 current shared work without private conversation-history transfer.
+
+Appointments are classified by transition, not by the resulting status alone:
+- A new offer reaches the patient once per offer group, however many slots it has.
+- A patient's accept, decline, request for another time, cancel or note reaches the
+  responsible clinician.
+- A time or location change to a confirmed visit, and an offer's expiry, reach the
+  patient.
+- Siblings withdrawn when one slot is accepted, completion and no-show create
+  nothing.
+- An offer stops asking for a response once it is answered.
+
+History items keep their exact-source link (labelled "View") after they stop being
+actionable, and following a link marks the item read.
+
+Acknowledgement is per clinician: it records that this reviewer saw the item. It is not
+clinical resolution and does not clear the item for other reviewers.
+
+Notification history is never updated. It is removed only together with the patient or
+account it belongs to, so account deletion and the synthetic demo reset keep working.
+No role is granted DELETE. Malformed source values, such as an unparseable date or an
+unknown patient time zone, make an item non-actionable; they never fail the centre.
 
 Browser writes/event creation are denied; server API and database access both
 enforce ownership/assignment. Revocation denies notification details and targets.
@@ -72,8 +93,10 @@ deployed acceptance. Record exact checks and remaining boundaries before review.
 ### Rollout dependency
 
 Migration `051_notification_centre.sql` must be reviewed and applied before the
-new API/UI deployment. Its full filename is distinct from the separate unfinished
-Nora migration; neither depends on the other. No remote application is authorized
+new API/UI deployment. Its full filename is distinct from Nora's
+`051_health_knowledge_and_chat_sessions.sql` (merged in #147 and already applied); the
+ledger keys on full filenames, and the two touch no shared objects. The two were
+verified together in disposable PostgreSQL 16. No remote application is authorized
 by this specification. Until the
 database is available, the UI shows unavailable/retry rather than fabricated
 counts. Existing patient notification endpoints remain compatible.

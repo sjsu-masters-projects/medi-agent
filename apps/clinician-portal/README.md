@@ -141,7 +141,7 @@ an audited acknowledgement, meaning seen for follow-up, not clinically resolved.
 The historical archive preserves legacy sent-message records without converting
 old urgency labels into active work. Messages remains private human conversations.
 
-The shared notification cache polls `/api/v1/notification-centre` every 15 seconds
+The shared notification cache polls `/api/v1/notification-centre` once a minute
 while visible and refreshes on focus. Signed per-page cutoffs protect bulk reads
 against new arrivals; assignment revocation removes access. Counts unavailable
 is not zero. See [NOT-001](../../.agent/specs/not-001-notification-centre.md) for
