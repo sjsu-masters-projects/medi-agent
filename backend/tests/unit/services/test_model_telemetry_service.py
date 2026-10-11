@@ -152,7 +152,7 @@ async def test_a_scheduled_task_is_held_until_it_finishes(sink) -> None:
     task = telemetry_service.schedule_generation_record(workload="triage", telemetry=_telemetry())
 
     assert task in telemetry_service._pending
-    await task
+    assert await task is True
     assert task not in telemetry_service._pending
 
 
