@@ -6,8 +6,8 @@ The task board alone supplies current status, owner and priority; bullets here
 are requirements, not progress checkboxes. Existing implementations may satisfy
 part of them. Inspect code/tests before assuming a missing implementation.
 
-Dedicated specifications take precedence for PAT-005, SCH-001, COM-001-B and
-INT-002/003. Clinical safety requirements are not relaxed by the demo scope.
+Dedicated specifications take precedence for PAT-005, SCH-001, COM-001-B,
+INT-002/003, LOC-001, NORA-002, NOT-001 and UX-002. Clinical safety requirements are not relaxed by the demo scope.
 The delivery target is a university expo with fictional patient and clinician
 accounts. No real-patient recruitment, professional-clinician recruitment, VC
 pitch or production certification is an acceptance gate. In-app clinician
@@ -245,7 +245,8 @@ requirement mentions them; use the current operator guide and explicit approval.
 
 - Translate dynamic and static patient journeys.
 - Preserve clinical terminology and evidence meaning across languages.
-- Test language switching mid-session.
+- Test that screens follow the saved language immediately; Nora replies in the language
+  the patient writes or speaks (requester decision, October 11).
 - Validate voice transcript, error, consent, and emergency flows in both languages.
 - Peer-review high-risk bilingual demo wording against its sources and deterministic safety tests; disclose that it is not professionally validated. Do not require recruiting a clinician/pharmacist for expo acceptance.
 
@@ -266,7 +267,6 @@ requirement mentions them; use the current operator guide and explicit approval.
 
 ## PV-001 — ADR and Naranjo workflow
 
-- Replace empty pharmacovigilance modules with tested implementation.
 - Consume the confirmed symptom-report contract with its patient answers, safety result, and
       provenance; preserve the separation between patient testimony, document context, and
       clinician assessment. Let a clinician request missing information without rewriting the
@@ -304,7 +304,8 @@ requirement mentions them; use the current operator guide and explicit approval.
       send (in-app and email) existed as backend-only endpoints with no frontend. Added: backend
       list endpoints (`GET /me/patients/{patient_id}/messages` and `GET /me/messages`), clinician
       inbox page replacing the static placeholder, compose form on the patient deep-dive Chat tab,
-      and integration + component tests. Patient-to-clinician origination remains unbuilt.
+      and integration + component tests. Patient-to-clinician origination is addressed by the
+      two-way threads shipped in COM-001-B (#139).
 - Require approval for clinical outbound messages.
 - Support opted-in administrative reminders.
 - Add retry, deduplication, delivery state, and operations queue.

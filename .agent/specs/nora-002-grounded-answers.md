@@ -1,6 +1,8 @@
 # NORA-002 — Grounded, plain-language answers from Nora
 
-**Status:** In progress · **Owner:** Rajeev · **Branch:** `fix/nora-follow-up-turns` (PR #146)
+**Status:** Verify deployed — merged in #147 (`4c9de30`) · **Owner:** Rajeev · **Refresh:** Cloud Run Job
+`mediagent-health-knowledge-refresh`, trigger `mediagent-health-knowledge-refresh-weekly`
+(Sundays 03:00 America/Los_Angeles)
 
 ## Goal
 
@@ -38,7 +40,9 @@ fetched and last checked it. Public reference text only; no patient data.
 - MedlinePlus Connect by RxCUI for medications and the topic search for conditions, in both
   languages.
 - On a miss, a tool call fetches and caches with a short timeout. The weekly job re-checks
-  every active medication and documented condition, refreshing only what changed.
+  every cached subject last checked more than six days ago and seeds active medications and
+  documented conditions with no cached text (conditions in en-US and es-MX), refreshing
+  only what changed.
 
 ### Retrieval pipeline and its checks
 
@@ -48,7 +52,7 @@ guess.
 | # | Stage | Check | On failure |
 | --- | --- | --- | --- |
 | 1 | **Decide to retrieve** (coordinator) | Retrieve only for a medication, condition or document question. A symptom or side-effect message is triaged first; the safety floor runs before any model. | Without a retrieval Nora answers from the record only, or says she does not have the information. |
-| 2 | **Resolve the subject** | Medication: match the patient's own active medications first (exact, then fuzzy name match). Otherwise RxNorm exact match, then approximate match, which is accepted only if the matched name shares a word (similarity ≥ 0.8) with what was asked ("hydration" must not become chloral hydrate). Combination products resolve to every ingredient. Condition: patient's conditions first, then a MedlinePlus topic whose title or alternate title matches. | `not_found`: Nora says she could not find reliable information for that name and asks which medication was meant. |
+| 2 | **Resolve the subject** | Medication: match the patient's own active medications first (exact, then fuzzy name match). Otherwise RxNorm exact match, then approximate match, which is accepted only if the matched name shares a word (similarity ≥ 0.8) with what was asked ("hydration" must not become chloral hydrate). Combination products currently report no match (see the safety review below). Condition: patient's conditions first, then a MedlinePlus topic whose title or alternate title matches. | `not_found`: Nora says she could not find reliable information for that name and asks which medication was meant. |
 | 3 | **Fetch from sources** | NLM HTTPS hosts only (allowlist). 6 s per request and 8 s total inline. Responses are size-capped, HTML is stripped, and the shape is validated. A DailyMed label must be single-ingredient, with the ingredient named in its title. Label sections are chosen by LOINC code. | A network or timeout error is `unavailable`, never cached as "not found". |
 | 4 | **Cache and freshness** | Rows hold `checked_at`, the source version and date, and a content hash. A row checked within 7 days is served from the cache. A miss (`not_found`) is retried after 7 days. A source that does not answer leaves the old row in place. | If a cached row is older than 30 days and the source is down, it is served with its "as of" date and marked stale. |
 | 5 | **Return to the model** | Each tool result shows provenance first: source, title, URL, date, language and `on_patient_list`. Excerpts are bounded (about 1,800 characters per section) and fenced as reference data, never instructions. **Label dosage sections are never returned**: a label's dose ranges are not this patient's prescription. | — |
@@ -133,7 +137,10 @@ framed as considerations for clinician review; extraction document text fenced a
    with a page reference.
 3. A new day or New chat starts a new conversation; earlier ones are listed and reopen with
    their messages; a backend restart keeps context.
-4. The weekly job refreshes changed sources and records a run.
+4. The weekly job refreshes changed sources and records a run. Scheduled runs before the
+   OPS-003 fix checked 0 subjects (a seven-day due cutoff skipped the previous run's rows
+   and conditions were never seeded); OPS-003 moved the due cutoff to six days and seeds
+   documented conditions.
 5. Safety review findings resolved or recorded; tests, lint, types and live checks pass.
 
 ## Safety review and live evidence (2026-10-11)
@@ -167,7 +174,7 @@ Recorded rather than changed:
 - Label XML is parsed with the standard library from fixed NLM hosts, with a 3 MB
   response limit. `defusedxml` is not a dependency.
 
-**Live check.** `scripts/check_nora_answers.py` ran on the synthetic patient against the
+**Live check.** `backend/scripts/check_nora_answers.py` ran on the synthetic patient against the
 real services:
 
 - 18 of 22 passed on the first run. Three answers had no lookup and so no source, and the

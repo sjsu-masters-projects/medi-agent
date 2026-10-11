@@ -1,6 +1,6 @@
 # SCH-001 — Appointment scheduling design
 
-> **Status:** Draft for review · **Owner:** Tushar Singh (patient portal, scheduling)
+> **Status:** Slices 1–6 merged (#97, #98, #133); deployed recheck is SCH-001-V · **Owner:** Tushar Singh (patient portal, scheduling)
 > · **Clinician-portal work:** coordinate with Jeevan Kurian
 > **Tracker:** `.agent/TASKS.md` → SCH-001
 
@@ -164,7 +164,7 @@ No backend API or migration change is needed for this slice.
 
 - **Slice 1 (PR #97):** statuses `proposed/confirmed/declined`; clinician-created visit
   starts `proposed`; patient accept/decline; patient-portal Visits page. Still valid.
-- **Slice 2 (branch `feature/sch-001-slice-2-visit-changes`):** `request_alternative`,
+- **Slice 2 (PR #98):** `request_alternative`,
   `cancel`, optional note; transition table; inline action errors. Still valid.
 - **Evolution:** Slice 3 generalises the single proposed appointment into a *group* of
   candidate slots and makes `accept` confirm-one-withdraw-siblings. The transition table
@@ -176,22 +176,20 @@ No backend API or migration change is needed for this slice.
 | --- | --- | --- |
 | 1 ✅ | Propose single slot + accept/decline | Patient/backend |
 | 2 ✅ | Request-alternative + cancel + note | Patient/backend |
-| **3a** | **Saved timezone + locale rendering, full Visits copy translation, labelled UTC fallback (implemented locally)** | Patient |
-| **3b** | **Multi-slot offer + patient "pick one", group-aware responses and atomic audit (implemented locally; staging acceptance pending)** | Patient/backend |
-| **4** | **Clinician Appointments screen: offer 2–4 slots, view responses/notes, re-propose (implemented locally; live acceptance/review pending)** | Clinician (Jeevan review) |
-| **5** | **Patient overlap protection and seven-day proposal expiration (migrated; live synthetic API checks passed October 3; review pending)** | Backend/portals |
-| **6** | **One-time calendar export (implemented; local builds, tests and authenticated browser downloads passed October 3; review/merge pending)** | Patient/clinician |
+| 3a ✅ | Saved timezone + locale rendering, full Visits copy translation, labelled UTC fallback (#133) | Patient |
+| 3b ✅ | Multi-slot offer + patient "pick one", group-aware responses and atomic audit (#133) | Patient/backend |
+| 4 ✅ | Clinician Appointments screen: offer 2–4 slots, view responses/notes, re-propose (#133) | Clinician (Jeevan review) |
+| 5 ✅ | Patient overlap protection and seven-day proposal expiration (#133; live synthetic API checks passed October 3) | Backend/portals |
+| 6 ✅ | One-time calendar export (#133; authenticated browser downloads passed October 3) | Patient/clinician |
 
-Slice 4 provides the clinician screen locally. October 3 live acceptance evidence
-for Slice 5 and calendar downloads is below. Clinician review with Jeevan, merge,
-dependency remediation and target-deployment verification remain release work.
+Slices 3a–6 merged in #133. October 3 live evidence for Slice 5 and calendar downloads
+is below; the deployed acceptance recheck is SCH-001-V.
 
 ## 10. Open decisions
 
 - Candidate count is fixed at 2–4 for the grouped proposal endpoint; legacy single-slot proposals remain supported.
 - Offer expiry is seven elapsed days (168 hours), capped at each slot's start.
 - Whether a patient may hold only one active offer per visit reason at a time.
-- Exact clinician-portal ownership split for Slice 4.
 
 ## 11. Slice 3a acceptance evidence
 
@@ -284,7 +282,8 @@ For release acceptance, run them with server binaries on PATH and confirm none s
 Patient portal lint/typecheck, all 130 tests, and the webpack production build pass.
 Clinician typecheck passes with the extended shared types. Its existing missing PDF
 library was restored using `npm ci` (zero vulnerabilities; lockfiles unchanged).
-Local HTTP checks and authenticated staging acceptance are recorded in the tracker.
+Local HTTP checks and authenticated staging checks passed before merge; the deployed
+acceptance recheck is SCH-001-V.
 
 ### Migration ledger follow-up — 2026-09-28
 
@@ -340,9 +339,7 @@ no-show controls are not delivered by this screen.
 
 ### Steps to see the changes
 
-1. The implementation runs from `.worktrees/clinician-scheduling`, branch
-   `feature/clinician-appointment-offers`, based on current main at `c2567cd` with
-   scheduling Slices 1–3 carried forward. The original checkout is preserved.
+1. Run the backend and both portals from current `main` (merged in #133).
 2. Open `http://localhost:3001/login`. Verify the actual clinic code, then sign in
    as synthetic clinician Elena Park. The canonical fixture uses `CA-CLINIC-001`;
    its deployed value must match the actual configured clinic.
@@ -684,9 +681,10 @@ gate was weakened.
    control. If a visit changes after the page loads, another download rechecks its
    status and fails safely. Existing external calendar copies are unchanged.
 
-Remaining scheduling work: clinician cancellation/completion/no-show controls,
-clinician-wide availability/capacity rules and notification delivery are separate
-future scopes. Calendar export does not complete the full SCH-001 lifecycle.
+Remaining scheduling work: clinician cancellation/completion/no-show controls and
+clinician-wide availability/capacity rules are separate future scopes. In-app appointment
+notifications shipped in NOT-001/NOT-002; external (email/SMS/push) delivery remains
+future. Calendar export does not complete the full SCH-001 lifecycle.
 
 ### Integration review safeguards — 2026-10-06
 

@@ -1,6 +1,6 @@
 # LOC-001 — One language setting, bilingual approved wording
 
-**Status:** In review · **Owner:** Rajeev · **Supersedes:** the "one clinician-reviewed
+**Status:** Verify deployed — merged and deployed in #145 (`0cf4c93`); follow-ups are LOC-002 · **Owner:** Rajeev · **Supersedes:** the "one clinician-reviewed
 locale per approved plan" rule in `pat-005-clinician-approved-today-feed-plan.md`
 (§ locale attestation) and `docs/portal-ui-ux-review-2026-10-10.md` (language section).
 
@@ -42,7 +42,7 @@ rendered verbatim with no label. Observed in the synthetic environment on 2026-1
    show recognised cadence phrases (the vocabulary reminder parsing already knows) in
    either language; anything else is shown as written.
 4. **Server text follows the reader's language.** Reminder guidance is already localized
-   on the client; notifications and Today error states move to codes (follow-up).
+   on the client; notifications and Today error states move to codes (LOC-002).
 5. **Human messages keep their original language,** labelled with the language they were
    actually written in. They are never translated or relabelled.
 6. **History is not rewritten.** Approved and superseded plan versions remain the record
@@ -130,11 +130,10 @@ reader's language and the clinician lists show the English title, both keeping t
 as the source identity; a missing column before migration is tolerated. The clinician
 patient detail shows approved English wording for medications and activities.
 
-Follow-ups (separate tasks): notifications and Today error text from codes; sign-up saves
+Follow-ups (tracked as LOC-002): notifications and Today error text from codes; sign-up saves
 the guest language and the server renders `lang` without an English flash; one label set
 for the two locales; a patient language chip in the clinician header and per-message
-language on history; chat session locale from the profile including mid-session switches;
-cached per-locale document explanations; one Spanish register (*tú*) across records,
+language on history; cached per-locale document explanations; one Spanish register (*tú*) across records,
 reminders and symptoms copy.
 
 ## Acceptance
@@ -174,5 +173,3 @@ run of the document-ingestion worker.
   eligible documents on the first attempt (for example "Hydration instructions" /
   "Indicaciones de hidratación"). Records and the clinician Documents list show them with
   the file name kept; the clinician patient detail shows English wording.
-- Until this branch is deployed, approval from the deployed clinician portal fails because the
-  previous review screen cannot supply both languages.
