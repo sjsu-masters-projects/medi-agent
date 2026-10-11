@@ -86,7 +86,8 @@ class Settings(BaseSettings):
     deepgram_api_key: str = ""
     deepgram_stt_model: str = "nova-3"
     deepgram_tts_model_en: str = "aura-2-asteria-en"
-    deepgram_tts_model_es: str = ""
+    # Female Mexican-Spanish voice, matching the English one, so Nora keeps one persona.
+    deepgram_tts_model_es: str = "aura-2-estrella-es"
     voice_max_audio_bytes: int = 5 * 1024 * 1024
 
     # Resend (email)
