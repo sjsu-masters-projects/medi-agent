@@ -722,7 +722,7 @@ async def test_the_server_writes_the_source_line_and_drops_the_models_own() -> N
     complete = _first(events, "complete")
     assert complete["response_text"] == (
         "La metformina baja el azúcar.\n\n"
-        "Fuentes: MedlinePlus: Metformina (consultado el 10 oct 2026)"
+        "Fuente: MedlinePlus: Metformina (consultado el 10 oct 2026)"
     )
 
     # The next turn uses no reference, so it carries no source line.
@@ -763,3 +763,124 @@ async def test_a_model_written_source_line_is_removed_even_when_no_tool_was_used
     )
     events = await _turn(CareCoordinatorRuntime(runner=runner), "What does metformin do?")
     assert _first(events, "complete")["response_text"] == "Metformin lowers sugar."
+
+
+class _DocumentCoordinator(BaseLlm):
+    """Decides, reads the selected document's items, then writes notes."""
+
+    fired: bool = False
+
+    async def generate_content_async(
+        self, llm_request: Any, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        if not self.fired:
+            self.fired = True
+            calls = [
+                types.FunctionCall(name="submit_triage_decision", args=dict(STANDARD_DECISION)),
+                types.FunctionCall(name="get_document_details", args={}),
+            ]
+            yield LlmResponse(
+                content=types.Content(
+                    role="model", parts=[types.Part(function_call=call) for call in calls]
+                )
+            )
+            return
+        yield LlmResponse(
+            content=types.Content(role="model", parts=[types.Part(text=COORDINATOR_NOTES)])
+        )
+
+
+class _DocumentResponder(BaseLlm):
+    """Streams a partial, then the whole answer with a source line of its own."""
+
+    text: str = ""
+
+    async def generate_content_async(
+        self, llm_request: Any, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        yield LlmResponse(
+            content=types.Content(role="model", parts=[types.Part(text=self.text[:12])]),
+            partial=True,
+        )
+        full = f"{self.text}\nSource: page 9 of something"
+        yield LlmResponse(content=types.Content(role="model", parts=[types.Part(text=full)]))
+
+
+SELECTED_DOCUMENT = {
+    "id": "55bc0b62-8726-47ea-9817-4e45535e8616",
+    "file_name": "Morgan-Ellis_Metformin-Medication-Order_2026-10-02.pdf",
+    "display_title": {"en-US": "Metformin prescription", "es-MX": "Receta de metformina"},
+    "document_type": "prescription",
+    "summary": "A prescription for metformin.",
+    "parse_status": "completed",
+}
+_PENDING = "not yet reviewed by the care team"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("language", "reply", "line"),
+    [
+        (
+            Language.EN.value,
+            "Your prescription lists metformin twice a day. Your care team has not "
+            "reviewed it yet.",
+            "Source: Metformin prescription "
+            "(Morgan-Ellis_Metformin-Medication-Order_2026-10-02.pdf), page 1",
+        ),
+        (
+            Language.ES.value,
+            "Tu receta indica metformina dos veces al día. Tu equipo de atención aún no la revisa.",
+            "Fuente: Receta de metformina "
+            "(Morgan-Ellis_Metformin-Medication-Order_2026-10-02.pdf), página 1",
+        ),
+    ],
+)
+async def test_a_document_answer_ends_with_the_server_written_document_source(
+    monkeypatch: pytest.MonkeyPatch, language: str, reply: str, line: str
+) -> None:
+    from app.adk.tools import patient_records
+
+    def facts(patient_id: str, document_id: str) -> list[dict[str, Any]]:
+        assert (patient_id, document_id) == (PATIENT_ID, SELECTED_DOCUMENT["id"])
+        return [
+            {"details": {"name": "Metformin"}, "review_status": _PENDING, "page": 1},
+            {"details": {"name": "Lisinopril"}, "review_status": _PENDING, "page": 2},
+        ]
+
+    monkeypatch.setattr(patient_records, "_document_facts", facts)
+    runner = build_runner(
+        app_name=APP_NAME,
+        agent=SequentialAgent(
+            name="pipeline",
+            sub_agents=[
+                LlmAgent(
+                    name=COORDINATOR_AGENT_NAME,
+                    model=_DocumentCoordinator(model="stub-coordinator"),
+                    instruction="stub",
+                    tools=[submit_triage_decision, patient_records.get_document_details],
+                ),
+                LlmAgent(
+                    name=RESPONDER_AGENT_NAME,
+                    model=_DocumentResponder(model="stub-responder", text=reply),
+                    instruction="stub",
+                ),
+            ],
+        ),
+        tool_allowlist=TOOL_ALLOWLIST,
+    )
+    events = [
+        event
+        async for event in CareCoordinatorRuntime(runner=runner).process_stream(
+            patient_id=PATIENT_ID,
+            user_id="user-1",
+            session_id="document-1",
+            message="What does my document say?",
+            language=language,
+            document_context=dict(SELECTED_DOCUMENT),
+        )
+    ]
+
+    # Only the page of the item the reply talks about; the model's own line is gone.
+    assert _first(events, "complete")["response_text"] == f"{reply}\n\n{line}"
+    assert _chunks(events).endswith(f"\n\n{line}")

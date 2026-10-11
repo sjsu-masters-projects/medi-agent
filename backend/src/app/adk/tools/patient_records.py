@@ -5,13 +5,15 @@ server verified and placed in state, never an identifier from the model. Extract
 facts are candidates until a clinician approves them, so each one carries its review
 status and the patient is never told a pending item is confirmed. Rejected and deleted
 items are left out. Excerpts are the patient's own document text, with its page.
+
+The documents a tool returns are recorded for the turn (``turn_sources``), so the server
+writes the reply's document citation; the model never names its own source.
 """
 
 from __future__ import annotations
 
 import asyncio
 import re
-import unicodedata
 from typing import Any, cast
 from uuid import UUID
 
@@ -20,6 +22,8 @@ from app.adk.tools.scoping import (
     PatientScopeError,
     require_patient_id,
 )
+from app.adk.tools.turn_sources import document_citation, record_turn_sources
+from app.adk.tools.turn_sources import fold as _fold
 from app.clients.supabase import get_admin_client
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.explanation_service import normalize_patient_summary
@@ -119,6 +123,10 @@ async def get_document_details(tool_context: Any) -> dict[str, Any]:
     if not document_id:
         return {"error": "No document is selected for this conversation."}
     items = await asyncio.to_thread(_document_facts, patient_id, document_id)
+    if items:
+        # The server, not the model, cites the document and the pages of these items.
+        citation = document_citation(context, items=items, selected=True)
+        record_turn_sources(tool_context, [citation] if citation else [])
     return {
         "document_type": str(context.get("document_type") or "other"),
         "items": items,
@@ -137,12 +145,6 @@ _GENERIC_WORDS = frozenset(
     este esta""".split()
 )
 SEARCHED_DOCUMENTS = 60
-
-
-def _fold(text: str) -> str:
-    """Case- and accent-insensitive text, so "hidratación" finds "Hidratacion"."""
-    decomposed = unicodedata.normalize("NFKD", text.casefold())
-    return "".join(char for char in decomposed if not unicodedata.combining(char))
 
 
 def _search_documents(patient_id: str, words: list[str]) -> list[dict[str, Any]]:
@@ -199,6 +201,14 @@ async def search_my_documents(query: str, language: str, tool_context: Any) -> d
     if not words:
         return {"documents": [], "note": "Ask the patient which document or topic they mean."}
     rows = await asyncio.to_thread(_search_documents, patient_id, words)
+    record_turn_sources(
+        tool_context,
+        [
+            citation
+            for citation in (document_citation(row, selected=False) for row in rows)
+            if citation is not None
+        ],
+    )
     locale = "es-MX" if str(language or "").lower().startswith("es") else "en-US"
     documents = [
         {

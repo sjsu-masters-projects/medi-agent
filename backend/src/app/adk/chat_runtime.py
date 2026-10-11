@@ -51,6 +51,7 @@ from app.adk.agents.care_coordinator import (
     route_for_intent,
 )
 from app.adk.grounding import (
+    cited_sources,
     plain_reply,
     source_line,
     sources_from_event,
@@ -287,10 +288,11 @@ class CareCoordinatorRuntime:
             return
 
         # The citation is written from what the tools returned, never by the model: a
-        # source line it wrote is removed whether or not a tool returned anything.
+        # source line it wrote is removed whether or not a tool returned anything. The
+        # patient's documents are cited the same way as reference pages, in one line.
         answer = plain_reply(without_source_lines(answer))
         if sources:
-            line = source_line(sources, language)
+            line = source_line(cited_sources(sources, answer), language)
             if line:
                 if streamed:
                     yield {"type": "chunk", "content": f"\n\n{line}"}
