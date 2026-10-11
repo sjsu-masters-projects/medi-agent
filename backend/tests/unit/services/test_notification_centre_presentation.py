@@ -83,6 +83,21 @@ def test_internal_identifiers_are_not_names_or_visible_copy():
     assert raw["actor_name"] not in result.title and raw["clinic_name"] not in result.body
 
 
+def test_message_names_the_sender_and_clinic_once():
+    raw = item(
+        event_type="message_received",
+        category="messages",
+        actor_name="Elena Park",
+        patient_name="Morgan Ellis",
+        clinic_name="Synthetic Clinic",
+    )
+    patient = present_item(raw, "patient", "en-US")
+    assert patient.title == "New message from Elena Park" and patient.body == "Synthetic Clinic"
+    clinician = present_item(raw, "clinician", "en-US")
+    assert clinician.title == "New message from Morgan Ellis"
+    assert clinician.clinic_name == "Synthetic Clinic" and clinician.body == ""
+
+
 def test_information_request_opens_the_requesting_recipient():
     recipient = str(uuid4())
     raw = item(
@@ -115,3 +130,19 @@ def test_reviewed_information_questions_are_shown_as_written_not_translated():
     result = present_item(raw, "patient", "es-MX")
     assert question in result.body and "texto original" in result.body
     assert "internal" not in result.body
+
+
+@pytest.mark.parametrize(
+    ("role", "actionable", "expected"),
+    [("clinician", True, True), ("clinician", False, False), ("patient", True, False)],
+)
+def test_appointment_response_acknowledgement_flows_only_while_actionable(
+    role, actionable, expected
+):
+    raw = item(
+        event_type="appointment_response",
+        category="appointments",
+        actionable=actionable,
+        can_acknowledge=True,
+    )
+    assert present_item(raw, role, "en-US").can_acknowledge is expected

@@ -138,13 +138,15 @@ The patient AI transcript links to Messages.
 care-plan drafts, appointments and follow-up/safety items open their exact existing
 workflow; reading does not approve care. Only supported barrier/safety items offer
 an audited acknowledgement, meaning seen for follow-up, not clinically resolved.
-The historical archive preserves legacy sent-message records without converting
-old urgency labels into active work. Messages remains private human conversations.
+Messages holds private human conversations, followed by a collapsed **Earlier
+messages** section: one-way messages and saved escalation notices from before
+conversations, shown as history only (old urgency labels create no active work).
 
 The shared notification cache polls `/api/v1/notification-centre` once a minute
 while visible and refreshes on focus. Signed per-page cutoffs protect bulk reads
-against new arrivals; assignment revocation removes access. Counts unavailable
-is not zero. See [NOT-001](../../.agent/specs/not-001-notification-centre.md) for
+against new arrivals; "Mark all loaded read" skips items that are no longer
+available and says how many; assignment revocation removes access. Counts
+unavailable is not zero. See [NOT-001](../../.agent/specs/not-001-notification-centre.md) for
 the migration prerequisite and deployed acceptance boundary.
 
 The conversation API is `/api/v1/care-conversations`. Pages contain at most 50

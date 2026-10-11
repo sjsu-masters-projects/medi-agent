@@ -24,6 +24,11 @@ vi.mock("@/services/clinic-context", () => ({
     readStoredClinicContext: vi.fn(() => null),
 }));
 
+const { notificationSummary } = vi.hoisted(() => ({ notificationSummary: { current: null as null | { unread_count: number; action_item_count: number } } }));
+vi.mock("@/components/features/notification-provider", () => ({
+    useOptionalNotificationCentre: () => notificationSummary.current ? { summary: { data: notificationSummary.current, error: null } } : null,
+}));
+
 vi.mock("@/services/api", () => ({
     api: {
         get: profileGetMock,
@@ -118,5 +123,13 @@ describe("Sidebar", () => {
         fireEvent.click(expand);
         expect(await screen.findByRole("button", { name: "Collapse sidebar" })).toBeInTheDocument();
         expect(window.localStorage.getItem("clinician-portal.sidebar-collapsed")).toBe("0");
+    });
+    it("shows the same unread count on Alerts as the header bell", () => {
+        notificationSummary.current = { unread_count: 8, action_item_count: 11 };
+        render(<Provider store={store}><Sidebar /></Provider>);
+        const alerts = screen.getByRole("link", { name: /Alerts/ });
+        expect(within(alerts).getByText("8")).toBeInTheDocument();
+        expect(within(alerts).queryByText("11")).not.toBeInTheDocument();
+        notificationSummary.current = null;
     });
 });

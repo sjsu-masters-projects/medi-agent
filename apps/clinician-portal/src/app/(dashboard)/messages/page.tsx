@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CareConversations } from "@/components/features/care-conversations";
+import { EarlierMessages } from "@/components/features/operational-alerts";
 
 function MessagesInbox() {
   const searchParams = useSearchParams();
@@ -18,5 +19,6 @@ export default function MessagesPage() {
       </div>
     </div>
     <Suspense fallback={<p role="status">Loading conversations…</p>}><MessagesInbox /></Suspense>
+    <EarlierMessages />
   </div>;
 }

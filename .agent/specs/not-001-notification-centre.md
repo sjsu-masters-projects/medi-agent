@@ -68,6 +68,39 @@ actionable, and following a link marks the item read.
 Acknowledgement is per clinician: it records that this reviewer saw the item. It is not
 clinical resolution and does not clear the item for other reviewers.
 
+Appointment responses in Needs attention (requester decision, October 11):
+- A confirmation is an ordinary notification and is never an action item.
+- A decline, a request for another time or a cancellation is an action item for the
+  responsible clinician until they acknowledge it, or until a newer appointment for that
+  patient and care team exists.
+- A multi-slot offer contributes one item, however many slots it had. From migration 055 the
+  answer is also one notification in History and one unread; responses captured before 055
+  keep one History row per slot (append only).
+
+"Mark all read" marks every item in the signed snapshot that the reader may still see. It
+skips the rest and returns `{"updated_count", "skipped_count"}`; both portals show how
+many were skipped, so a revoked item no longer fails the batch.
+
+Reads are proportional to the page shown, as in fan-out-on-write systems:
+- Prepare touches only the reader's active patients. A request that finds one already
+  running for that person waits for it, so the summary and lists of one refresh agree
+  (migration 056).
+- Lists walk the reader's receipts from the cursor in bounded windows.
+- Unread and action counts come from indexes.
+- Conversation read markers and legacy read flags keep `read_at` current.
+- Measured at 10,000 history items: about 54 ms for a list page, against about 2 s before
+  (migration 054).
+
+Account deletion (requester decision): a deleted patient's conversations, messages,
+read markers and appointment-offer history are removed with them. When a clinician is
+deleted, the patient's thread is kept but unlinked, and their sent messages keep the
+sender name (migration 053). Clinician deletion is still blocked by document upload and
+review provenance and by SOAP annotations; that is recorded as a follow-up.
+
+Clinician one-way messages and saved escalation notices from before conversations appear
+in Messages, in a collapsed Earlier messages section. They are history only. Alerts holds
+notifications only.
+
 Notification history is never updated. It is removed only together with the patient or
 account it belongs to, so account deletion and the synthetic demo reset keep working.
 No role is granted DELETE. Malformed source values, such as an unparseable date or an

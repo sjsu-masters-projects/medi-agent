@@ -18,6 +18,8 @@ const empty = (): Cache => ({ history: { data: null, error: null }, actions: { d
 interface CentreContext extends Cache {
   busy: boolean;
   writeError: string | null;
+  /** Items left unread by the last "mark all" because they are no longer available. */
+  skipped: number;
   refresh: () => Promise<void>;
   more: (feed: Feed) => Promise<void>;
   read: (id: string) => Promise<boolean>;
@@ -32,6 +34,10 @@ export function useNotificationCentre() {
   if (!value) throw new Error("Notification centre requires its portal provider.");
   return value;
 }
+/** For shell chrome that can render outside the provider (for example in tests). */
+export function useOptionalNotificationCentre() {
+  return useContext(Context);
+}
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
@@ -43,6 +49,7 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
   const [cacheToken, setCacheToken] = useState(token);
   const [busy, setBusy] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState(0);
   const [actionsCategory, setActionsCategory] = useState<NotificationCategory | "">("");
   const categoryRef = useRef<NotificationCategory | "">("");
   const generation = useRef(0);
@@ -158,7 +165,7 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
   }
 
   const value: CentreContext = {
-    ...(cacheToken === token ? cache : empty()), busy, writeError, refresh, more,
+    ...(cacheToken === token ? cache : empty()), busy, writeError, skipped, refresh, more,
     actionsCategory,
     filterActions: (category) => {
       if (lock.current || category === categoryRef.current) return;
@@ -171,11 +178,14 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
     readAll: () => {
       const snapshots = cache.history.data?.read_snapshots ?? [];
       const identity = session.current;
+      setSkipped(0);
       return snapshots.length ? write(async () => {
+        let total = 0;
         for (const snapshot of new Set(snapshots)) {
           if (!alive.current || identity !== session.current) return;
-          await notificationCentre.readThrough(token!, snapshot);
+          total += (await notificationCentre.readThrough(token!, snapshot)).skipped;
         }
+        if (alive.current && identity === session.current) setSkipped(total);
       }) : Promise.resolve(false);
     },
     acknowledge: (item, note) => {

@@ -7,14 +7,14 @@ vi.mock("@/components/features/care-conversations", () => ({
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("conversation=exact-thread") }));
 vi.mock("@/components/features/operational-alerts", () => ({
-  OperationalAlerts: () => <p>Separate operational history</p>,
+  EarlierMessages: () => <p>Earlier messages archive</p>,
 }));
 
 describe("Messages views", () => {
-  it("keeps Messages human-only and forwards the exact conversation", () => {
+  it("shows conversations first, keeps earlier one-way messages below, and forwards the exact conversation", () => {
     render(<MessagesPage />);
     expect(screen.getByText("Human conversations exact-thread")).toBeInTheDocument();
-    expect(screen.queryByText("Separate operational history")).not.toBeInTheDocument();
+    expect(screen.getByText("Earlier messages archive")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Operational alerts" })).not.toBeInTheDocument();
   });
 });

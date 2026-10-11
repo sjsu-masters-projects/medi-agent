@@ -12,6 +12,7 @@ from app.models.notification_centre import (
     CentreAcknowledgment,
     CentrePage,
     CentreReadThrough,
+    CentreReadThroughResult,
     CentreSummary,
     NotificationLocale,
 )
@@ -60,11 +61,11 @@ async def action_items(
     return await service.action_items({"category": category, "cursor": cursor, "limit": limit})
 
 
-@router.post("/read-through")
+@router.post("/read-through", response_model=CentreReadThroughResult)
 async def read_through(
     data: CentreReadThrough,
     service: NotificationCentreService = Depends(centre_service),
-) -> Any:
+) -> CentreReadThroughResult:
     return await service.read_through(data.read_through)
 
 

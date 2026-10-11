@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { NotificationList } from "@/components/features/notification-centre";
 import { useNotificationCentre } from "@/components/features/notification-provider";
-import { OperationalAlerts } from "@/components/features/operational-alerts";
 
 export default function AlertsPage() {
   const [view, setView] = useState<"actions" | "history">("actions");
@@ -12,7 +11,7 @@ export default function AlertsPage() {
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Alerts</h1>
-        <p className="mt-1 max-w-[80ch] text-sm text-muted">Review assigned work and notification history. Reading or acknowledging an alert does not approve care or resolve a clinical concern.</p>
+        <p className="mt-1 max-w-[80ch] text-sm text-muted">Reading or acknowledging an alert does not approve care or resolve a clinical concern.</p>
       </div>
       <p className="text-sm text-muted" role="status">{summary.error || !summary.data ? "Counts unavailable" : `${summary.data.action_item_count} need attention · ${summary.data.unread_count} unread`}</p>
     </div>
@@ -20,10 +19,6 @@ export default function AlertsPage() {
       {(["actions", "history"] as const).map((value) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={`min-h-9 rounded-md px-4 text-sm ${view === value ? "bg-surface font-medium text-ink shadow-sm" : "text-muted"}`}>{value === "actions" ? "Needs attention" : "History"}</button>)}
     </div>
     <NotificationList key={view} actions={view === "actions"} />
-    {view === "history" && <details className="rounded-2xl border border-line bg-surface p-4">
-      <summary className="cursor-pointer text-sm font-semibold text-ink">Legacy sent-message archive</summary>
-      <p className="my-3 max-w-[80ch] text-sm text-muted">Earlier operational records and human messages are retained here as history. They are not active work; earlier urgency labels do not create new clinical alerts or current review tasks.</p>
-      <OperationalAlerts />
-    </details>}
+
   </div>;
 }

@@ -44,6 +44,14 @@ class CentreReadThrough(BaseModel):
     read_through: str = Field(min_length=1, max_length=65536)
 
 
+class CentreReadThroughResult(BaseModel):
+    """Receipts marked read now, and snapshot receipts left alone because they are no
+    longer the caller's to see. Already-read receipts count as neither."""
+
+    updated_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+
+
 class CentreAcknowledgment(BaseModel):
     model_config = ConfigDict(extra="forbid")
     note: str | None = Field(default=None, max_length=1000)

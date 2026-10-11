@@ -67,9 +67,22 @@ def test_list_is_scoped_no_store_and_only_safe_display_fields(client, centre, ro
 def test_snapshot_marks_only_receipts_in_the_issued_view(client, centre):
     _, row, db = centre
     token = client.get(ROOT).json()["read_through"]
-    db.rpc.return_value.execute.return_value.data = {"updated": 1}
-    assert client.post(ROOT + "/read-through", json={"read_through": token}).status_code == 200
+    db.rpc.return_value.execute.return_value.data = {"updated_count": 0, "skipped_count": 1}
+    response = client.post(ROOT + "/read-through", json={"read_through": token})
+    assert response.status_code == 200
+    # A receipt that is no longer visible is skipped, not a failure for the whole view.
+    assert response.json() == {"updated_count": 0, "skipped_count": 1}
+    assert db.rpc.call_args.args[1]["p_action"] == "read_through"
     assert db.rpc.call_args.args[1]["p_payload"] == {"ids": [row["id"]]}
+
+
+def test_read_through_with_an_unexpected_result_is_unavailable_not_a_crash(client, centre):
+    _, _, db = centre
+    token = client.get(ROOT).json()["read_through"]
+    db.rpc.return_value.execute.return_value.data = {"updated": 1}
+    response = client.post(ROOT + "/read-through", json={"read_through": token})
+    assert response.status_code == 502
+    assert "updated" not in response.text
 
 
 @pytest.mark.parametrize("purpose", ["read", "cursor"])

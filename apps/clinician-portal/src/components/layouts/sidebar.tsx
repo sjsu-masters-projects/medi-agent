@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
+import { useOptionalNotificationCentre } from "@/components/features/notification-provider";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { clearStoredSession } from "@/services/auth-session";
 import { readStoredClinicContext } from "@/services/clinic-context";
@@ -107,6 +108,9 @@ export function Sidebar() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     // Counts come from data the dashboard already loaded; the sidebar never fetches its own.
     const pendingAdr = useSelector((state: RootState) => state.dashboard?.summary?.pending_adr_reviews);
+    // One notification number across the shell: the sidebar shows the same unread count
+    // as the header bell. "Needs attention" is shown on the Alerts page itself.
+    const unreadAlerts = useOptionalNotificationCentre()?.summary.data?.unread_count;
     const [profile, setProfile] = useState<SidebarClinicianProfile | null>(null);
     const storedClinic = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
     const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
@@ -182,7 +186,7 @@ export function Sidebar() {
 
             <nav aria-label="Clinician navigation" className="flex gap-1 overflow-x-auto px-3 py-2 md:flex-1 md:flex-col md:gap-0.5 md:overflow-visible md:p-0">
                 {primaryNavigation.map((item) => (
-                    <NavItem key={item.href} {...item} active={isActive(item.href)} collapsed={collapsed} count={item.href === "/medwatch" ? pendingAdr : undefined} />
+                    <NavItem key={item.href} {...item} active={isActive(item.href)} collapsed={collapsed} count={item.href === "/medwatch" ? pendingAdr : item.href === "/alerts" ? unreadAlerts : undefined} />
                 ))}
 
                 <div className="flex shrink-0 md:block">
