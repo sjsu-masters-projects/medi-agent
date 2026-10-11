@@ -170,5 +170,9 @@ run of the document-ingestion worker.
   Spanish-only active plan showed "Written in Spanish by your care team" in the English app.
 - Known: `verify-supabase-schema.sh` counts 59 ledger rows against this branch's 58 files; the
   extra row predates 049 (`047_adr_patient_information_loop.sql` from another branch).
+- Record titles: migration 050 applied with authorization; three worker runs titled all 18
+  eligible documents on the first attempt (for example "Hydration instructions" /
+  "Indicaciones de hidratación"). Records and the clinician Documents list show them with
+  the file name kept; the clinician patient detail shows English wording.
 - Until this branch is deployed, approval from the deployed clinician portal fails because the
   previous review screen cannot supply both languages.
