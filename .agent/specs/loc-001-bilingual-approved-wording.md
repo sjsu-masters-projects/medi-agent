@@ -142,3 +142,24 @@ reminders and symptoms copy.
    or clinician-edited.
 7. Backend pytest, Ruff, mypy; both portals' lint, typecheck, tests and build; migration
    validation; seed dry run and idempotency.
+
+## Verification — 2026-10-10 (synthetic environment)
+
+Authorized by the requester: migration 049 applied through `scripts/apply-supabase-migrations.sh`
+(only 049 was pending), the refresh applied with report hash `b710b06b…c92f`, and one local
+run of the document-ingestion worker.
+
+- Refresh: the open draft's 5 items received AI drafts that all passed validation; the second
+  patient's approved plan produced a new bilingual draft (4 items) for review. No approved row
+  changed.
+- Review and approval: in the clinician portal, the duplicate hydration proposal from a repeat
+  upload was removed in favour of the carried-forward item, each remaining item's English and
+  Spanish wording was checked against its source, and version 4 was approved. Projections hold
+  both languages; the audit event records Spanish as source and English as AI draft per item.
+- Patient: Today and Reminders render the same activities in English and, read-only with the
+  saved language overridden, in Spanish, with identical completion state. Before approval, the
+  Spanish-only active plan showed "Written in Spanish by your care team" in the English app.
+- Known: `verify-supabase-schema.sh` counts 59 ledger rows against this branch's 58 files; the
+  extra row predates 049 (`047_adr_patient_information_loop.sql` from another branch).
+- Until this branch is deployed, approval from the deployed clinician portal fails because the
+  previous review screen cannot supply both languages.
