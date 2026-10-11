@@ -21,15 +21,15 @@ export function ErrorState({
 }: ErrorStateProps) {
     const spanish = useSharedPatientProfile()?.profile?.preferredLanguage === "es-MX";
     return (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-[28px] border border-[#efbeb5] bg-[#fff5f2] px-6 py-10 text-center shadow-[0_18px_48px_rgba(116,52,42,0.08)]">
-            <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-4xl text-[#b94032]">{icon}</span>
+        <div className="flex flex-col items-center justify-center gap-4 rounded-[22px] border border-danger-ink/20 bg-danger-tint px-6 py-10 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface text-2xl text-danger-ink">{icon}</span>
             <div className="space-y-1">
-                <h3 className="text-lg font-bold text-[#17233a]">{title ?? (spanish ? "No se pudo cargar" : "Error")}</h3>
-                <p className="text-base leading-7 text-[#5b6b83]">{description ?? (spanish ? "Algo salió mal. Intenta de nuevo." : "Something went wrong. Please try again.")}</p>
+                <h3 className="text-lg font-semibold text-ink">{title ?? (spanish ? "No se pudo cargar" : "Error")}</h3>
+                <p className="text-[15px] leading-6 text-muted">{description ?? (spanish ? "Algo salió mal. Intenta de nuevo." : "Something went wrong. Please try again.")}</p>
             </div>
             {onRetry ? (
                 <button
-                    className="min-h-11 rounded-2xl border border-[#efbeb5] bg-white px-4 py-2 text-sm font-semibold text-[#b94032] transition hover:bg-[#fff2ef]"
+                    className="min-h-11 rounded-2xl border border-danger-ink/20 bg-surface px-4 py-2 text-sm font-semibold text-danger-ink transition hover:bg-danger-tint"
                     onClick={onRetry}
                     type="button"
                 >

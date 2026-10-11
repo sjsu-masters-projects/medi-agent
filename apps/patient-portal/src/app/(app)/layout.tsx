@@ -5,19 +5,26 @@ import { usePathname } from "next/navigation";
 import { BottomNav, ProtectedRoute } from "@/components/layouts";
 import { PatientProfileProvider } from "@/hooks/use-patient-profile";
 import { PatientLanguageControl } from "@/components/layouts/patient-language-control";
+import { PatientShellProvider, usePatientShell } from "@/contexts/patient-shell-context";
+
+function PatientShell({ children }: { children: ReactNode }) {
+    const pathname = usePathname();
+    const { conversationOpen } = usePatientShell();
+    return (
+        <div className="app-shell flex min-h-dvh flex-col">
+            <PatientLanguageControl visible={false} />
+            <main className={`flex-1 ${conversationOpen ? "pb-0" : "pb-[calc(110px+env(safe-area-inset-bottom))]"}`}>{children}</main>
+            {!conversationOpen && <BottomNav currentPath={pathname} />}
+        </div>
+    );
+}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-    const pathname = usePathname();
-
     return (
         <Suspense fallback={null}>
             <ProtectedRoute>
               <PatientProfileProvider>
-                <div className="app-shell flex min-h-dvh flex-col">
-                    <PatientLanguageControl visible={false} />
-                    <main className="flex-1 overflow-y-auto pb-32">{children}</main>
-                    <BottomNav currentPath={pathname} />
-                </div>
+                <PatientShellProvider><PatientShell>{children}</PatientShell></PatientShellProvider>
               </PatientProfileProvider>
             </ProtectedRoute>
         </Suspense>

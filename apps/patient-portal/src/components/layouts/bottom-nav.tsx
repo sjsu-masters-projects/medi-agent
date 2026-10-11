@@ -3,23 +3,17 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useSharedPatientProfile } from "@/contexts/patient-profile-context";
-import {
-    HiOutlineCalendarDays,
-    HiOutlineChatBubbleLeftRight,
-    HiOutlineFolder,
-    HiOutlineHome,
-    HiOutlineUser,
-} from "react-icons/hi2";
+import { Icon } from "@/components/ui/icons";
 
 interface BottomNavProps {
     currentPath: string;
 }
 
 const navItems = [
-    { href: "/today", icon: HiOutlineHome, label: "Today" },
-    { href: "/records", icon: HiOutlineFolder, label: "Records" },
-    { href: "/visits", icon: HiOutlineCalendarDays, label: "Visits" },
-    { href: "/profile", icon: HiOutlineUser, label: "Profile" },
+    { href: "/today", icon: "home", label: "Today" },
+    { href: "/records", icon: "folder", label: "Records" },
+    { href: "/visits", icon: "cal", label: "Visits" },
+    { href: "/profile", icon: "user", label: "Profile" },
 ] as const;
 
 function NavItem({
@@ -36,14 +30,14 @@ function NavItem({
     return (
         <Link
             aria-current={active ? "page" : undefined}
-            className={`flex min-h-[58px] min-w-[58px] flex-col items-center justify-center gap-1 rounded-2xl px-2 transition-all ${
-                active ? "bg-[#e6f4f1] text-[#147465]" : "text-[#718096] hover:bg-[#f6f1ea]"
+            className={`relative flex min-h-11 min-w-11 flex-col items-center justify-center gap-[3px] rounded-2xl transition-colors ${
+                active ? "text-brand" : "text-muted hover:text-brand"
             }`}
             href={href}
             prefetch={false}
         >
             <span className="text-[1.35rem]">{icon}</span>
-            <span className="text-[11px] font-bold">{label}</span>
+            <span className={`text-[11px] ${active ? "font-semibold" : "font-medium"}`}>{label}</span>
         </Link>
     );
 }
@@ -51,39 +45,41 @@ function NavItem({
 export function BottomNav({ currentPath }: BottomNavProps) {
     const spanish = useSharedPatientProfile()?.profile?.preferredLanguage === "es-MX";
     const labels: Record<string, string> = spanish ? { Today: "Hoy", Records: "Registros", Visits: "Citas", Profile: "Perfil" } : {};
+    const destinations = ["/today", "/records", "/chat", "/visits", "/profile"];
+    const activeIndex = destinations.findIndex((path) => currentPath === path || currentPath.startsWith(`${path}/`));
     return (
-        <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[480px] -translate-x-1/2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <div className="relative flex min-h-[82px] items-center justify-around rounded-[30px] border border-white/80 bg-white/92 px-2 shadow-[0_-18px_60px_rgba(31,45,69,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur-xl">
+        <nav aria-label={spanish ? "Navegación principal" : "Primary navigation"} className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-28px)] max-w-[452px] -translate-x-1/2">
+            <div className="relative grid h-[68px] grid-cols-5 items-center rounded-3xl border border-line bg-surface/90 shadow-[var(--shadow-nav)] backdrop-blur-[18px]">
+                {activeIndex >= 0 && activeIndex !== 2 ? <span aria-hidden="true" className="pointer-events-none absolute top-[10px] flex h-12 w-1/5 justify-center transition-transform duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)]" style={{ transform: `translateX(${activeIndex * 100}%)` }}><span className="h-12 w-[52px] rounded-2xl bg-brand-tint" /></span> : null}
                 <NavItem
-                    active={currentPath === "/today"}
+                    active={activeIndex === 0}
                     href="/today"
-                    icon={<HiOutlineHome />}
+                    icon={<Icon name="home" className="h-[22px] w-[22px]" />}
                     label={labels.Today ?? "Today"}
                 />
                 <NavItem
-                    active={currentPath === "/records"}
+                    active={activeIndex === 1}
                     href="/records"
-                    icon={<HiOutlineFolder />}
+                    icon={<Icon name="folder" className="h-[22px] w-[22px]" />}
                     label={labels.Records ?? "Records"}
                 />
                 <Link
-                    aria-current={currentPath === "/chat" ? "page" : undefined}
+                    aria-current={activeIndex === 2 ? "page" : undefined}
                     aria-label={spanish ? "Abrir conversaciones" : "Open care chat"}
-                    className={`flex h-[66px] w-[66px] -translate-y-5 items-center justify-center rounded-[26px] border-4 border-white text-3xl text-white shadow-[0_18px_38px_rgba(20,116,101,0.28)] transition-all active:scale-95 ${
-                        currentPath === "/chat" ? "bg-[#0f5f53]" : "bg-[#147465]"
+                    className={`ma-press relative mx-auto -mt-[26px] flex h-[54px] w-[54px] items-center justify-center rounded-[18px] shadow-[var(--shadow-fab)] ${
+                        activeIndex === 2 ? "bg-brand-deep text-gold ring-4 ring-brand-tint" : "bg-brand text-white"
                     }`}
                     href="/chat"
                     prefetch={false}
                 >
-                    <HiOutlineChatBubbleLeftRight />
+                    <Icon name="chat" />
                 </Link>
                 {navItems.slice(2).map((item) => {
-                    const Icon = item.icon;
                     return (
                         <NavItem
-                            active={currentPath === item.href}
+                            active={currentPath === item.href || currentPath.startsWith(`${item.href}/`)}
                             href={item.href}
-                            icon={<Icon />}
+                            icon={<Icon name={item.icon} className="h-[22px] w-[22px]" />}
                             key={item.href}
                             label={labels[item.label] ?? item.label}
                         />

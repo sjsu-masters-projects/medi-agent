@@ -2,11 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { HiOutlineCalendarDays, HiOutlineArrowPath } from "react-icons/hi2";
+import { HiOutlineArrowPath } from "react-icons/hi2";
+import { Icon } from "@/components/ui/icons";
+import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { VisitOfferCard } from "@/components/features/visit-offer-card";
 import { CalendarExportButton } from "@/components/features/calendar-export-button";
 import { PageHeader } from "@/components/layouts";
-import { Badge, Button, Card, EmptyState, ErrorState } from "@/components/ui";
+import { Button, Card, ErrorState } from "@/components/ui";
 import {
   getVisitsCopy,
   formatUpcomingVisitCount,
@@ -32,19 +34,12 @@ const UPCOMING_STATUSES: string[] = [
 ];
 const WAITING_STATUSES: string[] = [AppointmentStatus.ALTERNATIVE_REQUESTED];
 
-type BadgeVariant = "success" | "warning" | "danger" | "info" | "neutral";
-
-const STATUS_VARIANTS: Record<string, BadgeVariant> = {
-  proposed: "warning",
-  confirmed: "success",
-  scheduled: "success",
-  declined: "neutral",
-  alternative_requested: "info",
-  cancelled: "danger",
-  completed: "neutral",
-  no_show: "neutral",
-  withdrawn: "neutral",
-  expired: "neutral",
+const STATUS_STYLES: Record<string, string> = {
+  proposed: "bg-note-tint text-note-ink",
+  confirmed: "bg-brand-tint text-brand-ink",
+  scheduled: "bg-brand-tint text-brand-ink",
+  alternative_requested: "bg-lab-tint text-lab-ink",
+  cancelled: "bg-danger-tint text-danger-ink",
 };
 type ComposeAction = "request_alternative" | "cancel";
 
@@ -71,7 +66,7 @@ function VisitCard({
   const [note, setNote] = useState("");
 
   const label = copy.statuses[visit.status];
-  const variant = STATUS_VARIANTS[visit.status] ?? "neutral";
+  const statusStyle = STATUS_STYLES[visit.status] ?? "bg-surface-2 text-muted";
   const isProposed = visit.status === AppointmentStatus.PROPOSED;
   const isUpcoming = UPCOMING_STATUSES.includes(visit.status);
   const canAct = Boolean(onRespond) && (isProposed || isUpcoming);
@@ -93,22 +88,26 @@ function VisitCard({
   }
 
   return (
-    <Card>
+    <article className="border-b border-line px-[14px] py-[13px] last:border-b-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="min-w-0 break-words text-base font-bold text-[#17233a]">
+        <p className="min-w-0 break-words font-mono text-[15px] font-medium leading-6 text-ink">
           {formatVisitTime(visit.scheduledAt, locale, timezone) ??
             copy.invalidDate}
-          <span className="block text-sm font-normal text-slate-600">
+          <span className="block font-sans text-[13px] font-normal text-muted">
             {timezone}
           </span>
         </p>
-        <Badge variant={variant}>{label}</Badge>
+        <span
+          className={`max-w-full rounded-full px-2.5 py-1 text-xs font-medium ${statusStyle}`}
+        >
+          {label}
+        </span>
       </div>
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         {copy.types[visit.appointmentType]} · {visit.durationMinutes}{" "}
         {copy.minutes}
       </p>
-      <dl className="mt-2 space-y-1 break-words text-sm text-[#5b6b83]">
+      <dl className="mt-2 space-y-1 break-words text-sm text-ink-2">
         {visit.clinicianName ? (
           <dd>
             {copy.with} {visit.clinicianName}
@@ -118,25 +117,25 @@ function VisitCard({
         {visit.location ? <dd>{visit.location}</dd> : null}
       </dl>
       {isUpcomingVisit(visit, now) && visit.notes ? (
-        <div className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-slate-700">
+        <div className="mt-3 rounded-xl bg-surface-2 p-3 text-sm text-ink-2">
           <p className="font-semibold">{copy.preparationNotes}</p>
-          <p className="mt-1 whitespace-pre-wrap">{visit.notes}</p>
+          <p className="mt-1 whitespace-pre-wrap break-words">{visit.notes}</p>
         </div>
       ) : null}
       {visit.patientNote ? (
-        <p className="mt-2 text-sm italic text-[#5b6b83]">
+        <p className="mt-2 break-words text-sm italic text-muted">
           {copy.note} {visit.patientNote}
         </p>
       ) : null}
       {isProposed && visit.proposalExpiresAt ? (
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 break-words text-sm text-muted">
           {copy.availableUntil}{" "}
           {formatVisitTime(visit.proposalExpiresAt, locale, timezone)} ·{" "}
           {timezone}
         </p>
       ) : null}
       {visit.status === AppointmentStatus.EXPIRED ? (
-        <p className="mt-2 text-sm text-slate-600">{copy.expiredDetail}</p>
+        <p className="mt-2 text-sm text-muted">{copy.expiredDetail}</p>
       ) : null}
 
       {isUpcoming && (
@@ -152,13 +151,13 @@ function VisitCard({
         composing ? (
           <div className="mt-4 space-y-3">
             <label
-              className="block text-sm font-semibold text-[#30415f]"
+              className="block text-sm font-semibold text-ink-2"
               htmlFor={`note-${visit.id}`}
             >
               {copy.compose[composing].label}
             </label>
             <textarea
-              className="w-full rounded-2xl border border-[#d9cbc0] bg-white px-3 py-2 text-sm text-[#17233a] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus:border-[#147465] focus:outline-none"
+              className="min-h-11 w-full rounded-2xl border border-line-strong bg-surface px-3 py-2 text-base text-ink"
               id={`note-${visit.id}`}
               disabled={responding}
               maxLength={1000}
@@ -167,7 +166,7 @@ function VisitCard({
               rows={3}
               value={note}
             />
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3 [&_button]:min-h-11">
               <Button
                 disabled={responding}
                 fullWidth
@@ -188,7 +187,7 @@ function VisitCard({
             </div>
           </div>
         ) : (
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-2 [&_button]:min-h-11">
             {isProposed ? (
               <>
                 <Button
@@ -237,7 +236,7 @@ function VisitCard({
           </div>
         )
       ) : null}
-    </Card>
+    </article>
   );
 }
 
@@ -251,11 +250,13 @@ function VisitGroup({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3">
-      <h2 className="px-1 text-sm font-black uppercase tracking-[0.16em] text-[#5b6b83]">
+    <section className="space-y-2">
+      <h2 className="px-1.5 font-mono text-xs uppercase tracking-[0.08em] text-muted">
         {title} ({count})
       </h2>
-      {children}
+      <div className="overflow-hidden rounded-[22px] bg-surface">
+        {children}
+      </div>
     </section>
   );
 }
@@ -339,153 +340,188 @@ export default function VisitsPage() {
   );
 
   return (
-    <div className="patient-page space-y-4 pb-8" lang={locale} aria-busy={loading || settings.loading}>
-      <PageHeader
-        rightAction={!actionError ? <Button disabled={loading || settings.loading || Boolean(respondingId)} onClick={refresh} size="sm" variant="secondary"><HiOutlineArrowPath aria-hidden="true" className={loading ? "animate-spin motion-reduce:animate-none" : ""} />{copy.refreshVisits}</Button> : undefined}
-        subtitle={
-          upcoming.length
-            ? formatUpcomingVisitCount(upcoming.length, locale)
-            : copy.subtitle
-        }
-        title={copy.title}
-      />
+    <PullToRefresh
+      onRefresh={refresh}
+      busy={loading || settings.loading || Boolean(respondingId)}
+      label={copy.refreshVisits}
+    >
+      <div
+        className="patient-page space-y-4 pb-6"
+        lang={locale}
+        aria-busy={loading || settings.loading}
+      >
+        <PageHeader
+          rightAction={
+            !actionError ? (
+              <button
+                type="button"
+                aria-label={copy.refreshVisits}
+                title={copy.refreshVisits}
+                className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-surface-2 text-ink-2 disabled:opacity-50"
+                disabled={loading || settings.loading || Boolean(respondingId)}
+                onClick={refresh}
+              >
+                <HiOutlineArrowPath
+                  aria-hidden="true"
+                  className={
+                    loading ? "h-5 w-5 motion-safe:animate-spin" : "h-5 w-5"
+                  }
+                />
+              </button>
+            ) : undefined
+          }
+          subtitle={
+            upcoming.length
+              ? formatUpcomingVisitCount(upcoming.length, locale)
+              : copy.subtitle
+          }
+          title={copy.title}
+        />
 
-      <div className="patient-stack -mt-4 space-y-6 px-5">
-        {!settings.loading && zone.fallback ? (
-          <Card>
-            <p role="status">{copy.fallback}</p>
-            <Button onClick={settings.refresh} variant="ghost">
-              {copy.retry}
-            </Button>
-          </Card>
-        ) : null}
-        {settings.loading || (loading && visits.length === 0) ? (
-          <Card>
-            <p role="status" className="text-base text-[#64748b]">
-              {settings.loading ? copy.loadingSettings : copy.loading}
-            </p>
-          </Card>
-        ) : error && visits.length === 0 ? (
-          <ErrorState
-            description={copy.loadErrorDetail}
-            action={<Button onClick={refresh}>{copy.retry}</Button>}
-            title={copy.loadError}
-          />
-        ) : visits.length === 0 ? (
-          <EmptyState
-            description={copy.emptyDetail}
-            icon={<HiOutlineCalendarDays />}
-            title={copy.emptyTitle}
-          />
-        ) : (
-          <>
-            {loading ? (
-              <p role="status" className="text-sm text-slate-600">
-                {copy.loading}
+        <div className="patient-stack space-y-5 px-4">
+          {!settings.loading && zone.fallback ? (
+            <Card className="rounded-[22px] shadow-none">
+              <p role="status">{copy.fallback}</p>
+              <Button onClick={settings.refresh} variant="ghost">
+                {copy.retry}
+              </Button>
+            </Card>
+          ) : null}
+          {settings.loading || (loading && visits.length === 0) ? (
+            <Card className="rounded-[22px] shadow-none">
+              <p role="status" className="text-sm text-muted">
+                {settings.loading ? copy.loadingSettings : copy.loading}
               </p>
-            ) : error ? (
-              <Card>
-                <p role="alert">{copy.loadErrorDetail}</p>
-                <Button onClick={refresh} variant="ghost">
-                  {copy.retry}
-                </Button>
-              </Card>
-            ) : null}
-            {actionError ? (
-              <div
-                className="rounded-[20px] border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]"
-                role="alert"
-              >
-                {actionMessage}
-                <Button
-                  onClick={refresh}
-                  disabled={loading || Boolean(respondingId)}
-                  variant="ghost"
+            </Card>
+          ) : error && visits.length === 0 ? (
+            <ErrorState
+              description={copy.loadErrorDetail}
+              action={<Button onClick={refresh}>{copy.retry}</Button>}
+              title={copy.loadError}
+            />
+          ) : visits.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-2 text-muted">
+                <Icon name="cal" />
+              </span>
+              <h2 className="text-[17px] font-semibold text-ink">
+                {copy.emptyTitle}
+              </h2>
+              <p className="text-[15px] leading-6 text-muted">
+                {copy.emptyDetail}
+              </p>
+            </div>
+          ) : (
+            <>
+              {loading ? (
+                <p role="status" className="text-sm text-muted">
+                  {copy.loading}
+                </p>
+              ) : error ? (
+                <Card className="rounded-[22px] shadow-none">
+                  <p role="alert">{copy.loadErrorDetail}</p>
+                  <Button onClick={refresh} variant="ghost">
+                    {copy.retry}
+                  </Button>
+                </Card>
+              ) : null}
+              {actionError ? (
+                <div
+                  className="rounded-[22px] bg-danger-tint px-4 py-3 text-sm font-medium text-danger-ink"
+                  role="alert"
                 >
-                  {copy.refreshVisits}
-                </Button>
-              </div>
-            ) : null}
+                  {actionMessage}
+                  <Button
+                    onClick={refresh}
+                    disabled={loading || Boolean(respondingId)}
+                    variant="ghost"
+                  >
+                    {copy.refreshVisits}
+                  </Button>
+                </div>
+              ) : null}
 
-            {proposed.length > 0 ? (
-              <VisitGroup
-                title={copy.proposed}
-                count={offers.size + standaloneProposals.length}
+              {proposed.length > 0 ? (
+                <VisitGroup
+                  title={copy.proposed}
+                  count={offers.size + standaloneProposals.length}
+                >
+                  {Array.from(offers, ([groupId, slots]) => (
+                    <VisitOfferCard
+                      key={groupId}
+                      {...cardSettings}
+                      slots={slots}
+                      responding={actionsDisabled}
+                      onRespond={respond}
+                    />
+                  ))}
+                  {standaloneProposals.map((visit) => (
+                    <VisitCard
+                      {...cardSettings}
+                      key={visit.id}
+                      onRespond={(action, note) =>
+                        respond(visit.id, action, note)
+                      }
+                      responding={actionsDisabled}
+                      visit={visit}
+                    />
+                  ))}
+                </VisitGroup>
+              ) : null}
+
+              {upcoming.length > 0 ? (
+                <VisitGroup title={copy.upcoming} count={upcoming.length}>
+                  {upcoming.map((visit) => (
+                    <VisitCard
+                      {...cardSettings}
+                      key={visit.id}
+                      onRespond={(action, note) =>
+                        respond(visit.id, action, note)
+                      }
+                      responding={actionsDisabled}
+                      visit={visit}
+                    />
+                  ))}
+                </VisitGroup>
+              ) : null}
+
+              {waiting.length > 0 ? (
+                <VisitGroup title={copy.waiting} count={waiting.length}>
+                  {waiting.map((visit) => (
+                    <VisitCard {...cardSettings} key={visit.id} visit={visit} />
+                  ))}
+                </VisitGroup>
+              ) : null}
+
+              {past.length > 0 ? (
+                <VisitGroup title={copy.past} count={past.length}>
+                  {past.map((visit) => (
+                    <VisitCard {...cardSettings} key={visit.id} visit={visit} />
+                  ))}
+                </VisitGroup>
+              ) : null}
+            </>
+          )}
+          {!loading && !settings.loading && !error ? (
+            <section className="rounded-[22px] bg-surface p-[14px]">
+              <h2 className="text-[15px] font-semibold text-ink">
+                {copy.chatHelp.title}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted">
+                {copy.chatHelp.description}
+              </p>
+              <Button
+                className="mt-4"
+                variant="secondary"
+                onClick={() => router.push("/chat")}
+                disabled={Boolean(respondingId)}
               >
-                {Array.from(offers, ([groupId, slots]) => (
-                  <VisitOfferCard
-                    key={groupId}
-                    {...cardSettings}
-                    slots={slots}
-                    responding={actionsDisabled}
-                    onRespond={respond}
-                  />
-                ))}
-                {standaloneProposals.map((visit) => (
-                  <VisitCard
-                    {...cardSettings}
-                    key={visit.id}
-                    onRespond={(action, note) =>
-                      respond(visit.id, action, note)
-                    }
-                    responding={actionsDisabled}
-                    visit={visit}
-                  />
-                ))}
-              </VisitGroup>
-            ) : null}
-
-            {upcoming.length > 0 ? (
-              <VisitGroup title={copy.upcoming} count={upcoming.length}>
-                {upcoming.map((visit) => (
-                  <VisitCard
-                    {...cardSettings}
-                    key={visit.id}
-                    onRespond={(action, note) =>
-                      respond(visit.id, action, note)
-                    }
-                    responding={actionsDisabled}
-                    visit={visit}
-                  />
-                ))}
-              </VisitGroup>
-            ) : null}
-
-            {waiting.length > 0 ? (
-              <VisitGroup title={copy.waiting} count={waiting.length}>
-                {waiting.map((visit) => (
-                  <VisitCard {...cardSettings} key={visit.id} visit={visit} />
-                ))}
-              </VisitGroup>
-            ) : null}
-
-            {past.length > 0 ? (
-              <VisitGroup title={copy.past} count={past.length}>
-                {past.map((visit) => (
-                  <VisitCard {...cardSettings} key={visit.id} visit={visit} />
-                ))}
-              </VisitGroup>
-            ) : null}
-          </>
-        )}
-        {!loading && !settings.loading && !error ? (
-          <Card>
-            <h2 className="font-semibold text-slate-900">
-              {copy.chatHelp.title}
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              {copy.chatHelp.description}
-            </p>
-            <Button
-              className="mt-4"
-              onClick={() => router.push("/chat")}
-              disabled={Boolean(respondingId)}
-            >
-              {copy.chatHelp.open}
-            </Button>
-          </Card>
-        ) : null}
+                {copy.chatHelp.open}
+              </Button>
+            </section>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </PullToRefresh>
   );
 }

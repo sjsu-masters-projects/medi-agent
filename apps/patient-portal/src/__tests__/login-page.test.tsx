@@ -61,6 +61,7 @@ describe("Patient login page", () => {
         expect(screen.getByRole("button", { name: "Mostrar contraseña" })).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "Crear cuenta" })).toHaveAttribute("href", "/signup?lang=es-MX");
         expect(window.localStorage.getItem("patient-portal.guest.locale")).toBe("es-MX");
+        expect(document.documentElement).toHaveAttribute("lang", "es-MX");
         expect(post).not.toHaveBeenCalled();
     });
 

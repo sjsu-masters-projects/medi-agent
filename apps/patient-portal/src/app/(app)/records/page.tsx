@@ -1,21 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  HiArrowPath,
-  HiMiniSpeakerWave,
-  HiOutlineBeaker,
-  HiOutlineClipboardDocumentList,
-  HiOutlineDocumentText,
-  HiOutlineFolder,
-} from "react-icons/hi2";
-import { DocumentCard, DocumentSourceViewer } from "@/components/features";
+import { HiArrowPath } from "react-icons/hi2";
+import { DocumentSourceViewer } from "@/components/features";
+import { groupRecordDates, RecordRow } from "@/components/features/record-row";
+import { Icon } from "@/components/ui/icons";
+import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { recordsCopy } from "@/components/features/records-copy";
-import { PageHeader } from "@/components/layouts";
 import { Button, EmptyState, ErrorState, Modal } from "@/components/ui";
 import { api } from "@/services/api";
 import { redirectToLogin } from "@/services/auth-redirect";
@@ -38,7 +32,6 @@ import type { AppDispatch, RootState } from "@/store/store";
 import {
   DEFAULT_LOCALE,
   DocumentParseStatus,
-  DocumentType,
   Locale,
   SUPPORTED_LOCALES,
   getLocaleLabel,
@@ -49,7 +42,6 @@ import {
 import { getEffectiveSessionExpiresAt } from "../../../../../../packages/shared/src/utils/jwt-expiry";
 
 type PortalDocument = Document & {
-  icon: ReactNode;
   previewMimeType?: string;
   previewStatus?: string;
   previewUrl?: string;
@@ -182,21 +174,6 @@ function needsHumanDocumentReview(status: string) {
   );
 }
 
-function getDocumentIcon(documentType: DocumentType) {
-  switch (documentType) {
-    case DocumentType.LAB_REPORT:
-      return <HiOutlineBeaker />;
-    case DocumentType.PRESCRIPTION:
-      return <HiOutlineClipboardDocumentList />;
-    case DocumentType.DISCHARGE_SUMMARY:
-      return <HiOutlineDocumentText />;
-    case DocumentType.DIAGNOSTIC_REPORT:
-      return <HiOutlineBeaker />;
-    default:
-      return <HiOutlineDocumentText />;
-  }
-}
-
 function mapDocument(record: DocumentApiRecord): PortalDocument {
   return {
     aiSummary: normalizePatientSummary(record.ai_summary),
@@ -205,7 +182,6 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
     fileName: record.file_name,
     fileSizeBytes: record.file_size_bytes,
     fileUrl: record.file_url,
-    icon: getDocumentIcon(record.document_type),
     id: record.id,
     mimeType: record.mime_type,
     previewMimeType: record.preview_mime_type ?? undefined,
@@ -685,312 +661,359 @@ export default function RecordsPage() {
     deletingDocumentId === selectedDocument?.id;
 
   return (
-    <div className="patient-page space-y-4 pb-8">
-      <PageHeader
-        rightAction={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={loading || uploading}
-              onClick={() => void loadDocuments()}
-              variant="secondary"
-              className="gap-2"
-            >
-              <HiArrowPath
-                aria-hidden="true"
-                className={
-                  loading
-                    ? "h-5 w-5 shrink-0 motion-safe:animate-spin"
-                    : "h-5 w-5 shrink-0"
-                }
-              />
-              {copy(loading ? "Refreshing..." : "Refresh records")}
-            </Button>
-            <Button
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-              variant="secondary"
-            >
-              {copy("Upload")}
-            </Button>
-          </div>
-        }
-        subtitle={copy(
-          "View clinical records and plain-language explanations.",
-        )}
-        title={copy("My Records")}
-      />
-      <input
-        accept={UPLOAD_ACCEPT_ATTRIBUTE}
-        className="hidden"
-        onChange={handleFileChange}
-        ref={fileInputRef}
-        type="file"
-      />
-      <div className="patient-stack -mt-4 space-y-4 px-5">
-        <p className="text-sm text-gray-700" role="status">
-          {locale === "es-MX"
-            ? `${documents.length} documentos · ${processingCount} en proceso`
-            : `${documents.length} records · ${processingCount} processing`}
-        </p>
-        {uploading ? (
-          <p
-            role="status"
-            className="rounded-xl bg-blue-100 p-4 text-sm text-blue-800"
-          >
-            {locale === "es-MX"
-              ? "Subiendo documento..."
-              : "Uploading document..."}
-          </p>
-        ) : null}
-        {pageError && documents.length === 0 ? (
-          <ErrorState
-            description={pageError}
-            action={
-              <Button
-                disabled={loading}
+    <PullToRefresh
+      onRefresh={loadDocuments}
+      busy={loading || uploading}
+      label={copy("Refresh records")}
+    >
+      <div className="patient-page space-y-4 pb-6">
+        <header className="px-[22px] pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-[32px] font-semibold tracking-[-0.02em] text-ink">
+              {copy("My Records")}
+            </h1>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label={copy(loading ? "Refreshing..." : "Refresh records")}
+                title={copy("Refresh records")}
+                disabled={loading || uploading}
                 onClick={() => void loadDocuments()}
-                variant="secondary"
+                className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-surface-2 text-ink-2 disabled:opacity-50"
               >
-                {copy("Try again")}
-              </Button>
-            }
-            title={copy("Could not load records")}
-          />
-        ) : null}
-        {pageError && documents.length > 0 ? (
-          <ErrorState
-            description={pageError}
-            action={
-              <Button
-                onClick={() => {
-                  setPageError(null);
-                  void loadDocuments();
-                }}
-                variant="secondary"
-              >
-                {copy("Try again")}
-              </Button>
-            }
-            title={copy("Action failed")}
-          />
-        ) : null}
-        {parseError ? (
-          <ErrorState
-            description={parseError}
-            action={
-              <Button
-                onClick={() => {
-                  setParseError(null);
-                  fileInputRef.current?.click();
-                }}
-                variant="secondary"
-              >
-                {copy("Try again")}
-              </Button>
-            }
-            title={copy("Document processing failed")}
-          />
-        ) : null}
-        {loading ? (
-          <p className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200">
-            {copy("Loading documents...")}
-          </p>
-        ) : null}
-        {!loading && !pageError && documents.length === 0 ? (
-          <EmptyState
-            description={copy("Upload PDFs or images from your clinic visits.")}
-            icon={<HiOutlineFolder />}
-            title={copy("No records yet")}
-          />
-        ) : null}
-        {documents.map((document) => {
-          const displayDocument = parsingDocIds.has(document.id)
-            ? { ...document, parseStatus: "processing" as const }
-            : document;
-          const status = getDocumentStatus(displayDocument, locale);
-
-          return (
-            <DocumentCard
-              date={new Date(document.createdAt).toLocaleDateString(locale, {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-                timeZone: profile?.timezone ?? "UTC",
-              })}
-              hasAiSummary={document.parsed && Boolean(document.aiSummary)}
-              icon={document.icon}
-              id={document.id}
-              key={document.id}
-              name={document.fileName}
-              onClick={() => openDocument(document)}
-              provider={copy(document.provider)}
-              statusLabel={status?.label}
-              statusVariant={status?.variant}
-              type={getDocumentTypeLabel(document.documentType, locale)}
-            />
-          );
-        })}
-      </div>
-      <Modal
-        onClose={closeDocumentModal}
-        open={Boolean(selectedDocument)}
-        closeLabel={locale === "es-MX" ? "Cerrar ventana" : "Close modal"}
-        size="wide"
-        title={selectedDocument?.fileName ?? copy("Record details")}
-      >
-        <div className="space-y-4">
-          <details className="rounded-xl border border-gray-200 p-4">
-            <summary className="min-h-11 cursor-pointer py-2 font-semibold text-gray-900">
-              {copy("Source document")}
-            </summary>
-            {selectedDocument?.sourceClinic ? (
-              <p className="mb-2 break-words text-sm text-gray-700">
-                {copy("Source")}: {copy(selectedDocument.sourceClinic)}
-              </p>
-            ) : null}
-            <DocumentSourceViewer
-              locale={locale}
-              fileName={selectedDocument?.fileName ?? copy("Document")}
-              previewMimeType={selectedDocument?.previewMimeType}
-              previewStatus={selectedDocument?.previewStatus}
-              previewUrl={selectedDocument?.previewUrl}
-              sourceMimeType={selectedDocument?.mimeType}
-              sourceUrl={selectedDocument?.fileUrl}
-            />
-          </details>
-          <div className="rounded-3xl border border-blue-100 bg-blue-100 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                {copy("Explain this to me")}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  aria-label={copy("Read summary aloud")}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-blue-100 bg-white text-blue-600 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:text-blue-600"
-                  disabled={
-                    explanationLoading ||
-                    (!explanationText && !selectedDocument?.aiSummary)
+                <HiArrowPath
+                  aria-hidden="true"
+                  className={
+                    loading
+                      ? "h-5 w-5 shrink-0 motion-safe:animate-spin"
+                      : "h-5 w-5 shrink-0"
                   }
-                  onClick={handleReadSummary}
-                  type="button"
-                >
-                  <HiMiniSpeakerWave className="h-5 w-5" />
-                </button>
-                <select
-                  aria-label={copy("Explanation language")}
-                  className="min-h-11 rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-medium text-blue-600 outline-none focus:ring-4 focus:ring-blue-500"
-                  onChange={(event) =>
-                    handleLanguageChange(event.target.value as Locale)
-                  }
-                  value={explanationLang}
-                >
-                  {SUPPORTED_LOCALES.map((locale) => (
-                    <option key={locale} value={locale}>
-                      {getLocaleLabel(locale)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-slate-700">
-              {locale === "es-MX"
-                ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
-                : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
-            </p>
-            <p
-              aria-live="polite"
-              className="mt-3 whitespace-pre-wrap break-words text-base leading-7 text-gray-700"
-            >
-              {explanationLoading
-                ? copy("Translating...")
-                : readbackActive
-                  ? locale === "es-MX"
-                    ? `Escuchando en ${getLocaleLabel(explanationLang)}...`
-                    : `Reading in ${getLocaleLabel(explanationLang)}...`
-                  : (explanationText ??
-                    copy(
-                      "A plain-language explanation will appear here once it is ready.",
-                    ))}
-            </p>
-          </div>
-          <div className="space-y-3">
-            <Button fullWidth onClick={handleAskAboutDocument} size="lg">
-              {copy("Ask about this document")}
-            </Button>
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                fullWidth
-                onClick={closeDocumentModal}
-                variant="secondary"
-              >
-                {copy("Close")}
-              </Button>
-              <Button
-                fullWidth
+                />
+              </button>
+              <button
+                type="button"
+                aria-label={copy("Upload")}
+                title={copy("Upload")}
+                disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
-                variant="secondary"
+                className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-brand text-white hover:bg-brand-hover disabled:opacity-50"
               >
-                {copy("Upload another")}
-              </Button>
+                <Icon name="up" className="h-5 w-5" />
+              </button>
             </div>
-            {deleteError ? (
-              <ErrorState
-                description={deleteError}
-                action={
-                  <Button
-                    onClick={() => void handleDeleteDocument()}
-                    variant="secondary"
-                  >
-                    {copy("Try again")}
-                  </Button>
-                }
-                title={copy("Could not delete document")}
+          </div>
+          <p className="mt-1 text-sm text-muted" role="status">
+            {locale === "es-MX"
+              ? `${documents.length} documentos · ${processingCount} en proceso`
+              : `${documents.length} records · ${processingCount} processing`}
+          </p>
+        </header>
+        <input
+          accept={UPLOAD_ACCEPT_ATTRIBUTE}
+          className="hidden"
+          onChange={handleFileChange}
+          ref={fileInputRef}
+          type="file"
+        />
+        <div className="patient-stack space-y-4 px-4">
+          {uploading ? (
+            <p
+              role="status"
+              className="rounded-xl bg-brand-tint p-4 text-sm text-brand-ink"
+            >
+              {locale === "es-MX"
+                ? "Subiendo documento..."
+                : "Uploading document..."}
+            </p>
+          ) : null}
+          {pageError && documents.length === 0 ? (
+            <ErrorState
+              description={pageError}
+              action={
+                <Button
+                  disabled={loading}
+                  onClick={() => void loadDocuments()}
+                  variant="secondary"
+                >
+                  {copy("Try again")}
+                </Button>
+              }
+              title={copy("Could not load records")}
+            />
+          ) : null}
+          {pageError && documents.length > 0 ? (
+            <ErrorState
+              description={pageError}
+              action={
+                <Button
+                  onClick={() => {
+                    setPageError(null);
+                    void loadDocuments();
+                  }}
+                  variant="secondary"
+                >
+                  {copy("Try again")}
+                </Button>
+              }
+              title={copy("Action failed")}
+            />
+          ) : null}
+          {parseError ? (
+            <ErrorState
+              description={parseError}
+              action={
+                <Button
+                  onClick={() => {
+                    setParseError(null);
+                    fileInputRef.current?.click();
+                  }}
+                  variant="secondary"
+                >
+                  {copy("Try again")}
+                </Button>
+              }
+              title={copy("Document processing failed")}
+            />
+          ) : null}
+          {loading ? (
+            <p
+              className="rounded-2xl bg-surface px-4 py-3 text-sm font-medium text-muted"
+              role="status"
+            >
+              {copy("Loading documents...")}
+            </p>
+          ) : null}
+          {!loading && !pageError && documents.length === 0 ? (
+            <EmptyState
+              description={copy(
+                "Upload PDFs or images from your clinic visits.",
+              )}
+              icon={<Icon name="folder" />}
+              title={copy("No records yet")}
+            />
+          ) : null}
+          {groupRecordDates(
+            documents,
+            new Date(),
+            profile?.timezone ?? "UTC",
+          ).map((group) => (
+            <section key={group.key} aria-labelledby={`records-${group.key}`}>
+              <h2
+                id={`records-${group.key}`}
+                className="px-1.5 pb-2 pt-1 font-mono text-xs uppercase tracking-[0.08em] text-muted"
+              >
+                {group.key === "recent"
+                  ? locale === "es-MX"
+                    ? "Esta semana"
+                    : "This week"
+                  : locale === "es-MX"
+                    ? "Anteriores"
+                    : "Earlier"}
+              </h2>
+              <div className="overflow-hidden rounded-[22px] bg-surface">
+                {group.items.map((document) => {
+                  const displayDocument = parsingDocIds.has(document.id)
+                    ? { ...document, parseStatus: "processing" as const }
+                    : document;
+                  const status = getDocumentStatus(displayDocument, locale);
+
+                  return (
+                    <RecordRow
+                      document={displayDocument}
+                      patientName={[profile?.firstName, profile?.lastName]
+                        .filter(Boolean)
+                        .join(" ")}
+                      locale={locale}
+                      date={new Date(document.createdAt).toLocaleDateString(
+                        locale,
+                        {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          timeZone: profile?.timezone ?? "UTC",
+                        },
+                      )}
+                      key={document.id}
+                      onOpen={() => openDocument(document)}
+                      provider={copy(document.provider)}
+                      statusLabel={status?.label}
+                      typeLabel={getDocumentTypeLabel(
+                        document.documentType,
+                        locale,
+                      )}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+        <Modal
+          onClose={closeDocumentModal}
+          open={Boolean(selectedDocument)}
+          closeLabel={locale === "es-MX" ? "Cerrar ventana" : "Close modal"}
+          size="wide"
+          title={selectedDocument?.fileName ?? copy("Record details")}
+        >
+          <div className="space-y-4">
+            <p className="break-words text-sm text-muted">
+              {selectedDocument
+                ? getDocumentTypeLabel(selectedDocument.documentType, locale)
+                : null}
+            </p>
+            <details className="rounded-xl border border-line-strong p-4">
+              <summary className="min-h-11 cursor-pointer py-2 font-semibold text-ink">
+                {copy("Source document")}
+              </summary>
+              {selectedDocument?.sourceClinic ? (
+                <p className="mb-2 break-words text-sm text-ink-2">
+                  {copy("Source")}: {copy(selectedDocument.sourceClinic)}
+                </p>
+              ) : null}
+              <DocumentSourceViewer
+                locale={locale}
+                fileName={selectedDocument?.fileName ?? copy("Document")}
+                previewMimeType={selectedDocument?.previewMimeType}
+                previewStatus={selectedDocument?.previewStatus}
+                previewUrl={selectedDocument?.previewUrl}
+                sourceMimeType={selectedDocument?.mimeType}
+                sourceUrl={selectedDocument?.fileUrl}
               />
-            ) : null}
-            {deleteConfirming ? (
-              <div className="rounded-3xl border border-red-100 bg-red-100 p-4">
-                <p className="text-base font-bold text-red-800">
-                  {copy("Delete this document?")}
+            </details>
+            <div className="rounded-[22px] bg-brand-tint p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink">
+                  {copy("Explain this to me")}
                 </p>
-                <p className="mt-1 text-sm leading-6 text-red-800">
-                  {copy(
-                    "This removes the record from your documents. Existing care-plan items created from prior parsing are not removed.",
-                  )}
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <Button
-                    disabled={isDeletingSelectedDocument}
-                    fullWidth
-                    onClick={() => setDeleteConfirming(false)}
-                    variant="secondary"
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    aria-label={copy("Read summary aloud")}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-brand-ink hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={
+                      explanationLoading ||
+                      (!explanationText && !selectedDocument?.aiSummary)
+                    }
+                    onClick={handleReadSummary}
+                    type="button"
                   >
-                    {copy("Cancel")}
-                  </Button>
-                  <Button
-                    disabled={isDeletingSelectedDocument}
-                    fullWidth
-                    onClick={() => void handleDeleteDocument()}
-                    variant="danger"
+                    <Icon name="speaker" className="h-5 w-5" />
+                  </button>
+                  <select
+                    aria-label={copy("Explanation language")}
+                    className="min-h-11 max-w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-medium text-brand-ink"
+                    onChange={(event) =>
+                      handleLanguageChange(event.target.value as Locale)
+                    }
+                    value={explanationLang}
                   >
-                    {isDeletingSelectedDocument
-                      ? copy("Deleting")
-                      : copy("Delete permanently")}
-                  </Button>
+                    {SUPPORTED_LOCALES.map((locale) => (
+                      <option key={locale} value={locale}>
+                        {getLocaleLabel(locale)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            ) : (
-              <Button
-                disabled={isDeletingSelectedDocument}
-                fullWidth
-                onClick={() => setDeleteConfirming(true)}
-                variant="danger"
+              <p className="mt-3 text-sm leading-6 text-ink-2">
+                {locale === "es-MX"
+                  ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
+                  : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
+              </p>
+              <p
+                aria-live="polite"
+                className="mt-3 whitespace-pre-wrap break-words text-base leading-7 text-ink-2"
               >
-                {copy("Delete document")}
+                {explanationLoading
+                  ? copy("Translating...")
+                  : readbackActive
+                    ? locale === "es-MX"
+                      ? `Escuchando en ${getLocaleLabel(explanationLang)}...`
+                      : `Reading in ${getLocaleLabel(explanationLang)}...`
+                    : (explanationText ??
+                      copy(
+                        "A plain-language explanation will appear here once it is ready.",
+                      ))}
+              </p>
+            </div>
+            <div className="space-y-3">
+              <Button fullWidth onClick={handleAskAboutDocument} size="lg">
+                {copy("Ask about this document")}
               </Button>
-            )}
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  fullWidth
+                  onClick={closeDocumentModal}
+                  variant="secondary"
+                >
+                  {copy("Close")}
+                </Button>
+                <Button
+                  fullWidth
+                  onClick={() => fileInputRef.current?.click()}
+                  variant="secondary"
+                >
+                  {copy("Upload another")}
+                </Button>
+              </div>
+              {deleteError ? (
+                <ErrorState
+                  description={deleteError}
+                  action={
+                    <Button
+                      onClick={() => void handleDeleteDocument()}
+                      variant="secondary"
+                    >
+                      {copy("Try again")}
+                    </Button>
+                  }
+                  title={copy("Could not delete document")}
+                />
+              ) : null}
+              {deleteConfirming ? (
+                <div className="rounded-[22px] bg-danger-tint p-4">
+                  <p className="text-base font-bold text-danger-ink">
+                    {copy("Delete this document?")}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-danger-ink">
+                    {copy(
+                      "This removes the record from your documents. Existing care-plan items created from prior parsing are not removed.",
+                    )}
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <Button
+                      disabled={isDeletingSelectedDocument}
+                      fullWidth
+                      onClick={() => setDeleteConfirming(false)}
+                      variant="secondary"
+                    >
+                      {copy("Cancel")}
+                    </Button>
+                    <Button
+                      disabled={isDeletingSelectedDocument}
+                      fullWidth
+                      onClick={() => void handleDeleteDocument()}
+                      variant="danger"
+                    >
+                      {isDeletingSelectedDocument
+                        ? copy("Deleting")
+                        : copy("Delete permanently")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  disabled={isDeletingSelectedDocument}
+                  fullWidth
+                  onClick={() => setDeleteConfirming(true)}
+                  variant="danger"
+                >
+                  {copy("Delete document")}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      </Modal>
-    </div>
+        </Modal>
+      </div>
+    </PullToRefresh>
   );
 }

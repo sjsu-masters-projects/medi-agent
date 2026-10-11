@@ -69,15 +69,16 @@ function CalendarDownload({
   return (
     <div className="mt-3 space-y-2">
       <Button
+        className="min-h-11"
         variant="secondary"
         disabled={disabled || loading}
         onClick={download}
       >
         {loading ? copy.downloading : copy.download}
       </Button>
-      <p className="text-xs text-gray-500">{copy.notice}</p>
+      <p className="text-[13px] leading-5 text-muted">{copy.notice}</p>
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger-ink">
           {copy.error}
         </p>
       )}

@@ -5,25 +5,35 @@ import { useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import { careConversations } from "@/services/care-conversations";
 import { getChatControlsCopy } from "@/content/chat-copy";
+import { Icon } from "@/components/ui/icons";
+import { Modal } from "@/components/ui/modal";
+import { PullToRefresh } from "@/components/ui/pull-to-refresh";
+import { ChatTextarea, chatButton, chatDisplayTime } from "./chat-presentation";
 import { normalizeLocale } from "@/types";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages } from "../../../../../packages/shared/src/utils/care-conversations";
 
-const button = "min-h-11 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-50";
-const input = "min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500";
+const button = chatButton;
+const input = "min-h-11 w-full rounded-[14px] border border-line-strong bg-surface px-3 py-2 text-base text-ink";
+type Presentation = { compact?: boolean; onThreadPresentationChange?: (id: string | null) => void };
 
-export function CareConversations({ locale = "en-US", audience = "patient", visible = true }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean }) {
+export function CareConversations({ locale = "en-US", audience = "patient", visible = true, ...presentation }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean } & Presentation) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
   if (!accessToken || !user) return null;
-  return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} />;
+  return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} {...presentation} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean }) {
+function ConversationInbox({ token, locale, audience, visible, compact = false, onThreadPresentationChange }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
   const [recipient, setRecipient] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [threadFocused, setThreadFocused] = useState(false);
+  const [showRecipient, setShowRecipient] = useState(false);
+  const contactButtons = useRef(new Map<string, HTMLButtonElement>());
+  const backLabel = locale === "es-MX" ? "Volver a conversaciones" : "Back to conversations";
+  const newLabel = locale === "es-MX" ? "Nuevo mensaje" : "New message";
   const [drafts, setDrafts] = useState<Record<string, ConversationDraft>>({});
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
@@ -119,6 +129,8 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
       if (request !== version.current) return;
       setThreads((current) => [thread, ...current.filter((item) => item.id !== thread.id)]);
       setSelected(thread.id);
+      setThreadFocused(true);
+      setShowRecipient(false);
     } catch (failure) {
       if (request === version.current) setError(conversationAccessDenied(failure) ? "denied" : "loadError");
     } finally {
@@ -127,10 +139,14 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
   }
 
   const active = threads.find((thread) => thread.id === selected);
+  const presentationId = compact && threadFocused && visible ? active?.id ?? null : null;
+  useEffect(() => {
+    onThreadPresentationChange?.(presentationId);
+    return () => onThreadPresentationChange?.(null);
+  }, [presentationId, onThreadPresentationChange]);
   const name = (thread: CareConversation) => audience === "patient" ? thread.clinician_name : thread.patient_name;
-  return <section className="min-w-0 space-y-4 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 sm:p-5" aria-busy={loading}>
-    <p className="rounded-lg bg-yellow-100 p-3 text-yellow-800">{copy.notice}</p>
-    <div className="flex flex-wrap items-end gap-3">
+  const focused = compact && threadFocused && Boolean(active);
+  const recipientForm = <div className="flex flex-wrap items-end gap-3">
       <label className="min-w-0 basis-full font-medium sm:flex-1 sm:basis-auto">{copy.recipient}
         <select className={input} value={recipient} disabled={loading || opening || sending} onChange={(event) => setRecipient(event.target.value)}>
           <option value="">{copy.choose}</option>
@@ -139,23 +155,40 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
       </label>
       <button className={button} disabled={!recipient || loading || opening || sending} onClick={() => void open()} type="button">{opening ? copy.loading : copy.open}</button>
       <button className={button} disabled={loading || opening || sending} onClick={() => setAttempt((value) => value + 1)} type="button">{loading ? copy.loading : copy.refresh}</button>
-    </div>
+    </div>;
+  return <section className="min-w-0 space-y-4 text-sm text-ink-2" aria-busy={loading}>
+    <p className="flex gap-2 rounded-2xl bg-danger-tint p-3.5 text-danger-ink"><Icon name="alert" className="shrink-0" />{copy.notice}</p>
+    {compact ? <>
+      <div hidden={focused} className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{copy.threads}</h2>
+        <button className={button} type="button" onClick={() => setShowRecipient(true)}>{newLabel}</button>
+        <button className={button} disabled={loading || opening || sending} onClick={() => setAttempt((value) => value + 1)} type="button">{loading ? copy.loading : copy.refresh}</button>
+      </div>
+      <Modal open={showRecipient} onClose={() => setShowRecipient(false)} title={newLabel} closeLabel={copy.cancel}>{recipientForm}</Modal>
+      {focused && <button className={button + " inline-flex items-center gap-2"} type="button" disabled={sending || opening} onClick={() => { setThreadFocused(false); requestAnimationFrame(() => { if (selected) contactButtons.current.get(selected)?.focus(); }); }}><Icon name="back" />{backLabel}</button>}
+    </> : recipientForm}
     {error && <p role="alert">{copy[error]}</p>}
     {pollFailed && <p role="alert">{copy.loadError}</p>}
     {loading ? <p role="status">{copy.loading}</p> : <>
       {!recipients.length && <p>{copy.noRecipients}</p>}
-      <h2 className="text-lg font-semibold text-gray-900">{copy.threads}</h2>
+      {!compact && <h2 className="text-lg font-semibold text-ink">{copy.threads}</h2>}
       {!threads.length && <p>{copy.empty}</p>}
-      <ul className="space-y-2">
+      <div hidden={focused}><PullToRefresh onRefresh={refreshInbox} busy={loading || opening || sending} label={copy.refresh}>
+      <ul className="overflow-hidden rounded-[22px] bg-surface">
         {threads.map((thread) => <li key={thread.id}>
-          <button className={`${button} w-full text-left ${selected === thread.id ? "border-blue-600 bg-blue-50" : ""}`} type="button" aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => setSelected(thread.id)}>
-            <span className="block font-semibold">{name(thread)} · {thread.clinic_name}</span>
-            {thread.unread_count > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{thread.unread_count} {copy.unread}</span>}
-            <span className="block truncate text-gray-500">{thread.last_message_preview}</span>
+          <button ref={(element) => { if (element) contactButtons.current.set(thread.id, element); else contactButtons.current.delete(thread.id); }} className={`flex min-h-11 w-full items-center gap-3 border-b border-line p-3.5 text-left ${selected === thread.id ? "bg-brand-tint" : ""}`} type="button" aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => { setSelected(thread.id); setThreadFocused(true); }}>
+            <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-note-tint font-semibold text-note-ink">{name(thread).replace(/^Dr\.?\s*/i, "").split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("")}</span>
+            <span className="min-w-0 flex-1">
+            <span className="block break-words font-semibold text-ink">{name(thread)} · {thread.clinic_name}</span>
+            {thread.unread_count > 0 && <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-ink"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-brand" />{thread.unread_count} {copy.unread}</span>}
+            <span className="block truncate text-muted">{thread.last_message_preview}</span>
+            </span>
+            {thread.last_message_at && <time className="shrink-0 font-mono text-xs text-muted" dateTime={thread.last_message_at}>{chatDisplayTime(thread.last_message_at, locale)}</time>}
           </button>
         </li>)}
       </ul>
-      {active ? <ConversationThread key={active.id} token={token} thread={active} locale={locale} visible={visible}
+      </PullToRefresh></div>
+      {active ? <div hidden={compact && !focused}><ConversationThread key={active.id} token={token} thread={active} locale={locale} visible={visible && (!compact || focused)} focusOnOpen={compact}
         draft={drafts[active.id] ?? { body: "" }}
         onDraft={(draft) => setDrafts((current) => ({ ...current, [active.id]: draft }))}
         onSending={setSending}
@@ -165,17 +198,24 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
           setThreads((current) => current.map((thread) => thread.id === message.conversation_id ? { ...thread, last_message_preview: message.body, last_message_at: message.created_at } : thread));
           void refreshInbox();
         }}
-      /> : <p>{copy.select}</p>}
+      /></div> : <p>{copy.select}</p>}
     </>}
   </section>;
 }
 
-function ConversationThread({ token, thread, locale, visible, draft, onDraft, onSending, onRead, onSaved }: {
+function ConversationThread({ token, thread, locale, visible, draft, onDraft, onSending, onRead, onSaved, focusOnOpen }: {
   token: string; thread: CareConversation; locale: string; visible: boolean; draft: ConversationDraft;
   onDraft: (draft: ConversationDraft) => void; onSending: (sending: boolean) => void;
   onRead: (id: string) => void; onSaved: (message: CareConversationMessage) => void;
+  focusOnOpen?: boolean;
 }) {
   const copy = getConversationCopy(locale);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!visible || !focusOnOpen) return;
+    const frame = requestAnimationFrame(() => heading.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [visible, focusOnOpen]);
   const [messages, setMessages] = useState<CareConversationMessage[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -290,37 +330,39 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
     }
   }
 
-  return <div className="min-w-0 space-y-4 border-t border-gray-200 pt-4" aria-busy={loading}>
-    <h3 className="break-words font-semibold text-gray-900">{thread.patient_name} · {thread.clinician_name} · {thread.clinic_name}</h3>
-    <p className="text-xs text-gray-500">{getChatControlsCopy(normalizeLocale(locale)).humanOriginal}</p>
+  return <div className="flex min-h-[calc(100dvh-240px)] min-w-0 flex-col gap-4 border-t border-line-strong pt-4" aria-busy={loading}>
+    <h3 ref={heading} tabIndex={-1} className="break-words text-lg font-semibold text-ink">{thread.patient_name} · {thread.clinician_name} · {thread.clinic_name}</h3>
+    <p className="text-xs text-muted">{getChatControlsCopy(normalizeLocale(locale)).humanOriginal}</p>
     {error && <p role="alert">{copy[error]}</p>}
     <button className={button} disabled={sending || loading || denied} onClick={() => void load().catch(() => undefined)} type="button">{loading ? copy.loading : copy.refresh}</button>
     {loading && <p role="status">{copy.loading}</p>}
     {cursor && !denied && <button className={button} disabled={loading || sending} onClick={() => void load(cursor).catch(() => undefined)} type="button">{copy.older}</button>}
     {!loading && !denied && !messages.length && <p>{copy.noMessages}</p>}
-    <ol className="max-h-96 space-y-3 overflow-y-auto" aria-label={copy.threads}>
-      {messages.map((message) => <li key={message.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <p className="text-xs text-gray-500">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
-        <p className="whitespace-pre-wrap break-words text-sm text-gray-800">{message.body}</p>
+    <ol className="flex-1 space-y-3" aria-label={copy.threads}>
+      {messages.map((message) => <li key={message.id} className={`flex flex-col gap-1 ${message.sender_role === "patient" ? "items-end" : "items-start"}`}>
+        <p className={`whitespace-pre-wrap break-words px-3.5 py-3 text-[15px] leading-relaxed ${message.sender_role === "patient" ? "max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand text-white" : "max-w-[88%] rounded-[20px_20px_20px_6px] bg-surface text-ink"}`}>{message.body}</p>
+        <p className="break-words text-xs text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{chatDisplayTime(message.created_at, locale)}</time></p>
       </li>)}
     </ol>
     {draft.failure && <p role="alert">{copy[draft.failure]}</p>}
     {draft.failure === "mismatch" && !denied && <>
       <button className={button} type="button" onClick={() => setConfirmNewKey(true)}>{copy.prepareNew}</button>
-      {confirmNewKey && <div role="alertdialog" aria-label={copy.prepareNew} className="space-y-3 rounded-lg bg-yellow-100 p-3 text-yellow-800">
+      <Modal open={confirmNewKey} onClose={() => setConfirmNewKey(false)} title={copy.prepareNew} closeLabel={`${copy.cancel}: ${copy.prepareNew}`}><div role="alertdialog" aria-label={copy.prepareNew} className="space-y-3 rounded-2xl bg-danger-tint p-3 text-danger-ink">
         <p>{copy.confirmWarning}</p>
         <button className={button} type="button" onClick={() => { onDraft({ body: draft.body }); setConfirmNewKey(false); }}>{copy.confirmNew}</button>
         <button className={button} type="button" onClick={() => setConfirmNewKey(false)}>{copy.cancel}</button>
-      </div>}
+      </div></Modal>
     </>}
-    {!denied && thread.writable && <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="space-y-3">
-      <label className="block font-medium">{copy.message}
-        <textarea className={input} maxLength={4000} value={draft.body} disabled={sending || Boolean(draft.clientMessageId)}
+    {!denied && thread.writable && <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="sticky bottom-0 mt-auto space-y-2 bg-background pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+      <div className="flex items-end gap-2">
+      <label className="block min-w-0 flex-1 font-medium">{copy.message}
+        <ChatTextarea className="mt-1 rounded-[26px] border border-line-strong bg-surface" maxLength={4000} value={draft.body} disabled={sending || Boolean(draft.clientMessageId)}
           onChange={(event) => onDraft({ body: event.target.value })} />
       </label>
-      {draft.clientMessageId && !sending && draft.failure !== "mismatch" && <p>{copy.locked}</p>}
-      <button className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50"
+      <button className="min-h-[52px] max-w-[40%] shrink-0 rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-hover disabled:opacity-50"
         disabled={sending || loading || draft.failure === "mismatch" || !draft.body.trim() || draft.body.trim().length > 4000} type="submit">{sending ? copy.sending : draft.clientMessageId ? copy.retry : copy.send}</button>
+      </div>
+      {draft.clientMessageId && !sending && draft.failure !== "mismatch" && <p>{copy.locked}</p>}
     </form>}
     {!thread.writable && !denied && <p>{copy.denied}</p>}
   </div>;

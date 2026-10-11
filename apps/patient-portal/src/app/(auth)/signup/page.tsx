@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { useDispatch } from "react-redux";
-import { Button, Card, Input } from "@/components/ui";
+import { AuthEntryButton as Button, AuthEntryInput as Input } from "@/components/features/auth-entry-presentation";
 import { api } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type PatientAuthSession } from "@/store/slices/auth-slice";
@@ -100,26 +100,20 @@ export default function SignupPage() {
     }
 
     return (
-        <div className="app-shell patient-page min-h-dvh pb-10" lang={locale}>
+        <div className="patient-page mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-white pb-[calc(env(safe-area-inset-bottom)+24px)]" lang={locale}>
             <AuthEntryLanguage locale={locale} onChange={setLocale} />
-            <div className="relative overflow-hidden rounded-b-[38px] bg-[#147465] px-6 pt-14 pb-10 text-white shadow-sm">
-                <div className="absolute -top-16 -right-14 h-52 w-52 rounded-full bg-white/12" />
-                <div className="absolute -bottom-20 left-5 h-56 w-56 rounded-full bg-[#d8aa57]/18" />
-                <div className="relative">
-                    <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-[26px] bg-white/20 p-2 ring-1 ring-white/25">
-                        <Image alt="" height={52} priority src="/brand/icon.svg" width={52} />
-                    </div>
-                    <p className="text-xs font-black uppercase tracking-[0.24em] text-white">{copy.signup}</p>
-                    <h1 className="mt-3 text-[2.35rem] font-black leading-none tracking-[-0.04em]">{copy.join}</h1>
-                    <p className="mt-4 max-w-sm text-base leading-7 text-white">
-                        {copy.signupIntro}
-                    </p>
-                </div>
-            </div>
+            <header className="px-6 pt-6 pb-6">
+                <Image alt="" className="mb-5 h-16 w-16" height={64} priority src="/brand/icon.svg" width={64} />
+                <p className="font-mono text-xs uppercase tracking-[.06em] text-brand">{copy.signup}</p>
+                <h1 className="mt-2 text-[32px] font-semibold leading-tight text-ink">{copy.join}</h1>
+                <p className="mt-2 text-base leading-relaxed text-muted">
+                    {copy.signupIntro}
+                </p>
+            </header>
 
-            <div className="patient-stack -mt-5 space-y-5 px-5">
-                <Card className="shadow-sm" padding="lg">
-                    <div className="mb-5 rounded-2xl border border-[#b6d9d2] bg-[#e6f4f1] px-4 py-3 text-sm font-medium text-[#147465]">
+            <div className="patient-stack flex flex-1 flex-col gap-6 px-6">
+                <div>
+                    <div className="mb-5 rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-sm font-medium text-ink-2">
                         {copy.inviteLater}
                     </div>
                     <form className="space-y-5" onSubmit={handleSubmit}>
@@ -133,7 +127,7 @@ export default function SignupPage() {
                             trailingAction={
                                 <button
                                     aria-label={passwordVisible ? copy.hidePassword : copy.showPassword}
-                                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-[#147465] text-[#5b6b83] hover:bg-[#fffaf4] hover:text-[#17233a]"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-ink"
                                     onClick={() => setPasswordVisible((current) => !current)}
                                     type="button"
                                 >
@@ -149,7 +143,7 @@ export default function SignupPage() {
                             trailingAction={
                                 <button
                                     aria-label={confirmPasswordVisible ? copy.hideConfirm : copy.showConfirm}
-                                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-[#147465] text-[#5b6b83] hover:bg-[#fffaf4] hover:text-[#17233a]"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-ink"
                                     onClick={() => setConfirmPasswordVisible((current) => !current)}
                                     type="button"
                                 >
@@ -159,17 +153,17 @@ export default function SignupPage() {
                             type={confirmPasswordVisible ? "text" : "password"}
                             value={formData.confirmPassword}
                         />
-                        {errorKey ? <p role="alert" className="rounded-2xl bg-red-100 px-4 py-3 text-sm font-semibold text-red-800">{copy[errorKey]}</p> : null}
-                        <Button disabled={submitting} fullWidth size="lg" type="submit">{submitting ? copy.creating : copy.createAccount}</Button>
+                        {errorKey ? <p role="alert" className="rounded-2xl bg-danger-tint px-4 py-3 text-sm font-semibold text-danger-ink">{copy[errorKey]}</p> : null}
+                        <Button disabled={submitting} type="submit">{submitting ? copy.creating : copy.createAccount}</Button>
                     </form>
-                </Card>
+                </div>
 
-                <Card className="space-y-2 bg-white" padding="md">
-                    <p className="text-base text-[#5b6b83]">{copy.already}</p>
-                    <Link className="inline-flex min-h-11 items-center text-base font-bold text-[#147465]" href={"/login?lang=" + locale} prefetch={false}>
+                <section className="mt-auto flex flex-wrap items-center justify-between gap-3 rounded-group border border-line bg-surface p-4">
+                    <p className="text-sm text-muted">{copy.already}</p>
+                    <Link className="inline-flex min-h-11 min-w-11 items-center rounded-xl bg-brand-tint px-3 text-sm font-semibold text-brand" href={"/login?lang=" + locale} prefetch={false}>
                         {copy.signIn}
                     </Link>
-                </Card>
+                </section>
             </div>
         </div>
     );

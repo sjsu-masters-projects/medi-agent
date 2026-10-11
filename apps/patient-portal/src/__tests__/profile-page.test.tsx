@@ -81,46 +81,122 @@ function SharedPreferenceProbe() {
 }
 
 describe("Patient profile page", () => {
-    it("retains pending saves and errors when the language sheet closes", async () => {
+    it("keeps the edit sheet and draft while a profile save is pending", async () => {
         get.mockImplementation(async (endpoint: string) => endpoint === "/api/v1/patients/me" ? profileResponse() : []);
         let rejectSave!: (error: Error) => void;
         put.mockImplementation(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
-        render(<PatientProfileProvider><ProfilePage /></PatientProfileProvider>);
-        fireEvent.click(await screen.findByRole("button", { name: "English (US)" }));
-        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "es-MX" } });
+        render(<ProfilePage />);
+        fireEvent.click(await screen.findByRole("button", { name: "Edit profile" }));
+        fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Updated" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+        await waitFor(() => expect(put).toHaveBeenCalledOnce());
+        fireEvent.keyDown(document, { key: "Escape" });
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        expect(screen.getByRole("dialog", { name: "Personal information" })).toBeInTheDocument();
+        expect(screen.getByLabelText("First name")).toHaveValue("Updated");
+        rejectSave(new Error("Unavailable"));
+        await waitFor(() => expect(screen.getByRole("button", { name: "Save changes" })).not.toBeDisabled());
+        expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+    it("retains pending saves and errors when the language sheet closes", async () => {
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me" ? profileResponse() : [],
+        );
+        let rejectSave!: (error: Error) => void;
+        put.mockImplementation(
+            () =>
+                new Promise((_resolve, reject) => {
+                    rejectSave = reject;
+                }),
+        );
+        render(
+            <PatientProfileProvider>
+                <ProfilePage />
+            </PatientProfileProvider>,
+        );
+        fireEvent.click(
+            await screen.findByRole("button", { name: "English (US)" }),
+        );
+        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), {
+            target: { value: "es-MX" },
+        });
         fireEvent.keyDown(document, { key: "Escape" });
         fireEvent.click(screen.getByRole("button", { name: "English (US)" }));
-        expect(screen.getByRole("combobox", { name: "Language" })).toBeDisabled();
+        expect(
+            screen.getByRole("combobox", { name: "Language" }),
+        ).toBeDisabled();
         expect(put).toHaveBeenCalledOnce();
         fireEvent.keyDown(document, { key: "Escape" });
         rejectSave(new Error("Unavailable"));
-        await waitFor(() => expect(screen.getByRole("combobox", { name: "Language", hidden: true })).not.toBeDisabled());
+        await waitFor(() =>
+            expect(
+                screen.getByRole("combobox", {
+                    name: "Language",
+                    hidden: true,
+                }),
+            ).not.toBeDisabled(),
+        );
         fireEvent.click(screen.getByRole("button", { name: "English (US)" }));
-        expect(screen.getByRole("alert")).toHaveTextContent("Could not save the language");
+        expect(screen.getByRole("alert")).toHaveTextContent(
+            "Could not save the language",
+        );
     });
     it("keeps language settings available when care teams cannot load", async () => {
         get.mockImplementation(async (endpoint: string) => {
             if (endpoint === "/api/v1/patients/me") return profileResponse();
             throw new Error("Care teams unavailable");
         });
-        render(<PatientProfileProvider><ProfilePage /></PatientProfileProvider>);
-        fireEvent.click(await screen.findByRole("button", { name: "Preferred language" }));
-        await waitFor(() => expect(screen.getByRole("combobox", { name: "Language" })).not.toBeDisabled());
+        render(
+            <PatientProfileProvider>
+                <ProfilePage />
+            </PatientProfileProvider>,
+        );
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Preferred language" }),
+        );
+        await waitFor(() =>
+            expect(
+                screen.getByRole("combobox", { name: "Language" }),
+            ).not.toBeDisabled(),
+        );
     });
     it("opens the existing saved-language control in an accessible Profile sheet", async () => {
-        get.mockImplementation(async (endpoint: string) => endpoint === "/api/v1/patients/me" ? profileResponse() : []);
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me" ? profileResponse() : [],
+        );
         put.mockResolvedValue({ preferred_language: "es-MX" });
-        render(<PatientProfileProvider><ProfilePage /><SharedPreferenceProbe /></PatientProfileProvider>);
-        const trigger = await screen.findByRole("button", { name: "English (US)" });
+        render(
+            <PatientProfileProvider>
+                <ProfilePage />
+                <SharedPreferenceProbe />
+            </PatientProfileProvider>,
+        );
+        const trigger = await screen.findByRole("button", {
+            name: "English (US)",
+        });
         trigger.focus();
         fireEvent.click(trigger);
-        expect(screen.getByRole("dialog", { name: "Preferred language" })).toBeInTheDocument();
-        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "es-MX" } });
-        await waitFor(() => expect(screen.getByTestId("shared-preference")).toHaveTextContent("es-MX"));
-        expect(put).toHaveBeenCalledWith("/api/v1/patients/me", { preferred_language: "es-MX" }, { token: "access-token" });
+        expect(
+            screen.getByRole("dialog", { name: "Preferred language" }),
+        ).toBeInTheDocument();
+        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), {
+            target: { value: "es-MX" },
+        });
+        await waitFor(() =>
+            expect(screen.getByTestId("shared-preference")).toHaveTextContent(
+                "es-MX",
+            ),
+        );
+        expect(put).toHaveBeenCalledWith(
+            "/api/v1/patients/me",
+            { preferred_language: "es-MX" },
+            { token: "access-token" },
+        );
         fireEvent.keyDown(document, { key: "Escape" });
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Español (México)" })).toHaveFocus();
+        expect(
+            screen.getByRole("button", { name: "Español (México)" }),
+        ).toHaveFocus();
     });
     beforeEach(() => {
         clearStoredSession.mockReset();
@@ -131,6 +207,89 @@ describe("Patient profile page", () => {
         replace.mockReset();
         searchParamGet.mockReset();
         searchParamGet.mockReturnValue(null);
+    });
+
+    it("opens profile editing in a named sheet and returns focus on Escape without saving", async () => {
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me" ? profileResponse() : [],
+        );
+        render(<ProfilePage />);
+        const trigger = await screen.findByRole("button", {
+            name: "Edit profile",
+        });
+        trigger.focus();
+        fireEvent.click(trigger);
+        expect(
+            screen.getByRole("dialog", { name: "Personal information" }),
+        ).toHaveAttribute("aria-modal", "true");
+        expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
+        expect(screen.getByLabelText("First name")).toBeRequired();
+        expect(screen.getByLabelText("Last name")).toBeRequired();
+        fireEvent.change(screen.getByLabelText("First name"), {
+            target: { value: "Unsaved" },
+        });
+        fireEvent.keyDown(document, { key: "Escape" });
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(trigger).toHaveFocus();
+        expect(put).not.toHaveBeenCalled();
+        fireEvent.click(trigger);
+        expect(screen.getByLabelText("First name")).toHaveValue("Synthetic");
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        expect(trigger).toHaveFocus();
+    });
+
+    it("retains clinic draft and recovery feedback when reopening the join sheet", async () => {
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me" ? profileResponse() : [],
+        );
+        post.mockRejectedValue(new Error("Uncertain transport outcome"));
+        render(<ProfilePage />);
+        const trigger = await screen.findByRole("button", {
+            name: "Join another clinic",
+        });
+        trigger.focus();
+        fireEvent.click(trigger);
+        expect(
+            screen.getByRole("dialog", { name: "Add care team access" }),
+        ).toHaveAttribute("aria-modal", "true");
+        fireEvent.change(screen.getByLabelText("Clinic invite code"), {
+            target: { value: " CITY /8832 " },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Join clinic" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Refresh to check your care team",
+        );
+        expect(post).toHaveBeenCalledWith(
+            "/api/v1/patients/me/care-team/join?invite_code=CITY%20%2F8832",
+            undefined,
+            { token: "access-token" },
+        );
+        fireEvent.keyDown(document, { key: "Escape" });
+        expect(trigger).toHaveFocus();
+        fireEvent.click(trigger);
+        expect(screen.getByLabelText("Clinic invite code")).toHaveValue(
+            " CITY /8832 ",
+        );
+        expect(screen.getByRole("alert")).toHaveTextContent(
+            "Refresh to check your care team",
+        );
+        expect(post).toHaveBeenCalledOnce();
+    });
+
+    it("preserves reminder navigation and sign-out session cleanup", async () => {
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me" ? profileResponse() : [],
+        );
+        render(<ProfilePage />);
+        expect(
+            await screen.findByRole("link", { name: "Manage reminders" }),
+        ).toHaveAttribute("href", "/reminders");
+        fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+        expect(clearStoredSession).toHaveBeenCalledOnce();
+        expect(dispatch).toHaveBeenCalledWith(
+            expect.objectContaining({ type: "auth/logout" }),
+        );
+        expect(replace).toHaveBeenCalledWith("/login");
     });
 
     it("uses shared saved preference for all profile controls and retained notices", async () => {
@@ -160,7 +319,10 @@ describe("Patient profile page", () => {
             "break-all",
         );
         expect(screen.getByText("Inactive")).toBeInTheDocument();
-        expect(container.querySelector("details")).toHaveAttribute("open");
+        expect(container.querySelector("details")?.open ?? false).toBe(false);
+        expect(
+            screen.getByRole("button", { name: "Join another clinic" }),
+        ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: "Change saved preference" }),
         );
@@ -315,7 +477,7 @@ describe("Patient profile page", () => {
     );
 
     it.each([false, true])(
-        "collapses linked clinic form unless joinClinic forces it open (%s)",
+        "opens the clinic sheet only when joinClinic forces it open (%s)",
         async (forceOpen) => {
             searchParamGet.mockReturnValue(forceOpen ? "1" : null);
             get.mockImplementation(async (endpoint: string) =>
@@ -342,7 +504,20 @@ describe("Patient profile page", () => {
             expect(
                 await screen.findByText("Synthetic Clinician"),
             ).toBeInTheDocument();
-            expect(container.querySelector("details")?.open).toBe(forceOpen);
+            expect(container.querySelector("details")?.open ?? false).toBe(
+                false,
+            );
+            if (forceOpen) {
+                expect(
+                    screen.getByRole("dialog", {
+                        name: "Add care team access",
+                    }),
+                ).toBeInTheDocument();
+                fireEvent.keyDown(document, { key: "Escape" });
+                expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+            } else {
+                expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+            }
             expect(screen.getByText("Linked")).toBeInTheDocument();
             expect(screen.getByText("Transferred")).toBeInTheDocument();
             expect(
@@ -379,6 +554,11 @@ describe("Patient profile page", () => {
         );
         post.mockRejectedValue(new Error("Invalid or expired invite code"));
         render(<ProfilePage />);
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: "Vincular otra clínica",
+            }),
+        );
         const invite = await screen.findByLabelText(
             "Código de invitación de la clínica",
         );
@@ -583,6 +763,9 @@ describe("Patient profile page", () => {
             await screen.findByText(/no care teams linked yet/i),
         ).toBeInTheDocument();
 
+        fireEvent.click(
+            screen.getByRole("button", { name: "Join another clinic" }),
+        );
         fireEvent.change(await screen.findByLabelText(/clinic invite code/i), {
             target: { value: "NORTH-8832" },
         });
@@ -629,6 +812,9 @@ describe("Patient profile page", () => {
             await screen.findByText(/no care teams linked yet/i),
         ).toBeInTheDocument();
 
+        fireEvent.click(
+            screen.getByRole("button", { name: "Join another clinic" }),
+        );
         fireEvent.change(await screen.findByLabelText(/clinic invite code/i), {
             target: { value: "BAD-CODE" },
         });

@@ -11,7 +11,6 @@ import {
 } from "@/components/features/reminders-copy";
 import { PageHeader } from "@/components/layouts";
 import {
-  Badge,
   Button,
   Card,
   EmptyState,
@@ -343,10 +342,12 @@ export default function ReminderSettingsPage() {
   }
 
   return (
-    <div className="patient-page space-y-4 pb-8">
+    <div className="patient-page space-y-4 pb-6">
       <PageHeader
         rightAction={
           <Button
+            aria-label={copy(loading ? "Refreshing..." : "Refresh reminders")}
+            title={copy("Refresh reminders")}
             disabled={
               loading ||
               savingTargetKey !== null ||
@@ -355,7 +356,7 @@ export default function ReminderSettingsPage() {
             }
             onClick={() => void loadData()}
             variant="secondary"
-            className="gap-2"
+            className="h-11 w-11 p-0"
           >
             <HiArrowPath
               aria-hidden="true"
@@ -365,7 +366,6 @@ export default function ReminderSettingsPage() {
                   : "h-5 w-5 shrink-0"
               }
             />
-            {copy(loading ? "Refreshing..." : "Refresh reminders")}
           </Button>
         }
         subtitle={copy(
@@ -373,12 +373,12 @@ export default function ReminderSettingsPage() {
         )}
         title={copy("Reminder Settings")}
       />
-      <div className="patient-stack -mt-4 space-y-4 px-5">
+      <div className="patient-stack space-y-4 px-4">
         {loading && targets.length === 0 ? (
           <div className="space-y-4">
-            <Skeleton className="h-40 w-full rounded-3xl" />
-            <Skeleton className="h-64 w-full rounded-3xl" />
-            <Skeleton className="h-64 w-full rounded-3xl" />
+            <Skeleton className="h-16 w-full rounded-[22px]" />
+            <Skeleton className="h-32 w-full rounded-[22px]" />
+            <Skeleton className="h-32 w-full rounded-[22px]" />
           </div>
         ) : null}
 
@@ -397,7 +397,7 @@ export default function ReminderSettingsPage() {
         {(!loading || targets.length > 0) &&
         (!pageError || targets.length > 0) ? (
           <>
-            <Card className="space-y-4">
+            <section className="rounded-[22px] bg-surface px-[14px] py-1">
               <details>
                 <summary className="min-h-11 cursor-pointer py-2 font-semibold">
                   {copy("Advanced settings")} ·{" "}
@@ -405,20 +405,20 @@ export default function ReminderSettingsPage() {
                 </summary>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+                    <p className="font-mono text-xs uppercase tracking-[0.08em] text-muted">
                       {copy("Timezone")}
                     </p>
-                    <h2 className="mt-1 text-xl font-semibold text-gray-700">
+                    <h2 className="mt-1 text-[17px] font-semibold text-ink">
                       {copy("Your local schedule")}
                     </h2>
-                    <p className="mt-1 text-base leading-7 text-gray-700">
+                    <p className="mt-1 text-sm leading-6 text-muted">
                       {copy("Reminder times are interpreted in this timezone.")}
                     </p>
                   </div>
                 </div>
                 <select
                   aria-label={copy("Profile timezone")}
-                  className="min-h-[3.25rem] min-w-0 w-full rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 text-base text-gray-700 shadow-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-500"
+                  className="mt-3 min-h-11 min-w-0 w-full rounded-2xl border border-line-strong bg-surface px-3 py-2 text-base text-ink"
                   onChange={(event) => setPatientTimezone(event.target.value)}
                   value={patientTimezone}
                 >
@@ -429,6 +429,7 @@ export default function ReminderSettingsPage() {
                   ))}
                 </select>
                 <Button
+                  className="my-3 min-h-11"
                   disabled={savingTimezone || editingKey !== null}
                   onClick={saveTimezone}
                   size="lg"
@@ -438,17 +439,17 @@ export default function ReminderSettingsPage() {
                     : copy("Save timezone")}
                 </Button>
               </details>
-            </Card>
+            </section>
 
             {actionMessage ? (
-              <Card className="border-green-100 bg-green-100 text-base font-medium text-green-800">
+              <Card className="rounded-[22px] border-0 bg-brand-tint text-sm font-medium text-brand-ink shadow-none">
                 <p role="status">{actionMessage}</p>
               </Card>
             ) : null}
             {actionError ? (
               <p
                 role="alert"
-                className="rounded-2xl bg-red-100 p-4 text-red-800"
+                className="rounded-2xl bg-danger-tint p-4 text-sm text-danger-ink"
               >
                 {actionError}
               </p>
@@ -462,312 +463,324 @@ export default function ReminderSettingsPage() {
                 )}
               />
             ) : null}
-            {targets.map((target) => {
-              const key = makeTargetKey(target);
-              const draft = drafts[key] ?? buildDraft(target, patientTimezone);
-              const disableAutomatic =
-                !target.guidance.supportsAutomaticReminders;
-              const isSaving = savingTargetKey === key;
-              const isEditing = editingKey === key;
+            <div className="overflow-hidden rounded-[22px] bg-surface">
+              {targets.map((target) => {
+                const key = makeTargetKey(target);
+                const draft =
+                  drafts[key] ?? buildDraft(target, patientTimezone);
+                const disableAutomatic =
+                  !target.guidance.supportsAutomaticReminders;
+                const isSaving = savingTargetKey === key;
+                const isEditing = editingKey === key;
 
-              return (
-                <Card className="space-y-4" key={key}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-700">
-                        {target.targetType === "medication"
-                          ? copy("Medication")
-                          : copy("Care activity")}
-                      </p>
-                      <h3 className="mt-1 text-xl font-semibold text-gray-700">
-                        {target.name}
-                      </h3>
-                      <p className="mt-1 text-base leading-7 text-gray-700">
-                        {target.frequency}
-                        {target.providerName ? ` · ${target.providerName}` : ""}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={
-                        target.reminderSchedule &&
-                        !disableAutomatic &&
-                        target.reminderSchedule.isEnabled
-                          ? "success"
-                          : "warning"
-                      }
-                    >
-                      {target.reminderSchedule
-                        ? disableAutomatic
-                          ? copy("Review old reminder")
-                          : copy(
-                              target.reminderSchedule.isEnabled
-                                ? "Configured"
-                                : "Paused",
-                            )
-                        : disableAutomatic
-                          ? copy("No routine reminder")
-                          : copy("Not set")}
-                    </Badge>
-                  </div>
-
-                  {target.description &&
-                  target.description.trim() !== target.name.trim() ? (
-                    <p className="text-base leading-7 text-gray-700">
-                      {target.description}
-                    </p>
-                  ) : null}
-                  {target.reminderSchedule ? (
-                    <p className="text-sm text-gray-700">
-                      {target.reminderSchedule.daysOfWeek
-                        .map((day) => reminderDayLabel(locale, day))
-                        .join(", ")}{" "}
-                      ·{" "}
-                      {target.reminderSchedule.timesOfDay
-                        .map((value) => value.slice(0, 5))
-                        .join(", ")}{" "}
-                      · {target.reminderSchedule.timezone.replaceAll("_", " ")}
-                    </p>
-                  ) : null}
-                  {!disableAutomatic && !isEditing ? (
-                    <Button
-                      onClick={() => {
-                        setEditingKey(key);
-                        setDrafts((current) =>
-                          Object.fromEntries(
-                            targets.map((entry) => [
-                              makeTargetKey(entry),
-                              makeTargetKey(entry) === key
-                                ? (current[key] ??
-                                  buildDraft(entry, patientTimezone))
-                                : buildDraft(entry, patientTimezone),
-                            ]),
-                          ),
-                        );
-                      }}
-                      disabled={editingKey !== null}
-                      variant="secondary"
-                    >
-                      {target.reminderSchedule
-                        ? copy("Edit reminder")
-                        : copy("Set reminder")}
-                    </Button>
-                  ) : null}
-
-                  {!disableAutomatic ? (
-                    <div className="rounded-xl bg-gray-50 px-4 py-2 text-sm leading-7 text-gray-700 ring-1 ring-gray-200">
-                      <details>
-                        <summary className="min-h-11 cursor-pointer py-2 font-semibold">
-                          {copy("Schedule help")}
-                        </summary>
-                        <p>
-                          {copy(
-                            target.guidance.guidanceText ??
-                              "Follow the instruction above. Ask your care team if the timing is unclear.",
-                          )}
+                return (
+                  <article
+                    className="space-y-3 border-b border-line px-[14px] py-[13px] last:border-b-0"
+                    key={key}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono text-xs uppercase tracking-[0.08em] text-muted">
+                          {target.targetType === "medication"
+                            ? copy("Medication")
+                            : copy("Care activity")}
                         </p>
-                        {target.guidance.recommendedTimesPerDay ? (
-                          <p>
-                            {locale === "es-MX"
-                              ? `Horas por día: ${target.guidance.recommendedTimesPerDay}`
-                              : `Times per day: ${target.guidance.recommendedTimesPerDay}`}
-                          </p>
-                        ) : null}
-                        {target.guidance.recommendedDaysPerWeek ? (
-                          <p>
-                            {locale === "es-MX"
-                              ? `Días por semana: ${target.guidance.recommendedDaysPerWeek}`
-                              : `Days per week: ${target.guidance.recommendedDaysPerWeek}`}
-                          </p>
-                        ) : null}
-                      </details>
+                        <h3 className="mt-1 break-words text-[17px] font-semibold text-ink">
+                          {target.name}
+                        </h3>
+                        <p className="mt-1 break-words text-sm leading-6 text-muted">
+                          {target.frequency}
+                          {target.providerName
+                            ? ` · ${target.providerName}`
+                            : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={`max-w-full rounded-full px-2.5 py-1 text-xs font-medium ${
+                          target.reminderSchedule &&
+                          !disableAutomatic &&
+                          target.reminderSchedule.isEnabled
+                            ? "bg-brand-tint text-brand-ink"
+                            : "bg-note-tint text-note-ink"
+                        }`}
+                      >
+                        {target.reminderSchedule
+                          ? disableAutomatic
+                            ? copy("Review old reminder")
+                            : copy(
+                                target.reminderSchedule.isEnabled
+                                  ? "Configured"
+                                  : "Paused",
+                              )
+                          : disableAutomatic
+                            ? copy("No routine reminder")
+                            : copy("Not set")}
+                      </span>
                     </div>
-                  ) : null}
 
-                  {disableAutomatic ? (
-                    <p className="rounded-xl bg-yellow-100 p-4 text-sm text-yellow-800">
-                      {target.guidance.guidanceText ? (
-                        <span className="mb-2 block">
-                          {copy(target.guidance.guidanceText)}
-                        </span>
-                      ) : null}
-                      {copy(
-                        "This item stays available in Today. Routine clock-time reminders require a clear care-team instruction.",
-                      )}
-                    </p>
-                  ) : isEditing ? (
-                    <>
-                      <p className="text-sm text-gray-700">
+                    {target.description &&
+                    target.description.trim() !== target.name.trim() ? (
+                      <p className="break-words text-[15px] leading-6 text-ink-2">
+                        {target.description}
+                      </p>
+                    ) : null}
+                    {target.reminderSchedule ? (
+                      <p className="break-words text-sm leading-6 text-ink-2">
+                        {target.reminderSchedule.daysOfWeek
+                          .map((day) => reminderDayLabel(locale, day))
+                          .join(", ")}{" "}
+                        ·{" "}
+                        <span className="font-mono">
+                          {target.reminderSchedule.timesOfDay
+                            .map((value) => value.slice(0, 5))
+                            .join(", ")}
+                        </span>{" "}
+                        ·{" "}
+                        {target.reminderSchedule.timezone.replaceAll("_", " ")}
+                      </p>
+                    ) : null}
+                    {!disableAutomatic && !isEditing ? (
+                      <Button
+                        onClick={() => {
+                          setEditingKey(key);
+                          setDrafts((current) =>
+                            Object.fromEntries(
+                              targets.map((entry) => [
+                                makeTargetKey(entry),
+                                makeTargetKey(entry) === key
+                                  ? (current[key] ??
+                                    buildDraft(entry, patientTimezone))
+                                  : buildDraft(entry, patientTimezone),
+                              ]),
+                            ),
+                          );
+                        }}
+                        disabled={editingKey !== null}
+                        variant="secondary"
+                      >
+                        {target.reminderSchedule
+                          ? copy("Edit reminder")
+                          : copy("Set reminder")}
+                      </Button>
+                    ) : null}
+
+                    {!disableAutomatic ? (
+                      <div className="border-t border-line text-sm leading-6 text-muted">
+                        <details>
+                          <summary className="min-h-11 cursor-pointer py-2 font-semibold">
+                            {copy("Schedule help")}
+                          </summary>
+                          <p>
+                            {copy(
+                              target.guidance.guidanceText ??
+                                "Follow the instruction above. Ask your care team if the timing is unclear.",
+                            )}
+                          </p>
+                          {target.guidance.recommendedTimesPerDay ? (
+                            <p>
+                              {locale === "es-MX"
+                                ? `Horas por día: ${target.guidance.recommendedTimesPerDay}`
+                                : `Times per day: ${target.guidance.recommendedTimesPerDay}`}
+                            </p>
+                          ) : null}
+                          {target.guidance.recommendedDaysPerWeek ? (
+                            <p>
+                              {locale === "es-MX"
+                                ? `Días por semana: ${target.guidance.recommendedDaysPerWeek}`
+                                : `Days per week: ${target.guidance.recommendedDaysPerWeek}`}
+                            </p>
+                          ) : null}
+                        </details>
+                      </div>
+                    ) : null}
+
+                    {disableAutomatic ? (
+                      <p className="rounded-xl bg-note-tint p-3 text-sm leading-6 text-note-ink">
+                        {target.guidance.guidanceText ? (
+                          <span className="mb-2 block">
+                            {copy(target.guidance.guidanceText)}
+                          </span>
+                        ) : null}
                         {copy(
-                          "Choose times that match the instruction above, including meal or activity timing. These are reminders, not changes to your care plan.",
+                          "This item stays available in Today. Routine clock-time reminders require a clear care-team instruction.",
                         )}
                       </p>
-                      <p className="text-sm text-gray-700">
-                        {copy("Reminder timezone:")}{" "}
-                        {draft.timezone.replaceAll("_", " ")}
-                      </p>
-                      <div>
-                        <p className="mb-3 text-base font-semibold text-gray-700">
-                          {copy("Days")}
+                    ) : isEditing ? (
+                      <>
+                        <p className="text-sm leading-6 text-ink-2">
+                          {copy(
+                            "Choose times that match the instruction above, including meal or activity timing. These are reminders, not changes to your care plan.",
+                          )}
                         </p>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {DAYS.map((day) => {
-                            const checked = draft.daysOfWeek.includes(day);
-                            return (
-                              <label
-                                className={`flex min-h-12 items-center gap-2 rounded-2xl border px-3 py-2 text-base font-medium transition ${checked ? "border-blue-100 bg-blue-100 text-blue-600" : "border-gray-200 bg-white/80 text-gray-700"}`}
-                                key={day}
-                              >
-                                <input
-                                  checked={checked}
-                                  disabled={Boolean(
-                                    target.guidance.requiredDaysOfWeek?.length,
-                                  )}
-                                  className="h-5 w-5 accent-blue-600"
-                                  onChange={() =>
-                                    updateDraft(target, (current) => ({
-                                      ...current,
-                                      daysOfWeek: checked
-                                        ? current.daysOfWeek.filter(
-                                            (value) => value !== day,
-                                          )
-                                        : [...current.daysOfWeek, day],
-                                    }))
-                                  }
-                                  type="checkbox"
-                                />
-                                <span className="capitalize">
-                                  {reminderDayLabel(locale, day)}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-base font-semibold text-gray-700">
-                            {copy("Reminder times")}
+                        <p className="break-words text-sm text-muted">
+                          {copy("Reminder timezone:")}{" "}
+                          {draft.timezone.replaceAll("_", " ")}
+                        </p>
+                        <div>
+                          <p className="mb-3 text-[15px] font-semibold text-ink">
+                            {copy("Days")}
                           </p>
-                          <button
-                            className="min-h-11 rounded-full px-3 text-sm font-semibold text-blue-600 hover:bg-blue-100"
-                            onClick={() =>
-                              updateDraft(target, (current) => ({
-                                ...current,
-                                timesOfDay: [...current.timesOfDay, ""],
-                              }))
-                            }
-                            type="button"
-                          >
-                            {copy("Add time")}
-                          </button>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {DAYS.map((day) => {
+                              const checked = draft.daysOfWeek.includes(day);
+                              return (
+                                <label
+                                  className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-[15px] font-medium ${checked ? "border-brand bg-brand-tint text-brand-ink" : "border-line-strong bg-surface text-ink-2"}`}
+                                  key={day}
+                                >
+                                  <input
+                                    checked={checked}
+                                    disabled={Boolean(
+                                      target.guidance.requiredDaysOfWeek
+                                        ?.length,
+                                    )}
+                                    className="h-5 w-5 accent-brand"
+                                    onChange={() =>
+                                      updateDraft(target, (current) => ({
+                                        ...current,
+                                        daysOfWeek: checked
+                                          ? current.daysOfWeek.filter(
+                                              (value) => value !== day,
+                                            )
+                                          : [...current.daysOfWeek, day],
+                                      }))
+                                    }
+                                    type="checkbox"
+                                  />
+                                  <span className="capitalize">
+                                    {reminderDayLabel(locale, day)}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
-                        {draft.timesOfDay.map((value, index) => (
-                          <div
-                            className="flex items-center gap-3"
-                            key={`${key}-time-${index}`}
-                          >
-                            <input
-                              aria-label={
-                                locale === "es-MX"
-                                  ? `Hora del recordatorio ${index + 1}`
-                                  : `Reminder time ${index + 1}`
-                              }
-                              className="min-h-[3.25rem] min-w-0 w-full rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 text-base text-gray-700 shadow-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-500"
-                              onChange={(event) =>
-                                updateDraft(target, (current) => ({
-                                  ...current,
-                                  timesOfDay: current.timesOfDay.map(
-                                    (entry, entryIndex) =>
-                                      entryIndex === index
-                                        ? event.target.value
-                                        : entry,
-                                  ),
-                                }))
-                              }
-                              type="time"
-                              value={value}
-                            />
+
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[15px] font-semibold text-ink">
+                              {copy("Reminder times")}
+                            </p>
                             <button
-                              className="min-h-11 rounded-full px-3 text-sm font-semibold text-red-800 hover:bg-red-100"
+                              className="min-h-11 rounded-full px-3 text-sm font-semibold text-brand-ink hover:bg-brand-tint"
                               onClick={() =>
                                 updateDraft(target, (current) => ({
                                   ...current,
-                                  timesOfDay:
-                                    current.timesOfDay.length === 1
-                                      ? current.timesOfDay
-                                      : current.timesOfDay.filter(
-                                          (_, entryIndex) =>
-                                            entryIndex !== index,
-                                        ),
+                                  timesOfDay: [...current.timesOfDay, ""],
                                 }))
                               }
                               type="button"
                             >
-                              {copy("Remove")}
+                              {copy("Add time")}
                             </button>
                           </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : null}
+                          {draft.timesOfDay.map((value, index) => (
+                            <div
+                              className="flex items-center gap-3"
+                              key={`${key}-time-${index}`}
+                            >
+                              <input
+                                aria-label={
+                                  locale === "es-MX"
+                                    ? `Hora del recordatorio ${index + 1}`
+                                    : `Reminder time ${index + 1}`
+                                }
+                                className="min-h-11 min-w-0 w-full rounded-xl border border-line-strong bg-surface px-3 py-2 font-mono text-base text-ink"
+                                onChange={(event) =>
+                                  updateDraft(target, (current) => ({
+                                    ...current,
+                                    timesOfDay: current.timesOfDay.map(
+                                      (entry, entryIndex) =>
+                                        entryIndex === index
+                                          ? event.target.value
+                                          : entry,
+                                    ),
+                                  }))
+                                }
+                                type="time"
+                                value={value}
+                              />
+                              <button
+                                className="min-h-11 rounded-full px-3 text-sm font-semibold text-danger-ink hover:bg-danger-tint"
+                                onClick={() =>
+                                  updateDraft(target, (current) => ({
+                                    ...current,
+                                    timesOfDay:
+                                      current.timesOfDay.length === 1
+                                        ? current.timesOfDay
+                                        : current.timesOfDay.filter(
+                                            (_, entryIndex) =>
+                                              entryIndex !== index,
+                                          ),
+                                  }))
+                                }
+                                type="button"
+                              >
+                                {copy("Remove")}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {isEditing ? (
-                      <Button
-                        disabled={
-                          isSaving ||
-                          disableAutomatic ||
-                          draft.daysOfWeek.length === 0 ||
-                          draft.timesOfDay.length === 0 ||
-                          draft.timesOfDay.some((value) => !value) ||
-                          (target.guidance.recommendedTimesPerDay != null &&
-                            draft.timesOfDay.length !==
-                              target.guidance.recommendedTimesPerDay) ||
-                          (target.guidance.recommendedDaysPerWeek != null &&
-                            draft.daysOfWeek.length !==
-                              target.guidance.recommendedDaysPerWeek)
-                        }
-                        onClick={() => void saveSchedule(target)}
-                        size="lg"
-                      >
-                        {isSaving
-                          ? copy("Saving...")
-                          : copy("Save reminder schedule")}
-                      </Button>
-                    ) : null}
-                    {isEditing ? (
-                      <Button
-                        disabled={isSaving}
-                        variant="secondary"
-                        onClick={() => {
-                          setEditingKey(null);
-                          setDrafts((current) => ({
-                            ...current,
-                            [key]: buildDraft(target, patientTimezone),
-                          }));
-                        }}
-                      >
-                        {copy("Cancel")}
-                      </Button>
-                    ) : null}
-                    {target.reminderSchedule ? (
-                      <Button
-                        disabled={
-                          isSaving ||
-                          (editingKey !== null && editingKey !== key)
-                        }
-                        onClick={() => void clearSchedule(target)}
-                        size="lg"
-                        variant="secondary"
-                      >
-                        {copy("Clear schedule")}
-                      </Button>
-                    ) : null}
-                  </div>
-                </Card>
-              );
-            })}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {isEditing ? (
+                        <Button
+                          disabled={
+                            isSaving ||
+                            disableAutomatic ||
+                            draft.daysOfWeek.length === 0 ||
+                            draft.timesOfDay.length === 0 ||
+                            draft.timesOfDay.some((value) => !value) ||
+                            (target.guidance.recommendedTimesPerDay != null &&
+                              draft.timesOfDay.length !==
+                                target.guidance.recommendedTimesPerDay) ||
+                            (target.guidance.recommendedDaysPerWeek != null &&
+                              draft.daysOfWeek.length !==
+                                target.guidance.recommendedDaysPerWeek)
+                          }
+                          onClick={() => void saveSchedule(target)}
+                          size="lg"
+                        >
+                          {isSaving
+                            ? copy("Saving...")
+                            : copy("Save reminder schedule")}
+                        </Button>
+                      ) : null}
+                      {isEditing ? (
+                        <Button
+                          disabled={isSaving}
+                          variant="secondary"
+                          onClick={() => {
+                            setEditingKey(null);
+                            setDrafts((current) => ({
+                              ...current,
+                              [key]: buildDraft(target, patientTimezone),
+                            }));
+                          }}
+                        >
+                          {copy("Cancel")}
+                        </Button>
+                      ) : null}
+                      {target.reminderSchedule ? (
+                        <Button
+                          disabled={
+                            isSaving ||
+                            (editingKey !== null && editingKey !== key)
+                          }
+                          onClick={() => void clearSchedule(target)}
+                          size="lg"
+                          variant="secondary"
+                        >
+                          {copy("Clear schedule")}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </>
         ) : null}
       </div>

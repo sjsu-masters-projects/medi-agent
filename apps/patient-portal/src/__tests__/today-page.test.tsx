@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
@@ -45,7 +45,7 @@ function baseFeedData() {
 }
 
 describe("TodayPage", () => {
-    afterEach(() => vi.useRealTimers());
+    afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
     beforeEach(() => {
         markComplete.mockReset();
         reportBarrier.mockReset();
@@ -64,7 +64,7 @@ describe("TodayPage", () => {
         expect(useFeedData).toHaveBeenCalledWith("es-MX");
         expect(screen.getByRole("heading", { name: "Hola, Morgan" })).toBeInTheDocument();
         expect(screen.getByText("viernes, 9 de octubre")).toBeInTheDocument();
-        expect(screen.getByText("Progreso diario")).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: "Progreso diario" })).toBeInTheDocument();
         expect(screen.getByText("1 de 2 tareas completadas")).toBeInTheDocument();
         expect(screen.getByText("Racha de 4 días")).toBeInTheDocument();
         expect(screen.getByRole("heading", { name: "Actividades de hoy" })).toBeInTheDocument();
@@ -85,21 +85,22 @@ describe("TodayPage", () => {
         expect(screen.queryByText("Try again")).not.toBeInTheDocument();
     });
 
-    it("localizes reminder and plan labels while retaining clinical wording and completion semantics", () => {
+    it("localizes reminder and plan labels while retaining clinical wording and completion semantics", async () => {
         usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX", timezone: "America/Los_Angeles" });
         const task = { id: "synthetic", targetId: "synthetic-activity", type: FeedTaskType.OBLIGATION, name: "Source title", description: "Keep this source instruction unchanged.", frequency: "Every Monday", status: FeedTaskStatus.PENDING, requiresScheduleConfiguration: true, carePlan: { category: "follow_up", versionNumber: 3 } } as FeedTask;
         mockFeedData({ tasks: [task] });
         render(<TodayPage />);
-        expect(screen.getByRole("link", { name: /Configurar horarios de recordatorios/ })).toHaveAttribute("href", "/reminders");
+        expect(screen.getByRole("link", { name: "Configurar horario del recordatorio" })).toHaveAttribute("href", "/reminders");
         expect(screen.getByText("Configurar horario del recordatorio")).toBeInTheDocument();
         expect(screen.getByText("Aprobado por tu equipo de atención • seguimiento")).toBeInTheDocument();
         expect(screen.getByText("Detalles del plan de atención")).toBeInTheDocument();
-        expect(screen.getByText(/Versión 3 del plan aprobado/)).toBeInTheDocument();
         expect(screen.getByText(task.name)).toBeInTheDocument();
         expect(screen.getByText(task.description!)).toBeInTheDocument();
         expect(screen.getByText(task.frequency!)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Marcar como completada" }));
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Marcar como completada" })));
         expect(markComplete).toHaveBeenCalledWith(task);
+        fireEvent.click(screen.getByRole("button", { name: "Detalles del plan de atención" }));
+        expect(screen.getByText(/Versión 3 del plan aprobado/)).toBeInTheDocument();
     });
 
     it.each([
@@ -127,7 +128,7 @@ describe("TodayPage", () => {
         usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX" });
         mockFeedData({ tasks: [{ id: "synthetic", name: "Source medication 500 mg", type: FeedTaskType.MEDICATION, status: FeedTaskStatus.PENDING, scheduledTime: "18:00", scheduledAt: new Date(Date.now() + 3_600_000).toISOString() } as FeedTask] });
         render(<TodayPage />);
-        expect(screen.getByText("Próxima")).toBeInTheDocument();
+        expect(within(screen.getByRole("list")).getByText("Próxima")).toBeInTheDocument();
         expect(screen.queryByText("Para ahora")).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Marcar como tomado" })).not.toBeInTheDocument();
     });
@@ -181,7 +182,8 @@ describe("TodayPage", () => {
 
         render(<TodayPage />);
 
-        expect(screen.getByText("0%")).toBeInTheDocument();
+        expect(screen.getByText("0 of 0 tasks completed")).toBeInTheDocument();
+        expect(screen.getByTestId("today-progress-segments").children).toHaveLength(0);
         expect(screen.queryByText("NaN%")).not.toBeInTheDocument();
     });
 
@@ -190,7 +192,7 @@ describe("TodayPage", () => {
 
         const { container } = render(<TodayPage />);
 
-        expect(container.querySelectorAll(".animate-pulse")).toHaveLength(3);
+        expect(container.querySelectorAll('[class*="animate-pulse"]')).toHaveLength(3);
         expect(screen.queryByText(/Today's schedule/i)).not.toBeInTheDocument();
     });
 
@@ -203,7 +205,7 @@ describe("TodayPage", () => {
         expect(screen.getByText(/clinicians have not assigned anything/i)).toBeInTheDocument();
     });
 
-    it("highlights due-now work and lets patients complete it", () => {
+    it("highlights due-now work and lets patients complete it", async () => {
         const task = {
             description: "Take with water",
             frequency: "daily",
@@ -235,10 +237,11 @@ describe("TodayPage", () => {
         expect(screen.getByText("Care-team approved • monitoring")).toBeInTheDocument();
         expect(screen.getByText("Care plan approved by Dr. Chen")).toBeInTheDocument();
         expect(screen.queryByText("Prescribed by Dr. Chen")).not.toBeInTheDocument();
-        expect(screen.getByText(/Approved plan version 2/)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: /mark as taken/i }));
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: /mark as taken/i })));
         expect(markComplete).toHaveBeenCalledWith(task);
+        fireEvent.click(screen.getByRole("button", { name: "Care plan details" }));
+        expect(screen.getByText(/Approved plan version 2/)).toBeInTheDocument();
     });
 
     it("keeps a future scheduled dose upcoming instead of due now", () => {
@@ -252,6 +255,38 @@ describe("TodayPage", () => {
         expect(screen.queryByText("Due now")).not.toBeInTheDocument();
         expect(screen.queryByText(/• Now/)).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: /Mark as Taken/i })).not.toBeInTheDocument();
+    });
+
+    it.each([false, true])("only animates a confirmed completion (saved: %s)", async (saved) => {
+        vi.useFakeTimers();
+        const task = { id: "animation-task", targetId: "activity", type: FeedTaskType.OBLIGATION,
+            name: "Drink water", status: FeedTaskStatus.PENDING } as FeedTask;
+        markComplete.mockResolvedValue(saved);
+        mockFeedData({ tasks: [task] });
+        render(<TodayPage />);
+        const hero = screen.getByRole("article");
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Mark as Done" })));
+        expect(hero).toHaveAttribute("data-completion-phase", saved ? "checked" : "idle");
+        if (saved) {
+            expect(screen.getByRole("button", { name: "Mark as Done" })).toBeDisabled();
+            act(() => vi.advanceTimersByTime(160));
+            expect(hero).toHaveAttribute("data-completion-phase", "leaving");
+            act(() => vi.advanceTimersByTime(160));
+            expect(hero).toHaveAttribute("data-completion-phase", "idle");
+        }
+        expect(screen.getByRole("button", { name: "Mark as Done" })).toBeEnabled();
+        expect(markComplete).toHaveBeenCalledOnce();
+    });
+
+    it("does not animate confirmed completion when reduced motion is requested", async () => {
+        vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+        markComplete.mockResolvedValue(true);
+        mockFeedData({ tasks: [{ id: "reduced-motion", targetId: "activity", type: FeedTaskType.OBLIGATION,
+            name: "Drink water", status: FeedTaskStatus.PENDING } as FeedTask] });
+        render(<TodayPage />);
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Mark as Done" })));
+        expect(screen.getByRole("article")).toHaveAttribute("data-completion-phase", "idle");
+        expect(screen.getByRole("button", { name: "Mark as Done" })).toBeEnabled();
     });
 
     it("surfaces reminder schedule gaps with a direct setup link", () => {
@@ -273,7 +308,7 @@ describe("TodayPage", () => {
 
         render(<TodayPage />);
 
-        const setupLink = screen.getByRole("link", { name: /set reminder times/i });
+        const setupLink = screen.getByRole("link", { name: /^set reminder time$/i });
         expect(setupLink).toHaveAttribute("href", "/reminders");
         expect(screen.getByText(/^Set reminder time$/i)).toBeInTheDocument();
     });
@@ -303,7 +338,7 @@ describe("TodayPage", () => {
     it("uses today's completion count rather than the 30-day score", () => {
         mockFeedData({ summary: { completed: 1, total: 4 }, adherenceStats: { currentStreakDays: 0, overallScore: 0.9 } });
         render(<TodayPage />);
-        expect(screen.getByText("25%")).toBeInTheDocument();
+        expect(screen.getByText("1 of 4 tasks completed")).toBeInTheDocument();
         expect(screen.queryByText("90%")).not.toBeInTheDocument();
     });
 

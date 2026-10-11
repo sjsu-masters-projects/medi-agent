@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useSharedPatientProfile } from "@/contexts/patient-profile-context";
+import { Icon } from "@/components/ui/icons";
 
 interface PageHeaderProps {
     title: string;
@@ -16,28 +17,26 @@ export function PageHeader({ backButton = false, rightAction, subtitle, title }:
     const spanish = useSharedPatientProfile()?.profile?.preferredLanguage === "es-MX";
 
     return (
-        <div className="relative overflow-hidden rounded-b-[34px] bg-[#147465] px-5 pt-11 pb-7 text-white shadow-[0_22px_60px_rgba(20,116,101,0.24)]">
-            <div className="pointer-events-none absolute -top-16 -right-14 h-44 w-44 rounded-full bg-white/12" />
-            <div className="pointer-events-none absolute -bottom-20 left-8 h-48 w-48 rounded-full bg-[#d8aa57]/18" />
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="relative flex min-w-0 flex-1 items-start gap-3">
+        <header className="px-[22px] pt-6 pb-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-start gap-2">
                     {backButton ? (
                         <button
                             aria-label={spanish ? "Volver" : "Go back"}
-                            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-lg text-white backdrop-blur transition hover:bg-white/25"
+                            className="ma-press -ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface-2"
                             onClick={() => router.back()}
                             type="button"
                         >
-                            ←
+                            <Icon name="back" className="h-[22px] w-[22px]" />
                         </button>
                     ) : null}
-                    <div>
-                        <h1 className="text-[1.75rem] font-bold leading-tight tracking-[-0.02em] text-white">{title}</h1>
-                        {subtitle ? <p className="mt-2 max-w-[18rem] text-base leading-7 text-white/82">{subtitle}</p> : null}
+                    <div className="min-w-0">
+                        <h1 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">{title}</h1>
+                        {subtitle ? <p className="mt-2 max-w-prose text-[15px] leading-relaxed text-muted">{subtitle}</p> : null}
                     </div>
                 </div>
-                <div className="relative">{rightAction}</div>
+                {rightAction ? <div className="flex shrink-0 flex-wrap items-center gap-2">{rightAction}</div> : null}
             </div>
-        </div>
+        </header>
     );
 }
