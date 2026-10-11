@@ -37,6 +37,54 @@ fetched and last checked it. Public reference text only; no patient data.
 - On a miss, a tool call fetches and caches with a short timeout. The weekly job re-checks
   every active medication and documented condition, refreshing only what changed.
 
+### Retrieval pipeline and its checks
+
+Each stage has a check, and every failure has a defined outcome. A failure never becomes a
+guess.
+
+| # | Stage | Check | On failure |
+| --- | --- | --- | --- |
+| 1 | **Decide to retrieve** (coordinator) | Retrieve only for a medication, condition or document question. A symptom or side-effect message is triaged first; the safety floor runs before any model. | Without a retrieval Nora answers from the record only, or says she does not have the information. |
+| 2 | **Resolve the subject** | Medication: match the patient's own active medications first (exact, then fuzzy name match). Otherwise RxNorm exact match, then approximate match, which is accepted only if the matched name shares a word (similarity ≥ 0.8) with what was asked ("hydration" must not become chloral hydrate). Combination products resolve to every ingredient. Condition: patient's conditions first, then a MedlinePlus topic whose title or alternate title matches. | `not_found`: Nora says she could not find reliable information for that name and asks which medication was meant. |
+| 3 | **Fetch from sources** | NLM HTTPS hosts only (allowlist). 6 s per request and about 4 s total inline. Responses are size-capped, HTML is stripped, and the shape is validated. A DailyMed label must be single-ingredient, with the ingredient named in its title. Label sections are chosen by LOINC code. | A network or timeout error is `unavailable`, never cached as "not found". |
+| 4 | **Cache and freshness** | Rows hold `checked_at`, the source version and date, and a content hash. A row checked within 7 days is served from the cache. A miss (`not_found`) is retried after 7 days. A source that does not answer leaves the old row in place. | If a cached row is older than 30 days and the source is down, it is served with its "as of" date and marked stale. |
+| 5 | **Return to the model** | Each tool result shows provenance first: source, title, URL, date, language and `on_patient_list`. Excerpts are bounded (about 1,800 characters per section) and fenced as reference data, never instructions. **Label dosage sections are never returned**: a label's dose ranges are not this patient's prescription. | — |
+| 6 | **Write the reply** (responder) | General reference is kept apart from the patient's own record ("in general…" versus "your list says…"). When they conflict, the record and care team win. The reply never gives a dose, start or stop advice. A known side effect is never presented as "nothing to worry about"; it routes to the care team, and to 911 when there are danger signs. In Spanish, an English-only source is explained in Spanish and the source is named as English. | — |
+| 7 | **Check after generation** (deterministic, server-side) | The source line is attached by the server from the tool results that were actually used, never trusted to the model. A reply that cites a source no tool returned is stripped of that citation. Numbers that look like doses in the reply must appear in the patient record or the tool result; otherwise the reply is flagged in telemetry, and later blocked once measured. | — |
+| 8 | **Observe** | Logged per turn: retrieval outcome (`found`, `cache`, `stale`, `not_found` or `unavailable`), latency and source. No medication names together with a patient identifier. | — |
+
+**Language:** a MedlinePlus Spanish page when one exists, otherwise English explained in
+Spanish. DailyMed exists only in English.
+
+**Retired:** the pgvector drug chunk retrieval (`drug_knowledge_chunks`). It was queried on
+every turn and its result never reached the model. The table is left in place and dropped
+in a later migration once nothing reads it.
+
+### Evaluation (before merge)
+
+- Unit tests run on recorded source responses (no network in CI). They cover:
+  - resolution accepts and rejects (brand name, Spanish name, dose text, non-drug word,
+    combination product)
+  - label choice
+  - section parsing
+  - failure outcomes (`unavailable` is never cached)
+  - freshness
+  - patient scoping
+  - the server source line
+- A golden set of about 30 English and Spanish questions, each with the expected source
+  and the behaviors that must not happen:
+  - what a drug is for
+  - side effects
+  - interactions with the patient's other medications
+  - a drug that is not on the patient's list
+  - a misspelled name
+  - a non-drug word
+  - a condition explanation
+  - a document question
+  - a danger-sign side effect, which must escalate
+  - a dose-change request, which must refuse and route to the care team
+- A live check script runs the same set against the real services and Nora.
+
 ### Nora's tools (coordinator)
 
 - `get_medication_information(medication_name)`: plain summary in the patient's language

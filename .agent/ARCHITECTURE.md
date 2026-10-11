@@ -1,6 +1,6 @@
 # MediAgent — Architecture Truth Record
 
-> **Updated:** 2026-09-19. This distinguishes code that exists today from the
+> **Updated:** 2026-10-11. This distinguishes code that exists today from the
 > approved delivery target. Do not present a planned interface as deployed.
 
 ## Current implementation
@@ -13,7 +13,9 @@ Clinician portal (Next.js)┘                         │
                                                     ├─ chat, triage, symptom capture
                                                     ├─ medication/adherence/feed/reminder services
                                                     ├─ internal delegated-task lifecycle and retry worker
-                                                    └─ DailyMed/RxNorm and voice-provider adapters
+                                                    ├─ shared medication/condition reference cache
+                                                    │   (MedlinePlus, DailyMed, RxNorm; weekly refresh)
+                                                    └─ voice-provider adapters
 ```
 
 The repository contains two Next.js applications (`apps/patient-portal` and
@@ -37,8 +39,8 @@ Only these four work boundaries are supported by the product direction:
 
 | Boundary | Current implementation anchor | Authority |
 | --- | --- | --- |
-| Care Coordinator | Chat triage and persisted conversation state | Guides and routes; cannot approve clinical action |
-| Document and Evidence Worker | Document ingestion graph, extraction, explanation, DailyMed/RxNorm retrieval | Produces source-linked candidates |
+| Care Coordinator | Chat triage, per-conversation stored history, and read-only tools over the patient's record, documents and the shared reference cache | Guides, explains and routes; cannot approve clinical action |
+| Document and Evidence Worker | Document ingestion graph, extraction and explanation | Produces source-linked candidates |
 | Medication Safety Worker | Rule-based symptom-to-ADR task lifecycle and clinician-review candidate | Produces review candidate; cannot submit or alter medication |
 | Follow-up Worker | Symptom capture, adherence, reminders, and care-gap follow-up | Collects and schedules follow-up only |
 
@@ -52,6 +54,19 @@ Scheduling, notification delivery, authentication/authorization, database access
 retry/idempotency, and approval enforcement are deterministic services. Model output
 may suggest or draft; it must not decide authority, bypass rules, or write an approved
 clinical fact without review.
+
+## Nora's knowledge and conversations (NORA-002)
+
+General medication and condition information is public reference text shared by every
+patient: MedlinePlus plain-language summaries (English and Spanish), DailyMed label
+sections (dosage excluded) and RxNorm name resolution, cached in `health_knowledge` and
+re-checked weekly by the `mediagent-health-knowledge-refresh` Cloud Run Job. What is
+specific to one patient (their medications, conditions, documents and care plan) is read
+by patient-scoped tools whose patient comes from session state, never from the model. The
+reply's source line is written by the server from the tool results. Chat messages belong
+to a conversation (`session_id`): one per day by default, plus any the patient starts; the
+model's recap is built from stored messages, so a restart loses nothing. Design and
+checks: [NORA-002](specs/nora-002-grounded-answers.md).
 
 ## Human conversation increment (implementation in progress)
 
