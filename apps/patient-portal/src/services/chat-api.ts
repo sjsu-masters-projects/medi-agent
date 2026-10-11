@@ -56,6 +56,12 @@ export interface ChatContextLoadedEvent {
     document: ChatDocumentContextApi;
 }
 
+/** The conversation's document could not be read: deleted, or not the patient's. */
+export interface ChatContextUnavailableEvent {
+    type: "chat_context_unavailable";
+    context_type: "document";
+}
+
 export interface UserMessageSavedEvent {
     type: "user_message_saved";
     message: ChatMessageApi;
@@ -120,6 +126,7 @@ export type ChatSocketEvent =
     | AssistantCompleteEvent
     | AssistantStartEvent
     | ChatContextLoadedEvent
+    | ChatContextUnavailableEvent
     | ChatErrorEvent
     | ChatHistoryEvent
     | ClinicianMessageEvent
@@ -219,6 +226,8 @@ export function newConversationId(): string {
 
 export interface ChatWebSocketOptions {
     documentId?: string | null;
+    /** The patient dismissed this conversation's document; the server clears it. */
+    documentDismissed?: boolean;
     sessionId?: string | null;
 }
 
@@ -241,6 +250,8 @@ export function buildChatWebSocketUrl(
     const documentId = options.documentId?.trim();
     if (documentId) {
         parsed.searchParams.set("context", `doc:${documentId}`);
+    } else if (options.documentDismissed) {
+        parsed.searchParams.set("context", "none");
     }
 
     const sessionId = options.sessionId?.trim();

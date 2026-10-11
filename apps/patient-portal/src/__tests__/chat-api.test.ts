@@ -88,6 +88,19 @@ describe("chat API helpers", () => {
 
         vi.unstubAllEnvs();
     });
+
+    it("asks the server to drop a dismissed document, unless a document is being attached", () => {
+        vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.com");
+
+        expect(buildChatWebSocketUrl("patient-1", { documentDismissed: true, sessionId: "chat-1" })).toBe(
+            "wss://api.example.com/ws/chat/patient-1?context=none&session_id=chat-1",
+        );
+        expect(
+            buildChatWebSocketUrl("patient-1", { documentDismissed: true, documentId: "doc-2" }),
+        ).toBe("wss://api.example.com/ws/chat/patient-1?context=doc%3Adoc-2");
+
+        vi.unstubAllEnvs();
+    });
 });
 
 describe("conversation ids", () => {

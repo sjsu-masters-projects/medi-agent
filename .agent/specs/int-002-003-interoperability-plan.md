@@ -113,9 +113,17 @@ are present. Do not reuse Supabase JWT configuration for SMART validation.
    issuer, retrieves SMART configuration, creates a short-lived launch session, generates
    PKCE values and state, encrypts the opaque handle at rest, and redirects to the
    authorization endpoint. In standalone mode, the same protected endpoint omits the
-   opaque handle and requests patient/encounter launch context instead.
+   opaque handle and requests patient/encounter launch context instead. The portal
+   omits the issuer for standalone launch and the backend applies
+   `SMART_STANDALONE_ISSUER` (INT-003-V): for SMART Health IT this is
+   `https://launch.smarthealthit.org/v/r4/sim/WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0/fhir`,
+   a launcher options array for patient standalone. The earlier JSON-object segment
+   was read as a legacy code and ran the provider EHR flow.
 2. `GET /api/v1/smart/callback` rejects provider errors, missing or mismatched state,
    expired/replayed sessions, an unexpected issuer/audience, and insufficient scopes.
+   A provider `error`/`error_description` is sanitized (plain characters, opaque values
+   redacted, 200 characters), logged as a warning, and, for a live launch session,
+   returned to the portal as `smart_error_detail`; see `docs/smart-fhir-review-mapping.md`.
    It exchanges the code server-side and captures patient and encounter context.
 3. The callback performs a bounded, read-only patient import through the INT-002
    registry. It stores a launch summary and produces a short-lived, single-use portal

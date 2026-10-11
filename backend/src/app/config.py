@@ -115,11 +115,15 @@ class Settings(BaseSettings):
     smart_state_encryption_key: str = ""
     smart_allowed_issuers: str = "https://launch.smarthealthit.org/v/r4/fhir"
     # SMART Health IT's launcher uses a simulator-specific issuer for a direct
-    # standalone launch. EHR-initiated launches continue to use the issuer
-    # received from the EHR launch context and must still match the allowlist.
+    # standalone launch. The sim segment is the launcher's base64url launch
+    # options array; this one decodes to
+    # [3,"","","AUTO",0,0,0,"","","","","","","",0,1,""]: patient-standalone,
+    # patient login and picker, public client, PKCE "auto". EHR-initiated
+    # launches continue to use the issuer received from the EHR launch context
+    # and must still match the allowlist.
     smart_standalone_issuer: str = (
         "https://launch.smarthealthit.org/v/r4/sim/"
-        "eyJsYXVuY2hfdHlwZSI6InBhdGllbnQtc3RhbmRhbG9uZSJ9/fhir"
+        "WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0/fhir"
     )
     smart_scopes: str = (
         "patient/Patient.read patient/Encounter.read patient/Condition.read "

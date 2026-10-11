@@ -104,12 +104,10 @@ describe("SMART import page", () => {
         expect(await screen.findByRole("status")).toHaveTextContent(/preparing the secure smart authorization session/i);
         expect(screen.getByRole("status")).toHaveTextContent(/keep this tab open/i);
         expect(screen.getByRole("button", { name: /opening smart launch/i })).toBeDisabled();
+        // A standalone launch leaves the sandbox issuer to server configuration.
         expect(post).toHaveBeenCalledWith(
             "/api/v1/smart/launch",
-            expect.objectContaining({
-                patient_id: "patient-1",
-                issuer: expect.stringContaining("/v/r4/sim/"),
-            }),
+            { patient_id: "patient-1" },
             { token: "local-clinician-token" },
         );
 
@@ -123,6 +121,23 @@ describe("SMART import page", () => {
         render(<SmartImportPage />);
 
         expect(await screen.findByRole("alert")).toHaveTextContent(/did not authorize this import/i);
+        expect(screen.getByRole("alert")).not.toHaveTextContent(/sandbox response/i);
+        expect(replace).toHaveBeenCalledWith("/smart-import");
+    });
+
+    it("shows the sanitized sandbox error detail after a provider failure", async () => {
+        setSearchParams(
+            "smart_error=authorization_failed&smart_error_detail="
+                + encodeURIComponent("invalid_request: Invalid launch options: SyntaxError: Unexpected end of JSON input"),
+        );
+
+        render(<SmartImportPage />);
+
+        const alert = await screen.findByRole("alert");
+        expect(alert).toHaveTextContent(/did not authorize this import/i);
+        expect(alert).toHaveTextContent(
+            "Sandbox response: invalid_request: Invalid launch options: SyntaxError: Unexpected end of JSON input",
+        );
         expect(replace).toHaveBeenCalledWith("/smart-import");
     });
 

@@ -261,3 +261,256 @@ async def test_a_malformed_response_is_an_outage_not_a_crash(body: str) -> None:
 def test_dose_sentences_are_removed_from_reference_text() -> None:
     text = "It treats diabetes. Take 500 mg twice daily.\nTalk to your pharmacist."
     assert sources.strip_doses(text) == "It treats diabetes.\nTalk to your pharmacist."
+
+
+# ── Condition topics: best of several, qualifier retry, the twin page in the other language
+
+_EN = "https://medlineplus.gov"
+_ES = "https://medlineplus.gov/spanish"
+
+
+def _doc(url: str, title: str, *alt_titles: str, rank: int = 0) -> str:
+    """One search-result document in the web service's shape (public topic names only)."""
+    alts = "".join(f'<content name="altTitle">{alt}</content>' for alt in alt_titles)
+    return (
+        f'<document rank="{rank}" url="{url}">'
+        f'<content name="title">{title}</content>{alts}'
+        f'<content name="FullSummary">&lt;p&gt;Summary of {title}.&lt;/p&gt;</content>'
+        "</document>"
+    )
+
+
+def _results(*documents: str) -> str:
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?><nlmSearchResult>'
+        f'<list num="{len(documents)}" start="0" per="10">{"".join(documents)}</list>'
+        "</nlmSearchResult>"
+    )
+
+
+def _topic_client(
+    english: dict[str, str],
+    spanish: dict[str, str] | None = None,
+    pages: dict[str, str] | None = None,
+) -> tuple[httpx.AsyncClient, list[tuple[str, str]]]:
+    """Serve search results by (index, term) and page heads by path; record each request."""
+    asked: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "wsearch.nlm.nih.gov":
+            database = request.url.params["db"]
+            term = request.url.params["term"]
+            asked.append((database, term))
+            by_term = (spanish or {}) if database == "healthTopicsSpanish" else english
+            return httpx.Response(200, text=by_term.get(term.casefold(), _results()))
+        asked.append(("page", request.url.path))
+        page = (pages or {}).get(request.url.path)
+        return httpx.Response(206, text=page) if page is not None else httpx.Response(404)
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler)), asked
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("asked", "documents", "expected"),
+    [
+        (
+            "high cholesterol",
+            [
+                _doc(
+                    f"{_EN}/highcholesterolinchildrenandteens.html",
+                    "High Cholesterol in Children and Teens",
+                ),
+                _doc(f"{_EN}/cholesterol.html", "Cholesterol", "Hypercholesterolemia", rank=1),
+                _doc(f"{_EN}/howtolowercholesterol.html", "How to Lower Cholesterol", rank=2),
+            ],
+            "Cholesterol",
+        ),
+        (
+            "high blood pressure",
+            [
+                _doc(
+                    f"{_EN}/howtopreventhighbloodpressure.html",
+                    "How to Prevent High Blood Pressure",
+                    "High Blood Pressure Prevention",
+                ),
+                _doc(
+                    f"{_EN}/highbloodpressure.html",
+                    "High Blood Pressure",
+                    "Hypertension",
+                    "Essential hypertension",
+                    rank=1,
+                ),
+            ],
+            "High Blood Pressure",
+        ),
+        (
+            "type 2 diabetes",
+            [
+                _doc(f"{_EN}/diabetes.html", "Diabetes", "Diabetes Mellitus"),
+                _doc(f"{_EN}/diabetestype1.html", "Diabetes Type 1", "Type 1 Diabetes", rank=1),
+                _doc(f"{_EN}/diabetestype2.html", "Diabetes Type 2", "Type 2 Diabetes", rank=2),
+            ],
+            "Diabetes Type 2",
+        ),
+    ],
+)
+async def test_the_general_topic_that_names_the_condition_wins_over_the_top_hit(
+    asked: str, documents: list[str], expected: str
+) -> None:
+    client, requests = _topic_client({asked: _results(*documents)})
+    async with client:
+        text = await sources.medlineplus_condition(client, asked, "en-US")
+    assert text is not None
+    assert text.title == expected
+    assert text.summary == f"Summary of {expected}."
+    assert requests == [("healthTopics", asked)]  # one search, no retry
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("asked", "first", "simpler", "expected"),
+    [
+        ("mild persistent asthma", _results(), "asthma", "Asthma"),
+        ("episodic migraine", _results(_doc(f"{_EN}/pain.html", "Pain")), "migraine", "Migraine"),
+        (
+            "osteoarthritis of the knee",
+            _results(
+                _doc(f"{_EN}/arthritis.html", "Arthritis", "Joint inflammation"),
+                _doc(f"{_EN}/kneereplacement.html", "Knee Replacement", rank=1),
+            ),
+            "osteoarthritis",
+            "Osteoarthritis",
+        ),
+    ],
+)
+async def test_qualifiers_are_dropped_for_one_retry_when_nothing_matches(
+    asked: str, first: str, simpler: str, expected: str
+) -> None:
+    assert sources.without_qualifiers(asked) == simpler
+    client, requests = _topic_client(
+        {asked: first, simpler: _results(_doc(f"{_EN}/{simpler}.html", expected))}
+    )
+    async with client:
+        text = await sources.medlineplus_condition(client, asked, "en-US")
+    assert text is not None and text.title == expected
+    assert requests == [("healthTopics", asked), ("healthTopics", simpler)]
+
+
+@pytest.mark.asyncio
+async def test_an_unrelated_top_hit_is_still_rejected() -> None:
+    """ "Pain" shares no word with "episodic migraine"; it must never be cached under it."""
+    client, requests = _topic_client(
+        {"episodic migraine": _results(_doc(f"{_EN}/pain.html", "Pain"))},
+        {"episodic migraine": _results(_doc(f"{_ES}/pain.html", "Dolor"))},
+    )
+    async with client:
+        assert await sources.medlineplus_condition(client, "episodic migraine", "en-US") is None
+    assert ("healthTopics", "migraine") in requests
+
+
+ECZEMA = _doc(
+    f"{_EN}/eczema.html",
+    '&lt;span class="qt0"&gt;Eczema&lt;/span&gt;',
+    "Atopic Dermatitis",
+    "Dermatitis",
+)
+ECCEMA = _doc(f"{_ES}/eczema.html", "Eccema", "Dermatitis")
+
+
+@pytest.mark.asyncio
+async def test_spanish_is_the_english_topics_own_spanish_page() -> None:
+    """The Spanish index is never searched with the English condition name."""
+    client, requests = _topic_client(
+        {"atopic dermatitis": _results(ECZEMA)},
+        {"eczema": _results(_doc(f"{_ES}/foodallergy.html", "Alergia a los alimentos"), ECCEMA)},
+    )
+    async with client:
+        english = await sources.medlineplus_condition(client, "atopic dermatitis", "en-US")
+        spanish = await sources.medlineplus_condition(client, "atopic dermatitis", "es-MX")
+    assert english is not None and english.title == "Eczema"
+    assert spanish is not None
+    assert spanish.title == "Eccema"
+    assert spanish.url == f"{_ES}/eczema.html"
+    assert spanish.summary == "Summary of Eccema."
+    assert ("healthTopicsSpanish", "atopic dermatitis") not in requests
+
+
+@pytest.mark.asyncio
+async def test_the_spanish_page_title_finds_the_twin_when_the_english_title_does_not() -> None:
+    head = "<html><head><title>Eccema | Dermatitis | MedlinePlus en español</title></head>"
+    client, requests = _topic_client(
+        {"atopic dermatitis": _results(ECZEMA)},
+        {"eccema": _results(ECCEMA)},
+        pages={"/spanish/eczema.html": head},
+    )
+    async with client:
+        spanish = await sources.medlineplus_condition(client, "atopic dermatitis", "es-MX")
+    assert spanish is not None and spanish.title == "Eccema"
+    assert requests == [
+        ("healthTopics", "atopic dermatitis"),
+        ("healthTopicsSpanish", "Eczema"),
+        ("page", "/spanish/eczema.html"),
+        ("healthTopicsSpanish", "Eccema"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_no_spanish_twin_is_a_miss_never_english_text_under_spanish() -> None:
+    client, requests = _topic_client(
+        {"atopic dermatitis": _results(ECZEMA)},
+        # The Spanish index answers, but not with the twin page's URL; the page is missing.
+        {"eczema": _results(_doc(f"{_ES}/skinconditions.html", "Enfermedades de la piel"))},
+    )
+    async with client:
+        assert await sources.medlineplus_condition(client, "atopic dermatitis", "es-MX") is None
+    assert requests[-1] == ("page", "/spanish/eczema.html")
+
+
+@pytest.mark.asyncio
+async def test_a_spanish_stored_name_resolves_in_spanish_and_its_english_twin() -> None:
+    english_hits = _results(
+        _doc(f"{_EN}/diabetestype1.html", "Diabetes Type 1", "Type 1 Diabetes"),
+        _doc(f"{_EN}/diabetestype2.html", "Diabetes Type 2", "Type 2 Diabetes", rank=1),
+    )
+    spanish_hits = _results(
+        _doc(f"{_ES}/diabetestype2.html", "Diabetes tipo 2", "Diabetes Mellitus Estable"),
+        _doc(f"{_ES}/diabetes.html", "Diabetes", "Diabetes tipo II", rank=1),
+    )
+    client, requests = _topic_client(
+        # The English index does not know "tipo": its diabetes topics only share words.
+        {"diabetes tipo 2": english_hits},
+        {"diabetes tipo 2": spanish_hits},
+    )
+    async with client:
+        spanish = await sources.medlineplus_condition(client, "diabetes tipo 2", "es-MX")
+        english = await sources.medlineplus_condition(client, "diabetes tipo 2", "en-US")
+    assert spanish is not None and spanish.title == "Diabetes tipo 2"
+    assert spanish.url == f"{_ES}/diabetestype2.html"
+    assert english is not None and english.title == "Diabetes Type 2"
+    assert english.url == f"{_EN}/diabetestype2.html"
+    # en-US: English (no match), Spanish (match), then the twin from the English index.
+    assert requests[-3:] == [
+        ("healthTopics", "diabetes tipo 2"),
+        ("healthTopicsSpanish", "diabetes tipo 2"),
+        ("healthTopics", "Diabetes tipo 2"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_spanish_page_in_the_english_results_is_not_an_english_topic() -> None:
+    client, _requests = _topic_client({"eczema": _results(_doc(f"{_ES}/eczema.html", "Eczema"))})
+    async with client:
+        assert await sources.medlineplus_condition(client, "eczema", "en-US") is None
+
+
+@pytest.mark.asyncio
+async def test_an_outage_while_finding_the_twin_is_unavailable_not_a_miss() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("db") == "healthTopics":
+            return httpx.Response(200, text=_results(ECZEMA))
+        return httpx.Response(503)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(SourceUnavailableError):
+            await sources.medlineplus_condition(client, "atopic dermatitis", "es-MX")
