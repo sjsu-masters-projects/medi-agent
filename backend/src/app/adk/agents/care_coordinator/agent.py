@@ -120,6 +120,10 @@ def build_care_coordinator() -> SequentialAgent:
         instruction=CARE_COORDINATOR_INSTRUCTION,
         tools=[get_patient_context, get_active_document_context, submit_triage_decision],
         output_key=FINDINGS_STATE_KEY,
+        # Current turn only, plus the recap in its instruction. With full history the
+        # model saw its earlier submit_triage_decision call and skipped the new one,
+        # which failed every follow-up message.
+        include_contents="none",
         generate_content_config=_generation_config(Workload.TRIAGE),
         disallow_transfer_to_parent=True,
         disallow_transfer_to_peers=True,

@@ -11,9 +11,9 @@ import {
 const CHAT_DOCUMENT_CONTEXT_PREFIX = "patient-portal.chat.document-context";
 const DOCUMENT_TYPES = new Set<DocumentTypeValue>(Object.values(DocumentType));
 const DOCUMENT_QUESTION_TEMPLATES: LocaleResourceMap<string> = {
-    default: 'Help me understand my {descriptor} called "{documentName}" and what questions I should ask my doctor.',
-    "en-US": 'Help me understand my {descriptor} called "{documentName}" and what questions I should ask my doctor.',
-    "es-MX": 'Ayúdame a entender mi {descriptor} llamado "{documentName}" y dime qué debo preguntar a mi médico.',
+    default: 'Explain my {descriptor} "{documentName}" in simple words, and what I should ask my care team.',
+    "en-US": 'Explain my {descriptor} "{documentName}" in simple words, and what I should ask my care team.',
+    "es-MX": 'Explícame con palabras sencillas mi {descriptor} "{documentName}" y qué debo preguntarle a mi equipo de atención.',
 };
 
 export interface PendingChatDocumentContext {
@@ -56,9 +56,9 @@ export function buildSuggestedDocumentQuestion(
         "documentName" | "documentType" | "provider" | "preferredLanguage"
     >,
 ): string {
-    const descriptor = context.provider
-        ? `${getDocumentTypeLabel(context.documentType, context.preferredLanguage)} from ${context.provider}`
-        : getDocumentTypeLabel(context.documentType, context.preferredLanguage);
+    // The source label is shown on the context card; splicing it into the sentence put
+    // English ("from Care team") into Spanish questions.
+    const descriptor = getDocumentTypeLabel(context.documentType, context.preferredLanguage).toLocaleLowerCase(context.preferredLanguage);
     const template = resolveLocaleResource(
         context.preferredLanguage,
         DOCUMENT_QUESTION_TEMPLATES,

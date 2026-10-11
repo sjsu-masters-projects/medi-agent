@@ -88,21 +88,14 @@ function buildWelcomeMessage(patientId: string, language: ChatLocale): ChatMessa
     };
 }
 
-function resolveInitialDocumentContext(): PendingChatDocumentContext | null {
+// The document id comes from useSearchParams, not window.location: during in-app
+// navigation from Records, window.location still shows the previous page while the chat
+// page renders, so the handoff was lost and the inbox opened instead of Nora.
+function resolveInitialDocumentContext(documentId: string | null): PendingChatDocumentContext | null {
     if (typeof window === "undefined") {
         return null;
     }
-
-    const documentId = new URLSearchParams(window.location.search).get("document");
     return consumePendingChatDocumentContext(documentId);
-}
-
-function resolveInitialDocumentId(): string | null {
-    if (typeof window === "undefined") {
-        return null;
-    }
-
-    return new URLSearchParams(window.location.search).get("document");
 }
 
 function mapLoadedDocumentContext(
@@ -172,11 +165,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         (state: RootState) => state.chat,
     );
 
-    const [initialDocumentContext] = useState<PendingChatDocumentContext | null>(
-        resolveInitialDocumentContext,
+    const [initialDocumentContext] = useState<PendingChatDocumentContext | null>(() =>
+        resolveInitialDocumentContext(searchParams.get("document")),
     );
     const [initialDocumentId] = useState<string | null>(
-        () => initialDocumentContext?.documentId ?? resolveInitialDocumentId(),
+        () => initialDocumentContext?.documentId ?? (searchParams.get("document")?.trim() || null),
     );
     const [voiceCapabilities] = useState(getVoiceCapabilities);
     const [input, setInput] = useState(

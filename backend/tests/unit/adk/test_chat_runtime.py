@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -32,7 +33,11 @@ from app.adk.agents.care_coordinator import (
 from app.adk.chat_runtime import APP_NAME, CareCoordinatorRuntime
 from app.adk.models.resilient import ResilientLlm
 from app.adk.runner import build_runner
-from app.adk.tools import DOCUMENT_CONTEXT_STATE_KEY, submit_triage_decision
+from app.adk.tools import (
+    DOCUMENT_CONTEXT_STATE_KEY,
+    RECENT_CONVERSATION_STATE_KEY,
+    submit_triage_decision,
+)
 from app.models.enums import Language
 from app.safety import TRIAGE_COPY
 from app.utils.localization import resolve_locale_resource
@@ -215,7 +220,8 @@ async def test_selected_document_context_is_passed_only_in_the_current_run() -> 
     )
 
     assert runner.run_async.call_args.kwargs["state_delta"] == {
-        DOCUMENT_CONTEXT_STATE_KEY: selected_document
+        DOCUMENT_CONTEXT_STATE_KEY: selected_document,
+        RECENT_CONVERSATION_STATE_KEY: "(none: this is the first message)",
     }
 
 
@@ -549,3 +555,56 @@ async def test_educational_disclaimers_never_bypass_the_runtime_halt(
     events = await _turn(_runtime(must_not_run=True), message)
     assert _first(events, "classification")["urgency"] == "emergency"
     assert copy_signal in _first(events, "complete")["response_text"]
+
+
+def _event(author: str, text: str, *, partial: bool = False) -> SimpleNamespace:
+    return SimpleNamespace(
+        author=author,
+        partial=partial,
+        content=SimpleNamespace(parts=[SimpleNamespace(text=text)]),
+    )
+
+
+def test_recap_keeps_recent_patient_and_nora_text_without_tool_traffic() -> None:
+    from app.adk.chat_runtime import recent_conversation
+
+    events = [
+        _event("user", "Why do I take metformin with meals?"),
+        _event("care_coordinator", "internal notes and tool traffic"),
+        _event("care_responder", "Taking it with food", partial=True),
+        _event("care_responder", "Taking it with food helps your stomach."),
+        _event("user", "  And what   does it do? "),
+    ]
+    assert recent_conversation(events) == (
+        "Patient: Why do I take metformin with meals?\n"
+        "Nora: Taking it with food helps your stomach.\n"
+        "Patient: And what does it do?"
+    )
+    long_history = [_event("user", f"message {i} " + "x" * 400) for i in range(10)]
+    recap = recent_conversation(long_history).splitlines()
+    assert len(recap) == 6 and recap[-1].startswith("Patient: message 9") and len(recap[-1]) <= 289
+
+
+@pytest.mark.asyncio
+async def test_follow_up_turn_receives_the_recap_of_prior_events() -> None:
+    runner = MagicMock()
+    prior = SimpleNamespace(
+        events=[_event("user", "Why metformin?"), _event("care_responder", "It lowers sugar.")]
+    )
+    runner.session_service.get_session = AsyncMock(return_value=prior)
+    runner.run_async.return_value = _empty_stream()
+    runtime = CareCoordinatorRuntime(runner=runner)
+
+    await anext(
+        runtime.process_stream(
+            patient_id=PATIENT_ID,
+            user_id="user-1",
+            session_id="follow-up",
+            message="And with food?",
+            language=Language.EN.value,
+        )
+    )
+
+    assert runner.run_async.call_args.kwargs["state_delta"] == {
+        RECENT_CONVERSATION_STATE_KEY: "Patient: Why metformin?\nNora: It lowers sugar."
+    }
