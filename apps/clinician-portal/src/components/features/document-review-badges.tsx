@@ -5,28 +5,28 @@ import { DocumentReviewStatus } from "@/types";
 function getParseStatusBadgeClass(parseStatus: string): string {
     switch (parseStatus) {
         case "completed":
-            return "bg-green-100 text-green-700";
+            return "bg-ok-tint text-ok-ink";
         case "failed":
-            return "bg-red-100 text-red-700";
+            return "bg-risk-tint text-risk-ink";
         case "needs_ocr":
         case "needs_evidence_review":
         case "duplicate":
-            return "bg-slate-100 text-slate-700";
+            return "bg-sunken text-ink-2";
         default:
-            return "bg-amber-100 text-amber-700";
+            return "bg-warn-tint text-warn-ink";
     }
 }
 
 function getReviewStatusBadgeClass(reviewStatus: DocumentReviewStatus): string {
     switch (reviewStatus) {
         case DocumentReviewStatus.APPROVED:
-            return "bg-emerald-100 text-emerald-700";
+            return "bg-ok-tint text-ok-ink";
         case DocumentReviewStatus.REJECTED:
-            return "bg-rose-100 text-rose-700";
+            return "bg-risk-tint text-risk-ink";
         case DocumentReviewStatus.PENDING:
-            return "bg-blue-100 text-blue-700";
+            return "bg-ai-tint text-primary";
         default:
-            return "bg-slate-100 text-slate-600";
+            return "bg-sunken text-ink-2";
     }
 }
 

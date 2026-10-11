@@ -87,7 +87,7 @@ function getRoleTone(role: ClinicianRole) {
         case ClinicianRole.NURSE:
             return "bg-purple-100 text-purple-700";
         default:
-            return "bg-green-100 text-blue-700";
+            return "bg-ok-tint text-primary";
     }
 }
 
@@ -420,11 +420,11 @@ export default function SettingsPage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-8">
-            <div role="group" aria-label="Settings views" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1">
+            <div role="group" aria-label="Settings views" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-sunken p-1">
                 {settingsTabs.map((tab) => (
                     <button
                         aria-pressed={tab === activeTab}
-                        className={`shrink-0 whitespace-nowrap rounded-lg px-5 py-2.5 text-sm ${tab === activeTab ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-600"}`}
+                        className={`shrink-0 whitespace-nowrap rounded-lg px-5 py-2.5 text-sm ${tab === activeTab ? "bg-surface font-semibold text-ink shadow-sm" : "font-medium text-ink-2"}`}
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         type="button"
@@ -434,24 +434,24 @@ export default function SettingsPage() {
                 ))}
             </div>
 
-            {error ? <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-            {inviteStatus ? <p role="status" className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{inviteStatus}</p> : null}
+            {error ? <p role="alert" className="rounded-lg bg-risk-soft px-4 py-3 text-sm text-risk-ink">{error}</p> : null}
+            {inviteStatus ? <p role="status" className="rounded-lg bg-ok-soft px-4 py-3 text-sm text-ok-ink">{inviteStatus}</p> : null}
 
             {activeTab === "General Profile" ? (
                 <div className="grid gap-6 lg:grid-cols-2">
                     <Card className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-900">Clinic Profile</h3>
+                            <h3 className="text-xl font-bold text-ink">Clinic Profile</h3>
                         </div>
                         <div className="space-y-4 text-sm">
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Clinic Name</p>
-                                <p className="mt-1 font-medium text-slate-900">{clinicName || "—"}</p>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">Clinic Name</p>
+                                <p className="mt-1 font-medium text-ink">{clinicName || "—"}</p>
                             </div>
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Clinic Code</p>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">Clinic Code</p>
                                 <div className="mt-1 flex items-center gap-3">
-                                    <p className="font-mono text-base font-semibold tracking-[0.08em] text-slate-900">
+                                    <p className="font-mono text-base font-semibold tracking-[0.08em] text-ink">
                                         {clinicCode || "Unavailable"}
                                     </p>
                                     <Button
@@ -463,7 +463,7 @@ export default function SettingsPage() {
                                         Copy
                                     </Button>
                                 </div>
-                                <p className="mt-1 text-xs text-slate-500">
+                                <p className="mt-1 text-xs text-muted">
                                     New clinicians can join with this clinic code. Sending an invite is optional.
                                 </p>
                             </div>
@@ -471,7 +471,7 @@ export default function SettingsPage() {
                     </Card>
 
                     <Card className="space-y-4">
-                        <h3 className="text-xl font-bold text-slate-900">My Profile</h3>
+                        <h3 className="text-xl font-bold text-ink">My Profile</h3>
                         <div className="space-y-4">
                             <div className="grid gap-4 md:grid-cols-2">
                                 <Input
@@ -493,16 +493,16 @@ export default function SettingsPage() {
                                 placeholder="Family Medicine"
                                 value={specialty}
                             />
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                            <div className="rounded-lg border border-line bg-surface-2 p-4 text-sm text-ink-2">
                                 <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Role</p>
-                                    <p className="mt-1 font-semibold text-slate-900">
+                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">Role</p>
+                                    <p className="mt-1 font-semibold text-ink">
                                         {profile ? getRoleLabel(profile.role) : "Loading profile…"}
                                     </p>
                                 </div>
                                 <div className="mt-3">
-                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Email</p>
-                                    <p className="mt-1 font-medium text-slate-800">{profile?.email || "—"}</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">Email</p>
+                                    <p className="mt-1 font-medium text-ink">{profile?.email || "—"}</p>
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-3">
@@ -516,16 +516,16 @@ export default function SettingsPage() {
 
                     <Card className="space-y-4 lg:col-span-2">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-900">Security</h3>
+                            <h3 className="text-xl font-bold text-ink">Security</h3>
                         </div>
                         <div className="space-y-3 text-sm">
-                            <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                            <div className="flex items-center justify-between rounded-lg border border-line p-4">
                                 <div>
-                                    <p className="font-medium text-slate-900">Multi-Factor Authentication</p>
-                                    <p className="text-xs text-slate-500">Protect your account with a TOTP authenticator app.</p>
+                                    <p className="font-medium text-ink">Multi-Factor Authentication</p>
+                                    <p className="text-xs text-muted">Protect your account with a TOTP authenticator app.</p>
                                 </div>
                                 <Link
-                                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                                    className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
                                     href="/settings/mfa"
                                 >
                                     Configure
@@ -540,8 +540,8 @@ export default function SettingsPage() {
                 <div className="space-y-8">
                     <Card className="space-y-6">
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-900">Invite Team Member</h2>
-                            <p className="mt-1 text-sm text-slate-500">Send an email invitation to add staff to your MediAgent workspace.</p>
+                            <h2 className="text-2xl font-bold text-ink">Invite Team Member</h2>
+                            <p className="mt-1 text-sm text-muted">Send an email invitation to add staff to your MediAgent workspace.</p>
                         </div>
                         <div className="grid gap-4 md:grid-cols-[1.3fr_0.8fr_auto] md:items-end">
                             <Input
@@ -551,9 +551,9 @@ export default function SettingsPage() {
                                 value={inviteEmail}
                             />
                             <label className="block">
-                                <span className="mb-1 block text-sm font-bold uppercase tracking-[0.12em] text-slate-700">Role Access</span>
+                                <span className="mb-1 block text-sm font-bold uppercase tracking-[0.12em] text-ink-2">Role Access</span>
                                 <select
-                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary"
                                     onChange={(event) => setInviteRole(event.target.value as ClinicianRole)}
                                     value={inviteRole}
                                 >
@@ -568,12 +568,12 @@ export default function SettingsPage() {
                                 Send Invite
                             </Button>
                         </div>
-                        <p className="text-xs text-slate-500">Clinic code for self-registration is available under General Profile.</p>
+                        <p className="text-xs text-muted">Clinic code for self-registration is available under General Profile.</p>
                     </Card>
 
                     <Card className="overflow-visible px-0 py-0" padding="sm">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-6 py-5">
-                            <h3 className="text-xl font-bold text-slate-900">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface-2 px-6 py-5">
+                            <h3 className="text-xl font-bold text-ink">
                                 {loading ? "Loading staff..." : `Active Staff (${staffList.length})`}
                             </h3>
                             <div className="flex items-center gap-3">
@@ -587,10 +587,10 @@ export default function SettingsPage() {
                                     Refresh
                                 </Button>
                                 <label className="relative block">
-                                    <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                    <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
                                         aria-label="Search team"
-                                        className="w-full max-w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        className="w-full max-w-64 rounded-lg border border-line-strong bg-surface py-2 pl-9 pr-3 text-sm text-ink-2 outline-none focus:border-primary focus:ring-2 focus:ring-primary"
                                         onChange={(event) => setStaffQuery(event.target.value)}
                                         placeholder="Search team..."
                                         value={staffQuery}
@@ -598,7 +598,7 @@ export default function SettingsPage() {
                                 </label>
                             </div>
                         </div>
-                        <div className="hidden grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 md:grid">
+                        <div className="hidden grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 border-b border-line bg-surface-2 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted md:grid">
                             <span>Name &amp; Email</span>
                             <span>Role</span>
                             <span>Status</span>
@@ -606,7 +606,7 @@ export default function SettingsPage() {
                         </div>
                         {filteredStaffList.map((member, index) => (
                             <div
-                                className={`grid grid-cols-2 gap-4 px-6 py-4 md:grid-cols-[1.6fr_1fr_1fr_0.5fr] ${index > 0 ? "border-t border-slate-100" : ""}`}
+                                className={`grid grid-cols-2 gap-4 px-6 py-4 md:grid-cols-[1.6fr_1fr_1fr_0.5fr] ${index > 0 ? "border-t border-line" : ""}`}
                                 key={member.id}
                             >
                                 <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
@@ -614,13 +614,13 @@ export default function SettingsPage() {
                                         {getInitials(member.first_name, member.last_name)}
                                     </div>
                                     <div className="min-w-0 break-words">
-                                        <p className="text-sm font-bold text-slate-900">
+                                        <p className="text-sm font-bold text-ink">
                                             {member.first_name} {member.last_name}
                                         </p>
-                                        <p className="text-xs text-slate-500">{member.email}</p>
+                                        <p className="text-xs text-muted">{member.email}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center text-sm font-medium text-slate-700">
+                                <div className="flex items-center text-sm font-medium text-ink-2">
                                     {getRoleLabel(member.role)}
                                 </div>
                                 <div className="flex items-center">
@@ -628,12 +628,12 @@ export default function SettingsPage() {
                                 </div>
                                 <div className="relative flex items-center justify-end">
                                     {profile?.id && member.id === profile.id ? (
-                                        <span className="text-xs font-medium text-slate-400">You</span>
+                                        <span className="text-xs font-medium text-muted">You</span>
                                     ) : null}
                                     <button
                                         aria-label={`Actions for ${member.first_name} ${member.last_name}`}
                                         aria-expanded={actionMenuId === member.id}
-                                        className="rounded-md px-2 py-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                                        className="rounded-md px-2 py-1 text-muted transition hover:bg-sunken hover:text-ink-2 disabled:cursor-not-allowed disabled:text-slate-300"
                                         disabled={Boolean(profile?.id && member.id === profile.id)}
                                         onClick={() => setActionMenuId(actionMenuId === member.id ? null : member.id)}
                                         title={profile?.id && member.id === profile.id ? "No actions available for your own account" : "Open actions"}
@@ -642,10 +642,10 @@ export default function SettingsPage() {
                                         &#x22EE;
                                     </button>
                                     {actionMenuId === member.id ? (
-                                        <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                                        <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-line bg-surface py-1 shadow-lg">
                                             {ROLE_OPTIONS.filter((r) => r.value !== member.role).map((option) => (
                                                 <button
-                                                    className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                                    className="block w-full px-4 py-2 text-left text-sm text-ink-2 hover:bg-surface-2"
                                                     key={option.value}
                                                     onClick={() => handleRoleChange(member.id, option.value)}
                                                     type="button"
@@ -653,9 +653,9 @@ export default function SettingsPage() {
                                                     Change to {option.label}
                                                 </button>
                                             ))}
-                                            <hr className="my-1 border-slate-100" />
+                                            <hr className="my-1 border-line" />
                                             <button
-                                                className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                                className="block w-full px-4 py-2 text-left text-sm text-risk-ink hover:bg-risk-soft"
                                                 onClick={() => handleRemove(member.id)}
                                                 type="button"
                                             >
@@ -667,7 +667,7 @@ export default function SettingsPage() {
                             </div>
                         ))}
                         {!loading && filteredStaffList.length === 0 ? (
-                            <p className="px-6 py-8 text-center text-sm text-slate-400">No staff members yet.</p>
+                            <p className="px-6 py-8 text-center text-sm text-muted">No staff members yet.</p>
                         ) : null}
                     </Card>
                 </div>
@@ -680,12 +680,12 @@ export default function SettingsPage() {
                         <p className="mt-2 max-w-xl text-sm text-slate-300">
                             Generate single-use codes for patient onboarding. New codes remain active until claimed, revoked, or expired.
                         </p>
-                        <p className="mt-1 max-w-xl text-xs text-slate-400">
+                        <p className="mt-1 max-w-xl text-xs text-muted">
                             Invite history shows codes created by your account.
                         </p>
                         <div className="mt-6 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-5">
                             <div>
-                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Latest Active Code</p>
+                                <p className="text-xs uppercase tracking-[0.18em] text-muted">Latest Active Code</p>
                                 <span className="mt-1 block text-3xl font-bold tracking-[0.14em]">
                                     {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
                                 </span>
@@ -710,21 +710,21 @@ export default function SettingsPage() {
 
                     <Card className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h4 className="text-lg font-bold text-slate-900">Active Codes ({activeInvites.length})</h4>
-                            <p className="text-xs text-slate-500">Share these with new patients</p>
+                            <h4 className="text-lg font-bold text-ink">Active Codes ({activeInvites.length})</h4>
+                            <p className="text-xs text-muted">Share these with new patients</p>
                         </div>
                         {activeInvites.length === 0 ? (
-                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <p className="rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
                                 No active invite codes yet.
                             </p>
                         ) : (
                             <div className="space-y-3">
                                 {activeInvites.map((record) => (
-                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
+                                    <div className="rounded-lg border border-line p-4" key={record.care_team_id}>
                                         <div className="flex flex-wrap items-center justify-between gap-3">
                                             <div>
-                                                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Invite Code</p>
-                                                <p className="font-mono text-lg font-semibold text-slate-900">{record.invite_code || "—"}</p>
+                                                <p className="text-xs uppercase tracking-[0.18em] text-muted">Invite Code</p>
+                                                <p className="font-mono text-lg font-semibold text-ink">{record.invite_code || "—"}</p>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Button
@@ -745,7 +745,7 @@ export default function SettingsPage() {
                                                 </Button>
                                             </div>
                                         </div>
-                                        <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
+                                        <div className="mt-3 grid gap-2 text-xs text-ink-2 md:grid-cols-2">
                                             <p>Created: {formatDateTime(record.created_at)}</p>
                                             <p>Expires: {formatDateTime(record.invite_expires_at)}</p>
                                         </div>
@@ -757,26 +757,26 @@ export default function SettingsPage() {
 
                     <Card className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h4 className="text-lg font-bold text-slate-900">Claimed Codes ({claimedInvites.length})</h4>
-                            <p className="text-xs text-slate-500">Successfully linked patients</p>
+                            <h4 className="text-lg font-bold text-ink">Claimed Codes ({claimedInvites.length})</h4>
+                            <p className="text-xs text-muted">Successfully linked patients</p>
                         </div>
                         {claimedInvites.length === 0 ? (
-                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <p className="rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
                                 No claimed invite codes yet.
                             </p>
                         ) : (
                             <div className="space-y-3">
                                 {claimedInvites.map((record) => (
-                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
-                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
+                                    <div className="rounded-lg border border-line p-4" key={record.care_team_id}>
+                                        <div className="grid gap-2 text-sm text-ink-2 md:grid-cols-3">
                                             <p>
-                                                <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
+                                                <span className="font-semibold text-ink">Code:</span> {record.invite_code || "—"}
                                             </p>
                                             <p>
-                                                <span className="font-semibold text-slate-900">Patient:</span> {getPatientLabel(record)}
+                                                <span className="font-semibold text-ink">Patient:</span> {getPatientLabel(record)}
                                             </p>
                                             <p>
-                                                <span className="font-semibold text-slate-900">Claimed:</span> {formatDateTime(record.invite_claimed_at)}
+                                                <span className="font-semibold text-ink">Claimed:</span> {formatDateTime(record.invite_claimed_at)}
                                             </p>
                                         </div>
                                     </div>
@@ -787,26 +787,26 @@ export default function SettingsPage() {
 
                     <Card className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h4 className="text-lg font-bold text-slate-900">Inactive Codes ({inactiveInvites.length})</h4>
-                            <p className="text-xs text-slate-500">Revoked or expired history</p>
+                            <h4 className="text-lg font-bold text-ink">Inactive Codes ({inactiveInvites.length})</h4>
+                            <p className="text-xs text-muted">Revoked or expired history</p>
                         </div>
                         {inactiveInvites.length === 0 ? (
-                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <p className="rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
                                 No inactive codes.
                             </p>
                         ) : (
                             <div className="space-y-3">
                                 {inactiveInvites.map((record) => (
-                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
-                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
+                                    <div className="rounded-lg border border-line p-4" key={record.care_team_id}>
+                                        <div className="grid gap-2 text-sm text-ink-2 md:grid-cols-3">
                                             <p>
-                                                <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
+                                                <span className="font-semibold text-ink">Code:</span> {record.invite_code || "—"}
                                             </p>
                                             <p>
-                                                <span className="font-semibold text-slate-900">Created:</span> {formatDateTime(record.created_at)}
+                                                <span className="font-semibold text-ink">Created:</span> {formatDateTime(record.created_at)}
                                             </p>
                                             <p>
-                                                <span className="font-semibold text-slate-900">Expired:</span> {record.is_expired ? "Yes" : "No"}
+                                                <span className="font-semibold text-ink">Expired:</span> {record.is_expired ? "Yes" : "No"}
                                             </p>
                                         </div>
                                     </div>
@@ -820,11 +820,11 @@ export default function SettingsPage() {
             {activeTab === "Interoperability" ? (
                 <div className="max-w-3xl">
                     <Card className="space-y-4">
-                        <h3 className="text-xl font-bold text-slate-900">SMART on FHIR</h3>
-                        <p className="text-sm text-slate-600">
+                        <h3 className="text-xl font-bold text-ink">SMART on FHIR</h3>
+                        <p className="text-sm text-ink-2">
                             Import synthetic sandbox records into the clinician review queue with source-level lineage.
                         </p>
-                        <Link className="inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800" href="/smart-import">
+                        <Link className="inline-flex text-sm font-semibold text-primary hover:text-ai-ink" href="/smart-import">
                             Open SMART import
                         </Link>
                     </Card>

@@ -75,9 +75,9 @@ function CalendarDownload({
       >
         {loading ? copy.downloading : copy.download}
       </Button>
-      <p className="text-xs text-gray-500">{copy.notice}</p>
+      <p className="text-xs text-muted">{copy.notice}</p>
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-risk-ink">
           {copy.error}
         </p>
       )}

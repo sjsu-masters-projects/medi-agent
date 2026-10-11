@@ -82,24 +82,24 @@ function PdfCanvasViewer({ documentUrl, fileName, initialPage = 1 }: { documentU
         };
     }, [document, pageNumber]);
 
-    if (error) return <div role="alert"><p className="text-sm text-rose-700">{error}</p><button className="mt-2 rounded border px-3 py-2" onClick={() => setRetryCount((current) => current + 1)} type="button">Retry PDF preview</button></div>;
-    if (!document) return <p role="status" className="text-sm text-slate-500">Loading source document…</p>;
+    if (error) return <div role="alert"><p className="text-sm text-risk-ink">{error}</p><button className="mt-2 rounded border px-3 py-2" onClick={() => setRetryCount((current) => current + 1)} type="button">Retry PDF preview</button></div>;
+    if (!document) return <p role="status" className="text-sm text-muted">Loading source document…</p>;
 
     return (
         <div className="space-y-3">
-            <div className="max-h-[560px] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="max-h-[560px] overflow-auto rounded-xl border border-line bg-surface-2 p-3">
                 <canvas
                     aria-label={`${fileName}, page ${pageNumber}`}
-                    className="mx-auto max-w-full bg-white shadow-sm"
+                    className="mx-auto max-w-full bg-surface shadow-sm"
                     ref={canvasRef}
                     role="img"
                 />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-2">
                 <span>Page {pageNumber} of {document.numPages}</span>
                 <div className="flex gap-2">
                     <button
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+                        className="rounded-lg border border-line bg-surface px-3 py-2 font-semibold text-ink-2 disabled:cursor-not-allowed disabled:opacity-45"
                         disabled={pageNumber <= 1}
                         onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
                         type="button"
@@ -107,7 +107,7 @@ function PdfCanvasViewer({ documentUrl, fileName, initialPage = 1 }: { documentU
                         Previous
                     </button>
                     <button
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+                        className="rounded-lg border border-line bg-surface px-3 py-2 font-semibold text-ink-2 disabled:cursor-not-allowed disabled:opacity-45"
                         disabled={pageNumber >= document.numPages}
                         onClick={() => setPageNumber((current) => Math.min(document.numPages, current + 1))}
                         type="button"
@@ -136,17 +136,17 @@ export function DocumentSourceViewer({
     const canRenderNativeImage = Boolean(viewMimeType?.startsWith("image/")) && viewMimeType !== "image/tiff";
 
     return (
-        <section aria-label="Source document" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <section aria-label="Source document" className="space-y-3 rounded-xl border border-line bg-surface p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Source document</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Source document</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">
                         {usesPreview ? "Preview generated from the original TIFF" : "Original uploaded file"}
                     </p>
                 </div>
                 {sourceUrl ? (
                     <a
-                        className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                        className="rounded-lg border border-primary-line bg-surface px-3 py-2 text-sm font-semibold text-primary hover:bg-primary-tint"
                         href={sourceUrl}
                         rel="noreferrer"
                         target="_blank"
@@ -161,9 +161,9 @@ export function DocumentSourceViewer({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img alt={`Source document: ${fileName}`} className="max-h-[560px] w-full rounded-lg object-contain" src={viewUrl} />
             ) : null}
-            {previewStatus === "pending" ? <p className="text-sm text-slate-600">A browser preview is being prepared for this TIFF. The original is available to download now.</p> : null}
-            {previewStatus === "failed" ? <p className="text-sm text-rose-700">A browser preview could not be prepared. Download the original or use your established review workflow.</p> : null}
-            {!viewUrl && previewStatus !== "pending" && previewStatus !== "failed" ? <p className="text-sm text-rose-700">This source is temporarily unavailable. Refresh and try again.</p> : null}
+            {previewStatus === "pending" ? <p className="text-sm text-ink-2">A browser preview is being prepared for this TIFF. The original is available to download now.</p> : null}
+            {previewStatus === "failed" ? <p className="text-sm text-risk-ink">A browser preview could not be prepared. Download the original or use your established review workflow.</p> : null}
+            {!viewUrl && previewStatus !== "pending" && previewStatus !== "failed" ? <p className="text-sm text-risk-ink">This source is temporarily unavailable. Refresh and try again.</p> : null}
         </section>
     );
 }

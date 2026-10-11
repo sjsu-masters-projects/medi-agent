@@ -61,7 +61,7 @@ function PatientAppointments({
         }}
       />
     ) : (
-      <p role="status" className="text-sm text-gray-600">
+      <p role="status" className="text-sm text-ink-2">
         Loading the patient&apos;s timezone…
       </p>
     );
@@ -73,13 +73,13 @@ function PatientAppointments({
   }
   return (
     <div className="space-y-6">
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-ink-2">
         Appointment timezone: <strong>{settings.timezone}</strong>
       </p>
       {settings.fallback && (
         <p
           role="status"
-          className="rounded-lg bg-yellow-50 p-3 text-sm text-yellow-800"
+          className="rounded-lg bg-warn-soft p-3 text-sm text-warn-ink"
         >
           The patient has no valid saved timezone. Times are entered and
           displayed in UTC.
@@ -88,7 +88,7 @@ function PatientAppointments({
       {success && (
         <p
           role="status"
-          className="rounded-lg bg-green-50 p-3 text-sm text-green-800"
+          className="rounded-lg bg-ok-soft p-3 text-sm text-ok-ink"
         >
           Appointment offer sent. The patient can choose a time in Visits.
         </p>
@@ -104,7 +104,7 @@ function PatientAppointments({
         onSendingChange={onSendingChange}
       />
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-lg font-semibold text-ink">
           Appointments and patient responses
         </h2>
         <AppointmentOfferHistory
@@ -135,8 +135,8 @@ function SchedulingWorkspace({ token }: { token: string }) {
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Appointments</h1>
-          <p className="text-sm text-gray-600">
+          <h1 className="text-2xl font-bold text-ink">Appointments</h1>
+          <p className="text-sm text-ink-2">
             Offer times to assigned patients and review their responses.
           </p>
         </div>
@@ -151,7 +151,7 @@ function SchedulingWorkspace({ token }: { token: string }) {
       {error && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-lg bg-red-50 p-4 text-sm text-red-700"
+          className="flex items-center justify-between gap-3 rounded-lg bg-risk-soft p-4 text-sm text-risk-ink"
         >
           <span>
             Could not refresh scheduling data. Previously loaded appointments
@@ -172,10 +172,10 @@ function SchedulingWorkspace({ token }: { token: string }) {
               description="An active care-team assignment is required to offer appointments."
             />
           ) : (
-            <label className="block max-w-md text-sm font-medium text-gray-700">
+            <label className="block max-w-md text-sm font-medium text-ink-2">
               Patient
               <select
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-3 py-2"
                 value={selectedId}
                 disabled={loading || error || sending}
                 onChange={(event) => setSelectedId(event.target.value)}

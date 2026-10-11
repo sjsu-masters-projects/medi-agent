@@ -44,7 +44,7 @@ function parseSummary(text: string): ParsedSection[] {
 
 function SectionBadge({ type, count }: { type: ParsedSection["type"]; count: number }) {
     const styles: Record<ParsedSection["type"], string> = {
-        general: "bg-gray-100 text-gray-600",
+        general: "bg-sunken text-ink-2",
     };
 
     return (
@@ -99,7 +99,7 @@ export function DocumentSummary({
                         <ul className="space-y-2" aria-label={section.title}>
                             {section.items.map((item, itemIdx) => (
                                 <li
-                                    className="flex items-start gap-2 text-sm text-gray-700"
+                                    className="flex items-start gap-2 text-sm text-ink-2"
                                     key={itemIdx}
                                 >
                                     <span
@@ -115,15 +115,15 @@ export function DocumentSummary({
             </Accordion>
 
             {/* Clinician annotation */}
-            <div className="rounded-xl border border-dashed border-gray-300 bg-amber-50/40 p-4">
+            <div className="rounded-xl border border-dashed border-line-strong bg-warn-soft/40 p-4">
                 <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-warn-ink">
                         Clinician Annotation
                     </p>
                     {!editing && (
                         <button
                             aria-label="Edit annotation"
-                            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-500 hover:bg-amber-100"
+                            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted hover:bg-warn-tint"
                             id="edit-annotation-btn"
                             onClick={() => setEditing(true)}
                             type="button"
@@ -138,7 +138,7 @@ export function DocumentSummary({
                     <div className="space-y-2">
                         <textarea
                             aria-label="Clinician annotation text"
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
                             id={`annotation-textarea-${documentId}`}
                             onChange={(e) => setAnnotation(e.target.value)}
                             placeholder="Add your clinical notes visible to the patient alongside the AI summary…"
@@ -146,11 +146,11 @@ export function DocumentSummary({
                             value={annotation}
                         />
                         {saveError && (
-                            <p className="text-xs text-red-600" role="alert">{saveError}</p>
+                            <p className="text-xs text-risk-ink" role="alert">{saveError}</p>
                         )}
                         <div className="flex gap-2">
                             <button
-                                className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
                                 disabled={saving || !annotation.trim()}
                                 id={`save-annotation-btn-${documentId}`}
                                 onClick={handleSaveAnnotation}
@@ -160,7 +160,7 @@ export function DocumentSummary({
                                 {saving ? "Saving…" : "Save"}
                             </button>
                             <button
-                                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                                className="rounded-lg border border-line-strong px-3 py-1.5 text-xs text-ink-2 hover:bg-surface-2"
                                 onClick={() => {
                                     setEditing(false);
                                     setAnnotation(existingAnnotation);
@@ -172,9 +172,9 @@ export function DocumentSummary({
                         </div>
                     </div>
                 ) : (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-ink-2">
                         {annotation || (
-                            <span className="italic text-gray-400">
+                            <span className="italic text-muted">
                                 No annotation yet. Click Edit to add one.
                             </span>
                         )}

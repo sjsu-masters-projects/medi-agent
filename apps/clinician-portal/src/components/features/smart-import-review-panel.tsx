@@ -241,9 +241,9 @@ function stateLabel(state: ReviewState): string {
 }
 
 function stateClass(state: ReviewState): string {
-  if (state === "approved") return "bg-emerald-100 text-emerald-800";
-  if (state === "rejected") return "bg-rose-100 text-rose-800";
-  return "bg-amber-100 text-amber-800";
+  if (state === "approved") return "bg-ok-tint text-ok-ink";
+  if (state === "rejected") return "bg-risk-tint text-risk-ink";
+  return "bg-warn-tint text-warn-ink";
 }
 
 function FactDetails({
@@ -260,10 +260,10 @@ function FactDetails({
     <dl className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
       {fields.map(([key, label]) => (
         <div key={key}>
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted">
             {label}
           </dt>
-          <dd className="mt-0.5 break-words text-sm text-slate-800">
+          <dd className="mt-0.5 break-words text-sm text-ink">
             {formatValue(fact.value[key], patientTimezone, key)}
           </dd>
         </div>
@@ -644,16 +644,16 @@ export function SmartImportReviewPanel({
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-blue-700">
+          <p className="text-sm font-medium text-primary">
             External-record reconciliation
           </p>
           <h2
-            className="mt-1 text-xl font-bold text-slate-900"
+            className="mt-1 text-xl font-bold text-ink"
             id="smart-import-review-heading"
           >
             External records review
           </h2>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+          <p className="mt-1 max-w-3xl text-sm text-ink-2">
             Review SMART and document candidates with source-level provenance.
             Only a field-by-field reconciliation decision can change an existing
             medication, condition, or allergy; evidence-only records remain
@@ -662,7 +662,7 @@ export function SmartImportReviewPanel({
         </div>
         <button
           disabled={loading || busyFactId !== null}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2"
           onClick={() => void load()}
           type="button"
         >
@@ -675,7 +675,7 @@ export function SmartImportReviewPanel({
           (state) => (
             <button
               aria-pressed={reviewState === state}
-              className={`rounded-xl border p-4 text-left transition ${reviewState === state ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+              className={`rounded-xl border p-4 text-left transition ${reviewState === state ? "border-primary bg-primary-tint" : "border-line bg-surface hover:border-line-strong"}`}
               key={state}
               onClick={() => {
                 setReviewState(state);
@@ -683,8 +683,8 @@ export function SmartImportReviewPanel({
               }}
               type="button"
             >
-              <p className="text-sm text-slate-600">{stateLabel(state)}</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">
+              <p className="text-sm text-ink-2">{stateLabel(state)}</p>
+              <p className="mt-1 text-2xl font-bold text-ink">
                 {loading || error ? "—" : review?.state_counts[state] ?? 0}
               </p>
             </button>
@@ -694,7 +694,7 @@ export function SmartImportReviewPanel({
 
       {error && (
         <div
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+          className="rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
           role="alert"
         >
           {error}
@@ -702,23 +702,23 @@ export function SmartImportReviewPanel({
       )}
 
       <Card className="overflow-hidden px-0 py-0" padding="sm">
-        <div className="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 border-b border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="font-semibold text-slate-900">
+            <h3 className="font-semibold text-ink">
               {stateLabel(reviewState)} imported facts
             </h3>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted">
               {total} facts in this review state. Source data remains synthetic
               and read-only.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {review && Object.keys(review.fact_type_counts).length > 0 && (
-              <label className="text-sm font-medium text-slate-700">
+              <label className="text-sm font-medium text-ink-2">
                 Mapped type
                 <select
                   aria-label="Filter imported facts by mapped type"
-                  className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800"
+                  className="ml-2 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal text-ink"
                   onChange={(event) => {
                     setFactType(event.target.value);
                     setOffset(0);
@@ -740,11 +740,11 @@ export function SmartImportReviewPanel({
                 </select>
               </label>
             )}
-            <label className="text-sm font-medium text-slate-700">
+            <label className="text-sm font-medium text-ink-2">
               Source
               <select
                 aria-label="Filter imported facts by source"
-                className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800"
+                className="ml-2 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal text-ink"
                 onChange={(event) => {
                   setSourceKind(event.target.value);
                   setOffset(0);
@@ -756,11 +756,11 @@ export function SmartImportReviewPanel({
                 <option value="document">Document</option>
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700">
+            <label className="text-sm font-medium text-ink-2">
               Reconciliation
               <select
                 aria-label="Filter imported facts by reconciliation state"
-                className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800"
+                className="ml-2 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal text-ink"
                 onChange={(event) => {
                   setReconciliationState(event.target.value);
                   setOffset(0);
@@ -777,11 +777,11 @@ export function SmartImportReviewPanel({
                 <option value="source_withdrawn">Source withdrawn</option>
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700">
+            <label className="text-sm font-medium text-ink-2">
               From
               <input
                 aria-label="Filter imported facts from date"
-                className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-normal"
+                className="ml-2 rounded-lg border border-line-strong px-2 py-1.5 text-sm font-normal"
                 onChange={(event) => {
                   setFromDate(event.target.value);
                   setOffset(0);
@@ -790,11 +790,11 @@ export function SmartImportReviewPanel({
                 value={fromDate}
               />
             </label>
-            <label className="text-sm font-medium text-slate-700">
+            <label className="text-sm font-medium text-ink-2">
               To
               <input
                 aria-label="Filter imported facts to date"
-                className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-normal"
+                className="ml-2 rounded-lg border border-line-strong px-2 py-1.5 text-sm font-normal"
                 onChange={(event) => {
                   setToDate(event.target.value);
                   setOffset(0);
@@ -814,23 +814,23 @@ export function SmartImportReviewPanel({
           </div>
         ) : review?.facts.length === 0 ? (
           <div className="flex min-h-48 flex-col items-center justify-center px-5 py-10 text-center">
-            <HiOutlineCheckCircle className="h-10 w-10 text-emerald-500" />
-            <p className="mt-3 font-semibold text-slate-900">
+            <HiOutlineCheckCircle className="h-10 w-10 text-ok" />
+            <p className="mt-3 font-semibold text-ink">
               No {stateLabel(reviewState).toLowerCase()} imported facts
             </p>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-ink-2">
               New SMART and document imports appear here as clinician-review
               candidates.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="divide-y divide-line">
             {review?.facts.map((fact) => (
               <article className="space-y-4 px-5 py-5" key={fact.id}>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-semibold text-slate-900">
+                      <h4 className="font-semibold text-ink">
                         {FACT_LABELS[fact.fact_type] ?? fact.fact_type}
                       </h4>
                       <span
@@ -840,12 +840,12 @@ export function SmartImportReviewPanel({
                       </span>
                       {fact.reconciliation_state &&
                         fact.reconciliation_state !== "not_started" && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                          <span className="rounded-full bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-2">
                             {fact.reconciliation_state.replaceAll("_", " ")}
                           </span>
                         )}
                     </div>
-                    <details className="mt-1 text-xs text-slate-500"><summary className="cursor-pointer py-2 font-medium">Source identifiers</summary><p className="break-words">
+                    <details className="mt-1 text-xs text-muted"><summary className="cursor-pointer py-2 font-medium">Source identifiers</summary><p className="break-words">
                       {fact.source
                         ? `${fact.source.resource_type}${fact.source.external_resource_id ? ` · ${fact.source.external_resource_id}` : ""}${fact.source.version_id ? ` · version ${fact.source.version_id}` : ""}`
                         : "Source metadata unavailable"}
@@ -853,7 +853,7 @@ export function SmartImportReviewPanel({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2 disabled:opacity-60"
                       disabled={busyFactId === fact.id || !fact.source}
                       onClick={() => void inspectSource(fact)}
                       type="button"
@@ -865,7 +865,7 @@ export function SmartImportReviewPanel({
                       <>
                         {PROJECTABLE_TYPES.has(fact.fact_type) ? (
                           <button
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            className="inline-flex items-center gap-1 rounded-lg bg-ok px-3 py-2 text-sm font-semibold text-white hover:bg-ok-strong disabled:opacity-60"
                             disabled={busyFactId === fact.id}
                             onClick={() => void openReconciliation(fact)}
                             type="button"
@@ -875,7 +875,7 @@ export function SmartImportReviewPanel({
                           </button>
                         ) : (
                           <button
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            className="inline-flex items-center gap-1 rounded-lg bg-ok px-3 py-2 text-sm font-semibold text-white hover:bg-ok-strong disabled:opacity-60"
                             disabled={busyFactId === fact.id}
                             onClick={() => void approve(fact)}
                             type="button"
@@ -888,7 +888,7 @@ export function SmartImportReviewPanel({
                           fact.source?.source_kind === "smart" &&
                           fact.source.import_id && (
                             <button
-                              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                              className="inline-flex items-center gap-1 rounded-lg border border-primary-line px-3 py-2 text-sm font-medium text-primary hover:bg-primary-tint disabled:opacity-60"
                               disabled={busyFactId === fact.id}
                               onClick={() =>
                                 void openIdentityBinding(
@@ -901,7 +901,7 @@ export function SmartImportReviewPanel({
                             </button>
                           )}
                         <button
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                          className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2 disabled:opacity-60"
                           disabled={busyFactId === fact.id}
                           onClick={() => {
                             setCorrecting(fact);
@@ -913,7 +913,7 @@ export function SmartImportReviewPanel({
                           <HiOutlinePencilSquare className="h-4 w-4" /> Correct
                         </button>
                         <button
-                          className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                          className="inline-flex items-center gap-1 rounded-lg border border-risk-line px-3 py-2 text-sm font-semibold text-risk-ink hover:bg-risk-soft disabled:opacity-60"
                           disabled={busyFactId === fact.id}
                           onClick={() => {
                             setRejecting(fact);
@@ -932,13 +932,13 @@ export function SmartImportReviewPanel({
                   patientTimezone={patientTimezone ?? "UTC"}
                 />
                 {fact.uncertainty.length > 0 && (
-                  <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <div className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn-ink">
                     <HiOutlineExclamationCircle className="mr-1 inline h-4 w-4" />
                     {fact.uncertainty.join(" ")}
                   </div>
                 )}
                 {fact.reconciliation_state === "source_withdrawn" && (
-                  <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                  <div className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">
                     <HiOutlineExclamationCircle className="mr-1 inline h-4 w-4" />
                     The supporting source was withdrawn after local
                     reconciliation. Review the preserved local record and audit
@@ -948,7 +948,7 @@ export function SmartImportReviewPanel({
                 {fact.reconciliation_state === "applied" &&
                   fact.reconciliation_target_id && (
                     <a
-                      className="inline-flex text-sm font-medium text-blue-700 underline hover:text-blue-800"
+                      className="inline-flex text-sm font-medium text-primary underline hover:text-ai-ink"
                       href={`/patients/${patientId}`}
                     >
                       View applied local{" "}
@@ -958,7 +958,7 @@ export function SmartImportReviewPanel({
                 {fact.source &&
                   (fact.source.mapping_warnings.length > 0 ||
                     fact.source.validation_errors.length > 0) && (
-                    <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    <div className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn-ink">
                       {[
                         ...fact.source.mapping_warnings,
                         ...fact.source.validation_errors,
@@ -970,14 +970,14 @@ export function SmartImportReviewPanel({
           </div>
         )}
         {total > PAGE_SIZE && (
-          <div className="flex items-center justify-between border-t border-slate-200 px-5 py-4 text-sm text-slate-600">
+          <div className="flex items-center justify-between border-t border-line px-5 py-4 text-sm text-ink-2">
             <span>
               {start}–{end} of {total}
             </span>
             <div className="flex gap-2">
               <button
                 aria-label="Previous imported facts"
-                className="rounded-lg border border-slate-200 p-2 disabled:opacity-40"
+                className="rounded-lg border border-line p-2 disabled:opacity-40"
                 disabled={offset === 0}
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                 type="button"
@@ -986,7 +986,7 @@ export function SmartImportReviewPanel({
               </button>
               <button
                 aria-label="Next imported facts"
-                className="rounded-lg border border-slate-200 p-2 disabled:opacity-40"
+                className="rounded-lg border border-line p-2 disabled:opacity-40"
                 disabled={offset + PAGE_SIZE >= total}
                 onClick={() => setOffset(offset + PAGE_SIZE)}
                 type="button"
@@ -1012,24 +1012,24 @@ export function SmartImportReviewPanel({
       >
         {reconciling && (
           <div className="space-y-5">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-ink-2">
               Select exactly which imported values may be applied. Missing
               values never clear the local chart; this action is recorded with
               the original source version.
             </p>
-            <div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
+            <div className="grid gap-4 rounded-xl border border-line p-4 sm:grid-cols-2">
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-ink">
                   Imported candidate
                 </h3>
                 <dl className="mt-2 space-y-2 text-sm">
                   {Object.entries(reconciling.preview.candidate_fields).map(
                     ([field, value]) => (
                       <div key={field}>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                           {field.replaceAll("_", " ")}
                         </dt>
-                        <dd className="break-words text-slate-800">
+                        <dd className="break-words text-ink">
                           {formatValue(value, patientTimezone ?? "UTC", field)}
                         </dd>
                       </div>
@@ -1038,22 +1038,22 @@ export function SmartImportReviewPanel({
                 </dl>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-ink">
                   Matched local record
                 </h3>
                 {reconciling.preview.matches.length === 0 ? (
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-ink-2">
                     No conservative match was found. You may add a new local
                     record after checking the candidate fields.
                   </p>
                 ) : (
                   <>
-                    <label className="mt-2 block text-sm font-medium text-slate-700">
+                    <label className="mt-2 block text-sm font-medium text-ink-2">
                       {reconciling.preview.matches.length > 1
                         ? "Choose a local record"
                         : "Matched local record"}
                       <select
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                        className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal"
                         onChange={(event) =>
                           setSelectedTargetId(event.target.value)
                         }
@@ -1083,10 +1083,10 @@ export function SmartImportReviewPanel({
                                 )
                                 .map(([field, value]) => (
                                   <div key={field}>
-                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                                       {field.replaceAll("_", " ")}
                                     </dt>
-                                    <dd className="break-words text-slate-800">
+                                    <dd className="break-words text-ink">
                                       {formatValue(
                                         value,
                                         patientTimezone ?? "UTC",
@@ -1096,7 +1096,7 @@ export function SmartImportReviewPanel({
                                   </div>
                                 ))}
                             </dl>
-                            <div className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-slate-800">
+                            <div className="mt-4 rounded-lg bg-primary-tint p-3 text-sm text-ink">
                               <h4 className="font-semibold">
                                 Selected-field preview
                               </h4>
@@ -1107,11 +1107,11 @@ export function SmartImportReviewPanel({
                                   )
                                   .map((field) => (
                                     <div key={field}>
-                                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                      <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                                         {field.replaceAll("_", " ")}
                                       </dt>
                                       <dd>
-                                        <span className="text-slate-500">
+                                        <span className="text-muted">
                                           {formatValue(
                                             match.record[field],
                                             patientTimezone ?? "UTC",
@@ -1140,13 +1140,13 @@ export function SmartImportReviewPanel({
               </div>
             </div>
             <fieldset>
-              <legend className="text-sm font-semibold text-slate-900">
+              <legend className="text-sm font-semibold text-ink">
                 Fields to apply
               </legend>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {reconciling.preview.available_fields.map((field) => (
                   <label
-                    className="flex items-center gap-2 text-sm text-slate-700"
+                    className="flex items-center gap-2 text-sm text-ink-2"
                     key={field}
                   >
                     <input
@@ -1165,24 +1165,24 @@ export function SmartImportReviewPanel({
                 ))}
               </div>
             </fieldset>
-            <label className="block text-sm font-medium text-slate-700">
+            <label className="block text-sm font-medium text-ink-2">
               Decision note (required for defer or reject)
               <textarea
-                className="mt-2 min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="mt-2 min-h-20 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
                 onChange={(event) => setNote(event.target.value)}
                 value={note}
               />
             </label>
             <div className="flex flex-wrap justify-end gap-2">
               <button
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+                className="rounded-lg border border-line px-4 py-2 text-sm"
                 onClick={() => setReconciling(null)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink-2"
                 disabled={busyFactId !== null}
                 onClick={() => void reconcile("defer")}
                 type="button"
@@ -1192,7 +1192,7 @@ export function SmartImportReviewPanel({
               {reconciling.preview.matches.length > 0 && (
                 <>
                   <button
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                    className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink-2"
                     disabled={busyFactId !== null}
                     onClick={() => void reconcile("keep_existing")}
                     type="button"
@@ -1200,7 +1200,7 @@ export function SmartImportReviewPanel({
                     Keep existing
                   </button>
                   <button
-                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    className="rounded-lg bg-ok px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                     disabled={
                       busyFactId !== null ||
                       !selectedTargetId ||
@@ -1215,7 +1215,7 @@ export function SmartImportReviewPanel({
               )}
               {reconciling.preview.matches.length === 0 && (
                 <button
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="rounded-lg bg-ok px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   disabled={busyFactId !== null || selectedFields.length === 0}
                   onClick={() => void reconcile("add")}
                   type="button"
@@ -1224,7 +1224,7 @@ export function SmartImportReviewPanel({
                 </button>
               )}
               <button
-                className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700"
+                className="rounded-lg border border-risk-line px-4 py-2 text-sm font-semibold text-risk-ink"
                 disabled={busyFactId !== null}
                 onClick={() => void reconcile("reject")}
                 type="button"
@@ -1248,20 +1248,20 @@ export function SmartImportReviewPanel({
       >
         {binding && (
           <div className="space-y-5">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-ink-2">
               This comparison confirms that this external SMART patient belongs
               to this local chart. It never updates local demographics.
             </p>
-            <div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
+            <div className="grid gap-4 rounded-xl border border-line p-4 sm:grid-cols-2">
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-ink">
                   External SMART patient
                 </h3>
-                <dl className="mt-2 space-y-2 text-sm text-slate-700">
+                <dl className="mt-2 space-y-2 text-sm text-ink-2">
                   {Object.entries(binding.external_identity).map(
                     ([field, value]) => (
                       <div key={field}>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                           {field.replaceAll("_", " ")}
                         </dt>
                         <dd>{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
@@ -1271,14 +1271,14 @@ export function SmartImportReviewPanel({
                 </dl>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-ink">
                   Local chart
                 </h3>
-                <dl className="mt-2 space-y-2 text-sm text-slate-700">
+                <dl className="mt-2 space-y-2 text-sm text-ink-2">
                   {Object.entries(binding.local_identity).map(
                     ([field, value]) => (
                       <div key={field}>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                           {field.replaceAll("_", " ")}
                         </dt>
                         <dd>{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
@@ -1289,17 +1289,17 @@ export function SmartImportReviewPanel({
               </div>
             </div>
             <div
-              className={`rounded-lg px-3 py-2 text-sm ${binding.identity_matches ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}
+              className={`rounded-lg px-3 py-2 text-sm ${binding.identity_matches ? "bg-ok-soft text-ok-ink" : "bg-warn-soft text-warn-ink"}`}
             >
               {binding.identity_matches
                 ? "The available identity details match."
                 : "The available identity details differ or are incomplete. A clinician reason is required before binding synthetic records."}
             </div>
             {!binding.identity_matches && (
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="block text-sm font-medium text-ink-2">
                 Confirmation reason
                 <textarea
-                  className="mt-2 min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  className="mt-2 min-h-20 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
                   onChange={(event) => setBindingNote(event.target.value)}
                   value={bindingNote}
                 />
@@ -1307,14 +1307,14 @@ export function SmartImportReviewPanel({
             )}
             <div className="flex justify-end gap-3">
               <button
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+                className="rounded-lg border border-line px-4 py-2 text-sm"
                 onClick={() => setBinding(null)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-lg bg-primary-hover px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                 disabled={
                   busyFactId !== null ||
                   (!binding.identity_matches && !bindingNote.trim())
@@ -1340,28 +1340,28 @@ export function SmartImportReviewPanel({
         title="Reject imported fact"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-2">
             Record why this imported candidate should not be used. The original
             source remains in the audit trail.
           </p>
-          <label className="block text-sm font-medium text-slate-700">
+          <label className="block text-sm font-medium text-ink-2">
             Rejection note
             <textarea
-              className="mt-2 min-h-28 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              className="mt-2 min-h-28 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
               onChange={(event) => setNote(event.target.value)}
               value={note}
             />
           </label>
           <div className="flex justify-end gap-3">
             <button
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+              className="rounded-lg border border-line px-4 py-2 text-sm"
               onClick={() => setRejecting(null)}
               type="button"
             >
               Cancel
             </button>
             <button
-              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="rounded-lg bg-risk px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               disabled={!note.trim() || busyFactId !== null}
               onClick={() => void reject()}
               type="button"
@@ -1383,7 +1383,7 @@ export function SmartImportReviewPanel({
         title="Correct imported fact"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-2">
             Edit mapped fields, not the original FHIR source. The change remains
             pending review and is audited. Structured fields keep JSON only when
             their clinical structure must be preserved.
@@ -1396,13 +1396,13 @@ export function SmartImportReviewPanel({
                   original !== null && typeof original === "object";
                 return (
                   <label
-                    className="block text-sm font-medium text-slate-700"
+                    className="block text-sm font-medium text-ink-2"
                     key={key}
                   >
                     {label}
                     {structured ? (
                       <textarea
-                        className="mt-2 min-h-28 w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-xs"
+                        className="mt-2 min-h-28 w-full rounded-xl border border-line-strong px-3 py-2 font-mono text-xs"
                         onChange={(event) =>
                           setCorrectionDraft((current) => ({
                             ...current,
@@ -1413,7 +1413,7 @@ export function SmartImportReviewPanel({
                       />
                     ) : (
                       <input
-                        className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                        className="mt-2 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
                         onChange={(event) =>
                           setCorrectionDraft((current) => ({
                             ...current,
@@ -1427,24 +1427,24 @@ export function SmartImportReviewPanel({
                 );
               })}
           </div>
-          <label className="block text-sm font-medium text-slate-700">
+          <label className="block text-sm font-medium text-ink-2">
             Correction note
             <textarea
-              className="mt-2 min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              className="mt-2 min-h-24 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
               onChange={(event) => setNote(event.target.value)}
               value={note}
             />
           </label>
           <div className="flex justify-end gap-3">
             <button
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+              className="rounded-lg border border-line px-4 py-2 text-sm"
               onClick={() => setCorrecting(null)}
               type="button"
             >
               Cancel
             </button>
             <button
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="rounded-lg bg-primary-hover px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               disabled={!note.trim() || busyFactId !== null}
               onClick={() => void correct()}
               type="button"
@@ -1466,7 +1466,7 @@ export function SmartImportReviewPanel({
       >
         {source && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-ink-2">
               {source.detail.resource_type}
               {source.detail.external_resource_id
                 ? ` · ${source.detail.external_resource_id}`

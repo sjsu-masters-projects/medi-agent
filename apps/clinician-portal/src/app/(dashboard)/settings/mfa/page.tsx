@@ -185,7 +185,7 @@ export default function MFASetupPage() {
     if (step === "loading") {
         return (
             <div className="mx-auto max-w-lg py-20 text-center">
-                <p className="text-sm text-slate-500">Checking MFA status...</p>
+                <p className="text-sm text-muted">Checking MFA status...</p>
             </div>
         );
     }
@@ -194,43 +194,43 @@ export default function MFASetupPage() {
         <div className="mx-auto max-w-lg space-y-6">
             <div>
                 <button
-                    className="mb-4 text-sm font-medium text-blue-600 hover:underline"
+                    className="mb-4 text-sm font-medium text-primary hover:underline"
                     onClick={() => router.push("/settings")}
                     type="button"
                 >
                     &larr; Back to Settings
                 </button>
-                <h1 className="text-2xl font-bold text-slate-900">Multi-Factor Authentication</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <h1 className="text-2xl font-bold text-ink">Multi-Factor Authentication</h1>
+                <p className="mt-1 text-sm text-muted">
                     Add an extra layer of security using an authenticator app that generates one-time codes.
                 </p>
             </div>
 
-            {error ? <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+            {error ? <p role="alert" className="rounded-lg bg-risk-soft px-4 py-3 text-sm text-risk-ink">{error}</p> : null}
 
             {step === "already_enrolled" ? (
                 <Card className="space-y-4">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-lg">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ok-tint text-lg">
                             &#x2713;
                         </div>
                         <div>
-                            <p className="font-semibold text-slate-900">MFA is enabled</p>
-                            <p className="text-sm text-slate-500">
+                            <p className="font-semibold text-ink">MFA is enabled</p>
+                            <p className="text-sm text-muted">
                                 Your account is protected with {factors.length} authenticator{factors.length > 1 ? "s" : ""}.
                             </p>
                         </div>
                     </div>
                     {factors.map((factor) => (
-                        <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3" key={factor.id}>
+                        <div className="flex items-center justify-between rounded-lg border border-line px-4 py-3" key={factor.id}>
                             <div>
-                                <p className="text-sm font-medium text-slate-700">{factor.friendly_name ?? "Authenticator"}</p>
-                                <p className="text-xs text-slate-400">
+                                <p className="text-sm font-medium text-ink-2">{factor.friendly_name ?? "Authenticator"}</p>
+                                <p className="text-xs text-muted">
                                     Added {factor.created_at ? new Date(factor.created_at).toLocaleDateString() : "—"}
                                 </p>
                             </div>
                             <button
-                                className="text-sm font-medium text-red-600 hover:underline"
+                                className="text-sm font-medium text-risk-ink hover:underline"
                                 onClick={() => handleUnenroll(factor.id)}
                                 type="button"
                             >
@@ -244,8 +244,8 @@ export default function MFASetupPage() {
             {step === "enroll" ? (
                 <Card className="space-y-4">
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Set up authenticator</h2>
-                        <p className="mt-1 text-sm text-slate-500">
+                        <h2 className="text-lg font-semibold text-ink">Set up authenticator</h2>
+                        <p className="mt-1 text-sm text-muted">
                             You will need an authenticator app like Google Authenticator, Authy, or 1Password.
                         </p>
                     </div>
@@ -258,18 +258,18 @@ export default function MFASetupPage() {
             {step === "verify" && enrollData ? (
                 <Card className="space-y-5">
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Scan QR code</h2>
-                        <p className="mt-1 text-sm text-slate-500">
+                        <h2 className="text-lg font-semibold text-ink">Scan QR code</h2>
+                        <p className="mt-1 text-sm text-muted">
                             Open your authenticator app and scan the QR code below, then enter the 6-digit code.
                         </p>
                     </div>
-                    <div className="flex justify-center rounded-xl bg-white p-4">
+                    <div className="flex justify-center rounded-xl bg-surface p-4">
                         {/* eslint-disable-next-line @next/next/no-img-element -- QR code is a data URI, not optimizable */}
                         <img alt="TOTP QR Code" className="h-48 w-48" src={enrollData.totp.qr_code} />
                     </div>
-                    <div className="rounded-lg bg-slate-50 px-4 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Manual entry key</p>
-                        <p className="mt-1 select-all font-mono text-sm text-slate-700">{enrollData.totp.secret}</p>
+                    <div className="rounded-lg bg-surface-2 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Manual entry key</p>
+                        <p className="mt-1 select-all font-mono text-sm text-ink-2">{enrollData.totp.secret}</p>
                     </div>
                     <form className="space-y-4" onSubmit={handleVerify}>
                         <Input
@@ -290,11 +290,11 @@ export default function MFASetupPage() {
 
             {step === "success" ? (
                 <Card className="space-y-4 text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-600">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-ok-tint text-3xl text-ok-ink">
                         &#x2713;
                     </div>
-                    <h2 className="text-lg font-semibold text-slate-900">MFA enabled successfully</h2>
-                    <p className="text-sm text-slate-500">
+                    <h2 className="text-lg font-semibold text-ink">MFA enabled successfully</h2>
+                    <p className="text-sm text-muted">
                         Your account is now protected with two-factor authentication.
                     </p>
                     <Button onClick={() => router.push("/settings")}>Back to Settings</Button>

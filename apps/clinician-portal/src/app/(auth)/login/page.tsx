@@ -368,7 +368,7 @@ function ClinicianLoginPageContent() {
     }
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
+        <div className="flex min-h-screen bg-surface-2">
             <div className="hidden w-1/2 bg-gray-900 px-12 py-16 text-white lg:flex lg:flex-col lg:justify-between">
                 <div className="space-y-4">
                     <p className="text-sm font-medium uppercase tracking-[0.3em] text-blue-300">MediAgent Pro</p>
@@ -377,14 +377,14 @@ function ClinicianLoginPageContent() {
                         Surface high-risk adherence issues, coordinate shared care, and act on MedWatch drafts from one dashboard.
                     </p>
                 </div>
-                <p className="text-sm text-gray-400">Built for care teams managing proactive, AI-assisted follow-up.</p>
+                <p className="text-sm text-muted">Built for care teams managing proactive, AI-assisted follow-up.</p>
             </div>
 
             <div className="flex flex-1 items-center justify-center px-6 py-12">
                 <Card className="w-full max-w-md space-y-6" padding="lg">
                     <div className="space-y-2">
-                        <p className="text-sm font-medium text-blue-600">Clinic access</p>
-                        <h2 className="text-3xl font-bold text-gray-900">
+                        <p className="text-sm font-medium text-primary">Clinic access</p>
+                        <h2 className="text-3xl font-bold text-ink">
                             {stage === "verify"
                                 ? "Enter clinic code"
                                 : stage === "choose"
@@ -393,7 +393,7 @@ function ClinicianLoginPageContent() {
                                         ? "Sign in"
                                         : "Verify MFA"}
                         </h2>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-muted">
                             {stage === "verify"
                                 ? "Verify your clinic workspace before continuing to login or registration."
                                 : stage === "choose"
@@ -417,11 +417,11 @@ function ClinicianLoginPageContent() {
                                 }}
                                 value={clinicCode}
                             />
-                            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                            {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
                             <Button disabled={submitting} fullWidth type="submit">
                                 {submitting ? "Verifying..." : "Verify clinic code"}
                             </Button>
-                            <Link className="block text-center text-sm font-medium text-blue-600" href="/signup/admin">
+                            <Link className="block text-center text-sm font-medium text-primary" href="/signup/admin">
                                 Start a new clinic workspace (creates Clinic Admin)
                             </Link>
                         </form>
@@ -429,11 +429,11 @@ function ClinicianLoginPageContent() {
 
                     {stage === "choose" && clinicContext ? (
                         <div className="space-y-4">
-                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                            <div className="rounded-lg border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">
                                 <p className="font-semibold">Clinic verified: {clinicContext.clinicName}</p>
                                 <p className="mt-1">Code: {clinicContext.clinicCode}</p>
                             </div>
-                            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                            {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
                             <Button fullWidth onClick={() => setStage("login")} type="button">
                                 I already have an account
                             </Button>
@@ -442,7 +442,7 @@ function ClinicianLoginPageContent() {
                                     Join this clinic (Provider / Nurse)
                                 </Button>
                             </Link>
-                            <button className="w-full text-sm text-slate-500 underline" onClick={useDifferentClinicCode} type="button">
+                            <button className="w-full text-sm text-muted underline" onClick={useDifferentClinicCode} type="button">
                                 Use a different clinic code
                             </button>
                         </div>
@@ -450,15 +450,15 @@ function ClinicianLoginPageContent() {
 
                     {stage === "mfa" && clinicContext ? (
                         <div className="space-y-4">
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            <div className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
                                 <p className="font-semibold">Multi-factor authentication required</p>
                                 <p className="mt-1">
                                     Enter the 6-digit code from your authenticator app to continue signing in to{" "}
                                     <span className="font-medium">{clinicContext.clinicName}</span>.
                                 </p>
                             </div>
-                            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                                <p className="font-semibold text-slate-900">Available factors</p>
+                            <div className="space-y-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
+                                <p className="font-semibold text-ink">Available factors</p>
                                 {mfaFactors.length > 0 ? (
                                     mfaFactors.map((factor) => (
                                         <p key={factor.id}>{factor.friendly_name ?? "Authenticator"}</p>
@@ -477,14 +477,14 @@ function ClinicianLoginPageContent() {
                                     placeholder="000000"
                                     value={mfaCode}
                                 />
-                                {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                                {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
                                 <Button disabled={submitting || mfaCode.trim().length !== 6} fullWidth type="submit">
                                     {submitting ? "Verifying..." : "Verify and continue"}
                                 </Button>
                             </form>
                             <div className="flex items-center justify-start text-sm">
                                 <button
-                                    className="text-blue-600"
+                                    className="text-primary"
                                     onClick={() => {
                                         setStage("login");
                                         setMfaCode("");
@@ -501,7 +501,7 @@ function ClinicianLoginPageContent() {
 
                     {stage === "login" && clinicContext ? (
                         <>
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                            <div className="rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
                                 Signing into clinic: <span className="font-semibold">{clinicContext.clinicName}</span>
                             </div>
                             <form className="space-y-4" onSubmit={handleSubmit}>
@@ -519,7 +519,7 @@ function ClinicianLoginPageContent() {
                                     trailingAction={
                                         <button
                                             aria-label={passwordVisible ? "Hide password" : "Show password"}
-                                            className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:text-gray-700"
+                                            className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:text-ink-2"
                                             onClick={() => setPasswordVisible((current) => !current)}
                                             type="button"
                                         >
@@ -529,13 +529,13 @@ function ClinicianLoginPageContent() {
                                     type={passwordVisible ? "text" : "password"}
                                     value={password}
                                 />
-                                {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                                {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
                                 <Button disabled={submitting} fullWidth type="submit">
                                     {submitting ? "Signing in..." : "Sign in"}
                                 </Button>
                             </form>
                             <div className="flex items-center justify-start text-sm">
-                                <button className="text-blue-600" onClick={() => setStage("choose")} type="button">
+                                <button className="text-primary" onClick={() => setStage("choose")} type="button">
                                     Back
                                 </button>
                             </div>

@@ -27,7 +27,7 @@ export function ChatTranscript({ messages }: ChatTranscriptProps) {
     messages = messages.filter((message) => message.role !== ChatRole.CLINICIAN);
     if (messages.length === 0) {
         return (
-            <div className="flex h-40 items-center justify-center text-sm text-gray-400">
+            <div className="flex h-40 items-center justify-center text-sm text-muted">
                 No chat transcript available
             </div>
         );
@@ -47,7 +47,7 @@ export function ChatTranscript({ messages }: ChatTranscriptProps) {
                         key={`${msg.created_at}-${idx}`}
                     >
                         {/* Sender label */}
-                        <span className="px-1 text-xs text-gray-400">
+                        <span className="px-1 text-xs text-muted">
                             {isUser ? "Patient" : "Nora · AI care assistant"} · {formatTime(msg.created_at)}
                         </span>
 
@@ -55,8 +55,8 @@ export function ChatTranscript({ messages }: ChatTranscriptProps) {
                         <div
                             className={
                                 isUser
-                                    ? "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900"
-                                    : "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800"
+                                    ? "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm border border-primary-line bg-primary-tint p-3 text-sm text-ai-ink"
+                                    : "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm border border-line bg-surface-2 p-3 text-sm text-ink"
                             }
                         >
                             {msg.content}
@@ -64,7 +64,7 @@ export function ChatTranscript({ messages }: ChatTranscriptProps) {
 
                         {/* Audio indicator */}
                         {msg.audio_url && (
-                            <span className="flex items-center gap-1 text-xs text-gray-400">
+                            <span className="flex items-center gap-1 text-xs text-muted">
                                 🎙 Voice message
                             </span>
                         )}

@@ -8,8 +8,10 @@
   --color-background: #F4F6FA;
   --color-surface: #FFFFFF;
   --color-surface-2: #F8FAFC;
-  --color-line: rgba(100,116,139,.10);
-  --color-line-strong: rgba(100,116,139,.20);
+  --color-sunken: #EEF2F7;        /* source pane, wells */
+  --color-track: #E2E8F0;         /* progress tracks, avatars, disabled */
+  --color-line: rgba(100,116,139,.12);
+  --color-line-strong: rgba(100,116,139,.24);
   --color-ink: #0F172A;
   --color-ink-2: #334155;
   --color-muted: #64748B;
@@ -18,24 +20,53 @@
   --color-rail: #0A1222;
   --color-rail-ink: #E6ECF5;
   --color-rail-muted: #A9B6CA;
+  --color-rail-faint: #66758E;
   --color-rail-active: rgba(96,165,250,.12);
   --color-rail-accent: #60A5FA;
 
-  /* semantic */
-  --color-primary: #2563EB;        /* primary buttons */
+  /* primary action */
+  --color-primary: #2563EB;
   --color-primary-hover: #1D4ED8;
-  --color-ai-tint: #DBEAFE;  --color-ai-ink: #1D4ED8;       /* "AI draft" chip */
-  --color-ok-tint: #CCFBF1;  --color-ok-ink: #0F766E;       /* "Verified"/"Approved" seal */
-  --color-ok: #0F766E;
-  --color-risk-tint: #FEE2E2; --color-risk-ink: #B91C1C; --color-risk: #DC2626;
-  --color-warn-tint: #FEF3C7; --color-warn-ink: #92400E; --color-warn: #D97706;
+  --color-primary-tint: #EFF6FF;
+  --color-primary-line: rgba(37,99,235,.28);
+
+  /* AI produced this (blue + spark) */
+  --color-ai-tint: #DBEAFE;  --color-ai-ink: #1D4ED8;
+
+  /* clinician approved / verified (teal + check) */
+  --color-ok: #0F766E;       --color-ok-strong: #115E59;
+  --color-ok-tint: #CCFBF1;  --color-ok-soft: #F0FDFA;
+  --color-ok-ink: #0F766E;   --color-ok-line: #99F6E4;
+
+  /* risk */
+  --color-risk: #DC2626;     --color-risk-strong: #B91C1C;
+  --color-risk-tint: #FEE2E2; --color-risk-soft: #FEF2F2;
+  --color-risk-ink: #B91C1C; --color-risk-line: #FECACA;
+
+  /* warning / blockers */
+  --color-warn: #D97706;     --color-warn-strong: #B45309;
+  --color-warn-tint: #FEF3C7; --color-warn-soft: #FFFBEB;
+  --color-warn-ink: #92400E; --color-warn-line: #FDE68A;
 
   --shadow-card: 0 1px 2px rgba(15,23,42,.04);
   --shadow-raised: 0 16px 30px -16px rgba(37,99,235,.35);
+  --shadow-pop: 0 18px 40px -12px rgba(15,23,42,.22), 0 2px 6px rgba(15,23,42,.06);
+  --shadow-page: 0 18px 36px -18px rgba(15,23,42,.35);
+}
+
+:root {
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+  --dur-micro: 160ms;
+  --dur-panel: 240ms;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  background: var(--color-background);
 }
 
 body {
@@ -45,37 +76,102 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Desktop controls stay at least 32px tall; patient-grade 44px targets are not required here. */
 button, summary {
-  min-height: 44px;
+  min-height: 32px;
 }
 
 :focus-visible {
-  outline: 2px solid theme("colors.blue.600");
-  outline-offset: 3px;
+  outline: 2px solid rgba(37, 99, 235, .55);
+  outline-offset: 2px;
 }
 
-/* Shared reference-led motion; only mount looping indicators for active states. */
-
-:root {
-  --ease-out: cubic-bezier(.2,.8,.2,1);
-  --ease-spring: cubic-bezier(.34,1.56,.64,1);
-  --dur-micro: 160ms;
-  --dur-panel: 240ms;
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
 }
+
+/* Native selects share one caret so compact toolbar selects line up. */
+select:not([multiple]):not([size]):not(.appearance-auto) {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .6rem center;
+  background-size: .9rem;
+}
+
+@media (forced-colors: active) {
+  select:not([multiple]):not([size]) { appearance: auto; background-image: none; }
+}
+
+/* Opt-in disclosure: replaces the native triangle with a rotating chevron. */
+details.ma-disclosure > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  cursor: pointer;
+}
+details.ma-disclosure > summary::-webkit-details-marker { display: none; }
+details.ma-disclosure > summary::before {
+  content: "";
+  width: .875rem;
+  height: .875rem;
+  flex: none;
+  background: currentColor;
+  opacity: .55;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform var(--dur-panel) var(--ease-out);
+}
+details.ma-disclosure[open] > summary::before { transform: rotate(90deg); }
+
+/* ---------- Decorative depth (aria-hidden, static) ---------- */
+
+/* Risk Radar header: perspective grid floor */
+.radar-floor {
+  position: absolute; left: -10%; right: -10%; bottom: -140px; height: 260px;
+  background-image:
+    linear-gradient(rgba(37,99,235,.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37,99,235,.10) 1px, transparent 1px);
+  background-size: 44px 44px;
+  transform: perspective(500px) rotateX(62deg);
+  transform-origin: center top;
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,.9), transparent 75%);
+          mask-image: linear-gradient(180deg, rgba(0,0,0,.9), transparent 75%);
+  pointer-events: none;
+}
+.radar-glow {
+  position: absolute; right: 120px; top: -80px; width: 360px; height: 260px;
+  background: radial-gradient(ellipse, rgba(20,184,166,.12), transparent 65%);
+  pointer-events: none;
+}
+/* dark variant for the sign-in panel */
+.radar-floor--dark {
+  background-image:
+    linear-gradient(rgba(96,165,250,.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96,165,250,.14) 1px, transparent 1px);
+  background-size: 48px 48px;
+  transform: perspective(520px) rotateX(64deg);
+  bottom: -60px; height: 420px; left: -20%; right: -20%;
+}
+
+/* ---------- Motion ---------- */
 
 @keyframes ma-enter   { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 @keyframes ma-leave   { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-8px) } }
 @keyframes ma-bubble  { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
 @keyframes ma-fade    { from { opacity: 0 } to { opacity: 1 } }
-@keyframes ma-sheet   { from { transform: translateY(100%) } to { transform: none } }
+@keyframes ma-pop     { from { opacity: 0; transform: translateY(-4px) scale(.98) } to { opacity: 1; transform: none } }
 @keyframes ma-pulse   { 0% { transform: scale(1); opacity: .7 } 100% { transform: scale(3.2); opacity: 0 } }
 @keyframes ma-dot     { 0%, 80%, 100% { opacity: .25 } 40% { opacity: 1 } }
-@keyframes ma-draw    { 0% { stroke-dashoffset: 1 } 45%, 80% { stroke-dashoffset: 0 } 100% { stroke-dashoffset: -1 } }
 @keyframes ma-check   { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
-@keyframes ma-bars    { 0%, 100% { transform: scaleY(.4) } 50% { transform: scaleY(1) } }
 @keyframes ma-flash   { 0% { box-shadow: 0 0 0 0 rgba(202,138,4,.6) } 100% { box-shadow: 0 0 0 10px rgba(202,138,4,0) } }
 @keyframes ma-swap-out{ to { opacity: 0; transform: translateY(-4px) } }
 @keyframes ma-swap-in { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+@keyframes ma-shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
 /* sign-in supervised-flow stack (6s loop) */
 @keyframes ma-rise {
   0% { transform: translateY(0); opacity: 0 } 6% { opacity: 1 }
@@ -88,32 +184,26 @@ button, summary {
   70%, 100% { box-shadow: 0 0 0 0 rgba(45,212,191,0); background: rgba(45,212,191,0) }
 }
 
-/* utilities */
 .ma-enter        { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
-.ma-enter-spring { animation: ma-enter var(--dur-panel) var(--ease-spring) both; }
 .ma-leave        { animation: ma-leave var(--dur-micro) var(--ease-out) both; }
 .ma-bubble       { animation: ma-bubble var(--dur-micro) var(--ease-out) both; }
 .ma-fade         { animation: ma-fade var(--dur-micro) ease-out both; }
+.ma-pop          { animation: ma-pop var(--dur-micro) var(--ease-out) both; }
 .ma-flash        { animation: ma-flash 600ms ease-out 1; }
 .ma-check-draw path { stroke-dasharray: 1; animation: ma-check var(--dur-micro) var(--ease-out) both; }
-.ma-press        { transition: transform var(--dur-micro) var(--ease-out); }
+.ma-press        { transition: transform var(--dur-micro) var(--ease-out), background-color var(--dur-micro) ease-out, color var(--dur-micro) ease-out, border-color var(--dur-micro) ease-out; }
 .ma-press:active { transform: scale(.98); }
 .ma-lift         { transition: transform var(--dur-panel) var(--ease-out), box-shadow var(--dur-panel) var(--ease-out); }
 .ma-lift:hover   { transform: translateY(-3px); box-shadow: var(--shadow-raised); }
-
-/* existing patient page enter, retimed */
-.patient-page { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
-.patient-stack > * { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
-.patient-stack > *:nth-child(2) { animation-delay: 45ms; }
-.patient-stack > *:nth-child(3) { animation-delay: 90ms; }
-.patient-stack > *:nth-child(4) { animation-delay: 135ms; }
-
-/* native <dialog> bottom sheet */
-dialog.ma-sheet { margin: auto 0 0; width: 100%; max-width: 480px; margin-inline: auto; padding: 0; border: 0; background: transparent; }
-dialog.ma-sheet[open] > .ma-sheet-panel { animation: ma-sheet var(--dur-panel) var(--ease-out) both; }
-dialog.ma-sheet::backdrop { background: rgba(16,32,43,.4); animation: ma-fade var(--dur-micro) ease-out both; }
+.ma-page         { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
+.ma-skeleton {
+  background: linear-gradient(90deg, #E9EEF4 0%, #F4F7FA 50%, #E9EEF4 100%);
+  background-size: 200% 100%;
+  animation: ma-shimmer 1.6s ease-in-out infinite;
+}
+.ma-3d-tilt { transform: perspective(1200px) rotateY(-3deg); transform-origin: left center; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .ma-3d-tilt { transform: none !important; }
 }

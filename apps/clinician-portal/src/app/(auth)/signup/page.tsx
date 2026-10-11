@@ -185,7 +185,7 @@ function ClinicianSignupPageContent() {
     }
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
+        <div className="flex min-h-screen bg-surface-2">
             <div className="hidden w-1/2 bg-gray-900 px-12 py-16 text-white lg:flex lg:flex-col lg:justify-between">
                 <div className="space-y-4">
                     <p className="text-sm font-medium uppercase tracking-[0.3em] text-blue-300">MediAgent Pro</p>
@@ -194,25 +194,25 @@ function ClinicianSignupPageContent() {
                         Create your clinician account, connect your clinic identity, and begin managing patient follow-up from a shared dashboard.
                     </p>
                 </div>
-                <p className="text-sm text-gray-400">Access is limited to your clinic role and assigned care team.</p>
+                <p className="text-sm text-muted">Access is limited to your clinic role and assigned care team.</p>
             </div>
 
             <div className="flex flex-1 items-center justify-center px-6 py-12">
                 <Card className="w-full max-w-xl space-y-6" padding="lg">
                     <div className="space-y-2">
-                        <p className="text-sm font-medium text-blue-600">Clinician signup</p>
-                        <h2 className="text-3xl font-bold text-gray-900">Create your account</h2>
-                        <p className="text-sm text-gray-500">Set up a clinician login for dashboard access and invite-code workflows.</p>
-                        <p className="text-xs font-medium text-slate-600">Role access options: Provider or Nurse / MA</p>
+                        <p className="text-sm font-medium text-primary">Clinician signup</p>
+                        <h2 className="text-3xl font-bold text-ink">Create your account</h2>
+                        <p className="text-sm text-muted">Set up a clinician login for dashboard access and invite-code workflows.</p>
+                        <p className="text-xs font-medium text-ink-2">Role access options: Provider or Nurse / MA</p>
                     </div>
 
                     {clinicContext ? (
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                        <div className="rounded-lg border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">
                             <p className="font-semibold">Clinic: {clinicContext.clinicName}</p>
                             <p className="mt-1">Code: {clinicContext.clinicCode}</p>
                         </div>
                     ) : (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        <div className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
                             Verify your clinic code on the sign-in screen before creating an account.
                         </div>
                     )}
@@ -223,9 +223,9 @@ function ClinicianSignupPageContent() {
                         <Input label="Email" onChange={(event) => updateField("email", event.target.value)} type="email" value={formData.email} />
                         <Input label="Specialty" onChange={(event) => updateField("specialty", event.target.value)} value={formData.specialty} />
                         <label className="block">
-                            <span className="mb-1 block text-sm font-medium text-gray-700">Role access</span>
+                            <span className="mb-1 block text-sm font-medium text-ink-2">Role access</span>
                             <select
-                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                className="w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary"
                                 disabled={Boolean(inviteRole)}
                                 onChange={(event) => updateField("role", event.target.value)}
                                 value={formData.role}
@@ -237,7 +237,7 @@ function ClinicianSignupPageContent() {
                                 ) : null}
                             </select>
                             {inviteRole ? (
-                                <p className="mt-1 text-xs text-slate-500">Role access is set by your invite.</p>
+                                <p className="mt-1 text-xs text-muted">Role access is set by your invite.</p>
                             ) : null}
                         </label>
                         <Input label="NPI number (optional)" onChange={(event) => updateField("npiNumber", event.target.value)} value={formData.npiNumber} />
@@ -248,7 +248,7 @@ function ClinicianSignupPageContent() {
                             type="password"
                             value={formData.confirmPassword}
                         />
-                        {error ? <p className="text-sm text-red-600 md:col-span-2">{error}</p> : null}
+                        {error ? <p className="text-sm text-risk-ink md:col-span-2">{error}</p> : null}
                         <div className="md:col-span-2">
                             <Button
                                 disabled={submitting || inviteLoading || !clinicContext}
@@ -259,15 +259,15 @@ function ClinicianSignupPageContent() {
                             </Button>
                         </div>
                     </form>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-muted">
                         Already have a clinician account?{" "}
-                        <Link className="font-medium text-blue-600" href="/login">
+                        <Link className="font-medium text-primary" href="/login">
                             Sign in
                         </Link>
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-muted">
                         Need to onboard a brand-new clinic?{" "}
-                        <Link className="font-medium text-blue-600" href="/signup/admin">
+                        <Link className="font-medium text-primary" href="/signup/admin">
                             Create clinic admin account
                         </Link>
                     </div>

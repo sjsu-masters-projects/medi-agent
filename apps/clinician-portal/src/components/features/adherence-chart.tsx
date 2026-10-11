@@ -34,12 +34,12 @@ function CustomTooltip({
     if (!active || !payload?.length) return null;
     const point = payload[0];
     return (
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg">
-            <p className="mb-1 text-xs font-semibold text-gray-500">{formatDate(label ?? "")}</p>
-            <p className="text-sm font-bold text-blue-600">
+        <div className="rounded-xl border border-line bg-surface px-4 py-3 shadow-lg">
+            <p className="mb-1 text-xs font-semibold text-muted">{formatDate(label ?? "")}</p>
+            <p className="text-sm font-bold text-primary">
                 {Math.round((point?.value ?? 0) * 100)}% adherence
             </p>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-muted">
                 {point?.payload?.completed ?? 0} of {point?.payload?.expected ?? 0} recorded responses completed
             </p>
         </div>
@@ -55,7 +55,7 @@ export function AdherenceChart({ data }: AdherenceChartProps) {
         return (
             <div
                 aria-label="30-day adherence chart"
-                className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400"
+                className="flex h-40 items-center justify-center rounded-xl border border-dashed border-line text-sm text-muted"
             >
                 No adherence data available for this period.
             </div>

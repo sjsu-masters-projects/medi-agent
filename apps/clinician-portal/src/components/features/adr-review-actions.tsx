@@ -114,21 +114,21 @@ export function ADRReviewActions({
     const noteRequired = action !== "mark_reviewed";
     return (
         <form
-            className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4"
+            className="space-y-3 rounded-lg border border-primary-line bg-primary-tint p-4"
             onSubmit={submit}
         >
-            <h3 className="text-sm font-semibold text-gray-900">
+            <h3 className="text-sm font-semibold text-ink">
                 {ACTION_LABELS[action]}
             </h3>
             {action === "request_information" && missingQuestions.length > 0 ? (
                 <fieldset>
-                    <legend className="text-xs font-medium text-gray-700">
+                    <legend className="text-xs font-medium text-ink-2">
                         Information needed
                     </legend>
                     <div className="mt-2 flex flex-wrap gap-3">
                         {missingQuestions.map((question) => (
                             <label
-                                className="flex items-center gap-2 text-sm text-gray-700"
+                                className="flex items-center gap-2 text-sm text-ink-2"
                                 key={question}
                             >
                                 <input
@@ -143,12 +143,12 @@ export function ADRReviewActions({
                     </div>
                 </fieldset>
             ) : null}
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-ink-2">
                 Review note{noteRequired ? " (required)" : " (optional)"}
                 <textarea
                     disabled={submitting}
                     maxLength={MAX_NOTE_LENGTH}
-                    className="mt-1 min-h-24 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 min-h-24 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary"
                     onChange={(event) => setNote(event.target.value)}
                     placeholder={
                         action === "request_information"

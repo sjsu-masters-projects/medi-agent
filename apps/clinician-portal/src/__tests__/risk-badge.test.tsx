@@ -7,6 +7,6 @@ describe("RiskBadge", () => {
         const { container } = render(<RiskBadge level="high" />);
         const badge = screen.getByText("High");
         expect(badge).toBeInTheDocument();
-        expect(container.firstElementChild?.className).toContain("bg-red-100");
+        expect(container.firstElementChild?.className).toContain("bg-risk-tint");
     });
 });

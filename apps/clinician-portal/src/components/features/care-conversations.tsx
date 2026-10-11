@@ -7,8 +7,8 @@ import { careConversations } from "@/services/care-conversations";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages } from "../../../../../packages/shared/src/utils/care-conversations";
 
-const button = "rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50";
-const input = "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500";
+const button = "rounded-lg border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2 disabled:opacity-50";
+const input = "w-full rounded-lg border border-line-strong px-3 py-2 text-sm text-ink focus:border-primary focus:ring-2 focus:ring-primary";
 
 export function CareConversations({ locale = "en-US", audience = "patient", visible = true }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean }) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
@@ -126,8 +126,8 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
 
   const active = threads.find((thread) => thread.id === selected);
   const name = (thread: CareConversation) => audience === "patient" ? thread.clinician_name : thread.patient_name;
-  return <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 text-sm text-gray-700">
-    <p className="rounded-lg bg-yellow-100 p-3 text-yellow-800">{copy.notice}</p>
+  return <section className="space-y-4 rounded-xl border border-line bg-surface p-5 text-sm text-ink-2">
+    <p className="rounded-lg bg-warn-tint p-3 text-warn-ink">{copy.notice}</p>
     <div className="flex flex-wrap items-end gap-3">
       <label className="min-w-0 flex-1 font-medium">{copy.recipient}
         <select className={input} value={recipient} disabled={loading || opening || sending} onChange={(event) => setRecipient(event.target.value)}>
@@ -142,14 +142,14 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
     {pollFailed && <p role="alert">{copy.loadError}</p>}
     {loading ? <p role="status">{copy.loading}</p> : <>
       {!recipients.length && <p>{copy.noRecipients}</p>}
-      <h2 className="text-lg font-semibold text-gray-900">{copy.threads}</h2>
+      <h2 className="text-lg font-semibold text-ink">{copy.threads}</h2>
       {!threads.length && <p>{copy.empty}</p>}
       <ul className="space-y-2">
         {threads.map((thread) => <li key={thread.id}>
-          <button className={`${button} w-full text-left ${selected === thread.id ? "border-blue-600 bg-blue-50" : ""}`} type="button" aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => setSelected(thread.id)}>
+          <button className={`${button} w-full text-left ${selected === thread.id ? "border-primary bg-primary-tint" : ""}`} type="button" aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => setSelected(thread.id)}>
             <span className="block font-semibold">{name(thread)} · {thread.clinic_name}</span>
-            {thread.unread_count > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{thread.unread_count} {copy.unread}</span>}
-            <span className="block truncate text-gray-500">{thread.last_message_preview}</span>
+            {thread.unread_count > 0 && <span className="rounded-full bg-ai-tint px-2 py-0.5 text-xs text-ai-ink">{thread.unread_count} {copy.unread}</span>}
+            <span className="block truncate text-muted">{thread.last_message_preview}</span>
           </button>
         </li>)}
       </ul>
@@ -288,23 +288,23 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
     }
   }
 
-  return <div className="space-y-4 border-t border-gray-200 pt-4">
-    <h3 className="font-semibold text-gray-900">{thread.patient_name} · {thread.clinician_name} · {thread.clinic_name}</h3>
+  return <div className="space-y-4 border-t border-line pt-4">
+    <h3 className="font-semibold text-ink">{thread.patient_name} · {thread.clinician_name} · {thread.clinic_name}</h3>
     {error && <p role="alert">{copy[error]}</p>}
     <button className={button} disabled={sending || loading || denied} onClick={() => void load().catch(() => undefined)} type="button">{copy.refresh}</button>
     {loading && <p role="status">{copy.loading}</p>}
     {cursor && !denied && <button className={button} disabled={loading || sending} onClick={() => void load(cursor).catch(() => undefined)} type="button">{copy.older}</button>}
     {!loading && !denied && !messages.length && <p>{copy.noMessages}</p>}
     <ol className="max-h-96 space-y-3 overflow-y-auto" aria-label={copy.threads}>
-      {messages.map((message) => <li key={message.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <p className="text-xs text-gray-500">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
-        <p className="whitespace-pre-wrap break-words text-sm text-gray-800">{message.body}</p>
+      {messages.map((message) => <li key={message.id} className="rounded-xl border border-line bg-surface-2 p-3">
+        <p className="text-xs text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
+        <p className="whitespace-pre-wrap break-words text-sm text-ink">{message.body}</p>
       </li>)}
     </ol>
     {draft.failure && <p role="alert">{copy[draft.failure]}</p>}
     {draft.failure === "mismatch" && !denied && <>
       <button className={button} type="button" onClick={() => setConfirmNewKey(true)}>{copy.prepareNew}</button>
-      {confirmNewKey && <div role="alertdialog" aria-label={copy.prepareNew} className="space-y-3 rounded-lg bg-yellow-100 p-3 text-yellow-800">
+      {confirmNewKey && <div role="alertdialog" aria-label={copy.prepareNew} className="space-y-3 rounded-lg bg-warn-tint p-3 text-warn-ink">
         <p>{copy.confirmWarning}</p>
         <button className={button} type="button" onClick={() => { onDraft({ body: draft.body }); setConfirmNewKey(false); }}>{copy.confirmNew}</button>
         <button className={button} type="button" onClick={() => setConfirmNewKey(false)}>{copy.cancel}</button>
@@ -316,7 +316,7 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
           onChange={(event) => onDraft({ body: event.target.value })} />
       </label>
       {draft.clientMessageId && !sending && draft.failure !== "mismatch" && <p>{copy.locked}</p>}
-      <button className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+      <button className="rounded-lg bg-primary px-4 py-2 font-medium text-white hover:bg-primary-hover disabled:opacity-50"
         disabled={sending || loading || draft.failure === "mismatch" || !draft.body.trim() || draft.body.trim().length > 4000} type="submit">{sending ? copy.sending : draft.clientMessageId ? copy.retry : copy.send}</button>
     </form>}
     {!thread.writable && !denied && <p>{copy.denied}</p>}

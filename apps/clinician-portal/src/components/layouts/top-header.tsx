@@ -2,30 +2,47 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HiOutlineUserPlus } from "react-icons/hi2";
+import { Icon, type IconName } from "@/components/ui/icons";
 
-const titles: Record<string, string> = {
-    "/dashboard": "Risk Radar",
-    "/patients": "Patient roster",
-    "/appointments": "Appointments",
-    "/review-queue": "Patient upload reviews",
-    "/medwatch": "ADR reviews",
-    "/messages": "Messages",
-    "/smart-import": "External record import",
-    "/settings": "Clinic settings",
-    "/settings/mfa": "Account security",
+const sections: Record<string, { title: string; icon: IconName }> = {
+    "/dashboard": { title: "Risk Radar", icon: "grid" },
+    "/patients": { title: "Patient roster", icon: "users" },
+    "/appointments": { title: "Appointments", icon: "cal" },
+    "/review-queue": { title: "Patient upload reviews", icon: "inbox" },
+    "/medwatch": { title: "ADR reviews", icon: "alert" },
+    "/messages": { title: "Messages", icon: "chat" },
+    "/smart-import": { title: "External record import", icon: "download" },
+    "/settings": { title: "Clinic settings", icon: "gear" },
+    "/settings/mfa": { title: "Account security", icon: "shield" },
 };
 
 export function TopHeader() {
     const pathname = usePathname();
-    const title = titles[pathname] ?? (pathname.endsWith("/upload") ? "Document upload" : "Patient detail");
-    const isPageTitle = pathname === "/dashboard" || pathname === "/patients" || pathname === "/settings";
+    const exact = sections[pathname];
+    const patientDetail = !exact && pathname.startsWith("/patients/");
+    const title = exact?.title ?? (pathname.endsWith("/upload") ? "Document upload" : "Patient detail");
     return (
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
-            {isPageTitle ? <h1 className="text-2xl font-bold text-slate-900">{title}</h1> : <p className="text-sm font-semibold text-slate-600">{title}</p>}
+        <header className="flex min-h-[60px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2.5 sm:px-7">
+            <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm">
+                {patientDetail ? (
+                    <>
+                        <Link href="/patients" className="inline-flex items-center gap-2 rounded-md text-muted transition-colors hover:text-ink">
+                            <Icon name="users" className="h-4 w-4" />
+                            Patient roster
+                        </Link>
+                        <Icon name="chevron" className="h-3.5 w-3.5 text-[#94A3B8]" />
+                        <p aria-current="page" className="truncate font-medium text-ink">{title}</p>
+                    </>
+                ) : (
+                    <p className="inline-flex items-center gap-2 font-medium text-ink-2">
+                        <Icon name={exact?.icon ?? "grid"} className="h-4 w-4 text-muted" />
+                        {title}
+                    </p>
+                )}
+            </nav>
             {pathname === "/dashboard" ? (
-                <Link href="/settings" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    <HiOutlineUserPlus aria-hidden="true" className="h-4 w-4" />
+                <Link href="/settings" className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-3.5 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
+                    <Icon name="plus" className="h-4 w-4" />
                     Patient invitations
                 </Link>
             ) : null}

@@ -2,23 +2,24 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { HiOutlineArrowRightOnRectangle, HiOutlineCalendarDays, HiOutlineChartBarSquare, HiOutlineChatBubbleLeftRight, HiOutlineClipboardDocumentList, HiOutlineCog6Tooth, HiOutlineExclamationTriangle, HiOutlineUsers } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
+import { Icon, type IconName } from "@/components/ui/icons";
 import { clearStoredSession } from "@/services/auth-session";
+import { readStoredClinicContext } from "@/services/clinic-context";
 import { api } from "@/services/api";
 import { logout } from "@/store/slices/auth-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import { ClinicianRole, PortalUserRole } from "@/types";
 
-const primaryNavigation = [
-    { href: "/dashboard", icon: HiOutlineChartBarSquare, label: "Risk Radar" },
-    { href: "/patients", icon: HiOutlineUsers, label: "Patient Roster" },
-    { href: "/appointments", icon: HiOutlineCalendarDays, label: "Appointments" },
-    { href: "/review-queue", icon: HiOutlineClipboardDocumentList, label: "Review Queue" },
-    { href: "/medwatch", icon: HiOutlineExclamationTriangle, label: "ADR Reviews" },
-    { href: "/messages", icon: HiOutlineChatBubbleLeftRight, label: "Messages" },
+const primaryNavigation: { href: string; icon: IconName; label: string }[] = [
+    { href: "/dashboard", icon: "grid", label: "Risk Radar" },
+    { href: "/patients", icon: "users", label: "Patient Roster" },
+    { href: "/appointments", icon: "cal", label: "Appointments" },
+    { href: "/review-queue", icon: "inbox", label: "Review Queue" },
+    { href: "/medwatch", icon: "alert", label: "ADR Reviews" },
+    { href: "/messages", icon: "chat", label: "Messages" },
 ];
 
 interface SidebarClinicianProfile {
@@ -32,14 +33,36 @@ type SidebarRole = ClinicianRole | typeof PortalUserRole.CLINICIAN;
 function getRoleMeta(role: SidebarRole) {
     switch (role) {
         case ClinicianRole.ADMIN:
-            return { label: "Clinic Admin", tone: "bg-blue-500/20 text-blue-200" };
+            return { label: "Clinic Admin" };
         case ClinicianRole.NURSE:
-            return { label: "Nurse / MA", tone: "bg-purple-500/20 text-purple-200" };
+            return { label: "Nurse / MA" };
         case ClinicianRole.PROVIDER:
-            return { label: "Provider", tone: "bg-emerald-500/20 text-emerald-200" };
+            return { label: "Provider" };
         default:
-            return { label: "Clinician", tone: "bg-slate-500/20 text-slate-200" };
+            return { label: "Clinician" };
     }
+}
+
+function noopSubscribe() {
+    return () => undefined;
+}
+
+function storedClinicName() {
+    try { return readStoredClinicContext()?.clinicName ?? null; } catch { return null; }
+}
+
+function NavItem({ href, icon, label, active, count }: { href: string; icon: IconName; label: string; active: boolean; count?: number }) {
+    return (
+        <Link
+            aria-current={active ? "page" : undefined}
+            className={`group flex h-[38px] shrink-0 items-center gap-2.5 whitespace-nowrap rounded-[10px] px-2.5 text-sm transition-colors duration-[160ms] ${active ? "bg-rail-active font-medium text-rail-ink" : "text-rail-muted hover:bg-white/5 hover:text-rail-ink"}`}
+            href={href}
+        >
+            <Icon name={icon} className={`h-[18px] w-[18px] shrink-0 ${active ? "text-rail-accent" : "text-rail-muted group-hover:text-rail-ink"}`} />
+            <span className="flex-1">{label}</span>
+            {count ? <span className={`ml-auto font-mono text-xs ${active ? "text-[#93C5FD]" : "text-rail-faint"}`}>{count}</span> : null}
+        </Link>
+    );
 }
 
 export function Sidebar() {
@@ -48,7 +71,10 @@ export function Sidebar() {
     const dispatch = useDispatch<AppDispatch>();
     const user = useSelector((state: RootState) => state.auth.user);
     const token = useSelector((state: RootState) => state.auth.accessToken);
+    // Counts come from data the dashboard already loaded; the sidebar never fetches its own.
+    const pendingAdr = useSelector((state: RootState) => state.dashboard?.summary?.pending_adr_reviews);
     const [profile, setProfile] = useState<SidebarClinicianProfile | null>(null);
+    const clinicName = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
 
     useEffect(() => {
         let isMounted = true;
@@ -88,6 +114,7 @@ export function Sidebar() {
         .map((part) => part.charAt(0))
         .join("")
         .toUpperCase() || "CL";
+    const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
     const handleLogout = () => {
         clearStoredSession();
@@ -96,62 +123,43 @@ export function Sidebar() {
     };
 
     return (
-        <aside className="flex shrink-0 flex-col bg-slate-900 text-white md:w-64 md:overflow-y-auto">
-            <div className="hidden border-b border-slate-800 px-6 py-5 md:block">
-                <p className="flex items-center gap-2.5 text-xl font-semibold tracking-tight">
-                    <Image src="/brand/mark-sidebar.svg" alt="" width={28} height={28} />
-                    <span>MediAgent<span className="text-blue-400">Pro</span></span>
-                </p>
+        <aside className="flex shrink-0 flex-col border-white/10 bg-rail text-rail-ink md:h-dvh md:w-[232px] md:overflow-y-auto md:border-r md:px-3.5 md:py-5">
+            <div className="hidden items-center gap-2.5 px-2 pb-[22px] md:flex">
+                <Image src="/brand/mark-sidebar.svg" alt="" width={30} height={30} className="rounded-md" />
+                <span className="text-[17px] font-semibold tracking-[-0.01em]">MediAgent<span className="text-rail-accent">Pro</span></span>
             </div>
 
-            <nav aria-label="Clinician navigation" className="flex gap-2 overflow-x-auto px-3 py-2 md:block md:flex-1 md:space-y-2 md:px-4 md:py-6">
-                {primaryNavigation.map((item) => {
-                    const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                    const Icon = item.icon;
+            <nav aria-label="Clinician navigation" className="flex gap-1 overflow-x-auto px-3 py-2 md:flex-1 md:flex-col md:gap-0.5 md:overflow-visible md:p-0">
+                {primaryNavigation.map((item) => (
+                    <NavItem key={item.href} {...item} active={isActive(item.href)} count={item.href === "/medwatch" ? pendingAdr : undefined} />
+                ))}
 
-                    return (
-                        <Link
-                            aria-current={active ? "page" : undefined}
-                            className={`flex shrink-0 items-center gap-3 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-medium transition ${active ? "bg-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}
-                            href={item.href}
-                            key={item.href}
-                        >
-                            <Icon aria-hidden="true" className="h-5 w-5" />
-                            <span>{item.label}</span>
-                        </Link>
-                    );
-                })}
-
-                <div className="shrink-0 md:border-t md:border-slate-800 md:pt-4">
-                    <p className="hidden px-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-400 md:block">Administration</p>
-                    <Link
-                        aria-current={pathname.startsWith("/settings") ? "page" : undefined}
-                        className={`flex items-center gap-3 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-medium transition md:mt-3 ${pathname.startsWith("/settings") ? "bg-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}
-                        href="/settings"
-                    >
-                        <HiOutlineCog6Tooth aria-hidden="true" className="h-5 w-5" />
-                        <span>Clinic Settings</span>
-                    </Link>
+                <div className="flex shrink-0 md:block">
+                    <p className="hidden px-2.5 pb-2 pt-[18px] font-mono text-[11px] uppercase tracking-[0.08em] text-rail-faint md:block">Administration</p>
+                    <NavItem href="/settings" icon="gear" label="Clinic Settings" active={pathname.startsWith("/settings")} />
                 </div>
             </nav>
 
-            <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-3 py-1 md:block md:px-4 md:py-4">
-                <div role="group" aria-label="Signed-in clinician" className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 md:bg-slate-800 md:px-3 md:py-3">
-                    <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 text-sm font-semibold md:flex">
+            <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3 py-2 md:mt-4 md:flex-col md:items-stretch md:border-t-0 md:p-0">
+                <div role="group" aria-label="Signed-in clinician" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1 py-1 md:bg-white/5 md:p-2.5">
+                    <div aria-hidden="true" className="hidden h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#1E293B] text-[13px] font-semibold md:flex">
                         {initials}
                     </div>
                     <div className="min-w-0">
-                        <p className="break-words text-sm font-medium text-white">{displayName || "Clinician"}</p>
-                        <p className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${roleMeta.tone}`}>{roleMeta.label}</p>
-                        <p className="mt-1 hidden truncate text-[11px] text-slate-400 md:block">{email}</p>
+                        <p className="break-words text-[13px] font-semibold leading-tight text-rail-ink">{displayName || "Clinician"}</p>
+                        <p className="mt-0.5 text-xs leading-tight text-[#8B9AB3]">
+                            <span>{roleMeta.label}</span>
+                            {clinicName ? <span className="hidden md:inline"> · {clinicName}</span> : null}
+                        </p>
+                        <p className="mt-1 hidden truncate text-[11px] text-rail-faint md:block">{email}</p>
                     </div>
                 </div>
                 <button
-                    className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white md:mt-3 md:w-full md:border md:border-slate-700"
+                    className="ma-press flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-white/10 px-3 text-sm text-rail-muted hover:bg-white/5 hover:text-rail-ink md:w-full"
                     onClick={handleLogout}
                     type="button"
                 >
-                    <HiOutlineArrowRightOnRectangle className="h-4 w-4" />
+                    <Icon name="logout" className="h-4 w-4" />
                     Logout
                 </button>
             </div>

@@ -103,19 +103,19 @@ export function AppointmentOfferForm({
         className="space-y-4"
       >
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-ink">
             {previous ? "Offer new times" : "Offer appointment times"}
           </h2>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-ink-2">
             Enter 2–4 options in <strong>{timezone}</strong>. The patient
             chooses one.
           </p>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-ink-2">
             Offers expire after seven days. Each time is unavailable once it
             starts.
           </p>
           {previous && (
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-ink-2">
               This creates a new offer and keeps the previous response and note.
             </p>
           )}
@@ -170,10 +170,10 @@ export function AppointmentOfferForm({
               value={duration}
               onChange={(event) => setDuration(event.target.value)}
             />
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-ink-2">
               Appointment type
               <select
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-line-strong px-3 py-2"
                 value={type}
                 onChange={(event) =>
                   setType(event.target.value as Appointment["appointmentType"])
@@ -202,7 +202,7 @@ export function AppointmentOfferForm({
           </Button>
         </fieldset>
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-risk-ink">
             {error}
           </p>
         )}

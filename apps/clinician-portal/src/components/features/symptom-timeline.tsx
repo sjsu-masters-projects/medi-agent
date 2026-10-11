@@ -66,9 +66,9 @@ function CustomTooltip({
     if (!point) return null;
 
     return (
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg">
-            <p className="mb-1 text-xs font-semibold text-gray-500">{point.date}</p>
-            <p className="text-sm font-bold text-gray-900 capitalize">{point.symptom}</p>
+        <div className="rounded-xl border border-line bg-surface px-4 py-3 shadow-lg">
+            <p className="mb-1 text-xs font-semibold text-muted">{point.date}</p>
+            <p className="text-sm font-bold text-ink capitalize">{point.symptom}</p>
             <p
                 className="text-sm font-semibold"
                 style={{ color: severityColor(point.severity) }}
@@ -76,7 +76,7 @@ function CustomTooltip({
                 Severity: {point.severity}/10
             </p>
             {point.flagged && (
-                <p className="mt-1 text-xs font-medium text-red-600">⚠ ADR flagged</p>
+                <p className="mt-1 text-xs font-medium text-risk-ink">⚠ ADR flagged</p>
             )}
         </div>
     );
@@ -87,7 +87,7 @@ export function SymptomTimeline({ data }: SymptomTimelineProps) {
 
     if (chartData.length === 0) {
         return (
-            <div className="flex h-40 items-center justify-center text-sm text-gray-400">
+            <div className="flex h-40 items-center justify-center text-sm text-muted">
                 No symptom reports recorded
             </div>
         );
@@ -130,15 +130,15 @@ export function SymptomTimeline({ data }: SymptomTimelineProps) {
             </ResponsiveContainer>
 
             {/* Legend */}
-            <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500">
+            <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted">
                 <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Mild (1–4)
+                    <span className="inline-block h-2 w-2 rounded-full bg-ok" /> Mild (1–4)
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-full bg-amber-500" /> Moderate (5–7)
+                    <span className="inline-block h-2 w-2 rounded-full bg-warn" /> Moderate (5–7)
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-full bg-red-500" /> Severe (8–10)
+                    <span className="inline-block h-2 w-2 rounded-full bg-risk" /> Severe (8–10)
                 </span>
             </div>
         </div>

@@ -34,18 +34,18 @@ function formatTimestamp(value: string) {
 
 function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
     if (item.evidence.length === 0) {
-        return <p className="text-sm text-gray-500">No patient-grounded evidence was captured.</p>;
+        return <p className="text-sm text-muted">No patient-grounded evidence was captured.</p>;
     }
 
     return (
         <ul className="space-y-3">
             {item.evidence.map((entry) => (
                 <li
-                    className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                    className="rounded-lg border border-line bg-surface-2 p-3"
                     key={entry.question}
                 >
                     <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-ink">
                             {questionLabel(entry.question)}
                         </p>
                         <Badge variant={entry.answer === "yes" ? "success" : "neutral"}>
@@ -53,7 +53,7 @@ function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
                         </Badge>
                     </div>
                     {entry.evidence ? (
-                        <blockquote className="mt-2 border-l-2 border-blue-200 pl-3 text-sm text-gray-700">
+                        <blockquote className="mt-2 border-l-2 border-primary-line pl-3 text-sm text-ink-2">
                             “{entry.evidence}”
                         </blockquote>
                     ) : null}
@@ -80,10 +80,10 @@ export function ADRReviewCard({
             <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
                 <div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold text-gray-900">{patientName}</h2>
+                        <h2 className="text-lg font-semibold text-ink">{patientName}</h2>
                         <Badge variant="warning">Awaiting review</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-muted">
                         Captured {formatTimestamp(item.createdAt)}
                     </p>
                 </div>
@@ -94,33 +94,33 @@ export function ADRReviewCard({
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-                <section className="rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-center gap-2 text-gray-900">
-                        <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-blue-600" />
+                <section className="rounded-lg border border-line p-4">
+                    <div className="flex items-center gap-2 text-ink">
+                        <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-primary" />
                         <h3 className="text-sm font-semibold">Reported symptom</h3>
                     </div>
-                    <p className="mt-3 text-sm font-medium text-gray-900">{item.symptom}</p>
-                    <p className="mt-1 text-xs text-gray-500">Severity {item.severity}/10</p>
+                    <p className="mt-3 text-sm font-medium text-ink">{item.symptom}</p>
+                    <p className="mt-1 text-xs text-muted">Severity {item.severity}/10</p>
                     {item.onset ? (
-                        <p className="mt-2 text-sm text-gray-700">Onset: {item.onset}</p>
+                        <p className="mt-2 text-sm text-ink-2">Onset: {item.onset}</p>
                     ) : null}
                 </section>
-                <section className="rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-center gap-2 text-gray-900">
-                        <HiOutlineBeaker className="h-5 w-5 text-blue-600" />
+                <section className="rounded-lg border border-line p-4">
+                    <div className="flex items-center gap-2 text-ink">
+                        <HiOutlineBeaker className="h-5 w-5 text-primary" />
                         <h3 className="text-sm font-semibold">Suspect medication</h3>
                     </div>
-                    <p className="mt-3 text-sm font-medium text-gray-900">
+                    <p className="mt-3 text-sm font-medium text-ink">
                         {item.suspectMedicationName}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-muted">
                         Patient-reported association; not a clinician decision
                     </p>
                 </section>
             </div>
 
             <section>
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">
+                <h3 className="mb-3 text-sm font-semibold text-ink">
                     Patient-grounded Naranjo evidence
                 </h3>
                 <EvidenceList item={item} />
@@ -128,7 +128,7 @@ export function ADRReviewCard({
 
             {missingQuestions.length > 0 ? (
                 <section>
-                    <h3 className="text-sm font-semibold text-gray-900">Missing information</h3>
+                    <h3 className="text-sm font-semibold text-ink">Missing information</h3>
                     <div className="mt-2 flex flex-wrap gap-2">
                         {missingQuestions.map((question) => (
                             <Badge key={question} variant="neutral">
@@ -140,10 +140,10 @@ export function ADRReviewCard({
             ) : null}
 
             {item.lastReviewAction === "request_information" ? (
-                <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                    <h3 className="text-sm font-semibold text-blue-900">Information requested</h3>
+                <section className="rounded-lg border border-primary-line bg-primary-tint p-4">
+                    <h3 className="text-sm font-semibold text-ai-ink">Information requested</h3>
                     {item.reviewNote ? (
-                        <p className="mt-1 text-sm text-blue-800">{item.reviewNote}</p>
+                        <p className="mt-1 text-sm text-ai-ink">{item.reviewNote}</p>
                     ) : null}
                 </section>
             ) : null}
@@ -154,13 +154,13 @@ export function ADRReviewCard({
                 submitting={submitting}
             />
 
-            <div className="flex flex-col justify-between gap-3 border-t border-gray-200 pt-4 md:flex-row md:items-center">
-                <p className="max-w-3xl text-xs text-gray-500">
+            <div className="flex flex-col justify-between gap-3 border-t border-line pt-4 md:flex-row md:items-center">
+                <p className="max-w-3xl text-xs text-muted">
                     Decision support only. Review the source evidence before making a clinical
                     determination or generating a MedWatch draft.
                 </p>
                 <Link
-                    className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary"
                     href={`/patients/${item.patientId}`}
                 >
                     Open patient record

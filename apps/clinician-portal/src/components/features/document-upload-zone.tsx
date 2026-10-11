@@ -286,11 +286,11 @@ export function DocumentUploadZone({
   return (
     <div className="space-y-4">
       <label className="block" htmlFor="upload-document-type">
-        <span className="mb-1 block text-sm font-medium text-gray-700">
+        <span className="mb-1 block text-sm font-medium text-ink-2">
           Document type
         </span>
         <select
-          className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
           id="upload-document-type"
           onChange={(e) => setDocumentType(parseDocumentType(e.target.value))}
           value={documentType}
@@ -307,8 +307,8 @@ export function DocumentUploadZone({
       <div
         className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 transition-colors ${
           dragging
-            ? "border-blue-400 bg-blue-50"
-            : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/30"
+            ? "border-primary bg-primary-tint"
+            : "border-line-strong bg-surface-2 hover:border-primary-line hover:bg-primary-tint/30"
         }`}
         id="clinician-upload-zone"
         onDragLeave={handleDragLeave}
@@ -325,14 +325,14 @@ export function DocumentUploadZone({
       >
         <HiOutlineCloudArrowUp
           aria-hidden="true"
-          className={`h-10 w-10 ${dragging ? "text-blue-500" : "text-gray-400"}`}
+          className={`h-10 w-10 ${dragging ? "text-primary" : "text-muted"}`}
         />
         <div className="text-center">
-          <p className="text-sm font-medium text-gray-700">
+          <p className="text-sm font-medium text-ink-2">
             Drop files here or{" "}
-            <span className="text-blue-600 underline">browse</span>
+            <span className="text-primary underline">browse</span>
           </p>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-muted">
             PDF, JPG, PNG, WebP, or TIFF — max {MAX_SIZE_MB}MB per file
           </p>
         </div>
@@ -350,7 +350,7 @@ export function DocumentUploadZone({
       </div>
 
       {validationError && (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-risk-ink" role="alert">
           {validationError}
         </p>
       )}
@@ -360,19 +360,19 @@ export function DocumentUploadZone({
         <ul aria-label="Files queued for upload" className="space-y-2">
           {queue.map((item) => (
             <li
-              className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3"
+              className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3"
               key={item.id}
             >
               <div className="flex items-center gap-3">
                 <HiOutlineDocumentText
                   aria-hidden="true"
-                  className="h-5 w-5 shrink-0 text-blue-500"
+                  className="h-5 w-5 shrink-0 text-primary"
                 />
                 <div>
-                  <p className="text-sm font-medium text-gray-800">
+                  <p className="text-sm font-medium text-ink">
                     {item.file.name}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-muted">
                     {(item.file.size / 1024).toFixed(1)} KB
                   </p>
                 </div>
@@ -381,21 +381,21 @@ export function DocumentUploadZone({
               <div className="flex items-center gap-3">
                 {/* Status pill */}
                 {item.status === UploadStatus.UPLOADING && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-ai-tint px-2.5 py-0.5 text-xs font-medium text-primary">
                     <span className="animate-pulse">●</span> Uploading
                   </span>
                 )}
                 {item.status === UploadStatus.DONE && (
-                  <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                  <span className="inline-flex items-center rounded-full bg-ok-tint px-2.5 py-0.5 text-xs font-medium text-ok-ink">
                     ✓ Done
                   </span>
                 )}
                 {item.status === UploadStatus.ERROR && (
                   <div className="text-right">
-                    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                    <span className="inline-flex items-center rounded-full bg-risk-tint px-2.5 py-0.5 text-xs font-medium text-risk-ink">
                       ✕ Failed
                     </span>
-                    <p className="mt-1 max-w-56 text-xs text-red-700" role="alert">
+                    <p className="mt-1 max-w-56 text-xs text-risk-ink" role="alert">
                       {item.error ?? "Upload failed. Please try again."}
                     </p>
                   </div>
@@ -405,7 +405,7 @@ export function DocumentUploadZone({
                 {item.status !== UploadStatus.UPLOADING && (
                   <button
                     aria-label={`Remove ${item.file.name}`}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    className="rounded p-1 text-muted hover:bg-sunken hover:text-ink-2"
                     onClick={() => removeFromQueue(item.id)}
                     type="button"
                   >
@@ -421,7 +421,7 @@ export function DocumentUploadZone({
       {/* Upload button */}
       {queue.some((item) => item.status === UploadStatus.PENDING) && (
         <button
-          className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
           disabled={uploading}
           id="clinician-upload-submit"
           onClick={handleUpload}

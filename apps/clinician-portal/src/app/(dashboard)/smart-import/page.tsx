@@ -144,15 +144,15 @@ export default function SmartImportPage() {
     };
 
     if (loading) {
-        return <main className="p-8 text-sm text-gray-600">Loading SMART import…</main>;
+        return <main className="p-8 text-sm text-ink-2">Loading SMART import…</main>;
     }
 
     return (
         <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-10">
             <section>
-                <p className="text-sm font-medium text-blue-700">Interoperability demo</p>
-                <h1 className="mt-1 text-3xl font-bold text-slate-900">Import SMART sandbox records</h1>
-                <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                <p className="text-sm font-medium text-primary">Interoperability demo</p>
+                <h1 className="mt-1 text-3xl font-bold text-ink">Import SMART sandbox records</h1>
+                <p className="mt-2 max-w-2xl text-sm text-ink-2">
                     Choose an assigned synthetic patient, then import sandbox records as pending facts.
                     Nothing becomes part of the clinical record until clinician review.
                 </p>
@@ -160,12 +160,12 @@ export default function SmartImportPage() {
 
             <Card className="space-y-5 p-5">
                 <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-800" htmlFor="smart-patient">
+                    <label className="mb-1 block text-sm font-medium text-ink" htmlFor="smart-patient">
                         Local synthetic patient
                     </label>
                     <select
                         id="smart-patient"
-                        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                        className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm"
                         disabled={starting}
                         value={patientId}
                         onChange={(event) => setPatientId(event.target.value)}
@@ -178,13 +178,13 @@ export default function SmartImportPage() {
                     </select>
                 </div>
                 {hasEhrLaunch ? (
-                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                    <div className="rounded-md border border-primary-line bg-primary-tint p-3 text-sm text-ai-ink">
                         EHR launch context received. Your local clinician session and selected patient still
                         control whether this sandbox import can begin.
                     </div>
                 ) : (
-                    <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                        <p className="font-medium text-slate-900">SMART Health IT standalone sandbox</p>
+                    <div className="rounded-md border border-line bg-surface-2 p-3 text-sm text-ink-2">
+                        <p className="font-medium text-ink">SMART Health IT standalone sandbox</p>
                         <p className="mt-1">
                             No EHR launch context is active. This starts a fresh session and does not reuse a
                             previously selected sandbox patient or encounter. Choose one external synthetic
@@ -192,17 +192,17 @@ export default function SmartImportPage() {
                         </p>
                     </div>
                 )}
-                {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+                {error && <p role="alert" className="text-sm text-risk-ink">{error}</p>}
                 {launchStatus && (
                     <div
                         aria-live="polite"
-                        className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"
+                        className="flex items-start gap-3 rounded-md border border-primary-line bg-primary-tint p-3 text-sm text-ai-ink"
                         role="status"
                     >
-                        <HiOutlineArrowPath aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-blue-700" />
+                        <HiOutlineArrowPath aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary" />
                         <div>
                             <p className="font-medium">{launchStatus}</p>
-                            <p className="mt-1 text-blue-900">This can take a few seconds. Keep this tab open; the SMART sandbox will open automatically.</p>
+                            <p className="mt-1 text-ai-ink">This can take a few seconds. Keep this tab open; the SMART sandbox will open automatically.</p>
                         </div>
                     </div>
                 )}
@@ -214,30 +214,30 @@ export default function SmartImportPage() {
             {handoff && (
                 <Card className="space-y-4 p-5">
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-900">
+                        <h2 className="text-lg font-semibold text-ink">
                             {handoff.import_record.resource_count === 0
                                 ? "No new SMART records to review"
                                 : "Import ready for review"}
                         </h2>
                         {handoff.import_record.resource_count === 0 ? (
-                            <p className="text-sm text-slate-600">
+                            <p className="text-sm text-ink-2">
                                 This may be a repeat of a previously imported sandbox record, or the selected
                                 sandbox patient has no supported records. No local clinical truth was changed.
                             </p>
                         ) : (
-                            <p className="text-sm text-slate-600">
+                            <p className="text-sm text-ink-2">
                                 {handoff.import_record.resource_count} source resources created {handoff.import_record.candidate_fact_count} pending facts.
                             </p>
                         )}
                     </div>
                     {handoff.import_record.warnings.length > 0 && (
-                        <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800">
+                        <ul className="list-disc space-y-1 pl-5 text-sm text-warn-ink">
                             {handoff.import_record.warnings.map((warning) => <li key={warning}>{warning}</li>)}
                         </ul>
                     )}
-                    <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
+                    <ul className="divide-y divide-line rounded-md border border-line">
                         {handoff.resources.map((resource) => (
-                            <li key={resource.id} className="px-3 py-2 text-sm text-slate-700">
+                            <li key={resource.id} className="px-3 py-2 text-sm text-ink-2">
                                 {resource.resource_type}{resource.external_resource_id ? ` · ${resource.external_resource_id}` : ""}
                             </li>
                         ))}

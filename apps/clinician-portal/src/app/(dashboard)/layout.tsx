@@ -9,11 +9,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return (
         <Suspense fallback={null}>
             <ProtectedRoute>
-                <div className="flex h-dvh flex-col overflow-hidden md:flex-row">
+                <div className="flex h-dvh flex-col overflow-hidden bg-background md:flex-row">
                     <Sidebar />
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                         <TopHeader />
-                        <main className="min-h-0 flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6">{children}</main>
+                        <main className="min-h-0 flex-1 overflow-y-auto bg-background px-4 py-5 sm:px-7 sm:py-6">{children}</main>
                     </div>
                 </div>
             </ProtectedRoute>

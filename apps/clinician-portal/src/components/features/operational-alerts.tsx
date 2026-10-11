@@ -56,16 +56,16 @@ export function OperationalAlerts() {
         <div className="mx-auto max-w-7xl space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-semibold text-slate-900">
+                    <h2 className="text-lg font-semibold text-ink">
                         Operational alerts
                     </h2>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-muted">
                         Legacy operational notifications, separate from patient conversations.
                     </p>
                 </div>
                 <button
                     disabled={loading}
-                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    className="flex items-center gap-2 rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2"
                     onClick={() => void loadMessages()}
                     type="button"
                 >
@@ -76,32 +76,32 @@ export function OperationalAlerts() {
 
             <section className="grid gap-4 md:grid-cols-3">
                 <Card className="flex items-center gap-3 px-5 py-4" padding="sm">
-                    <div className="rounded-full bg-blue-100 p-3 text-blue-600">
+                    <div className="rounded-full bg-ai-tint p-3 text-primary">
                         <HiOutlinePaperAirplane className="h-5 w-5" />
                     </div>
                     <div>
-                        <p className="text-sm text-slate-500">Total sent</p>
-                        <p className="text-2xl font-bold text-slate-900">{messages.length}</p>
+                        <p className="text-sm text-muted">Total sent</p>
+                        <p className="text-2xl font-bold text-ink">{messages.length}</p>
                     </div>
                 </Card>
                 <Card className="flex items-center gap-3 px-5 py-4" padding="sm">
-                    <div className="rounded-full bg-emerald-100 p-3 text-emerald-600">
+                    <div className="rounded-full bg-ok-tint p-3 text-ok-ink">
                         <HiOutlineChatBubbleLeftRight className="h-5 w-5" />
                     </div>
                     <div>
-                        <p className="text-sm text-slate-500">In-app</p>
-                        <p className="text-2xl font-bold text-slate-900">
+                        <p className="text-sm text-muted">In-app</p>
+                        <p className="text-2xl font-bold text-ink">
                             {messages.filter((m) => m.channel === "in_app").length}
                         </p>
                     </div>
                 </Card>
                 <Card className="flex items-center gap-3 px-5 py-4" padding="sm">
-                    <div className="rounded-full bg-amber-100 p-3 text-amber-600">
+                    <div className="rounded-full bg-warn-tint p-3 text-warn-ink">
                         <HiOutlineEnvelope className="h-5 w-5" />
                     </div>
                     <div>
-                        <p className="text-sm text-slate-500">Email</p>
-                        <p className="text-2xl font-bold text-slate-900">
+                        <p className="text-sm text-muted">Email</p>
+                        <p className="text-2xl font-bold text-ink">
                             {messages.filter((m) => m.channel === "email").length}
                         </p>
                     </div>
@@ -110,7 +110,7 @@ export function OperationalAlerts() {
 
             {error && (
                 <div
-                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                    className="rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
                     role="alert"
                 >
                     {error}
@@ -118,9 +118,9 @@ export function OperationalAlerts() {
             )}
 
             <Card className="overflow-hidden px-0 py-0" padding="sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                    <h2 className="text-lg font-semibold text-slate-900">Operational alert history</h2>
-                    <p className="text-sm text-slate-500">
+                <div className="border-b border-line px-6 py-5">
+                    <h2 className="text-lg font-semibold text-ink">Operational alert history</h2>
+                    <p className="text-sm text-muted">
                         Ordered by most recent. These notifications are not conversation replies.
                     </p>
                 </div>
@@ -132,12 +132,12 @@ export function OperationalAlerts() {
                         ))}
                     </div>
                 ) : error && messages.length === 0 ? (
-                    <p className="px-6 py-10 text-sm text-slate-600">Alert history is unavailable. Refresh to check for notifications.</p>
+                    <p className="px-6 py-10 text-sm text-ink-2">Alert history is unavailable. Refresh to check for notifications.</p>
                 ) : messages.length === 0 ? (
-                    <div className="flex h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-slate-500">
+                    <div className="flex h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-muted">
                         <HiOutlineChatBubbleLeftRight className="h-10 w-10 text-slate-300" />
                         <div>
-                            <p className="text-base font-semibold text-slate-900">
+                            <p className="text-base font-semibold text-ink">
                                 No operational alerts yet
                             </p>
                             <p className="text-sm">
@@ -146,13 +146,13 @@ export function OperationalAlerts() {
                         </div>
                     </div>
                 ) : (
-                    <div className="divide-y divide-slate-200">
+                    <div className="divide-y divide-line">
                         {messages.map((msg) => (
                             <div className="px-6 py-5" key={msg.id}>
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <p className="text-base font-semibold text-slate-900">
+                                            <p className="text-base font-semibold text-ink">
                                                 {formatPatientName(msg)}
                                             </p>
                                             <Badge variant={channelVariant(msg.channel)}>
@@ -160,17 +160,17 @@ export function OperationalAlerts() {
                                             </Badge>
                                         </div>
                                         {msg.subject && (
-                                            <p className="text-sm font-medium text-slate-700">
+                                            <p className="text-sm font-medium text-ink-2">
                                                 {msg.subject}
                                             </p>
                                         )}
-                                        <p className="max-w-3xl break-words text-sm text-slate-600">
+                                        <p className="max-w-3xl break-words text-sm text-ink-2">
                                             {msg.body.length > 200
                                                 ? `${msg.body.slice(0, 200)}…`
                                                 : msg.body}
                                         </p>
-                                        {msg.body.length > 200 ? <details className="max-w-3xl text-sm text-slate-600"><summary className="cursor-pointer py-2 font-medium">Read full alert</summary><p className="whitespace-pre-wrap break-words">{msg.body}</p></details> : null}
-                                        <p className="text-xs text-slate-400">
+                                        {msg.body.length > 200 ? <details className="max-w-3xl text-sm text-ink-2"><summary className="cursor-pointer py-2 font-medium">Read full alert</summary><p className="whitespace-pre-wrap break-words">{msg.body}</p></details> : null}
+                                        <p className="text-xs text-muted">
                                             {new Date(msg.createdAt).toLocaleString()}
                                         </p>
                                     </div>

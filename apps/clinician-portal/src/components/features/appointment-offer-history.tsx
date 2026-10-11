@@ -75,7 +75,7 @@ export function AppointmentOfferHistory({
         return (
           <Card key={representative.proposalGroupId ?? representative.id}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold text-gray-900">
+              <h3 className="font-semibold text-ink">
                 {representative.reason ||
                   (representative.proposalGroupId
                     ? "Appointment offer"
@@ -91,11 +91,11 @@ export function AppointmentOfferHistory({
                 {LABELS[representative.status]}
               </Badge>
             </div>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-ink-2">
               {representative.durationMinutes} minutes
               {representative.location ? ` · ${representative.location}` : ""}
             </p>
-            <ul className="mt-3 space-y-2 text-sm text-gray-700">
+            <ul className="mt-3 space-y-2 text-sm text-ink-2">
               {rows.map((row) => (
                 <li key={row.id}>
                   {formatSchedulingTime(row.scheduledAt, timezone)} · {timezone}{" "}
@@ -111,7 +111,7 @@ export function AppointmentOfferHistory({
                   )}
                   {row.status === AppointmentStatus.PROPOSED &&
                     row.proposalExpiresAt && (
-                      <span className="block text-xs text-gray-500">
+                      <span className="block text-xs text-muted">
                         Available until{" "}
                         {formatSchedulingTime(row.proposalExpiresAt, timezone)}{" "}
                         · {timezone}
@@ -121,7 +121,7 @@ export function AppointmentOfferHistory({
               ))}
             </ul>
             {note && (
-              <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
+              <p className="mt-3 whitespace-pre-wrap text-sm text-ink-2">
                 <strong>Patient note:</strong> {note}
               </p>
             )}
