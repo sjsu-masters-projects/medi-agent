@@ -44,7 +44,7 @@ export default function ChatPage() {
     const noraOpenRef = useRef<HTMLButtonElement | null>(null);
     const previousInbox = useRef(inbox);
     const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
-        dismissDocumentContext, dismissSafetyNotice, documentContext, error, handleHandsFreeToggle,
+        dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
         startNewConversation, voiceError, voiceStatus } = usePatientChatSession(locale);
@@ -141,6 +141,7 @@ export default function ChatPage() {
                 </div>
                 <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
+            {!documentContext && documentUnavailable && <p className="flex items-start gap-2 rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] leading-snug text-ink-2" role="status"><Icon name="note" className="mt-px h-4 w-4 shrink-0 text-muted" />{controls.documentUnavailable}</p>}
             {error && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.chatError}</p>}
             {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <Icon name="alert" className="mt-px h-5 w-5 shrink-0" />

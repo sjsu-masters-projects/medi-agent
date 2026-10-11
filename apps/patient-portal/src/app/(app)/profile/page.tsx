@@ -32,7 +32,7 @@ interface PatientProfileResponse {
     first_name: string;
     last_name: string;
     date_of_birth: string;
-    gender?: Patient["gender"];
+    gender?: Patient["gender"] | null;
     preferred_language: Locale;
     timezone?: string;
     created_at: string;
@@ -64,7 +64,7 @@ function mapPatient(profile: PatientProfileResponse): Patient {
         dateOfBirth: profile.date_of_birth,
         email: profile.email,
         firstName: profile.first_name,
-        gender: profile.gender,
+        gender: profile.gender ?? undefined,
         id: profile.id,
         lastName: profile.last_name,
         preferredLanguage: normalizeLocale(profile.preferred_language),
@@ -223,7 +223,8 @@ function ProfilePageContent() {
                     first_name: editDraft.firstName.trim(),
                     last_name: editDraft.lastName.trim(),
                     preferred_language: editDraft.preferredLanguage,
-                    ...(editDraft.gender ? { gender: editDraft.gender } : {}),
+                    // Always sent so "Not specified" clears a saved value.
+                    gender: editDraft.gender || null,
                 },
                 { token: accessToken },
             );

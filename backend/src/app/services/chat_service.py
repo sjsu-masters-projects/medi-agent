@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from typing import Any
+from uuid import UUID
 
 from supabase import Client
 
@@ -228,9 +229,13 @@ class ChatService:
             "last_route": str(updates.get("last_route") or "triage"),
             "summary": str(updates.get("summary") or ""),
             "state_json": updates.get("state_json") or {},
-            "document_context": updates.get("document_context"),
             "status": str(updates.get("status") or "active"),
         }
+        # The document a conversation is focused on changes only when it is attached,
+        # dismissed or found unavailable (see `set_document_context`). Writing it on every
+        # turn let a turn resurrect a document the patient had already dismissed.
+        if "document_context" in updates:
+            payload["document_context"] = updates.get("document_context")
 
         update_query = (
             self.db.table("chat_conversation_states")
@@ -265,6 +270,32 @@ class ChatService:
                 **payload,
             },
         )
+
+    async def set_document_context(
+        self,
+        patient_id: str,
+        session_id: str,
+        document_context: dict[str, Any] | None,
+    ) -> None:
+        """Attach a document to one conversation, or clear it with ``None``.
+
+        Scoped to the patient's own conversation row; the document itself must already
+        have been read through `get_document_context` for the same patient.
+        """
+        await self._execute(
+            self.db.table("chat_conversation_states")
+            .update({"document_context": document_context})
+            .eq("patient_id", patient_id)
+            .eq("session_id", normalize_session_id(session_id))
+        )
+
+    async def get_document_context(
+        self,
+        patient_id: str,
+        document_id: str,
+    ) -> dict[str, Any] | None:
+        """The patient's own document as chat context, or None if it is not available."""
+        return await self._fetch_document_context(patient_id, document_id)
 
     async def save_symptom_report(
         self,
@@ -382,6 +413,12 @@ class ChatService:
         patient_id: str,
         document_id: str,
     ) -> dict[str, Any] | None:
+        # The id arrives from the connection URL or a saved conversation; a malformed one
+        # names no document rather than failing the whole connection in the database.
+        try:
+            document_id = str(UUID(str(document_id)))
+        except ValueError:
+            return None
         result = await self._execute(
             self.db.table("documents")
             .select("id, file_name, document_type, ai_summary, notes, parse_status")

@@ -17,7 +17,8 @@ import html
 import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+import unicodedata
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, ParamSpec, TypeVar
@@ -31,6 +32,7 @@ RXNAV = "https://rxnav.nlm.nih.gov/REST"
 DAILYMED = "https://dailymed.nlm.nih.gov/dailymed/services/v2"
 MEDLINEPLUS_CONNECT = "https://connect.medlineplus.gov/service"
 MEDLINEPLUS_SEARCH = "https://wsearch.nlm.nih.gov/ws/query"
+MEDLINEPLUS = "https://medlineplus.gov"
 RXNORM_SYSTEM = "2.16.840.1.113883.6.88"
 REQUEST_TIMEOUT = httpx.Timeout(6.0, connect=3.0)
 
@@ -38,6 +40,42 @@ SUMMARY_LIMIT = 6000
 SECTION_LIMIT = 6000
 MAX_RESPONSE_BYTES = 3_000_000
 NAME_SIMILARITY = 0.85
+TOPIC_SEARCH_HITS = 10
+PAGE_HEAD_BYTES = 32_768
+
+# MedlinePlus health topics: each language has its own search index, and a topic's page
+# in one language has a twin at the same slug in the other.
+_TOPIC_DATABASES = {"en-US": "healthTopics", "es-MX": "healthTopicsSpanish"}
+_TOPIC_PATHS = {"en-US": "/", "es-MX": "/spanish/"}
+_TOPIC_URL = re.compile(r"https://medlineplus\.gov/(spanish/)?([a-z0-9]+)\.html")
+_PAGE_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+# Joining words never decide whether a topic matches a condition name.
+_FILLER = frozenset(
+    "a an and at by for in of on or the to with con de del el en la las los para por su"
+    " sus un una y".split()
+)
+# Severity, course and side qualifiers (English, and Spanish unaccented), and "of the
+# knee"-style body sites. They are dropped for one retry, only when the name as written
+# matches no general topic.
+_QUALIFIERS = frozenset(
+    """mild moderate severe persistent intermittent episodic chronic acute recurrent
+    seasonal left right bilateral leve moderada moderado grave severa severo persistente
+    intermitente episodica episodico cronica cronico aguda agudo recurrente estacional
+    izquierda izquierdo derecha derecho""".split()
+)
+_BODY_SITE = re.compile(
+    r"\b(?:of|in)\s+(?:the\s+)?(?:(?:left|right|both)\s+)?"
+    r"(?:knee|hip|shoulder|hand|foot|feet|ankle|wrist|elbow|neck|back|spine)s?\b",
+    re.I,
+)
+# Title words (unaccented) for a narrower audience, a how-to, a treatment or a test. A
+# topic with one is chosen only when no general topic matches, unless the name says it.
+_NARROWING = frozenset(
+    """children child kids teens teen infants infant babies baby newborns newborn pregnancy
+    women men older seniors how prevent prevention lower medicines tests screening diet
+    surgery ninos adolescentes bebes embarazo mujer mujeres hombres mayores como prevenir
+    prevencion bajar medicinas medicamentos pruebas dieta cirugia""".split()
+)
 
 # FDA label sections by LOINC code. Dosage is deliberately absent: a label's dose ranges
 # are not this patient's prescription, and Nora must never present them as one. The
@@ -135,10 +173,14 @@ def plain_text(markup: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
-async def _get(client: httpx.AsyncClient, url: str, **params: Any) -> httpx.Response:
+async def _get(
+    client: httpx.AsyncClient, url: str, *, headers: Mapping[str, str] | None = None, **params: Any
+) -> httpx.Response:
     host = httpx.URL(url).host
     try:
-        response = await client.get(url, params=params or None, timeout=REQUEST_TIMEOUT)
+        response = await client.get(
+            url, params=params or None, headers=headers, timeout=REQUEST_TIMEOUT
+        )
         response.raise_for_status()
         if len(response.content) > MAX_RESPONSE_BYTES:
             raise httpx.DecodingError("response larger than the reference size limit")
@@ -220,16 +262,13 @@ async def medlineplus_medication(
     client: httpx.AsyncClient, rxcui: str, locale: str
 ) -> SourceText | None:
     """The MedlinePlus drug page summary for an RxNorm concept, in English or Spanish."""
-    response = await _get(
-        client,
-        MEDLINEPLUS_CONNECT,
-        **{
-            "mainSearchCriteria.v.cs": RXNORM_SYSTEM,
-            "mainSearchCriteria.v.c": rxcui,
-            "knowledgeResponseType": "application/json",
-            "informationRecipient.languageCode.c": "es" if locale == "es-MX" else "en",
-        },
-    )
+    query: dict[str, Any] = {
+        "mainSearchCriteria.v.cs": RXNORM_SYSTEM,
+        "mainSearchCriteria.v.c": rxcui,
+        "knowledgeResponseType": "application/json",
+        "informationRecipient.languageCode.c": "es" if locale == "es-MX" else "en",
+    }
+    response = await _get(client, MEDLINEPLUS_CONNECT, **query)
     entries = response.json().get("feed", {}).get("entry") or []
     # The drug's own page comes first; later entries are broader topics.
     for entry in entries:
@@ -246,31 +285,208 @@ async def medlineplus_medication(
 async def medlineplus_condition(
     client: httpx.AsyncClient, name: str, locale: str
 ) -> SourceText | None:
-    """The best-matching MedlinePlus health topic for a condition name.
+    """The MedlinePlus health topic for a condition name, in English or Spanish.
 
-    The top search hit is accepted only if its title or an alternate title shares a word
-    with the name asked about; otherwise a loosely related topic would be cached under it.
+    The name is looked up in the English topic index first and, when nothing there
+    matches, in the Spanish index, because records can hold either language. The other
+    language's page is then MedlinePlus's own twin of the topic found (``/<slug>.html`` and
+    ``/spanish/<slug>.html``), read from that language's index; it is never a translation.
+    No twin is a miss: English text is never returned as the Spanish topic.
     """
-    database = "healthTopicsSpanish" if locale == "es-MX" else "healthTopics"
-    response = await _get(client, MEDLINEPLUS_SEARCH, db=database, term=name, retmax=1)
+    wanted = "es-MX" if locale == "es-MX" else "en-US"
+    found_in = "en-US"
+    topic = await _matching_topic(client, name, found_in)
+    if topic is None:
+        found_in = "es-MX"
+        topic = await _matching_topic(client, name, found_in)
+    if topic is not None and found_in != wanted:
+        topic = await _twin_topic(client, topic, wanted)
+    if topic is None:
+        return None
+    return SourceText(title=topic.title, url=topic.url, summary=topic.summary[:SUMMARY_LIMIT])
+
+
+@dataclass(frozen=True)
+class _Topic:
+    """One health topic from a MedlinePlus search result."""
+
+    rank: int
+    url: str
+    slug: str
+    title: str
+    alt_titles: tuple[str, ...]
+    summary: str
+
+
+async def _search_topics(client: httpx.AsyncClient, locale: str, term: str) -> list[_Topic]:
+    """Up to ``TOPIC_SEARCH_HITS`` topics of one language's index, best ranked first."""
+    response = await _get(
+        client,
+        MEDLINEPLUS_SEARCH,
+        db=_TOPIC_DATABASES[locale],
+        term=term,
+        retmax=TOPIC_SEARCH_HITS,
+    )
     root = ElementTree.fromstring(response.content)
-    document = root.find("./list/document")
-    if document is None:
+    topics: list[_Topic] = []
+    for position, document in enumerate(root.findall("./list/document")):
+        address = _TOPIC_URL.fullmatch(document.get("url") or "")
+        # A page outside this language's topic path is not a topic of this index.
+        if address is None or bool(address[1]) != (locale == "es-MX"):
+            continue
+        fields: dict[str, list[str]] = {}
+        for content in document.findall("content"):
+            key = content.get("name") or ""
+            if key:
+                fields.setdefault(key, []).append(plain_text(content.text or ""))
+        title = next(iter(fields.get("title", [])), "").strip()
+        summary = next(iter(fields.get("FullSummary", [])), "").strip()
+        if not title or not summary:
+            continue
+        rank = document.get("rank") or ""
+        topics.append(
+            _Topic(
+                rank=int(rank) if rank.isdigit() else position,
+                url=address[0],
+                slug=address[2],
+                title=title,
+                alt_titles=tuple(alt for alt in fields.get("altTitle", []) if alt),
+                summary=summary,
+            )
+        )
+    return sorted(topics, key=lambda topic: topic.rank)
+
+
+async def _matching_topic(client: httpx.AsyncClient, name: str, locale: str) -> _Topic | None:
+    """The topic of one index that best matches a name, retrying once without qualifiers.
+
+    The index requires every word, so "mild persistent asthma" finds nothing and
+    "episodic migraine" finds only "Pain"; the retry asks for "asthma" and "migraine". It
+    runs only when the name as written has no acceptable general topic.
+    """
+    topic, general = best_topic(await _search_topics(client, locale, name), name)
+    if general:
+        return topic
+    simpler = without_qualifiers(name)
+    if simpler and simpler.casefold() != " ".join(name.casefold().split()):
+        retry, retry_general = best_topic(await _search_topics(client, locale, simpler), simpler)
+        if retry is not None and (retry_general or topic is None):
+            return retry
+    return topic
+
+
+async def _twin_topic(client: httpx.AsyncClient, topic: _Topic, locale: str) -> _Topic | None:
+    """The same topic's page in the other language, read from that language's index.
+
+    The index is searched with the topic's own title, and then with the twin page's title
+    (read from the page head only), and a result counts only when its URL is the twin's.
+    """
+    url = f"{MEDLINEPLUS}{_TOPIC_PATHS[locale]}{topic.slug}.html"
+    twin = await _topic_at(client, locale, topic.title, url)
+    if twin is None:
+        title = await _page_title(client, url)
+        if title and title != topic.title:
+            twin = await _topic_at(client, locale, title, url)
+    return twin
+
+
+async def _topic_at(client: httpx.AsyncClient, locale: str, term: str, url: str) -> _Topic | None:
+    found = await _search_topics(client, locale, term)
+    return next((topic for topic in found if topic.url == url), None)
+
+
+async def _page_title(client: httpx.AsyncClient, url: str) -> str | None:
+    """A topic page's own name, from its ``<title>``: "Eccema | Dermatitis | ..." -> "Eccema".
+
+    Only the head of the page is requested; its body text is never used. A page that does
+    not exist is a miss, not an outage.
+    """
+    try:
+        response = await _get(client, url, headers={"Range": f"bytes=0-{PAGE_HEAD_BYTES - 1}"})
+    except SourceUnavailableError as error:
+        cause = error.__cause__
+        if isinstance(cause, httpx.HTTPStatusError) and cause.response.status_code == 404:
+            return None
+        raise
+    found = _PAGE_TITLE.search(response.text)
+    if found is None:
         return None
-    fields: dict[str, list[str]] = {}
-    for content in document.findall("content"):
-        key = content.get("name") or ""
-        if key:
-            fields.setdefault(key, []).append(plain_text(content.text or ""))
-    title = next(iter(fields.get("title", [])), "").strip()
-    summary = next(iter(fields.get("FullSummary", [])), "").strip()
-    if not title or not summary:
-        return None
-    if not names_match(name, [title, *fields.get("altTitle", [])]):
-        return None
-    url = document.get("url")
-    url = url if url and url.startswith("https://") else None
-    return SourceText(title=title, url=url, summary=summary[:SUMMARY_LIMIT])
+    title = re.split(r"\s+\|\s+|:", html.unescape(found[1]), maxsplit=1)[0]
+    return " ".join(title.split()) or None
+
+
+def without_qualifiers(name: str) -> str:
+    """A condition name without its severity, course, side and body-site qualifiers."""
+    text = _BODY_SITE.sub(" ", name)
+    words = (word for word in text.split() if _unaccented(word).strip(",.;") not in _QUALIFIERS)
+    return " ".join(words)
+
+
+def best_topic(topics: list[_Topic], name: str) -> tuple[_Topic | None, bool]:
+    """The best acceptable topic for a name, and whether it is a general topic.
+
+    A topic is acceptable when its title or an alternate title is the name itself, holds
+    every meaningful word of it, or is a broader topic named within it that covers at
+    least half of its words ("Cholesterol" for "high cholesterol"). A topic sharing only
+    a word ("Knee Replacement" for "osteoarthritis of the knee", "Diabetes" for "diabetes
+    tipo 2") is never accepted, so a loosely related topic is never cached under the name.
+    Among acceptable topics a general one wins over one for a narrower audience or a
+    how-to ("High Blood Pressure" over "How to Prevent High Blood Pressure").
+    """
+    asked = set(_terms(name))
+    scored = [(key, topic) for topic in topics if (key := _topic_key(topic, asked))[0]]
+    if not scored:
+        return None, False
+    key, topic = max(scored, key=lambda pair: pair[0])
+    return topic, key[1]
+
+
+def _topic_key(topic: _Topic, asked: set[str]) -> tuple[bool, bool, int, int, int, bool, int]:
+    labels = [topic.title, *topic.alt_titles]
+    tier, covered, is_title = max(
+        (*_label_match(asked, label), index == 0) for index, label in enumerate(labels)
+    )
+    words = {word for label in labels for word in _terms(label)}
+    union = sum(1 for want in asked if any(_same_word(want, word) for word in words))
+    narrow = bool((set(_terms(topic.title)) & _NARROWING) - asked)
+    return (tier >= 2, not narrow, tier, covered, union, is_title, -topic.rank)
+
+
+def _label_match(asked: set[str], label: str) -> tuple[int, int]:
+    """How well one title names what was asked: a tier from 0 to 4, and words covered.
+
+    4 the same words; 3 every asked word; 2 a broader label naming at least half of what
+    was asked; 1 some shared word; 0 nothing.
+    """
+    words = set(_terms(label))
+    covered = {want for want in asked if any(_same_word(want, word) for word in words)}
+    if not covered:
+        return 0, 0
+    used = {word for word in words if any(_same_word(want, word) for want in asked)}
+    if covered == asked:
+        return (4 if used == words else 3), len(covered)
+    if used == words and 2 * len(covered) >= len(asked):
+        return 2, len(covered)
+    return 1, len(covered)
+
+
+def _terms(text: str) -> list[str]:
+    """Lower-case, unaccented words of a name, without joining words such as "of" or "de"."""
+    return [word for word in re.findall(r"[^\W_]+", _unaccented(text)) if word not in _FILLER]
+
+
+def _unaccented(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def _same_word(left: str, right: str) -> bool:
+    """Equal, or nearly so for longer words ("anemia"/"anaemia"); numbers must be equal."""
+    if left == right:
+        return True
+    if left.isdigit() or right.isdigit() or min(len(left), len(right)) < 4:
+        return False
+    return difflib.SequenceMatcher(None, left, right).ratio() >= NAME_SIMILARITY
 
 
 @_shape_checked

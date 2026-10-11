@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, status
@@ -39,7 +40,10 @@ from app.services.clinical_reconciliation_service import ClinicalReconciliationS
 from app.services.external_patient_binding_service import ExternalPatientBindingService
 from app.services.fhir_audit_export_service import FhirAuditExportService
 from app.services.fhir_import_review_service import FhirImportReviewService
-from app.services.smart_launch_service import SmartLaunchService
+from app.services.smart_launch_service import (
+    SmartLaunchService,
+    SmartProviderAuthorizationError,
+)
 
 router = APIRouter()
 _clinician_dep = require_role("clinician")
@@ -78,7 +82,7 @@ async def start_launch(
     return service.start_launch(
         clinician_id=user.id,
         patient_id=request.patient_id,
-        issuer=str(request.issuer),
+        issuer=str(request.issuer) if request.issuer is not None else None,
         launch_context=request.launch_context,
     )
 
@@ -90,15 +94,22 @@ async def smart_callback(
     state: str = Query(min_length=20, max_length=512),
     code: str | None = Query(default=None, min_length=1, max_length=2048),
     error: str | None = Query(default=None, max_length=500),
+    error_description: str | None = Query(default=None, max_length=2048),
     service: SmartLaunchService = Depends(_service),
 ) -> RedirectResponse:
     try:
-        result = service.handle_callback(state=state, code=code, error=error)
-    except (AuthorizationError, ExternalServiceError, ValidationError):
-        # Do not strand the clinician on an API JSON error or reflect a provider
-        # error description into the portal. The next attempt must start fresh.
+        result = service.handle_callback(
+            state=state, code=code, error=error, error_description=error_description
+        )
+    except (AuthorizationError, ExternalServiceError, ValidationError) as exc:
+        # Do not strand the clinician on an API JSON error. Only a provider error
+        # tied to a live launch session is surfaced, and only in its sanitized
+        # form; raw provider text is never reflected. The next attempt must start fresh.
+        failure: dict[str, str] = {"smart_error": "authorization_failed"}
+        if isinstance(exc, SmartProviderAuthorizationError):
+            failure["smart_error_detail"] = exc.provider_detail
         return RedirectResponse(
-            url=f"{settings.clinician_portal_url.rstrip('/')}/smart-import?smart_error=authorization_failed",
+            url=f"{settings.clinician_portal_url.rstrip('/')}/smart-import?{urlencode(failure)}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
     redirect_url = (

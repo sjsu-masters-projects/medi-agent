@@ -531,7 +531,7 @@ describe("Patient chat page", () => {
         expect(replace).toHaveBeenCalledWith("/chat");
     });
 
-    it("reconnects without document context when the user dismisses it", async () => {
+    it("tells the server about a dismissal so a reconnect does not bring the document back", async () => {
         searchParamsValue = new URLSearchParams("document=doc-3");
         window.history.replaceState({}, "", "/chat?document=doc-3");
         storePendingChatDocumentContext({
@@ -547,15 +547,80 @@ describe("Patient chat page", () => {
         renderPage();
 
         expect(await screen.findByText(/Medication List\.pdf/i)).toBeInTheDocument();
+        const sessionId = buildChatWebSocketUrl.mock.lastCall?.[1].sessionId;
         fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
 
         await waitFor(() => {
             expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
                 "patient-1",
-                { documentId: null, sessionId: expect.stringMatching(/^(chat|day)-/) },
+                { documentId: null, documentDismissed: true, sessionId },
             );
         });
         expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
+
+        // The server has cleared the saved document, so the reconnected socket sends
+        // only history; a later transient reconnect still carries the dismissal.
+        const reconnected = MockWebSocket.instances.at(-1)!;
+        await act(async () => {
+            reconnected.emitOpen();
+            reconnected.emitMessage({ type: "chat_history", messages: [] });
+        });
+        vi.useFakeTimers();
+        const socketsBefore = MockWebSocket.instances.length;
+        await act(async () => {
+            reconnected.close();
+            vi.advanceTimersByTime(1_000);
+        });
+        vi.useRealTimers();
+        await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(socketsBefore));
+        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+            "patient-1",
+            { documentId: null, documentDismissed: true, sessionId },
+        );
+        expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Record context attached/i)).not.toBeInTheDocument();
+    });
+
+    it("removes the document and says so when the server cannot read it any more", async () => {
+        searchParamsValue = new URLSearchParams("document=doc-4");
+        window.history.replaceState({}, "", "/chat?document=doc-4");
+        storePendingChatDocumentContext({
+            documentId: "doc-4",
+            documentName: "Old Lab.pdf",
+            documentType: "lab_report",
+            preferredLanguage: Language.EN,
+            provider: "Care team",
+            suggestedQuestion: "Help me understand this lab report.",
+            summary: "Old results.",
+        });
+
+        renderPage();
+
+        expect(await screen.findByText(/Old Lab\.pdf/i)).toBeInTheDocument();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "chat_context_unavailable", context_type: "document" });
+        });
+
+        expect(screen.queryByText(/Old Lab\.pdf/i)).not.toBeInTheDocument();
+        expect(await screen.findByText("This document isn't available anymore. You can keep asking about the rest of your record.")).toBeInTheDocument();
+        // It stops asking for the missing document on the next connection.
+        await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+            "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
+        ));
+    });
+
+    it("shows the unavailable-document note in Spanish", async () => {
+        profile.preferredLanguage = Language.ES;
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "chat_context_unavailable", context_type: "document" });
+        });
+
+        expect(await screen.findByText("Este documento ya no está disponible. Puedes seguir preguntando sobre el resto de tu expediente.")).toBeInTheDocument();
     });
 
     it("does not auto-play assistant audio for typed (non-voice) turns", async () => {
