@@ -270,7 +270,9 @@ shared by every patient and cached in `health_knowledge` (migration 051): Medlin
 plain-language summaries in English and Spanish, DailyMed label sections (never dosage),
 and RxNorm for name resolution. A chat lookup fetches on a miss within a short time budget;
 the `mediagent-health-knowledge-refresh` Cloud Run Job re-checks the cache weekly and
-records each run in `cron_job_runs`. Run it locally against your configured project with:
+records each run in `cron_job_runs`. A subject is due six days after its last check; active
+medications and documented conditions with no cached text are added. Run it locally against
+your configured project with:
 
 ```bash
 cd backend
@@ -278,6 +280,16 @@ PYTHONPATH=src .venv/bin/python -m app.workers.health_knowledge_refresh
 ```
 
 Design, checks and failure behaviour: `.agent/specs/nora-002-grounded-answers.md`.
+
+## Scheduled jobs
+
+Document ingestion (every 5 minutes), the reference refresh (Sundays 03:00
+America/Los_Angeles) and reminder dispatch (every 15 minutes, via
+`POST /api/v1/cron/reminders/dispatch` with `X-Cron-Auth`) each write one
+`scheduled_job.started` and one `scheduled_job.finished` JSON line per run
+(`app/core/job_logging.py`). The finished line carries `status`, `duration_ms` and the same
+`summary` as `cron_job_runs`. The nightly ADR scan is retired. Triggers, auth, healthy-run
+signals and Cloud Logging queries: `.agent/CLOUD_INFRASTRUCTURE_GUIDE.md`, section 5.
 
 ## Key Conventions
 

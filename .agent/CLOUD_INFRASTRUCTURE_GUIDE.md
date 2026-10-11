@@ -11,7 +11,7 @@ To survive 10 months on a fixed budget, our golden rule is **Scale-to-Zero**. We
 | **Backend API** | GCP Cloud Run | Set `min-instances: 0` and `max-instances: 2`. Cloud Run's free tier gives 2M requests/month free. It will spin down completely when not in use. | $0.00 |
 | **Frontend (Portals)** | Vercel | Use a **Hobby** account. Do NOT create a Vercel "Team" ($20/mo/user). Have one person link the GitHub repo; PRs will still auto-deploy preview links for everyone via GitHub integrations. | $0.00 |
 | **Database & Auth** | Supabase | Free tier. Note: Free projects pause after 1 week of inactivity. Just go to the Supabase dashboard and click "Restore" when returning to work. | $0.00 |
-| **Cron Jobs** | GCP Cloud Scheduler | GCP gives 3 free cron jobs per month per billing account. We will consolidate our tasks into 3 distinct endpoints. | $0.00 |
+| **Scheduled jobs** | GCP Cloud Scheduler | GCP gives 3 free Scheduler jobs per month per billing account. Three are active (document ingestion, weekly reference refresh, reminders); the retired ADR scan trigger should be deleted. See section 5. | $0.00 |
 | **Error Tracking** | Sentry | Developer Free Tier gives 5,000 errors/month. | $0.00 |
 | **AI Subsystems** | Gemini API | Use the free tier (15 Requests Per Minute). Perfect for development. | $0.00 |
 
@@ -69,24 +69,100 @@ Vercel is unbeatable for Next.js, but team plans are expensive. We will bypass t
 - **Step 4:** Set up Environment Variables in the Vercel UI.
 - **Teammate workflow:** Teammates do NOT need Vercel accounts. When they push a commit or open a Pull Request on GitHub, Vercel's GitHub Bot will automatically build it and post a preview link directly in the PR comments!
 
-### 5. Cron Jobs (Cloud Scheduler)
-We use **one global scheduler strategy** for the whole app. Cloud Scheduler triggers a small set of backend cron endpoints, and the backend fans out to the correct patients / clinics by querying Supabase at runtime.
+### 5. Scheduled jobs (Cloud Scheduler) and run logs
+Cloud Scheduler triggers a small set of backend jobs, and the backend fans out to the
+correct patients and clinics by querying Supabase at runtime. Project `medi-agent-490106`,
+Scheduler and Cloud Run region `us-central1`.
 
-- **Endpoint 1:** `POST /api/v1/cron/reminders/dispatch`
-  - Run every 15 minutes
-  - Dispatches due appointment reminders
-  - Dispatches due medication / obligation reminders from structured patient schedules
-- **Endpoint 2:** `POST /api/v1/cron/adr/nightly-scan`
-  - Run once nightly
-  - Scans new symptom reports since the last successful run
-  - Flags ADR candidates for the pharmacovigilance pipeline
-- **Security:** Protect cron endpoints with `X-Cron-Auth` header carrying `CRON_AUTH_TOKEN`
-- **Cost Saving:** Keep it to 2-3 jobs total to stay inside the free tier
+| Job (`jsonPayload.job`) | Trigger | Schedule (timezone) | Target | Auth | Run record | Healthy run |
+| --- | --- | --- | --- | --- | --- | --- |
+| `document_ingestion` | `mediagent-document-ingestion-every-5m` (enabled) | `*/5 * * * *` (America/Los_Angeles) | Cloud Run Job `mediagent-document-ingestion` (`python -m app.workers.document_ingestion`) | OAuth: service account `mediagent-doc-ingest-sched`, `roles/run.invoker` on the Job only | None at job level (state is kept per document); the two log lines are the run record | `status="success"`, `summary.failed=0`; `summary.claimed=0` is normal when nothing is pending. Exit code 1 when any document failed or the batch could not run. |
+| `health_knowledge_refresh` | `mediagent-health-knowledge-refresh-weekly` (enabled) | `0 3 * * 0`, Sundays 03:00 (America/Los_Angeles) | Cloud Run Job `mediagent-health-knowledge-refresh` (`python -m app.workers.health_knowledge_refresh`) | OAuth: service account `mediagent-knowledge-sched`, `roles/run.invoker` on the Job only | `cron_job_runs`, `job_name='health_knowledge_refresh'` | `status="success"`, `summary.subjects_failed=0`. `subjects_checked=0` is correct only with `subjects_due=0` and no new subjects; `next_due_at` then says when the oldest cached subject becomes due. Exit code 1 when any subject raised. |
+| `reminders_dispatch` | `medi-agent-reminders-dispatch-prod` (**paused since April**) | `*/15 * * * *` (UTC) | `POST https://api.mediagent.live/api/v1/cron/reminders/dispatch` on service `mediagent-backend` | Shared secret: `X-Cron-Auth` header equal to the backend's `CRON_AUTH_TOKEN` | `cron_job_runs`, `job_name='reminders_dispatch'` | `status="success"`, `summary.window_mode="contiguous"` and a small `catch_up_minutes`. `catch_up_capped` means the previous run ended over an hour earlier. |
+| `nightly_adr_scan` | `medi-agent-adr-nightly-scan-prod` (paused since April) | was `0 2 * * *` (UTC) | **Retired.** The `/api/v1/cron/adr/nightly-scan` route was removed. | was the shared-secret header | Earlier rows stay in `cron_job_runs` | Not applicable. |
 
-**Manual GCP setup**
+**Why the ADR scan was retired.** Chat intake already sets `flagged_for_adr` under the
+stricter AI-004 rule (an active medication match plus explicit Naranjo link evidence,
+`followup/service.py::is_possible_adr_candidate`) and starts the pharmacovigilance review.
+The scan flagged any medication-linked symptom without starting a review, which would have
+put unreviewed ADR labels into the clinician symptom timeline and SOAP notes. **Requester
+action:** delete the paused Scheduler job `medi-agent-adr-nightly-scan-prod`. If it were
+resumed it would only receive `404`.
+
+**Auth.** The two Cloud Run Job triggers call each Job's `:run` endpoint with OAuth as a
+dedicated, invoker-only service account, so no secret sits in a Scheduler payload. The
+reminder trigger calls a public HTTPS route and is authorised only by the shared
+`X-Cron-Auth` secret. Rotate `CRON_AUTH_TOKEN` in Secret Manager and in the Scheduler header
+together.
+
+**Reminder windows.** Each dispatch covers the range from the previous successful
+(non-dry-run) window end, stored in `cron_job_runs.summary.window_end`, to now plus
+`window_minutes`. A late or retried run therefore leaves no gap. After a pause of more than
+60 minutes the next run starts at now. Dedupe keys stop overlaps from sending twice. The
+Scheduler timezone does not matter for this job because due times come from the database.
+Booked visits are `confirmed` or `scheduled`.
+
+**Run log shape.** Every run writes exactly two JSON lines on stdout. Cloud Run parses
+them into `jsonPayload` and reads `severity` and `message`:
+
+- `scheduled_job.started`: `job`, `run_id` (the `cron_job_runs` id, or `null` for document
+  ingestion), `dry_run`, `execution` (the Job execution name, or the service revision
+  on the API service), `parameters` and `severity="INFO"`.
+- `scheduled_job.finished`: the same fields, plus `status` (`success`, `failed` or
+  `skipped`), `duration_ms` and `summary`, which is the same object stored in
+  `cron_job_runs.summary`. Severity is `INFO`, or `WARNING` when skipped (another run is in
+  progress) and `ERROR` when failed. A failed line carries `error_type`, `error_category`
+  and, when it has the shape of a code, `error_code` (for example SQLSTATE `23505`). It may
+  also carry a fixed `reason` (`documents_failed`, `run_not_recorded`, or
+  `N reference subjects failed`). Exception text is never logged because it can quote
+  patient data.
+
+Example (synthetic):
+
+```json
+{"dry_run":false,"duration_ms":412,"event":"scheduled_job.finished","execution":"mediagent-backend-00123-abc","job":"reminders_dispatch","message":"Scheduled job reminders_dispatch finished: success","run_id":"2f0c…","severity":"INFO","status":"success","summary":{"appointment_1h_candidates":0,"appointment_1h_created":0,"appointment_1h_existing":0,"appointment_24h_candidates":0,"appointment_24h_created":0,"appointment_24h_existing":0,"catch_up_minutes":2.0,"medication_candidates":1,"medication_created":1,"medication_existing":0,"obligation_candidates":0,"obligation_created":0,"obligation_existing":0,"skipped_frequency_mismatch":0,"skipped_inactive_target":1,"window_end":"2026-10-12T08:12:00+00:00","window_mode":"contiguous","window_start":"2026-10-12T07:55:00+00:00"}}
+```
+
+Summary counts per job:
+
+- **Document ingestion:** `claimed`, `completed`, `needs_review`, `failed`,
+  `summaries_*`, `titles_*` and the care-plan generation counts.
+- **Reference refresh:** `subjects_total`, `subjects_due`, `subjects_new_medications`,
+  `subjects_new_conditions`, `subjects_checked`, `subjects_updated`,
+  `subjects_unavailable`, `subjects_failed`, `subjects_deferred` (over the limit of 150),
+  `next_due_at`, and `sources.<medlineplus|dailymed>.<updated|unchanged|not_found|unavailable>`.
+- **Reminders:** `window_start`, `window_end`, `window_mode`, `catch_up_minutes`,
+  `appointment_<24h|1h>_<candidates|created|existing>`,
+  `<medication|obligation>_<candidates|created|existing>`, `skipped_inactive_target` and
+  `skipped_frequency_mismatch`.
+
+**Cloud Logging queries** (Logs Explorer, project `medi-agent-490106`):
+
+```text
+# Document ingestion: every finished run
+resource.type="cloud_run_job" AND resource.labels.job_name="mediagent-document-ingestion"
+jsonPayload.event="scheduled_job.finished" AND jsonPayload.job="document_ingestion"
+
+# Reference refresh: every finished run
+resource.type="cloud_run_job" AND resource.labels.job_name="mediagent-health-knowledge-refresh"
+jsonPayload.event="scheduled_job.finished" AND jsonPayload.job="health_knowledge_refresh"
+
+# Reminders: every finished run (API service)
+resource.type="cloud_run_revision" AND resource.labels.service_name="mediagent-backend"
+jsonPayload.event="scheduled_job.finished" AND jsonPayload.job="reminders_dispatch"
+
+# Any job that failed or was skipped
+jsonPayload.event="scheduled_job.finished" AND jsonPayload.status!="success"
+```
+
+Do not filter these lines with `severity>=INFO` alone when looking for older executions:
+before this change the Jobs wrote lines without a severity, which Cloud Logging stores as
+`DEFAULT`.
+
+**Manual GCP setup for the reminder trigger** (already done; kept for rebuilding)
 - **Step 1:** Create a strong random `CRON_AUTH_TOKEN` secret in GCP Secret Manager
 - **Step 2:** Add `CRON_AUTH_TOKEN` to the Cloud Run backend service as a secret-backed env var
-- **Step 3:** In Cloud Scheduler, create an HTTP job for each endpoint above
+- **Step 3:** In Cloud Scheduler, create an HTTP job for the reminder endpoint
 - **Step 4:** Set method to `POST` and target URL to the Cloud Run backend URL plus the cron path
 - **Step 5:** Add custom header `X-Cron-Auth: <same token>`
 - **Step 6:** Keep the reminder dispatcher in UTC and let the backend decide which records are due based on DB state
