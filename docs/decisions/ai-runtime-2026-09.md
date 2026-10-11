@@ -18,6 +18,7 @@ and provenance rules run independently of a model response.
 | Symptom/ADR intake | Gemini 3.8 Flash / LOW | None; backups not qualified | Do not write a symptom report |
 | Care-plan categorization | Gemini 3.8 Flash / LOW | None | Preserve approved plan; draft remains retryable |
 | Care-plan translation (second language for clinician review) | Gemini 3.8 Flash / LOW | None | Item stays untranslated; clinician retries or writes it |
+| Record titles (uses the document-explanation route) | Gemini 3.8 Flash / MEDIUM | Gemini 3.5 Flash / MEDIUM | Cleaned file name shown; bounded retries |
 
 The authoritative route definitions, output ceilings, thinking levels, kill switches, and
 latency budgets are in `backend/src/app/adk/registry.py`.

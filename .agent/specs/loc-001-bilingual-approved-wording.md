@@ -121,6 +121,15 @@ refresh to any remote environment requires explicit authorization.
 - Done here: language-setting copy describes the new behaviour; Today and Reminders tag
   wording with its language and label older single-language items.
 
+Also done here: record titles. Migration `050_document_display_titles.sql` adds
+`documents.display_title` (`{"en-US", "es-MX"}`) and a bounded attempt counter. After
+summaries, the worker drafts a short title in both languages from the document's existing
+summary and extracted topics on the explanation route; titles with digits or more than a
+few words are rejected and the patient's name is never sent. Records shows the title in the
+reader's language and the clinician lists show the English title, both keeping the file name
+as the source identity; a missing column before migration is tolerated. The clinician
+patient detail shows approved English wording for medications and activities.
+
 Follow-ups (separate tasks): notifications and Today error text from codes; sign-up saves
 the guest language and the server renders `lang` without an English flash; one label set
 for the two locales; a patient language chip in the clinician header and per-message
