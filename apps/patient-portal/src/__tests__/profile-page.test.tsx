@@ -818,6 +818,7 @@ describe("Patient profile page", () => {
                 "/api/v1/patients/me",
                 {
                     first_name: "Sara",
+                    gender: null,
                     last_name: "Johnson",
                     preferred_language: "es-MX",
                 },
@@ -830,6 +831,50 @@ describe("Patient profile page", () => {
         ).toBeInTheDocument();
         expect(screen.getByText("Sara Johnson")).toBeInTheDocument();
         expect(screen.getByText("Femenino")).toBeInTheDocument();
+    });
+
+    it("clears a saved gender when the patient chooses Not specified", async () => {
+        const savedProfile = {
+            created_at: "2026-01-10T00:00:00Z",
+            date_of_birth: "1958-03-02",
+            email: "morgan@example.com",
+            first_name: "Morgan",
+            gender: "female",
+            id: "patient-1",
+            last_name: "Lee",
+            preferred_language: "en-US",
+        };
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me" ? savedProfile : [],
+        );
+        put.mockResolvedValue({ ...savedProfile, gender: null });
+
+        render(<ProfilePage />);
+
+        expect(await screen.findByText("Female")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /edit profile/i }));
+        fireEvent.change(screen.getByLabelText(/^gender/i), {
+            target: { value: "" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+        await waitFor(() => {
+            expect(put).toHaveBeenCalledWith(
+                "/api/v1/patients/me",
+                {
+                    first_name: "Morgan",
+                    gender: null,
+                    last_name: "Lee",
+                    preferred_language: "en-US",
+                },
+                { token: "access-token" },
+            );
+        });
+        expect(
+            await screen.findByText("Profile updated successfully."),
+        ).toBeInTheDocument();
+        expect(screen.queryByText("Female")).not.toBeInTheDocument();
+        expect(screen.queryByText(/^gender$/i)).not.toBeInTheDocument();
     });
 
     it("lets the patient join another clinic after onboarding", async () => {
