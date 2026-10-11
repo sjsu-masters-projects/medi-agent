@@ -58,3 +58,21 @@ compliance or production-readiness certification.
 - LOC-001 approval of a new bilingual draft on the deployed clinician portal: no draft
   was pending, and no clinical publication was performed.
 - Scheduled jobs: covered by OPS-003 after its deployment.
+
+## Follow-up checks after #151 (evening)
+
+- Scheduled jobs: the requester resumed reminder dispatch and deleted the paused nightly
+  ADR scan trigger. The 21:15 UTC reminder run logged `scheduled_job.finished` (INFO,
+  success, first-run window, 3 schedules skipped for inactive targets, nothing due). A
+  document ingestion run and a manual weekly-refresh execution also logged success; the
+  refresh seeded 13 documented conditions and updated 10 subjects, next due October 17.
+- Security: after the merge, GitHub showed 0 open Dependabot alerts, 0 open code-scanning
+  alerts and 0 open CodeQL quality findings.
+- Profile gender: "Prefer not to say" saved and survived a reload (restored to Female
+  afterwards). "Not specified" reported success but kept the previous value — fixed in
+  the follow-up PR.
+- Focused-document chat: "Ask about this document" opened a new conversation with the
+  document card; Nora answered from the document; reopening the conversation after a
+  reload restored the card. Dismiss did not remove the card (the server restored the
+  saved document) — fixed in the follow-up PR. Answers do not yet show which document
+  they used.
