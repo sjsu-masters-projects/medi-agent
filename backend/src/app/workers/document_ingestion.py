@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
 from typing import Any, cast
 from uuid import UUID
 
@@ -13,6 +11,7 @@ from supabase import Client
 
 from app.clients.supabase import get_admin_client
 from app.config import settings
+from app.core.job_logging import JobRunLog
 from app.services.care_plan_service import CarePlanService
 from app.services.document_summary_service import DocumentSummaryService
 from app.services.document_title_service import DocumentTitleService
@@ -29,17 +28,6 @@ def _configure_worker_logging() -> None:
     # telemetry must not enable those request lines. Warnings and errors still reach
     # Cloud Logging for operational diagnosis.
     logging.getLogger("httpx").setLevel(logging.WARNING)
-
-
-def _log_execution(event: str, **fields: int | str) -> None:
-    """Write one non-PHI, machine-readable Cloud Run execution event."""
-    payload: dict[str, int | str] = {
-        "event": event,
-        "execution": os.getenv("CLOUD_RUN_EXECUTION", "local"),
-        "task_index": os.getenv("CLOUD_RUN_TASK_INDEX", "0"),
-        **fields,
-    }
-    logger.info("%s", json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
 class DocumentIngestionWorker:
@@ -135,14 +123,26 @@ class DocumentIngestionWorker:
 
 
 async def main() -> int:
+    """Run one batch; exit non-zero when a document failed or the batch could not run.
+
+    Document ingestion keeps its run state on each document, not in ``cron_job_runs``, so
+    the two structured log lines are this Job's run record.
+    """
     _configure_worker_logging()
-    _log_execution("document_ingestion_started", batch_size=settings.document_ingestion_batch_size)
-    worker = DocumentIngestionWorker(
-        get_admin_client(), batch_size=settings.document_ingestion_batch_size
-    )
-    summary = await worker.process_batch()
-    _log_execution("document_ingestion_finished", **summary)
-    return 1 if summary["failed"] else 0
+    batch_size = settings.document_ingestion_batch_size
+    log = JobRunLog("document_ingestion")
+    log.started(parameters={"batch_size": batch_size})
+    try:
+        worker = DocumentIngestionWorker(get_admin_client(), batch_size=batch_size)
+        summary = await worker.process_batch()
+    except Exception as exc:  # noqa: BLE001 - reported as one sanitized line, then exit 1
+        log.finished("failed", {}, error=exc)
+        return 1
+    if summary["failed"]:
+        log.finished("failed", summary, reason="documents_failed")
+        return 1
+    log.finished("success", summary)
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised by Cloud Run Job

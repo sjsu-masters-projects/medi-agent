@@ -1,6 +1,6 @@
 # MediAgent — Product Context
 
-> **Current direction:** August–December 2026 revival. This file records the
+> **Current direction:** August–December 2026 expo delivery. This file records the
 > product decision and boundaries; `.agent/TASKS.md` is the execution tracker.
 
 ## Product thesis
@@ -56,7 +56,7 @@ store or present private chain-of-thought.
 
 ## Operating decisions
 
-1. Evolve the current Next.js, FastAPI, Supabase, DailyMed, RxNorm, Vercel, and Cloud Run
+1. Evolve the current Next.js, FastAPI, Supabase, DailyMed, RxNorm, MedlinePlus, Vercel, and Cloud Run
    foundation rather than rewriting it. New model-backed work uses the ADK runtime; legacy
    graph modules are compatibility code, not an architectural target.
 2. Use four meaningful worker boundaries: Care Coordinator, Document and Evidence,
@@ -71,7 +71,7 @@ store or present private chain-of-thought.
 ## Decision history
 
 The March 2026 decisions below are retained as history. They are **superseded where
-they conflict with the August 2026 revival plan**, not deleted.
+they conflict with the current direction above**, not deleted.
 
 | Ref | Historical decision | Current status |
 | --- | --- | --- |
@@ -93,5 +93,5 @@ they conflict with the August 2026 revival plan**, not deleted.
 
 - `.agent/ARCHITECTURE.md` — verified implementation shape and target boundaries
 - `.agent/TASKS.md` — status, owners, and acceptance checklist
-- `.agent/specs/mediagent-revival-aug-dec-2026.md` — approved revival plan
+- `.agent/specs/project-backlog-acceptance.md` — detailed acceptance requirements
 - `CONTRIBUTING.md` — contribution and review expectations

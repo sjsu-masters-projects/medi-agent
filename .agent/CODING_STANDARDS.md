@@ -183,7 +183,7 @@ except Exception:
 ### Backend (Python)
 
 ```
-backend/app/
+backend/src/app/
 ├── main.py              # App entry, middleware, startup
 ├── config.py            # Settings from env vars (pydantic-settings)
 ├── models/              # Pydantic models (request/response schemas)
@@ -203,12 +203,19 @@ backend/app/
 │   ├── registry.py
 │   └── plugins/
 ├── agents/              # Legacy compatibility paths; no new product work
-├── tools/               # Tools agents call (DailyMed, RxNorm, etc.)
+├── tools/               # FHIR builder, medication normalizer
 ├── clients/             # External API clients (Gemini, Deepgram, etc.)
-├── db/                  # Supabase queries, migrations, seeds
-│   ├── queries/         # Raw SQL or Supabase client calls
+├── core/                # Security, exceptions, constants, logging helpers
+├── db/                  # Supabase access, migrations, seeds
+│   ├── repositories/    # Supabase client calls per aggregate
 │   ├── migrations/
 │   └── seed/
+├── workers/             # Cloud Run Job entry points
+├── safety/              # Deterministic triage floor and escalation
+├── followup/            # Symptom follow-up and ADR candidate rules
+├── pharmacovigilance/   # Naranjo scoring
+├── middleware/          # Rate limiting
+├── mcp/                 # In-process provider adapters
 └── utils/               # Pure utility functions
 ```
 
@@ -241,7 +248,7 @@ apps/{portal}/src/
 
 ## Design System & UI
 
-All frontend UI code must strictly adhere to our centralized design tokens and components based on the approved Figma screens.
+All frontend UI code must strictly adhere to our centralized design tokens and components based on the UX-002 reference described in the design system.
 **Before writing or reviewing any UI code (Tailwind, React components, CSS), you must read:**
 👉 [`.agent/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md)
 
@@ -254,15 +261,16 @@ Do not invent new colors, spacing, or abstractions that conflict with the Design
 ### Branch Naming
 
 ```
-feature/{feature-id}-{short-description}
-bugfix/{issue}-{short-description}
+feature/{short-description}
+fix/{short-description}
 hotfix/{description}
 
 Examples:
-feature/fp2-document-upload
-feature/fc7-medwatch-queue
-bugfix/123-adherence-score-calculation
+feature/import-review
+fix/appointment-validation
 ```
+
+Start from current `main` (see `AGENTS.md` and `CONTRIBUTING.md`).
 
 ### Commit Messages
 
@@ -274,7 +282,7 @@ fix(patient-portal): correct medication time display in Today Feed
 docs(architecture): update API endpoint documentation
 refactor(services): extract document parsing into separate service
 test(agents): add golden-set tests for ingestion agent
-chore(ci): add Playwright E2E workflow
+chore(ci): pin pip-audit version
 ```
 
 ### Pull Request Rules
@@ -282,11 +290,9 @@ chore(ci): add Playwright E2E workflow
 1. **Every PR requires at least 1 review** from another team member
 2. **All CI checks must pass** (lint, test, build)
 3. **PR title follows conventional commits** format
-4. **PR description must include:**
-   - What changed and why
-   - How to test manually
-   - Screenshots for UI changes
-   - Link to task in TASKS.md
+4. **PR description** follows [`.github/pull_request_template.md`](../.github/pull_request_template.md):
+   what changed and why, exact check commands and outcomes, manual verification,
+   screenshots for UI changes, and the TASKS.md item.
 
 ---
 
@@ -305,18 +311,17 @@ chore(ci): add Playwright E2E workflow
 | Type | Tool | Coverage Target | When |
 |------|------|----------------|------|
 | Component | Vitest + Testing Library | UI components | Every PR |
-| E2E | Playwright | Critical user flows | Pre-merge to main |
+| E2E | Not adopted yet (QUA-001) | Critical user flows | — |
 
 ### Test File Naming
 
 ```
 # Python
-tests/test_document_service.py
-tests/agents/test_ingestion_agent.py
+tests/unit/services/test_care_plan_classification.py
+tests/integration/routers/test_adherence_api.py
 
 # TypeScript
 __tests__/risk-radar.test.tsx
-e2e/patient-onboarding.spec.ts
 ```
 
 ---
@@ -325,10 +330,10 @@ e2e/patient-onboarding.spec.ts
 
 | Tool | Scope | Config |
 |------|-------|--------|
-| **Ruff** | Python lint + format | `ruff.toml` |
-| **mypy** | Python type checking | `mypy.ini` |
-| **ESLint** | TypeScript lint | `.eslintrc.json` |
-| **Prettier** | TS/CSS/JSON format | `.prettierrc` |
-| **Husky** | Pre-commit hooks | Runs lint + format on staged files |
+| **Ruff** | Python lint + format | `backend/pyproject.toml` `[tool.ruff]` |
+| **mypy** | Python type checking | `backend/pyproject.toml` `[tool.mypy]` |
+| **ESLint** | TypeScript lint | `apps/*/eslint.config.mjs` |
+| **Prettier** | TS/CSS/JSON format | Package defaults (no config file) |
+| **Husky + lint-staged** | Pre-commit hooks | Root `package.json`; runs Ruff, mypy and ESLint on staged files |
 
 **Rule: If the linter complains, fix it. No `# noqa` or `eslint-disable` without a comment explaining why.**

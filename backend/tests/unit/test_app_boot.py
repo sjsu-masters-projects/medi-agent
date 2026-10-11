@@ -61,7 +61,6 @@ def test_all_expected_routes_registered():
     }
     expected_cron = {
         "/api/v1/cron/reminders/dispatch",
-        "/api/v1/cron/adr/nightly-scan",
     }
 
     all_expected = (
@@ -74,6 +73,9 @@ def test_all_expected_routes_registered():
     )
     missing = all_expected - paths
     assert not missing, f"Missing routes: {missing}"
+    # Retired: chat intake flags possible ADRs under the stricter AI-004 rule and starts
+    # the review pipeline; the scan flagged without a review.
+    assert "/api/v1/cron/adr/nightly-scan" not in paths
 
 
 def test_health_endpoint():

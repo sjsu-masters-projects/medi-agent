@@ -1,6 +1,10 @@
 # MediAgent UI redesign — implementation handoff
 
-Visual reference: `MediAgent Redesign.dc.html` (screens A–F). This document is the source of truth for values. If the mockup and this file disagree, follow this file.
+> **Status:** Delivered in #142 (foundation), #143 (patient), #144 (clinician) and #145
+> (responsive/wording); deployed recheck passed October 11 (docs/deployed-recheck-2026-10-11.md).
+
+Visual reference: the hosted redesign (screens A–F) linked from
+[DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md#canonical-visual-reference). This document is the source of truth for values. If the mockup and this file disagree, follow this file.
 
 Additional approved reference: [Profile & Clinic settings](https://claude.ai/artifact/HWCwWAVWQCp3aGGk5Abp1Q).
 Patient Profile uses an identity card, grouped label/value settings, language and
@@ -220,7 +224,7 @@ Pill variant (clinician headers): add `rounded-full bg-ok-tint px-3 py-1.5`.
 Patient app: use it for "AI Summary" chips on Records (`bg-brand-tint text-brand-ink`, sparkle icon).
 **Never** put the check icon on AI content, and never put the sparkle on approved content.
 
-**Icons**: inline SVG components, 24×24 viewBox, `fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"`. Copy the path data from the `<symbol>` definitions at the top of `MediAgent Redesign.dc.html`: home, folder, chat, cal, user, pill, drop, gauge, walk, check, search, plus, lab, rx, note, up, mic, send, arrow, back, alert, users, grid, inbox, gear, spark, speaker. Put them in `src/components/ui/icons.tsx`. Don't add an icon package.
+**Icons**: inline SVG components, 24×24 viewBox, `fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"`. Path data comes from the reference's `<symbol>` definitions: home, folder, chat, cal, user, pill, drop, gauge, walk, check, search, plus, lab, rx, note, up, mic, send, arrow, back, alert, users, grid, inbox, gear, spark, speaker. They live in each portal's `src/components/ui/icons.tsx`. Don't add an icon package.
 
 **Logo**: use `/brand/icon.svg` (patient) and `/brand/mark-sidebar.svg` (clinician) from the earlier brand handoff (`docs/brand-icons.md`).
 

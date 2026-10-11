@@ -75,24 +75,20 @@ where sp.document_id = '<synthetic-document-uuid>'
 order by cf.created_at desc;
 ```
 
-## Scheduling after acceptance
+## Scheduling
 
-For a production deployment, do **not** create a Scheduler trigger until every synthetic
-acceptance check above has passed and execution duration has been observed. Then create a
-Cloud Scheduler trigger for this Job with the following initial contract:
+The live trigger is `mediagent-document-ingestion-every-5m` (Scheduler region `us-central1`,
+`*/5 * * * *`, America/Los_Angeles), enabled on 2026-09-26 for the master's-project
+demonstration after synthetic functional, viewer, expiry, cross-user-denial, and
+log-privacy checks. It invokes the Job as
+`mediagent-doc-ingest-sched@medi-agent-490106.iam.gserviceaccount.com`, which has only
+`roles/run.invoker` on the Job. This schedule is **not production-ready**: capacity
+analysis, alerting, and load testing are deferred and must be completed first.
 
-- name: `mediagent-document-ingestion-every-5m`
-- Scheduler region: `us-central1`
-- schedule: `*/5 * * * *`
-- timezone: `America/Los_Angeles`
-- invoker: a dedicated service account granted only `roles/run.invoker` on
-  `mediagent-document-ingestion`
-
-**Master's-project demonstration exception (2026-09-26).** The project enabled this exact
-trigger after synthetic functional, viewer, expiry, cross-user-denial, and log-privacy checks.
-It uses `mediagent-doc-ingest-sched@medi-agent-490106.iam.gserviceaccount.com`, which has only
-`roles/run.invoker` on the Job. Capacity analysis, alerting, and load testing are explicitly
-deferred and must be completed before treating this schedule as production-ready.
+Each execution writes `scheduled_job.started` and `scheduled_job.finished` JSON log lines
+with a `summary` of claimed, completed, failed and generated counts. The log shape, healthy
+values and Cloud Logging queries are in the
+[scheduled job runbook](../.agent/CLOUD_INFRASTRUCTURE_GUIDE.md#5-scheduled-jobs-cloud-scheduler-and-run-logs).
 
 Cloud Scheduler invokes the Job's `:run` endpoint with OAuth. The Job's one task and
 parallelism limit apply within an execution, not across executions. The database claim
@@ -196,7 +192,10 @@ continues without scheduling metadata. The clinician document list still loads, 
 explanations stay unclaimed only until the matching migration is applied.
 
 When a patient selects a document in chat, the server authorizes the document first and supplies
-only its bounded patient-facing summary to that single agent invocation. The model cannot choose a
-document ID or receive a storage URL. A document without a usable summary must be described as
+only its bounded patient-facing summary to that single agent invocation. Nora can also call
+`get_document_details` for the selected document's extracted items with page excerpts, and
+`search_my_documents` to find the patient's own documents by topic (NORA-002); both are
+patient-scoped from session state. The model cannot choose a document ID or receive a
+storage URL. A document without a usable summary must be described as
 unavailable rather than answered from general medical knowledge as though it were the patient's
 record.

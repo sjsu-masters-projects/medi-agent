@@ -25,9 +25,9 @@ that artifact.
 
 For document extraction, a candidate is registered only when its source evidence names
 one source page, preserves an exact excerpt found on that page, and carries a bounded
-extractor confidence. Generic document-level citations are not sufficient. A scanned
-image or PDF without at least 32 non-whitespace embedded characters is retained as a
-`needs_ocr` document with no candidate. An extraction whose proposed values cannot be
+extractor confidence. Generic document-level citations are not sufficient. Scans and
+images are OCR'd (Tesseract, `eng`/`spa`); a source with no usable page text after
+embedded-text and OCR recovery is retained as `needs_ocr` with no candidate. An extraction whose proposed values cannot be
 grounded is retained as `needs_evidence_review`, also with no ungrounded candidate.
 Neither status changes canonical clinical truth.
 
