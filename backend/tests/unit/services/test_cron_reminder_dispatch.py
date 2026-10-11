@@ -1,184 +1,41 @@
 """Reminder dispatch end to end against an in-memory table store.
 
-The store enforces the partial unique index on ``notifications.dedupe_key`` the way
-PostgreSQL does (a conflicting batch inserts nothing), so the windowing, dedupe and
-conflict fallback are exercised through ``CronService.dispatch_reminders`` itself.
+The store enforces the partial unique index on ``notifications.dedupe_key``, so the
+windowing, dedupe and conflict fallback run through ``CronService.dispatch_reminders``.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from itertools import count
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
-from postgrest.exceptions import APIError
 
-from app.services.cron_service import CronService
 from app.services.reminder_schedule_service import DAY_ORDER
-
-DAY = datetime(2026, 10, 12, tzinfo=UTC)
-PATIENT = "00000000-0000-4000-8000-000000000001"
-
-
-class _Result:
-    def __init__(self, data: list[dict[str, Any]]) -> None:
-        self.data = data
-
-
-class _Query:
-    def __init__(self, store: _Store, table: str) -> None:
-        self.store, self.table = store, table
-        self.tests: list[Any] = []
-        self.write: tuple[str, Any] | None = None
-        self.ordering: tuple[str, bool] | None = None
-        self.count: int | None = None
-
-    def select(self, *_: Any) -> _Query:
-        return self
-
-    def eq(self, column: str, value: Any) -> _Query:
-        self.tests.append(lambda row: row.get(column) == value)
-        return self
-
-    def in_(self, column: str, values: list[Any]) -> _Query:
-        self.tests.append(lambda row: row.get(column) in set(values))
-        return self
-
-    def gte(self, column: str, value: str) -> _Query:
-        self.tests.append(lambda row: str(row.get(column)) >= value)
-        return self
-
-    def lt(self, column: str, value: str) -> _Query:
-        self.tests.append(lambda row: str(row.get(column)) < value)
-        return self
-
-    def order(self, column: str, *, desc: bool = False) -> _Query:
-        self.ordering = (column, desc)
-        return self
-
-    def limit(self, value: int) -> _Query:
-        self.count = value
-        return self
-
-    def insert(self, rows: Any) -> _Query:
-        self.write = ("insert", rows)
-        return self
-
-    def update(self, values: dict[str, Any]) -> _Query:
-        self.write = ("update", values)
-        return self
-
-    def execute(self) -> _Result:
-        rows = self.store.tables.setdefault(self.table, [])
-        if self.write and self.write[0] == "insert":
-            return _Result(self.store.insert(self.table, self.write[1]))
-        matched = [row for row in rows if all(test(row) for test in self.tests)]
-        if self.write and self.write[0] == "update":
-            for row in matched:
-                row.update(self.write[1])
-            return _Result([dict(row) for row in matched])
-        if self.ordering:
-            column, desc = self.ordering
-            matched.sort(key=lambda row: str(row.get(column)), reverse=desc)
-        return _Result([dict(row) for row in matched[: self.count or None]])
-
-
-class _Store:
-    def __init__(self) -> None:
-        self.tables: dict[str, list[dict[str, Any]]] = {}
-        self.now = DAY
-        self._ids = count(1)
-        self.batch_inserts = 0
-
-    def table(self, name: str) -> _Query:
-        return _Query(self, name)
-
-    def insert(self, table: str, payload: Any) -> list[dict[str, Any]]:
-        batch = [dict(row) for row in (payload if isinstance(payload, list) else [payload])]
-        rows = self.tables.setdefault(table, [])
-        if table == "notifications":
-            if isinstance(payload, list):
-                self.batch_inserts += 1
-            taken = {row["dedupe_key"] for row in rows if row.get("dedupe_key")}
-            for row in batch:
-                if row.get("dedupe_key") in taken:
-                    # A unique violation aborts the whole statement.
-                    raise APIError(
-                        {"code": "23505", "message": "duplicate key value violates unique"}
-                    )
-                taken.add(row.get("dedupe_key"))
-        for row in batch:
-            row.setdefault("id", f"{table}-{next(self._ids)}")
-            if table == "cron_job_runs":
-                row.setdefault("started_at", self.now.isoformat())
-        rows.extend(batch)
-        return [dict(row) for row in batch]
-
-    def notifications(self) -> list[dict[str, Any]]:
-        return self.tables.get("notifications", [])
+from tests.unit.services.cron_store import (
+    DAY,
+    PATIENT,
+    Store,
+    add_medication,
+    add_visit,
+    service_for,
+)
 
 
 @pytest.fixture
-def store() -> _Store:
-    return _Store()
+def store() -> Store:
+    return Store()
 
 
-def _service(store: _Store) -> CronService:
-    service = CronService(store)  # type: ignore[arg-type]
-    service._utc_now = lambda: store.now  # type: ignore[method-assign]
-    return service
-
-
-async def _dispatch(store: _Store, at: datetime, **kwargs: Any) -> dict[str, Any]:
+async def _dispatch(store: Store, at: datetime, **kwargs: Any) -> dict[str, Any]:
     store.now = at
-    result = await _service(store).dispatch_reminders(**kwargs)
+    result = await service_for(store).dispatch_reminders(**kwargs)
     return result["summary"]
 
 
-def _medication(store: _Store, med_id: str, *, active: bool = True, frequency: str = "daily"):
-    store.tables.setdefault("medications", []).append(
-        {
-            "id": med_id,
-            "name": "Synthetic tablet",
-            "dosage": "1 tablet",
-            "instructions": "",
-            "frequency": frequency,
-            "is_active": active,
-        }
-    )
-    store.tables.setdefault("reminder_schedules", []).append(
-        {
-            "id": f"schedule-{med_id}",
-            "patient_id": PATIENT,
-            "target_type": "medication",
-            "target_id": med_id,
-            "timezone": "UTC",
-            "times_of_day": ["08:00"],
-            "days_of_week": list(DAY_ORDER),
-            "is_enabled": True,
-        }
-    )
-
-
-def _visit(store: _Store, *, status: str, at: datetime, visit_id: str = "visit-1") -> None:
-    store.tables.setdefault("appointments", []).append(
-        {
-            "id": visit_id,
-            "patient_id": PATIENT,
-            "scheduled_at": at.isoformat(),
-            "status": status,
-            "clinician_name": "Dr. Synthetic",
-            "location": "Synthetic Clinic",
-            "appointment_type": "follow-up",
-            "reason": "",
-        }
-    )
-
-
 @pytest.mark.asyncio
-async def test_a_late_run_covers_the_gap_since_the_last_window(store: _Store) -> None:
-    _medication(store, "med-1")
+async def test_a_late_run_covers_the_gap_since_the_last_window(store: Store) -> None:
+    add_medication(store, "med-1")
     first = await _dispatch(store, DAY + timedelta(hours=7, minutes=40))
     assert first["window_mode"] == "first_run"
     assert first["window_end"] == (DAY + timedelta(hours=7, minutes=55)).isoformat()
@@ -196,8 +53,8 @@ async def test_a_late_run_covers_the_gap_since_the_last_window(store: _Store) ->
 
 
 @pytest.mark.asyncio
-async def test_a_long_pause_never_replays_more_than_an_hour(store: _Store) -> None:
-    _medication(store, "med-1")
+async def test_a_long_pause_never_replays_more_than_an_hour(store: Store) -> None:
+    add_medication(store, "med-1")
     await _dispatch(store, DAY + timedelta(hours=5, minutes=45))
     resumed = await _dispatch(store, DAY + timedelta(hours=8, minutes=5))
     assert resumed["window_mode"] == "catch_up_capped"
@@ -208,8 +65,8 @@ async def test_a_long_pause_never_replays_more_than_an_hour(store: _Store) -> No
 
 
 @pytest.mark.asyncio
-async def test_a_dry_run_neither_sends_nor_moves_the_window(store: _Store) -> None:
-    _medication(store, "med-1")
+async def test_a_dry_run_neither_sends_nor_moves_the_window(store: Store) -> None:
+    add_medication(store, "med-1")
     await _dispatch(store, DAY + timedelta(hours=7, minutes=40))
     dry = await _dispatch(store, DAY + timedelta(hours=7, minutes=50), dry_run=True)
     assert dry["medication_candidates"] == 1 and store.notifications() == []
@@ -219,8 +76,8 @@ async def test_a_dry_run_neither_sends_nor_moves_the_window(store: _Store) -> No
 
 
 @pytest.mark.asyncio
-async def test_overlapping_windows_never_send_a_reminder_twice(store: _Store) -> None:
-    _medication(store, "med-1")
+async def test_overlapping_windows_never_send_a_reminder_twice(store: Store) -> None:
+    add_medication(store, "med-1")
     first = await _dispatch(store, DAY + timedelta(hours=7, minutes=50))
     assert first["medication_created"] == 1
     # A run recorded before windows were stored gives no previous end: the next window
@@ -235,10 +92,10 @@ async def test_overlapping_windows_never_send_a_reminder_twice(store: _Store) ->
 
 
 @pytest.mark.asyncio
-async def test_a_confirmed_visit_gets_its_day_before_reminder(store: _Store) -> None:
+async def test_a_confirmed_visit_gets_its_day_before_reminder(store: Store) -> None:
     visit_at = DAY + timedelta(days=1, hours=17)
-    _visit(store, status="confirmed", at=visit_at)
-    _visit(store, status="cancelled", at=visit_at, visit_id="visit-cancelled")
+    add_visit(store, status="confirmed", at=visit_at)
+    add_visit(store, status="cancelled", at=visit_at, visit_id="visit-cancelled")
     summary = await _dispatch(store, DAY + timedelta(hours=16, minutes=50))
     assert summary["appointment_24h_candidates"] == 1
     assert summary["appointment_24h_created"] == 1
@@ -247,9 +104,9 @@ async def test_a_confirmed_visit_gets_its_day_before_reminder(store: _Store) -> 
 
 
 @pytest.mark.asyncio
-async def test_a_rescheduled_visit_is_reminded_once_for_its_new_time(store: _Store) -> None:
+async def test_a_rescheduled_visit_is_reminded_once_for_its_new_time(store: Store) -> None:
     first_time = DAY + timedelta(days=1, hours=17)
-    _visit(store, status="confirmed", at=first_time)
+    add_visit(store, status="confirmed", at=first_time)
     await _dispatch(store, DAY + timedelta(hours=16, minutes=50))
     assert len(store.notifications()) == 1
 
@@ -270,10 +127,10 @@ async def test_a_rescheduled_visit_is_reminded_once_for_its_new_time(store: _Sto
 
 @pytest.mark.asyncio
 async def test_a_conflict_in_the_batch_keeps_the_other_reminders(
-    store: _Store, monkeypatch: pytest.MonkeyPatch
+    store: Store, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _medication(store, "med-1")
-    _medication(store, "med-2")
+    add_medication(store, "med-1")
+    add_medication(store, "med-2")
     # A concurrent run inserted one reminder after this run's pre-check.
     store.tables["notifications"] = [
         {"id": "other", "dedupe_key": f"medication:med-1:{(DAY + timedelta(hours=8)).isoformat()}"}
@@ -282,7 +139,7 @@ async def test_a_conflict_in_the_batch_keeps_the_other_reminders(
     async def nothing_seen(_keys: list[str]) -> set[str]:
         return set()
 
-    service = _service(store)
+    service = service_for(store)
     monkeypatch.setattr(service, "_fetch_existing_notification_keys", nothing_seen)
     store.now = DAY + timedelta(hours=7, minutes=50)
     result = await service.dispatch_reminders()
@@ -299,10 +156,10 @@ async def test_a_conflict_in_the_batch_keeps_the_other_reminders(
 
 
 @pytest.mark.asyncio
-async def test_schedules_that_must_not_remind_are_counted_as_skipped(store: _Store) -> None:
-    _medication(store, "med-active")
-    _medication(store, "med-stopped", active=False)
-    _medication(store, "med-prn", frequency="as needed")
+async def test_schedules_that_must_not_remind_are_counted_as_skipped(store: Store) -> None:
+    add_medication(store, "med-active")
+    add_medication(store, "med-stopped", active=False)
+    add_medication(store, "med-prn", frequency="as needed")
     store.tables["reminder_schedules"].append(
         {
             "id": "schedule-missing",

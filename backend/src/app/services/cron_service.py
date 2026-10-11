@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from supabase import Client
 
 from app.core.exceptions import ValidationError
+from app.core.job_logging import JobRunLog
 from app.db.supabase_execute import execute_async
 from app.services.health_knowledge_service import HealthKnowledgeService
 from app.services.reminder_schedule_service import (
@@ -19,6 +20,17 @@ from app.services.reminder_schedule_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Fills the run's summary in place; returns a short, PHI-free reason when the run as a
+# whole must count as failed although it completed (for example, subjects that errored).
+JobWork = Callable[[dict[str, Any]], Awaitable[str | None]]
+
+
+class CronJobAlreadyRunningError(ValidationError):
+    """Another run of the same job started recently and has not finished."""
+
+    def __init__(self, job_name: str) -> None:
+        super().__init__(f"Cron job '{job_name}' is already running")
 
 
 class CronService:
@@ -50,14 +62,6 @@ class CronService:
         keys make any overlap harmless.
         """
         job_name = "reminders_dispatch"
-        await self._ensure_job_not_running(job_name)
-        run = await self._start_run(
-            job_name,
-            metadata={"dry_run": dry_run, "window_minutes": window_minutes},
-        )
-
-        started_at = run["started_at"]
-        run_id = run["id"]
         summary: dict[str, Any] = {
             "window_start": None,
             "window_end": None,
@@ -72,7 +76,7 @@ class CronService:
             **self._empty_schedule_summary(),
         }
 
-        try:
+        async def work(summary: dict[str, Any]) -> None:
             now = self._utc_now()
             window_start, window_end, mode = self._reminder_window(
                 now=now,
@@ -97,36 +101,21 @@ class CronService:
                 summary[f"appointment_{reminder_kind}_created"] = result["created"]
                 summary[f"appointment_{reminder_kind}_existing"] = result["existing"]
 
-            scheduled_result = await self._dispatch_schedule_reminders(
-                window_start=window_start,
-                window_end=window_end,
-                dry_run=dry_run,
+            summary.update(
+                await self._dispatch_schedule_reminders(
+                    window_start=window_start,
+                    window_end=window_end,
+                    dry_run=dry_run,
+                )
             )
-            for key, value in scheduled_result.items():
-                summary[key] = value
 
-            finished = await self._finish_run(
-                run_id,
-                status="success",
-                summary=summary,
-            )
-            return {
-                "run_id": run_id,
-                "job_name": job_name,
-                "status": "success",
-                "dry_run": dry_run,
-                "started_at": started_at,
-                "finished_at": finished["finished_at"],
-                "summary": summary,
-            }
-        except Exception as exc:
-            await self._finish_run(
-                run_id,
-                status="failed",
-                summary=summary,
-                error=str(exc),
-            )
-            raise
+        return await self._run_job(
+            job_name,
+            dry_run=dry_run,
+            metadata={"dry_run": dry_run, "window_minutes": window_minutes},
+            summary=summary,
+            work=work,
+        )
 
     @classmethod
     def _reminder_window(
@@ -164,22 +153,74 @@ class CronService:
         return None
 
     async def run_health_knowledge_refresh(self, *, limit: int = 150) -> dict[str, Any]:
-        """Re-check public medication and condition references; record the run."""
-        job_name = "health_knowledge_refresh"
-        await self._ensure_job_not_running(job_name)
-        run = await self._start_run(job_name, metadata={"limit": limit})
-        summary: dict[str, Any] = {}
+        """Re-check public medication and condition references; record the run.
+
+        A run in which any subject raised counts as failed, so the Cloud Run execution
+        fails too; subjects whose source was unavailable do not (the cache keeps serving).
+        """
+
+        async def work(summary: dict[str, Any]) -> str | None:
+            summary.update(await HealthKnowledgeService(self.db).refresh_due(limit=limit))
+            failed = int(summary.get("subjects_failed") or 0)
+            return f"{failed} reference subjects failed" if failed else None
+
+        return await self._run_job(
+            "health_knowledge_refresh",
+            dry_run=False,
+            metadata={"limit": limit},
+            summary={},
+            work=work,
+        )
+
+    async def _run_job(
+        self,
+        job_name: str,
+        *,
+        dry_run: bool,
+        metadata: dict[str, Any],
+        summary: dict[str, Any],
+        work: JobWork,
+    ) -> dict[str, Any]:
+        """Record one run in ``cron_job_runs`` and log its start and its outcome.
+
+        The log line and the run record carry the same summary. A run already in progress
+        is logged as skipped; any exception is logged as a failure with its type and
+        category only, recorded on the run, and re-raised.
+        """
+        log = JobRunLog(job_name, dry_run=dry_run)
         try:
-            summary = await HealthKnowledgeService(self.db).refresh_due(limit=limit)
-            finished = await self._finish_run(run["id"], status="success", summary=summary)
-        except Exception as exc:
-            await self._finish_run(run["id"], status="failed", summary=summary, error=str(exc))
+            await self._ensure_job_not_running(job_name)
+            run = await self._start_run(job_name, metadata=metadata)
+        except CronJobAlreadyRunningError:
+            log.finished("skipped", summary, reason="already_running")
             raise
+        except Exception as exc:
+            log.finished("failed", summary, error=exc, reason="run_not_recorded")
+            raise
+
+        run_id = str(run["id"])
+        log.started(run_id=run_id, parameters=metadata)
+        try:
+            failure = await work(summary)
+            status = "failed" if failure else "success"
+            finished = await self._finish_run(run_id, status=status, summary=summary, error=failure)
+        except Exception as exc:
+            try:
+                await self._finish_run(run_id, status="failed", summary=summary, error=str(exc))
+            except Exception:  # noqa: BLE001 - the original failure is the one to report
+                logger.warning("Could not record the failed %s run", job_name)
+            log.finished("failed", summary, error=exc)
+            raise
+
+        if failure:
+            log.finished("failed", summary, reason=failure)
+        else:
+            log.finished("success", summary)
         return {
-            "run_id": run["id"],
+            "run_id": run_id,
             "job_name": job_name,
-            "status": "success",
-            "dry_run": False,
+            "status": status,
+            "dry_run": dry_run,
             "started_at": run["started_at"],
             "finished_at": finished["finished_at"],
             "summary": summary,
@@ -323,7 +364,7 @@ class CronService:
             retry_transient=True,
         )
         if response.data:
-            raise ValidationError(f"Cron job '{job_name}' is already running")
+            raise CronJobAlreadyRunningError(job_name)
 
     async def _start_run(self, job_name: str, *, metadata: dict[str, Any]) -> dict[str, Any]:
         response = await execute_async(
