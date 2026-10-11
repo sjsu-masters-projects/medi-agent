@@ -26,6 +26,7 @@ interface SidebarClinicianProfile {
     first_name: string;
     last_name: string;
     role: ClinicianRole;
+    clinic_name?: string | null;
 }
 
 type SidebarRole = ClinicianRole | typeof PortalUserRole.CLINICIAN;
@@ -74,7 +75,8 @@ export function Sidebar() {
     // Counts come from data the dashboard already loaded; the sidebar never fetches its own.
     const pendingAdr = useSelector((state: RootState) => state.dashboard?.summary?.pending_adr_reviews);
     const [profile, setProfile] = useState<SidebarClinicianProfile | null>(null);
-    const clinicName = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
+    const storedClinic = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
+    const clinicName = profile?.clinic_name || storedClinic;
 
     useEffect(() => {
         let isMounted = true;
