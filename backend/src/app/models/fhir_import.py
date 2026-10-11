@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from app.models.clinical_fact import ClinicalFactRead, ClinicalFactReviewState
 
@@ -25,19 +25,27 @@ class SmartLaunchRequest(BaseModel):
 
     ``launch_context`` is the opaque EHR-launch handle.  It is accepted only
     after local clinician and care-team authorization, and is never returned to
-    the browser by this API.
+    the browser by this API.  An EHR launch must supply the EHR's ``issuer``; a
+    standalone launch may omit it so the server-configured standalone issuer is
+    used.
     """
 
     patient_id: UUID
-    issuer: HttpUrl
+    issuer: HttpUrl | None = None
     launch_context: str | None = Field(default=None, min_length=1, max_length=2048)
 
     @field_validator("issuer")
     @classmethod
-    def issuer_must_use_https(cls, value: HttpUrl) -> HttpUrl:
-        if value.scheme != "https":
+    def issuer_must_use_https(cls, value: HttpUrl | None) -> HttpUrl | None:
+        if value is not None and value.scheme != "https":
             raise ValueError("SMART issuer must use HTTPS")
         return value
+
+    @model_validator(mode="after")
+    def ehr_launch_requires_issuer(self) -> SmartLaunchRequest:
+        if self.launch_context and self.issuer is None:
+            raise ValueError("An EHR launch context requires the EHR issuer")
+        return self
 
 
 class SmartLaunchResponse(BaseModel):

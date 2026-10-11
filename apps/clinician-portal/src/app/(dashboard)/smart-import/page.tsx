@@ -38,7 +38,9 @@ interface HandoffResponse {
     resources: ImportResource[];
 }
 
-const STANDALONE_SANDBOX_ISSUER = "https://launch.smarthealthit.org/v/r4/sim/eyJsYXVuY2hfdHlwZSI6InBhdGllbnQtc3RhbmRhbG9uZSJ9/fhir";
+// The standalone sandbox issuer is server configuration: a standalone launch omits
+// the issuer and the backend applies SMART_STANDALONE_ISSUER.
+const MAX_SMART_ERROR_DETAIL_LENGTH = 200;
 
 export default function SmartImportPage() {
     const router = useRouter();
@@ -46,7 +48,6 @@ export default function SmartImportPage() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [patients, setPatients] = useState<AssignedPatient[]>([]);
     const [patientId, setPatientId] = useState("");
-    const [issuer, setIssuer] = useState(STANDALONE_SANDBOX_ISSUER);
     const [loading, setLoading] = useState(true);
     const [starting, setStarting] = useState(false);
     const [launchStatus, setLaunchStatus] = useState<string | null>(null);
@@ -57,6 +58,7 @@ export default function SmartImportPage() {
     const hasEhrLaunch = Boolean(ehrIssuer && ehrLaunchContext);
     const hasIncompleteEhrLaunch = Boolean(ehrIssuer || ehrLaunchContext) && !hasEhrLaunch;
     const smartError = searchParams?.get("smart_error");
+    const smartErrorDetail = searchParams?.get("smart_error_detail")?.slice(0, MAX_SMART_ERROR_DETAIL_LENGTH) ?? null;
 
     const selectedPatient = useMemo(
         () => patients.find((patient) => patient.id === patientId),
@@ -81,18 +83,11 @@ export default function SmartImportPage() {
     }, [loadPatients]);
 
     useEffect(() => {
-        if (ehrIssuer) {
-            setIssuer(ehrIssuer);
-        } else {
-            setIssuer(STANDALONE_SANDBOX_ISSUER);
-        }
-    }, [ehrIssuer]);
-
-    useEffect(() => {
         if (!smartError) return;
-        setError("The SMART sandbox did not authorize this import. Start a fresh launch and try again.");
+        const message = "The SMART sandbox did not authorize this import. Start a fresh launch and try again.";
+        setError(smartErrorDetail ? `${message} Sandbox response: ${smartErrorDetail}` : message);
         router.replace("/smart-import");
-    }, [router, smartError]);
+    }, [router, smartError, smartErrorDetail]);
 
     useEffect(() => {
         const ticket = searchParams?.get("ticket");
@@ -123,8 +118,7 @@ export default function SmartImportPage() {
                 "/api/v1/smart/launch",
                 {
                     patient_id: patientId,
-                    issuer,
-                    ...(hasEhrLaunch ? { launch_context: ehrLaunchContext } : {}),
+                    ...(hasEhrLaunch ? { issuer: ehrIssuer, launch_context: ehrLaunchContext } : {}),
                 },
                 { token },
             );
