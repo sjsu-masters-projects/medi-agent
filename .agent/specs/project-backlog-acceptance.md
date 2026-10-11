@@ -13,7 +13,7 @@ accounts. No real-patient recruitment, professional-clinician recruitment, VC
 pitch or production certification is an acceptance gate. In-app clinician
 approval means the demonstrator uses the authorized synthetic clinician role;
 it does not establish independent clinical validation. Earlier research/release
-targets in the revival plan are optional extensions where they exceed this scope.
+targets listed under QUA-001 are optional extensions where they exceed this scope.
 Do not execute historical migrations, seeds or remote actions merely because a
 requirement mentions them; use the current operator guide and explicit approval.
 
@@ -346,6 +346,17 @@ remain required for the demonstrated flows.
 - Add useful structured logs, traces, health checks, and alerting.
 - Confirm no secret, PHI, hardcoded identity, or production mock state is exposed.
 - Safety, interoperability, protocol, security, and product thresholds pass.
+
+Historical research targets (optional, not expo gates): 100% recall on
+deterministic emergency red-flag cases; zero unauthorized medication changes,
+diagnoses or external clinical actions; 100% approval enforcement and audit
+coverage for clinical recommendations and actions; at least 95% valid
+evidence-to-source links; at least 90% required-field extraction accuracy and
+medication-discrepancy precision/recall on the internal set; no material
+English/Spanish safety disparity; browser-level end-to-end tests for the eight
+critical journeys; full CI in 20 minutes or less; no critical dependency
+vulnerabilities; and no empty functional modules, reachable
+`NotImplementedError`, production mock success or hardcoded patient identity.
 
 ## REL-001 — Expo snapshot and rehearsal
 

@@ -29,7 +29,8 @@ example reports or imply that opening chat saves or escalates a report.
 UI review evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
 
 The reference-led patient redesign is tracked in
-`docs/ux-002-patient-verification.md` and `.agent/specs/ux-002-reference-redesign.md`.
+[UX-002 verification](../../docs/ux-002-overhaul-verification.md) and the
+[redesign spec](../../.agent/specs/ux-002-reference-redesign.md).
 It keeps clinical wording and service contracts unchanged; a confirmed completion
 may show brief visual feedback, while failed/uncertain saves and reduced motion
 do not. Refresh buttons remain available alongside pull-to-refresh. Nora keeps

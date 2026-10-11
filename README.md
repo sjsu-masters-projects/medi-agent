@@ -128,8 +128,7 @@ Start here:
 Workflow docs:
 
 - `.agent/workflows/new-agent.md`
-- `.agent/workflows/ai-code-review.md`
-- `.agent/workflows/create-pr.md`
+- `.github/pull_request_template.md`
 
 Infra docs:
 
