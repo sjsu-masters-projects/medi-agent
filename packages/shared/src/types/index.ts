@@ -410,6 +410,8 @@ export interface Document {
     fileSizeBytes: number;
     parsed: boolean;
     aiSummary?: string;
+    /** Short list title per locale, drafted from the summary; fileName stays the source. */
+    displayTitle?: Partial<Record<Locale, string>>;
     parseStatus: DocumentParseStatus;
     parseFailureCode?: string;
     parseAttempts: number;
@@ -433,6 +435,8 @@ export interface DocumentReviewer {
 export interface ClinicianPatientDocument {
     id: string;
     fileName: string;
+    /** Short list title per locale; fileName stays the source identity. */
+    displayTitle?: Partial<Record<Locale, string>>;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
     parseFailureCode?: string;
@@ -459,6 +463,8 @@ export interface DocumentReviewQueueItem {
     patientFirstName: string;
     patientLastName: string;
     fileName: string;
+    /** Short list title per locale; fileName stays the source identity. */
+    displayTitle?: Partial<Record<Locale, string>>;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
     parseFailureCode?: string;

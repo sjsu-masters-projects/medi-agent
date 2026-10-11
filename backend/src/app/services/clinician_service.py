@@ -37,8 +37,11 @@ from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
 from app.services.notification_service import NotificationService
+from app.services.patient_wording import patient_text
 from app.services.reminder_schedule_service import ReminderScheduleService
 
+# The clinician portal is English; patient-facing wording is shown in that language.
+CLINICIAN_LOCALE = "en-US"
 logger = logging.getLogger(__name__)
 
 
@@ -638,6 +641,11 @@ class ClinicianService:
                 provider_by_team[str(team["id"])] = name
 
         for med in medications:
+            # Clinician controls are English: show approved English wording, keeping the
+            # medication name and dose as recorded. Reconciliation reads raw rows elsewhere.
+            text = patient_text("medication", med, CLINICIAN_LOCALE, include_dosage=False)
+            med["frequency"] = text["frequency"]
+            med["instructions"] = text["description"]
             team_id = med.get("prescribed_by_care_team_id")
             if team_id and str(team_id) in provider_by_team:
                 med["prescribed_by_name"] = provider_by_team[str(team_id)]
@@ -697,13 +705,20 @@ class ClinicianService:
 
         obligations_res = await self._execute(
             self.db.table("obligations")
-            .select("id, obligation_type, description, frequency, notes, is_active, created_at")
+            .select(
+                "id, obligation_type, description, frequency, notes, patient_wording, "
+                "is_active, created_at"
+            )
             .eq("patient_id", pid)
             .eq("is_active", True)
             .order("created_at", desc=True)
         )
         obligations = cast(list[dict[str, Any]], obligations_res.data or [])
         for obligation in obligations:
+            text = patient_text("obligation", obligation, CLINICIAN_LOCALE)
+            obligation["description"] = text["name"]
+            obligation["notes"] = text["description"]
+            obligation["frequency"] = text["frequency"]
             obligation["reminder_schedule"] = reminder_map.get(
                 ("obligation", str(obligation["id"]))
             )

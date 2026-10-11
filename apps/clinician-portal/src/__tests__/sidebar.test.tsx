@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "@/components/layouts/sidebar";
@@ -85,7 +85,7 @@ describe("Sidebar", () => {
             </Provider>,
         );
 
-        expect(screen.getByText("Email unavailable")).toBeInTheDocument();
+        expect(screen.getByRole("group", { name: "Signed-in clinician" })).toHaveTextContent("Clinician");
         expect(screen.queryByText("clinician@mediagent.local")).not.toBeInTheDocument();
     });
 
@@ -96,6 +96,27 @@ describe("Sidebar", () => {
         expect(within(identity).getByText("Clinic Admin")).toBeInTheDocument();
         expect(identity).not.toHaveClass("hidden");
         expect(identity).toHaveClass("flex", "min-w-0");
-        expect(within(identity).getByText("dr.smith@cityhealth.org")).toHaveClass("hidden", "md:block");
+        // The email is not repeated in the rail; it remains the account row's tooltip.
+        expect(within(identity).queryByText("dr.smith@cityhealth.org")).not.toBeInTheDocument();
+        expect(identity).toHaveAttribute("title", "dr.smith@cityhealth.org");
+    });
+
+    it("collapses to an icon rail that keeps accessible labels and remembers the choice", async () => {
+        window.localStorage.removeItem("clinician-portal.sidebar-collapsed");
+        render(<Provider store={store}><Sidebar /></Provider>);
+        const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+        expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+        fireEvent.click(toggle);
+
+        const expand = await screen.findByRole("button", { name: "Expand sidebar" });
+        expect(expand).toHaveAttribute("aria-expanded", "false");
+        expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("title", "Appointments");
+        expect(screen.getByText("Appointments")).toHaveClass("md:sr-only");
+        expect(window.localStorage.getItem("clinician-portal.sidebar-collapsed")).toBe("1");
+
+        fireEvent.click(expand);
+        expect(await screen.findByRole("button", { name: "Collapse sidebar" })).toBeInTheDocument();
+        expect(window.localStorage.getItem("clinician-portal.sidebar-collapsed")).toBe("0");
     });
 });

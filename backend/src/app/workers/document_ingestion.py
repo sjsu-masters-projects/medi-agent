@@ -15,6 +15,7 @@ from app.clients.supabase import get_admin_client
 from app.config import settings
 from app.services.care_plan_service import CarePlanService
 from app.services.document_summary_service import DocumentSummaryService
+from app.services.document_title_service import DocumentTitleService
 from app.services.ingestion_service import IngestionService
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class DocumentIngestionWorker:
         self._batch_size = max(1, min(batch_size, 100))
         self._service = IngestionService(db)
         self._summaries = DocumentSummaryService(db)
+        self._titles = DocumentTitleService(db)
         self._care_plans = CarePlanService(db)
 
     async def process_batch(self) -> dict[str, int]:
@@ -78,8 +80,17 @@ class DocumentIngestionWorker:
             else:
                 summary["failed"] += 1
         summary.update(await self.process_pending_summaries())
+        summary.update(await self.process_pending_titles())
         summary.update(await self._care_plans.process_pending(limit=self._batch_size))
         return summary
+
+    async def process_pending_titles(self) -> dict[str, int]:
+        """Draft record titles after summaries; a failure only leaves the file name."""
+        try:
+            return await self._titles.fill_missing(limit=self._batch_size)
+        except Exception:  # noqa: BLE001 - a list title never fails the Job
+            logger.exception("Document title drafting failed")
+            return {"titles_unhandled_failures": 1}
 
     async def process_pending_summaries(self) -> dict[str, int]:
         """Generate owed patient explanations from candidates that already exist.

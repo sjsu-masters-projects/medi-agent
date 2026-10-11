@@ -132,6 +132,7 @@ class PatientDocumentRead(BaseModel):
     parse_failure_code: str | None = None
     parse_attempts: int = 0
     ai_summary: str | None = None
+    display_title: dict[str, str] = Field(default_factory=dict)
     summary_status: str = "not_required"
     summary_failure_code: str | None = None
     summary_attempts: int = 0
@@ -159,6 +160,7 @@ class DocumentReviewQueueItem(BaseModel):
     parse_failure_code: str | None = None
     parse_attempts: int = 0
     ai_summary: str | None = None
+    display_title: dict[str, str] = Field(default_factory=dict)
     summary_status: str = "not_required"
     summary_failure_code: str | None = None
     summary_attempts: int = 0

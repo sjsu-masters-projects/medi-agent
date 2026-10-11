@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import (
     DocumentReviewStatus,
@@ -36,6 +36,8 @@ class DocumentRead(BaseModel):
     file_size_bytes: int
     parsed: bool = False
     ai_summary: str | None = None
+    # Short list title per locale, drafted from the summary; the file name stays the source.
+    display_title: dict[str, str] = Field(default_factory=dict)
     parse_status: str = "none"
     parse_failure_code: str | None = None
     parse_attempts: int = 0

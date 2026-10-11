@@ -379,6 +379,7 @@ interface PatientDeepDiveResponse
     documents: Array<{
         id: string;
         file_name: string;
+        display_title?: Partial<Record<"en-US" | "es-MX", string>> | null;
         document_type: DocumentType;
         parse_status: string;
         parse_failure_code?: string;
@@ -409,6 +410,7 @@ interface DocumentReviewQueueItemResponse {
     patient_first_name: string;
     patient_last_name: string;
     file_name: string;
+    display_title?: Partial<Record<"en-US" | "es-MX", string>> | null;
     document_type: DocumentType;
     parse_status: string;
     parse_failure_code?: string;
@@ -565,6 +567,7 @@ function normalizePatientDocument(
     return {
         id: document.id,
         fileName: document.file_name,
+        displayTitle: document.display_title ?? undefined,
         documentType: document.document_type,
         parseStatus: document.parse_status,
         parseFailureCode: document.parse_failure_code,
@@ -594,6 +597,7 @@ function normalizeDocumentReviewQueueItem(
         patientFirstName: item.patient_first_name,
         patientLastName: item.patient_last_name,
         fileName: item.file_name,
+        displayTitle: item.display_title ?? undefined,
         documentType: item.document_type,
         parseStatus: item.parse_status,
         parseFailureCode: item.parse_failure_code,

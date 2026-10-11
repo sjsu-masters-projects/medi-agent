@@ -15,6 +15,7 @@ export interface DocumentApiRecord {
     file_size_bytes: number;
     parsed: boolean;
     ai_summary?: string | null;
+    display_title?: Partial<Record<"en-US" | "es-MX", string>> | null;
     parse_status?: Document["parseStatus"];
     parse_failure_code?: string | null;
     parse_attempts?: number;
