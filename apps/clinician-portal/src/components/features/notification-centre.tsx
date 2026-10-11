@@ -133,9 +133,12 @@ export function NotificationBell() {
   const summary = centre.summary.data;
   const unavailable = !!centre.summary.error || !summary;
   return <>
-    <button type="button" aria-label={`Open notifications${unavailable ? ": count unavailable" : `: ${summary.unread_count} unread`}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)} className="ma-press relative flex h-10 min-w-10 items-center justify-center gap-1 rounded-lg border border-line-strong px-2 text-ink-2 hover:bg-surface-2">
+    <button type="button" aria-label={`Open notifications${unavailable ? ": count unavailable" : `: ${summary.unread_count} unread`}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)} className="ma-press relative flex h-10 w-10 items-center justify-center rounded-lg border border-line-strong text-ink-2 hover:bg-surface-2">
       <Icon name="bell" className="h-5 w-5" />
-      <span className="font-mono text-xs">{unavailable ? "—" : summary.unread_count || null}</span>
+      {/* A filled badge on the bell, like any notification count; unknown is a quiet dash, never zero. */}
+      {unavailable
+        ? <span aria-hidden="true" className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-line-strong bg-surface px-1 font-mono text-[10px] text-muted">—</span>
+        : summary.unread_count > 0 && <span aria-hidden="true" className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-risk px-1.5 font-mono text-[11px] font-semibold leading-none text-white ring-2 ring-surface">{summary.unread_count > 99 ? "99+" : summary.unread_count}</span>}
     </button>
     <Modal open={open} onClose={() => setOpen(false)} title="Notifications" contentClassName="sm:!max-w-xl !pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">

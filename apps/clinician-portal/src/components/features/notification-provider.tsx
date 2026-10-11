@@ -34,6 +34,10 @@ export function useNotificationCentre() {
   if (!value) throw new Error("Notification centre requires its portal provider.");
   return value;
 }
+/** For shell chrome that can render outside the provider (for example in tests). */
+export function useOptionalNotificationCentre() {
+  return useContext(Context);
+}
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);

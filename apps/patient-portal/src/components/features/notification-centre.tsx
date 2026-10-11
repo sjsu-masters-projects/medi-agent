@@ -99,7 +99,7 @@ export function NotificationBell() {
   return <>
     <button type="button" className="ma-press relative flex h-11 w-11 items-center justify-center rounded-[14px] bg-surface text-ink-2 hover:bg-surface-2" aria-label={`${copy.title} · ${summary ? copy.count(summary.unread_count) : copy.unavailable}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
       <Icon name="bell" className="h-5 w-5" />
-      {summary === null ? <span aria-hidden="true" className="absolute right-0 top-0 rounded-full bg-surface-2 px-1.5 font-mono text-xs text-muted">?</span> : summary.unread_count > 0 && <span aria-hidden="true" className="absolute right-0 top-0 rounded-full bg-brand px-1.5 font-mono text-xs text-white">{summary.unread_count > 99 ? "99+" : summary.unread_count}</span>}
+      {summary === null ? <span aria-hidden="true" className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-line-strong bg-surface px-1 font-mono text-[10px] text-muted">?</span> : summary.unread_count > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-ink px-1.5 font-mono text-[11px] font-semibold leading-none text-white ring-2 ring-background">{summary.unread_count > 99 ? "99+" : summary.unread_count}</span>}
     </button>
     <Modal open={open} onClose={() => setOpen(false)} title={copy.title} closeLabel={copy.close}>
       <NotificationCentre onNavigate={() => setOpen(false)} />
