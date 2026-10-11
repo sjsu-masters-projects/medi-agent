@@ -25,6 +25,7 @@ import type { CareTeamMember, Patient } from "@/types";
 import { careTeamRoleLabel } from "./care-team-labels";
 import { profileCopy, profileGenderLabels } from "./profile-copy";
 import { useSharedPatientProfile } from "@/hooks/use-patient-profile";
+import { EmailPreferences } from "@/components/features/email-preferences";
 
 interface PatientProfileResponse {
     id: string;
@@ -550,6 +551,7 @@ function ProfilePageContent() {
                                 </p>
                             ) : null}
                         </section>
+                        {accessToken ? <EmailPreferences token={accessToken} locale={locale} /> : null}
                         <section aria-labelledby="profile-account">
                             <h3 className={eyebrowClass}>{copy.account}</h3>
                             <div className={groupClass}>

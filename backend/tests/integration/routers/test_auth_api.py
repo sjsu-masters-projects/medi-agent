@@ -379,7 +379,9 @@ class TestClinicAdminSignup:
 
 
 class TestLogin:
-    def test_success_for_both_roles(self, client, override_db, override_auth_service, mock_supabase_db):
+    def test_success_for_both_roles(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
         mock_supabase_db.auth.sign_in_with_password.side_effect = [
             _make_auth_response(
                 user_id=str(uuid4()),
@@ -481,7 +483,9 @@ class TestLogin:
         assert result.json()["error"]["code"] == "CLINIC_CONTEXT_INVALID"
         assert "Clinic code is required" in result.json()["error"]["message"]
 
-    def test_invalid_credentials(self, client, override_db, override_auth_service, mock_supabase_db):
+    def test_invalid_credentials(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
         mock_supabase_db.auth.sign_in_with_password.side_effect = Exception("Invalid login")
 
         response = client.post(
@@ -502,7 +506,9 @@ class TestLogin:
         mock_supabase_db.auth.sign_in_with_password.return_value = response
 
         original_clinic_check = AuthService._assert_clinician_matches_clinic
-        AuthService._assert_clinician_matches_clinic = lambda self, _id, _code: (_ for _ in ()).throw(
+        AuthService._assert_clinician_matches_clinic = lambda self, _id, _code: (
+            _ for _ in ()
+        ).throw(
             AuthenticationError(
                 "Clinician account does not belong to the selected clinic",
                 code="CLINIC_CONTEXT_INVALID",
@@ -575,7 +581,17 @@ class TestPasswordReset:
         )
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        mock_supabase_db.auth.reset_password_email.assert_called_once_with("patient@example.com")
+        mock_supabase_db.auth.reset_password_email.assert_called_once_with(
+            "patient@example.com",
+            {"redirect_to": "http://localhost:3000/reset-password?lang=en-US"},
+        )
+
+    def test_untrusted_redirect_rejected(self, client, override_db, override_auth_service):
+        response = client.post(
+            "/api/v1/auth/password-reset",
+            json={"email": "patient@example.com", "portal": "https://outsider.example"},
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 class TestGetMe:

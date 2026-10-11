@@ -27,6 +27,7 @@ from app.routers import (
     clinics,
     cron,
     documents,
+    email_preferences,
     feed,
     medications,
     mfa,
@@ -133,6 +134,7 @@ def create_app() -> FastAPI:
     application.include_router(patients.router, prefix=f"{api}/patients", tags=["Patients"])
     application.include_router(clinicians.router, prefix=f"{api}/clinicians", tags=["Clinicians"])
     application.include_router(documents.router, prefix=f"{api}/documents", tags=["Documents"])
+    application.include_router(email_preferences.router, prefix=f"{api}/email", tags=["Email preferences"])
     application.include_router(
         medications.router, prefix=f"{api}/medications", tags=["Medications"]
     )

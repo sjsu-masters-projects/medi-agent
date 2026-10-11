@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Button, Input } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { AuthShell, AuthSteps, VerifiedClinic } from "@/components/features/auth-shell";
@@ -15,7 +15,7 @@ import {
     type ClinicContext,
 } from "@/services/clinic-context";
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
-import type { AppDispatch } from "@/store/store";
+import type { AppDispatch, RootState } from "@/store/store";
 import { ClinicianRole, PortalUserRole } from "@/types";
 
 interface SignupResponse {
@@ -57,6 +57,8 @@ function ClinicianSignupPageContent() {
     const [clinicContext, setClinicContext] = useState<ClinicContext | null>(null);
     const [inviteRole, setInviteRole] = useState<ClinicianRole | null>(null);
     const inviteHydrated = useRef(false);
+    const [invitationToken, setInvitationToken] = useState("");
+    const accessToken = useSelector((state: RootState) => state.auth.accessToken);
     const [formData, setFormData] = useState({
         confirmPassword: "",
         email: "",
@@ -79,6 +81,22 @@ function ClinicianSignupPageContent() {
 
     useEffect(() => {
         if (inviteHydrated.current) {
+            return;
+        }
+
+        const token = new URLSearchParams(window.location.hash.slice(1)).get("invitation");
+        if (token) {
+            inviteHydrated.current = true;
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+            setInvitationToken(token); setInviteLoading(true);
+            void api.post<ClinicResolveResponse & { email: string; role: ClinicianRole }>(
+                "/api/v1/email/invitations/preview", { token },
+            ).then(value => {
+                const context = mapClinicContext(value);
+                setClinicContext(context); writeStoredClinicContext(context);
+                updateField("email", value.email); updateField("role", value.role); setInviteRole(value.role);
+            }).catch(() => setError("This invitation is invalid, expired or no longer available."))
+              .finally(() => setInviteLoading(false));
             return;
         }
 
@@ -161,6 +179,7 @@ function ClinicianSignupPageContent() {
                 password: formData.password,
                 role: formData.role,
                 specialty: formData.specialty,
+                invitation_token: invitationToken || undefined,
             });
 
             if (response.user.role !== PortalUserRole.CLINICIAN) {
@@ -179,6 +198,16 @@ function ClinicianSignupPageContent() {
             };
             writeStoredSession(session);
             dispatch(hydrateSession(session));
+            // Claim membership separately: a retry must not delete a successfully created account.
+            if (invitationToken) {
+                try {
+                    await api.post("/api/v1/email/invitations/accept", { token: invitationToken }, { token: session.accessToken });
+                } catch {
+                    setError("Your account was created, but clinic membership could not be confirmed. Use the accept invitation button to retry with this account.");
+                    setSubmitting(false);
+                    return;
+                }
+            }
             router.replace("/dashboard");
         } catch (submissionError) {
             setError((submissionError as Error).message);
@@ -214,10 +243,17 @@ function ClinicianSignupPageContent() {
                         </div>
                     )}
 
+                    {invitationToken && accessToken ? <Button disabled={submitting || inviteLoading} onClick={() => {
+                        setSubmitting(true); setError("");
+                        void api.post("/api/v1/email/invitations/accept", { token: invitationToken }, { token: accessToken })
+                            .then(() => router.replace("/settings"))
+                            .catch(() => setError("This invitation cannot be accepted by the signed-in account."))
+                            .finally(() => setSubmitting(false));
+                    }}>Accept invitation with signed-in account</Button> : null}
                     <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
                         <Input label="First name" onChange={(event) => updateField("firstName", event.target.value)} value={formData.firstName} />
                         <Input label="Last name" onChange={(event) => updateField("lastName", event.target.value)} value={formData.lastName} />
-                        <Input label="Email" onChange={(event) => updateField("email", event.target.value)} type="email" value={formData.email} />
+                        <Input label="Email" readOnly={Boolean(invitationToken)} onChange={(event) => updateField("email", event.target.value)} type="email" value={formData.email} />
                         <Input label="Specialty" onChange={(event) => updateField("specialty", event.target.value)} value={formData.specialty} />
                         <label className="block">
                             <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Role access</span>

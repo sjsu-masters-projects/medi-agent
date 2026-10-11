@@ -134,7 +134,8 @@ async def send_patient_message(
 @router.post(
     "/me/patients/{patient_id}/email",
     response_model=ClinicianMessageRead,
-    summary="Record an email message to an assigned patient",
+    summary="Retired legacy email-record endpoint",
+    deprecated=True,
 )
 async def send_patient_email(
     patient_id: UUID,
@@ -142,9 +143,11 @@ async def send_patient_email(
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
-    payload = data.model_dump()
-    payload["channel"] = "email"
-    return await service.send_patient_message(user.id, patient_id, payload)
+    await service.get_patient_detail(user.id, patient_id)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Use private care-team messages. Verified recipients may opt into email notices.",
+    )
 
 
 @router.get(

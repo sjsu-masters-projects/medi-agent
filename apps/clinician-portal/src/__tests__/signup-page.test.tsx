@@ -28,6 +28,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("react-redux", () => ({
     useDispatch: () => dispatch,
+    useSelector: () => null,
 }));
 
 vi.mock("@/services/api", () => ({
@@ -54,6 +55,7 @@ describe("Clinician signup page", () => {
         readStoredClinicContext.mockReset();
         writeStoredClinicContext.mockReset();
         setSearchParams("");
+        window.history.replaceState(null, "", "/signup");
         readStoredClinicContext.mockReturnValue({
             clinicCode: "ABC123",
             clinicId: "clinic-1",
@@ -106,15 +108,18 @@ describe("Clinician signup page", () => {
         expect(replace).toHaveBeenCalledWith("/dashboard");
     });
 
-    it("hydrates invite params and signs up admin invitees", async () => {
+    it("uses an addressed opaque invitation for admin membership", async () => {
         readStoredClinicContext.mockReturnValue(null);
-        setSearchParams("email=admin%40example.com&role=admin&code=ABC123");
+        const invitation = "x".repeat(43);
+        window.history.replaceState(null, "", `/signup#invitation=${invitation}`);
 
         post.mockResolvedValueOnce({
             clinic_code: "ABC123",
             clinic_id: "clinic-1",
             clinic_name: "City Health",
             status: "active",
+            email: "admin@example.com",
+            role: "admin",
         });
         post.mockResolvedValueOnce({
             tokens: {
@@ -128,6 +133,7 @@ describe("Clinician signup page", () => {
                 role: "clinician",
             },
         });
+        post.mockResolvedValueOnce({ status: "accepted" });
 
         render(<ClinicianSignupPage />);
 
@@ -157,5 +163,7 @@ describe("Clinician signup page", () => {
                 expect.objectContaining({ clinic_code: "ABC123", role: "admin" }),
             );
         });
+        expect(window.location.hash).toBe("");
+        expect(post).toHaveBeenCalledWith("/api/v1/email/invitations/accept", { token: invitation }, { token: "access-token" });
     });
 });

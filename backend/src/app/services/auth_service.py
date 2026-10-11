@@ -22,11 +22,13 @@ from jwt import PyJWTError as JWTError
 from supabase import Client
 
 from app.clients.supabase import create_anon_client
+from app.config import settings
 from app.core.exceptions import AuthenticationError, ExternalServiceError, ValidationError
 from app.core.jwt_utils import decode_unverified_claims
 from app.db.repositories import ClinicianRepository, ClinicRepository
 from app.models.enums import ClinicianRole, coerce_locale
 from app.services.clinic_service import ClinicService
+from app.services.email_invitation_service import EmailInvitationService
 
 logger = logging.getLogger(__name__)
 _SUPPORTED_ROLES = {"patient", "clinician"}
@@ -110,9 +112,19 @@ class AuthService:
         role: str = ClinicianRole.PROVIDER,
         *,
         allow_admin_role: bool = False,
+        invitation_token: str | None = None,
     ) -> Any:
         """Create a clinician account: auth user + profile row."""
         role_value = role.value if isinstance(role, ClinicianRole) else str(role)
+        if invitation_token:
+            invitation = await EmailInvitationService(self.db).preview(invitation_token)
+            if (
+                str(invitation["email"]).lower() != email.lower()
+                or invitation["clinic_code"] != clinic_code
+            ):
+                raise ValidationError("Invitation does not match this account or clinic")
+            role_value = str(invitation["role"])
+            allow_admin_role = role_value == ClinicianRole.ADMIN.value
 
         allowed_roles = {
             ClinicianRole.PROVIDER.value,
@@ -144,10 +156,10 @@ class AuthService:
                     "first_name": first_name,
                     "last_name": last_name,
                     "specialty": specialty,
-                    "clinic_id": clinic["id"],
-                    "clinic_name": clinic["display_name"],
+                    "clinic_id": None if invitation_token else clinic["id"],
+                    "clinic_name": None if invitation_token else clinic["display_name"],
                     "type1_npi": type1_npi,
-                    "role": role_value,
+                    "role": ClinicianRole.PROVIDER.value if invitation_token else role_value,
                 }
             ).execute()
         except Exception as e:
@@ -156,11 +168,12 @@ class AuthService:
             raise ValidationError(f"Profile creation failed: {e}") from e
 
         try:
-            return self._sign_in_and_format(
+            result = self._sign_in_and_format(
                 email=email,
                 password=password,
                 expected_role="clinician",
             )
+            return result
         except Exception as e:
             logger.error("Failed to finalize clinician signup for %s: %s", user_id, e)
             self._cleanup_signup("clinicians", user_id)
@@ -257,12 +270,22 @@ class AuthService:
 
     # ── Password Reset ──────────────────────────────────────
 
-    async def request_password_reset(self, email: str) -> None:
+    async def request_password_reset(
+        self, email: str, *, portal: str = "patient", locale: str = "en-US"
+    ) -> None:
         """Send a password reset email via Supabase."""
         try:
-            self.auth_client.auth.reset_password_email(email)
-        except Exception as e:
-            logger.info("Password reset requested for %s: %s", email, e)
+            base_url = (
+                settings.clinician_portal_url
+                if portal == "clinician"
+                else settings.patient_portal_url
+            )
+            language = "en-US" if portal == "clinician" else coerce_locale(locale).value
+            redirect_url = base_url.rstrip("/") + "/reset-password?lang=" + language
+            self.auth_client.auth.reset_password_email(email, {"redirect_to": redirect_url})
+        except Exception:
+            # Neither provider diagnostics nor the address belongs in recovery logs.
+            logger.warning("Password recovery delivery request failed")
 
     # ── Helpers ─────────────────────────────────────────────
 

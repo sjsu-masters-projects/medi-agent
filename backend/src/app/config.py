@@ -92,7 +92,7 @@ class Settings(BaseSettings):
 
     # Resend (email)
     resend_api_key: str = ""
-    resend_from_email: str = "MediAgent <onboarding@resend.dev>"
+    resend_from_email: str = ""
     resend_clinician_onboarding_from_email: str = (
         "MediAgent Clinician Onboarding <onboarding@mail.mediagent.live>"
     )

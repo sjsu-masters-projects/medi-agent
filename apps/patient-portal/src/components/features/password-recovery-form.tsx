@@ -1,0 +1,116 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { api } from "@/services/api";
+import { createRecoveryClient } from "@/services/password-recovery";
+import { readRecoveryTokens, recoveryCopy } from "../../../../../packages/shared/src/utils/password-recovery";
+
+type Client = NonNullable<ReturnType<typeof createRecoveryClient>>;
+type State = "checking" | "ready" | "invalid" | "unavailable" | "success";
+
+export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
+    mode: "request" | "reset";
+    locale?: string;
+    portal: "patient" | "clinician";
+}) {
+    const copy = recoveryCopy(locale);
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirm, setConfirm] = useState("");
+    const [sent, setSent] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const [state, setState] = useState<State>("checking");
+    const recovery = useRef<Promise<{ client: Client | null; state: State }> | null>(null);
+    const client = useRef<Client | null>(null);
+
+    useEffect(() => {
+        if (mode !== "reset") return;
+        let active = true;
+        if (!recovery.current) {
+            const tokens = readRecoveryTokens(window.location.hash);
+            // Do this before SDK/network work: secrets must not remain in browser history.
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+            recovery.current = (async () => {
+                if (!tokens) return { client: null, state: "invalid" as const };
+                const auth = createRecoveryClient();
+                if (!auth) return { client: null, state: "unavailable" as const };
+                try {
+                    const session = await auth.auth.setSession(tokens);
+                    if (session.error || !session.data.session) return { client: null, state: "invalid" as const };
+                    const user = await auth.auth.getUser();
+                    if (user.error || !user.data.user) return { client: null, state: "invalid" as const };
+                    return { client: auth, state: "ready" as const };
+                } catch {
+                    return { client: null, state: "invalid" as const };
+                }
+            })();
+        }
+        void recovery.current.then((result) => {
+            if (active) { client.current = result.client; setState(result.state); }
+        });
+        return () => { active = false; };
+    }, [mode]);
+
+    async function submit(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (busy) return;
+        setError("");
+        if (mode === "reset" && (password !== confirm || password.length < 8 || password.length > 128)) {
+            setError(copy.mismatch); return;
+        }
+        setBusy(true);
+        try {
+            if (mode === "request") {
+                await api.post("/api/v1/auth/password-reset", { email, portal, locale });
+                setSent(true);
+            } else {
+                if (state !== "ready" || !client.current) { setState("invalid"); return; }
+                const result = await client.current.auth.updateUser({ password });
+                if (result.error) { setError(copy.failure); return; }
+                setPassword(""); setConfirm(""); setState("success");
+                // Do not keep the recovery session, or log into the portal around its MFA.
+                await client.current.auth.signOut({ scope: "local" }).catch(() => undefined);
+                client.current = null;
+                recovery.current = null;
+            }
+        } catch {
+            setError(copy.failure);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    const action = portal === "patient" ? "bg-brand hover:bg-brand-hover" : "bg-primary hover:bg-primary-hover";
+    const input = "mt-2 min-h-12 w-full rounded-xl border border-line-strong bg-surface px-4 text-base text-ink";
+    const link = portal === "patient" ? "text-brand" : "text-primary";
+    const resetReady = mode === "reset" && state === "ready";
+    return <section className="space-y-6" lang={locale}>
+        <header>
+            <h1 className="text-2xl font-semibold text-ink">{mode === "request" ? copy.forgot : copy.reset}</h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted">{mode === "request" ? copy.intro : copy.resetIntro}</p>
+        </header>
+        {mode === "request" && sent ? <p role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2">{copy.sent}</p> : null}
+        {mode === "reset" && state !== "ready" ? <p role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2">{copy[state]}</p> : null}
+        {(mode === "request" && !sent) || resetReady ? <form onSubmit={submit} className="space-y-5">
+            {mode === "request" ? <label className="block text-sm font-medium text-ink-2">
+                {copy.email}<input autoComplete="email" className={input} type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
+            </label> : <>
+                <label className="block text-sm font-medium text-ink-2">{copy.password}
+                    <input autoComplete="new-password" className={input} type="password" required minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} />
+                </label>
+                <label className="block text-sm font-medium text-ink-2">{copy.confirm}
+                    <input autoComplete="new-password" className={input} type="password" required minLength={8} maxLength={128} value={confirm} onChange={(event) => setConfirm(event.target.value)} />
+                </label>
+            </>}
+            {error ? <p role="alert" className="text-sm text-ink">{error}</p> : null}
+            <button className={`min-h-12 w-full rounded-xl px-4 font-semibold text-white disabled:opacity-50 ${action}`} disabled={busy} type="submit">
+                {mode === "request" ? busy ? copy.sending : copy.send : busy ? copy.saving : copy.save}
+            </button>
+        </form> : null}
+        {mode === "reset" && (state === "invalid" || state === "unavailable") ?
+            <Link className={`inline-flex min-h-11 items-center font-semibold ${link}`} href={`/forgot-password?lang=${locale}`}>{copy.retry}</Link> : null}
+        <Link className={`flex min-h-11 items-center text-sm font-medium ${link}`} href={`/login?lang=${locale}`}>{copy.back}</Link>
+    </section>;
+}

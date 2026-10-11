@@ -47,6 +47,7 @@ class ClinicianSignupRequest(BaseModel):
     clinic_code: str = Field(..., min_length=6, max_length=20)
     type1_npi: str | None = Field(default=None, pattern=r"^\d{10}$")
     role: ClinicianSignupRole = "provider"
+    invitation_token: str | None = Field(default=None, min_length=32, max_length=128)
 
 
 class ClinicAdminSignupRequest(BaseModel):
@@ -81,6 +82,8 @@ class PasswordResetRequest(BaseModel):
     """Request a password reset email."""
 
     email: EmailStr
+    portal: AuthRole = "patient"
+    locale: Language = Language.EN
 
 
 # ── Responses ───────────────────────────────────────────────

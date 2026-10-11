@@ -110,7 +110,7 @@ async def signup_clinician(
         clinic_code=body.clinic_code,
         type1_npi=body.type1_npi,
         role=body.role,
-        allow_admin_role=body.role == "admin",
+        invitation_token=body.invitation_token,
     )
     return AuthResponse(
         tokens=AuthTokens(**result["tokens"]),
@@ -183,7 +183,7 @@ async def password_reset(
     body: PasswordResetRequest,
     service: AuthService = Depends(_get_auth_service),
 ) -> None:
-    await service.request_password_reset(body.email)
+    await service.request_password_reset(body.email, portal=body.portal, locale=body.locale.value)
 
 
 # ── Current User ────────────────────────────────────────────

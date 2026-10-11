@@ -67,6 +67,41 @@ open backend/htmlcov/index.html
 
 See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing documentation.
 
+## Runtime configuration ownership
+
+`app/config.py` supplies defaults; real process environment variables override
+those defaults. Local startup may also load the repository-root `.env` (or CWD
+`.env` if that file is absent). Never copy credentials into documentation or test
+reports. `.env.example` documents intent, not proof of local overrides.
+
+The Cloud Run service deploy in `.github/workflows/deploy-backend.yml` uses
+`--update-env-vars`: unrelated settings and secret references survive deployment,
+but the named model/location/timeout settings are re-pinned on every deploy.
+Change those declarations together with defaults/examples when promoting a model;
+a console-only model change is temporary. `GOOGLE_PROJECT_ID` is currently an
+out-of-band service setting and must remain configured for Vertex routing.
+
+The document-ingestion and health-knowledge jobs use `--set-env-vars` and
+`--set-secrets`, declaring their entire environment. Manual additions to a job do
+not survive its next deployment. Ingestion receives the Gemini settings and batch
+size; the public-source health-knowledge job does not require Gemini settings.
+
+Serving uses `GEMINI_VERTEX_AI_LOCATION` and Vertex credentials. The separate
+`VERTEX_AI_LOCATION` is retained for managed open-weight evaluation, not current
+chat routing. `GOOGLE_API_KEY` supports the legacy explicit AI Studio path, not
+normal Vertex requests. Embedding/RAG settings currently have no runtime consumer;
+do not infer an active embedding pipeline from their presence in the example.
+
+October 11 read-only audit: main `8b93b48`, live service revision
+`mediagent-backend-00126-c94` (100% traffic), service and ingestion model settings
+match the workflow; knowledge job has only its declared public-source/DB settings.
+Both live portal URLs and branded email From values are configured. The onboarding
+From variable occurs twice with identical values in the service and needs a
+separately authorized deduplication. No local credential file or secret value was
+inspected, and no model call, deployment or remote change was performed by this
+audit. Config/ADK/provider/client/worker focused tests: **54 passed**. Configuration
+agreement and mocked tests do not establish current provider availability.
+
 ## Care-plan model preflight
 
 Before deploying a change to care-plan classification or its provider route, validate the

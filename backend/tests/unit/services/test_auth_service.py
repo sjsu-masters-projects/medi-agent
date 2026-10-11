@@ -849,7 +849,9 @@ async def test_request_password_reset_success(auth_service, mock_auth_client):
     await auth_service.request_password_reset(email="user@example.com")
 
     # Verify reset_password_email was called
-    mock_auth_client.auth.reset_password_email.assert_called_once_with("user@example.com")
+    mock_auth_client.auth.reset_password_email.assert_called_once_with(
+        "user@example.com", {"redirect_to": "http://localhost:3000/reset-password?lang=en-US"}
+    )
 
 
 @pytest.mark.asyncio
@@ -862,7 +864,43 @@ async def test_request_password_reset_email_not_found(auth_service, mock_auth_cl
     await auth_service.request_password_reset(email="nonexistent@example.com")
 
     # Verify reset_password_email was called
-    mock_auth_client.auth.reset_password_email.assert_called_once_with("nonexistent@example.com")
+    mock_auth_client.auth.reset_password_email.assert_called_once_with(
+        "nonexistent@example.com",
+        {"redirect_to": "http://localhost:3000/reset-password?lang=en-US"},
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("portal", "locale", "expected_url"),
+    [
+        ("patient", "es-MX", "https://app.example/reset-password?lang=es-MX"),
+        ("clinician", "es-MX", "https://clinic.example/reset-password?lang=en-US"),
+    ],
+)
+async def test_recovery_uses_fixed_portal_destination(
+    auth_service, mock_auth_client, portal, locale, expected_url
+):
+    with patch("app.services.auth_service.settings") as config:
+        config.patient_portal_url = "https://app.example/"
+        config.clinician_portal_url = "https://clinic.example/"
+        await auth_service.request_password_reset("test@example.com", portal=portal, locale=locale)
+    mock_auth_client.auth.reset_password_email.assert_called_once_with(
+        "test@example.com", {"redirect_to": expected_url}
+    )
+
+
+@pytest.mark.asyncio
+async def test_recovery_failure_logs_no_identity_or_provider_payload(
+    auth_service, mock_auth_client, caplog
+):
+    mock_auth_client.auth.reset_password_email.side_effect = Exception(
+        "recipient@example.com secret-recovery-token"
+    )
+    await auth_service.request_password_reset("recipient@example.com")
+    assert "recipient@example.com" not in caplog.text
+    assert "secret-recovery-token" not in caplog.text
+    assert "Password recovery delivery request failed" in caplog.text
 
 
 # ── Session Formatting Tests ──────────────────────────────────

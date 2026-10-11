@@ -537,6 +537,9 @@ function ClinicianLoginPageContent() {
                                     value={password}
                                 />
                                 {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}
+                                <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-primary" href="/forgot-password">
+                                    Forgot your password?
+                                </Link>
                                 <Button disabled={submitting} fullWidth size="lg" type="submit">
                                     {submitting ? "Signing in..." : "Sign in"}
                                 </Button>
