@@ -33,16 +33,16 @@ export function DocumentCard({
       type="button"
     >
       <Card className="flex items-start gap-4 transition hover:border-blue-600 hover:shadow-sm">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-2xl text-gray-700 shadow-sm">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-2xl text-ink-2 shadow-sm">
           {icon}
         </span>
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 w-full">
-              <h3 className="break-words text-base font-bold text-gray-700">
+              <h3 className="break-words text-base font-bold text-ink-2">
                 {name}
               </h3>
-              <p className="mt-1 text-sm text-gray-700">{provider}</p>
+              <p className="mt-1 text-sm text-ink-2">{provider}</p>
             </div>
             <div className="flex items-center gap-2">
               {statusLabel ? (
@@ -51,10 +51,10 @@ export function DocumentCard({
               {!statusLabel && hasAiSummary ? (
                 <Badge variant="info">AI Summary</Badge>
               ) : null}
-              <HiOutlineChevronRight className="text-lg text-gray-700" />
+              <HiOutlineChevronRight className="text-lg text-ink-2" />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
             <Badge variant="neutral">{type}</Badge>
             <span>{date}</span>
           </div>

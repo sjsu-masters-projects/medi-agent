@@ -150,7 +150,7 @@ describe("TodayPage", () => {
         const task = { id: "synthetic", name: "Source medication 500 mg", type: FeedTaskType.MEDICATION, status: FeedTaskStatus.PENDING, scheduledTime: "08:00", scheduledAt: new Date(Date.now() - 60_000).toISOString() } as FeedTask;
         mockFeedData({ tasks: [task] });
         const { rerender } = render(<TodayPage />);
-        expect(screen.getByText(/8:00.*• Ahora/)).toBeInTheDocument();
+        expect(screen.getByText(/^8:00/)).toBeInTheDocument();
         expect(screen.getByText("Para ahora")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "No pude hacer esto" }));
         mockFeedData({ tasks: [task], submitting: true });
@@ -193,7 +193,7 @@ describe("TodayPage", () => {
 
         const { container } = render(<TodayPage />);
 
-        expect(container.querySelectorAll('[class*="animate-pulse"]')).toHaveLength(3);
+        expect(container.querySelectorAll(".ma-skeleton")).toHaveLength(4);
         expect(screen.queryByText(/Today's schedule/i)).not.toBeInTheDocument();
     });
 
@@ -233,7 +233,8 @@ describe("TodayPage", () => {
 
         render(<TodayPage />);
 
-        expect(screen.getByText(/8:00 AM .* Now/i)).toBeInTheDocument();
+        expect(screen.getByText(/^8:00\sAM$/i)).toBeInTheDocument();
+        expect(screen.getByText("Due now")).toBeInTheDocument();
         expect(screen.getByText(/Lisinopril/i)).toBeInTheDocument();
         expect(screen.queryByText("Care-team approved • monitoring")).not.toBeInTheDocument();
         expect(screen.getByText("Care plan approved by Dr. Chen")).toBeInTheDocument();

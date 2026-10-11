@@ -129,7 +129,7 @@ function LoginPageContent() {
                             trailingAction={
                                 <button
                                     aria-label={passwordVisible ? copy.hidePassword : copy.showPassword}
-                                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:bg-surface-2 hover:text-ink"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:text-ink"
                                     onClick={() => setPasswordVisible((current) => !current)}
                                     type="button"
                                 >
@@ -145,7 +145,7 @@ function LoginPageContent() {
                             {submitting ? copy.signingIn : copy.signIn}
                         </Button>
                     </form>
-                <section className="mt-auto flex flex-wrap items-center justify-between gap-3 rounded-group border border-line bg-surface p-4">
+                <section className="mt-auto flex flex-wrap items-center justify-between gap-3 rounded-group bg-surface p-4 shadow-[0_1px_0_rgba(16,32,43,.04)]">
                     <div className="min-w-0 flex-1 basis-40">
                         <p className="text-[15px] font-semibold text-ink">{copy.newHere}</p>
                         <p className="mt-1 text-sm text-muted">{copy.newIntro}</p>

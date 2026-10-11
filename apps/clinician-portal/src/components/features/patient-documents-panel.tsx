@@ -1,11 +1,15 @@
 "use client";
 
+import { SourceFileIcon } from "@/components/features/source-file";
 import { useEffect, useState } from "react";
-import { HiOutlineDocumentText } from "react-icons/hi2";
 import { Modal } from "@/components/ui";
+import { AiChip } from "@/components/ui/ai-chip";
+import { Icon } from "@/components/ui/icons";
+import { ProcessingDots } from "@/components/ui/motion";
 import { DocumentSummary } from "@/components/features/document-summary";
 import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
 import {
+    DocumentTypeTile,
     ParseStatusBadge,
     ReviewStatusBadge,
 } from "@/components/features/document-review-badges";
@@ -24,6 +28,9 @@ import {
     getDocumentTypeLabel,
 } from "@/types";
 import type { ClinicianDocumentSource, ExtractedDocumentFact } from "@/services/clinicians";
+
+const compactSecondary =
+    "ma-press inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]";
 
 interface PatientDocumentsPanelProps {
     documents: ClinicianPatientDocument[];
@@ -270,10 +277,10 @@ export function PatientDocumentsPanel({
 
     return (
         <div aria-labelledby="tab-btn-documents" id="tab-panel-documents" role="tabpanel">
-            <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink">Documents</h2>
                 <a
-                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    className="ma-press inline-flex h-[34px] items-center rounded-[9px] bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-hover"
                     href={`/patients/${patientId}/upload`}
                     id="clinician-upload-link"
                 >
@@ -283,49 +290,40 @@ export function PatientDocumentsPanel({
 
             {reviewError && (
                 <div
-                    className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                    className="mb-4 flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
                     role="alert"
                 >
-                    {reviewError}
+                    <Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{reviewError}</span>
                 </div>
             )}
 
             {documents.length === 0 ? (
-                <div className="flex h-40 items-center justify-center text-sm text-gray-400">
-                    No documents on file
+                <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-line bg-surface px-6 py-12 text-center">
+                    <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-muted">
+                        <Icon name="folder" className="h-6 w-6" />
+                    </span>
+                    <p className="text-[15px] font-semibold text-ink">No documents on file</p>
                 </div>
             ) : (
-                <div className="space-y-4">
+                <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
                     {documents.map((doc) => (
-                        <div className="scroll-mt-24 rounded-xl border border-gray-200 bg-white target:ring-2 target:ring-blue-500" id={`document-${doc.id}`} key={doc.id}>
-                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
-                                <div className="flex min-w-0 items-center gap-3">
-                                    <HiOutlineDocumentText
-                                        aria-hidden="true"
-                                        className="h-5 w-5 text-blue-500"
-                                    />
+                        <div className="scroll-mt-24 border-b border-line px-5 py-4 last:border-b-0 target:bg-primary-tint/40 target:ring-2 target:ring-inset target:ring-primary" id={`document-${doc.id}`} key={doc.id}>
+                            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                                <div className="flex min-w-0 flex-1 items-start gap-3">
+                                    <DocumentTypeTile documentType={doc.documentType} />
                                     <div className="min-w-0">
-                                        <p className="break-words text-sm font-semibold text-gray-900">
-                                            {doc.fileName}
+                                        <div className="flex min-w-0 items-start gap-1.5"><SourceFileIcon className="mt-0.5" name={doc.fileName} /><p className="min-w-0 break-words text-sm font-semibold text-ink">{doc.fileName}</p></div>
+                                        <p className="mt-0.5 text-xs text-muted">
+                                            <span className="capitalize">{getDocumentTypeLabel(doc.documentType)}</span> ·{" "}
+                                            <time className="font-mono" dateTime={doc.createdAt}>{new Date(doc.createdAt).toLocaleDateString()}</time> ·
+                                            uploaded by {doc.uploadedByRole}
                                         </p>
-                                        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                                            <span>
-                                                {getDocumentTypeLabel(doc.documentType)} ·{" "}
-                                                {new Date(doc.createdAt).toLocaleDateString()} ·
-                                                uploaded by {doc.uploadedByRole}
-                                            </span>
-                                            {doc.uploadedByRole === UploaderRole.PATIENT &&
-                                                doc.reviewStatus && (
-                                                    <ReviewStatusBadge
-                                                        reviewStatus={doc.reviewStatus}
-                                                    />
-                                                )}
-                                        </div>
                                         {doc.uploadedByRole === UploaderRole.PATIENT &&
                                             doc.reviewStatus &&
                                             doc.reviewStatus !==
                                                 DocumentReviewStatus.PENDING && (
-                                                <p className="mt-1 text-xs text-gray-500">
+                                                <p className="mt-1 text-xs text-muted">
                                                     {doc.reviewStatus ===
                                                     DocumentReviewStatus.APPROVED
                                                         ? "Approved"
@@ -341,119 +339,139 @@ export function PatientDocumentsPanel({
                                         {doc.reviewStatus ===
                                             DocumentReviewStatus.REJECTED &&
                                             doc.reviewNote && (
-                                                <p className="mt-1 text-xs text-rose-600">
+                                                <p className="mt-1.5 max-w-[80ch] border-l-2 border-risk-line pl-2.5 text-xs text-risk-ink">
                                                     Review note: {doc.reviewNote}
                                                 </p>
                                             )}
                                     </div>
                                 </div>
-                                <ParseStatusBadge parseStatus={doc.parseStatus} />
+                                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                                    {doc.uploadedByRole === UploaderRole.PATIENT &&
+                                        doc.reviewStatus && (
+                                            <ReviewStatusBadge
+                                                reviewStatus={doc.reviewStatus}
+                                            />
+                                        )}
+                                    <ParseStatusBadge parseStatus={doc.parseStatus} />
+                                </div>
                             </div>
 
-                            {parseMessage(doc) && (
-                                <div className="border-b border-gray-100 px-5 py-3 text-sm text-slate-600">
-                                    <p>{parseMessage(doc)}</p>
-                                    {doc.parseStatus === "failed" && (
-                                        <div className="mt-2 flex items-center gap-3">
-                                            <span className="text-xs text-gray-500">
-                                                Attempt {doc.parseAttempts ?? 0} of 3
-                                            </span>
-                                            {(doc.parseAttempts ?? 0) < 3 && (
-                                                <button
-                                                    className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                                    disabled={retryingDocumentId === doc.id}
-                                                    onClick={() => void handleRetryDocument(doc.id)}
-                                                    type="button"
-                                                >
-                                                    {retryingDocumentId === doc.id
-                                                        ? "Retrying..."
-                                                        : "Retry processing"}
-                                                </button>
+                            <div className="mt-3 space-y-3 sm:pl-12">
+                                {parseMessage(doc) && (
+                                    <div className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${doc.parseStatus === "failed" ? "border-risk-line bg-risk-soft text-risk-ink" : "border-line bg-surface-2 text-ink-2"}`}>
+                                        <Icon name={doc.parseStatus === "failed" ? "alert" : "info"} aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="max-w-[80ch]">{parseMessage(doc)}</p>
+                                            {doc.parseStatus === "failed" && (
+                                                <div className="mt-2 flex flex-wrap items-center gap-3">
+                                                    <span className="font-mono text-xs text-muted">
+                                                        Attempt {doc.parseAttempts ?? 0} of 3
+                                                    </span>
+                                                    {(doc.parseAttempts ?? 0) < 3 && (
+                                                        <button
+                                                            className={compactSecondary}
+                                                            disabled={retryingDocumentId === doc.id}
+                                                            onClick={() => void handleRetryDocument(doc.id)}
+                                                            type="button"
+                                                        >
+                                                            <Icon name="refresh" aria-hidden="true" className="h-3.5 w-3.5" />
+                                                            {retryingDocumentId === doc.id
+                                                                ? "Retrying..."
+                                                                : "Retry processing"}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
-                                    )}
-                                </div>
-                            )}
+                                    </div>
+                                )}
 
-                            <div className="border-b border-gray-100 px-5 py-3">
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <button
-                                        className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                                        className={compactSecondary}
                                         onClick={() => void handleOpenSource(doc)}
                                         type="button"
                                     >
+                                        <Icon name="eye" aria-hidden="true" className="h-3.5 w-3.5" />
                                         Open source document
                                     </button>
                                     {doc.parseStatus === "completed" ? (
                                         <button
-                                            className="rounded-lg border border-violet-200 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-50"
+                                            className={compactSecondary}
                                             onClick={() => void handleReviewFacts(doc)}
                                             type="button"
                                         >
+                                            <Icon name="spark" aria-hidden="true" className="h-3.5 w-3.5 text-ai-ink" />
                                             Review extracted facts
                                         </button>
                                     ) : null}
+                                    {doc.uploadedByRole === UploaderRole.PATIENT &&
+                                        doc.reviewStatus === DocumentReviewStatus.PENDING && (
+                                            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                                                <button
+                                                    className="ma-press inline-flex h-8 items-center justify-center rounded-lg bg-ok px-3 text-[13px] font-semibold text-white hover:bg-ok-strong disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]"
+                                                    disabled={reviewingDocumentId === doc.id}
+                                                    onClick={() => void handleApproveDocument(doc.id)}
+                                                    type="button"
+                                                >
+                                                    {reviewingDocumentId === doc.id
+                                                        ? "Saving..."
+                                                        : "Approve"}
+                                                </button>
+                                                <button
+                                                    className="ma-press inline-flex h-8 items-center justify-center rounded-lg border border-risk-line bg-surface px-3 text-[13px] font-semibold text-risk-ink hover:bg-risk-soft disabled:cursor-not-allowed disabled:border-line disabled:text-[#94A3B8]"
+                                                    disabled={reviewingDocumentId === doc.id}
+                                                    onClick={() => {
+                                                        setReviewError(null);
+                                                        setRejectingDocumentId(doc.id);
+                                                        setRejectNote(doc.reviewNote ?? "");
+                                                    }}
+                                                    type="button"
+                                                >
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        )}
                                 </div>
-                            </div>
 
-                            {doc.uploadedByRole === UploaderRole.PATIENT &&
-                                doc.reviewStatus === DocumentReviewStatus.PENDING && (
-                                    <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-5 py-4">
-                                        <button
-                                            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                            disabled={reviewingDocumentId === doc.id}
-                                            onClick={() => void handleApproveDocument(doc.id)}
-                                            type="button"
-                                        >
-                                            {reviewingDocumentId === doc.id
-                                                ? "Saving..."
-                                                : "Approve"}
-                                        </button>
-                                        <button
-                                            className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                            disabled={reviewingDocumentId === doc.id}
-                                            onClick={() => {
-                                                setReviewError(null);
-                                                setRejectingDocumentId(doc.id);
-                                                setRejectNote(doc.reviewNote ?? "");
-                                            }}
-                                            type="button"
-                                        >
-                                            Reject
-                                        </button>
-                                    </div>
-                                )}
-
-                            {doc.aiSummary && doc.parseStatus !== "duplicate" ? (
-                                <div className="px-5 py-4">
+                                {doc.aiSummary && doc.parseStatus !== "duplicate" ? (
                                     <DocumentSummary
                                         documentId={doc.id}
                                         existingAnnotation={doc.clinicianAnnotation}
                                         patientId={patientId}
                                         summaryText={doc.aiSummary}
                                     />
-                                </div>
-                            ) : (
-                                summaryMessage(doc) && (
-                                    <div className="px-5 py-4">
-                                        <p className="text-sm text-gray-600">
-                                            {summaryMessage(doc)}
-                                        </p>
-                                        {doc.summaryStatus === "failed" && (
-                                            <button
-                                                className="mt-3 rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                                disabled={retryingSummaryId === doc.id}
-                                                onClick={() => void handleRetrySummary(doc.id)}
-                                                type="button"
-                                            >
-                                                {retryingSummaryId === doc.id
-                                                    ? "Requesting..."
-                                                    : "Retry patient explanation"}
-                                            </button>
-                                        )}
-                                    </div>
-                                )
-                            )}
+                                ) : (
+                                    summaryMessage(doc) && (
+                                        <div className="rounded-xl border border-line bg-surface-2 px-4 py-3">
+                                            <div className="flex items-start gap-2.5">
+                                                <span aria-hidden="true" className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-ai-tint text-ai-ink">
+                                                    <Icon name="spark" className="h-3 w-3" />
+                                                </span>
+                                                <p className="max-w-[80ch] text-sm text-ink-2">
+                                                    {summaryMessage(doc)}
+                                                    {doc.summaryStatus === "processing" ? (
+                                                        <span className="ml-2 inline-flex align-middle"><ProcessingDots className="bg-ai-ink" /></span>
+                                                    ) : null}
+                                                </p>
+                                            </div>
+                                            {doc.summaryStatus === "failed" && (
+                                                <button
+                                                    className={`${compactSecondary} ml-[30px] mt-3`}
+                                                    disabled={retryingSummaryId === doc.id}
+                                                    onClick={() => void handleRetrySummary(doc.id)}
+                                                    type="button"
+                                                >
+                                                    <Icon name="refresh" aria-hidden="true" className="h-3.5 w-3.5" />
+                                                    {retryingSummaryId === doc.id
+                                                        ? "Requesting..."
+                                                        : "Retry patient explanation"}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -471,22 +489,22 @@ export function PatientDocumentsPanel({
                 title="Reject patient upload"
             >
                 <div className="space-y-4">
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-ink-2">
                         Add an optional note to explain why this patient-uploaded
                         document needs follow-up or correction.
                     </p>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[13px] font-medium text-ink-2">
                         Review note
                         <textarea
-                            className="mt-2 min-h-28 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                            className="mt-1.5 min-h-28 w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]"
                             onChange={(event) => setRejectNote(event.target.value)}
                             placeholder="Optional note for the care team."
                             value={rejectNote}
                         />
                     </label>
-                    <div className="flex justify-end gap-3">
+                    <div className="flex justify-end gap-2">
                         <button
-                            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                            className="ma-press h-[34px] rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink"
                             onClick={() => {
                                 setRejectingDocumentId(null);
                                 setRejectNote("");
@@ -496,7 +514,7 @@ export function PatientDocumentsPanel({
                             Cancel
                         </button>
                         <button
-                            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="ma-press h-[34px] rounded-[9px] bg-risk px-4 text-[13px] font-semibold text-white hover:bg-risk-strong disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]"
                             disabled={!rejectingDocumentId || reviewingDocumentId !== null}
                             onClick={() => void handleRejectDocument()}
                             type="button"
@@ -523,48 +541,52 @@ export function PatientDocumentsPanel({
                 title={factsDocument ? `Extracted facts — ${factsDocument.fileName}` : "Extracted facts"}
             >
                 <div className="space-y-3">
-                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
-                        Pending clinician review — these are evidence-backed candidates, not clinical truth.
+                    <p className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm font-semibold text-warn-ink">
+                        <Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>Pending clinician review — these are evidence-backed candidates, not clinical truth.</span>
                     </p>
-                    {factsLoading ? <p className="text-sm text-slate-600">Loading extracted facts…</p> : null}
-                    {factsError ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{factsError}</p> : null}
-                    {!factsLoading && !factsError && facts.length === 0 ? <p className="text-sm text-slate-600">No grounded facts were extracted from this document.</p> : null}
+                    {factsLoading ? <p className="flex items-center gap-2 text-sm text-ink-2">Loading extracted facts…<ProcessingDots /></p> : null}
+                    {factsError ? <p className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"><Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{factsError}</span></p> : null}
+                    {!factsLoading && !factsError && facts.length === 0 ? <p className="text-sm text-ink-2">No grounded facts were extracted from this document.</p> : null}
                     {facts.length > 0 ? (
                         <div className="grid gap-4 lg:grid-cols-2">
-                            <div className="space-y-3" role="list" aria-label="Extracted fact candidates">
-                                {facts.map((fact) => (
-                                    <button
-                                        aria-pressed={selectedFactId === fact.id}
-                                        className={`w-full rounded-xl border p-3 text-left ${selectedFactId === fact.id ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
-                                        key={fact.id}
-                                        onClick={() => setSelectedFactId(fact.id)}
-                                        type="button"
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <p className="text-sm font-semibold capitalize text-gray-900">{fact.fact_type}</p>
-                                                <p className="mt-1 text-xs font-semibold text-amber-800">{candidateState(fact)}</p>
-                                            </div>
-                                            <span className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-semibold text-yellow-800">
-                                                {fact.confidence_score === null || fact.confidence_score === undefined ? "Confidence unavailable" : `${Math.round(fact.confidence_score * 100)}% confidence`}
-                                            </span>
-                                        </div>
-                                        <dl className="mt-3 space-y-1 text-sm text-gray-700">
-                                            {factFields(fact).map(([label, value]) => (
-                                                <div className="grid grid-cols-[7rem_1fr] gap-2" key={label}>
-                                                    <dt className="font-medium capitalize text-gray-500">{label}</dt>
-                                                    <dd>{value}</dd>
+                            <div className="space-y-2.5">
+                                <AiChip>AI-extracted candidates</AiChip>
+                                <div className="space-y-2.5" role="list" aria-label="Extracted fact candidates">
+                                    {facts.map((fact) => (
+                                        <button
+                                            aria-pressed={selectedFactId === fact.id}
+                                            className={`ma-press w-full rounded-xl border p-3.5 text-left ${selectedFactId === fact.id ? "border-primary bg-primary-tint" : "border-line bg-surface hover:bg-surface-2"}`}
+                                            key={fact.id}
+                                            onClick={() => setSelectedFactId(fact.id)}
+                                            type="button"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-semibold capitalize text-ink">{fact.fact_type}</p>
+                                                    <p className="mt-1 text-xs font-medium text-warn-ink">{candidateState(fact)}</p>
                                                 </div>
-                                            ))}
-                                        </dl>
-                                        {fact.citations?.[0]?.excerpt ? <p className="mt-3 border-l-2 border-blue-300 pl-2 text-xs text-gray-600">“{fact.citations[0].excerpt}”{fact.citations[0].location?.page ? ` · page ${fact.citations[0].location.page}` : ""}</p> : null}
-                                    </button>
-                                ))}
+                                                <span className="whitespace-nowrap rounded-[7px] bg-warn-soft px-2 py-1 text-xs font-medium text-warn-ink">
+                                                    {fact.confidence_score === null || fact.confidence_score === undefined ? "Confidence unavailable" : <><span className="font-mono">{Math.round(fact.confidence_score * 100)}%</span> confidence</>}
+                                                </span>
+                                            </div>
+                                            <dl className="mt-3 space-y-1 text-sm text-ink-2">
+                                                {factFields(fact).map(([label, value]) => (
+                                                    <div className="grid grid-cols-[7rem_1fr] gap-2" key={label}>
+                                                        <dt className="text-[13px] font-medium capitalize text-muted">{label}</dt>
+                                                        <dd className="break-words">{value}</dd>
+                                                    </div>
+                                                ))}
+                                            </dl>
+                                            {fact.citations?.[0]?.excerpt ? <p className="mt-3 border-l-2 border-line-strong pl-3 text-xs text-ink-2">“{fact.citations[0].excerpt}”{fact.citations[0].location?.page ? ` · page ${fact.citations[0].location.page}` : ""}</p> : null}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="min-h-80 rounded-xl border border-gray-200 bg-gray-50 p-3">
-                                <p className="mb-3 text-sm font-semibold text-gray-900">Protected source preview</p>
-                                {factsSourceLoading ? <p className="text-sm text-gray-500">Loading source preview…</p> : null}
-                                {factsSourceError ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{factsSourceError}</p> : null}
+                            <div className="min-h-80 space-y-3">
+                                <p className="text-sm font-semibold text-ink">Protected source preview</p>
+                                {factsSourceLoading ? <p className="flex items-center gap-2 text-sm text-muted">Loading source preview…<ProcessingDots /></p> : null}
+                                {factsSourceError ? <p className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"><Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{factsSourceError}</span></p> : null}
                                 {factsSource ? (
                                     <DocumentSourceViewer
                                         initialPage={facts.find((fact) => fact.id === selectedFactId)?.citations?.[0]?.location?.page ?? 1}
@@ -592,8 +614,8 @@ export function PatientDocumentsPanel({
                 open={Boolean(sourceDocument)}
                 title={sourceDocument?.fileName ?? "Source document"}
             >
-                {sourceLoading ? <p className="text-sm text-slate-600">Loading source document…</p> : null}
-                {sourceError ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{sourceError}</p> : null}
+                {sourceLoading ? <p className="flex items-center gap-2 text-sm text-ink-2">Loading source document…<ProcessingDots /></p> : null}
+                {sourceError ? <p className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"><Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{sourceError}</span></p> : null}
                 {source && sourceDocument ? (
                     <DocumentSourceViewer
                         fileName={source.file_name}

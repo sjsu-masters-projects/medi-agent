@@ -143,7 +143,7 @@ describe("RecordsPage", () => {
       screen.getByRole("button", { name: /April Lab Report\.txt/i }),
     );
 
-    expect(await screen.findAllByText(/City Health/i)).toHaveLength(2);
+    expect(await screen.findAllByText(/City Health/i)).toHaveLength(3);
     expect(screen.getByText(/Your lab values are stable/i)).toBeInTheDocument();
     expect(
       screen.getByText(/not a newly approved care plan/i),
@@ -586,7 +586,7 @@ describe("RecordsPage", () => {
     ).toBeInTheDocument();
     expect(
       screen
-        .getByText("Documento original", { selector: "summary" })
+        .getByText("Documento original", { selector: "summary span" })
         .closest("details"),
     ).not.toHaveAttribute("open");
     expect(

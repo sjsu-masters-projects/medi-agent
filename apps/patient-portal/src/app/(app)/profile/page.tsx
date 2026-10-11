@@ -3,17 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-    HiOutlineBuildingOffice2,
-    HiOutlineCheck,
-    HiOutlineChevronRight,
-    HiOutlinePencilSquare,
-    HiOutlineXMark,
-} from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { PageHeader } from "@/components/layouts";
 import { PatientLanguageControl } from "@/components/layouts/patient-language-control";
 import { Modal } from "@/components/ui/modal";
+import { Icon } from "@/components/ui/icons";
+import { IconTile } from "@/components/ui/list";
 import { api } from "@/services/api";
 import { clearStoredSession } from "@/services/auth-session";
 import {
@@ -292,112 +287,115 @@ function ProfilePageContent() {
         }
     }
 
+    const languageName = locale === "es-MX" ? "Español (México)" : "English (US)";
+    const rowClass = "flex min-h-[52px] items-center justify-between gap-3 px-4 py-3";
+    const groupClass = "mx-4 overflow-hidden rounded-[22px] bg-surface [&>*+*]:border-t [&>*+*]:border-line";
+    const eyebrowClass = "px-[22px] pt-5 pb-2 font-mono text-xs uppercase tracking-[0.08em] text-muted";
+    const chevron = <Icon name="chevron" className="h-[18px] w-[18px] shrink-0 text-faint" />;
+    const initialsOf = (first?: string, last?: string) => `${first?.charAt(0) ?? ""}${last?.charAt(0) ?? ""}`.toUpperCase() || "?";
+    const formatBirthDate = (value: string) => {
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+        if (!match) return value;
+        const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+        return date.toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+    };
+
     return (
-        <div className="patient-page space-y-4 pb-8">
-            <PageHeader subtitle={copy.subtitle} title={copy.title} />
-            <div className="patient-stack space-y-4 px-4">
+        <div className="patient-page pb-8">
+            <PageHeader title={copy.title} />
+            <div className="patient-stack">
                 {loading || pageError ? (
-                    <button
-                        type="button"
-                        onClick={() => setLanguageOpen(true)}
-                        className="min-h-11 w-full rounded-group bg-surface px-[14px] py-[13px] text-left font-semibold text-brand"
-                    >
-                        {copy.language}
-                    </button>
+                    <div className="px-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={() => setLanguageOpen(true)}
+                            className={`${rowClass} w-full rounded-[22px] bg-surface text-left text-[15px] font-semibold text-brand`}
+                        >
+                            <span className="flex items-center gap-3"><Icon name="globe" className="h-5 w-5" />{copy.language}</span>
+                            {chevron}
+                        </button>
+                    </div>
                 ) : null}
                 {loading ? (
-                    <div className="space-y-4">
-                        <Skeleton className="h-32 w-full rounded-group" />
-                        <Skeleton className="h-48 w-full rounded-group" />
-                        <Skeleton className="h-56 w-full rounded-group" />
+                    <div className="space-y-4 px-4 pt-4" aria-hidden="true">
+                        <Skeleton className="h-[84px] w-full" />
+                        <Skeleton className="h-48 w-full" />
+                        <Skeleton className="h-40 w-full" />
                     </div>
                 ) : null}
                 {!loading && pageError ? (
-                    <ErrorState
-                        description={copy.loadError}
-                        action={
-                            <Button onClick={() => window.location.reload()}>
-                                {copy.retry}
-                            </Button>
-                        }
-                        title={copy.loadTitle}
-                    />
+                    <div className="px-4 pt-4">
+                        <ErrorState
+                            description={copy.loadError}
+                            action={
+                                <Button size="sm" onClick={() => window.location.reload()}>
+                                    {copy.retry}
+                                </Button>
+                            }
+                            title={copy.loadTitle}
+                        />
+                    </div>
                 ) : null}
                 {!loading && !pageError && patientProfile ? (
                     <>
-                        <div className="flex items-center gap-3 rounded-group bg-surface px-4 py-4">
+                        <div className="mx-4 mt-2 flex items-center gap-3.5 rounded-[22px] bg-surface px-4 py-4">
                             <div
                                 aria-hidden="true"
-                                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-tint text-2xl font-semibold text-brand"
+                                className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-tint text-xl font-semibold text-brand"
                             >
                                 {patientProfile.firstName.charAt(0)}
                             </div>
                             <div className="min-w-0">
-                                <p className="text-xs text-muted">
-                                    {copy.patientAccount}
-                                </p>
-                                <h2 className="break-words text-xl font-semibold text-ink">
+                                <p className="sr-only">{copy.patientAccount}</p>
+                                <h2 className="break-words text-[20px] font-semibold leading-tight text-ink">
                                     {patientProfile.firstName}{" "}
                                     {patientProfile.lastName}
                                 </h2>
-                                <p className="mt-1 break-all text-sm text-ink-2">
+                                <p className="mt-0.5 break-all text-[13px] text-muted">
                                     {patientProfile.email}
                                 </p>
                             </div>
                         </div>
                         {showJoinClinicPrompt ? (
-                            <p className="rounded-group bg-note-tint px-4 py-3 text-sm font-medium text-note-ink">
+                            <p className="mx-4 mt-3 flex items-start gap-2.5 rounded-[18px] bg-note-tint px-4 py-3 text-sm font-medium text-note-ink">
+                                <Icon name="info" className="mt-px h-[18px] w-[18px] shrink-0" />
                                 {copy.onboarding}
                             </p>
                         ) : null}
-                        <section
-                            aria-labelledby="profile-personal"
-                            className="space-y-2"
-                        >
-                            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-                                <div>
-                                    <p className="sr-only">{copy.details}</p>
-                                    <h3
-                                        id="profile-personal"
-                                        className="font-mono text-xs uppercase tracking-[0.08em] text-muted"
-                                    >
-                                        {copy.personal}
-                                    </h3>
-                                </div>
+                        <section aria-labelledby="profile-personal">
+                            <div className="flex items-end justify-between gap-3 pr-4">
+                                <p className="sr-only">{copy.details}</p>
+                                <h3 id="profile-personal" className={eyebrowClass}>
+                                    {copy.personal}
+                                </h3>
                                 <button
                                     aria-label={copy.editProfile}
-                                    className="inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-xl bg-brand-tint px-3 text-sm font-semibold text-brand"
+                                    className="ma-press mb-0.5 inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl px-2.5 text-sm font-semibold text-brand hover:bg-brand-tint/60"
                                     onClick={startEditing}
                                     type="button"
                                 >
-                                    <HiOutlinePencilSquare
-                                        aria-hidden="true"
-                                        className="h-4 w-4"
-                                    />
                                     {copy.edit}
                                 </button>
                             </div>
                             {saveSuccess && !editing ? (
                                 <p
                                     role="status"
-                                    className="flex items-center gap-2 bg-brand-tint px-[14px] py-[13px] text-sm font-medium text-brand-ink"
+                                    className="ma-enter mx-4 mb-2 flex items-center gap-2 rounded-2xl bg-brand-tint px-4 py-3 text-sm font-medium text-brand-ink"
                                 >
-                                    <HiOutlineCheck
-                                        aria-hidden="true"
-                                        className="h-4 w-4 shrink-0"
-                                    />
+                                    <Icon name="check" className="h-4 w-4 shrink-0" />
                                     {copy.saved}
                                 </p>
                             ) : null}
-                            <dl className="overflow-hidden rounded-group bg-surface text-[15px]">
-                                <div className="flex flex-wrap justify-between gap-2 border-b border-line px-[14px] py-[13px]">
-                                    <dt className="text-muted">{copy.dob}</dt>
-                                    <dd className="text-ink-2">
-                                        {patientProfile.dateOfBirth}
+                            <dl className={`${groupClass} text-[15px]`}>
+                                <div className={rowClass}>
+                                    <dt className="text-ink-2">{copy.dob}</dt>
+                                    <dd className="text-right font-medium text-ink">
+                                        <time dateTime={patientProfile.dateOfBirth}>{formatBirthDate(patientProfile.dateOfBirth)}</time>
                                     </dd>
                                 </div>
-                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-[14px] py-[13px]">
-                                    <dt className="text-muted">
+                                <div className={`relative ${rowClass}`}>
+                                    <dt className="flex items-center gap-2.5 text-ink-2">
+                                        <Icon name="globe" className="h-[18px] w-[18px] text-muted" />
                                         {copy.language}
                                     </dt>
                                     <dd>
@@ -406,99 +404,89 @@ function ProfilePageContent() {
                                             onClick={() =>
                                                 setLanguageOpen(true)
                                             }
-                                            className="min-h-11 min-w-11 text-left font-semibold text-brand underline-offset-4 hover:underline"
+                                            className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-xl text-right font-medium text-ink after:absolute after:inset-0 after:content-[''] hover:text-brand"
                                         >
-                                            {locale === "es-MX"
-                                                ? "Español (México)"
-                                                : "English (US)"}
+                                            {languageName}
+                                            {chevron}
                                         </button>
                                     </dd>
                                 </div>
                                 {patientProfile.gender ? (
-                                    <div className="flex flex-wrap justify-between gap-2 border-b border-line px-[14px] py-[13px]">
-                                        <dt className="text-muted">
+                                    <div className={rowClass}>
+                                        <dt className="text-ink-2">
                                             {copy.gender}
                                         </dt>
-                                        <dd className="text-ink-2">
+                                        <dd className="text-right font-medium text-ink">
                                             {genderLabels[
                                                 patientProfile.gender
                                             ] ?? copy.unspecified}
                                         </dd>
                                     </div>
                                 ) : null}
-                                <div className="flex flex-wrap justify-between gap-2 px-[14px] py-[13px]">
-                                    <dt className="text-muted">
+                                <div className={rowClass}>
+                                    <dt className="text-ink-2">
                                         {copy.timezone}
                                     </dt>
-                                    <dd className="break-all text-ink-2">
+                                    <dd className="min-w-0 break-all text-right font-medium text-ink">
                                         {patientProfile.timezone ?? "UTC"}
                                     </dd>
                                 </div>
                             </dl>
                         </section>
-                        <section
-                            aria-labelledby="profile-reminders"
-                            className="overflow-hidden rounded-group bg-surface"
-                        >
-                            <Link
-                                aria-label={copy.manageReminders}
-                                className="flex min-h-11 items-center justify-between gap-3 px-[14px] py-[13px] text-[15px] font-semibold text-brand"
-                                href="/reminders"
-                            >
-                                <div className="min-w-0">
-                                    <h3
-                                        id="profile-reminders"
-                                        className="break-words"
-                                    >
-                                        {copy.reminders}
-                                    </h3>
-                                    <p className="mt-1 break-words text-sm font-normal text-muted">
-                                        {copy.reminderHelp}
-                                    </p>
-                                </div>
-                                <HiOutlineChevronRight
-                                    aria-hidden="true"
-                                    className="h-5 w-5 shrink-0"
-                                />
-                            </Link>
-                        </section>
-                        <section
-                            aria-labelledby="profile-team"
-                            className="overflow-hidden rounded-group bg-surface"
-                        >
-                            <div className="border-b border-line px-[14px] py-[13px]">
-                                <p className="text-xs text-muted">
-                                    {copy.connected}
-                                </p>
-                                <h3
-                                    id="profile-team"
-                                    className="text-[17px] font-semibold text-ink"
+                        <section aria-labelledby="profile-reminders">
+                            <h3 id="profile-reminders" className={eyebrowClass}>
+                                {copy.reminders}
+                            </h3>
+                            <div className={groupClass}>
+                                <Link
+                                    aria-label={copy.manageReminders}
+                                    className="flex min-h-11 items-center gap-3 px-[14px] py-3 text-left hover:bg-[#FBF7F0]"
+                                    href="/reminders"
                                 >
-                                    {copy.teams}
-                                </h3>
+                                    <IconTile icon="bell" tone="brand" />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="break-words text-[15px] font-semibold text-ink">{copy.reminderTitle}</p>
+                                        <p className="mt-0.5 break-words text-[13px] text-muted">
+                                            {copy.reminderHelp}
+                                        </p>
+                                    </div>
+                                    {chevron}
+                                </Link>
                             </div>
-                            {careTeam.length ? (
-                                careTeam.map((member) => (
-                                    <div
-                                        className="border-b border-line px-[14px] py-[13px]"
-                                        key={member.id}
-                                    >
-                                        <div className="flex flex-wrap items-start justify-between gap-2">
-                                            <div className="min-w-0">
+                        </section>
+                        <section aria-labelledby="profile-team">
+                            <p className="sr-only">{copy.connected}</p>
+                            <h3 id="profile-team" className={eyebrowClass}>
+                                {copy.teams}
+                            </h3>
+                            <div className={groupClass}>
+                                {careTeam.length ? (
+                                    careTeam.map((member) => (
+                                        <div
+                                            className="flex items-center gap-3 px-[14px] py-3"
+                                            key={member.id}
+                                        >
+                                            <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-note-tint text-sm font-semibold text-note-ink">{initialsOf(member.clinicianFirstName, member.clinicianLastName)}</span>
+                                            <div className="min-w-0 flex-1">
                                                 <p className="break-words text-[15px] font-semibold text-ink">
                                                     {member.clinicianFirstName}{" "}
                                                     {member.clinicianLastName}
                                                 </p>
-                                                <p className="mt-1 text-sm text-muted">
-                                                    {careTeamRoleLabel(
+                                                <p className="mt-0.5 break-words text-[13px] text-muted">
+                                                    <span>{careTeamRoleLabel(
                                                         member.role,
                                                         locale,
-                                                    )}
+                                                    )}</span>
+                                                    <span aria-hidden="true"> · </span>
+                                                    <span>{member.clinicName ||
+                                                        member.specialtyContext ||
+                                                        copy.teamFallback}</span>
                                                 </p>
                                             </div>
                                             <span
-                                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${member.status === "active" ? "bg-brand-tint text-brand-ink" : "bg-surface-2 text-ink-2"}`}
+                                                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${member.status === "active" ? "bg-brand-tint text-brand-ink" : "bg-surface-2 text-ink-2"}`}
                                             >
+                                                {member.status === "active" ? <Icon name="check" className="h-3 w-3" /> : null}
                                                 {member.status === "active"
                                                     ? copy.active
                                                     : member.status ===
@@ -510,79 +498,69 @@ function ProfilePageContent() {
                                                         : copy.unknownStatus}
                                             </span>
                                         </div>
-                                        <p className="mt-1 break-words text-sm text-ink-2">
-                                            {member.clinicName ||
-                                                member.specialtyContext ||
-                                                copy.teamFallback}
-                                        </p>
+                                    ))
+                                ) : (
+                                    <div>
+                                        <EmptyState
+                                            description={copy.noTeamsHelp}
+                                            icon={<Icon name="building" />}
+                                            title={copy.noTeams}
+                                        />
                                     </div>
-                                ))
-                            ) : (
-                                <div className="px-[14px] py-[13px]">
-                                    <EmptyState
-                                        description={copy.noTeamsHelp}
-                                        icon={
-                                            <HiOutlineBuildingOffice2 aria-hidden="true" />
-                                        }
-                                        title={copy.noTeams}
-                                    />
-                                </div>
-                            )}
-                            {hasActiveTeam ? (
-                                <div>
+                                )}
+                                {hasActiveTeam ? (
                                     <Link
-                                        className="flex min-h-11 items-center justify-between gap-3 px-[14px] py-[13px] text-[15px] font-semibold text-brand"
+                                        className="flex min-h-11 items-center gap-3 px-[14px] py-3 text-[15px] font-semibold text-brand hover:bg-[#FBF7F0]"
                                         href="/chat"
                                     >
-                                        {copy.messages}
-                                        <HiOutlineChevronRight
-                                            aria-hidden="true"
-                                            className="h-5 w-5 shrink-0"
-                                        />
+                                        <IconTile icon="chat" tone="brand" />
+                                        <span className="min-w-0 flex-1">{copy.messages}</span>
+                                        {chevron}
                                     </Link>
-                                    <p className="px-[14px] pb-[13px] text-sm text-muted">
-                                        {copy.messageHelp}
-                                    </p>
-                                </div>
+                                ) : null}
+                                <button
+                                    className="flex min-h-11 w-full items-center gap-3 px-[14px] py-3 text-left text-[15px] font-semibold text-ink hover:bg-[#FBF7F0]"
+                                    type="button"
+                                    onClick={() => setJoinExpanded(true)}
+                                >
+                                    <IconTile icon="plus" tone="neutral" />
+                                    <span className="min-w-0 flex-1 break-words">
+                                        {careTeam.length
+                                            ? copy.joinAnother
+                                            : copy.connectClinic}
+                                    </span>
+                                    {chevron}
+                                </button>
+                            </div>
+                            {hasActiveTeam ? (
+                                <p className="px-[22px] pt-2 text-[13px] leading-relaxed text-muted">
+                                    {copy.messageHelp}
+                                </p>
                             ) : null}
                         </section>
-                        <div className="overflow-hidden rounded-group bg-surface">
-                            <button
-                                className="flex min-h-11 w-full items-center justify-between gap-3 px-[14px] py-[13px] text-left text-[15px] font-semibold text-ink"
-                                type="button"
-                                onClick={() => setJoinExpanded(true)}
-                            >
-                                <span className="min-w-0 break-words">
-                                    {careTeam.length
-                                        ? copy.joinAnother
-                                        : copy.connectClinic}
-                                </span>
-                                <HiOutlineChevronRight
-                                    aria-hidden="true"
-                                    className="h-5 w-5 shrink-0"
-                                />
-                            </button>
-                        </div>
-                        <section
-                            aria-labelledby="profile-account"
-                            className="overflow-hidden rounded-group bg-surface"
-                        >
-                            <button
-                                aria-label={copy.signOut}
-                                className="min-h-11 w-full px-[14px] py-[13px] text-left text-[15px] font-semibold text-danger-ink"
-                                type="button"
-                                onClick={handleLogout}
-                            >
-                                <span
-                                    id="profile-account"
-                                    className="block break-words"
+                        <section aria-labelledby="profile-account">
+                            <h3 className={eyebrowClass}>{copy.account}</h3>
+                            <div className={groupClass}>
+                                <button
+                                    aria-label={copy.signOut}
+                                    className="flex min-h-11 w-full items-center gap-3 px-[14px] py-3 text-left hover:bg-danger-tint/40"
+                                    type="button"
+                                    onClick={handleLogout}
                                 >
-                                    {copy.signOut}
-                                </span>
-                                <span className="mt-1 block break-words text-sm font-normal text-muted">
-                                    {copy.signOutHelp}
-                                </span>
-                            </button>
+                                    <IconTile icon="logout" tone="danger" />
+                                    <span className="min-w-0 flex-1">
+                                        <span
+                                            id="profile-account"
+                                            className="block break-words text-[15px] font-semibold text-danger-ink"
+                                        >
+                                            {copy.signOut}
+                                        </span>
+                                        <span className="mt-0.5 block break-words text-[13px] font-normal text-muted">
+                                            {copy.signOutHelp}
+                                        </span>
+                                    </span>
+                                </button>
+                            </div>
                         </section>
                     </>
                 ) : null}
@@ -741,7 +719,6 @@ function ProfilePageContent() {
                                     type="button"
                                     variant="secondary"
                                 >
-                                    <HiOutlineXMark className="mr-1 h-4 w-4" />
                                     {copy.cancel}
                                 </Button>
                             </div>
@@ -818,7 +795,7 @@ function ProfilePageContent() {
                 title={copy.language}
                 closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}
             >
-                <div className="[&_select]:min-w-0 [&_select]:flex-1 [&_select]:pr-10 [&_summary]:min-h-11 [&_label]:shrink-0">
+                <div>
                     <PatientLanguageControl />
                 </div>
             </Modal>

@@ -55,7 +55,7 @@ describe("CarePlanPanel", () => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: plan, active: plan, patient_locale: "en-US", active_medications: [] });
         vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
         render(<CarePlanPanel patientId="p" />);
-        await screen.findByText("Metformin");
+        expect((await screen.findAllByText("Metformin")).length).toBeGreaterThan(0);
         expect(screen.queryByText(/Choose whether each medication/)).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Approve and publish plan" })).not.toBeInTheDocument();
     });

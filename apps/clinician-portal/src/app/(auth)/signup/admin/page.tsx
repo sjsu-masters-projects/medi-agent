@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { AuthShell } from "@/components/features/auth-shell";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useDispatch } from "react-redux";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { api } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
@@ -29,14 +30,14 @@ function InfoIcon({ text }: { text: string }) {
         <span className="group relative inline-flex items-center">
             <span
                 aria-label={text}
-                className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-400 text-[10px] font-semibold text-slate-600"
+                className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line-strong text-[10px] font-semibold text-muted"
                 role="img"
                 tabIndex={0}
             >
                 i
             </span>
             <span
-                className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-56 -translate-x-1/2 rounded-md bg-slate-900 px-2 py-1 text-xs font-normal text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+                className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-56 -translate-x-1/2 rounded-lg bg-rail px-2.5 py-1.5 text-xs font-normal text-rail-ink opacity-0 shadow-[var(--shadow-pop)] transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
                 role="tooltip"
             >
                 {text}
@@ -115,24 +116,17 @@ export default function ClinicAdminSignupPage() {
     }
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
-            <div className="hidden w-1/2 bg-gray-900 px-12 py-16 text-white lg:flex lg:flex-col lg:justify-between">
-                <div className="space-y-4">
-                    <p className="text-sm font-medium uppercase tracking-[0.3em] text-blue-300">MediAgent Pro</p>
-                    <h1 className="max-w-md text-5xl font-bold leading-tight">Launch your clinic workspace in one secure step.</h1>
-                    <p className="max-w-lg text-lg text-gray-300">
-                        Create the clinic, register the first admin account, and start onboarding your care team from the dashboard.
-                    </p>
-                </div>
-                <p className="text-sm text-gray-400">Your account will manage clinic settings and team access.</p>
-            </div>
-
-            <div className="flex flex-1 items-center justify-center px-6 py-12">
-                <Card className="w-full max-w-xl space-y-6" padding="lg">
+        <AuthShell
+            headline="Launch your clinic workspace in one secure step."
+            subcopy="Create the clinic, register the first admin account, and start onboarding your care team from the dashboard."
+            footer="Your account will manage clinic settings and team access."
+            wide
+        >
+                <div className="space-y-6">
                     <div className="space-y-2">
-                        <p className="text-sm font-medium text-blue-600">Clinic admin onboarding</p>
-                        <h2 className="text-3xl font-bold text-gray-900">Create clinic and admin account</h2>
-                        <p className="text-sm text-gray-500">
+                        <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-primary">Clinic admin onboarding</p>
+                        <h2 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">Create clinic and admin account</h2>
+                        <p className="text-sm text-muted">
                             This account becomes the first clinic admin and can invite additional clinicians.
                         </p>
                     </div>
@@ -146,14 +140,14 @@ export default function ClinicAdminSignupPage() {
                         <Input label="Email" onChange={(event) => updateField("email", event.target.value)} type="email" value={formData.email} />
                         <Input label="Specialty" onChange={(event) => updateField("specialty", event.target.value)} value={formData.specialty} />
                         <div className="space-y-1">
-                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <div className="flex items-center gap-2 text-[13px] font-medium text-ink-2">
                                 <span>Type 1 NPI (optional)</span>
                                 <InfoIcon text="Type 1 NPI is for the admin clinician (individual provider NPI)." />
                             </div>
                             <Input aria-label="Type 1 NPI (optional)" onChange={(event) => updateField("type1Npi", event.target.value)} value={formData.type1Npi} />
                         </div>
                         <div className="space-y-1">
-                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <div className="flex items-center gap-2 text-[13px] font-medium text-ink-2">
                                 <span>Type 2 NPI (optional)</span>
                                 <InfoIcon text="Type 2 NPI is for the clinic/organization (facility NPI)." />
                             </div>
@@ -166,33 +160,32 @@ export default function ClinicAdminSignupPage() {
                             type="password"
                             value={formData.confirmPassword}
                         />
-                        {error ? <p className="text-sm text-red-600 md:col-span-2">{error}</p> : null}
+                        {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink md:col-span-2">{error}</p> : null}
                         {isClinicAlreadyExistsError ? (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 md:col-span-2">
+                            <div className="rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink md:col-span-2">
                                 <p className="font-semibold">This clinic is already provisioned.</p>
                                 <p className="mt-1">
                                     Use an existing clinician login for this clinic, then ask a current clinic admin to grant admin access.
                                 </p>
-                                <Link className="mt-2 inline-block font-semibold text-amber-900 underline" href="/login">
+                                <Link className="mt-2 inline-block font-semibold text-warn-ink underline" href="/login">
                                     Go to clinician sign in
                                 </Link>
                             </div>
                         ) : null}
                         <div className="md:col-span-2">
-                            <Button disabled={submitting} fullWidth type="submit">
+                            <Button disabled={submitting} fullWidth size="lg" type="submit">
                                 {submitting ? "Creating clinic..." : "Create clinic admin account"}
                             </Button>
                         </div>
                     </form>
 
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-muted">
                         Already have clinic access?{" "}
-                        <Link className="font-medium text-blue-600" href="/login">
+                        <Link className="font-medium text-primary hover:underline" href="/login">
                             Sign in
                         </Link>
                     </div>
-                </Card>
-            </div>
-        </div>
+                </div>
+        </AuthShell>
     );
 }

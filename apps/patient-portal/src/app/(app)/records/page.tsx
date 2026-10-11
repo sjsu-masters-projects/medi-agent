@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
-import { HiArrowPath } from "react-icons/hi2";
 import { DocumentSourceViewer } from "@/components/features";
-import { groupRecordDates, RecordRow } from "@/components/features/record-row";
+import { cleanRecordTitle, groupRecordDates, RecordRow } from "@/components/features/record-row";
 import { Icon } from "@/components/ui/icons";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
+import { OverflowMenu } from "@/components/ui/overflow-menu";
+import { ListenBars, ProcessingDots } from "@/components/ui/motion";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { recordsCopy } from "@/components/features/records-copy";
-import { Button, EmptyState, ErrorState, Modal } from "@/components/ui";
+import { Button, EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui";
 import { api } from "@/services/api";
 import { redirectToLogin } from "@/services/auth-redirect";
 import { refreshPatientSession } from "@/services/auth-refresh";
@@ -660,50 +661,60 @@ export default function RecordsPage() {
   const isDeletingSelectedDocument =
     deletingDocumentId === selectedDocument?.id;
 
+  const patientName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ");
+  const spanish = locale === "es-MX";
+  const displayProvider = (document: PortalDocument) => {
+    if (document.provider === "Patient uploaded document") return spanish ? "Tu documento" : "Your upload";
+    if (document.provider === "Clinician uploaded document") return spanish ? "De tu equipo de atención" : "From your care team";
+    return copy(document.provider);
+  };
+  const shortDate = (value: string, withYear = false) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const timeZone = profile?.timezone ?? "UTC";
+    const sameYear = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric" }).format(date) === new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric" }).format(new Date());
+    return date.toLocaleDateString(locale, { month: "short", day: "numeric", ...(withYear || !sameYear ? { year: "numeric" } : {}), timeZone });
+  };
+
   return (
     <PullToRefresh
       onRefresh={loadDocuments}
       busy={loading || uploading}
       label={copy("Refresh records")}
     >
-      <div className="patient-page space-y-4 pb-6">
-        <header className="px-[22px] pt-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-[32px] font-semibold tracking-[-0.02em] text-ink">
+      <div className="patient-page pb-6">
+        <header className="px-[22px] pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="min-w-0 break-words text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">
               {copy("My Records")}
             </h1>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                aria-label={copy(loading ? "Refreshing..." : "Refresh records")}
-                title={copy("Refresh records")}
-                disabled={loading || uploading}
-                onClick={() => void loadDocuments()}
-                className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-surface-2 text-ink-2 disabled:opacity-50"
-              >
-                <HiArrowPath
-                  aria-hidden="true"
-                  className={
-                    loading
-                      ? "h-5 w-5 shrink-0 motion-safe:animate-spin"
-                      : "h-5 w-5 shrink-0"
-                  }
-                />
-              </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <OverflowMenu
+                label={spanish ? "Más opciones" : "More options"}
+                items={[
+                  {
+                    label: copy(loading ? "Refreshing..." : "Refresh records"),
+                    icon: "refresh",
+                    onSelect: () => void loadDocuments(),
+                    disabled: loading || uploading,
+                    busy: loading,
+                  },
+                ]}
+              />
               <button
                 type="button"
                 aria-label={copy("Upload")}
                 title={copy("Upload")}
                 disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-brand text-white hover:bg-brand-hover disabled:opacity-50"
+                className="ma-press flex h-11 w-11 items-center justify-center rounded-[14px] bg-brand text-white shadow-[0_8px_18px_-10px_rgba(20,116,101,.8)] hover:bg-brand-hover disabled:opacity-50"
               >
                 <Icon name="up" className="h-5 w-5" />
               </button>
             </div>
           </div>
           <p className="mt-1 text-sm text-muted" role="status">
-            {locale === "es-MX"
+            {spanish
               ? `${documents.length} documentos · ${processingCount} en proceso`
               : `${documents.length} records · ${processingCount} processing`}
           </p>
@@ -715,15 +726,15 @@ export default function RecordsPage() {
           ref={fileInputRef}
           type="file"
         />
-        <div className="patient-stack space-y-4 px-4">
+        <div className="space-y-3 px-4 pt-4 empty:hidden">
           {uploading ? (
             <p
               role="status"
-              className="rounded-xl bg-brand-tint p-4 text-sm text-brand-ink"
+              className="ma-enter flex items-center gap-3 rounded-[22px] bg-brand-tint px-4 py-3.5 text-sm font-medium text-brand-ink"
             >
-              {locale === "es-MX"
-                ? "Subiendo documento..."
-                : "Uploading document..."}
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="up" className="h-[18px] w-[18px]" /></span>
+              <span className="flex-1">{spanish ? "Subiendo documento..." : "Uploading document..."}</span>
+              <ProcessingDots className="bg-brand" />
             </p>
           ) : null}
           {pageError && documents.length === 0 ? (
@@ -734,6 +745,7 @@ export default function RecordsPage() {
                   disabled={loading}
                   onClick={() => void loadDocuments()}
                   variant="secondary"
+                  size="sm"
                 >
                   {copy("Try again")}
                 </Button>
@@ -751,6 +763,7 @@ export default function RecordsPage() {
                     void loadDocuments();
                   }}
                   variant="secondary"
+                  size="sm"
                 >
                   {copy("Try again")}
                 </Button>
@@ -768,6 +781,7 @@ export default function RecordsPage() {
                     fileInputRef.current?.click();
                   }}
                   variant="secondary"
+                  size="sm"
                 >
                   {copy("Try again")}
                 </Button>
@@ -775,23 +789,35 @@ export default function RecordsPage() {
               title={copy("Document processing failed")}
             />
           ) : null}
+          {loading && documents.length === 0 ? (
+            <div aria-hidden="true" className="space-y-2.5 pt-2">
+              <Skeleton className="h-3 w-24" variant="text" />
+              <Skeleton className="h-[220px] w-full" />
+            </div>
+          ) : null}
           {loading ? (
-            <p
-              className="rounded-2xl bg-surface px-4 py-3 text-sm font-medium text-muted"
-              role="status"
-            >
+            <p className="sr-only" role="status">
               {copy("Loading documents...")}
             </p>
           ) : null}
           {!loading && !pageError && documents.length === 0 ? (
-            <EmptyState
-              description={copy(
-                "Upload PDFs or images from your clinic visits.",
-              )}
-              icon={<Icon name="folder" />}
-              title={copy("No records yet")}
-            />
+            <div className="rounded-[22px] bg-surface">
+              <EmptyState
+                description={copy(
+                  "Upload PDFs or images from your clinic visits.",
+                )}
+                icon={<Icon name="folder" />}
+                title={copy("No records yet")}
+                action={
+                  <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                    <Icon name="up" className="h-[18px] w-[18px]" />{copy("Upload")}
+                  </Button>
+                }
+              />
+            </div>
           ) : null}
+        </div>
+        <div className="patient-stack">
           {groupRecordDates(
             documents,
             new Date(),
@@ -800,17 +826,17 @@ export default function RecordsPage() {
             <section key={group.key} aria-labelledby={`records-${group.key}`}>
               <h2
                 id={`records-${group.key}`}
-                className="px-1.5 pb-2 pt-1 font-mono text-xs uppercase tracking-[0.08em] text-muted"
+                className="px-[22px] pt-5 pb-2 font-mono text-xs uppercase tracking-[0.08em] text-muted"
               >
                 {group.key === "recent"
-                  ? locale === "es-MX"
+                  ? spanish
                     ? "Esta semana"
                     : "This week"
-                  : locale === "es-MX"
+                  : spanish
                     ? "Anteriores"
                     : "Earlier"}
               </h2>
-              <div className="overflow-hidden rounded-[22px] bg-surface">
+              <div className="mx-4 overflow-hidden rounded-[22px] bg-surface [&>*+*]:border-t [&>*+*]:border-line">
                 {group.items.map((document) => {
                   const displayDocument = parsingDocIds.has(document.id)
                     ? { ...document, parseStatus: "processing" as const }
@@ -820,22 +846,12 @@ export default function RecordsPage() {
                   return (
                     <RecordRow
                       document={displayDocument}
-                      patientName={[profile?.firstName, profile?.lastName]
-                        .filter(Boolean)
-                        .join(" ")}
+                      patientName={patientName}
                       locale={locale}
-                      date={new Date(document.createdAt).toLocaleDateString(
-                        locale,
-                        {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          timeZone: profile?.timezone ?? "UTC",
-                        },
-                      )}
+                      date={shortDate(document.createdAt)}
                       key={document.id}
                       onOpen={() => openDocument(document)}
-                      provider={copy(document.provider)}
+                      provider={displayProvider(document)}
                       statusLabel={status?.label}
                       typeLabel={getDocumentTypeLabel(
                         document.documentType,
@@ -851,44 +867,52 @@ export default function RecordsPage() {
         <Modal
           onClose={closeDocumentModal}
           open={Boolean(selectedDocument)}
-          closeLabel={locale === "es-MX" ? "Cerrar ventana" : "Close modal"}
+          closeLabel={spanish ? "Cerrar ventana" : "Close modal"}
           size="wide"
-          title={selectedDocument?.fileName ?? copy("Record details")}
+          title={selectedDocument ? cleanRecordTitle(selectedDocument.fileName, patientName) : copy("Record details")}
         >
           <div className="space-y-4">
-            <p className="break-words text-sm text-muted">
-              {selectedDocument
-                ? getDocumentTypeLabel(selectedDocument.documentType, locale)
-                : null}
-            </p>
-            <details className="rounded-xl border border-line-strong p-4">
-              <summary className="min-h-11 cursor-pointer py-2 font-semibold text-ink">
-                {copy("Source document")}
+            <div className="-mt-2 space-y-1">
+              <p className="break-words text-sm text-muted first-letter:uppercase">
+                {selectedDocument
+                  ? [getDocumentTypeLabel(selectedDocument.documentType, locale), displayProvider(selectedDocument), shortDate(selectedDocument.createdAt, true)].filter(Boolean).join(" · ")
+                  : null}
+              </p>
+              <p className="break-words font-mono text-xs text-muted [overflow-wrap:anywhere]">{selectedDocument?.fileName}</p>
+            </div>
+            <details className="group rounded-[22px] border border-line-strong bg-surface">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-4 py-2 font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                <Icon name="file" className="h-5 w-5 text-muted" />
+                <span className="flex-1">{copy("Source document")}</span>
+                <Icon name="chevronDown" className="h-[18px] w-[18px] text-muted transition-transform duration-[240ms] group-open:rotate-180" />
               </summary>
-              {selectedDocument?.sourceClinic ? (
-                <p className="mb-2 break-words text-sm text-ink-2">
-                  {copy("Source")}: {copy(selectedDocument.sourceClinic)}
-                </p>
-              ) : null}
-              <DocumentSourceViewer
-                locale={locale}
-                fileName={selectedDocument?.fileName ?? copy("Document")}
-                previewMimeType={selectedDocument?.previewMimeType}
-                previewStatus={selectedDocument?.previewStatus}
-                previewUrl={selectedDocument?.previewUrl}
-                sourceMimeType={selectedDocument?.mimeType}
-                sourceUrl={selectedDocument?.fileUrl}
-              />
+              <div className="border-t border-line px-4 pt-3 pb-4">
+                {selectedDocument?.sourceClinic ? (
+                  <p className="mb-2 break-words text-sm text-ink-2">
+                    {copy("Source")}: {copy(selectedDocument.sourceClinic)}
+                  </p>
+                ) : null}
+                <DocumentSourceViewer
+                  locale={locale}
+                  fileName={selectedDocument?.fileName ?? copy("Document")}
+                  previewMimeType={selectedDocument?.previewMimeType}
+                  previewStatus={selectedDocument?.previewStatus}
+                  previewUrl={selectedDocument?.previewUrl}
+                  sourceMimeType={selectedDocument?.mimeType}
+                  sourceUrl={selectedDocument?.fileUrl}
+                />
+              </div>
             </details>
-            <div className="rounded-[22px] bg-brand-tint p-4">
+            <div className="rounded-[22px] bg-brand-tint/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink">
+                <p className="inline-flex items-center gap-2 text-sm font-semibold text-brand-ink">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface text-brand"><Icon name="spark" className="h-3.5 w-3.5" /></span>
                   {copy("Explain this to me")}
                 </p>
                 <div className="flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto">
                   <button
                     aria-label={copy("Read summary aloud")}
-                    className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-brand-ink hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="ma-press flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-brand-ink hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={
                       explanationLoading ||
                       (!explanationText && !selectedDocument?.aiSummary)
@@ -896,11 +920,11 @@ export default function RecordsPage() {
                     onClick={handleReadSummary}
                     type="button"
                   >
-                    <Icon name="speaker" className="h-5 w-5" />
+                    {readbackActive ? <ListenBars /> : <Icon name="speaker" className="h-5 w-5" />}
                   </button>
                   <select
                     aria-label={copy("Explanation language")}
-                    className="min-h-11 min-w-0 max-w-full flex-1 rounded-xl border border-line-strong bg-surface pl-3 pr-10 py-2 text-base font-medium text-brand-ink"
+                    className="min-h-11 min-w-0 max-w-full flex-1 rounded-xl border border-line-strong bg-surface pl-3 pr-10 py-2 text-base font-medium text-brand-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
                     onChange={(event) =>
                       handleLanguageChange(event.target.value as Locale)
                     }
@@ -914,19 +938,14 @@ export default function RecordsPage() {
                   </select>
                 </div>
               </div>
-              <p className="mt-3 text-sm leading-6 text-ink-2">
-                {locale === "es-MX"
-                  ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
-                  : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
-              </p>
               <p
                 aria-live="polite"
-                className="mt-3 whitespace-pre-wrap break-words text-base leading-7 text-ink-2"
+                className="mt-3 whitespace-pre-wrap break-words text-base leading-7 text-ink"
               >
                 {explanationLoading
                   ? copy("Translating...")
                   : readbackActive
-                    ? locale === "es-MX"
+                    ? spanish
                       ? `Escuchando en ${getLocaleLabel(explanationLang)}...`
                       : `Reading in ${getLocaleLabel(explanationLang)}...`
                     : (explanationText ??
@@ -934,10 +953,15 @@ export default function RecordsPage() {
                         "A plain-language explanation will appear here once it is ready.",
                       ))}
               </p>
+              <p className="mt-3 border-t border-brand/15 pt-3 text-[13px] leading-5 text-brand-ink/90">
+                {spanish
+                  ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
+                  : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
+              </p>
             </div>
             <div className="space-y-3">
               <Button fullWidth onClick={handleAskAboutDocument} size="lg">
-                {copy("Ask about this document")}
+                <Icon name="chat" className="h-5 w-5" />{copy("Ask about this document")}
               </Button>
               <div className="grid grid-cols-2 gap-3">
                 <Button
@@ -962,6 +986,7 @@ export default function RecordsPage() {
                     <Button
                       onClick={() => void handleDeleteDocument()}
                       variant="secondary"
+                      size="sm"
                     >
                       {copy("Try again")}
                     </Button>
@@ -970,8 +995,8 @@ export default function RecordsPage() {
                 />
               ) : null}
               {deleteConfirming ? (
-                <div className="rounded-[22px] bg-danger-tint p-4">
-                  <p className="text-base font-bold text-danger-ink">
+                <div className="ma-enter rounded-[22px] bg-danger-tint p-4">
+                  <p className="text-base font-semibold text-danger-ink">
                     {copy("Delete this document?")}
                   </p>
                   <p className="mt-1 text-sm leading-6 text-danger-ink">
@@ -993,6 +1018,7 @@ export default function RecordsPage() {
                       fullWidth
                       onClick={() => void handleDeleteDocument()}
                       variant="danger"
+                      className="!bg-danger-ink !text-white hover:!bg-[#8C2F1F]"
                     >
                       {isDeletingSelectedDocument
                         ? copy("Deleting")
@@ -1001,14 +1027,14 @@ export default function RecordsPage() {
                   </div>
                 </div>
               ) : (
-                <Button
+                <button
                   disabled={isDeletingSelectedDocument}
-                  fullWidth
                   onClick={() => setDeleteConfirming(true)}
-                  variant="danger"
+                  type="button"
+                  className="ma-press flex min-h-11 w-full items-center justify-center rounded-2xl text-[15px] font-semibold text-danger-ink hover:bg-danger-tint disabled:opacity-50"
                 >
                   {copy("Delete document")}
-                </Button>
+                </button>
               )}
             </div>
           </div>

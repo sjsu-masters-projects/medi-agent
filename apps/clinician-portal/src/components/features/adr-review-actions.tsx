@@ -81,13 +81,12 @@ export function ADRReviewActions({
     if (!action) {
         return (
             <div
-                className="flex flex-wrap gap-2"
+                className="flex flex-wrap gap-2 border-t border-line pt-4"
                 aria-label="ADR review actions"
             >
                 <Button
                     disabled={submitting}
                     onClick={() => begin("request_information")}
-                    size="sm"
                     variant="secondary"
                 >
                     Request information
@@ -95,7 +94,6 @@ export function ADRReviewActions({
                 <Button
                     disabled={submitting}
                     onClick={() => begin("dismiss")}
-                    size="sm"
                     variant="danger"
                 >
                     Dismiss
@@ -103,7 +101,6 @@ export function ADRReviewActions({
                 <Button
                     disabled={submitting}
                     onClick={() => begin("mark_reviewed")}
-                    size="sm"
                 >
                     Mark reviewed
                 </Button>
@@ -114,24 +111,25 @@ export function ADRReviewActions({
     const noteRequired = action !== "mark_reviewed";
     return (
         <form
-            className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4"
+            className="ma-enter space-y-4 rounded-xl border border-primary-line bg-primary-tint p-4"
             onSubmit={submit}
         >
-            <h3 className="text-sm font-semibold text-gray-900">
+            <h3 className="text-sm font-semibold text-ink">
                 {ACTION_LABELS[action]}
             </h3>
             {action === "request_information" && missingQuestions.length > 0 ? (
                 <fieldset>
-                    <legend className="text-xs font-medium text-gray-700">
+                    <legend className="mb-1.5 text-[13px] font-medium text-ink-2">
                         Information needed
                     </legend>
-                    <div className="mt-2 flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2">
                         {missingQuestions.map((question) => (
                             <label
-                                className="flex items-center gap-2 text-sm text-gray-700"
+                                className="inline-flex min-h-8 cursor-pointer items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.5 text-[13px] text-ink-2 transition-colors duration-[160ms] hover:border-primary-line has-[:checked]:border-primary-line has-[:checked]:text-ink has-[:disabled]:cursor-not-allowed"
                                 key={question}
                             >
                                 <input
+                                    className="h-4 w-4 accent-[var(--color-primary)]"
                                     disabled={submitting}
                                     checked={questions.includes(question)}
                                     onChange={() => toggleQuestion(question)}
@@ -143,12 +141,12 @@ export function ADRReviewActions({
                     </div>
                 </fieldset>
             ) : null}
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-[13px] font-medium text-ink-2">
                 Review note{noteRequired ? " (required)" : " (optional)"}
                 <textarea
                     disabled={submitting}
                     maxLength={MAX_NOTE_LENGTH}
-                    className="mt-1 min-h-24 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    className="mt-1.5 block min-h-24 w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm font-normal text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted"
                     onChange={(event) => setNote(event.target.value)}
                     placeholder={
                         action === "request_information"
@@ -158,14 +156,13 @@ export function ADRReviewActions({
                     value={note}
                 />
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
                 <Button
                     disabled={
                         submitting ||
                         note.length > MAX_NOTE_LENGTH ||
                         (noteRequired && !note.trim())
                     }
-                    size="sm"
                     type="submit"
                 >
                     {ACTION_LABELS[action]}
@@ -173,7 +170,6 @@ export function ADRReviewActions({
                 <Button
                     disabled={submitting}
                     onClick={() => setAction(null)}
-                    size="sm"
                     variant="ghost"
                 >
                     Cancel

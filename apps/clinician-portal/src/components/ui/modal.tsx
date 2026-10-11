@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { Icon } from "./icons";
 
 interface ModalProps {
     open: boolean;
@@ -55,24 +56,24 @@ export function Modal({ children, contentClassName, onClose, open, title }: Moda
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+        <div className="ma-fade fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,.45)] p-4 backdrop-blur-[2px]" onClick={onClose}>
             <div
                 ref={dialogRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className={`max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:p-6 ${contentClassName ?? ""}`}
+                className={`ma-pop max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)] sm:p-6 ${contentClassName ?? ""}`}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-center justify-between">
-                    <h2 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h2>
+                    <h2 id={titleId} className="text-lg font-semibold tracking-[-0.01em] text-ink">{title}</h2>
                     <button
                         aria-label="Close modal"
-                        className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                        className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink"
                         onClick={onClose}
                         type="button"
                     >
-                        ✕
+                        <Icon name="close" className="h-4 w-4" strokeWidth={2} />
                     </button>
                 </div>
                 {children}

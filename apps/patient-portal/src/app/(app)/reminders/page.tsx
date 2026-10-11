@@ -10,9 +10,10 @@ import {
   remindersCopy,
 } from "@/components/features/reminders-copy";
 import { PageHeader } from "@/components/layouts";
+import { Icon } from "@/components/ui/icons";
+import { IconTile } from "@/components/ui/list";
 import {
   Button,
-  Card,
   EmptyState,
   ErrorState,
   Skeleton,
@@ -29,7 +30,6 @@ import type {
   ReminderTarget,
 } from "@/types";
 import { useSelector } from "react-redux";
-import { HiArrowPath } from "react-icons/hi2";
 
 const DAYS: ReminderDayOfWeek[] = [
   "monday",
@@ -355,11 +355,11 @@ export default function ReminderSettingsPage() {
               editingKey !== null
             }
             onClick={() => void loadData()}
-            variant="secondary"
-            className="h-11 w-11 p-0"
+            variant="ghost"
+            className="h-11 w-11 rounded-[14px] p-0 text-ink-2 hover:bg-surface"
           >
-            <HiArrowPath
-              aria-hidden="true"
+            <Icon
+              name="refresh"
               className={
                 loading
                   ? "h-5 w-5 shrink-0 motion-safe:animate-spin"
@@ -372,6 +372,7 @@ export default function ReminderSettingsPage() {
           "Choose the exact days and times you want reminder nudges.",
         )}
         title={copy("Reminder Settings")}
+        backButton
       />
       <div className="patient-stack space-y-4 px-4">
         {loading && targets.length === 0 ? (
@@ -397,12 +398,17 @@ export default function ReminderSettingsPage() {
         {(!loading || targets.length > 0) &&
         (!pageError || targets.length > 0) ? (
           <>
-            <section className="rounded-[22px] bg-surface px-[14px] py-1">
-              <details>
-                <summary className="min-h-11 cursor-pointer py-2 font-semibold">
-                  {copy("Advanced settings")} ·{" "}
-                  {patientTimezone.replaceAll("_", " ")}
+            <section className="rounded-[22px] bg-surface">
+              <details className="group">
+                <summary className="flex min-h-[56px] cursor-pointer list-none items-center gap-3 px-[14px] py-2 [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-ink-2"><Icon name="globe" className="h-5 w-5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-semibold text-ink">{copy("Advanced settings")}</span>
+                    <span className="block break-words text-[13px] text-muted">{patientTimezone.replaceAll("_", " ")}</span>
+                  </span>
+                  <Icon name="chevronDown" className="h-[18px] w-[18px] shrink-0 text-muted transition-transform duration-[240ms] group-open:rotate-180" />
                 </summary>
+                <div className="border-t border-line px-[14px] pt-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-mono text-xs uppercase tracking-[0.08em] text-muted">
@@ -418,7 +424,7 @@ export default function ReminderSettingsPage() {
                 </div>
                 <select
                   aria-label={copy("Profile timezone")}
-                  className="mt-3 min-h-11 min-w-0 w-full rounded-2xl border border-line-strong bg-surface px-3 py-2 text-base text-ink"
+                  className="mt-3 min-h-[52px] min-w-0 w-full rounded-2xl border border-line-strong bg-surface px-4 py-2 text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
                   onChange={(event) => setPatientTimezone(event.target.value)}
                   value={patientTimezone}
                 >
@@ -429,22 +435,23 @@ export default function ReminderSettingsPage() {
                   ))}
                 </select>
                 <Button
-                  className="my-3 min-h-11"
+                  className="my-3"
                   disabled={savingTimezone || editingKey !== null}
                   onClick={saveTimezone}
-                  size="lg"
+                  fullWidth
                 >
                   {savingTimezone
                     ? copy("Saving timezone...")
                     : copy("Save timezone")}
                 </Button>
+                </div>
               </details>
             </section>
 
             {actionMessage ? (
-              <Card className="rounded-[22px] border-0 bg-brand-tint text-sm font-medium text-brand-ink shadow-none">
-                <p role="status">{actionMessage}</p>
-              </Card>
+              <p role="status" className="ma-enter flex items-start gap-2.5 rounded-2xl bg-brand-tint px-4 py-3 text-sm font-medium text-brand-ink">
+                <Icon name="check" className="mt-px h-4 w-4 shrink-0" />{actionMessage}
+              </p>
             ) : null}
             {actionError ? (
               <p
@@ -456,14 +463,15 @@ export default function ReminderSettingsPage() {
             ) : null}
 
             {targets.length === 0 ? (
-              <EmptyState
+              <div className="rounded-[22px] bg-surface"><EmptyState
+                icon={<Icon name="bell" />}
                 title={copy("No reminders to set")}
                 description={copy(
                   "Reminders will appear here when your care team adds eligible medications or activities.",
                 )}
-              />
+              /></div>
             ) : null}
-            <div className="overflow-hidden rounded-[22px] bg-surface">
+            <div className="space-y-3">
               {targets.map((target) => {
                 const key = makeTargetKey(target);
                 const draft =
@@ -475,20 +483,21 @@ export default function ReminderSettingsPage() {
 
                 return (
                   <article
-                    className="space-y-3 border-b border-line px-[14px] py-[13px] last:border-b-0"
+                    className={`space-y-3 rounded-[22px] bg-surface p-4 transition-shadow duration-[240ms] ${isEditing ? "shadow-[var(--shadow-raised)] ring-1 ring-brand/20" : ""}`}
                     key={key}
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <IconTile icon={target.targetType === "medication" ? "pill" : "check"} tone={target.targetType === "medication" ? "med" : "neutral"} />
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-xs uppercase tracking-[0.08em] text-muted">
                           {target.targetType === "medication"
                             ? copy("Medication")
                             : copy("Care activity")}
                         </p>
-                        <h3 className="mt-1 break-words text-[17px] font-semibold text-ink">
+                        <h3 className="mt-0.5 break-words text-[17px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">
                           {target.name}
                         </h3>
-                        <p className="mt-1 break-words text-sm leading-6 text-muted">
+                        <p className="mt-0.5 break-words text-[13px] leading-5 text-muted">
                           {target.frequency}
                           {target.providerName
                             ? ` · ${target.providerName}`
@@ -496,7 +505,7 @@ export default function ReminderSettingsPage() {
                         </p>
                       </div>
                       <span
-                        className={`max-w-full rounded-full px-2.5 py-1 text-xs font-medium ${
+                        className={`max-w-[40%] shrink-0 rounded-full px-2.5 py-1 text-center text-xs font-semibold ${
                           target.reminderSchedule &&
                           !disableAutomatic &&
                           target.reminderSchedule.isEnabled
@@ -525,19 +534,24 @@ export default function ReminderSettingsPage() {
                       </p>
                     ) : null}
                     {target.reminderSchedule ? (
-                      <p className="break-words text-sm leading-6 text-ink-2">
-                        {target.reminderSchedule.daysOfWeek
-                          .map((day) => reminderDayLabel(locale, day))
-                          .join(", ")}{" "}
-                        ·{" "}
-                        <span className="font-mono">
-                          {target.reminderSchedule.timesOfDay
-                            .map((value) => value.slice(0, 5))
-                            .join(", ")}
-                        </span>{" "}
-                        ·{" "}
-                        {target.reminderSchedule.timezone.replaceAll("_", " ")}
-                      </p>
+                      <div className="flex items-start gap-3 rounded-2xl bg-surface-2/70 px-3.5 py-3">
+                        <Icon name="bell" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-brand" />
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <p className="break-words text-sm text-ink-2">
+                            {target.reminderSchedule.daysOfWeek
+                              .map((day) => { const label = reminderDayLabel(locale, day); return label.charAt(0).toLocaleUpperCase(locale) + label.slice(1); })
+                              .join(", ")}
+                          </p>
+                          <p className="flex flex-wrap gap-1.5">
+                            {target.reminderSchedule.timesOfDay.map((value, index) => (
+                              <span key={`${value}-${index}`} className="rounded-lg bg-surface px-2 py-0.5 font-mono text-[13px] font-medium text-ink">{value.slice(0, 5)}</span>
+                            ))}
+                          </p>
+                          <p className="break-words text-xs text-muted">
+                            {target.reminderSchedule.timezone.replaceAll("_", " ")}
+                          </p>
+                        </div>
+                      </div>
                     ) : null}
                     {!disableAutomatic && !isEditing ? (
                       <Button
@@ -566,9 +580,11 @@ export default function ReminderSettingsPage() {
 
                     {!disableAutomatic ? (
                       <div className="border-t border-line text-sm leading-6 text-muted">
-                        <details>
-                          <summary className="min-h-11 cursor-pointer py-2 font-semibold">
-                            {copy("Schedule help")}
+                        <details className="group">
+                          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-2 font-semibold text-ink-2 [&::-webkit-details-marker]:hidden">
+                            <Icon name="info" className="h-4 w-4 text-muted" />
+                            <span className="flex-1">{copy("Schedule help")}</span>
+                            <Icon name="chevronDown" className="h-4 w-4 text-muted transition-transform duration-[240ms] group-open:rotate-180" />
                           </summary>
                           <p>
                             {copy(
@@ -625,7 +641,7 @@ export default function ReminderSettingsPage() {
                               const checked = draft.daysOfWeek.includes(day);
                               return (
                                 <label
-                                  className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-[15px] font-medium ${checked ? "border-brand bg-brand-tint text-brand-ink" : "border-line-strong bg-surface text-ink-2"}`}
+                                  className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-[15px] font-medium transition-colors duration-[160ms] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-70 ${checked ? "border-brand bg-brand-tint text-brand-ink" : "border-line-strong bg-surface text-ink-2 hover:border-brand/40"}`}
                                   key={day}
                                 >
                                   <input
@@ -685,7 +701,7 @@ export default function ReminderSettingsPage() {
                                     ? `Hora del recordatorio ${index + 1}`
                                     : `Reminder time ${index + 1}`
                                 }
-                                className="min-h-11 min-w-0 w-full rounded-xl border border-line-strong bg-surface px-3 py-2 font-mono text-base text-ink"
+                                className="min-h-12 min-w-0 w-full rounded-2xl border border-line-strong bg-surface px-4 py-2 font-mono text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
                                 onChange={(event) =>
                                   updateDraft(target, (current) => ({
                                     ...current,
@@ -724,7 +740,7 @@ export default function ReminderSettingsPage() {
                       </>
                     ) : null}
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 empty:hidden">
                       {isEditing ? (
                         <Button
                           disabled={
@@ -770,8 +786,8 @@ export default function ReminderSettingsPage() {
                             (editingKey !== null && editingKey !== key)
                           }
                           onClick={() => void clearSchedule(target)}
-                          size="lg"
-                          variant="secondary"
+                          variant="ghost"
+                          className="!text-danger-ink hover:!bg-danger-tint"
                         >
                           {copy("Clear schedule")}
                         </Button>

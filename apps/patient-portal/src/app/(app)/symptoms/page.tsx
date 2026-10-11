@@ -43,17 +43,18 @@ export default function SymptomsPage() {
               : "Nora is an AI care assistant. In chat, describe what you feel, when it started, and how strong it is. Review the questions and confirm details when asked."}
           </p>
           <Link
-            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-brand px-4 py-3 text-center font-semibold text-white hover:bg-brand-hover"
+            className="ma-press inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 py-3 text-center text-base font-semibold text-white shadow-[0_12px_24px_-16px_rgba(20,116,101,.9)] hover:bg-brand-hover"
             href="/chat"
             onClick={(event) => {
               if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
                 setConversationOpen(true);
             }}
           >
+            <Icon name="chat" className="h-5 w-5" />
             {spanish ? "Abrir chat con Nora" : "Open chat with Nora"}
           </Link>
-          <details className="border-t border-line pt-2">
-            <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ink">
+          <details className="ma-disclosure border-t border-line pt-2">
+            <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ink-2">
               {spanish
                 ? "Qué incluir en su reporte"
                 : "What to include in your report"}
@@ -67,13 +68,14 @@ export default function SymptomsPage() {
         </section>
         <p
           role="note"
-          className="rounded-2xl bg-danger-tint p-[14px] text-sm leading-6 text-danger-ink"
+          className="flex items-start gap-2.5 rounded-2xl bg-danger-tint px-3.5 py-3 text-sm leading-6 text-danger-ink"
         >
+          <Icon name="alert" className="mt-0.5 h-[18px] w-[18px] shrink-0" />
           {spanish
             ? "Este chat no se monitorea continuamente. En una emergencia, llame al 911."
             : "This chat is not continuously monitored. In an emergency, call 911."}
         </p>
-        <details className="rounded-[22px] bg-surface px-[14px]">
+        <details className="ma-disclosure rounded-[22px] bg-surface px-[14px]">
           <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-ink-2">
             {spanish
               ? "Historial de síntomas no disponible aquí"

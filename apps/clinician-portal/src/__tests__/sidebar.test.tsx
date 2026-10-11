@@ -21,6 +21,7 @@ vi.mock("@/services/auth-session", () => ({
 
 vi.mock("@/services/clinic-context", () => ({
     clearStoredClinicContext: vi.fn(),
+    readStoredClinicContext: vi.fn(() => null),
 }));
 
 vi.mock("@/services/api", () => ({
@@ -70,7 +71,7 @@ describe("Sidebar", () => {
         expect(screen.getByText("Rajeevranjan Chaurasia")).toBeInTheDocument();
         expect(screen.getByText("Clinic Admin")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-blue-600");
+        expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-rail-active");
         expect(screen.getByRole("link", { name: /risk radar/i })).toHaveAttribute("aria-current", "page");
         expect(screen.getByRole("navigation", { name: "Clinician navigation" })).toBeInTheDocument();
     });

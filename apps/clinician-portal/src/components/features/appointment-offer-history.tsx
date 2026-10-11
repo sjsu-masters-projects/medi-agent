@@ -1,4 +1,5 @@
-import { Badge, Button, Card, EmptyState } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import { AppointmentStatus, type Appointment } from "@/types";
 import { formatSchedulingTime } from "@/utils/appointment-times";
 import { CalendarExportButton } from "./calendar-export-button";
@@ -14,6 +15,22 @@ const LABELS: Record<Appointment["status"], string> = {
   cancelled: "Cancelled",
   completed: "Completed",
   no_show: "No-show",
+};
+
+const TONES: Record<
+  Appointment["status"],
+  "success" | "info" | "warning" | "danger" | "neutral"
+> = {
+  scheduled: "success",
+  proposed: "info",
+  confirmed: "success",
+  declined: "warning",
+  alternative_requested: "warning",
+  withdrawn: "neutral",
+  expired: "neutral",
+  cancelled: "neutral",
+  completed: "success",
+  no_show: "danger",
 };
 
 export function groupAppointmentHistory(appointments: Appointment[]) {
@@ -46,13 +63,22 @@ export function AppointmentOfferHistory({
 }) {
   if (!appointments.length)
     return (
-      <EmptyState
-        title="No appointments yet"
-        description="Send appointment options to this patient to begin."
-      />
+      <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-muted">
+          <Icon name="cal" className="h-6 w-6" />
+        </span>
+        <div className="max-w-[48ch] space-y-1">
+          <h3 className="text-[15px] font-semibold text-ink">
+            No appointments yet
+          </h3>
+          <p className="text-sm leading-relaxed text-muted">
+            Send appointment options to this patient to begin.
+          </p>
+        </div>
+      </div>
     );
   return (
-    <div className="space-y-4" aria-label="Appointment history">
+    <ul className="divide-y divide-line" aria-label="Appointment history">
       {groupAppointmentHistory(appointments).map((rows) => {
         const representative =
           rows.find(
@@ -73,33 +99,46 @@ export function AppointmentOfferHistory({
               row.status === AppointmentStatus.WITHDRAWN,
           );
         return (
-          <Card key={representative.proposalGroupId ?? representative.id}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold text-gray-900">
-                {representative.reason ||
-                  (representative.proposalGroupId
-                    ? "Appointment offer"
-                    : "Appointment")}
-              </h3>
-              <Badge
-                variant={
-                  representative.status === AppointmentStatus.CONFIRMED
-                    ? "success"
-                    : "info"
-                }
-              >
+          <li
+            key={representative.proposalGroupId ?? representative.id}
+            className="px-5 py-4 transition-colors hover:bg-[rgba(100,116,139,.05)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-ink">
+                  {representative.reason ||
+                    (representative.proposalGroupId
+                      ? "Appointment offer"
+                      : "Appointment")}
+                </h3>
+                <p className="mt-0.5 text-[13px] text-muted">
+                  <span className="font-mono">
+                    {representative.durationMinutes}
+                  </span>{" "}
+                  minutes
+                  {representative.location
+                    ? ` · ${representative.location}`
+                    : ""}
+                </p>
+              </div>
+              <Badge variant={TONES[representative.status]} className="shrink-0">
                 {LABELS[representative.status]}
               </Badge>
             </div>
-            <p className="mt-2 text-sm text-gray-600">
-              {representative.durationMinutes} minutes
-              {representative.location ? ` · ${representative.location}` : ""}
-            </p>
-            <ul className="mt-3 space-y-2 text-sm text-gray-700">
+            <ul className="mt-3 space-y-2 text-[13px] text-ink-2">
               {rows.map((row) => (
-                <li key={row.id}>
-                  {formatSchedulingTime(row.scheduledAt, timezone)} · {timezone}{" "}
-                  — {LABELS[row.status]}
+                <li
+                  key={row.id}
+                  className="rounded-[10px] bg-surface-2 px-3 py-2"
+                >
+                  <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="font-mono text-[12.5px] text-ink">
+                      {formatSchedulingTime(row.scheduledAt, timezone)}
+                    </span>
+                    <span className="text-muted">
+                      · {timezone} — {LABELS[row.status]}
+                    </span>
+                  </span>
                   {(row.status === AppointmentStatus.CONFIRMED ||
                     row.status === AppointmentStatus.SCHEDULED) && (
                     <CalendarExportButton
@@ -111,7 +150,7 @@ export function AppointmentOfferHistory({
                   )}
                   {row.status === AppointmentStatus.PROPOSED &&
                     row.proposalExpiresAt && (
-                      <span className="block text-xs text-gray-500">
+                      <span className="mt-0.5 block font-mono text-[11px] text-muted">
                         Available until{" "}
                         {formatSchedulingTime(row.proposalExpiresAt, timezone)}{" "}
                         · {timezone}
@@ -121,13 +160,15 @@ export function AppointmentOfferHistory({
               ))}
             </ul>
             {note && (
-              <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
-                <strong>Patient note:</strong> {note}
+              <p className="mt-3 whitespace-pre-wrap rounded-[10px] border border-line px-3 py-2 text-[13px] text-ink-2">
+                <strong className="font-semibold text-ink">Patient note:</strong>{" "}
+                {note}
               </p>
             )}
             {canRepropose && (
               <Button
-                className="mt-4"
+                className="mt-3"
+                size="sm"
                 disabled={disabled}
                 variant="secondary"
                 onClick={() => onRepropose(representative)}
@@ -135,9 +176,9 @@ export function AppointmentOfferHistory({
                 Offer new times
               </Button>
             )}
-          </Card>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }

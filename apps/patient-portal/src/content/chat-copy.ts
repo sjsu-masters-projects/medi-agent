@@ -101,7 +101,7 @@ export function getPatientChatCopy(locale: Locale): PatientChatCopy {
 
 export function getChatControlsCopy(locale: Locale) {
   return locale === "es-MX" ? {
-    connection: { idle: "Chat de IA sin conexión", connected: "Chat de IA conectado", connecting: "Conectando al chat de IA…", disconnected: "Chat de IA sin conexión", error: "Problema de conexión con el chat de IA" },
+    connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión" },
     caution: "Nora es una IA y puede equivocarse. No cambies tu tratamiento sin consultar a tu equipo clínico. Para una emergencia, llama al 911.",
     loading: "Cargando conversación…", recordContext: "Registro adjunto", dismiss: "Cerrar", message: "Mensaje para Nora", send: "Enviar mensaje",
     speak: "Toca para hablar", stopVoice: "Detener grabación de voz", interrupt: "Interrumpir y hablar", listening: "Escuchando…", transcribing: "Transcribiendo…",
@@ -111,7 +111,7 @@ export function getChatControlsCopy(locale: Locale) {
     humanOriginal: "Los mensajes se muestran tal como se escribieron, sin traducción automática.",
     profileRequired: "Necesitamos cargar tu idioma preferido antes de enviar. Si tarda demasiado, vuelve a abrir Chat.",
   } : {
-    connection: { idle: "AI chat disconnected", connected: "AI chat connected", connecting: "Connecting to AI chat…", disconnected: "AI chat disconnected", error: "AI chat connection issue" },
+    connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue" },
     caution: "Nora is AI and can make mistakes. Check with your care team before changing treatment. For an emergency, call 911.",
     loading: "Loading conversation…", recordContext: "Record context attached", dismiss: "Dismiss", message: "Message to Nora", send: "Send message",
     speak: "Tap to speak", stopVoice: "Stop voice recording", interrupt: "Interrupt and speak", listening: "Listening…", transcribing: "Transcribing…",

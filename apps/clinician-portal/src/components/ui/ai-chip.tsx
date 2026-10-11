@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Icon } from "./icons";
 
-export function AiChip({ children }: { children: ReactNode }) {
-  return <span className="inline-flex items-center gap-1.5 rounded-md bg-ai-tint text-ai-ink px-2 py-1 text-xs font-medium"><Icon name="spark" className="h-3.5 w-3.5" />{children}</span>;
+/** The only way to say "AI produced this". Never pair it with the approval check. */
+export function AiChip({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-ai-tint px-2.5 py-1.5 text-xs font-medium text-ai-ink ${className}`}><Icon name="spark" className="h-3 w-3" />{children}</span>;
 }

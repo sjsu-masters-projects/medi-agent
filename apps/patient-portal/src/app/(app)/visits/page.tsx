@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { HiOutlineArrowPath } from "react-icons/hi2";
 import { Icon } from "@/components/ui/icons";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { VisitOfferCard } from "@/components/features/visit-offer-card";
@@ -157,7 +156,7 @@ function VisitCard({
               {copy.compose[composing].label}
             </label>
             <textarea
-              className="min-h-11 w-full rounded-2xl border border-line-strong bg-surface px-3 py-2 text-base text-ink"
+              className="min-h-24 w-full rounded-2xl border border-line-strong bg-surface px-4 py-3 text-base text-ink outline-none transition placeholder:text-muted focus:border-brand focus:ring-4 focus:ring-brand/15"
               id={`note-${visit.id}`}
               disabled={responding}
               maxLength={1000}
@@ -357,12 +356,12 @@ export default function VisitsPage() {
                 type="button"
                 aria-label={copy.refreshVisits}
                 title={copy.refreshVisits}
-                className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-surface-2 text-ink-2 disabled:opacity-50"
+                className="ma-press flex h-11 w-11 items-center justify-center rounded-[14px] text-ink-2 hover:bg-surface disabled:opacity-50"
                 disabled={loading || settings.loading || Boolean(respondingId)}
                 onClick={refresh}
               >
-                <HiOutlineArrowPath
-                  aria-hidden="true"
+                <Icon
+                  name="refresh"
                   className={
                     loading ? "h-5 w-5 motion-safe:animate-spin" : "h-5 w-5"
                   }
@@ -388,11 +387,12 @@ export default function VisitsPage() {
             </Card>
           ) : null}
           {settings.loading || (loading && visits.length === 0) ? (
-            <Card className="rounded-[22px] shadow-none">
-              <p role="status" className="text-sm text-muted">
+            <div className="space-y-3">
+              <p role="status" className="sr-only">
                 {settings.loading ? copy.loadingSettings : copy.loading}
               </p>
-            </Card>
+              <div aria-hidden="true" className="ma-skeleton h-40 w-full rounded-[22px]" />
+            </div>
           ) : error && visits.length === 0 ? (
             <ErrorState
               description={copy.loadErrorDetail}
@@ -400,14 +400,14 @@ export default function VisitsPage() {
               title={copy.loadError}
             />
           ) : visits.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-2 text-muted">
+            <div className="flex flex-col items-center gap-3 rounded-[22px] bg-surface px-6 py-9 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-tint text-brand">
                 <Icon name="cal" />
               </span>
               <h2 className="text-[17px] font-semibold text-ink">
                 {copy.emptyTitle}
               </h2>
-              <p className="text-[15px] leading-6 text-muted">
+              <p className="max-w-[32ch] text-[15px] leading-6 text-muted">
                 {copy.emptyDetail}
               </p>
             </div>
@@ -503,15 +503,18 @@ export default function VisitsPage() {
             </>
           )}
           {!loading && !settings.loading && !error ? (
-            <section className="rounded-[22px] bg-surface p-[14px]">
-              <h2 className="text-[15px] font-semibold text-ink">
-                {copy.chatHelp.title}
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-muted">
-                {copy.chatHelp.description}
-              </p>
+            <section className="flex flex-wrap items-center gap-3 rounded-[22px] bg-surface px-[14px] py-[14px]">
+              <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-brand-tint text-brand"><Icon name="chat" className="h-5 w-5" /></span>
+              <div className="min-w-0 flex-1 basis-40">
+                <h2 className="text-[15px] font-semibold text-ink">
+                  {copy.chatHelp.title}
+                </h2>
+                <p className="mt-0.5 text-[13px] leading-5 text-muted">
+                  {copy.chatHelp.description}
+                </p>
+              </div>
               <Button
-                className="mt-4"
+                size="sm"
                 variant="secondary"
                 onClick={() => router.push("/chat")}
                 disabled={Boolean(respondingId)}

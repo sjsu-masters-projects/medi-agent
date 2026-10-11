@@ -101,7 +101,7 @@ function PdfCanvasViewer({
 
   if (error) {
     return (
-      <p className="text-sm leading-6 text-red-800">
+      <p className="text-sm leading-6 text-danger-ink">
         {copy(
           error === "load"
             ? "This PDF could not be displayed in the browser. You can still download the original."
@@ -113,7 +113,7 @@ function PdfCanvasViewer({
 
   if (!document) {
     return (
-      <p className="text-sm text-gray-700">
+      <p className="text-sm text-ink-2">
         {copy("Loading source document…")}
       </p>
     );
@@ -121,19 +121,19 @@ function PdfCanvasViewer({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-auto rounded-2xl border border-gray-200 bg-gray-200 p-3">
+      <div className="overflow-auto rounded-2xl border border-line-strong bg-surface-2 p-3">
         <canvas
           aria-label={
             locale === "es-MX"
               ? `${fileName}, página ${pageNumber}`
               : `${fileName}, page ${pageNumber}`
           }
-          className="mx-auto max-w-full bg-white shadow-sm"
+          className="mx-auto max-w-full bg-surface shadow-sm"
           ref={canvasRef}
           role="img"
         />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-2">
         <span>
           {locale === "es-MX"
             ? `Página ${pageNumber} de ${document.numPages}`
@@ -141,7 +141,7 @@ function PdfCanvasViewer({
         </span>
         <div className="flex gap-2">
           <button
-            className="min-h-11 rounded-xl border border-gray-200 bg-white px-3 py-2 font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-45"
+            className="min-h-11 rounded-xl border border-line-strong bg-surface px-3 py-2 font-semibold text-ink-2 disabled:cursor-not-allowed disabled:opacity-45"
             disabled={pageNumber <= 1}
             onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
             type="button"
@@ -149,7 +149,7 @@ function PdfCanvasViewer({
             {copy("Previous")}
           </button>
           <button
-            className="min-h-11 rounded-xl border border-gray-200 bg-white px-3 py-2 font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-45"
+            className="min-h-11 rounded-xl border border-line-strong bg-surface px-3 py-2 font-semibold text-ink-2 disabled:cursor-not-allowed disabled:opacity-45"
             disabled={pageNumber >= document.numPages}
             onClick={() =>
               setPageNumber((current) =>
@@ -187,14 +187,14 @@ export function DocumentSourceViewer({
   return (
     <section
       aria-label={copy("Source document")}
-      className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4"
+      className="space-y-3 rounded-2xl border border-line-strong bg-surface p-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-2">
             {copy("Source document")}
           </p>
-          <p className="mt-1 text-sm font-semibold text-gray-700">
+          <p className="mt-1 text-sm font-semibold text-ink-2">
             {usesPreview
               ? copy("Preview generated from the original TIFF")
               : copy("Original uploaded file")}
@@ -202,7 +202,7 @@ export function DocumentSourceViewer({
         </div>
         {sourceUrl ? (
           <a
-            className="inline-flex min-h-11 items-center rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700"
+            className="inline-flex min-h-11 items-center rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-semibold text-ink-2"
             href={sourceUrl}
             rel="noreferrer"
             target="_blank"
@@ -229,21 +229,21 @@ export function DocumentSourceViewer({
         />
       ) : null}
       {previewStatus === "pending" ? (
-        <p className="text-sm leading-6 text-gray-700">
+        <p className="text-sm leading-6 text-ink-2">
           {copy(
             "A browser preview is being prepared for this TIFF. The original is available to download now.",
           )}
         </p>
       ) : null}
       {previewStatus === "failed" ? (
-        <p className="text-sm leading-6 text-red-800">
+        <p className="text-sm leading-6 text-danger-ink">
           {copy(
             "A browser preview could not be prepared. Download the original or ask your care team for help reviewing it.",
           )}
         </p>
       ) : null}
       {!viewUrl && previewStatus !== "pending" && previewStatus !== "failed" ? (
-        <p className="text-sm leading-6 text-red-800">
+        <p className="text-sm leading-6 text-danger-ink">
           {copy(
             "This source is temporarily unavailable. Please refresh and try again.",
           )}

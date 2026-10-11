@@ -1,10 +1,7 @@
 import Link from "next/link";
-import {
-    HiOutlineArrowTopRightOnSquare,
-    HiOutlineBeaker,
-    HiOutlineClipboardDocumentCheck,
-} from "react-icons/hi2";
-import { Badge, Card } from "@/components/ui";
+import { Badge } from "@/components/ui";
+import { AiChip } from "@/components/ui/ai-chip";
+import { Icon } from "@/components/ui/icons";
 import { ADRReviewActions } from "@/components/features/adr-review-actions";
 import type { ADRReviewDecisionInput, ADRReviewQueueItem } from "@/services/clinicians";
 
@@ -32,28 +29,35 @@ function formatTimestamp(value: string) {
     }).format(new Date(value));
 }
 
+const panelClass = "rounded-xl border border-line bg-surface p-4";
+const panelHeadingClass = "flex items-center gap-2 text-[13px] font-semibold text-ink";
+
 function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
     if (item.evidence.length === 0) {
-        return <p className="text-sm text-gray-500">No patient-grounded evidence was captured.</p>;
+        return (
+            <p className="rounded-xl border border-dashed border-line-strong bg-surface-2 px-4 py-3 text-sm text-muted">
+                No patient-grounded evidence was captured.
+            </p>
+        );
     }
 
     return (
-        <ul className="space-y-3">
+        <ul className="divide-y divide-line rounded-xl border border-line">
             {item.evidence.map((entry) => (
-                <li
-                    className="rounded-lg border border-gray-200 bg-gray-50 p-3"
-                    key={entry.question}
-                >
-                    <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900">
+                <li className="space-y-2.5 px-4 py-3.5" key={entry.question}>
+                    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+                        <p className="min-w-0 text-sm font-medium text-ink">
                             {questionLabel(entry.question)}
                         </p>
-                        <Badge variant={entry.answer === "yes" ? "success" : "neutral"}>
+                        <Badge
+                            className="capitalize"
+                            variant={entry.answer === "yes" ? "success" : "neutral"}
+                        >
                             {entry.answer.replaceAll("_", " ")}
                         </Badge>
                     </div>
                     {entry.evidence ? (
-                        <blockquote className="mt-2 border-l-2 border-blue-200 pl-3 text-sm text-gray-700">
+                        <blockquote className="max-w-[72ch] border-l-2 border-line-strong pl-3 text-sm leading-relaxed text-ink-2">
                             “{entry.evidence}”
                         </blockquote>
                     ) : null}
@@ -76,97 +80,128 @@ export function ADRReviewCard({
     const patientName = `${item.patientFirstName} ${item.patientLastName}`.trim();
 
     return (
-        <Card className="space-y-5" padding="lg">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                <div>
+        <article className="ma-enter rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
+                <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold text-gray-900">{patientName}</h2>
+                        <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
+                            {patientName}
+                        </h2>
                         <Badge variant="warning">Awaiting review</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">
-                        Captured {formatTimestamp(item.createdAt)}
+                    <p className="mt-1 text-xs text-muted">
+                        Captured <span className="font-mono">{formatTimestamp(item.createdAt)}</span>
                     </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <Badge variant="info">Naranjo {item.naranjoScore}</Badge>
-                    <Badge variant="warning">{item.causality}</Badge>
+                <Badge className="font-mono" variant="neutral">
+                    Naranjo {item.naranjoScore}
+                </Badge>
+            </header>
+
+            <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+                {/* Left: what the patient reported and the evidence behind each answer */}
+                <div className="min-w-0 space-y-6">
+                    <section>
+                        <div className={panelHeadingClass}>
+                            <Icon className="h-4 w-4 text-primary" name="note" />
+                            <h3 className="text-sm font-semibold">Reported symptom</h3>
+                        </div>
+                        <p className="mt-2.5 text-[15px] font-semibold text-ink">{item.symptom}</p>
+                        <p className="mt-1 text-xs text-muted">
+                            Severity <span className="font-mono">{item.severity}/10</span>
+                        </p>
+                        {item.onset ? (
+                            <p className="mt-2 max-w-[72ch] text-sm text-ink-2">Onset: {item.onset}</p>
+                        ) : null}
+                    </section>
+
+                    <section>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <h3 className="text-sm font-semibold text-ink">
+                                Patient-grounded Naranjo evidence
+                            </h3>
+                            <AiChip>AI-extracted</AiChip>
+                        </div>
+                        <EvidenceList item={item} />
+                    </section>
                 </div>
+
+                {/* Right: the score and the review controls, kept in view on wide screens */}
+                <aside className="min-w-0 space-y-4 self-start xl:sticky xl:top-0">
+                    <section className={panelClass}>
+                        <div className={panelHeadingClass}>
+                            <Icon className="h-4 w-4 text-primary" name="pill" />
+                            <h3 className="text-sm font-semibold">Suspect medication</h3>
+                        </div>
+                        <p className="mt-2.5 text-sm font-medium text-ink">
+                            {item.suspectMedicationName}
+                        </p>
+                        <p className="mt-1 text-xs text-muted">
+                            Patient-reported association; not a clinician decision
+                        </p>
+                    </section>
+
+                    <section className="rounded-xl border border-line bg-surface-2 p-4">
+                        <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                            Naranjo score
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                            <span className="font-mono text-3xl font-medium leading-none text-ink">
+                                {item.naranjoScore}
+                            </span>
+                            <Badge variant="warning">{item.causality}</Badge>
+                        </div>
+                        <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-muted">
+                            Naranjo scores support your review; they do not make a clinical decision.
+                        </p>
+                    </section>
+
+                    {missingQuestions.length > 0 ? (
+                        <section>
+                            <h3 className="text-[13px] font-semibold text-ink">Missing information</h3>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {missingQuestions.map((question) => (
+                                    <Badge key={question} variant="neutral">
+                                        {questionLabel(question)}
+                                    </Badge>
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
+
+                    {item.lastReviewAction === "request_information" ? (
+                        <section className="flex items-start gap-2.5 rounded-xl border border-primary-line bg-primary-tint px-4 py-3">
+                            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" name="info" />
+                            <div className="min-w-0">
+                                <h3 className="text-sm font-semibold text-ink">Information requested</h3>
+                                {item.reviewNote ? (
+                                    <p className="mt-1 text-sm text-ink-2">{item.reviewNote}</p>
+                                ) : null}
+                            </div>
+                        </section>
+                    ) : null}
+
+                    <ADRReviewActions
+                        item={item}
+                        onSubmit={(input) => onReview(item.id, input)}
+                        submitting={submitting}
+                    />
+                </aside>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-                <section className="rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-center gap-2 text-gray-900">
-                        <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-blue-600" />
-                        <h3 className="text-sm font-semibold">Reported symptom</h3>
-                    </div>
-                    <p className="mt-3 text-sm font-medium text-gray-900">{item.symptom}</p>
-                    <p className="mt-1 text-xs text-gray-500">Severity {item.severity}/10</p>
-                    {item.onset ? (
-                        <p className="mt-2 text-sm text-gray-700">Onset: {item.onset}</p>
-                    ) : null}
-                </section>
-                <section className="rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-center gap-2 text-gray-900">
-                        <HiOutlineBeaker className="h-5 w-5 text-blue-600" />
-                        <h3 className="text-sm font-semibold">Suspect medication</h3>
-                    </div>
-                    <p className="mt-3 text-sm font-medium text-gray-900">
-                        {item.suspectMedicationName}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                        Patient-reported association; not a clinician decision
-                    </p>
-                </section>
-            </div>
-
-            <section>
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">
-                    Patient-grounded Naranjo evidence
-                </h3>
-                <EvidenceList item={item} />
-            </section>
-
-            {missingQuestions.length > 0 ? (
-                <section>
-                    <h3 className="text-sm font-semibold text-gray-900">Missing information</h3>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        {missingQuestions.map((question) => (
-                            <Badge key={question} variant="neutral">
-                                {questionLabel(question)}
-                            </Badge>
-                        ))}
-                    </div>
-                </section>
-            ) : null}
-
-            {item.lastReviewAction === "request_information" ? (
-                <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                    <h3 className="text-sm font-semibold text-blue-900">Information requested</h3>
-                    {item.reviewNote ? (
-                        <p className="mt-1 text-sm text-blue-800">{item.reviewNote}</p>
-                    ) : null}
-                </section>
-            ) : null}
-
-            <ADRReviewActions
-                item={item}
-                onSubmit={(input) => onReview(item.id, input)}
-                submitting={submitting}
-            />
-
-            <div className="flex flex-col justify-between gap-3 border-t border-gray-200 pt-4 md:flex-row md:items-center">
-                <p className="max-w-3xl text-xs text-gray-500">
+            <footer className="flex flex-col justify-between gap-3 border-t border-line px-6 py-4 md:flex-row md:items-center">
+                <p className="max-w-[80ch] text-xs leading-relaxed text-muted">
                     Decision support only. Review the source evidence before making a clinical
                     determination or generating a MedWatch draft.
                 </p>
                 <Link
-                    className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-md text-[13px] font-semibold text-primary hover:text-primary-hover"
                     href={`/patients/${item.patientId}`}
                 >
                     Open patient record
-                    <HiOutlineArrowTopRightOnSquare className="h-4 w-4" />
+                    <Icon className="h-4 w-4" name="external" />
                 </Link>
-            </div>
-        </Card>
+            </footer>
+        </article>
     );
 }

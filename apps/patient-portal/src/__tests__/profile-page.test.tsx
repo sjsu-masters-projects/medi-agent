@@ -443,7 +443,7 @@ describe("Patient profile page", () => {
             screen.getByText("Personal de enfermería titulado"),
         ).toBeInTheDocument();
         expect(screen.getByText("Femenino")).toBeInTheDocument();
-        expect(screen.getByText("1985-03-15")).toBeInTheDocument();
+        expect(screen.getByText(/1985/)).toHaveAttribute("dateTime", "1985-03-15");
         fireEvent.click(screen.getByRole("button", { name: "Editar perfil" }));
         expect(screen.getByLabelText("Idioma preferido")).toHaveValue("es-MX");
         expect(
@@ -522,7 +522,7 @@ describe("Patient profile page", () => {
                     ? "Tu perfil se actualizó correctamente."
                     : "Profile updated successfully.",
             );
-            expect(screen.getByText("1985-03-15")).toBeInTheDocument();
+            expect(screen.getByText(/1985/)).toHaveAttribute("dateTime", "1985-03-15");
             expect(screen.getByText("America/Los_Angeles")).toBeInTheDocument();
         },
     );

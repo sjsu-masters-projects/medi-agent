@@ -26,10 +26,10 @@ const badgeVariant = {
 } as const;
 
 const cardClasses = {
-    active: "border-[#147465] bg-white shadow-[0_20px_46px_rgba(20,116,101,0.16)]",
+    active: "border-[#147465] bg-surface shadow-[0_20px_46px_rgba(20,116,101,0.16)]",
     completed: "border-[#dbe7df] bg-[#f2f8f4]",
     missed: "border-[#efbeb5] bg-[#fff5f2]",
-    upcoming: "border-white/70 bg-white/82",
+    upcoming: "border-white/70 bg-surface/82",
     skipped: "border-[#edd59a] bg-[#fff7dc]",
 } as const;
 

@@ -2,7 +2,9 @@ import Link from "next/link";
 import type { TodayCopy } from "@/content/today-copy";
 import { getCarePlanCategoryLabel, getTaskStatusLabel } from "@/content/today-copy";
 import { ApprovalSeal } from "@/components/ui/approval-seal";
-import { Icon, type IconName } from "@/components/ui/icons";
+import { Icon } from "@/components/ui/icons";
+import { IconTile, type TileTone } from "@/components/ui/list";
+import type { IconName } from "@/components/ui/icons";
 import type { TaskCardStatus } from "./task-card.types";
 import { FeedTaskType, type FeedTask } from "@/types";
 
@@ -17,51 +19,82 @@ function activityType(task: FeedTask) {
     }
 }
 
-export function TodayTaskIcon({ task, large = false }: { task: FeedTask; large?: boolean }) {
-    let name: IconName = "check";
-    let color = "bg-surface-2 text-ink-2";
-    if (task.type === FeedTaskType.MEDICATION) { name = "pill"; color = "bg-med-tint text-med-ink"; }
-    else if (task.carePlan?.category === "monitoring") { name = "gauge"; color = "bg-lab-tint text-lab-ink"; }
-    else if (task.carePlan?.category === "hydration") { name = "drop"; color = "bg-hyd-tint text-hyd-ink"; }
-    else if (task.carePlan?.category === "movement") { name = "walk"; color = "bg-brand-tint text-brand"; }
-    return <span className={`flex shrink-0 items-center justify-center ${color} ${large ? "h-[52px] w-[52px] rounded-2xl" : "h-10 w-10 rounded-xl"}`}><Icon name={name} className={large ? "h-6 w-6" : "h-5 w-5"} /></span>;
+function taskVisual(task: FeedTask): { icon: IconName; tone: TileTone } {
+    if (task.type === FeedTaskType.MEDICATION) return { icon: "pill", tone: "med" };
+    switch (task.carePlan?.category) {
+        case "monitoring": return { icon: "gauge", tone: "lab" };
+        case "hydration": return { icon: "drop", tone: "hyd" };
+        case "movement": return { icon: "walk", tone: "move" };
+        case "nutrition": return { icon: "leaf", tone: "note" };
+        case "follow_up": return { icon: "cal", tone: "brand" };
+        default: return { icon: "check", tone: "neutral" };
+    }
 }
 
-export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onComplete, onBarrier, hero = false, phase }: {
+export function TodayTaskIcon({ task, large = false }: { task: FeedTask; large?: boolean }) {
+    const visual = taskVisual(task);
+    return <IconTile icon={visual.icon} tone={visual.tone} size={large ? "lg" : "sm"} />;
+}
+
+function statusPillClass(status: TaskCardStatus) {
+    if (status === "missed") return "bg-danger-tint text-danger-ink";
+    if (status === "active" || status === "completed") return "bg-brand-tint text-brand-ink";
+    if (status === "skipped") return "bg-note-tint text-note-ink";
+    return "bg-surface-2 text-ink-2";
+}
+
+/** Status pill with the clock time in mono, e.g. "Missed · 8:00 AM". */
+export function TaskStatusPill({ status, task, copy, timeLabel }: { status: TaskCardStatus; task: FeedTask; copy: TodayCopy; timeLabel: string }) {
+    const showTime = Boolean(task.scheduledTime) || !task.requiresScheduleConfiguration;
+    return <span className={`inline-flex max-w-full shrink-0 flex-wrap items-center gap-x-1 rounded-full px-2.5 py-1 text-xs font-semibold ${statusPillClass(status)}`}>
+        <span>{getTaskStatusLabel(status, task.scheduledTime ?? "", copy)}</span>
+        {showTime ? <><span aria-hidden="true">·</span><span className="font-mono font-medium">{timeLabel}</span></> : null}
+    </span>;
+}
+
+export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onComplete, onBarrier, hero = false, phase, eyebrow }: {
     task: FeedTask; copy: TodayCopy; status: TaskCardStatus; timeLabel: string;
     disabled: boolean; onComplete: () => void; onBarrier: () => void;
-    hero?: boolean; phase?: "saving" | "checked" | "leaving";
+    hero?: boolean; phase?: "saving" | "checked" | "leaving"; eyebrow?: string;
 }) {
     const medication = task.type === FeedTaskType.MEDICATION;
     const actionable = status === "active" || status === "missed";
     const category = activityType(task);
     const instruction = medication ? task.description ?? copy.prescription : task.description || copy.activity[category];
     return <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
-            {!task.requiresScheduleConfiguration || task.scheduledTime ? <span className="font-mono text-muted">{timeLabel}</span> : null}
-            <span className={`rounded-full px-2.5 py-1 font-semibold ${status === "missed" ? "bg-danger-tint text-danger-ink" : status === "active" || status === "completed" ? "bg-brand-tint text-brand-ink" : "bg-surface-2 text-ink-2"}`}>{getTaskStatusLabel(status, task.scheduledTime ?? "", copy)}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+            {eyebrow ? <h2 className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{eyebrow}</h2> : null}
+            <TaskStatusPill status={status} task={task} copy={copy} timeLabel={timeLabel} />
         </div>
         <div className="flex items-start gap-3.5">
             <TodayTaskIcon task={task} large />
-            <div className="min-w-0 flex-1 space-y-1 break-words">
-                <h3 className="text-[22px] font-semibold leading-tight tracking-[-0.01em] text-ink">{task.name}</h3>
+            <div className="min-w-0 flex-1 space-y-1 break-words [overflow-wrap:anywhere]">
+                <h3 className={`${hero ? "text-[22px]" : "text-xl"} font-semibold leading-tight tracking-[-0.01em] text-ink`}>{task.name}</h3>
                 {instruction.trim() !== task.name.trim() ? <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink-2">{instruction}</p> : null}
                 {!medication && task.frequency ? <p className="text-[13px] text-muted">{task.frequency}</p> : null}
-                <p className="text-xs text-muted">{medication ? "Rx" : copy.types[category]}</p>
             </div>
         </div>
         {task.carePlan ? <div className="space-y-2">
             {hero ? <ApprovalSeal>{task.provider?.name ? copy.approvedBy(task.provider.name) : copy.approved}</ApprovalSeal> : null}
-            {!hero ? <p className="text-xs text-muted">{copy.approved} • {getCarePlanCategoryLabel(task.carePlan.category, copy)}</p> : null}
-            {!hero ? <><p className="text-sm text-ink-2">{copy.planDetail(task.carePlan.versionNumber)}</p>{task.provider?.name ? <p className="text-sm text-brand-ink">{copy.approvedBy(task.provider.name)}</p> : null}</> : null}
-        </div> : medication && task.provider?.name ? <p className="text-sm text-brand-ink">{copy.prescribedBy(task.provider.name)}</p> : null}
-        {task.requiresScheduleConfiguration ? <div className="space-y-1 text-sm"><Link href="/reminders" className="inline-flex min-h-11 items-center font-semibold text-brand underline underline-offset-4">{copy.setTime}</Link><p className="text-muted">{copy.setupDetail}</p></div> : null}
+            {!hero ? <div className="space-y-2 rounded-2xl bg-surface-2/70 p-3.5">
+                <ApprovalSeal>{copy.approved} • {getCarePlanCategoryLabel(task.carePlan.category, copy)}</ApprovalSeal>
+                <p className="text-sm leading-relaxed text-ink-2">{copy.planDetail(task.carePlan.versionNumber)}</p>
+                {task.provider?.name ? <p className="text-sm font-medium text-brand-ink">{copy.approvedBy(task.provider.name)}</p> : null}
+            </div> : null}
+        </div> : medication && task.provider?.name ? <p className="text-[13px] text-muted">{copy.prescribedBy(task.provider.name)}</p> : null}
+        {task.requiresScheduleConfiguration ? <div className="flex items-start gap-3 rounded-2xl bg-brand-tint/60 p-3.5 text-sm">
+            <Icon name="bell" className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+            <div className="min-w-0 space-y-0.5">
+                <Link href="/reminders" className="inline-flex min-h-6 items-center font-semibold text-brand hover:underline">{copy.setTime}</Link>
+                <p className="text-ink-2">{copy.setupDetail}</p>
+            </div>
+        </div> : null}
         {actionable ? <div className="space-y-2">
-            <button type="button" disabled={disabled} onClick={onComplete} className="ma-press flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 py-3 text-[17px] font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
+            <button type="button" disabled={disabled} onClick={onComplete} className="ma-press flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 py-3 text-[17px] font-semibold text-white shadow-[0_10px_22px_-14px_rgba(20,116,101,.9)] hover:bg-brand-hover disabled:opacity-60">
                 <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-5 w-5 shrink-0 ${phase === "checked" || phase === "leaving" ? "ma-check-draw" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7" /></svg>
                 {medication ? copy.taken : copy.done}
             </button>
-            <button type="button" disabled={disabled} onClick={onBarrier} className="ma-press min-h-[46px] w-full rounded-[14px] bg-surface-2 px-3 py-3 text-[15px] font-medium text-ink-2 disabled:opacity-60">{copy.barrier}</button>
+            <button type="button" disabled={disabled} onClick={onBarrier} className="ma-press min-h-[46px] w-full rounded-[14px] bg-surface-2 px-3 py-3 text-[15px] font-medium text-ink-2 hover:bg-line-strong disabled:opacity-60">{copy.barrier}</button>
         </div> : null}
     </div>;
 }
@@ -70,18 +103,27 @@ export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetail
     task: FeedTask; copy: TodayCopy; status: TaskCardStatus; timeLabel: string;
     disabled: boolean; onDetails: () => void; onComplete: () => void;
 }) {
-    return <li className="flex flex-wrap items-center gap-3 border-b border-line px-[14px] py-[13px] last:border-b-0">
-        <button type="button" aria-label={`${copy.details}: ${task.name}`} onClick={onDetails} className="flex min-h-11 min-w-0 flex-1 basis-40 items-start gap-3 text-left">
+    const canMarkDone = !task.requiresScheduleConfiguration && task.type !== FeedTaskType.MEDICATION && (status === "active" || status === "missed");
+    const rawStatus = getTaskStatusLabel(status, task.scheduledTime ?? "", copy);
+    const statusLabel = rawStatus.charAt(0).toLocaleUpperCase() + rawStatus.slice(1);
+    const sub = task.frequency || task.description;
+    return <li className="flex items-center gap-3 px-[14px] py-3">
+        <button type="button" aria-label={`${copy.details}: ${task.name}`} onClick={onDetails} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl text-left">
             <TodayTaskIcon task={task} />
-            <span className="min-w-0 flex-1 space-y-1 break-words">
-                <span className="block text-[15px] font-semibold text-ink">{task.name}</span>
-                {task.description ? <span className="block whitespace-pre-wrap text-[13px] text-ink-2">{task.description}</span> : null}
-            </span>
-            <span className="ml-auto flex min-w-0 max-w-[40%] shrink-0 flex-col items-end gap-1 break-words text-right text-[13px] text-muted">
-                <span>{getTaskStatusLabel(status, task.scheduledTime ?? "", copy)}</span>
-                {!task.requiresScheduleConfiguration ? <span className="font-mono">{timeLabel}</span> : null}
+            <span className="min-w-0 flex-1">
+                <span className={`line-clamp-2 break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${status === "completed" ? "text-muted" : "text-ink"}`}>{task.name}</span>
+                {sub ? <span className="mt-0.5 line-clamp-1 break-words text-[13px] text-muted [overflow-wrap:anywhere]">{sub}</span> : null}
             </span>
         </button>
-        {task.requiresScheduleConfiguration ? <Link href="/reminders" className="flex min-h-11 max-w-full items-center rounded-xl px-2 text-[13px] font-medium text-brand underline underline-offset-4">{copy.setTime}</Link> : task.type !== FeedTaskType.MEDICATION && (status === "active" || status === "missed") ? <button type="button" disabled={disabled} onClick={onComplete} className="ma-press min-h-11 max-w-full rounded-[11px] bg-brand-tint px-3 py-2 text-[13px] font-semibold text-brand disabled:opacity-60">{copy.done}</button> : null}
+        <div className="flex max-w-[42%] shrink-0 flex-col items-end gap-1 text-right">
+            {status === "completed"
+                ? <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand"><Icon name="check" className="h-4 w-4" />{statusLabel}</span>
+                : canMarkDone
+                    ? <button type="button" disabled={disabled} onClick={onComplete} className="ma-press relative before:absolute before:-inset-x-1 before:-inset-y-[7px] before:content-[''] min-h-[34px] rounded-[11px] bg-brand-tint px-3 py-1.5 text-[13px] font-semibold text-brand hover:bg-[#D3E8E1] disabled:opacity-60">{copy.done}</button>
+                    : <span className={`text-[12px] font-medium ${status === "missed" ? "text-danger-ink" : status === "skipped" ? "text-note-ink" : "text-muted"}`}>{statusLabel}</span>}
+            {task.requiresScheduleConfiguration && !task.scheduledTime
+                ? <Link href="/reminders" className="inline-flex min-h-8 items-center text-[13px] font-medium leading-tight text-brand hover:underline">{copy.setTime}</Link>
+                : status !== "completed" ? <span className="font-mono text-[13px] text-ink-2">{timeLabel}</span> : null}
+        </div>
     </li>;
 }

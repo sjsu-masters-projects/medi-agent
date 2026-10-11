@@ -1,20 +1,12 @@
 "use client";
 
-import { Suspense, useState, useSyncExternalStore } from "react";
+import { Suspense, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
-import {
-    HiOutlineArrowLeft,
-    HiOutlineArrowPath,
-    HiOutlineBeaker,
-    HiOutlineChatBubbleLeftRight,
-    HiOutlineDocumentText,
-    HiOutlineExclamationTriangle,
-    HiOutlineIdentification,
-    HiOutlineLink,
-    HiOutlineSparkles,
-} from "react-icons/hi2";
-import { Card, Skeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icons";
+import { AiChip } from "@/components/ui/ai-chip";
+import { ProcessingDots } from "@/components/ui/motion";
 import { RiskBadge } from "@/components/features/risk-badge";
 import { PatientAdherencePanel } from "@/components/features/patient-adherence-panel";
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
@@ -30,16 +22,71 @@ import type { RootState } from "@/store/store";
 
 type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan";
 
-const TABS: Array<{ id: TabId; label: string; icon: typeof HiOutlineIdentification }> = [
-    { id: "profile", label: "Profile", icon: HiOutlineIdentification },
-    { id: "imports", label: "External records", icon: HiOutlineLink },
-    { id: "adherence", label: "Adherence", icon: HiOutlineBeaker },
-    { id: "symptoms", label: "Symptoms", icon: HiOutlineExclamationTriangle },
-    { id: "chat", label: "Chat Transcript", icon: HiOutlineChatBubbleLeftRight },
-    { id: "soap", label: "SOAP Notes", icon: HiOutlineSparkles },
-    { id: "documents", label: "Documents", icon: HiOutlineDocumentText },
-    { id: "care-plan", label: "Care Plan", icon: HiOutlineSparkles },
+const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
+    { id: "profile", label: "Profile", icon: "user" },
+    { id: "imports", label: "External records", icon: "link" },
+    { id: "adherence", label: "Adherence", icon: "gauge" },
+    { id: "symptoms", label: "Symptoms", icon: "alert" },
+    { id: "chat", label: "Chat Transcript", icon: "chat" },
+    { id: "soap", label: "SOAP Notes", icon: "spark" },
+    { id: "documents", label: "Documents", icon: "note" },
+    { id: "care-plan", label: "Care Plan", icon: "check" },
 ];
+
+function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab: TabId) => void }) {
+    const bar = useRef<HTMLDivElement>(null);
+    const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+    useLayoutEffect(() => {
+        function measure() {
+            const button = bar.current?.querySelector<HTMLElement>(`#tab-btn-${activeTab}`);
+            if (button) setIndicator({ left: button.offsetLeft, width: button.offsetWidth });
+        }
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+    }, [activeTab]);
+    return (
+        <div
+            aria-label="Patient data tabs"
+            className="relative flex h-11 shrink-0 gap-1 overflow-x-auto border-b border-line-strong"
+            ref={bar}
+            role="tablist"
+        >
+            {TABS.map(({ id, label, icon }) => (
+                <button
+                    aria-controls={`tab-panel-${id}`}
+                    aria-selected={activeTab === id}
+                    className={`flex h-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-lg px-3 text-[13px] transition-colors duration-[160ms] ${
+                        activeTab === id
+                            ? "font-medium text-ink"
+                            : "text-muted hover:bg-[rgba(100,116,139,.06)] hover:text-ink-2"
+                    }`}
+                    id={`tab-btn-${id}`}
+                    key={id}
+                    onClick={() => onChange(id)}
+                    tabIndex={activeTab === id ? 0 : -1}
+                    onKeyDown={(event) => {
+                        const index = TABS.findIndex((tab) => tab.id === id);
+                        const nextIndex = event.key === "ArrowRight" ? (index + 1) % TABS.length
+                            : event.key === "ArrowLeft" ? (index - 1 + TABS.length) % TABS.length
+                            : event.key === "Home" ? 0 : event.key === "End" ? TABS.length - 1 : null;
+                        if (nextIndex === null) return;
+                        event.preventDefault();
+                        const nextTab = TABS[nextIndex];
+                        onChange(nextTab.id);
+                        document.getElementById(`tab-btn-${nextTab.id}`)?.focus();
+                    }}
+                    role="tab"
+                    type="button"
+                >
+                    <Icon name={icon} className={`h-4 w-4 shrink-0 ${activeTab === id ? "text-primary" : ""}`} />
+                    <span>{label}</span>
+                </button>
+            ))}
+            {indicator ? <span aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-[transform,width] duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)]" style={{ transform: `translateX(${indicator.left}px)`, width: indicator.width }} /> : null}
+        </div>
+    );
+}
 
 function isTabId(value: string | null): value is TabId {
     return value !== null && TABS.some((entry) => entry.id === value);
@@ -102,7 +149,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
     // initial client render identical; render the interactive data only after mount.
     if (!hasMounted || loadingProfile) {
         return (
-            <div className="mx-auto max-w-6xl space-y-6">
+            <div className="space-y-4">
                 <Skeleton className="h-10 w-48" />
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-96 w-full" />
@@ -113,29 +160,29 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
     if (loadFailure && !patient) {
         if (loadFailure !== "transient") {
             return (
-                <div className="mx-auto max-w-6xl rounded-xl border border-gray-200 bg-white px-6 py-8 text-center" role="status">
-                    <h1 className="mb-2 text-lg font-semibold text-gray-900">
+                <div className="rounded-2xl border border-line bg-surface px-6 py-8 text-center" role="status">
+                    <h1 className="mb-2 text-lg font-semibold text-ink">
                         {loadFailure === "denied" ? "Access denied" : "Patient not found"}
                     </h1>
-                    <p className="mb-4 text-sm text-gray-700">
+                    <p className="mb-4 text-sm text-ink-2">
                         {loadFailure === "denied"
                             ? "You do not have access to this patient. Only assigned care-team members can view this record."
                             : "This patient record could not be found."}
                     </p>
-                    <button className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" onClick={() => router.push("/patients")} type="button">
+                    <button className="rounded-lg border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2" onClick={() => router.push("/patients")} type="button">
                         Return to patient roster
                     </button>
                 </div>
             );
         }
         return (
-            <div className="mx-auto max-w-6xl">
-                <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center">
-                    <p className="mb-4 text-sm font-semibold text-red-700">
+            <div>
+                <div className="rounded-xl border border-risk-line bg-risk-soft px-6 py-8 text-center">
+                    <p className="mb-4 text-sm font-semibold text-risk-ink">
                         Unable to load patient data. Please try again.
                     </p>
                     <button
-                        className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-100"
+                        className="rounded-lg border border-risk-line px-4 py-2 text-sm text-risk-ink hover:bg-risk-tint"
                         onClick={() => void reload()}
                         type="button"
                     >
@@ -150,117 +197,73 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
 
     const adherencePct = Math.round(patient.adherence_score * 100);
 
+    const adrFlags = patient.symptom_reports.filter((s) => s.flaggedForAdr).length;
+    const hasCompletionData = patient.adherence_series.some((day) => day.expected > 0);
+
     return (
-        <div className="mx-auto max-w-6xl space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <button
-                    aria-label="Back to patients"
-                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
-                    id="back-to-patients-btn"
-                    onClick={() => router.push("/patients")}
-                    type="button"
-                >
-                    <HiOutlineArrowLeft aria-hidden="true" className="h-4 w-4" />
-                    Patient roster
-                </button>
-
-                <button
-                    aria-label="Refresh patient data"
-                    className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-                    onClick={() => void reload()}
-                    type="button"
-                >
-                    <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
-                    Refresh
-                </button>
-            </div>
-
-            {/* Patient hero card */}
-            <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" padding="lg">
-                <div className="flex items-center gap-5">
-                    {/* Avatar */}
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-xl font-bold text-white">
-                        {patient.first_name[0]}{patient.last_name[0]}
-                    </div>
-
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">
-                            {patient.first_name} {patient.last_name}
-                        </h1>
-                        <p className="text-sm text-gray-500">{patient.email}</p>
-                        {patient.date_of_birth && (
-                            <p className="text-xs text-gray-400">DOB: {patient.date_of_birth}</p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Risk + adherence summary */}
-                <div className="flex flex-wrap items-center gap-4">
-                    <RiskBadge level={patient.risk_level} />
-
-                    <div className="text-center">
-                        <p className="text-2xl font-bold text-gray-900">{patient.adherence_series.some((day) => day.expected > 0) ? `${adherencePct}%` : "—"}</p>
-                        <p className="text-xs text-gray-500">Recorded completion</p>
-                    </div>
-
-                    <div className="text-center">
-                        <p className="text-2xl font-bold text-gray-900">
-                            {patient.medications.length}
-                        </p>
-                        <p className="text-xs text-gray-400">Active Meds</p>
-                    </div>
-
-                    <div className="text-center">
-                        <p className="text-2xl font-bold text-gray-900">
-                            {patient.symptom_reports.filter((s) => s.flaggedForAdr).length}
-                        </p>
-                        <p className="text-xs text-gray-400">ADR Flags</p>
-                    </div>
-                </div>
-            </Card>
-
-            {/* Tab navigation */}
-            <div
-                aria-label="Patient data tabs"
-                className="flex gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-1"
-                role="tablist"
-            >
-                {TABS.map(({ id, label, icon: Icon }) => (
+        <div className="ma-page flex min-h-full flex-col gap-4">
+            {/* Patient strip */}
+            <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-2xl border border-line bg-surface px-5 py-4 shadow-[var(--shadow-card)]">
+                <div className="flex min-w-0 items-center gap-3.5">
                     <button
-                        aria-controls={`tab-panel-${id}`}
-                        aria-selected={activeTab === id}
-                        className={`flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
-                            activeTab === id
-                                ? "bg-white text-blue-600 shadow-sm"
-                                : "text-gray-500 hover:bg-white/60 hover:text-gray-700"
-                        }`}
-                        id={`tab-btn-${id}`}
-                        key={id}
-                        onClick={() => setActiveTab(id)}
-                        tabIndex={activeTab === id ? 0 : -1}
-                        onKeyDown={(event) => {
-                            const index = TABS.findIndex((tab) => tab.id === id);
-                            const nextIndex = event.key === "ArrowRight" ? (index + 1) % TABS.length
-                                : event.key === "ArrowLeft" ? (index - 1 + TABS.length) % TABS.length
-                                : event.key === "Home" ? 0 : event.key === "End" ? TABS.length - 1 : null;
-                            if (nextIndex === null) return;
-                            event.preventDefault();
-                            const nextTab = TABS[nextIndex];
-                            setActiveTab(nextTab.id);
-                            document.getElementById(`tab-btn-${nextTab.id}`)?.focus();
-                        }}
-                        role="tab"
+                        aria-label="Back to patients"
+                        className="ma-press flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink"
+                        id="back-to-patients-btn"
+                        onClick={() => router.push("/patients")}
                         type="button"
                     >
-                        <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                        <span>{label}</span>
+                        <Icon name="back" className="h-4 w-4" />
                     </button>
-                ))}
-            </div>
+                    <div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-track text-sm font-semibold text-ink-2">
+                        {patient.first_name[0]}{patient.last_name[0]}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <h1 className="break-words text-lg font-semibold tracking-[-0.01em] text-ink">
+                                {patient.first_name} {patient.last_name}
+                            </h1>
+                            <RiskBadge level={patient.risk_level} />
+                        </div>
+                        <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-[13px] text-muted">
+                            {patient.date_of_birth ? <span>DOB {patient.date_of_birth}</span> : null}
+                            {patient.date_of_birth ? <span aria-hidden="true">·</span> : null}
+                            <span className="break-all">{patient.email}</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
+                    <dl className="flex flex-wrap items-center gap-x-7 gap-y-2">
+                        <div className="flex flex-col-reverse">
+                            <dt className="text-xs text-muted">Recorded completion</dt>
+                            <dd className="font-mono text-lg font-medium text-ink">{hasCompletionData ? `${adherencePct}%` : "—"}</dd>
+                        </div>
+                        <div className="flex flex-col-reverse">
+                            <dt className="text-xs text-muted">Active Meds</dt>
+                            <dd className="font-mono text-lg font-medium text-ink">{patient.medications.length}</dd>
+                        </div>
+                        <div className="flex flex-col-reverse">
+                            <dt className="text-xs text-muted">ADR Flags</dt>
+                            <dd className={`font-mono text-lg font-medium ${adrFlags > 0 ? "text-risk" : "text-ink"}`}>{adrFlags}</dd>
+                        </div>
+                    </dl>
+                    <button
+                        aria-label="Refresh patient data"
+                        className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink"
+                        onClick={() => void reload()}
+                        type="button"
+                    >
+                        <Icon name="refresh" className="h-[15px] w-[15px]" />
+                        Refresh
+                    </button>
+                </div>
+            </section>
+
+            {/* Tab navigation: underline bar with one sliding indicator */}
+            <PatientTabs activeTab={activeTab} onChange={setActiveTab} />
 
             {/* Tab panels */}
-            <Card padding="lg">
+            <div className={activeTab === "care-plan" ? "flex min-h-0 flex-1 flex-col" : "rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-card)]"}>
                 {activeTab === "imports" && (
                     <SmartImportReviewPanel
                         patientId={patientId}
@@ -275,50 +278,51 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         id="tab-panel-profile"
                         role="tabpanel"
                     >
-                        <h2 className="mb-4 text-lg font-semibold text-gray-900">
+                        <h2 className="mb-4 text-lg font-semibold tracking-[-0.01em] text-ink">
                             Demographics &amp; Clinical Profile
                         </h2>
 
-                        <div className="grid gap-6 md:grid-cols-2">
+                        <div className="grid gap-4 md:grid-cols-2">
                             {/* Conditions */}
-                            <div>
-                                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
+                            <section className="rounded-[14px] border border-line bg-surface p-5">
+                                <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
                                     Active Conditions
                                 </h3>
                                 {patient.conditions.length === 0 ? (
-                                    <p className="text-sm text-gray-400 italic">None documented</p>
+                                    <p className="text-sm text-muted">None documented</p>
                                 ) : (
-                                    <ul className="space-y-1.5">
+                                    <ul className="flex flex-wrap gap-2">
                                         {patient.conditions.map((c, i) => (
                                             <li
-                                                className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800"
+                                                className="inline-flex items-center gap-1.5 rounded-[7px] border border-line bg-surface-2 px-2.5 py-1.5 text-[13px] font-medium text-ink"
                                                 key={i}
                                             >
-                                                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                                                <span aria-hidden="true" className="h-[7px] w-[7px] shrink-0 rounded-full bg-primary" />
                                                 {c.name ?? c.icd10_code ?? "Unknown condition"}
                                             </li>
                                         ))}
                                     </ul>
                                 )}
-                            </div>
+                            </section>
 
                             {/* Allergies */}
-                            <div>
-                                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
+                            <section className="rounded-[14px] border border-line bg-surface p-5">
+                                <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
                                     Allergies
                                 </h3>
                                 {patient.allergies.length === 0 ? (
-                                    <p className="text-sm text-gray-400 italic">Not documented</p>
+                                    <p className="text-sm text-muted">Not documented</p>
                                 ) : (
-                                    <ul className="space-y-1.5">
+                                    <ul className="flex flex-wrap gap-2">
                                         {patient.allergies.map((a, i) => (
                                             <li
-                                                className="flex items-center justify-between rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-gray-800"
+                                                className="inline-flex items-center gap-1.5 rounded-[7px] border border-risk-line bg-risk-soft px-2.5 py-1.5 text-[13px] font-medium text-risk-ink"
                                                 key={i}
                                             >
+                                                <Icon name="alert" className="h-3.5 w-3.5 shrink-0" />
                                                 <span>{a.allergen}</span>
                                                 {a.severity && (
-                                                    <span className="text-xs text-red-600 font-medium">
+                                                    <span className="rounded-[5px] bg-risk-tint px-1.5 py-0.5 text-[11px] font-medium capitalize text-risk-ink">
                                                         {a.severity}
                                                     </span>
                                                 )}
@@ -326,58 +330,63 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                         ))}
                                     </ul>
                                 )}
-                            </div>
+                            </section>
 
                             {/* Active Medications */}
-                            <div className="md:col-span-2">
-                                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
-                                    Active Medications
-                                </h3>
-                                <p className="mb-3 text-sm text-gray-500">
-                                    Patient timezone: {patient.timezone ?? "UTC"}
-                                </p>
+                            <section className="overflow-hidden rounded-[14px] border border-line bg-surface md:col-span-2">
+                                <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-5">
+                                    <h3 className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                        Active Medications
+                                    </h3>
+                                    <p className="text-[13px] text-muted">
+                                        Patient timezone: {patient.timezone ?? "UTC"}
+                                    </p>
+                                </div>
                                 {patient.medications.length === 0 ? (
-                                    <p className="text-sm text-gray-400 italic">No active medications</p>
+                                    <p className="px-5 pb-5 text-sm text-muted">No active medications</p>
                                 ) : (
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
+                                        <table className="w-full min-w-[720px] text-sm">
                                             <thead>
-                                                <tr className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                                                    <th className="py-2 pr-4 text-left">Name</th>
-                                                    <th className="py-2 pr-4 text-left">Dosage</th>
-                                                    <th className="py-2 pr-4 text-left">Frequency</th>
-                                                    <th className="py-2 text-left">Route</th>
-                                                    <th className="py-2 text-left">Source Provider</th>
-                                                    <th className="py-2 text-left">Reminders</th>
+                                                <tr className="border-y border-line font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                                    <th className="px-5 py-3 text-left font-normal">Name</th>
+                                                    <th className="px-3 py-3 text-left font-normal">Dosage</th>
+                                                    <th className="px-3 py-3 text-left font-normal">Frequency</th>
+                                                    <th className="px-3 py-3 text-left font-normal">Route</th>
+                                                    <th className="px-3 py-3 text-left font-normal">Source Provider</th>
+                                                    <th className="px-5 py-3 text-left font-normal">Reminders</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {patient.medications.map((med) => (
                                                     <tr
-                                                        className="border-b border-gray-100 hover:bg-gray-50"
+                                                        className="border-b border-line last:border-b-0 hover:bg-[rgba(100,116,139,.05)]"
                                                         key={med.id}
                                                     >
-                                                        <td className="py-2.5 pr-4 font-medium text-gray-900">
-                                                            {med.name}
+                                                        <td className="px-5 py-4 align-top font-medium text-ink">
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Icon name="pill" className="h-4 w-4 shrink-0 text-muted" />
+                                                                {med.name}
+                                                            </span>
                                                             {med.genericName && (
-                                                                <span className="ml-1 text-xs text-gray-400">
+                                                                <span className="ml-1 text-xs font-normal text-muted">
                                                                     ({med.genericName})
                                                                 </span>
                                                             )}
                                                         </td>
-                                                        <td className="py-2.5 pr-4 text-gray-600">
+                                                        <td className="px-3 py-4 align-top font-mono text-[13px] text-ink-2">
                                                             {med.dosage}
                                                         </td>
-                                                        <td className="py-2.5 pr-4 text-gray-600">
+                                                        <td className="px-3 py-4 align-top text-ink-2">
                                                             {med.frequency}
                                                         </td>
-                                                        <td className="py-2.5 text-gray-600 capitalize">
+                                                        <td className="px-3 py-4 align-top capitalize text-ink-2">
                                                             {med.route}
                                                         </td>
-                                                        <td className="py-2.5 text-gray-600">
+                                                        <td className="px-3 py-4 align-top text-ink-2">
                                                             {med.prescribedByName ?? "Unknown"}
                                                         </td>
-                                                        <td className="py-2.5 text-gray-600">
+                                                        <td className={`px-5 py-4 align-top ${med.reminderSchedule?.timesOfDay?.length ? "font-mono text-[13px] text-ink-2" : "text-muted"}`}>
                                                             {formatReminderSchedule(med.reminderSchedule)}
                                                         </td>
                                                     </tr>
@@ -386,32 +395,35 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                         </table>
                                     </div>
                                 )}
-                            </div>
+                            </section>
 
-                            <div className="md:col-span-2">
-                                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">
+                            <section className="overflow-hidden rounded-[14px] border border-line bg-surface md:col-span-2">
+                                <h3 className="px-5 pb-3 pt-5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
                                     Active care activities
                                 </h3>
                                 {patient.obligations?.length ? (
-                                    <div className="space-y-2">
+                                    <div className="border-t border-line">
                                         {patient.obligations.map((obligation) => (
                                             <div
-                                                className="rounded-xl border border-gray-200 px-4 py-3"
+                                                className="border-b border-line px-5 py-4 last:border-b-0 hover:bg-[rgba(100,116,139,.05)]"
                                                 key={obligation.id}
                                             >
                                                 <div className="flex flex-wrap items-start justify-between gap-3">
-                                                    <div className="min-w-0 flex-1 basis-48 break-words">
-                                                        <p className="font-medium text-gray-900">
-                                                            {obligation.description}
-                                                        </p>
-                                                        <p className="mt-1 text-sm text-gray-500">
-                                                            {obligation.frequency}
-                                                            {obligation.notes && obligation.notes.trim().replace(/\s+/g, " ") !== obligation.description.trim().replace(/\s+/g, " ")
-                                                                ? ` · ${obligation.notes}`
-                                                                : ""}
-                                                        </p>
+                                                    <div className="flex min-w-0 flex-1 basis-48 items-start gap-2.5 break-words">
+                                                        <Icon name="walk" className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-medium text-ink">
+                                                                {obligation.description}
+                                                            </p>
+                                                            <p className="mt-0.5 text-[13px] text-muted">
+                                                                {obligation.frequency}
+                                                                {obligation.notes && obligation.notes.trim().replace(/\s+/g, " ") !== obligation.description.trim().replace(/\s+/g, " ")
+                                                                    ? ` · ${obligation.notes}`
+                                                                    : ""}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <p className="text-sm text-gray-500">
+                                                    <p className={`inline-flex items-center gap-1.5 rounded-[7px] bg-surface-2 px-2 py-1 text-xs ${obligation.reminder_schedule?.timesOfDay?.length ? "font-mono text-ink-2" : "text-muted"}`}>
                                                         <span className="sr-only">Reminders: </span>
                                                         {formatReminderSchedule(
                                                             obligation.reminder_schedule,
@@ -422,9 +434,9 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-gray-500 italic">No active care activities</p>
+                                    <p className="px-5 pb-5 text-sm text-muted">No active care activities</p>
                                 )}
-                            </div>
+                            </section>
                         </div>
                     </div>
                 )}
@@ -447,55 +459,66 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         id="tab-panel-symptoms"
                         role="tabpanel"
                     >
-                        <h2 className="mb-1 text-lg font-semibold text-gray-900">
+                        <h2 className="mb-1 text-lg font-semibold tracking-[-0.01em] text-ink">
                             Symptom Timeline
                         </h2>
-                        <p className="mb-6 text-sm text-gray-500">
+                        <p className="mb-5 max-w-[80ch] text-sm text-muted">
                             Patient-reported symptoms with severity ratings. ADR flags require clinician review and do not establish an adverse drug reaction.
                         </p>
                         <SymptomTimeline data={patient.symptom_reports} />
 
                         {/* Symptom list */}
                         {patient.symptom_reports.length > 0 && (
-                            <div className="mt-6 space-y-2">
-                                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-400">
+                            <div className="mt-6">
+                                <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
                                     Recent Symptoms
                                 </h3>
-                                {patient.symptom_reports.slice(0, 10).map((s) => (
-                                    <div
-                                        className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3"
-                                        key={s.id}
-                                    >
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-900 capitalize">
-                                                {s.symptom}
-                                            </p>
-                                            {s.onset && (
-                                                <p className="text-xs text-gray-400">
-                                                    Onset: {s.onset}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            {s.flaggedForAdr && (
-                                                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                                                    ADR Flagged
+                                <div className="overflow-hidden rounded-[14px] border border-line">
+                                    {patient.symptom_reports.slice(0, 10).map((s) => (
+                                        <div
+                                            className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-[22px] py-4 last:border-b-0 hover:bg-[rgba(100,116,139,.05)]"
+                                            key={s.id}
+                                        >
+                                            <div className="flex min-w-0 items-center gap-3">
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={`h-2 w-2 shrink-0 rounded-full ${
+                                                        s.severity >= 8 ? "bg-risk" : s.severity >= 5 ? "bg-warn" : "bg-ok"
+                                                    }`}
+                                                />
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium capitalize text-ink">
+                                                        {s.symptom}
+                                                    </p>
+                                                    {s.onset && (
+                                                        <p className="mt-0.5 text-xs text-muted">
+                                                            Onset: {s.onset}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                {s.flaggedForAdr && (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-risk-tint px-2 py-1 text-xs font-medium text-risk-ink">
+                                                        <Icon name="alert" className="h-3 w-3" />
+                                                        ADR Flagged
+                                                    </span>
+                                                )}
+                                                <span
+                                                    className={`min-w-[3.25rem] text-right font-mono text-sm font-medium ${
+                                                        s.severity >= 8
+                                                            ? "text-risk-ink"
+                                                            : s.severity >= 5
+                                                              ? "text-warn-ink"
+                                                              : "text-ok-ink"
+                                                    }`}
+                                                >
+                                                    {s.severity}/10
                                                 </span>
-                                            )}
-                                            <span
-                                                className={`text-sm font-bold ${
-                                                    s.severity >= 8
-                                                        ? "text-red-600"
-                                                        : s.severity >= 5
-                                                          ? "text-amber-600"
-                                                          : "text-green-600"
-                                                }`}
-                                            >
-                                                {s.severity}/10
-                                            </span>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -508,13 +531,13 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         id="tab-panel-chat"
                         role="tabpanel"
                     >
-                        <h2 className="mb-4 text-lg font-semibold text-gray-900">
+                        <h2 className="mb-4 text-lg font-semibold text-ink">
                             Chat Transcript
                         </h2>
-                        <p className="mb-4 text-sm text-gray-500">Patient conversations with Nora, the AI care assistant. Messages retain their original language. Care-team conversations are in Messages.</p>
+                        <p className="mb-4 text-sm text-muted">Patient conversations with Nora, the AI care assistant. Messages retain their original language. Care-team conversations are in Messages.</p>
                         <ChatTranscript messages={patient.chat_messages} />
 
-                        <Link href="/messages" className="mt-6 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                        <Link href="/messages" className="mt-6 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover">
                             Open Messages to contact this patient
                         </Link>
                     </div>
@@ -527,33 +550,34 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         id="tab-panel-soap"
                         role="tabpanel"
                     >
-                        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <h2 className="text-lg font-semibold text-gray-900">
-                                    AI SOAP draft
-                                </h2>
-                                <p className="text-sm text-gray-500">
+                        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                    <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
+                                        AI SOAP draft
+                                    </h2>
+                                    <AiChip>AI draft</AiChip>
+                                </div>
+                                <p className="mt-1 text-sm text-muted">
                                     AI-assisted draft based on available recent records · clinician review required.
                                 </p>
                             </div>
                             <button
-                                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                                className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:cursor-wait disabled:bg-track disabled:text-[#94A3B8]"
                                 disabled={generatingSoap}
                                 id="generate-soap-btn"
                                 onClick={handleGenerateSoap}
                                 type="button"
                             >
-                                <HiOutlineSparkles
-                                    aria-hidden="true"
-                                    className={`h-4 w-4 ${generatingSoap ? "animate-pulse" : ""}`}
-                                />
+                                <Icon name="spark" className="h-4 w-4" />
                                 {generatingSoap ? "Generating…" : patient.latest_soap_note ? "Regenerate" : "Generate SOAP Note"}
                             </button>
                         </div>
 
                         {generatingSoap && (
-                            <div className="space-y-3">
-                                <p className="text-xs text-gray-400">
+                            <div className="ma-enter space-y-3">
+                                <p className="flex items-center gap-2 text-xs text-muted">
+                                    <ProcessingDots className="bg-ai-ink" />
                                     AI is analyzing patient data… this may take 15–30 seconds.
                                 </p>
                                 <Skeleton className="h-20 w-full" />
@@ -563,45 +587,53 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         )}
 
                         {error && !generatingSoap && (
-                            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                                Failed to generate SOAP note: {error}
+                            <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink">
+                                <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+                                <p>Failed to generate SOAP note: {error}</p>
                             </div>
                         )}
 
                         {patient.latest_soap_note && !generatingSoap && (
-                            <div className="space-y-4">
-                                {(["subjective", "objective", "assessment", "plan"] as const).map(
-                                    (section) => (
-                                        <div
-                                            key={section}
-                                            className="rounded-xl border border-gray-200"
-                                        >
-                                            <div className="border-b border-gray-100 bg-gray-50 px-5 py-3">
-                                                <h3 className="text-sm font-semibold capitalize text-gray-700">
-                                                    {section}
-                                                </h3>
+                            <div className="ma-enter space-y-3">
+                                <div className="grid gap-3 lg:grid-cols-2">
+                                    {(["subjective", "objective", "assessment", "plan"] as const).map(
+                                        (section) => (
+                                            <div
+                                                key={section}
+                                                className="overflow-hidden rounded-[14px] border border-line bg-surface"
+                                            >
+                                                <div className="flex items-center gap-2.5 border-b border-line bg-surface-2 px-5 py-3">
+                                                    <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-ai-tint font-mono text-[11px] font-medium uppercase text-ai-ink">
+                                                        {section[0]}
+                                                    </span>
+                                                    <h3 className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                                        {section}
+                                                    </h3>
+                                                </div>
+                                                <div className="max-w-[80ch] whitespace-pre-wrap px-5 py-4 text-sm leading-relaxed text-ink">
+                                                    {patient.latest_soap_note![section]}
+                                                </div>
                                             </div>
-                                            <div className="whitespace-pre-wrap px-5 py-4 text-sm leading-relaxed text-gray-800">
-                                                {patient.latest_soap_note![section]}
-                                            </div>
-                                        </div>
-                                    ),
-                                )}
+                                        ),
+                                    )}
+                                </div>
 
-                                <details className="text-xs text-gray-500"><summary className="min-h-11 cursor-pointer py-2 font-medium">Generation details</summary><p>
+                                <details className="ma-disclosure text-xs text-muted"><summary className="min-h-9 py-1.5 text-[13px] font-medium">Generation details</summary><p className="pl-[1.375rem]">
                                     Generated{" "}
-                                    {patient.latest_soap_note?.generated_at
-                                        ? new Date(patient.latest_soap_note.generated_at).toLocaleString()
-                                        : "recently"}
+                                    <span className="font-mono">
+                                        {patient.latest_soap_note?.generated_at
+                                            ? new Date(patient.latest_soap_note.generated_at).toLocaleString()
+                                            : "recently"}
+                                    </span>
                                 </p></details>
                             </div>
                         )}
 
                         {!patient.latest_soap_note && !generatingSoap && (
-                            <div className="flex h-40 flex-col items-center justify-center gap-3 text-gray-400">
-                                <HiOutlineSparkles aria-hidden="true" className="h-10 w-10" />
-                                <p className="text-sm">No SOAP note generated yet.</p>
-                                <p className="text-xs">Click &ldquo;Generate SOAP Note&rdquo; to create one.</p>
+                            <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ai-tint text-ai-ink"><Icon name="spark" className="h-6 w-6" /></span>
+                                <p className="text-[15px] font-semibold text-ink">No SOAP note generated yet.</p>
+                                <p className="text-sm text-muted">Click &ldquo;Generate SOAP Note&rdquo; to create one.</p>
                             </div>
                         )}
                     </div>
@@ -616,7 +648,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                     />
                 )}
                 {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void reload()} />}
-            </Card>
+            </div>
         </div>
     );
 }

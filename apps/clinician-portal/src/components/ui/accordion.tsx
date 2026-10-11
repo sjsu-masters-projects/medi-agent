@@ -50,19 +50,19 @@ export function AccordionItem({
     }
 
     return (
-        <div className={`border border-gray-200 rounded-xl overflow-hidden ${className}`}>
+        <div className={`border border-line rounded-xl overflow-hidden ${className}`}>
             <button
                 aria-expanded={open}
-                className="flex w-full items-center justify-between bg-white px-5 py-4 text-left transition-colors hover:bg-gray-50"
+                className="flex w-full items-center justify-between bg-surface px-5 py-4 text-left transition-colors hover:bg-surface-2"
                 onClick={handleToggle}
                 type="button"
             >
-                <span className="text-sm font-semibold text-gray-900">{title}</span>
+                <span className="text-sm font-semibold text-ink">{title}</span>
                 <div className="flex items-center gap-2">
                     {badge}
                     <svg
                         aria-hidden="true"
-                        className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+                        className={`h-4 w-4 text-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}
                         fill="none"
                         stroke="currentColor"
                         strokeWidth={2}
@@ -78,7 +78,7 @@ export function AccordionItem({
                 className="overflow-hidden transition-all duration-300 ease-in-out"
                 style={{ maxHeight: open ? "9999px" : "0px" }}
             >
-                <div className="border-t border-gray-100 bg-white px-5 py-4">{children}</div>
+                <div className="border-t border-line bg-surface px-5 py-4">{children}</div>
             </div>
         </div>
     );
