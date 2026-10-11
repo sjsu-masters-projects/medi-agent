@@ -14,9 +14,10 @@ from datetime import date
 from typing import Any
 
 from app.adk.tools.health_reference import KNOWLEDGE_SOURCES_STATE_KEY
+from app.services.health_knowledge_sources import DOSE
 
 _SOURCE_LINE = re.compile(r"^\s*(?:\*\*)?(?:sources?|fuentes?)\s*:.*$", re.I | re.M)
-_DOSE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:mg|mcg|µg|g|ml|mL|units?|unidades|ui|iu)\b", re.I)
+_DOSE = DOSE
 _MONTHS_ES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 _LABELS = {
     "en-US": {
@@ -26,7 +27,7 @@ _LABELS = {
     },
     "es-MX": {
         "lead": "Fuentes",
-        "medlineplus": "MedlinePlus: {title} (consultado el {checked})",
+        "medlineplus": "MedlinePlus{english}: {title} (consultado el {checked})",
         "dailymed": "DailyMed, etiqueta de la FDA en inglés (publicada el {published})",
     },
 }
@@ -64,7 +65,9 @@ def source_line(sources: list[dict[str, Any]], locale: str) -> str:
         template = labels.get(str(item.get("source")))
         if template is None:
             continue
+        english = locale == "es-MX" and item.get("language") == "en-US"
         part = template.format(
+            english=" (en inglés)" if english else "",
             title=str(item.get("title") or "").strip() or "—",
             checked=_day(item.get("checked_on"), locale),
             published=_day(item.get("published_on") or item.get("checked_on"), locale),
@@ -87,3 +90,13 @@ def unsupported_doses(reply: str, *grounding: str) -> list[str]:
 
 def _normal(dose: str) -> str:
     return re.sub(r"\s+", "", dose.casefold().replace(",", "."))
+
+
+_EMPHASIS = re.compile(r"\*\*|__|`")
+_BULLET = re.compile(r"^\s*[*-]\s+", re.M)
+_HEADING = re.compile(r"^\s*#{1,6}\s*", re.M)
+
+
+def plain_reply(text: str) -> str:
+    """The chat shows plain text: drop Markdown emphasis and headings, keep bullets as •."""
+    return _HEADING.sub("", _BULLET.sub("• ", _EMPHASIS.sub("", text)))

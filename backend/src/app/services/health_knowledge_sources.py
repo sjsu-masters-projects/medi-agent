@@ -11,14 +11,16 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import functools
 import hashlib
 import html
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 from xml.etree import ElementTree
 
 import httpx
@@ -34,9 +36,13 @@ REQUEST_TIMEOUT = httpx.Timeout(6.0, connect=3.0)
 
 SUMMARY_LIMIT = 6000
 SECTION_LIMIT = 6000
+MAX_RESPONSE_BYTES = 3_000_000
+NAME_SIMILARITY = 0.85
 
 # FDA label sections by LOINC code. Dosage is deliberately absent: a label's dose ranges
-# are not this patient's prescription, and Nora must never present them as one.
+# are not this patient's prescription, and Nora must never present them as one. The
+# Medication Guide (42230-3) is left out for the same reason: its "how should I take"
+# part carries doses.
 LABEL_SECTIONS: dict[str, tuple[str, ...]] = {
     "boxed_warning": ("34066-1",),
     "indications": ("34067-9",),
@@ -45,15 +51,53 @@ LABEL_SECTIONS: dict[str, tuple[str, ...]] = {
     "adverse_reactions": ("34084-4",),
     "drug_interactions": ("34073-7",),
     "patient_counseling": ("34076-0", "88436-1"),
-    "patient_information": ("42230-3",),
 }
 _HL7 = {"h": "urn:hl7-org:v3"}
 _TAG = re.compile(r"<[^>]+>")
 _BLOCK_END = re.compile(r"</?(?:p|h[1-6]|li|ul|ol|div)\b[^>]*>|<br\s*/?>", re.I)
+DOSE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:mg|mcg|µg|g|ml|mL|units?|unidades|ui|iu)\b", re.I)
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class SourceUnavailableError(RuntimeError):
     """A reference service did not answer; try again later rather than record a miss."""
+
+
+def _shape_checked(
+    fetch: Callable[P, Awaitable[R]],
+) -> Callable[P, Awaitable[R]]:
+    """A response that is not the documented shape is an outage, never a miss or a crash.
+
+    A maintenance page served with 200, truncated JSON or unexpected types would otherwise
+    raise out of a chat tool and end the turn.
+    """
+
+    @functools.wraps(fetch)
+    async def checked(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return await fetch(*args, **kwargs)
+        except SourceUnavailableError:
+            raise
+        except (ValueError, KeyError, TypeError, AttributeError, ElementTree.ParseError) as error:
+            logger.warning(
+                "Reference source returned an unexpected shape: %s", type(error).__name__
+            )
+            raise SourceUnavailableError(fetch.__name__) from error
+
+    return checked
+
+
+def strip_doses(text: str) -> str:
+    """Drop sentences that state an amount: reference doses are never this patient's."""
+    kept = (
+        sentence
+        for line in text.splitlines()
+        for sentence in [" ".join(s for s in _SENTENCE.split(line) if not DOSE.search(s))]
+        if sentence.strip()
+    )
+    return "\n".join(kept)
 
 
 @dataclass(frozen=True)
@@ -96,6 +140,8 @@ async def _get(client: httpx.AsyncClient, url: str, **params: Any) -> httpx.Resp
     try:
         response = await client.get(url, params=params or None, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            raise httpx.DecodingError("response larger than the reference size limit")
         return response
     except httpx.HTTPError as error:
         # Only the host is logged: the query is a drug or condition name, never patient
@@ -104,8 +150,13 @@ async def _get(client: httpx.AsyncClient, url: str, **params: Any) -> httpx.Resp
         raise SourceUnavailableError(host) from error
 
 
+@_shape_checked
 async def resolve_ingredient(client: httpx.AsyncClient, name: str) -> Ingredient | None:
-    """Resolve a name as written ("Metformina 500 mg", "Tylenol") to its RxNorm ingredient."""
+    """Resolve a name as written ("Metformina 500 mg", "Tylenol") to its RxNorm ingredient.
+
+    A combination product ("Janumet") resolves to nothing for now: answering with one of
+    its ingredients would describe only part of what the patient takes.
+    """
     response = await _get(
         client, f"{RXNAV}/approximateTerm.json", term=name, maxEntries=8, option=1
     )
@@ -119,31 +170,52 @@ async def resolve_ingredient(client: httpx.AsyncClient, name: str) -> Ingredient
         # hydrate. A match must share a word with what was asked about.
         return None
     related = await _get(client, f"{RXNAV}/rxcui/{rxcui}/related.json", tty="IN")
-    for group in related.json().get("relatedGroup", {}).get("conceptGroup") or []:
-        for concept in group.get("conceptProperties") or []:
-            if concept.get("rxcui") and concept.get("name"):
-                return Ingredient(rxcui=str(concept["rxcui"]), name=str(concept["name"]))
-    return None
+    ingredients = {
+        str(concept["rxcui"]): str(concept["name"])
+        for group in related.json().get("relatedGroup", {}).get("conceptGroup") or []
+        for concept in group.get("conceptProperties") or []
+        if concept.get("rxcui") and concept.get("name")
+    }
+    if len(ingredients) != 1:
+        return None
+    ((ingredient_rxcui, ingredient_name),) = ingredients.items()
+    return Ingredient(rxcui=ingredient_rxcui, name=ingredient_name)
 
 
-_UNIT_WORDS = {"tablet", "tablets", "tableta", "tabletas", "capsule", "capsula", "oral"}
+# Salt, form and release words name no ingredient and appear across unrelated drugs
+# ("metformin hydrochloride", "hydralazine hydrochloride"), so they never make a match.
+_NON_INGREDIENT_WORDS = frozenset(
+    """tablet tablets tableta tabletas capsule capsules capsula capsulas cápsula cápsulas
+    oral solution solución injection inyección extended release delayed liberación
+    prolongada retardada hydrochloride clorhidrato sodium sódico sodica sódica potassium
+    potásico potasica potásica calcium calcio magnesium magnesio sulfate sulfato succinate
+    succinato tartrate tartrato maleate maleato besylate besilato mesylate mesilato
+    citrate citrato acetate acetato phosphate fosfato chloride cloruro medicine medicina
+    medicamento medication drug pill pills pastilla pastillas""".split()
+)
 
 
 def _words(text: str) -> set[str]:
     words = re.findall(r"[^\W\d_]{4,}", text.casefold())
-    return {word for word in words if word not in _UNIT_WORDS}
+    return {word for word in words if word not in _NON_INGREDIENT_WORDS}
 
 
 def names_match(query: str, candidate_names: list[str]) -> bool:
+    """True when a meaningful word asked about is (nearly) a word of a candidate name.
+
+    Similar enough for "metformina"/"metformin" and a transposed letter; not for
+    "losartan"/"valsartan" or "hydration"/"hydrate".
+    """
     asked = _words(query)
     found = set().union(*(_words(name) for name in candidate_names)) if candidate_names else set()
     return any(
-        difflib.SequenceMatcher(None, left, right).ratio() >= 0.8
+        difflib.SequenceMatcher(None, left, right).ratio() >= NAME_SIMILARITY
         for left in asked
         for right in found
     )
 
 
+@_shape_checked
 async def medlineplus_medication(
     client: httpx.AsyncClient, rxcui: str, locale: str
 ) -> SourceText | None:
@@ -170,31 +242,38 @@ async def medlineplus_medication(
     return None
 
 
+@_shape_checked
 async def medlineplus_condition(
     client: httpx.AsyncClient, name: str, locale: str
 ) -> SourceText | None:
-    """The best-matching MedlinePlus health topic for a condition name."""
+    """The best-matching MedlinePlus health topic for a condition name.
+
+    The top search hit is accepted only if its title or an alternate title shares a word
+    with the name asked about; otherwise a loosely related topic would be cached under it.
+    """
     database = "healthTopicsSpanish" if locale == "es-MX" else "healthTopics"
     response = await _get(client, MEDLINEPLUS_SEARCH, db=database, term=name, retmax=1)
-    try:
-        root = ElementTree.fromstring(response.content)
-    except ElementTree.ParseError:
-        return None
+    root = ElementTree.fromstring(response.content)
     document = root.find("./list/document")
     if document is None:
         return None
-    fields: dict[str, str] = {}
+    fields: dict[str, list[str]] = {}
     for content in document.findall("content"):
         key = content.get("name") or ""
-        if key and key not in fields:
-            fields[key] = plain_text(content.text or "")
-    title = fields.get("title", "").strip()
-    summary = fields.get("FullSummary", "").strip()
+        if key:
+            fields.setdefault(key, []).append(plain_text(content.text or ""))
+    title = next(iter(fields.get("title", [])), "").strip()
+    summary = next(iter(fields.get("FullSummary", [])), "").strip()
     if not title or not summary:
         return None
-    return SourceText(title=title, url=document.get("url"), summary=summary[:SUMMARY_LIMIT])
+    if not names_match(name, [title, *fields.get("altTitle", [])]):
+        return None
+    url = document.get("url")
+    url = url if url and url.startswith("https://") else None
+    return SourceText(title=title, url=url, summary=summary[:SUMMARY_LIMIT])
 
 
+@_shape_checked
 async def dailymed_label(client: httpx.AsyncClient, ingredient: Ingredient) -> SourceText | None:
     """The newest single-ingredient FDA label for an ingredient, as plain sections."""
     listing = await _get(client, f"{DAILYMED}/spls.json", rxcui=ingredient.rxcui, pagesize=50)
@@ -204,10 +283,7 @@ async def dailymed_label(client: httpx.AsyncClient, ingredient: Ingredient) -> S
         return None
     setid = str(choice["setid"])
     document = await _get(client, f"{DAILYMED}/spls/{setid}.xml")
-    try:
-        root = ElementTree.fromstring(document.content)
-    except ElementTree.ParseError:
-        return None
+    root = ElementTree.fromstring(document.content)
     sections = label_sections(root)
     if not sections:
         return None

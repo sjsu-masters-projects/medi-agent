@@ -28,6 +28,7 @@ Emergency examples include severe chest pain, breathing difficulty, stroke sympt
 active self-harm intent, severe allergic reaction, loss of consciousness, or severe bleeding.
 """
 
+
 def build_triage_classification_prompt(
     *,
     message: str,

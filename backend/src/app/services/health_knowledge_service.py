@@ -21,7 +21,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -63,6 +63,8 @@ class Knowledge:
     status: Status
     subject: str | None = None
     references: list[Reference] = field(default_factory=list)
+    rxcui: str | None = None
+    """The RxNorm ingredient a medication resolved to, for comparing with the patient's list."""
 
 
 def name_key(name: str) -> str:
@@ -107,6 +109,15 @@ class HealthKnowledgeService:
             logger.warning("Medication reference lookup exceeded its time budget")
             return await self._cached_only("medication", await self._known_rxcui(name))
 
+    async def ingredient_of(self, name: str) -> Ingredient | None:
+        """The RxNorm ingredient a name resolves to, or None if unknown or unreachable."""
+        try:
+            async with asyncio.timeout(self._budget):
+                resolved = await self._resolve(name)
+        except TimeoutError:
+            return None
+        return resolved if isinstance(resolved, Ingredient) else None
+
     async def condition(self, name: str, locale: str) -> Knowledge:
         """A plain-language MedlinePlus topic for a condition, in the patient's language."""
         key = name_key(name)
@@ -127,14 +138,14 @@ class HealthKnowledgeService:
             return Knowledge(status="unavailable")
         rows = await self._rows("medication", ingredient.rxcui)
         if not self._needs_fetch(rows, _MEDICATION_SOURCES):
-            return self._knowledge(rows, ingredient.name)
+            return replace(self._knowledge(rows, ingredient.name), rxcui=ingredient.rxcui)
         async with self._client_factory() as client:
             fetched = await sources.gather_medication(client, ingredient)
         await self._store("medication", ingredient.rxcui, ingredient.name, fetched, rows)
         knowledge = self._knowledge(
             await self._rows("medication", ingredient.rxcui), ingredient.name
         )
-        return _unless_unavailable(knowledge, fetched)
+        return replace(_unless_unavailable(knowledge, fetched), rxcui=ingredient.rxcui)
 
     async def _condition(self, key: str, name: str, locale: str) -> Knowledge:
         wanted = (("medlineplus", locale),)
@@ -370,7 +381,7 @@ class HealthKnowledgeService:
             self.db.table("medications").select("name").eq("is_active", True).limit(500)
         )
         names = {
-            _medication_name(str(row.get("name") or ""))
+            medication_name(str(row.get("name") or ""))
             for row in cast(list[dict[str, Any]], meds.data or [])
         }
         names.discard("")
@@ -399,6 +410,6 @@ def _unless_unavailable(
     return knowledge
 
 
-def _medication_name(name: str) -> str:
+def medication_name(name: str) -> str:
     """A medication's name without the dose text a record often carries with it."""
     return re.split(r"\s\d", name.strip(), maxsplit=1)[0].strip()

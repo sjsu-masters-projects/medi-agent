@@ -6,20 +6,33 @@ this patient's active list. The patient comes from session scope, never from the
 
 Each result says where its text came from and when, and the sources a turn actually used
 are recorded in session state so the server, not the model, writes the citation line.
-Label dosage sections are never returned: a label's dose ranges are not this patient's
-prescription.
+Label dosage sections are never returned, and any sentence stating an amount is removed
+from what is returned: a reference dose is not this patient's prescription.
+
+Whether a medication is on the patient's list is decided by RxNorm ingredient, never by
+name similarity: "losartan" and "valsartan" look alike and are different drugs.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, cast
 
-from app.adk.tools.scoping import PatientScopeError, require_patient_id
+from app.adk.tools.scoping import (
+    REPLY_LANGUAGE_STATE_KEY,
+    PatientScopeError,
+    require_patient_id,
+)
 from app.clients.supabase import get_admin_client
-from app.services.health_knowledge_service import HealthKnowledgeService, Knowledge, Reference
-from app.services.health_knowledge_sources import names_match
+from app.services.health_knowledge_service import (
+    HealthKnowledgeService,
+    Knowledge,
+    Reference,
+    medication_name,
+)
+from app.services.health_knowledge_sources import Ingredient, names_match, strip_doses
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +45,7 @@ SECTION_CHARS = 1800
 SUMMARY_CHARS = 2400
 TOPIC_SECTIONS: dict[str, tuple[str, ...]] = {
     "overview": ("indications", "patient_counseling"),
-    "side_effects": ("boxed_warning", "adverse_reactions", "patient_information"),
+    "side_effects": ("boxed_warning", "adverse_reactions"),
     "interactions": ("drug_interactions", "contraindications"),
     "warnings": ("boxed_warning", "warnings", "contraindications"),
 }
@@ -48,8 +61,19 @@ def _knowledge_service() -> HealthKnowledgeService:
     return HealthKnowledgeService(get_admin_client())
 
 
-def _language(value: str) -> str:
-    return "es-MX" if str(value or "").lower().startswith("es") else "en-US"
+def _language(value: str, tool_context: Any) -> str:
+    """The language the patient wrote in, as the server detected it; the model's guess
+    only when the server set none."""
+    state = getattr(tool_context, "state", None)
+    detected = state.get(REPLY_LANGUAGE_STATE_KEY) if state is not None else None
+    chosen = str(detected or value or "")
+    return "es-MX" if chosen.lower().startswith("es") else "en-US"
+
+
+_UNAVAILABLE = {
+    "status": "unavailable",
+    "error": "Reference sources are not answering right now; say so plainly.",
+}
 
 
 async def _patient_rows(table: str, columns: str, patient_id: str) -> list[dict[str, Any]]:
@@ -80,6 +104,7 @@ def _citation(reference: Reference) -> dict[str, Any]:
         "source": reference.source,
         "title": reference.title,
         "url": reference.url,
+        "language": reference.locale,
         "checked_on": reference.checked_at.date().isoformat(),
         "published_on": (
             reference.source_updated_on.isoformat() if reference.source_updated_on else None
@@ -134,23 +159,40 @@ async def get_medication_information(
         patient_id = require_patient_id(tool_context)
     except PatientScopeError:
         return {"status": "error", "error": "No patient record is available in this conversation."}
-    asked = str(medication_name or "").strip()[:120]
+    try:
+        return await _medication_information(
+            patient_id, medication_name, topic, _language(language, tool_context), tool_context
+        )
+    except Exception:  # noqa: BLE001 - a lookup failure must never end the patient's turn
+        logger.exception("Medication reference lookup failed")
+        return dict(_UNAVAILABLE)
+
+
+async def _patient_ingredients(
+    service: HealthKnowledgeService, medications: list[dict[str, Any]]
+) -> list[tuple[dict[str, Any], Ingredient | None]]:
+    names = [
+        medication_name(str(row.get("generic_name") or row.get("name") or ""))
+        for row in medications
+    ]
+    resolved = await asyncio.gather(*(service.ingredient_of(name) for name in names))
+    return list(zip(medications, resolved, strict=True))
+
+
+async def _medication_information(
+    patient_id: str, medication_name_asked: str, topic: str, language: str, tool_context: Any
+) -> dict[str, Any]:
+    asked = str(medication_name_asked or "").strip()[:120]
     if not asked:
         return {"status": "not_found", "error": "No medication name was given."}
     topic = topic if topic in TOPIC_SECTIONS else "overview"
-    language = _language(language)
-
-    medications = await _patient_rows("medications", "name, generic_name", patient_id)
-    match = next(
-        (
-            row
-            for row in medications
-            if names_match(asked, [str(row.get("name") or ""), str(row.get("generic_name") or "")])
-        ),
-        None,
+    service = _knowledge_service()
+    knowledge, medications = await asyncio.gather(
+        service.medication(asked),
+        _patient_rows("medications", "name, generic_name", patient_id),
     )
-    lookup_name = str(match.get("generic_name") or match.get("name")) if match else asked
-    knowledge = await _knowledge_service().medication(lookup_name)
+    on_list = await _patient_ingredients(service, medications) if knowledge.rxcui else []
+    match = next((row for row, found in on_list if found and found.rxcui == knowledge.rxcui), None)
 
     result: dict[str, Any] = {
         "status": knowledge.status,
@@ -161,10 +203,11 @@ async def get_medication_information(
     }
     if knowledge.status != "found":
         result["error"] = (
-            "No reliable reference was found for that name; ask the patient which medication "
-            "they mean, or suggest asking their pharmacist."
+            "No reliable reference was found for that name (combination products are not "
+            "covered yet); ask the patient which medication they mean, or suggest asking "
+            "their pharmacist. Do not answer from memory."
             if knowledge.status == "not_found"
-            else "Reference sources are not answering right now; say so plainly."
+            else _UNAVAILABLE["error"]
         )
         return result
 
@@ -172,14 +215,15 @@ async def get_medication_information(
     used: list[dict[str, Any]] = []
     summary, translated = _summary_for(knowledge, language)
     if summary is not None:
-        references.append(_reference_entry(summary, "text", summary.summary[:SUMMARY_CHARS]))
+        text = strip_doses(summary.summary)[:SUMMARY_CHARS]
+        references.append(_reference_entry(summary, "text", text))
         used.append(_citation(summary))
     label = next((r for r in knowledge.references if r.source == "dailymed"), None)
     # The overview is MedlinePlus's plain summary; label sections are for the specific
     # topics, or for when no plain summary exists.
     if label is not None and (topic != "overview" or summary is None):
         sections = {
-            name: label.sections[name][:SECTION_CHARS]
+            name: strip_doses(label.sections[name])[:SECTION_CHARS]
             for name in TOPIC_SECTIONS[topic]
             if label.sections.get(name)
         }
@@ -188,15 +232,13 @@ async def get_medication_information(
             used.append(_citation(label))
             if topic == "interactions":
                 text = " ".join(sections.values())
-                others = [
+                result["patient_medications_named_in_label"] = [
                     str(row.get("name") or "")
-                    for row in medications
+                    for row, found in on_list
                     if row is not match
-                    and names_match(
-                        text, [str(row.get("name") or ""), str(row.get("generic_name") or "")]
-                    )
+                    and found is not None
+                    and re.search(rf"\b{re.escape(found.name)}\b", text, re.IGNORECASE)
                 ]
-                result["patient_medications_named_in_label"] = others
     result["references"] = references
     result["notice"] = _NOTICE
     if translated:
@@ -226,10 +268,21 @@ async def get_condition_information(
         patient_id = require_patient_id(tool_context)
     except PatientScopeError:
         return {"status": "error", "error": "No patient record is available in this conversation."}
+    try:
+        return await _condition_information(
+            patient_id, condition_name, _language(language, tool_context), tool_context
+        )
+    except Exception:  # noqa: BLE001 - a lookup failure must never end the patient's turn
+        logger.exception("Condition reference lookup failed")
+        return dict(_UNAVAILABLE)
+
+
+async def _condition_information(
+    patient_id: str, condition_name: str, language: str, tool_context: Any
+) -> dict[str, Any]:
     asked = str(condition_name or "").strip()[:120]
     if not asked:
         return {"status": "not_found", "error": "No condition name was given."}
-    language = _language(language)
     conditions = await _patient_rows("conditions", "name", patient_id)
     match = next(
         (row for row in conditions if names_match(asked, [str(row.get("name") or "")])), None
@@ -249,13 +302,15 @@ async def get_condition_information(
     }
     if knowledge.status != "found":
         result["error"] = (
-            "No reliable reference was found for that condition."
+            "No reliable reference was found for that condition. Do not answer from memory."
             if knowledge.status == "not_found"
             else "Reference sources are not answering right now; say so plainly."
         )
         return result
     reference = knowledge.references[0]
-    result["references"] = [_reference_entry(reference, "text", reference.summary[:SUMMARY_CHARS])]
+    result["references"] = [
+        _reference_entry(reference, "text", strip_doses(reference.summary)[:SUMMARY_CHARS])
+    ]
     result["notice"] = _NOTICE
     if translated:
         result["language_note"] = "Only an English source was found; explain it in Spanish."

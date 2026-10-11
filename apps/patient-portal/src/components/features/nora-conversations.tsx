@@ -17,6 +17,7 @@ const COPY = {
         untitled: "Conversation",
         loadError: "Past conversations could not be loaded.",
         dayTitle: "Conversation from",
+        todayTitle: "Today's conversation",
     },
     "es-MX": {
         heading: "Conversaciones anteriores con Nora",
@@ -24,6 +25,7 @@ const COPY = {
         untitled: "Conversación",
         loadError: "No se pudieron cargar las conversaciones anteriores.",
         dayTitle: "Conversación del",
+        todayTitle: "Conversación de hoy",
     },
 } as const;
 
@@ -66,7 +68,8 @@ export function NoraConversations({
                 const isToday = row.sessionId === today;
                 const when = isToday ? copy.today : formatter.format(new Date(row.updatedAt));
                 const title = row.title.trim()
-                    || (row.sessionId.startsWith("day-") ? `${copy.dayTitle} ${when}` : copy.untitled);
+                    || (isToday ? copy.todayTitle
+                        : row.sessionId.startsWith("day-") ? `${copy.dayTitle} ${when}` : copy.untitled);
                 return <li key={row.sessionId}>
                     <button type="button" onClick={() => onOpen(row.sessionId)}
                         aria-current={row.sessionId === activeSessionId ? "true" : undefined}

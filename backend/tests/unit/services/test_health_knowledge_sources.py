@@ -202,3 +202,62 @@ async def test_gathering_keeps_an_outage_apart_from_a_miss() -> None:
     assert fetched[("medlineplus", "en-US")] is None
     assert fetched[("medlineplus", "es-MX")] is None
     assert isinstance(fetched[("dailymed", "en-US")], SourceUnavailableError)
+
+
+@pytest.mark.parametrize(
+    ("asked", "candidate"),
+    [
+        ("losartan", "valsartan"),
+        ("hydralazine hydrochloride", "Metformin hydrochloride"),
+        ("losartan potassium", "Potassium chloride"),
+        ("metformin extended release", "Metoprolol succinate extended release"),
+    ],
+)
+def test_look_alike_and_salt_names_do_not_match(asked: str, candidate: str) -> None:
+    assert not sources.names_match(asked, [candidate])
+
+
+@pytest.mark.asyncio
+async def test_a_combination_product_resolves_to_nothing_rather_than_one_ingredient() -> None:
+    related = {
+        "relatedGroup": {
+            "conceptGroup": [
+                {
+                    "tty": "IN",
+                    "conceptProperties": [
+                        {"rxcui": "6809", "name": "metformin"},
+                        {"rxcui": "593411", "name": "sitagliptin"},
+                    ],
+                }
+            ]
+        }
+    }
+    client = _client(
+        {"approximateTerm.json": _approximate("729717", "Janumet"), "related.json": related}
+    )
+    async with client:
+        assert await sources.resolve_ingredient(client, "Janumet") is None
+
+
+@pytest.mark.asyncio
+async def test_a_condition_topic_must_match_the_name_asked_about() -> None:
+    unrelated = SEARCH.replace("diabetestype2", "kidneydisease").replace(
+        '&lt;span class="qt0"&gt;Diabetes&lt;/span&gt; tipo 2', "Enfermedades renales"
+    )
+    client = _client({"wsearch.nlm.nih.gov": unrelated})
+    async with client:
+        assert await sources.medlineplus_condition(client, "diabetes tipo 2", "es-MX") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", ["<html>maintenance</html>", '{"approximateGroup": 3}'])
+async def test_a_malformed_response_is_an_outage_not_a_crash(body: str) -> None:
+    client = _client({"approximateTerm.json": body})
+    async with client:
+        with pytest.raises(SourceUnavailableError):
+            await sources.resolve_ingredient(client, "metformin")
+
+
+def test_dose_sentences_are_removed_from_reference_text() -> None:
+    text = "It treats diabetes. Take 500 mg twice daily.\nTalk to your pharmacist."
+    assert sources.strip_doses(text) == "It treats diabetes.\nTalk to your pharmacist."

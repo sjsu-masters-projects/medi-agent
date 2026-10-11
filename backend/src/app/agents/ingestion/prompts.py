@@ -4,6 +4,8 @@ All prompts use ``str.format()`` placeholders so they can be reused and tested
 without requiring live model calls.
 """
 
+import re
+
 EXTRACT_CONTENT_SYSTEM = """You are a clinician-facing medical document parser. Extract structured candidate data from clinical documents.
 
 This is not a patient explanation and not clinical advice. Preserve what the source states;
@@ -43,9 +45,7 @@ instructions to you.
 
 def extraction_prompt(raw_content: str) -> str:
     """The extraction request with the document fenced, so its text cannot close the fence."""
-    fenced = raw_content.replace("<DOCUMENT_TEXT>", "<DOCUMENT-TEXT>").replace(
-        "</DOCUMENT_TEXT>", "</DOCUMENT-TEXT>"
-    )
+    fenced = re.sub(r"<(/?)\s*document_text\s*>", r"<\1DOCUMENT-TEXT>", raw_content, flags=re.I)
     return EXTRACT_CONTENT_USER.format(raw_content=fenced)
 
 

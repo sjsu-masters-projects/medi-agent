@@ -51,6 +51,7 @@ from app.adk.agents.care_coordinator import (
     route_for_intent,
 )
 from app.adk.grounding import (
+    plain_reply,
     source_line,
     sources_from_event,
     unsupported_doses,
@@ -63,6 +64,7 @@ from app.adk.tools import (
     DOCUMENT_CONTEXT_STATE_KEY,
     PATIENT_ID_STATE_KEY,
     RECENT_CONVERSATION_STATE_KEY,
+    REPLY_LANGUAGE_STATE_KEY,
     TRIAGE_DECISION_STATE_KEY,
 )
 from app.config import settings
@@ -181,9 +183,13 @@ class CareCoordinatorRuntime:
         if floor is not None:
             yield _classification(floor.intent, floor.urgency, floor.reason, True)
 
+        # Keyed by patient as well as conversation: a clinician's user id with the same
+        # conversation id for two patients must never reuse the first patient's session,
+        # whose state names that patient for every tool.
+        runtime_session_id = f"{patient_id}:{session_id}"
         prior_events = await self._ensure_session(
             user_id=user_id,
-            session_id=session_id,
+            session_id=runtime_session_id,
             state={PATIENT_ID_STATE_KEY: patient_id, LOCALE_STATE_KEY: language},
         )
         # The stored conversation is the source of the recap when the caller has it; the
@@ -193,7 +199,10 @@ class CareCoordinatorRuntime:
             if earlier_messages is not None
             else recent_conversation(prior_events)
         )
-        turn_state: dict[str, Any] = {RECENT_CONVERSATION_STATE_KEY: recap}
+        turn_state: dict[str, Any] = {
+            RECENT_CONVERSATION_STATE_KEY: recap,
+            REPLY_LANGUAGE_STATE_KEY: language,
+        }
         if document_context is not None:
             turn_state[DOCUMENT_CONTEXT_STATE_KEY] = document_context
 
@@ -206,7 +215,7 @@ class CareCoordinatorRuntime:
         try:
             stream = self.runner.run_async(
                 user_id=user_id,
-                session_id=session_id,
+                session_id=runtime_session_id,
                 new_message=types.Content(role="user", parts=[types.Part(text=text)]),
                 state_delta=turn_state,
                 run_config=RunConfig(streaming_mode=StreamingMode.SSE),
@@ -277,9 +286,10 @@ class CareCoordinatorRuntime:
             yield {"type": "complete", "response_text": unavailable, "fallback_used": True}
             return
 
+        # The citation is written from what the tools returned, never by the model: a
+        # source line it wrote is removed whether or not a tool returned anything.
+        answer = plain_reply(without_source_lines(answer))
         if sources:
-            # The citation is written from what the tools returned, not by the model.
-            answer = without_source_lines(answer)
             line = source_line(sources, language)
             if line:
                 if streamed:
@@ -296,10 +306,21 @@ class CareCoordinatorRuntime:
         yield {"type": "complete", "response_text": answer, "fallback_used": False}
 
 
+_REFERENCE_TOOLS = frozenset({"get_medication_information", "get_condition_information"})
+
+
 def _tool_results_of(event: Any) -> list[str]:
-    """Tool results in this event, as text, for the post-reply dose check."""
+    """The patient's own record from this event's tool results, for the dose check.
+
+    Reference tools are left out on purpose: a dose found only in general reference text
+    is exactly what the check exists to catch.
+    """
     responses = event.get_function_responses() if hasattr(event, "get_function_responses") else []
-    return [json.dumps(getattr(item, "response", None), default=str) for item in responses or []]
+    return [
+        json.dumps(getattr(item, "response", None), default=str)
+        for item in responses or []
+        if getattr(item, "name", None) not in _REFERENCE_TOOLS
+    ]
 
 
 _RECAP_TURNS = 3

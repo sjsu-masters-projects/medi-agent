@@ -25,7 +25,7 @@ async def test_transcribe_audio_validates_and_calls_deepgram(monkeypatch):
                 "smart_format": smart_format,
             }
         )
-        return "  hello care team  "
+        return "  I feel dizzy after my medicine  "
 
     monkeypatch.setattr(
         "app.services.voice_service.transcribe_audio_bytes_async",
@@ -39,14 +39,31 @@ async def test_transcribe_audio_validates_and_calls_deepgram(monkeypatch):
         language="es",
     )
 
-    assert result.transcript == "hello care team"
-    assert result.language is Language.ES
+    assert result.transcript == "I feel dizzy after my medicine"
+    # Transcribed in multilingual mode and labelled with the language actually spoken,
+    # even though the app is set to Spanish.
+    assert result.language is Language.EN
     assert captured == {
         "audio_data": b"audio",
         "model": "nova-3",
-        "language": "es-MX",
+        "language": "multi",
         "smart_format": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_spanish_speech_is_labelled_spanish_in_an_english_app(monkeypatch):
+    async def _mock_transcribe(audio_data, model, language, smart_format):
+        assert language == "multi"
+        return "Me duele el estómago después del desayuno"
+
+    monkeypatch.setattr("app.services.voice_service.transcribe_audio_bytes_async", _mock_transcribe)
+    result = await VoiceService().transcribe_audio(
+        audio_base64=base64.b64encode(b"audio").decode("ascii"),
+        mime_type="audio/webm;codecs=opus",
+        language="en-US",
+    )
+    assert result.language is Language.ES
 
 
 @pytest.mark.asyncio

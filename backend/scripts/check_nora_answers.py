@@ -28,7 +28,7 @@ from app.followup import analyse_symptom
 from app.followup.service import EMERGENCY_THRESHOLD
 from app.services.chat_service import ChatService
 
-CASES = Path(__file__).resolve().parents[1] / "tests/fixtures/eval/nora_grounded_answers.json"
+CASES = Path(__file__).resolve().parents[1] / "tests/fixtures/nora/grounded_answers.json"
 SOURCE_NAMES = {"medlineplus": "MedlinePlus", "dailymed": "DailyMed"}
 
 

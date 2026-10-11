@@ -11,12 +11,13 @@ from fastapi import WebSocket, WebSocketDisconnect, WebSocketException
 from starlette import status
 
 from app.adk.grounding import without_source_lines
-from app.clients.deepgram_client import transcribe_audio_bytes_async
+from app.clients.deepgram_client import STT_LANGUAGE, transcribe_audio_bytes_async
 from app.config import settings
 from app.core.exceptions import ValidationError
-from app.models.enums import Language, coerce_locale
+from app.models.enums import Language
 from app.routers.chat import _authenticate_ws_patient, negotiated_subprotocol
 from app.services.voice_service import VoiceService, VoiceStreamTranscript
+from app.utils.localization import written_language
 
 logger = logging.getLogger(__name__)
 
@@ -122,16 +123,18 @@ async def voice_websocket_endpoint(
 
                     if audio:
                         try:
-                            locale = coerce_locale(stream_language)
                             transcript_text = (
                                 await transcribe_audio_bytes_async(
                                     audio,
                                     model=settings.deepgram_stt_model,
-                                    language=locale.value,
+                                    language=STT_LANGUAGE,
                                     smart_format=True,
                                 )
                             ).strip()
-                            logger.info("Voice batch transcribe: %r", transcript_text or "<empty>")
+                            # The spoken language, whatever the app is set to.
+                            locale = written_language(transcript_text, stream_language)
+                            # Length only: what a patient said never goes to the logs.
+                            logger.info("Voice batch transcribe: %d chars", len(transcript_text))
                             if transcript_text:
                                 await websocket.send_json(
                                     {

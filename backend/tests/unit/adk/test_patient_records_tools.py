@@ -63,23 +63,73 @@ async def test_rejected_facts_are_never_returned(monkeypatch: pytest.MonkeyPatch
                 {"id": "b", "fact_type": "medication", "review_state": "rejected", "value": {}},
             ]
 
+    filters: list[tuple[str, str, Any]] = []
+
     class _Query:
+        def __init__(self, table: str) -> None:
+            self.table = table
+
         def select(self, *_: Any) -> _Query:
             return self
 
-        def in_(self, _column: str, values: list[str]) -> _Query:
-            assert values == ["a"]
+        def eq(self, column: str, value: Any) -> _Query:
+            filters.append((self.table, column, value))
+            return self
+
+        def in_(self, column: str, values: list[str]) -> _Query:
+            filters.append((self.table, column, values))
             return self
 
         def execute(self) -> SimpleNamespace:
-            return SimpleNamespace(data=[])
+            if self.table == "source_provenances":
+                return SimpleNamespace(data=[{"id": "prov-this-document"}])
+            return SimpleNamespace(
+                data=[{"fact_id": "a", "excerpt": "Take metformin", "location": {"page": 2}}]
+            )
 
     monkeypatch.setattr(tools, "ClinicalFactService", _Facts)
+    monkeypatch.setattr(tools, "get_admin_client", lambda: SimpleNamespace(table=_Query))
+    items = tools._document_facts(PATIENT, DOCUMENT)
+    assert [item["review_status"] for item in items] == ["confirmed by the care team"]
+    assert items[0]["page"] == 2
+    # Citations come only from this document's provenance, and only for kept facts.
+    assert ("source_provenances", "document_id", DOCUMENT) in filters
+    assert ("evidence_citations", "provenance_id", ["prov-this-document"]) in filters
+    assert ("evidence_citations", "fact_id", ["a"]) in filters
+
+
+def test_document_search_ignores_accents_and_generic_words(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        {
+            "file_name": "Morgan-Ellis-01-Hidratacion-es-MX.pdf",
+            "display_title": {},
+            "ai_summary": "The document says to drink water.",
+            "created_at": "2026-10-10",
+        },
+        {
+            "file_name": "lab.pdf",
+            "display_title": {"en-US": "Lab results"},
+            "ai_summary": "The document lists an A1C value.",
+            "created_at": "2026-10-09",
+        },
+    ]
+
+    class _Query:
+        def __getattr__(self, _name: str) -> Any:
+            return lambda *_args, **_kwargs: self
+
+        def execute(self) -> SimpleNamespace:
+            return SimpleNamespace(data=rows)
+
     monkeypatch.setattr(
         tools, "get_admin_client", lambda: SimpleNamespace(table=lambda _name: _Query())
     )
-    items = tools._document_facts(PATIENT, DOCUMENT)
-    assert [item["review_status"] for item in items] == ["confirmed by the care team"]
+    found = tools._search_documents(PATIENT, ["hidratacion"])
+    assert [row["file_name"] for row in found] == ["Morgan-Ellis-01-Hidratacion-es-MX.pdf"]
+    assert tools._fold("Hidratación") == "hidratacion"
+    assert "documento" in tools._GENERIC_WORDS and "document" in tools._GENERIC_WORDS
 
 
 @pytest.mark.asyncio

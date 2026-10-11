@@ -10,6 +10,7 @@ from app.adk.tools.scoping import (
     DOCUMENT_CONTEXT_STATE_KEY,
     PATIENT_ID_STATE_KEY,
     RECENT_CONVERSATION_STATE_KEY,
+    REPLY_LANGUAGE_STATE_KEY,
     PatientScopeError,
     require_patient_id,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "PATIENT_ID_STATE_KEY",
     "DOCUMENT_CONTEXT_STATE_KEY",
     "RECENT_CONVERSATION_STATE_KEY",
+    "REPLY_LANGUAGE_STATE_KEY",
     "TRIAGE_DECISION_STATE_KEY",
     "VALID_INTENTS",
     "VALID_URGENCIES",

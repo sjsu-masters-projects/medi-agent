@@ -395,6 +395,10 @@ def test_a_worst_or_danger_sign_symptom_always_carries_911_guidance(
 def test_911_guidance_is_not_added_twice_or_below_the_threshold() -> None:
     from app.followup.service import with_emergency_guidance
 
-    already = "Call 911 now."
-    assert with_emergency_guidance(already, severity=10, language="en-US") == already
+    once = with_emergency_guidance("Logged.", severity=10, language="en-US")
+    assert with_emergency_guidance(once, severity=10, language="en-US") == once
+    # "911" alone does not count: a reply saying not to call it still gets the guidance.
+    assert "call 911 or go" in with_emergency_guidance(
+        "No need to call 911.", severity=9, language="en-US"
+    )
     assert with_emergency_guidance("Logged.", severity=8, language="en-US") == "Logged."

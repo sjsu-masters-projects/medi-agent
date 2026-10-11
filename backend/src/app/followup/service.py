@@ -197,10 +197,14 @@ async def _respond(*, language: str, extraction: SymptomExtractionResult) -> str
 
 
 def with_emergency_guidance(reply: str, *, severity: int, language: str) -> str:
-    """Add the reviewed 911 sentence to a 9-10 reply that does not already give it."""
-    if severity < EMERGENCY_THRESHOLD or "911" in reply:
-        return reply
+    """Add the reviewed 911 sentence to every 9-10 reply.
+
+    Keyed on the exact sentence, not on "911" appearing anywhere: "no need to call 911"
+    contains it too.
+    """
     suffix = resolve_locale_resource(language, FOLLOWUP_COPY)["emergency_suffix"]
+    if severity < EMERGENCY_THRESHOLD or suffix in reply:
+        return reply
     return f"{reply.rstrip()}\n\n{suffix}"
 
 

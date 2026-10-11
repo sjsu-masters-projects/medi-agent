@@ -11,8 +11,9 @@ import pytest
 from app.adk import grounding
 from app.adk.tools import health_reference as tools
 from app.adk.tools.health_reference import KNOWLEDGE_SOURCES_STATE_KEY
-from app.adk.tools.scoping import PATIENT_ID_STATE_KEY
+from app.adk.tools.scoping import PATIENT_ID_STATE_KEY, REPLY_LANGUAGE_STATE_KEY
 from app.services.health_knowledge_service import Knowledge, Reference
+from app.services.health_knowledge_sources import Ingredient
 
 PATIENT = "e6c098a8-fb5f-4070-a575-b0201352d8c5"
 CHECKED = datetime(2026, 10, 10, tzinfo=UTC)
@@ -41,7 +42,8 @@ LABEL = _reference(
     sections={
         "indications": "For type 2 diabetes.",
         "adverse_reactions": "Diarrhea, nausea.",
-        "drug_interactions": "Topiramate and other carbonic anhydrase inhibitors.",
+        "drug_interactions": "Topiramate and other carbonic anhydrase inhibitors. "
+        "Cationic drugs such as ranitidine hydrochloride.",
         "contraindications": "Severe kidney disease.",
     },
     source_version="7",
@@ -51,7 +53,15 @@ FOUND = Knowledge(
     status="found",
     subject="metformin",
     references=[_reference("medlineplus", "en-US"), LABEL],
+    rxcui="6809",
 )
+INGREDIENTS = {
+    "metformin": Ingredient("6809", "metformin"),
+    "metformina": Ingredient("6809", "metformin"),
+    "topiramate": Ingredient("38404", "topiramate"),
+    "lisinopril": Ingredient("29046", "lisinopril"),
+    "valsartan": Ingredient("69749", "valsartan"),
+}
 
 
 class _Service:
@@ -62,6 +72,9 @@ class _Service:
     async def medication(self, name: str) -> Knowledge:
         self.asked.append(name)
         return self.knowledge
+
+    async def ingredient_of(self, name: str) -> Ingredient | None:
+        return INGREDIENTS.get(name.casefold())
 
     async def condition(self, name: str, locale: str) -> Knowledge:
         self.asked.append(f"{name}|{locale}")
@@ -106,7 +119,7 @@ async def test_a_medication_on_the_patient_list_is_joined_and_looked_up_by_its_r
     result = await tools.get_medication_information("Metformina", "overview", "es-MX", _context())
     assert result["on_patient_list"] is True
     assert result["patient_list_name"] == "Metformin 500 mg"
-    assert service.asked == ["metformin"]
+    assert service.asked == ["Metformina"]
     # Only an English summary is cached here, so the reply must say so in Spanish.
     assert result["language_note"]
     assert [ref["source"] for ref in result["references"]] == ["MedlinePlus"]
@@ -114,8 +127,73 @@ async def test_a_medication_on_the_patient_list_is_joined_and_looked_up_by_its_r
 
 @pytest.mark.asyncio
 async def test_a_medication_not_on_the_list_is_general_information(service: _Service) -> None:
+    service.knowledge = Knowledge(
+        status="found",
+        subject="ibuprofen",
+        rxcui="5640",
+        references=[_reference("medlineplus", "en-US")],
+    )
     result = await tools.get_medication_information("ibuprofen", "overview", "en-US", _context())
     assert result["on_patient_list"] is False and service.asked == ["ibuprofen"]
+
+
+@pytest.mark.asyncio
+async def test_a_look_alike_name_is_not_the_patients_medication(
+    service: _Service, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """losartan and valsartan look alike; list membership is decided by ingredient."""
+
+    async def rows(table: str, _columns: str, _patient_id: str) -> list[dict[str, Any]]:
+        return [{"name": "Valsartan 80 mg", "generic_name": None}]
+
+    monkeypatch.setattr(tools, "_patient_rows", rows)
+    service.knowledge = Knowledge(
+        status="found",
+        subject="losartan",
+        rxcui="52175",
+        references=[_reference("medlineplus", "en-US")],
+    )
+    result = await tools.get_medication_information("losartan", "overview", "en-US", _context())
+    assert result["on_patient_list"] is False and result["patient_list_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_the_servers_detected_language_wins_over_the_models_argument(
+    service: _Service,
+) -> None:
+    context = _context(**{REPLY_LANGUAGE_STATE_KEY: "es-MX"})
+    result = await tools.get_medication_information("metformin", "overview", "en-US", context)
+    assert result["language_note"]  # Spanish reader, English-only source
+
+
+@pytest.mark.asyncio
+async def test_reference_sentences_stating_an_amount_are_removed(service: _Service) -> None:
+    service.knowledge = Knowledge(
+        status="found",
+        subject="metformin",
+        rxcui="6809",
+        references=[
+            _reference(
+                "medlineplus",
+                "en-US",
+                summary="It treats diabetes. Adults take 500 mg twice a day.",
+            )
+        ],
+    )
+    result = await tools.get_medication_information("metformin", "overview", "en-US", _context())
+    assert result["references"][0]["text"] == "It treats diabetes."
+
+
+@pytest.mark.asyncio
+async def test_a_failing_lookup_is_reported_rather_than_ending_the_turn(
+    service: _Service, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken(_name: str) -> Knowledge:
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(service, "medication", broken)
+    result = await tools.get_medication_information("metformin", "overview", "en-US", _context())
+    assert result["status"] == "unavailable"
 
 
 @pytest.mark.asyncio
@@ -137,6 +215,7 @@ async def test_no_topic_ever_returns_a_label_dosage_section(service: _Service) -
         status="found",
         subject="metformin",
         references=[_reference("dailymed", "en-US", sections={"dosage": "Start 850 mg daily"})],
+        rxcui="6809",
     )
     for topic in tools.TOPIC_SECTIONS:
         result = await tools.get_medication_information("metformin", topic, "en-US", _context())
@@ -235,7 +314,7 @@ def test_the_nora_question_set_is_paired_synthetic_and_well_formed() -> None:
     import json
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[2] / "fixtures/eval/nora_grounded_answers.json"
+    path = Path(__file__).resolve().parents[2] / "fixtures/nora/grounded_answers.json"
     cases = json.loads(path.read_text())["cases"]
     assert len({case["id"] for case in cases}) == len(cases)
     assert {case["locale"] for case in cases} == {"en-US", "es-MX"}
@@ -256,3 +335,10 @@ def test_the_nora_question_set_is_paired_synthetic_and_well_formed() -> None:
     danger = [case for case in cases if case["pair_id"] == "danger-sign"]
     assert {case["locale"] for case in danger} == {"en-US", "es-MX"}
     assert all("911" in case["must_include_any"] for case in danger)
+
+
+def test_markdown_is_removed_from_a_plain_text_reply() -> None:
+    reply = "**Important:** drink water\n* one glass with breakfast\n# Note"
+    assert (
+        grounding.plain_reply(reply) == "Important: drink water\n• one glass with breakfast\nNote"
+    )
