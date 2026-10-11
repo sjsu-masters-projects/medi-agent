@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NotificationProvider, useNotifications } from "@/contexts/notifications-context";
+import { NOTIFICATION_POLL_MS, NotificationProvider, useNotifications } from "@/contexts/notifications-context";
 import { NotificationBell, NotificationCentre } from "@/components/features/notification-centre";
 import { notifications } from "@/services/notifications";
 import type { NotificationPage, PatientNotification } from "@/types/notifications";
@@ -174,15 +174,17 @@ describe("patient notification centre", () => {
     expect(notifications.list).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Notifications · 1 unread" }));
     await act(async () => vi.advanceTimersByTime(15_000));
+    expect(notifications.list).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS - 15_000));
     expect(notifications.list).toHaveBeenCalledTimes(2);
     const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-    await act(async () => vi.advanceTimersByTime(15_000));
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS));
     expect(notifications.list).toHaveBeenCalledTimes(2);
     visibility.mockReturnValue("visible");
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(notifications.list).toHaveBeenCalledTimes(3);
     view.unmount();
-    await act(async () => vi.advanceTimersByTime(30_000));
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS));
     expect(notifications.list).toHaveBeenCalledTimes(3);
     visibility.mockRestore();
   });

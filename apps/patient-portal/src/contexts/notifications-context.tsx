@@ -9,6 +9,10 @@ import { ApiClientError } from "@/services/api";
 import { notifications } from "@/services/notifications";
 import type { NotificationPage, NotificationSummary } from "@/types/notifications";
 
+/** Background refresh while the tab is visible. Every poll re-authorizes in the database,
+ * so it stays slow; opening, focusing, reading or acting refreshes at once. */
+export const NOTIFICATION_POLL_MS = 60_000;
+
 interface NotificationState {
   locale: Locale;
   timezone: string | null;
@@ -111,7 +115,7 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
     mounted.current = true;
     const update = () => { void refresh(); };
     update();
-    const timer = setInterval(update, 15_000);
+    const timer = setInterval(update, NOTIFICATION_POLL_MS);
     window.addEventListener("focus", update);
     document.addEventListener("visibilitychange", update);
     return () => {

@@ -7,6 +7,10 @@ import { ApiClientError } from "@/services/api";
 import { notificationCentre } from "@/services/notification-centre";
 import type { CentreItem, CentrePage, CentreSummary, NotificationCategory } from "@/types/notification-centre";
 
+/** Background refresh while the tab is visible. Every poll re-authorizes in the database,
+ * so it stays slow; opening, focusing, reading or acting refreshes at once. */
+export const NOTIFICATION_POLL_MS = 60_000;
+
 type Feed = "history" | "actions";
 type Resource<T> = { data: T | null; error: string | null };
 type Cache = { history: Resource<CentrePage>; actions: Resource<CentrePage>; summary: Resource<CentreSummary> };
@@ -95,7 +99,7 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
       if (document.visibilityState === "visible") void refresh();
     });
     const visibleRefresh = () => { if (document.visibilityState === "visible") void refresh(); };
-    const timer = window.setInterval(visibleRefresh, 15000);
+    const timer = window.setInterval(visibleRefresh, NOTIFICATION_POLL_MS);
     window.addEventListener("focus", visibleRefresh);
     document.addEventListener("visibilitychange", visibleRefresh);
     return () => {

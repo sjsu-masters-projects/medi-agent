@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { NotificationProvider, useNotificationCentre } from "@/components/features/notification-provider";
+import { NOTIFICATION_POLL_MS, NotificationProvider, useNotificationCentre } from "@/components/features/notification-provider";
 import { NotificationBell, NotificationList } from "@/components/features/notification-centre";
 import AlertsPage from "@/app/(dashboard)/alerts/page";
 import { notificationCentre } from "@/services/notification-centre";
@@ -169,22 +169,24 @@ describe("clinician notification centre", () => {
     expect(screen.queryByText("Patient reported a barrier")).not.toBeInTheDocument();
   });
 
-  it("refreshes every 15 seconds only while visible, refreshes on focus, and stops on teardown", async () => {
+  it("refreshes every minute only while visible, refreshes on focus, and stops on teardown", async () => {
     vi.useFakeTimers();
     const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     const view = render(<NotificationProvider><Probe /></NotificationProvider>);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(notificationCentre.summary).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    expect(notificationCentre.summary).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS - 15000); });
     expect(notificationCentre.summary).toHaveBeenCalledTimes(2);
     visibility.mockReturnValue("hidden");
-    await act(async () => { await vi.advanceTimersByTimeAsync(30000); window.dispatchEvent(new Event("focus")); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2 * NOTIFICATION_POLL_MS); window.dispatchEvent(new Event("focus")); });
     expect(notificationCentre.summary).toHaveBeenCalledTimes(2);
     visibility.mockReturnValue("visible");
     await act(async () => { window.dispatchEvent(new Event("focus")); });
     expect(notificationCentre.summary).toHaveBeenCalledTimes(3);
     view.unmount();
-    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS); });
     expect(notificationCentre.summary).toHaveBeenCalledTimes(3);
     visibility.mockRestore();
   });
