@@ -204,6 +204,12 @@ BEGIN
  WHEN 'barrier_reported' THEN RETURN p_role='clinician' AND s->>'status'='skipped' AND s->>'barrier_code' IS NOT NULL;
  WHEN 'safety_flag' THEN RETURN p_role='clinician';
  WHEN 'med_reminder','obligation_reminder' THEN RETURN private.notification_reminder_active(s);
+ WHEN 'appointment_offered' THEN
+   -- Answered offers (accepted, declined, withdrawn, expired) no longer ask for action.
+   RETURN coalesce(s->>'status'='proposed'
+     AND private.notification_ts(s->>'scheduled_at')>clock_timestamp()
+     AND (nullif(s->>'proposal_expires_at','') IS NULL
+       OR private.notification_ts(s->>'proposal_expires_at')>clock_timestamp()),false);
  WHEN 'appointment_reminder' THEN
    SELECT to_jsonb(a) INTO s FROM public.appointments a
      WHERE a.id=private.notification_uuid(e.metadata->>'appointment_id') AND a.patient_id=e.patient_id;
@@ -273,14 +279,35 @@ BEGIN
  WHEN 'appointments' THEN
    IF TG_OP='UPDATE' AND (s->>'status',s->>'scheduled_at',s->>'patient_note',s->>'location')
      IS NOT DISTINCT FROM (o->>'status',o->>'scheduled_at',o->>'patient_note',o->>'location') THEN RETURN NEW; END IF;
-   v_kind:=CASE WHEN s->>'status'='proposed' THEN 'appointment_offered'
-     WHEN s->>'status' IN ('confirmed','declined') THEN 'appointment_response' ELSE 'appointment_changed' END;
+   -- Classified by transition, because the same status means different things: a
+   -- patient's cancel or "another time" goes to the clinician, a clinician's offer or
+   -- time change goes to the patient, and siblings withdrawn when one slot of an offer
+   -- is accepted are bookkeeping, not news. Patients can only accept, decline, ask for
+   -- another time or cancel (039, 043); everything else here is the clinician's.
+   v_kind:=CASE
+     WHEN s->>'status'='proposed' AND (TG_OP='INSERT' OR o->>'status' IS DISTINCT FROM 'proposed')
+       THEN 'appointment_offered'
+     WHEN TG_OP='UPDATE' AND o->>'status'='proposed'
+       AND s->>'status' IN ('confirmed','declined','alternative_requested','cancelled')
+       THEN 'appointment_response'
+     WHEN TG_OP='UPDATE' AND o->>'status' IN ('confirmed','scheduled') AND s->>'status'='cancelled'
+       THEN 'appointment_response'
+     WHEN TG_OP='UPDATE' AND s->>'status' IS NOT DISTINCT FROM o->>'status'
+       AND (s->>'patient_note') IS DISTINCT FROM (o->>'patient_note')
+       AND (s->>'scheduled_at',s->>'location') IS NOT DISTINCT FROM (o->>'scheduled_at',o->>'location')
+       THEN 'appointment_response'
+     WHEN s->>'status' IN ('withdrawn','completed','no_show','proposed') THEN NULL
+     ELSE 'appointment_changed' END;
+   IF v_kind IS NULL THEN RETURN NEW; END IF;
    v_category:='appointments';
    v_meta:=jsonb_build_object('appointment_id',v_id,'status',s->>'status','scheduled_at',s->>'scheduled_at');
-   SELECT clinician_id INTO v_recipient FROM public.care_teams WHERE id=(s->>'care_team_id')::uuid;
+   SELECT clinician_id INTO v_recipient FROM public.care_teams WHERE id=private.notification_uuid(s->>'care_team_id');
    v_meta:=v_meta||jsonb_build_object('clinician_id',v_recipient);
-   IF v_kind<>'appointment_response' THEN v_audience:='patient';
-   ELSE v_audience:='clinician'; END IF;
+   IF v_kind='appointment_response' THEN v_audience:='clinician'; ELSE v_audience:='patient'; END IF;
+   IF v_kind='appointment_offered' THEN
+     -- One notification per offer, however many time slots it proposes.
+     v_key:='appointments:offer:'||coalesce(s->>'proposal_group_id',v_id::text);
+   END IF;
  WHEN 'care_plan_versions','care_plan_items','care_plan_generation_requests' THEN
    IF s->>'status'='draft' AND private.notification_draft_ready(v_id) THEN
      v_kind:='care_plan_draft';
