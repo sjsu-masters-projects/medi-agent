@@ -137,7 +137,7 @@ def patient_id():
 def connect(client, patient_id, monkeypatch):
     token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
     monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = MagicMock
 
     def _connect(query: str = ""):
         suffix = f"&{query}" if query else ""
