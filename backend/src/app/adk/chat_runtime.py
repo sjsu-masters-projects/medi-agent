@@ -44,6 +44,7 @@ from google.genai import types
 
 from app.adk.agents.care_coordinator import (
     COORDINATOR_AGENT_NAME,
+    RESPONDER_AGENT_NAME,
     TOOL_ALLOWLIST,
     build_care_coordinator,
     route_for_intent,
@@ -54,6 +55,7 @@ from app.adk.runner import build_runner
 from app.adk.tools import (
     DOCUMENT_CONTEXT_STATE_KEY,
     PATIENT_ID_STATE_KEY,
+    RECENT_CONVERSATION_STATE_KEY,
     TRIAGE_DECISION_STATE_KEY,
 )
 from app.config import settings
@@ -131,7 +133,8 @@ class CareCoordinatorRuntime:
 
     async def _ensure_session(
         self, *, user_id: str, session_id: str, state: dict[str, Any]
-    ) -> None:
+    ) -> list[Any]:
+        """Create the session if needed; return its prior events for the recap."""
         service = self.runner.session_service
         existing = await service.get_session(
             app_name=APP_NAME, user_id=user_id, session_id=session_id
@@ -140,6 +143,8 @@ class CareCoordinatorRuntime:
             await service.create_session(
                 app_name=APP_NAME, user_id=user_id, session_id=session_id, state=state
             )
+            return []
+        return list(getattr(existing, "events", None) or [])
 
     async def process_stream(
         self,
@@ -168,11 +173,16 @@ class CareCoordinatorRuntime:
         if floor is not None:
             yield _classification(floor.intent, floor.urgency, floor.reason, True)
 
-        await self._ensure_session(
+        prior_events = await self._ensure_session(
             user_id=user_id,
             session_id=session_id,
             state={PATIENT_ID_STATE_KEY: patient_id, LOCALE_STATE_KEY: language},
         )
+        turn_state: dict[str, Any] = {
+            RECENT_CONVERSATION_STATE_KEY: recent_conversation(prior_events)
+        }
+        if document_context is not None:
+            turn_state[DOCUMENT_CONTEXT_STATE_KEY] = document_context
 
         classified = floor is not None
         answer = ""
@@ -183,11 +193,7 @@ class CareCoordinatorRuntime:
                 user_id=user_id,
                 session_id=session_id,
                 new_message=types.Content(role="user", parts=[types.Part(text=text)]),
-                state_delta=(
-                    {DOCUMENT_CONTEXT_STATE_KEY: document_context}
-                    if document_context is not None
-                    else {}
-                ),
+                state_delta=turn_state,
                 run_config=RunConfig(streaming_mode=StreamingMode.SSE),
             )
             async with asyncio.timeout(settings.chat_turn_timeout_seconds):
@@ -252,6 +258,32 @@ class CareCoordinatorRuntime:
             return
 
         yield {"type": "complete", "response_text": answer, "fallback_used": False}
+
+
+_RECAP_TURNS = 3
+_RECAP_CHARS = 280
+
+
+def recent_conversation(events: list[Any]) -> str:
+    """The last few patient messages and Nora replies as plain text, for the coordinator.
+
+    Tool calls, tool results and internal notes are left out on purpose: replaying them
+    is what made the coordinator skip the current turn's decision.
+    """
+    lines: list[str] = []
+    for event in events:
+        if getattr(event, "partial", False):
+            continue
+        author = getattr(event, "author", "")
+        speaker = (
+            "Patient" if author == "user" else "Nora" if author == RESPONDER_AGENT_NAME else None
+        )
+        text = " ".join(_text_of(event).split())
+        if speaker and text:
+            clipped = text if len(text) <= _RECAP_CHARS else text[: _RECAP_CHARS - 1] + "…"
+            lines.append(f"{speaker}: {clipped}")
+    recent = lines[-2 * _RECAP_TURNS :]
+    return "\n".join(recent) if recent else "(none: this is the first message)"
 
 
 def _apply_floor_rules(decision: dict[str, Any], message: str) -> tuple[str, str, str, bool]:

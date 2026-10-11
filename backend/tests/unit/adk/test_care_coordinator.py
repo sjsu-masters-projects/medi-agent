@@ -265,3 +265,12 @@ def test_the_pipeline_runs_with_every_runtime_guarantee_attached(
             "submit_triage_decision",
         }
     )
+
+
+def test_the_coordinator_decides_each_message_from_a_recap_not_raw_history(
+    coordinator: LlmAgent,
+) -> None:
+    """Replaying earlier tool calls made the model skip the current turn's decision."""
+    assert coordinator.include_contents == "none"
+    assert "{temp:recent_conversation?}" in coordinator.instruction
+    assert "call submit_triage_decision exactly once" in coordinator.instruction
