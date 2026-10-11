@@ -39,6 +39,23 @@ fetched and last checked it. Public reference text only; no patient data.
   patient counselling.
 - MedlinePlus Connect by RxCUI for medications and the topic search for conditions, in both
   languages.
+- Condition topics (fix, 2026-10-11; the weekly seed found 13 of 29 lookups missing or
+  matched poorly):
+  - The English index is searched first with the name as stored, the Spanish index only
+    when English has no match (records can hold Spanish names such as "diabetes tipo 2").
+  - Ten hits are scored by title and alternate titles: the same words, then every word
+    asked about, then a broader topic named in at least half the name ("Cholesterol" for
+    "high cholesterol"). A topic sharing only a word is never accepted, and a general topic
+    beats one for a narrower audience or a how-to ("High Blood Pressure" over "How to
+    Prevent High Blood Pressure").
+  - With no acceptable general topic, the search is retried once without a short,
+    documented list of severity, course, side and body-site qualifiers ("mild persistent
+    asthma" → "asthma", "osteoarthritis of the knee" → "osteoarthritis").
+  - The other language is MedlinePlus's own twin page at the same slug (`/<slug>.html` and
+    `/spanish/<slug>.html`), never a translation. It is read from that language's index by
+    URL, searching with the topic's title and then with the twin page's `<title>`, read from
+    the page head only. No twin is `not_found`; English text is never stored as Spanish.
+  - At most about seven requests per subject and language, within the existing budgets.
 - On a miss, a tool call fetches and caches with a short timeout. The weekly job re-checks
   every cached subject last checked more than six days ago and seeds active medications and
   documented conditions with no cached text (conditions in en-US and es-MX), refreshing
@@ -52,7 +69,7 @@ guess.
 | # | Stage | Check | On failure |
 | --- | --- | --- | --- |
 | 1 | **Decide to retrieve** (coordinator) | Retrieve only for a medication, condition or document question. A symptom or side-effect message is triaged first; the safety floor runs before any model. | Without a retrieval Nora answers from the record only, or says she does not have the information. |
-| 2 | **Resolve the subject** | Medication: match the patient's own active medications first (exact, then fuzzy name match). Otherwise RxNorm exact match, then approximate match, which is accepted only if the matched name shares a word (similarity ≥ 0.8) with what was asked ("hydration" must not become chloral hydrate). Combination products currently report no match (see the safety review below). Condition: patient's conditions first, then a MedlinePlus topic whose title or alternate title matches. | `not_found`: Nora says she could not find reliable information for that name and asks which medication was meant. |
+| 2 | **Resolve the subject** | Medication: match the patient's own active medications first (exact, then fuzzy name match). Otherwise RxNorm exact match, then approximate match, which is accepted only if the matched name shares a word (similarity ≥ 0.8) with what was asked ("hydration" must not become chloral hydrate). Combination products currently report no match (see the safety review below). Condition: patient's conditions first, then the best-scoring MedlinePlus topic by title and alternate titles (see Knowledge), and its twin page for the other language. | `not_found`: Nora says she could not find reliable information for that name and asks which medication was meant. |
 | 3 | **Fetch from sources** | NLM HTTPS hosts only (allowlist). 6 s per request and 8 s total inline. Responses are size-capped, HTML is stripped, and the shape is validated. A DailyMed label must be single-ingredient, with the ingredient named in its title. Label sections are chosen by LOINC code. | A network or timeout error is `unavailable`, never cached as "not found". |
 | 4 | **Cache and freshness** | Rows hold `checked_at`, the source version and date, and a content hash. A row checked within 7 days is served from the cache. A miss (`not_found`) is retried after 7 days. A source that does not answer leaves the old row in place. | If a cached row is older than 30 days and the source is down, it is served with its "as of" date and marked stale. |
 | 5 | **Return to the model** | Each tool result shows provenance first: source, title, URL, date, language and `on_patient_list`. Excerpts are bounded (about 1,800 characters per section) and fenced as reference data, never instructions. **Label dosage sections are never returned**: a label's dose ranges are not this patient's prescription. | — |
