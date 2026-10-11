@@ -8,9 +8,8 @@ This guide provides comprehensive information about testing practices, patterns,
 
 ### Minimum Coverage Threshold
 
-- **Overall Coverage**: 80% minimum (enforced in CI/CD)
-- **Current Coverage**: 83.95%
-- **Coverage Report**: Generated in `htmlcov/` directory after running tests
+- **Overall Coverage**: 80% minimum (`--cov-fail-under=80`, enforced in CI)
+- **HTML report**: `./scripts/generate_html_coverage.sh` writes `backend/htmlcov/`
 
 ### Running Tests with Coverage
 
@@ -31,7 +30,7 @@ Coverage settings are defined in `pyproject.toml`:
 
 ```toml
 [tool.pytest.ini_options]
-addopts = "-v --tb=short --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=80"
+addopts = "-v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 source = ["src"]
@@ -48,12 +47,31 @@ omit = [
 ```
 backend/tests/
 ├── unit/                    # Unit tests (isolated, mocked dependencies)
-│   ├── services/           # Service layer tests
-└── integration/            # Integration tests (multiple components)
-    ├── routers/           # API endpoint tests
-    ├── test_middleware.py # Middleware tests
-    └── test_mock_validation.py # Mock validation tests
+│   ├── adk/                 # Agent runtime, registry, tools and plugins
+│   ├── services/            # Service layer tests
+│   ├── safety/              # Deterministic triage floor and escalation
+│   ├── workers/             # Cloud Run Job entry points
+│   └── ...                  # agents, clients, core, db, followup, middleware, pharmacovigilance, scripts, tools, utils
+├── integration/             # Integration tests (multiple components)
+│   ├── routers/             # API endpoint tests
+│   ├── test_*_postgres.py   # Opt-in real PostgreSQL contract suites
+│   ├── test_middleware.py
+│   └── test_mock_validation.py
+└── fixtures/                # Synthetic documents, eval, Nora and PAT-005 fixtures
 ```
+
+### Opt-in PostgreSQL suites
+
+These run real migrations against disposable PostgreSQL 16 and skip unless enabled:
+
+| Suite | Enable with |
+|-------|-------------|
+| `integration/test_care_conversation_postgres.py` | `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` (official `postgres:16` image) |
+| `integration/test_notification_centre_postgres.py` | `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` (official `postgres:16` image) |
+| `integration/test_care_plan_postgres.py` | `CARE_PLAN_TEST_POSTGRES=1` (local `initdb`/`pg_ctl`), plus `CARE_PLAN_TEST_POSTGRES_DOCKER=1` to use Docker instead |
+| `integration/test_appointment_offer_transactions.py` | Runs when PostgreSQL server binaries are on `PATH`; skips otherwise |
+
+Run them for any migration with functions or triggers; mocked RPC tests cannot see SQL bugs.
 
 ## Testing Patterns
 
@@ -262,33 +280,17 @@ async def test_multiple_calls():
 
 ## Running Tests in CI/CD
 
-Tests are automatically run in GitHub Actions on every push and pull request.
-
-**CI Configuration** (`.github/workflows/backend-tests.yml`):
-
-```yaml
-- name: Run tests with coverage
-  run: |
-    cd backend
-    python -m pytest tests/ --cov=app --cov-fail-under=80
-```
+`.github/workflows/ci.yml` runs the backend tests on every push and pull request in four
+sharded jobs (`integration-routers`, `integration-workflows`, `unit-foundation`,
+`unit-services`) without coverage, plus a full-suite coverage job that enables the Docker
+PostgreSQL suites and enforces the 80% threshold.
 
 ## Pre-commit Hooks
 
-Pre-commit hooks ensure tests pass before committing code.
-
-**Setup:**
-
-```bash
-# Install pre-commit
-pip install pre-commit
-
-# Install hooks
-pre-commit install
-
-# Run manually
-pre-commit run --all-files
-```
+Husky and lint-staged (root `package.json`) run on staged files at commit time: Ruff
+check/format and mypy for `backend/src/**/*.py` (using `backend/.venv`), and ESLint for
+portal TypeScript. They do not run the test suite. Install them with `npm ci` at the
+repository root.
 
 ## Troubleshooting
 

@@ -49,12 +49,10 @@ lockstep. A client-provided MIME type is never sufficient evidence of file type.
    browser upload is not a safety verdict.
 2. Keep uploaded objects private, scope every read to the owning patient or an assigned
    clinician, and retain immutable source/hash/provenance.
-3. Scan uploaded source files before broad production rollout; never treat a successful
-   browser upload as a safety verdict.
-4. Limit preview generation to the documented resource budget. Failure to generate a
+3. Limit preview generation to the documented resource budget. Failure to generate a
    preview is a reviewable operational state, not permission to serve an arbitrary original
    inline.
-5. Exercise the synthetic corpus against valid PDFs, scans, multi-frame TIFF, malformed and
+4. Exercise the synthetic corpus against valid PDFs, scans, multi-frame TIFF, malformed and
    encrypted PDFs, signed-URL expiry, and authorization denial in both portals.
 
 This policy does not claim support for arbitrary healthcare files. FHIR/CDA/DICOM are

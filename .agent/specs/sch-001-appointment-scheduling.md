@@ -454,8 +454,7 @@ visits and ignore old loads/responses. Clinician history shows deadlines and per
 
 ### Rollout and steps to see the changes
 
-1. Use `.worktrees/clinician-scheduling`; the original checkout is preserved.
-   Review the read-only `backend/scripts/appointment-booking-preflight.sql` in the
+1. For a new environment, review the read-only `backend/scripts/appointment-booking-preflight.sql` in the
    synthetic development database. It must return no overlap pairs before 043 can
    succeed. Existing overlapping bookings require a separately reviewed resolution;
    this slice never cancels or deletes them automatically.
@@ -463,12 +462,8 @@ visits and ignore old loads/responses. Clinician history shows deadlines and per
    `043_appointment_booking_guards.sql` through the existing filename/checksum
    migration ledger. Apply schema before activating the new backend. The extension
    `btree_gist` is required. See the Supabase setup guide for the authorized rollout
-   process. These files were tested only on disposable local PostgreSQL, not applied
-   to remote Supabase. The original 038–041 migration bytes are unchanged.
-3. Restart the backend using this checkout's `backend/src` and the existing local
-   backend configuration. Both portal servers now serve this checkout on ports
-   3000/3001; the port-8000 backend still serves the previous checkout until the
-   migrations are applied and the new backend is deliberately activated.
+   process. Both were applied to the synthetic Supabase project on 2026-10-03.
+3. Run the backend and both portals (ports 8000, 3000 and 3001) from current `main`.
 4. As Elena, offer Maya two future times, then as Maya accept the first. For the
    proposed example, October 5, 2026 09:00 in America/Los_Angeles is
    `2026-10-05T16:00:00Z`; a 30-minute booking ends at 09:30.

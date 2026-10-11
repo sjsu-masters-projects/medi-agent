@@ -62,18 +62,20 @@ approves them; neither the generated files nor the AI worker may publish them.
 ## Chat and weekday regression checks
 
 The patient assistant is **Nora**, explicitly labeled "AI care assistant" in en-US
-and "Asistente de cuidado con IA" in es-MX. Its conversation and the read-only
-care-team message view are separate. The latter does not imply a two-way clinical
-messaging channel: replies still require direct contact with the clinic. Voice
-capture/processing/playback must finish before switching to that view.
+and "Asistente de cuidado con IA" in es-MX. Its conversation and the care-team
+messages view are separate. Two-way care-team threads shipped in COM-001-B (#139);
+older one-way clinician messages stay in a read-only historical section of patient
+Chat and in the clinician's collapsed **Earlier messages**, and notifications appear in
+the notification centre (NOT-001/NOT-002). Voice capture/processing/playback must
+finish before switching views.
 
 Clinician inbox escalation notices remain stored for clinician review. Their
 reserved subject/body signature is excluded from patient delivery and again
 filtered by the client during staggered rollout. Patient UUIDs remain structured
 metadata, not text in new operational alert bodies. Existing stored alerts and
-historical assistant conversations are not rewritten or deleted. The current
-delivery query remains bounded to the latest 20 inbox rows; alerts within that
-window can reduce the number of available clinician-authored messages.
+historical assistant conversations are not rewritten or deleted. The patient's
+historical section is still read from the latest 20 `clinician_messages` rows; alerts
+within that window can reduce the number of older clinician-authored messages shown.
 
 After deployment, verify the following using only this synthetic patient:
 
