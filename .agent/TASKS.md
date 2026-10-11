@@ -35,10 +35,12 @@ editing this board.
 | Area | Current state | Remaining boundary |
 | --- | --- | --- |
 | Main deployment | `ce3799a`, [#140](https://github.com/sjsu-masters-projects/medi-agent/pull/140) merged; October 10 main CI/backend deployment and both portal commit statuses succeeded | Deployment signals do not prove every screen was retested. |
-| PAT-005 core | Synthetic Morgan/Elena loop verified live, including V2 continuity, six barriers, audit, Spanish V3 and non-scheduled-day absence | V3 active; V4 is an unpublished overlap-blocked draft. Presentation follow-up is separate. |
+| PAT-005 core | Synthetic Morgan/Elena loop verified live, including V2 continuity, six barriers, audit, Spanish V3 and non-scheduled-day absence | V4 approved October 10 in English and Spanish under LOC-001 after removing a duplicate-upload overlap ([evidence](specs/loc-001-bilingual-approved-wording.md#verification--2026-10-10-synthetic-environment)). Presentation follow-up is separate. |
 | Patient-upload review | [#138](https://github.com/sjsu-masters-projects/medi-agent/pull/138) deployed; pending/rejected exclusion, approval eligibility/queue handoff and exact-document link verified | Negative preview/publication guards have API/PostgreSQL evidence, not a newly repeated live blocked publication. |
 | Human messaging | [#139](https://github.com/sjsu-masters-projects/medi-agent/pull/139) deployed; migration checked; bilingual replies, actual sender/clinic, unread and reload persistence verified | Concurrency/reassignment/multiple-recipient isolation tested in isolated PostgreSQL, not repeated by the four-message live run. |
 | Portal polish | [#141](https://github.com/sjsu-masters-projects/medi-agent/pull/141) merged at `657602d`; original local checks: 372 patient + 260 clinician tests and both app checks pass | Authenticated deployed UI checks remain separate from merge; UX-002 replaces the visual direction. |
+| Reference redesign | [#144](https://github.com/sjsu-masters-projects/medi-agent/pull/144) merged at `a36fc37`; responsive and wording follow-up in [#145](https://github.com/sjsu-masters-projects/medi-agent/pull/145) | Authenticated deployed screen recheck not yet recorded. |
+| Synthetic database schema | Migration 049 (LOC-001) applied October 10 with requester authorization, ahead of #145 deployment; bilingual refresh applied ([evidence](specs/loc-001-bilingual-approved-wording.md#verification--2026-10-10-synthetic-environment)) | Until #145 deploys, the deployed clinician review screen cannot approve care plans. The ledger holds 59 rows against 58 files on `main` + #145; the extra `047_adr_patient_information_loop.sql` comes from #136. |
 | Patient symptoms | #141 removes hard-coded examples and routes Today directly to Nora | No connected patient timeline of confirmed reports; raw chat capture is not a complete confirmation workflow. |
 | ADR patient information loop | Ganesh's [#136](https://github.com/sjsu-masters-projects/medi-agent/pull/136) open, conflicting; author reports staging migration and authenticated local-branch acceptance | Not merged or deployed on canonical apps. |
 
@@ -53,8 +55,8 @@ This is prototype acceptance, not clinical/compliance/production certification.
 | Issue | Priority | Status | Owner | Next observable result |
 | --- | --- | --- | --- | --- |
 | UX-001 — Both portal UI/UX polish | P1 | Verify deployed | Rajeev; patient/clinician lane review | #141 merged; recheck authenticated screens at narrow widths and both patient locales after deployment. |
-| UX-002 — Reference-led portal redesign | P1 | In review | Rajeev | [Requirements](specs/ux-002-reference-redesign.md): Foundation #142 and patient #143 merged → reference overhaul PR rebuilds patient screens and all clinician screens (tokens, shell, Risk Radar, roster, care-plan review, ADR, queues, appointments, messages, settings, entry). [Overhaul checks](../docs/ux-002-overhaul-verification.md). Routes/API/clinical gates unchanged. Follow-up: [LOC-001](specs/loc-001-bilingual-approved-wording.md). |
-| LOC-001 — One language setting, bilingual approved wording | P1 | In review | Rajeev | [Spec](specs/loc-001-bilingual-approved-wording.md): care-plan wording drafted and approved in en-US and es-MX together; frequency codes; Today/Reminders follow `preferred_language`; bilingual refresh of active plans through the normal review. Built on `feature/bilingual-care-plan-wording` with migration 049, the translation workload, the side-by-side review and locale-aware Today/Reminders; local checks pass. Migration 049 and the refresh applied to the synthetic environment with authorization; v4 reviewed and approved bilingually ([verification](specs/loc-001-bilingual-approved-wording.md#verification--2026-10-10-synthetic-environment)). Deploy pending: the deployed review screen cannot approve until this ships. |
+| UX-002 — Reference-led portal redesign | P1 | In review | Rajeev | [Requirements](specs/ux-002-reference-redesign.md): #142, #143 and the reference overhaul [#144](https://github.com/sjsu-masters-projects/medi-agent/pull/144) merged ([overhaul checks](../docs/ux-002-overhaul-verification.md)). Responsive/wording pass (entry screens, Messages, patient tabs, care-plan approval bar, ADR, Documents, Today, Profile) is in [#145](https://github.com/sjsu-masters-projects/medi-agent/pull/145). Next: merge #145, then an authenticated deployed recheck at phone and desktop widths. |
+| LOC-001 — One language setting, bilingual approved wording | P1 | In review | Rajeev | [Spec](specs/loc-001-bilingual-approved-wording.md) · [#145](https://github.com/sjsu-masters-projects/medi-agent/pull/145): care-plan wording drafted and approved in en-US and es-MX together; Today/Reminders follow `preferred_language`; existing plans refreshed through normal review. Synthetic-environment migration, refresh and bilingual V4 approval recorded ([evidence](specs/loc-001-bilingual-approved-wording.md#verification--2026-10-10-synthetic-environment)). Next: #145 CI/review/merge and deployment, then the deployed checks below. |
 | PAT-005-L — Presentation recheck | P1 | Verify deployed | Rajeev | Confirm #140 saved-locale Today controls and duplicate-skipped explanations in both document surfaces; sources/history unchanged. |
 | PV-001-B — ADR patient answers | P1 | Blocked | Ganesh | Resolve #136 conflicts, integrate current chat/language UI, reverify and request review; canonical rollout acceptance then follows. |
 | PAT-002-B — Confirmed symptom intake | P1 | Ready | Unassigned; Tushar + Ganesh lanes | Inventory existing capture, implement missing draft → correct/review → patient confirmation boundary with bilingual tests. |
@@ -82,7 +84,7 @@ this is functional demonstration, not independent clinical validation.
 - [x] Inventory core live screens and source/test-review remaining entry/import routes.
 - [x] Simplify duplicate/technical content while retaining clinical instructions and evidence identity.
 - [x] One saved patient en-US/es-MX interface language; clinician controls English.
-- [x] Approved clinical wording/history unchanged; language switching does not translate/publish a plan.
+- [x] Approved clinical wording/history unchanged; language switching does not translate/publish a plan. (Superseded for care-plan wording by LOC-001: both languages are approved together.)
 - [x] Responsive layouts, tap/keyboard help, refresh/recovery and accessible dialogs.
 - [x] Four workstream reviews/cross-review fixes integrated; 632 tests and both app checks pass.
 - [x] Remove fabricated timeline; Today opens Nora directly, old Symptoms URL is an honest compact handoff.
@@ -94,14 +96,27 @@ Patient symptom history, existing MFA lookup-failure handling and dashboard
 unknown-versus-zero API ambiguity are documented limits.
 [Scope and evidence](../docs/portal-ui-ux-review-2026-10-10.md).
 
+### LOC-001 acceptance
+
+- [x] A draft from Spanish sources shows Spanish (from source) and English (AI translation) side by side; approval stays blocked until every item is checked in both languages.
+- [x] A translation that changes a number, dose or medication name is discarded and leaves the item untranslated for retry or manual wording.
+- [x] Approval projects both languages and the audit event records each item's source language and wording origin.
+- [x] Today and Reminders render approved wording in the saved language with identical completion state; reminder scheduling is unchanged.
+- [x] Older single-language items are labelled with their language instead of mixing silently.
+- [x] Existing plans refreshed by review only: open draft translated, approved single-language plan re-drafted; no approved row edited.
+- [x] Local checks (backend, PostgreSQL contract, both portals and builds) and synthetic-environment verification ([evidence](specs/loc-001-bilingual-approved-wording.md#verification--2026-10-10-synthetic-environment)).
+- [ ] #145 CI, review and merge; deployment.
+- [ ] Deployed: approve a bilingual draft from the clinician portal and switch the patient's saved language in Profile, observing Today change. (Spanish was verified read-only server-side, not through the Profile switch.)
+- [ ] Clinician review of the second synthetic patient's bilingual V3 draft (left for a clinician decision).
+
 ### PAT-005-L acceptance
 
-- [ ] Saved es-MX updates Today chrome/actions/barriers; reviewed wording and reminder times stay unchanged.
+- [ ] Saved es-MX updates Today chrome/actions/barriers and, since LOC-001, approved bilingual wording; reminder times stay unchanged.
 - [ ] Duplicate fixture displays skipped extraction in patient Records and clinician Documents/Review Queue, with source accessible and no false empty-facts review.
 - [ ] Record these observations in the acceptance report, then close this slice.
 
-#140 is deployed. No new migration/reset/publication needed. Keep V3 active;
-V4 publication is not a QA requirement.
+#140 is deployed. No new migration/reset/publication needed. V4 is now active,
+approved in both languages under LOC-001; V3 history is preserved.
 
 ### PV-001-B acceptance
 
@@ -168,6 +183,7 @@ not a claim that every task is personally claimed.
 | PAT-002-B | P1 | Ready | Unassigned | Reviewed question library, attributable draft, correct/confirm/cancel, bounded retrieval and ownership. |
 | PAT-002-C | P2 | Blocked | Unassigned | B's report contract, real patient timeline and authorized clinician detail; no invented history. |
 | PAT-003 | P1 | In progress | Tushar; Jeevan review | #141 global locale rollout; bilingual voice/errors/consent and high-risk wording review. |
+| LOC-002 | P2 | Backlog | Unassigned; patient + runtime lanes | LOC-001 follow-ups ([spec](specs/loc-001-bilingual-approved-wording.md)): notifications and Today errors from codes; sign-up saves the guest language and the server renders `lang` without an English flash; one label set for the two locales; clinician patient-language chip and per-message language; chat locale from the profile including mid-session switches; cached per-locale document explanations; one Spanish register. |
 | PAT-004 | P2 | In progress | Rajeev + runtime/patient lanes | Per-turn visible focus/provenance and route/reconnect/unavailable-source acceptance. |
 | PAT-PROFILE-001 | P2 | In review | Patient lane | #141 optional gender/unset presentation, then save/reload verification; not required signup data. |
 | REC-001 | P2 | In progress | Rajeev + Jeevan | Remaining correction/deletion/projection paths, sourced display titles and recovery matrix; extraction/viewers already exist. |
