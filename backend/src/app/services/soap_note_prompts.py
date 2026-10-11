@@ -35,12 +35,13 @@ def format_adherence(adherence: dict[str, Any]) -> str:
             return "no logs recorded"
         return f"{adherence.get(key, 0):.0%}"
 
+    streak = int(adherence.get("current_streak_days", 0) or 0)
     return "\n".join(
         [
             f"- Overall Score: {score('overall_score', 'log_count')}",
             f"- Medication Score: {score('medication_score', 'medication_log_count')}",
             f"- Obligation Score: {score('obligation_score', 'obligation_log_count')}",
-            f"- Current Streak: {adherence.get('current_streak_days', 0)} days",
+            f"- Current Streak: {streak} day{'' if streak == 1 else 's'}",
         ]
     )
 

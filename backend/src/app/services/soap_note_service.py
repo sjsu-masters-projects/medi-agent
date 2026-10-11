@@ -57,6 +57,11 @@ async def _execute(query: Any) -> Any:
     return await asyncio.to_thread(query.execute)
 
 
+# Medications are logged as "taken" and activities as "completed"; both are done.
+# Counting only "completed" reported every medication as 0% adherent.
+DONE_STATUSES = frozenset({"completed", "taken"})
+
+
 def calculate_adherence_stats(logs: list[dict[str, Any]]) -> dict[str, Any]:
     """Summarise adherence logs into the four figures the prompt reports."""
     if not logs:
@@ -72,12 +77,12 @@ def calculate_adherence_stats(logs: list[dict[str, Any]]) -> dict[str, Any]:
         }
 
     total = len(logs)
-    completed = sum(1 for log in logs if log.get("status") == "completed")
+    completed = sum(1 for log in logs if log.get("status") in DONE_STATUSES)
     med_logs = [log for log in logs if log.get("target_type") == "medication"]
     obl_logs = [log for log in logs if log.get("target_type") == "obligation"]
 
-    med_completed = sum(1 for log in med_logs if log.get("status") == "completed")
-    obl_completed = sum(1 for log in obl_logs if log.get("status") == "completed")
+    med_completed = sum(1 for log in med_logs if log.get("status") in DONE_STATUSES)
+    obl_completed = sum(1 for log in obl_logs if log.get("status") in DONE_STATUSES)
 
     return {
         "overall_score": completed / total if total else 0.0,
@@ -99,7 +104,7 @@ def calculate_current_streak_days(logs: list[dict[str, Any]]) -> int:
             continue
         day = logged_at[:10]
         by_day_completed[day] = by_day_completed.get(day, False) or (
-            log.get("status") == "completed"
+            log.get("status") in DONE_STATUSES
         )
 
     if not by_day_completed:

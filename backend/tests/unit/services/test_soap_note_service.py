@@ -417,3 +417,17 @@ def test_soap_prompt_reports_missing_adherence_logs_instead_of_zero_percent() ->
     )
     assert "- Medication Score: 100%" in partial
     assert "- Obligation Score: no logs recorded" in partial
+
+
+def test_taken_medication_doses_count_as_adherent() -> None:
+    """Regression: medication logs use "taken", which was reported as 0% adherence."""
+    logs = [
+        {"target_type": "medication", "status": "taken", "logged_at": "2026-10-09T08:00:00Z"},
+        {"target_type": "medication", "status": "taken", "logged_at": "2026-10-10T08:00:00Z"},
+        {"target_type": "medication", "status": "skipped", "logged_at": "2026-10-10T18:00:00Z"},
+        {"target_type": "obligation", "status": "completed", "logged_at": "2026-10-10T09:00:00Z"},
+    ]
+    stats = calculate_adherence_stats(logs)
+    assert stats["medication_score"] == pytest.approx(2 / 3)
+    assert stats["overall_score"] == pytest.approx(3 / 4)
+    assert stats["current_streak_days"] == 2
