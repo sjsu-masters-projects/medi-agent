@@ -2,11 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import {
-  HiOutlineCloudArrowUp,
-  HiOutlineDocumentText,
-  HiOutlineXMark,
-} from "react-icons/hi2";
+import { Icon } from "@/components/ui/icons";
+import { LiveDot, ProcessingDots } from "@/components/ui/motion";
 import { DocumentType } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
 
@@ -286,11 +283,11 @@ export function DocumentUploadZone({
   return (
     <div className="space-y-4">
       <label className="block" htmlFor="upload-document-type">
-        <span className="mb-1 block text-sm font-medium text-ink-2">
+        <span className="mb-1.5 block text-[13px] font-medium text-ink-2">
           Document type
         </span>
         <select
-          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          className="h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]"
           id="upload-document-type"
           onChange={(e) => setDocumentType(parseDocumentType(e.target.value))}
           value={documentType}
@@ -305,10 +302,10 @@ export function DocumentUploadZone({
 
       {/* Drop zone */}
       <div
-        className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 transition-colors ${
+        className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-[1.5px] border-dashed px-6 py-10 transition-colors duration-[160ms] ${
           dragging
             ? "border-primary bg-primary-tint"
-            : "border-line-strong bg-surface-2 hover:border-primary-line hover:bg-primary-tint/30"
+            : "border-line-strong bg-surface-2 hover:border-primary-line hover:bg-primary-tint/40"
         }`}
         id="clinician-upload-zone"
         onDragLeave={handleDragLeave}
@@ -323,14 +320,20 @@ export function DocumentUploadZone({
         }}
         aria-label="Upload patient documents"
       >
-        <HiOutlineCloudArrowUp
+        <span
           aria-hidden="true"
-          className={`h-10 w-10 ${dragging ? "text-primary" : "text-muted"}`}
-        />
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-colors duration-[160ms] ${
+            dragging
+              ? "border-primary-line bg-surface text-primary"
+              : "border-line bg-surface text-muted"
+          }`}
+        >
+          <Icon name="up" className="h-6 w-6" />
+        </span>
         <div className="text-center">
-          <p className="text-sm font-medium text-ink-2">
+          <p className="text-sm font-medium text-ink">
             Drop files here or{" "}
-            <span className="text-primary underline">browse</span>
+            <span className="font-semibold text-primary underline underline-offset-2">browse</span>
           </p>
           <p className="mt-1 text-xs text-muted">
             PDF, JPG, PNG, WebP, or TIFF — max {MAX_SIZE_MB}MB per file
@@ -350,49 +353,58 @@ export function DocumentUploadZone({
       </div>
 
       {validationError && (
-        <p className="text-sm text-risk-ink" role="alert">
-          {validationError}
+        <p
+          className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
+          role="alert"
+        >
+          <Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{validationError}</span>
         </p>
       )}
 
       {/* File queue */}
       {queue.length > 0 && (
-        <ul aria-label="Files queued for upload" className="space-y-2">
+        <ul
+          aria-label="Files queued for upload"
+          className="overflow-hidden rounded-xl border border-line bg-surface"
+        >
           {queue.map((item) => (
             <li
-              className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3"
+              className="ma-enter flex items-center justify-between gap-3 border-b border-line px-4 py-3 last:border-b-0"
               key={item.id}
             >
-              <div className="flex items-center gap-3">
-                <HiOutlineDocumentText
+              <div className="flex min-w-0 items-center gap-3">
+                <span
                   aria-hidden="true"
-                  className="h-5 w-5 shrink-0 text-primary"
-                />
-                <div>
-                  <p className="text-sm font-medium text-ink">
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-primary-tint text-primary"
+                >
+                  <Icon name="file" className="h-[18px] w-[18px]" />
+                </span>
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-medium text-ink">
                     {item.file.name}
                   </p>
-                  <p className="text-xs text-muted">
+                  <p className="font-mono text-xs text-muted">
                     {(item.file.size / 1024).toFixed(1)} KB
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-2">
                 {/* Status pill */}
                 {item.status === UploadStatus.UPLOADING && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-ai-tint px-2.5 py-0.5 text-xs font-medium text-primary">
-                    <span className="animate-pulse">●</span> Uploading
+                  <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-primary-tint px-2 py-1 text-xs font-medium text-primary">
+                    <LiveDot color="#2563EB" /> Uploading
                   </span>
                 )}
                 {item.status === UploadStatus.DONE && (
-                  <span className="inline-flex items-center rounded-full bg-ok-tint px-2.5 py-0.5 text-xs font-medium text-ok-ink">
+                  <span className="inline-flex items-center rounded-[7px] bg-ok-soft px-2 py-1 text-xs font-medium text-ok-ink">
                     ✓ Done
                   </span>
                 )}
                 {item.status === UploadStatus.ERROR && (
                   <div className="text-right">
-                    <span className="inline-flex items-center rounded-full bg-risk-tint px-2.5 py-0.5 text-xs font-medium text-risk-ink">
+                    <span className="inline-flex items-center rounded-[7px] bg-risk-soft px-2 py-1 text-xs font-medium text-risk-ink">
                       ✕ Failed
                     </span>
                     <p className="mt-1 max-w-56 text-xs text-risk-ink" role="alert">
@@ -405,11 +417,11 @@ export function DocumentUploadZone({
                 {item.status !== UploadStatus.UPLOADING && (
                   <button
                     aria-label={`Remove ${item.file.name}`}
-                    className="rounded p-1 text-muted hover:bg-sunken hover:text-ink-2"
+                    className="ma-press inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink"
                     onClick={() => removeFromQueue(item.id)}
                     type="button"
                   >
-                    <HiOutlineXMark aria-hidden="true" className="h-4 w-4" />
+                    <Icon name="close" aria-hidden="true" className="h-4 w-4" />
                   </button>
                 )}
               </div>
@@ -421,12 +433,13 @@ export function DocumentUploadZone({
       {/* Upload button */}
       {queue.some((item) => item.status === UploadStatus.PENDING) && (
         <button
-          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+          className="ma-press inline-flex h-[42px] w-full items-center justify-center gap-2 rounded-[10px] bg-primary px-[18px] text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]"
           disabled={uploading}
           id="clinician-upload-submit"
           onClick={handleUpload}
           type="button"
         >
+          {uploading ? <ProcessingDots className="bg-[#94A3B8]" /> : null}
           {uploading
             ? "Uploading..."
             : `Upload ${queue.filter((q) => q.status === UploadStatus.PENDING).length} file(s)`}

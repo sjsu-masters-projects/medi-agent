@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import { api } from "@/services/api";
 import type { Locale } from "@/types";
 import {
@@ -67,18 +68,24 @@ function CalendarDownload({
   }
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <Button
         variant="secondary"
+        size="sm"
         disabled={disabled || loading}
         onClick={download}
       >
+        <Icon name="download" className="h-3.5 w-3.5" />
         {loading ? copy.downloading : copy.download}
       </Button>
-      <p className="text-xs text-muted">{copy.notice}</p>
+      <p className="min-w-0 flex-1 text-xs text-muted">{copy.notice}</p>
       {error && (
-        <p role="alert" className="text-sm text-risk-ink">
-          {copy.error}
+        <p
+          role="alert"
+          className="flex w-full items-start gap-2 rounded-[10px] border border-risk-line bg-risk-soft px-3 py-2 text-[13px] text-risk-ink"
+        >
+          <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{copy.error}</span>
         </p>
       )}
     </div>

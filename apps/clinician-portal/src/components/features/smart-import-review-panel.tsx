@@ -1,18 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  HiOutlineArrowPath,
-  HiOutlineCheckCircle,
-  HiOutlineChevronLeft,
-  HiOutlineChevronRight,
-  HiOutlineDocumentMagnifyingGlass,
-  HiOutlineExclamationCircle,
-  HiOutlinePencilSquare,
-  HiOutlineXCircle,
-} from "react-icons/hi2";
 import { useSelector } from "react-redux";
 import { Card, Modal, Skeleton } from "@/components/ui";
+import { ApprovalSeal } from "@/components/ui/approval-seal";
+import { Icon } from "@/components/ui/icons";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 
@@ -89,6 +81,19 @@ interface SourceDetail extends ReviewSource {
 
 const PAGE_SIZE = 25;
 const PROJECTABLE_TYPES = new Set(["medication", "condition", "allergy"]);
+
+const EYEBROW = "font-mono text-[11px] uppercase tracking-[0.06em] text-muted";
+const CHIP = "inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-xs font-medium";
+const BUTTON_BASE = "ma-press inline-flex h-[34px] items-center justify-center gap-1.5 rounded-[9px] px-3.5 text-[13px] disabled:cursor-not-allowed";
+const SECONDARY_BUTTON = `${BUTTON_BASE} border border-line-strong bg-surface font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:text-[#94A3B8] disabled:hover:bg-surface`;
+const PRIMARY_BUTTON = `${BUTTON_BASE} bg-primary font-semibold text-white hover:bg-primary-hover disabled:bg-track disabled:text-[#94A3B8]`;
+const APPROVE_BUTTON = `${BUTTON_BASE} bg-ok font-semibold text-white hover:bg-ok-strong disabled:bg-track disabled:text-[#94A3B8]`;
+const DANGER_BUTTON = `${BUTTON_BASE} border border-risk-line bg-surface font-semibold text-risk-ink hover:bg-risk-soft disabled:text-[#94A3B8] disabled:hover:bg-surface`;
+const ICON_BUTTON = "ma-press flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface";
+const INPUT = "h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm font-normal text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
+const TEXTAREA = "w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm font-normal text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
+const FILTER_LABEL = "flex flex-col gap-1 font-mono text-[11px] uppercase tracking-[0.06em] text-muted";
+const FILTER_CONTROL = "h-[34px] min-w-[9rem] rounded-[9px] border border-line-strong bg-surface px-3 text-[13px] font-normal normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
 
 const FACT_LABELS: Record<string, string> = {
   patient_demographics: "Patient demographics",
@@ -246,6 +251,20 @@ function stateClass(state: ReviewState): string {
   return "bg-warn-tint text-warn-ink";
 }
 
+function stateDot(state: ReviewState): string {
+  if (state === "approved") return "bg-ok";
+  if (state === "rejected") return "bg-risk";
+  return "bg-warn";
+}
+
+function sourceHost(issuer: string): string {
+  try {
+    return new URL(issuer).host || issuer;
+  } catch {
+    return issuer;
+  }
+}
+
 function FactDetails({
   fact,
   patientTimezone,
@@ -257,17 +276,21 @@ function FactDetails({
     FACT_FIELDS[fact.fact_type] ??
     Object.keys(fact.value).map((key) => [key, key] as [string, string]);
   return (
-    <dl className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
-      {fields.map(([key, label]) => (
-        <div key={key}>
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted">
-            {label}
-          </dt>
-          <dd className="mt-0.5 break-words text-sm text-ink">
-            {formatValue(fact.value[key], patientTimezone, key)}
-          </dd>
-        </div>
-      ))}
+    <dl className="grid gap-x-6 gap-y-3 rounded-[14px] border border-line bg-surface-2 p-4 sm:grid-cols-2 xl:grid-cols-3">
+      {fields.map(([key, label]) => {
+        const text = formatValue(fact.value[key], patientTimezone, key);
+        const dated = DATE_FIELDS.has(key) && /\d{4}/.test(text);
+        return (
+          <div className="min-w-0" key={key}>
+            <dt className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+              {label}
+            </dt>
+            <dd className={`mt-1 break-words ${dated ? "font-mono text-[13px]" : "text-sm"} ${text === "Not supplied" ? "text-muted" : "text-ink"}`}>
+              {text}
+            </dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }
@@ -642,18 +665,18 @@ export function SmartImportReviewPanel({
       className="space-y-5"
       aria-labelledby="smart-import-review-heading"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-primary">
+          <p className={EYEBROW}>
             External-record reconciliation
           </p>
           <h2
-            className="mt-1 text-xl font-bold text-ink"
+            className="mt-1.5 text-lg font-semibold tracking-[-0.01em] text-ink"
             id="smart-import-review-heading"
           >
             External records review
           </h2>
-          <p className="mt-1 max-w-3xl text-sm text-ink-2">
+          <p className="mt-1 max-w-[80ch] text-sm text-muted">
             Review SMART and document candidates with source-level provenance.
             Only a field-by-field reconciliation decision can change an existing
             medication, condition, or allergy; evidence-only records remain
@@ -662,20 +685,30 @@ export function SmartImportReviewPanel({
         </div>
         <button
           disabled={loading || busyFactId !== null}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2"
+          className={`${SECONDARY_BUTTON} shrink-0 self-start sm:self-auto`}
           onClick={() => void load()}
           type="button"
         >
-          <HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> {loading ? "Refreshing…" : "Refresh"}
+          <Icon name="refresh" aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
+
+      <ol aria-label="Review steps" className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-muted">
+        {["Inspect provenance", "Compare with the local chart", "Record a clinician decision"].map((step, index) => (
+          <li className="flex items-center gap-2" key={step}>
+            {index > 0 ? <Icon name="chevron" className="h-3.5 w-3.5 text-[#94A3B8]" /> : null}
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sunken font-mono text-[11px] text-ink-2">{index + 1}</span>
+            {step}
+          </li>
+        ))}
+      </ol>
 
       <div className="grid gap-3 sm:grid-cols-3">
         {(["pending_review", "approved", "rejected"] as ReviewState[]).map(
           (state) => (
             <button
               aria-pressed={reviewState === state}
-              className={`rounded-xl border p-4 text-left transition ${reviewState === state ? "border-primary bg-primary-tint" : "border-line bg-surface hover:border-line-strong"}`}
+              className={`ma-press rounded-2xl border px-5 py-4 text-left ${reviewState === state ? "border-primary bg-primary-tint shadow-[0_0_0_3px_rgba(37,99,235,.10)]" : "border-line bg-surface shadow-[var(--shadow-card)] hover:border-line-strong hover:bg-surface-2"}`}
               key={state}
               onClick={() => {
                 setReviewState(state);
@@ -683,8 +716,11 @@ export function SmartImportReviewPanel({
               }}
               type="button"
             >
-              <p className="text-sm text-ink-2">{stateLabel(state)}</p>
-              <p className="mt-1 text-2xl font-bold text-ink">
+              <p className="flex items-center gap-2 text-[13px] text-muted">
+                <span aria-hidden="true" className={`h-[7px] w-[7px] rounded-full ${stateDot(state)}`} />
+                {stateLabel(state)}
+              </p>
+              <p className="mt-1.5 font-mono text-[28px] font-medium leading-none text-ink">
                 {loading || error ? "—" : review?.state_counts[state] ?? 0}
               </p>
             </button>
@@ -694,116 +730,115 @@ export function SmartImportReviewPanel({
 
       {error && (
         <div
-          className="rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
+          className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
           role="alert"
         >
-          {error}
+          <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{error}</p>
         </div>
       )}
 
-      <Card className="overflow-hidden px-0 py-0" padding="sm">
-        <div className="flex flex-col gap-2 border-b border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-semibold text-ink">
-              {stateLabel(reviewState)} imported facts
-            </h3>
-            <p className="text-sm text-muted">
-              {total} facts in this review state. Source data remains synthetic
-              and read-only.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {review && Object.keys(review.fact_type_counts).length > 0 && (
-              <label className="text-sm font-medium text-ink-2">
-                Mapped type
-                <select
-                  aria-label="Filter imported facts by mapped type"
-                  className="ml-2 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal text-ink"
-                  onChange={(event) => {
-                    setFactType(event.target.value);
-                    setOffset(0);
-                  }}
-                  value={factType}
-                >
-                  <option value="">All mapped types</option>
-                  {Object.entries(review.fact_type_counts)
-                    .sort(([left], [right]) =>
-                      (FACT_LABELS[left] ?? left).localeCompare(
-                        FACT_LABELS[right] ?? right,
-                      ),
-                    )
-                    .map(([value, count]) => (
-                      <option key={value} value={value}>
-                        {FACT_LABELS[value] ?? value} ({count})
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
-            <label className="text-sm font-medium text-ink-2">
-              Source
+      <Card className="overflow-hidden" padding="none">
+        <div className="border-b border-line px-5 py-4">
+          <h3 className="text-[15px] font-semibold text-ink">
+            {stateLabel(reviewState)} imported facts
+          </h3>
+          <p className="text-[13px] text-muted">
+            <span className="font-mono">{total}</span> facts in this review state. Source data remains synthetic
+            and read-only.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3 border-b border-line bg-surface-2 px-5 py-3">
+          {review && Object.keys(review.fact_type_counts).length > 0 && (
+            <label className={FILTER_LABEL}>
+              Mapped type
               <select
-                aria-label="Filter imported facts by source"
-                className="ml-2 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal text-ink"
+                aria-label="Filter imported facts by mapped type"
+                className={FILTER_CONTROL}
                 onChange={(event) => {
-                  setSourceKind(event.target.value);
+                  setFactType(event.target.value);
                   setOffset(0);
                 }}
-                value={sourceKind}
+                value={factType}
               >
-                <option value="">All sources</option>
-                <option value="smart">SMART</option>
-                <option value="document">Document</option>
+                <option value="">All mapped types</option>
+                {Object.entries(review.fact_type_counts)
+                  .sort(([left], [right]) =>
+                    (FACT_LABELS[left] ?? left).localeCompare(
+                      FACT_LABELS[right] ?? right,
+                    ),
+                  )
+                  .map(([value, count]) => (
+                    <option key={value} value={value}>
+                      {FACT_LABELS[value] ?? value} ({count})
+                    </option>
+                  ))}
               </select>
             </label>
-            <label className="text-sm font-medium text-ink-2">
-              Reconciliation
-              <select
-                aria-label="Filter imported facts by reconciliation state"
-                className="ml-2 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal text-ink"
-                onChange={(event) => {
-                  setReconciliationState(event.target.value);
-                  setOffset(0);
-                }}
-                value={reconciliationState}
-              >
-                <option value="">All states</option>
-                <option value="not_started">Not started</option>
-                <option value="applied">Applied</option>
-                <option value="kept_existing">Kept existing</option>
-                <option value="deferred">Deferred</option>
-                <option value="rejected">Rejected</option>
-                <option value="reviewed_evidence">Reviewed evidence</option>
-                <option value="source_withdrawn">Source withdrawn</option>
-              </select>
-            </label>
-            <label className="text-sm font-medium text-ink-2">
-              From
-              <input
-                aria-label="Filter imported facts from date"
-                className="ml-2 rounded-lg border border-line-strong px-2 py-1.5 text-sm font-normal"
-                onChange={(event) => {
-                  setFromDate(event.target.value);
-                  setOffset(0);
-                }}
-                type="date"
-                value={fromDate}
-              />
-            </label>
-            <label className="text-sm font-medium text-ink-2">
-              To
-              <input
-                aria-label="Filter imported facts to date"
-                className="ml-2 rounded-lg border border-line-strong px-2 py-1.5 text-sm font-normal"
-                onChange={(event) => {
-                  setToDate(event.target.value);
-                  setOffset(0);
-                }}
-                type="date"
-                value={toDate}
-              />
-            </label>
-          </div>
+          )}
+          <label className={FILTER_LABEL}>
+            Source
+            <select
+              aria-label="Filter imported facts by source"
+              className={FILTER_CONTROL}
+              onChange={(event) => {
+                setSourceKind(event.target.value);
+                setOffset(0);
+              }}
+              value={sourceKind}
+            >
+              <option value="">All sources</option>
+              <option value="smart">SMART</option>
+              <option value="document">Document</option>
+            </select>
+          </label>
+          <label className={FILTER_LABEL}>
+            Reconciliation
+            <select
+              aria-label="Filter imported facts by reconciliation state"
+              className={FILTER_CONTROL}
+              onChange={(event) => {
+                setReconciliationState(event.target.value);
+                setOffset(0);
+              }}
+              value={reconciliationState}
+            >
+              <option value="">All states</option>
+              <option value="not_started">Not started</option>
+              <option value="applied">Applied</option>
+              <option value="kept_existing">Kept existing</option>
+              <option value="deferred">Deferred</option>
+              <option value="rejected">Rejected</option>
+              <option value="reviewed_evidence">Reviewed evidence</option>
+              <option value="source_withdrawn">Source withdrawn</option>
+            </select>
+          </label>
+          <label className={FILTER_LABEL}>
+            From
+            <input
+              aria-label="Filter imported facts from date"
+              className={`${FILTER_CONTROL} font-mono`}
+              onChange={(event) => {
+                setFromDate(event.target.value);
+                setOffset(0);
+              }}
+              type="date"
+              value={fromDate}
+            />
+          </label>
+          <label className={FILTER_LABEL}>
+            To
+            <input
+              aria-label="Filter imported facts to date"
+              className={`${FILTER_CONTROL} font-mono`}
+              onChange={(event) => {
+                setToDate(event.target.value);
+                setOffset(0);
+              }}
+              type="date"
+              value={toDate}
+            />
+          </label>
         </div>
 
         {loading ? (
@@ -813,74 +848,112 @@ export function SmartImportReviewPanel({
             ))}
           </div>
         ) : review?.facts.length === 0 ? (
-          <div className="flex min-h-48 flex-col items-center justify-center px-5 py-10 text-center">
-            <HiOutlineCheckCircle className="h-10 w-10 text-ok" />
-            <p className="mt-3 font-semibold text-ink">
+          <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-5 py-12 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-muted">
+              <Icon name="inbox" className="h-6 w-6" />
+            </span>
+            <p className="text-[15px] font-semibold text-ink">
               No {stateLabel(reviewState).toLowerCase()} imported facts
             </p>
-            <p className="mt-1 text-sm text-ink-2">
+            <p className="max-w-[48ch] text-sm text-muted">
               New SMART and document imports appear here as clinician-review
               candidates.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-line">
+          <div>
             {review?.facts.map((fact) => (
-              <article className="space-y-4 px-5 py-5" key={fact.id}>
+              <article className="space-y-4 border-b border-line px-5 py-5 last:border-b-0" key={fact.id}>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-semibold text-ink">
+                      <h4 className="text-[15px] font-semibold text-ink">
                         {FACT_LABELS[fact.fact_type] ?? fact.fact_type}
                       </h4>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${stateClass(fact.review_state)}`}
-                      >
-                        {stateLabel(fact.review_state)}
-                      </span>
+                      {fact.review_state === "approved" ? (
+                        <ApprovalSeal pill>
+                          {stateLabel(fact.review_state)}
+                        </ApprovalSeal>
+                      ) : (
+                        <span
+                          className={`${CHIP} ${stateClass(fact.review_state)}`}
+                        >
+                          <span aria-hidden="true" className={`h-[7px] w-[7px] rounded-full ${stateDot(fact.review_state)}`} />
+                          {stateLabel(fact.review_state)}
+                        </span>
+                      )}
                       {fact.reconciliation_state &&
                         fact.reconciliation_state !== "not_started" && (
-                          <span className="rounded-full bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-2">
+                          <span className={`${CHIP} bg-sunken capitalize text-ink-2`}>
                             {fact.reconciliation_state.replaceAll("_", " ")}
                           </span>
                         )}
                     </div>
-                    <details className="mt-1 text-xs text-muted"><summary className="cursor-pointer py-2 font-medium">Source identifiers</summary><p className="break-words">
+                    <dl className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted">
+                      <div className="flex items-center gap-1.5">
+                        <dt className="sr-only">Source system</dt>
+                        <dd className="flex items-center gap-1.5">
+                          <Icon name={fact.source?.source_kind === "document" ? "file" : "link"} className="h-3.5 w-3.5" />
+                          {fact.source
+                            ? fact.source.source_kind === "document"
+                              ? "Document"
+                              : fact.source.source_kind === "smart"
+                                ? `SMART · ${sourceHost(fact.source.issuer)}`
+                                : sourceHost(fact.source.issuer)
+                            : "Unknown source"}
+                        </dd>
+                      </div>
+                      {fact.source && (
+                        <div className="flex items-center gap-1.5">
+                          <dt className="sr-only">Resource type</dt>
+                          <dd className="rounded-[5px] bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-ink-2">
+                            {fact.source.resource_type}
+                          </dd>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        <dt>Imported</dt>
+                        <dd className="font-mono text-ink-2">
+                          {formatFhirDateTime(fact.created_at, patientTimezone ?? "UTC")}
+                        </dd>
+                      </div>
+                    </dl>
+                    <details className="ma-disclosure mt-1 text-xs text-muted"><summary className="min-h-9 py-1.5 text-[13px] font-medium">Source identifiers</summary><p className="break-words pb-1 pl-[1.375rem] font-mono text-[11px]">
                       {fact.source
                         ? `${fact.source.resource_type}${fact.source.external_resource_id ? ` · ${fact.source.external_resource_id}` : ""}${fact.source.version_id ? ` · version ${fact.source.version_id}` : ""}`
                         : "Source metadata unavailable"}
                     </p></details>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
                     <button
-                      className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2 disabled:opacity-60"
+                      className={SECONDARY_BUTTON}
                       disabled={busyFactId === fact.id || !fact.source}
                       onClick={() => void inspectSource(fact)}
                       type="button"
                     >
-                      <HiOutlineDocumentMagnifyingGlass className="h-4 w-4" />{" "}
+                      <Icon name="eye" className="h-4 w-4" />{" "}
                       Source
                     </button>
                     {fact.review_state === "pending_review" && (
                       <>
                         {PROJECTABLE_TYPES.has(fact.fact_type) ? (
                           <button
-                            className="inline-flex items-center gap-1 rounded-lg bg-ok px-3 py-2 text-sm font-semibold text-white hover:bg-ok-strong disabled:opacity-60"
+                            className={PRIMARY_BUTTON}
                             disabled={busyFactId === fact.id}
                             onClick={() => void openReconciliation(fact)}
                             type="button"
                           >
-                            <HiOutlineCheckCircle className="h-4 w-4" /> Review
+                            <Icon name="history" className="h-4 w-4" /> Review
                             changes
                           </button>
                         ) : (
                           <button
-                            className="inline-flex items-center gap-1 rounded-lg bg-ok px-3 py-2 text-sm font-semibold text-white hover:bg-ok-strong disabled:opacity-60"
+                            className={APPROVE_BUTTON}
                             disabled={busyFactId === fact.id}
                             onClick={() => void approve(fact)}
                             type="button"
                           >
-                            <HiOutlineCheckCircle className="h-4 w-4" /> Mark
+                            <Icon name="check" className="h-4 w-4" /> Mark
                             reviewed
                           </button>
                         )}
@@ -888,7 +961,7 @@ export function SmartImportReviewPanel({
                           fact.source?.source_kind === "smart" &&
                           fact.source.import_id && (
                             <button
-                              className="inline-flex items-center gap-1 rounded-lg border border-primary-line px-3 py-2 text-sm font-medium text-primary hover:bg-primary-tint disabled:opacity-60"
+                              className={`${SECONDARY_BUTTON} text-primary hover:text-primary-hover`}
                               disabled={busyFactId === fact.id}
                               onClick={() =>
                                 void openIdentityBinding(
@@ -897,11 +970,12 @@ export function SmartImportReviewPanel({
                               }
                               type="button"
                             >
+                              <Icon name="user" className="h-4 w-4" />
                               Confirm patient
                             </button>
                           )}
                         <button
-                          className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2 disabled:opacity-60"
+                          className={SECONDARY_BUTTON}
                           disabled={busyFactId === fact.id}
                           onClick={() => {
                             setCorrecting(fact);
@@ -910,10 +984,10 @@ export function SmartImportReviewPanel({
                           }}
                           type="button"
                         >
-                          <HiOutlinePencilSquare className="h-4 w-4" /> Correct
+                          <Icon name="edit" className="h-4 w-4" /> Correct
                         </button>
                         <button
-                          className="inline-flex items-center gap-1 rounded-lg border border-risk-line px-3 py-2 text-sm font-semibold text-risk-ink hover:bg-risk-soft disabled:opacity-60"
+                          className={DANGER_BUTTON}
                           disabled={busyFactId === fact.id}
                           onClick={() => {
                             setRejecting(fact);
@@ -921,7 +995,7 @@ export function SmartImportReviewPanel({
                           }}
                           type="button"
                         >
-                          <HiOutlineXCircle className="h-4 w-4" /> Reject
+                          <Icon name="close" className="h-4 w-4" /> Reject
                         </button>
                       </>
                     )}
@@ -932,37 +1006,43 @@ export function SmartImportReviewPanel({
                   patientTimezone={patientTimezone ?? "UTC"}
                 />
                 {fact.uncertainty.length > 0 && (
-                  <div className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-                    <HiOutlineExclamationCircle className="mr-1 inline h-4 w-4" />
-                    {fact.uncertainty.join(" ")}
+                  <div className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
+                    <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>{fact.uncertainty.join(" ")}</p>
                   </div>
                 )}
                 {fact.reconciliation_state === "source_withdrawn" && (
-                  <div className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">
-                    <HiOutlineExclamationCircle className="mr-1 inline h-4 w-4" />
-                    The supporting source was withdrawn after local
-                    reconciliation. Review the preserved local record and audit
-                    history before further use.
+                  <div className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink">
+                    <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                      The supporting source was withdrawn after local
+                      reconciliation. Review the preserved local record and audit
+                      history before further use.
+                    </p>
                   </div>
                 )}
                 {fact.reconciliation_state === "applied" &&
                   fact.reconciliation_target_id && (
                     <a
-                      className="inline-flex text-sm font-medium text-primary underline hover:text-ai-ink"
+                      className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:text-primary-hover hover:underline"
                       href={`/patients/${patientId}`}
                     >
                       View applied local{" "}
                       {fact.reconciliation_target_type ?? "record"}
+                      <Icon name="arrow" className="h-3.5 w-3.5" />
                     </a>
                   )}
                 {fact.source &&
                   (fact.source.mapping_warnings.length > 0 ||
                     fact.source.validation_errors.length > 0) && (
-                    <div className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-                      {[
-                        ...fact.source.mapping_warnings,
-                        ...fact.source.validation_errors,
-                      ].join(" ")}
+                    <div className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
+                      <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0" />
+                      <p>
+                        {[
+                          ...fact.source.mapping_warnings,
+                          ...fact.source.validation_errors,
+                        ].join(" ")}
+                      </p>
                     </div>
                   )}
               </article>
@@ -970,28 +1050,28 @@ export function SmartImportReviewPanel({
           </div>
         )}
         {total > PAGE_SIZE && (
-          <div className="flex items-center justify-between border-t border-line px-5 py-4 text-sm text-ink-2">
-            <span>
+          <div className="flex items-center justify-between border-t border-line px-5 py-3 text-[13px] text-muted">
+            <span className="font-mono">
               {start}–{end} of {total}
             </span>
             <div className="flex gap-2">
               <button
                 aria-label="Previous imported facts"
-                className="rounded-lg border border-line p-2 disabled:opacity-40"
+                className={ICON_BUTTON}
                 disabled={offset === 0}
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                 type="button"
               >
-                <HiOutlineChevronLeft className="h-4 w-4" />
+                <Icon name="chevron" className="h-4 w-4 rotate-180" />
               </button>
               <button
                 aria-label="Next imported facts"
-                className="rounded-lg border border-line p-2 disabled:opacity-40"
+                className={ICON_BUTTON}
                 disabled={offset + PAGE_SIZE >= total}
                 onClick={() => setOffset(offset + PAGE_SIZE)}
                 type="button"
               >
-                <HiOutlineChevronRight className="h-4 w-4" />
+                <Icon name="chevron" className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -1017,19 +1097,19 @@ export function SmartImportReviewPanel({
               values never clear the local chart; this action is recorded with
               the original source version.
             </p>
-            <div className="grid gap-4 rounded-xl border border-line p-4 sm:grid-cols-2">
-              <div>
-                <h3 className="text-sm font-semibold text-ink">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[14px] border border-line bg-surface-2 p-4">
+                <h3 className="text-[13px] font-semibold text-ink">
                   Imported candidate
                 </h3>
-                <dl className="mt-2 space-y-2 text-sm">
+                <dl className="mt-3 space-y-2.5 text-sm">
                   {Object.entries(reconciling.preview.candidate_fields).map(
                     ([field, value]) => (
                       <div key={field}>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                        <dt className={EYEBROW}>
                           {field.replaceAll("_", " ")}
                         </dt>
-                        <dd className="break-words text-ink">
+                        <dd className="mt-0.5 break-words text-ink">
                           {formatValue(value, patientTimezone ?? "UTC", field)}
                         </dd>
                       </div>
@@ -1037,23 +1117,23 @@ export function SmartImportReviewPanel({
                   )}
                 </dl>
               </div>
-              <div>
-                <h3 className="text-sm font-semibold text-ink">
+              <div className="rounded-[14px] border border-line bg-surface p-4">
+                <h3 className="text-[13px] font-semibold text-ink">
                   Matched local record
                 </h3>
                 {reconciling.preview.matches.length === 0 ? (
-                  <p className="mt-2 text-sm text-ink-2">
+                  <p className="mt-3 text-sm text-muted">
                     No conservative match was found. You may add a new local
                     record after checking the candidate fields.
                   </p>
                 ) : (
                   <>
-                    <label className="mt-2 block text-sm font-medium text-ink-2">
+                    <label className="mt-3 block text-[13px] font-medium text-ink-2">
                       {reconciling.preview.matches.length > 1
                         ? "Choose a local record"
                         : "Matched local record"}
                       <select
-                        className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm font-normal"
+                        className={`mt-1.5 ${INPUT}`}
                         onChange={(event) =>
                           setSelectedTargetId(event.target.value)
                         }
@@ -1074,7 +1154,7 @@ export function SmartImportReviewPanel({
                         );
                         return match ? (
                           <>
-                            <dl className="mt-3 space-y-2 text-sm">
+                            <dl className="mt-3 space-y-2.5 text-sm">
                               {Object.entries(match.record)
                                 .filter(([field]) =>
                                   reconciling.preview.available_fields.includes(
@@ -1083,10 +1163,10 @@ export function SmartImportReviewPanel({
                                 )
                                 .map(([field, value]) => (
                                   <div key={field}>
-                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                                    <dt className={EYEBROW}>
                                       {field.replaceAll("_", " ")}
                                     </dt>
-                                    <dd className="break-words text-ink">
+                                    <dd className="mt-0.5 break-words text-ink">
                                       {formatValue(
                                         value,
                                         patientTimezone ?? "UTC",
@@ -1096,8 +1176,8 @@ export function SmartImportReviewPanel({
                                   </div>
                                 ))}
                             </dl>
-                            <div className="mt-4 rounded-lg bg-primary-tint p-3 text-sm text-ink">
-                              <h4 className="font-semibold">
+                            <div className="mt-4 rounded-xl border border-primary-line bg-primary-tint p-3 text-sm text-ink">
+                              <h4 className="text-[13px] font-semibold">
                                 Selected-field preview
                               </h4>
                               <dl className="mt-2 space-y-2">
@@ -1107,18 +1187,18 @@ export function SmartImportReviewPanel({
                                   )
                                   .map((field) => (
                                     <div key={field}>
-                                      <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                                      <dt className={EYEBROW}>
                                         {field.replaceAll("_", " ")}
                                       </dt>
-                                      <dd>
-                                        <span className="text-muted">
+                                      <dd className="mt-0.5">
+                                        <span className="text-muted line-through decoration-line-strong">
                                           {formatValue(
                                             match.record[field],
                                             patientTimezone ?? "UTC",
                                             field,
                                           )}
                                         </span>{" "}
-                                        <span aria-hidden="true">→</span>{" "}
+                                        <span aria-hidden="true" className="text-primary">→</span>{" "}
                                         <span className="font-medium">
                                           {formatValue(
                                             reconciling.preview
@@ -1140,17 +1220,18 @@ export function SmartImportReviewPanel({
               </div>
             </div>
             <fieldset>
-              <legend className="text-sm font-semibold text-ink">
+              <legend className="text-[13px] font-semibold text-ink">
                 Fields to apply
               </legend>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {reconciling.preview.available_fields.map((field) => (
                   <label
-                    className="flex items-center gap-2 text-sm text-ink-2"
+                    className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-[9px] border border-line px-3 text-sm capitalize text-ink-2 hover:bg-surface-2"
                     key={field}
                   >
                     <input
                       checked={selectedFields.includes(field)}
+                      className="h-4 w-4 accent-[var(--color-primary)]"
                       onChange={(event) =>
                         setSelectedFields((current) =>
                           event.target.checked
@@ -1165,24 +1246,24 @@ export function SmartImportReviewPanel({
                 ))}
               </div>
             </fieldset>
-            <label className="block text-sm font-medium text-ink-2">
+            <label className="block text-[13px] font-medium text-ink-2">
               Decision note (required for defer or reject)
               <textarea
-                className="mt-2 min-h-20 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
+                className={`mt-1.5 min-h-20 ${TEXTAREA}`}
                 onChange={(event) => setNote(event.target.value)}
                 value={note}
               />
             </label>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
               <button
-                className="rounded-lg border border-line px-4 py-2 text-sm"
+                className={SECONDARY_BUTTON}
                 onClick={() => setReconciling(null)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink-2"
+                className={SECONDARY_BUTTON}
                 disabled={busyFactId !== null}
                 onClick={() => void reconcile("defer")}
                 type="button"
@@ -1192,7 +1273,7 @@ export function SmartImportReviewPanel({
               {reconciling.preview.matches.length > 0 && (
                 <>
                   <button
-                    className="rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink-2"
+                    className={SECONDARY_BUTTON}
                     disabled={busyFactId !== null}
                     onClick={() => void reconcile("keep_existing")}
                     type="button"
@@ -1200,7 +1281,7 @@ export function SmartImportReviewPanel({
                     Keep existing
                   </button>
                   <button
-                    className="rounded-lg bg-ok px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    className={APPROVE_BUTTON}
                     disabled={
                       busyFactId !== null ||
                       !selectedTargetId ||
@@ -1215,7 +1296,7 @@ export function SmartImportReviewPanel({
               )}
               {reconciling.preview.matches.length === 0 && (
                 <button
-                  className="rounded-lg bg-ok px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className={APPROVE_BUTTON}
                   disabled={busyFactId !== null || selectedFields.length === 0}
                   onClick={() => void reconcile("add")}
                   type="button"
@@ -1224,7 +1305,7 @@ export function SmartImportReviewPanel({
                 </button>
               )}
               <button
-                className="rounded-lg border border-risk-line px-4 py-2 text-sm font-semibold text-risk-ink"
+                className={DANGER_BUTTON}
                 disabled={busyFactId !== null}
                 onClick={() => void reconcile("reject")}
                 type="button"
@@ -1252,36 +1333,36 @@ export function SmartImportReviewPanel({
               This comparison confirms that this external SMART patient belongs
               to this local chart. It never updates local demographics.
             </p>
-            <div className="grid gap-4 rounded-xl border border-line p-4 sm:grid-cols-2">
-              <div>
-                <h3 className="text-sm font-semibold text-ink">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[14px] border border-line bg-surface-2 p-4">
+                <h3 className="text-[13px] font-semibold text-ink">
                   External SMART patient
                 </h3>
-                <dl className="mt-2 space-y-2 text-sm text-ink-2">
+                <dl className="mt-3 space-y-2.5 text-sm text-ink-2">
                   {Object.entries(binding.external_identity).map(
                     ([field, value]) => (
                       <div key={field}>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                        <dt className={EYEBROW}>
                           {field.replaceAll("_", " ")}
                         </dt>
-                        <dd>{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
+                        <dd className="mt-0.5">{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
                       </div>
                     ),
                   )}
                 </dl>
               </div>
-              <div>
-                <h3 className="text-sm font-semibold text-ink">
+              <div className="rounded-[14px] border border-line bg-surface p-4">
+                <h3 className="text-[13px] font-semibold text-ink">
                   Local chart
                 </h3>
-                <dl className="mt-2 space-y-2 text-sm text-ink-2">
+                <dl className="mt-3 space-y-2.5 text-sm text-ink-2">
                   {Object.entries(binding.local_identity).map(
                     ([field, value]) => (
                       <div key={field}>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                        <dt className={EYEBROW}>
                           {field.replaceAll("_", " ")}
                         </dt>
-                        <dd>{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
+                        <dd className="mt-0.5">{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
                       </div>
                     ),
                   )}
@@ -1289,32 +1370,35 @@ export function SmartImportReviewPanel({
               </div>
             </div>
             <div
-              className={`rounded-lg px-3 py-2 text-sm ${binding.identity_matches ? "bg-ok-soft text-ok-ink" : "bg-warn-soft text-warn-ink"}`}
+              className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${binding.identity_matches ? "border-ok-line bg-ok-soft text-ok-ink" : "border-warn-line bg-warn-soft text-warn-ink"}`}
             >
-              {binding.identity_matches
-                ? "The available identity details match."
-                : "The available identity details differ or are incomplete. A clinician reason is required before binding synthetic records."}
+              <Icon name={binding.identity_matches ? "info" : "alert"} className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                {binding.identity_matches
+                  ? "The available identity details match."
+                  : "The available identity details differ or are incomplete. A clinician reason is required before binding synthetic records."}
+              </p>
             </div>
             {!binding.identity_matches && (
-              <label className="block text-sm font-medium text-ink-2">
+              <label className="block text-[13px] font-medium text-ink-2">
                 Confirmation reason
                 <textarea
-                  className="mt-2 min-h-20 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
+                  className={`mt-1.5 min-h-20 ${TEXTAREA}`}
                   onChange={(event) => setBindingNote(event.target.value)}
                   value={bindingNote}
                 />
               </label>
             )}
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2 border-t border-line pt-4">
               <button
-                className="rounded-lg border border-line px-4 py-2 text-sm"
+                className={SECONDARY_BUTTON}
                 onClick={() => setBinding(null)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-lg bg-primary-hover px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className={PRIMARY_BUTTON}
                 disabled={
                   busyFactId !== null ||
                   (!binding.identity_matches && !bindingNote.trim())
@@ -1344,24 +1428,24 @@ export function SmartImportReviewPanel({
             Record why this imported candidate should not be used. The original
             source remains in the audit trail.
           </p>
-          <label className="block text-sm font-medium text-ink-2">
+          <label className="block text-[13px] font-medium text-ink-2">
             Rejection note
             <textarea
-              className="mt-2 min-h-28 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
+              className={`mt-1.5 min-h-28 ${TEXTAREA}`}
               onChange={(event) => setNote(event.target.value)}
               value={note}
             />
           </label>
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-2 border-t border-line pt-4">
             <button
-              className="rounded-lg border border-line px-4 py-2 text-sm"
+              className={SECONDARY_BUTTON}
               onClick={() => setRejecting(null)}
               type="button"
             >
               Cancel
             </button>
             <button
-              className="rounded-lg bg-risk px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="ma-press inline-flex h-[34px] items-center justify-center gap-2 rounded-[9px] bg-risk px-4 text-[13px] font-semibold text-white hover:bg-risk-strong disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]"
               disabled={!note.trim() || busyFactId !== null}
               onClick={() => void reject()}
               type="button"
@@ -1396,13 +1480,13 @@ export function SmartImportReviewPanel({
                   original !== null && typeof original === "object";
                 return (
                   <label
-                    className="block text-sm font-medium text-ink-2"
+                    className="block text-[13px] font-medium text-ink-2"
                     key={key}
                   >
                     {label}
                     {structured ? (
                       <textarea
-                        className="mt-2 min-h-28 w-full rounded-xl border border-line-strong px-3 py-2 font-mono text-xs"
+                        className={`mt-1.5 min-h-28 ${TEXTAREA} font-mono text-xs`}
                         onChange={(event) =>
                           setCorrectionDraft((current) => ({
                             ...current,
@@ -1413,7 +1497,7 @@ export function SmartImportReviewPanel({
                       />
                     ) : (
                       <input
-                        className="mt-2 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
+                        className={`mt-1.5 ${INPUT}`}
                         onChange={(event) =>
                           setCorrectionDraft((current) => ({
                             ...current,
@@ -1427,24 +1511,24 @@ export function SmartImportReviewPanel({
                 );
               })}
           </div>
-          <label className="block text-sm font-medium text-ink-2">
+          <label className="block text-[13px] font-medium text-ink-2">
             Correction note
             <textarea
-              className="mt-2 min-h-24 w-full rounded-xl border border-line-strong px-3 py-2 text-sm"
+              className={`mt-1.5 min-h-24 ${TEXTAREA}`}
               onChange={(event) => setNote(event.target.value)}
               value={note}
             />
           </label>
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-2 border-t border-line pt-4">
             <button
-              className="rounded-lg border border-line px-4 py-2 text-sm"
+              className={SECONDARY_BUTTON}
               onClick={() => setCorrecting(null)}
               type="button"
             >
               Cancel
             </button>
             <button
-              className="rounded-lg bg-primary-hover px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className={PRIMARY_BUTTON}
               disabled={!note.trim() || busyFactId !== null}
               onClick={() => void correct()}
               type="button"
@@ -1466,7 +1550,7 @@ export function SmartImportReviewPanel({
       >
         {source && (
           <div className="space-y-3">
-            <p className="text-sm text-ink-2">
+            <p className="font-mono text-xs text-muted">
               {source.detail.resource_type}
               {source.detail.external_resource_id
                 ? ` · ${source.detail.external_resource_id}`
@@ -1475,7 +1559,7 @@ export function SmartImportReviewPanel({
                 ? ` · version ${source.detail.version_id}`
                 : ""}
             </p>
-            <pre className="max-h-[60vh] overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
+            <pre className="max-h-[60vh] overflow-auto rounded-xl bg-rail p-4 font-mono text-xs leading-relaxed text-rail-ink">
               {JSON.stringify(source.detail.raw_resource, null, 2)}
             </pre>
           </div>

@@ -3,9 +3,10 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { FiEye, FiEyeOff } from "react-icons/fi";
 import { useDispatch } from "react-redux";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
+import { AuthShell, AuthSteps, VerifiedClinic } from "@/components/features/auth-shell";
 import { ApiClientError, api, isRetryableApiError } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import {
@@ -368,23 +369,16 @@ function ClinicianLoginPageContent() {
     }
 
     return (
-        <div className="flex min-h-screen bg-surface-2">
-            <div className="hidden w-1/2 bg-gray-900 px-12 py-16 text-white lg:flex lg:flex-col lg:justify-between">
-                <div className="space-y-4">
-                    <p className="text-sm font-medium uppercase tracking-[0.3em] text-blue-300">MediAgent Pro</p>
-                    <h1 className="max-w-md text-5xl font-bold leading-tight">Clinical intelligence for the entire patient panel.</h1>
-                    <p className="max-w-lg text-lg text-gray-300">
-                        Surface high-risk adherence issues, coordinate shared care, and act on MedWatch drafts from one dashboard.
-                    </p>
-                </div>
-                <p className="text-sm text-muted">Built for care teams managing proactive, AI-assisted follow-up.</p>
-            </div>
-
-            <div className="flex flex-1 items-center justify-center px-6 py-12">
-                <Card className="w-full max-w-md space-y-6" padding="lg">
+        <AuthShell
+            headline="Clinical intelligence for the entire patient panel."
+            subcopy="Surface high-risk adherence issues, coordinate shared care, and act on MedWatch drafts from one dashboard."
+            footer="Built for care teams managing proactive, AI-assisted follow-up."
+        >
+                <div className="space-y-6">
                     <div className="space-y-2">
-                        <p className="text-sm font-medium text-primary">Clinic access</p>
-                        <h2 className="text-3xl font-bold text-ink">
+                        <AuthSteps label="Clinic access" step={stage === "verify" ? 1 : stage === "choose" ? 2 : 3} />
+                        <p className="sr-only">Clinic access</p>
+                        <h2 className="pt-3 text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">
                             {stage === "verify"
                                 ? "Enter clinic code"
                                 : stage === "choose"
@@ -393,7 +387,7 @@ function ClinicianLoginPageContent() {
                                         ? "Sign in"
                                         : "Verify MFA"}
                         </h2>
-                        <p className="text-sm text-muted">
+                        <p className="text-sm leading-relaxed text-muted">
                             {stage === "verify"
                                 ? "Verify your clinic workspace before continuing to login or registration."
                                 : stage === "choose"
@@ -407,8 +401,10 @@ function ClinicianLoginPageContent() {
                     {stage === "verify" ? (
                         <form className="space-y-4" onSubmit={handleVerifyClinicCode}>
                             <Input
+                                className="font-mono tracking-[0.04em]"
                                 error={clinicCodeError}
                                 label="Clinic code"
+                                placeholder="CA-CLINIC-"
                                 onChange={(event) => {
                                     setClinicCode(event.target.value.toUpperCase());
                                     if (clinicCodeError) {
@@ -417,32 +413,35 @@ function ClinicianLoginPageContent() {
                                 }}
                                 value={clinicCode}
                             />
-                            {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
-                            <Button disabled={submitting} fullWidth type="submit">
-                                {submitting ? "Verifying..." : "Verify clinic code"}
+                            {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}
+                            <Button disabled={submitting} fullWidth size="lg" type="submit">
+                                {submitting ? "Verifying..." : <>Verify clinic code<Icon name="arrow" className="h-4 w-4" /></>}
                             </Button>
-                            <Link className="block text-center text-sm font-medium text-primary" href="/signup/admin">
-                                Start a new clinic workspace (creates Clinic Admin)
-                            </Link>
+                            <p className="border-t border-line pt-4 text-sm text-muted">
+                                New clinic?{" "}
+                                <Link className="font-medium text-primary hover:underline" href="/signup/admin">
+                                    Start a new clinic workspace (creates Clinic Admin)
+                                </Link>
+                            </p>
                         </form>
                     ) : null}
 
                     {stage === "choose" && clinicContext ? (
                         <div className="space-y-4">
-                            <div className="rounded-lg border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">
-                                <p className="font-semibold">Clinic verified: {clinicContext.clinicName}</p>
-                                <p className="mt-1">Code: {clinicContext.clinicCode}</p>
-                            </div>
-                            {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
-                            <Button fullWidth onClick={() => setStage("login")} type="button">
+                            <VerifiedClinic code={`${clinicContext.clinicCode} · verified`} name={clinicContext.clinicName}>
+                                <p className="sr-only">Clinic verified: {clinicContext.clinicName}</p>
+                                <p className="sr-only">Code: {clinicContext.clinicCode}</p>
+                            </VerifiedClinic>
+                            {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}
+                            <Button fullWidth onClick={() => setStage("login")} size="lg" type="button">
                                 I already have an account
                             </Button>
                             <Link className="block" href="/signup">
-                                <Button fullWidth type="button" variant="secondary">
+                                <Button fullWidth size="lg" type="button" variant="secondary">
                                     Join this clinic (Provider / Nurse)
                                 </Button>
                             </Link>
-                            <button className="w-full text-sm text-muted underline" onClick={useDifferentClinicCode} type="button">
+                            <button className="w-full text-sm text-muted hover:text-ink" onClick={useDifferentClinicCode} type="button">
                                 Use a different clinic code
                             </button>
                         </div>
@@ -450,14 +449,17 @@ function ClinicianLoginPageContent() {
 
                     {stage === "mfa" && clinicContext ? (
                         <div className="space-y-4">
-                            <div className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
+                            <div className="flex items-start gap-3 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
+                                <Icon name="shield" className="mt-0.5 h-4 w-4 shrink-0" />
+                                <div>
                                 <p className="font-semibold">Multi-factor authentication required</p>
                                 <p className="mt-1">
                                     Enter the 6-digit code from your authenticator app to continue signing in to{" "}
                                     <span className="font-medium">{clinicContext.clinicName}</span>.
                                 </p>
+                                </div>
                             </div>
-                            <div className="space-y-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
+                            <div className="space-y-1 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
                                 <p className="font-semibold text-ink">Available factors</p>
                                 {mfaFactors.length > 0 ? (
                                     mfaFactors.map((factor) => (
@@ -474,17 +476,18 @@ function ClinicianLoginPageContent() {
                                     label={`6-digit code (${pendingMFAChallenge?.friendlyName ?? "Authenticator"})`}
                                     maxLength={6}
                                     onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))}
+                                    className="text-center font-mono text-lg tracking-[0.4em]"
                                     placeholder="000000"
                                     value={mfaCode}
                                 />
-                                {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
-                                <Button disabled={submitting || mfaCode.trim().length !== 6} fullWidth type="submit">
+                                {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}
+                                <Button disabled={submitting || mfaCode.trim().length !== 6} fullWidth size="lg" type="submit">
                                     {submitting ? "Verifying..." : "Verify and continue"}
                                 </Button>
                             </form>
                             <div className="flex items-center justify-start text-sm">
                                 <button
-                                    className="text-primary"
+                                    className="inline-flex items-center gap-1 font-medium text-muted hover:text-ink"
                                     onClick={() => {
                                         setStage("login");
                                         setMfaCode("");
@@ -501,8 +504,9 @@ function ClinicianLoginPageContent() {
 
                     {stage === "login" && clinicContext ? (
                         <>
-                            <div className="rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
-                                Signing into clinic: <span className="font-semibold">{clinicContext.clinicName}</span>
+                            <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink-2">
+                                <Icon name="building" className="h-4 w-4 shrink-0 text-muted" />
+                                <span>Signing into clinic: <span className="font-semibold text-ink">{clinicContext.clinicName}</span></span>
                             </div>
                             <form className="space-y-4" onSubmit={handleSubmit}>
                                 <Input
@@ -519,31 +523,31 @@ function ClinicianLoginPageContent() {
                                     trailingAction={
                                         <button
                                             aria-label={passwordVisible ? "Hide password" : "Show password"}
-                                            className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:text-ink-2"
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink-2"
                                             onClick={() => setPasswordVisible((current) => !current)}
                                             type="button"
                                         >
-                                            {passwordVisible ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
+                                            <Icon name={passwordVisible ? "eyeOff" : "eye"} className="h-4 w-4" />
                                         </button>
                                     }
                                     type={passwordVisible ? "text" : "password"}
                                     value={password}
                                 />
-                                {error ? <p className="text-sm text-risk-ink">{error}</p> : null}
-                                <Button disabled={submitting} fullWidth type="submit">
+                                {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}
+                                <Button disabled={submitting} fullWidth size="lg" type="submit">
                                     {submitting ? "Signing in..." : "Sign in"}
                                 </Button>
                             </form>
                             <div className="flex items-center justify-start text-sm">
-                                <button className="text-primary" onClick={() => setStage("choose")} type="button">
+                                <button className="inline-flex items-center gap-1 font-medium text-muted hover:text-ink" onClick={() => setStage("choose")} type="button">
+                                    <Icon name="back" className="h-3.5 w-3.5" />
                                     Back
                                 </button>
                             </div>
                         </>
                     ) : null}
-                </Card>
-            </div>
-        </div>
+                </div>
+        </AuthShell>
     );
 }
 
