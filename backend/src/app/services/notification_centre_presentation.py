@@ -248,7 +248,8 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
         name = _name(row.get("actor_name" if role == "patient" else "patient_name"))
         if name:
             title = f"Nuevo mensaje de {name}" if spanish else f"New message from {name}"
-        body = _name(row.get("clinic_name")) or body
+        # Clinicians already see the patient and clinic on the row's context line.
+        body = (_name(row.get("clinic_name")) or body) if role == "patient" else ""
     return title, body
 
 

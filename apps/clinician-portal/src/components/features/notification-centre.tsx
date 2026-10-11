@@ -58,7 +58,7 @@ function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAc
               {time && <time dateTime={item.created_at} title={time.full} aria-label={time.full} className="shrink-0 pt-0.5 font-mono text-xs text-muted">{time.short}</time>}
             </div>
             {context && <p className="mt-0.5 truncate text-xs text-muted">{context}</p>}
-            <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[13px] leading-snug text-ink-2">{item.body}</p>
+            {item.body && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[13px] leading-snug text-ink-2">{item.body}</p>}
             {(target || (allowRead && !item.is_read) || (allowAcknowledge && item.can_acknowledge)) && <div className="-ml-2 mt-1.5 flex flex-wrap items-center gap-1">
               {target && <Link href={target} onClick={() => { if (!item.is_read) void centre.read(item.id); onNavigate?.(); }} className="inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-[13px] font-medium text-primary hover:bg-primary-tint">{item.action_label || "Open details"}<Icon name="chevron" className="h-3.5 w-3.5" /></Link>}
               {allowAcknowledge && item.can_acknowledge && <Button variant="secondary" disabled={centre.busy || !!centre.actions.error} onClick={() => { setNote(""); setAcknowledging(item); }}>Acknowledge</Button>}

@@ -83,6 +83,21 @@ def test_internal_identifiers_are_not_names_or_visible_copy():
     assert raw["actor_name"] not in result.title and raw["clinic_name"] not in result.body
 
 
+def test_message_names_the_sender_and_clinic_once():
+    raw = item(
+        event_type="message_received",
+        category="messages",
+        actor_name="Elena Park",
+        patient_name="Morgan Ellis",
+        clinic_name="Synthetic Clinic",
+    )
+    patient = present_item(raw, "patient", "en-US")
+    assert patient.title == "New message from Elena Park" and patient.body == "Synthetic Clinic"
+    clinician = present_item(raw, "clinician", "en-US")
+    assert clinician.title == "New message from Morgan Ellis"
+    assert clinician.clinic_name == "Synthetic Clinic" and clinician.body == ""
+
+
 def test_information_request_opens_the_requesting_recipient():
     recipient = str(uuid4())
     raw = item(
