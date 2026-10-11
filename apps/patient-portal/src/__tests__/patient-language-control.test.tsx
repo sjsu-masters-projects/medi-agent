@@ -58,7 +58,7 @@ describe("Portal language preference", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "es-MX" } });
     expect(await screen.findByRole("alert")).toHaveTextContent("preference is unchanged");
     expect(screen.getByRole("combobox")).toHaveValue("en-US");
-    expect(screen.getByText(/Medical instructions and previous messages keep their original wording/)).toBeInTheDocument();
+    expect(screen.getByText(/approves them in English and Spanish. Earlier messages stay in the language they were written in/)).toBeInTheDocument();
     expect(put).toHaveBeenCalledTimes(1);
   });
 

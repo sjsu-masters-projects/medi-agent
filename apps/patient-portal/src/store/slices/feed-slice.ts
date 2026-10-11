@@ -29,6 +29,7 @@ interface ApiFeedTask {
     completedAt?: string | null;
     requires_schedule_configuration?: boolean;
     requiresScheduleConfiguration?: boolean;
+    content_locale?: string | null;
     provider?: ApiFeedProvider | null;
     care_plan_item_id?: string | null;
     carePlanItemId?: string | null;
@@ -86,6 +87,7 @@ function mapApiTask(task: ApiFeedTask): FeedTask {
     return {
         completedAt: task.completedAt ?? task.completed_at ?? undefined,
         carePlanItemId: task.carePlanItemId ?? task.care_plan_item_id ?? undefined,
+        contentLocale: task.content_locale === "en-US" || task.content_locale === "es-MX" ? task.content_locale : undefined,
         carePlan: task.care_plan
             ? {
                   versionNumber: task.care_plan.version_number,

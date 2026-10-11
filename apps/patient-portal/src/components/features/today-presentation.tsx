@@ -49,6 +49,12 @@ function statusPillClass(status: TaskCardStatus) {
 }
 
 /** Status pill with the clock time in mono, e.g. "Missed · 8:00 AM". */
+/** Older single-language records keep their wording; say so instead of mixing silently. */
+export function WrittenIn({ task, copy }: { task: FeedTask; copy: TodayCopy }) {
+    if (!task.contentLocale || task.contentLocale === copy.locale) return null;
+    return <p className="flex items-center gap-1.5 text-[12px] font-medium text-muted"><Icon name="globe" className="h-3.5 w-3.5 shrink-0" />{copy.writtenIn(task.contentLocale)}</p>;
+}
+
 export function TaskStatusPill({ status, task, copy, timeLabel }: { status: TaskCardStatus; task: FeedTask; copy: TodayCopy; timeLabel: string }) {
     const showTime = Boolean(task.scheduledTime) || !task.requiresScheduleConfiguration;
     return <span className={`inline-flex max-w-full shrink-0 flex-wrap items-center gap-x-1 rounded-full px-2.5 py-1 text-xs font-semibold ${statusPillClass(status)}`}>
@@ -74,7 +80,8 @@ export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onCo
         <div className="flex items-start gap-3.5">
             <TodayTaskIcon task={task} large />
             <div className="min-w-0 flex-1 space-y-1 break-words [overflow-wrap:anywhere]">
-                <h3 className={`${hero ? heroTitleSize(task.name) : "text-xl"} font-semibold leading-tight tracking-[-0.01em] text-ink`}>{task.name}</h3>
+                <h3 lang={task.contentLocale} className={`${hero ? heroTitleSize(task.name) : "text-xl"} font-semibold leading-tight tracking-[-0.01em] text-ink`}>{task.name}</h3>
+                <WrittenIn task={task} copy={copy} />
                 {instruction.trim() !== task.name.trim() ? <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink-2">{instruction}</p> : null}
                 {!medication && task.frequency ? <p className="text-[13px] text-muted">{task.frequency}</p> : null}
             </div>
@@ -118,7 +125,7 @@ export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetail
         <button type="button" aria-label={`${copy.details}: ${task.name}`} onClick={onDetails} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl text-left">
             <TodayTaskIcon task={task} />
             <span className="min-w-0 flex-1">
-                <span className={`line-clamp-2 break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${status === "completed" ? "text-muted" : "text-ink"}`}>{task.name}</span>
+                <span lang={task.contentLocale} className={`line-clamp-2 break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${status === "completed" ? "text-muted" : "text-ink"}`}>{task.name}</span>
                 {sub ? <span className="mt-0.5 line-clamp-1 break-words text-[13px] text-muted [overflow-wrap:anywhere]">{sub}</span> : null}
             </span>
         </button>

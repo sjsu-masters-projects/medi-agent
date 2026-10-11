@@ -361,6 +361,8 @@ export interface ReminderTarget {
     providerName?: string;
     reminderSchedule?: ReminderSchedule | null;
     guidance: ReminderGuidance;
+    /** See FeedTask.contentLocale. */
+    contentLocale?: Locale;
 }
 
 export interface Medication {
@@ -523,6 +525,9 @@ export interface FeedTask {
     provider?: FeedProvider;
     carePlanItemId?: string;
     carePlan?: FeedCarePlanProvenance;
+    /** Language of the name and description, when known. Approved plans match the
+     * patient's language; an older single-language record may not. */
+    contentLocale?: Locale;
 }
 
 export interface FeedSummary {

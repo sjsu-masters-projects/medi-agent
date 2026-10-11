@@ -18,7 +18,7 @@ const en = {
     lastName: "Last name",
     language: "Preferred language",
     languageHelp:
-        "Saving this preference changes the app language. Approved clinical instructions keep their reviewed wording.",
+        "Saving this changes the app language. Your care plan and Today list switch too, because your care team approves them in English and Spanish.",
     gender: "Gender",
     optional: "(optional)",
     unspecified: "Not specified",
@@ -88,7 +88,7 @@ const es: typeof en = {
     lastName: "Apellidos",
     language: "Idioma preferido",
     languageHelp:
-        "Al guardar esta preferencia cambia el idioma de la aplicación. Las instrucciones clínicas aprobadas conservan su redacción revisada.",
+        "Al guardarlo cambia el idioma de la aplicación. Tu plan de atención y tus actividades de hoy también cambian, porque tu equipo de atención los aprueba en inglés y en español.",
     gender: "Género",
     optional: "(opcional)",
     unspecified: "Sin especificar",

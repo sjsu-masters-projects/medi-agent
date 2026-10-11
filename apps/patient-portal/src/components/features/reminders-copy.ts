@@ -55,6 +55,8 @@ const spanish: Record<string, string> = {
   "Save reminder schedule": "Guardar recordatorio",
   Cancel: "Cancelar",
   "Clear schedule": "Eliminar recordatorio",
+  "Written in Spanish by your care team": "Escrito en español por tu equipo de atención",
+  "Written in English by your care team": "Escrito en inglés por tu equipo de atención",
   "Advanced settings": "Ajustes de zona horaria",
   "Reminder timezone:": "Zona horaria del recordatorio:",
   "Timezone updated.": "Zona horaria actualizada.",
