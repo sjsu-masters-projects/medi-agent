@@ -154,7 +154,9 @@ def create_app() -> FastAPI:
         notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
     )
     application.include_router(
-        notification_centre.router, prefix=f"{api}/notification-centre", tags=["Notification centre"]
+        notification_centre.router,
+        prefix=f"{api}/notification-centre",
+        tags=["Notification centre"],
     )
     application.include_router(reminders.router, prefix=f"{api}/reminders", tags=["Reminders"])
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])

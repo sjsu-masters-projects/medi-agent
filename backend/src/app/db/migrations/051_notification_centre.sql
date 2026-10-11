@@ -14,7 +14,7 @@ CREATE TABLE public.notification_events (
     'appointments','notifications','care_plan_versions','documents','adherence_logs',
     'adr_assessments','clinician_messages')),
   source_id uuid NOT NULL,
-  patient_id uuid NOT NULL REFERENCES public.patients(id),
+  patient_id uuid NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
   audience text NOT NULL CHECK (audience IN ('patient','clinician','shared','private')),
   recipient_id uuid,
   metadata jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(metadata)='object'),
@@ -24,8 +24,8 @@ CREATE INDEX notification_events_source ON public.notification_events(source_typ
 CREATE INDEX notification_events_patient ON public.notification_events(patient_id,created_at DESC,id DESC);
 
 CREATE TABLE public.notification_pending_deliveries (
-  event_id uuid NOT NULL REFERENCES public.notification_events(id),
-  recipient_id uuid NOT NULL REFERENCES auth.users(id),
+  event_id uuid NOT NULL REFERENCES public.notification_events(id) ON DELETE CASCADE,
+  recipient_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   recipient_role text NOT NULL CHECK (recipient_role IN ('patient','clinician')),
   delivered_at timestamptz,
   PRIMARY KEY(event_id,recipient_id)
@@ -34,8 +34,8 @@ CREATE INDEX notification_pending_actor ON public.notification_pending_deliverie
   WHERE delivered_at IS NULL;
 CREATE TABLE public.notification_receipts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id uuid NOT NULL REFERENCES public.notification_events(id),
-  recipient_id uuid NOT NULL REFERENCES auth.users(id),
+  event_id uuid NOT NULL REFERENCES public.notification_events(id) ON DELETE CASCADE,
+  recipient_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   recipient_role text NOT NULL CHECK (recipient_role IN ('patient','clinician')),
   created_at timestamptz NOT NULL,
   read_at timestamptz,
@@ -48,8 +48,8 @@ CREATE INDEX notification_receipts_unread ON public.notification_receipts(recipi
 CREATE INDEX notification_receipts_event ON public.notification_receipts(event_id);
 CREATE TABLE public.notification_read_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  receipt_id uuid NOT NULL REFERENCES public.notification_receipts(id),
-  actor_id uuid NOT NULL REFERENCES auth.users(id),
+  receipt_id uuid NOT NULL REFERENCES public.notification_receipts(id) ON DELETE CASCADE,
+  actor_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   action text NOT NULL CHECK (action IN ('read','acknowledge')),
   note text CHECK (char_length(note)<=1000),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -72,10 +72,33 @@ CREATE FUNCTION private.notification_immutable() RETURNS trigger
 LANGUAGE plpgsql SET search_path='' AS $$
 BEGIN RAISE EXCEPTION 'Notification history is append only' USING ERRCODE='42501'; END;
 $$;
-CREATE TRIGGER notification_events_immutable BEFORE UPDATE OR DELETE ON public.notification_events
+-- History is never edited. Rows are removed only with the account or patient they belong
+-- to (cascade), which keeps account deletion and the synthetic demo reset working; no
+-- role is granted DELETE, so nothing else can remove them.
+CREATE TRIGGER notification_events_immutable BEFORE UPDATE ON public.notification_events
   FOR EACH ROW EXECUTE FUNCTION private.notification_immutable();
-CREATE TRIGGER notification_audit_immutable BEFORE UPDATE OR DELETE ON public.notification_read_audit
+CREATE TRIGGER notification_audit_immutable BEFORE UPDATE ON public.notification_read_audit
   FOR EACH ROW EXECUTE FUNCTION private.notification_immutable();
+
+-- One malformed source value must not break a person's whole notification centre.
+CREATE FUNCTION private.notification_ts(p_value text) RETURNS timestamptz
+LANGUAGE plpgsql STABLE SET search_path='' AS $$
+BEGIN RETURN nullif(p_value,'')::timestamptz;
+EXCEPTION WHEN invalid_text_representation OR invalid_datetime_format OR datetime_field_overflow
+  OR invalid_parameter_value THEN RETURN NULL;
+END;
+$$;
+CREATE FUNCTION private.notification_uuid(p_value text) RETURNS uuid
+LANGUAGE plpgsql IMMUTABLE SET search_path='' AS $$
+BEGIN RETURN nullif(p_value,'')::uuid;
+EXCEPTION WHEN invalid_text_representation THEN RETURN NULL;
+END;
+$$;
+CREATE FUNCTION private.notification_zone(p_zone text) RETURNS text
+LANGUAGE sql STABLE SET search_path='' AS $$
+  SELECT CASE WHEN EXISTS(SELECT 1 FROM pg_catalog.pg_timezone_names WHERE name=p_zone)
+    THEN p_zone ELSE 'UTC' END
+$$;
 
 -- Internal only: never return arbitrary source JSON to the API (ADR reasoning,
 -- storage URLs, and unrelated clinical content must not enter notification data).
@@ -139,7 +162,8 @@ BEGIN
  SELECT * INTO v_schedule FROM public.reminder_schedules WHERE patient_id=(s->>'patient_id')::uuid
    AND target_id=v_target AND target_type::text=m->>'target_type' AND is_enabled;
  IF NOT FOUND THEN RETURN false; END IF;
- SELECT timezone INTO v_timezone FROM public.patients WHERE id=(s->>'patient_id')::uuid;
+ SELECT private.notification_zone(timezone) INTO v_timezone FROM public.patients
+   WHERE id=(s->>'patient_id')::uuid;
  IF (v_when AT TIME ZONE v_timezone)::date<>(clock_timestamp() AT TIME ZONE v_timezone)::date THEN RETURN false; END IF;
  v_day:=lower(trim(to_char(v_when AT TIME ZONE v_schedule.timezone,'Day')));
  IF NOT v_schedule.days_of_week ? v_day OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(v_schedule.times_of_day) x
@@ -156,7 +180,8 @@ BEGIN
    AND a.target_id=v_target AND a.target_type::text=m->>'target_type' AND a.status IN ('taken','completed','skipped')
    AND (a.scheduled_time=v_when OR (a.scheduled_time IS NULL AND
      (a.logged_at AT TIME ZONE v_timezone)::date=(v_when AT TIME ZONE v_timezone)::date)));
-EXCEPTION WHEN invalid_text_representation OR invalid_datetime_format THEN RETURN false;
+EXCEPTION WHEN invalid_text_representation OR invalid_datetime_format OR datetime_field_overflow
+  OR invalid_parameter_value THEN RETURN false;
 END;
 $$;
 
@@ -180,13 +205,14 @@ BEGIN
  WHEN 'safety_flag' THEN RETURN p_role='clinician';
  WHEN 'med_reminder','obligation_reminder' THEN RETURN private.notification_reminder_active(s);
  WHEN 'appointment_reminder' THEN
-   SELECT to_jsonb(a) INTO s FROM public.appointments a WHERE a.id=(e.metadata->>'appointment_id')::uuid
-     AND a.patient_id=e.patient_id;
-   RETURN coalesce(s->>'status' IN ('confirmed','scheduled') AND (s->>'scheduled_at')::timestamptz>clock_timestamp(),false);
- ELSE RETURN s->>'status' IN ('proposed','confirmed','scheduled')
-   AND (s->>'scheduled_at')::timestamptz>clock_timestamp()
+   SELECT to_jsonb(a) INTO s FROM public.appointments a
+     WHERE a.id=private.notification_uuid(e.metadata->>'appointment_id') AND a.patient_id=e.patient_id;
+   RETURN coalesce(s->>'status' IN ('confirmed','scheduled')
+     AND private.notification_ts(s->>'scheduled_at')>clock_timestamp(),false);
+ ELSE RETURN coalesce(s->>'status' IN ('proposed','confirmed','scheduled')
+   AND private.notification_ts(s->>'scheduled_at')>clock_timestamp()
    AND (s->>'status'<>'proposed' OR nullif(s->>'proposal_expires_at','') IS NULL
-     OR (s->>'proposal_expires_at')::timestamptz>clock_timestamp());
+     OR private.notification_ts(s->>'proposal_expires_at')>clock_timestamp()),false);
  END CASE;
 END;
 $$;
@@ -232,7 +258,7 @@ BEGIN
    SELECT to_jsonb(v) INTO s FROM public.care_plan_versions v WHERE id=v_id;
  ELSIF TG_TABLE_NAME='care_plan_generation_requests' THEN
    v_id:=(s->>'plan_version_id')::uuid;
-   IF s->>'status'<>'completed' OR v_id IS NULL THEN RETURN NEW; END IF;
+   IF s->>'status' IS DISTINCT FROM 'completed' OR v_id IS NULL THEN RETURN NEW; END IF;
    SELECT to_jsonb(v) INTO s FROM public.care_plan_versions v WHERE id=v_id;
  END IF;
  v_patient:=(s->>'patient_id')::uuid;
@@ -282,12 +308,12 @@ BEGIN
    ELSE RETURN NEW; END IF;
    v_meta:=jsonb_build_object('review_status',s->>'review_status','parse_status',s->>'parse_status');
  WHEN 'adherence_logs' THEN
-   IF s->>'barrier_code' IS NULL OR s->>'status'<>'skipped'
+   IF s->>'barrier_code' IS NULL OR s->>'status' IS DISTINCT FROM 'skipped'
      OR (TG_OP='UPDATE' AND (s->>'barrier_code',s->>'status') IS NOT DISTINCT FROM (o->>'barrier_code',o->>'status')) THEN RETURN NEW; END IF;
    v_kind:='barrier_reported'; v_category:='follow_up';
    v_meta:=jsonb_build_object('target_id',s->>'target_id','target_type',s->>'target_type','barrier_code',s->>'barrier_code');
  WHEN 'adr_assessments' THEN
-   IF s->>'status'<>'draft' THEN RETURN NEW; END IF;
+   IF s->>'status' IS DISTINCT FROM 'draft' THEN RETURN NEW; END IF;
    IF s->>'last_review_action'='request_information' AND (TG_OP='INSERT' OR
      (s->>'last_review_action',s->'requested_information',s->>'updated_at') IS DISTINCT FROM
        (o->>'last_review_action',o->'requested_information',o->>'updated_at')) THEN
@@ -297,8 +323,8 @@ BEGIN
    ELSE RETURN NEW; END IF;
    v_category:='safety';
  WHEN 'clinician_messages' THEN
-   IF TG_OP<>'INSERT' OR s->>'subject'<>'Urgent patient chat escalation'
-     OR left(s->>'body',25)<>'Chat escalation flagged (' THEN RETURN NEW; END IF;
+   IF TG_OP<>'INSERT' OR s->>'subject' IS DISTINCT FROM 'Urgent patient chat escalation'
+     OR left(s->>'body',25) IS DISTINCT FROM 'Chat escalation flagged (' THEN RETURN NEW; END IF;
    v_kind:='safety_flag'; v_category:='safety';
    -- Fanout inserts share transaction timestamp/body; keep one event for the patient.
    v_key:='safety:'||v_patient||':'||md5((s->>'body')||':'||(s->>'created_at'));
@@ -347,7 +373,7 @@ FROM public.notifications n;
 -- thread history or old resolved tasks. Existing event identities are reused.
 CREATE FUNCTION private.notification_prepare(p_actor uuid,p_role text) RETURNS void
 LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
-DECLARE x record; e public.notification_events; v_id uuid;
+DECLARE x record; v_ev public.notification_events; v_id uuid;
 BEGIN
  IF p_role='clinician' THEN
    FOR x IN
@@ -367,12 +393,12 @@ BEGIN
      IF NOT EXISTS(SELECT 1 FROM public.care_teams ct JOIN public.clinicians c ON c.id=ct.clinician_id
        JOIN public.clinics cl ON cl.id=c.clinic_id WHERE ct.patient_id=x.patient_id AND ct.clinician_id=p_actor
        AND ct.status='active' AND cl.status='active') THEN CONTINUE; END IF;
-     SELECT * INTO e FROM public.notification_events WHERE source_type=x.typ AND source_id=x.id
+     SELECT * INTO v_ev FROM public.notification_events WHERE source_type=x.typ AND source_id=x.id
        AND event_type=x.kind ORDER BY created_at DESC,id DESC LIMIT 1;
      IF NOT FOUND THEN
        v_id:=private.notification_capture(x.typ,x.id,x.patient_id,x.kind,x.category,'shared',NULL,
          '{}'::jsonb,'current:'||x.typ||':'||x.id||':'||x.kind,clock_timestamp());
-     ELSE v_id:=e.id; END IF;
+     ELSE v_id:=v_ev.id; END IF;
      INSERT INTO public.notification_pending_deliveries(event_id,recipient_id,recipient_role)
        VALUES(v_id,p_actor,p_role) ON CONFLICT DO NOTHING;
    END LOOP;
@@ -410,8 +436,8 @@ LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
  ), states AS (
    SELECT a.*,(a.read_at IS NOT NULL OR (a.source_type='notifications' AND coalesce((s->>'is_read')::boolean,false))
      OR (a.event_type='message_received' AND EXISTS(SELECT 1 FROM public.care_conversation_reads cr
-       WHERE cr.conversation_id=(a.metadata->>'conversation_id')::uuid AND cr.actor_id=p_actor
-         AND ((a.s->>'created_at')::timestamptz,a.source_id)<=(cr.last_message_at,cr.last_message_id)))) seen,
+       WHERE cr.conversation_id=private.notification_uuid(a.metadata->>'conversation_id') AND cr.actor_id=p_actor
+         AND (private.notification_ts(a.s->>'created_at'),a.source_id)<=(cr.last_message_at,cr.last_message_id)))) seen,
      (a.active AND a.latest=1 AND a.acknowledged_at IS NULL) needs
    FROM authorized a
  )
@@ -419,7 +445,8 @@ LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
    (p_role='clinician' AND a.event_type IN ('barrier_reported','safety_flag') AND a.needs),
    CASE WHEN a.event_type='message_received' THEN 'message:'||(a.metadata->>'conversation_id')
      WHEN a.category='reminders' THEN 'reminder:'||coalesce(a.metadata->>'target_id',a.source_id::text)||':'||
-       coalesce(((a.metadata->>'scheduled_at')::timestamptz AT TIME ZONE p.timezone)::date::text,a.created_at::date::text)
+       coalesce((private.notification_ts(a.metadata->>'scheduled_at')
+         AT TIME ZONE private.notification_zone(p.timezone))::date::text,a.created_at::date::text)
      ELSE 'receipt:'||a.id END,
    jsonb_build_object('id',a.id,'event_type',a.event_type,'category',a.category,'source_type',a.source_type,
      'source_id',a.source_id,'patient_id',a.patient_id,'metadata',a.metadata,'created_at',a.created_at,
