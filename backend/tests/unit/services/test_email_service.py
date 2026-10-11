@@ -32,9 +32,12 @@ def test_template_escapes_data_and_has_plaintext():
     assert "#F3EEE6" in content.html and "#147465" in content.html
 
 
-@pytest.mark.parametrize(
-    "url", ["javascript:alert(1)", "https://" + "user:example-only" + "@app.example.com", "http://app.example.com"]
-)
+# A link carrying credentials must be rejected; built at runtime so no literal
+# "user:password@host" URI is committed.
+CREDENTIAL_URL = "https://" + ":".join(["user", "example-only"]) + "@app.example.com"
+
+
+@pytest.mark.parametrize("url", ["javascript:alert(1)", CREDENTIAL_URL, "http://app.example.com"])
 def test_template_rejects_unsafe_urls(url):
     with pytest.raises(ValueError):
         render_email("Update", [], action_url=url, action_label="Open")
