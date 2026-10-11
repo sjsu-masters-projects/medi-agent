@@ -371,8 +371,8 @@ function ClinicianLoginPageContent() {
     return (
         <AuthShell
             headline="Clinical intelligence for the entire patient panel."
-            subcopy="Surface high-risk adherence issues, coordinate shared care, and act on MedWatch drafts from one dashboard."
-            footer="Built for care teams managing proactive, AI-assisted follow-up."
+            subcopy="Review AI-drafted care plans against their source documents, catch adherence risk early, and publish only what you approve."
+            footer="Supervised clinical decision support for outpatient chronic care."
         >
                 <div className="space-y-6">
                     <div className="space-y-2">
@@ -389,9 +389,9 @@ function ClinicianLoginPageContent() {
                         </h2>
                         <p className="text-sm leading-relaxed text-muted">
                             {stage === "verify"
-                                ? "Verify your clinic workspace before continuing to login or registration."
+                                ? "Your clinic code opens your workspace. Next, you'll sign in or join the clinic."
                                 : stage === "choose"
-                                    ? "Clinic verified. Continue to sign in with your account or join this clinic."
+                                    ? "Clinic verified. Sign in, or create an account to join this clinic."
                                     : stage === "login"
                                         ? "Access your dashboard, roster, and active alerts."
                                         : "Use your authenticator app to complete sign-in."}
@@ -417,12 +417,15 @@ function ClinicianLoginPageContent() {
                             <Button disabled={submitting} fullWidth size="lg" type="submit">
                                 {submitting ? "Verifying..." : <>Verify clinic code<Icon name="arrow" className="h-4 w-4" /></>}
                             </Button>
-                            <p className="border-t border-line pt-4 text-sm text-muted">
-                                New clinic?{" "}
-                                <Link className="font-medium text-primary hover:underline" href="/signup/admin">
-                                    Start a new clinic workspace (creates Clinic Admin)
-                                </Link>
-                            </p>
+                            <div className="space-y-0.5 border-t border-line pt-4 text-sm">
+                                <p className="text-muted">
+                                    New clinic?{" "}
+                                    <Link className="font-medium text-primary hover:underline" href="/signup/admin">
+                                        Create a clinic workspace
+                                    </Link>
+                                </p>
+                                <p className="text-xs text-muted">You&apos;ll set it up as its first Clinic Admin.</p>
+                            </div>
                         </form>
                     ) : null}
 

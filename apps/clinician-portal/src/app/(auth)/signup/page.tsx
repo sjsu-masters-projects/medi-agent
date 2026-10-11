@@ -188,8 +188,8 @@ function ClinicianSignupPageContent() {
 
     return (
         <AuthShell
-            headline="Stand up your clinic workspace with one secure account."
-            subcopy="Create your clinician account, connect your clinic identity, and begin managing patient follow-up from a shared dashboard."
+            headline="Join your clinic's care team."
+            subcopy="Create your clinician account to review AI drafts, approve care plans, and follow up with the patients assigned to you."
             footer="Access is limited to your clinic role and assigned care team."
             wide
         >

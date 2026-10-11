@@ -423,9 +423,9 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
                     <ol className="flex flex-wrap items-center gap-x-2 gap-y-2" aria-label="Publishing steps">
                         {steps.map((step, index) => <li key={step.label} className="flex items-center gap-2">
-                            {index > 0 ? <span aria-hidden="true" className="hidden h-px w-8 bg-line-strong sm:block xl:w-10" /> : null}
+                            {index > 0 ? <span aria-hidden="true" className="hidden h-px w-4 bg-line-strong sm:block xl:w-8 2xl:w-10" /> : null}
                             <span aria-hidden="true" className={`flex h-[22px] w-[22px] items-center justify-center rounded-full font-mono text-[11px] transition-colors duration-[160ms] ${step.state === "done" ? "bg-ok text-white" : step.state === "current" ? "border-2 border-primary text-ink" : step.state === "blocked" ? "border-[1.5px] border-warn text-warn-ink" : "border-[1.5px] border-[#CBD5E1] text-muted"}`}>{step.state === "done" ? <Icon name="check" className="h-3 w-3" strokeWidth={2.6} draw /> : index + 1}</span>
-                            <span aria-current={step.state === "current" ? "step" : undefined} className={`whitespace-nowrap text-[13px] ${step.state === "current" ? "font-semibold text-ink" : step.state === "done" ? "text-ok-ink" : step.state === "blocked" ? "text-warn-ink" : "text-muted"}`}>{step.label}</span>
+                            <span aria-current={step.state === "current" ? "step" : undefined} className={`whitespace-nowrap text-[13px] ${step.state === "current" ? "" : "sr-only xl:not-sr-only"} ${step.state === "current" ? "font-semibold text-ink" : step.state === "done" ? "text-ok-ink" : step.state === "blocked" ? "text-warn-ink" : "text-muted"}`}>{step.label}</span>
                         </li>)}
                     </ol>
                     <Popover align="end" className="ml-auto" label="Before publishing" trigger={(props) => <button {...props} aria-label="Before publishing" className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink" type="button"><Icon name="info" className="h-4 w-4" /></button>}>
@@ -499,15 +499,17 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
 
         {/* Sticky approval bar: same note, same save and approve gating */}
         {isDraft ? <div className="sticky bottom-0 z-20 -mx-4 border-t border-line-strong bg-white/90 px-4 py-3 backdrop-blur-md sm:-mx-7 sm:px-7">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <p className="text-[13px] text-ink-2 lg:max-w-[260px]">{activePlan ? `v${activePlan.version_number} stays active in Today until this version is approved.` : "Nothing is visible to the patient until approval."}</p>
-                <label className="min-w-[240px] flex-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-2 xl:grid-cols-[minmax(170px,220px)_minmax(220px,1fr)_auto_auto]">
+                <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+                    <p className="font-mono text-xs text-ink-2">{verifiedCount} of {retained.length} verified{blockerCount ? ` · ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}` : ""}</p>
+                    <p className="mt-0.5 text-xs leading-snug text-muted">{activePlan ? `v${activePlan.version_number} stays live in Today until you approve.` : "Nothing is visible to the patient until approval."}</p>
+                </div>
+                <label className="col-span-3 row-start-2 min-w-0 xl:col-span-1 xl:col-start-2 xl:row-start-1">
                     <span className="sr-only">Approval note</span>
                     <textarea rows={1} className="block max-h-28 min-h-[42px] w-full resize-y rounded-[10px] border border-line-strong bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:bg-surface focus:ring-4 focus:ring-[rgba(37,99,235,.12)]" placeholder="Record the basis for your approval." value={note} onChange={(event) => setNote(event.target.value)} />
                 </label>
-                <span className="font-mono text-xs text-muted">{verifiedCount} of {retained.length} verified{blockerCount ? ` · ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}` : ""}</span>
-                <button className="ma-press inline-flex h-[42px] items-center rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-60" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save review"}</button>
-                <button className="ma-press inline-flex h-[42px] items-center gap-2 rounded-[10px] bg-primary px-[18px] text-sm font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,.3)] hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8] disabled:shadow-none" disabled={!canApprove} onClick={() => void approve()} type="button"><Icon name="check" className="h-4 w-4" strokeWidth={2.4} />Approve and publish plan</button>
+                <button className="ma-press inline-flex h-[42px] items-center whitespace-nowrap rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-60" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save review"}</button>
+                <button className="ma-press inline-flex h-[42px] items-center gap-2 whitespace-nowrap rounded-[10px] bg-primary px-[18px] text-sm font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,.3)] hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8] disabled:shadow-none" disabled={!canApprove} onClick={() => void approve()} type="button"><Icon name="check" className="h-4 w-4" strokeWidth={2.4} />Approve and publish plan</button>
             </div>
         </div> : null}
     </section>;

@@ -293,6 +293,18 @@ function ProfilePageContent() {
     const eyebrowClass = "px-[22px] pt-5 pb-2 font-mono text-xs uppercase tracking-[0.08em] text-muted";
     const chevron = <Icon name="chevron" className="h-[18px] w-[18px] shrink-0 text-faint" />;
     const initialsOf = (first?: string, last?: string) => `${first?.charAt(0) ?? ""}${last?.charAt(0) ?? ""}`.toUpperCase() || "?";
+    // "America/Los_Angeles" reads as "Pacific Time · Los Angeles"; unknown zones fall back to the raw name.
+    const formatTimezone = (zone: string) => {
+        try {
+            const name = new Intl.DateTimeFormat(locale, { timeZone: zone, timeZoneName: "longGeneric" })
+                .formatToParts(new Date())
+                .find((part) => part.type === "timeZoneName")?.value;
+            const city = zone.includes("/") ? zone.split("/").pop()?.replaceAll("_", " ") : null;
+            return name && city ? `${name} · ${city}` : name ?? zone;
+        } catch {
+            return zone;
+        }
+    };
     const formatBirthDate = (value: string) => {
         const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
         if (!match) return value;
@@ -427,8 +439,8 @@ function ProfilePageContent() {
                                     <dt className="text-ink-2">
                                         {copy.timezone}
                                     </dt>
-                                    <dd className="min-w-0 break-all text-right font-medium text-ink">
-                                        {patientProfile.timezone ?? "UTC"}
+                                    <dd className="min-w-0 text-right font-medium text-ink" title={patientProfile.timezone ?? "UTC"}>
+                                        {formatTimezone(patientProfile.timezone ?? "UTC")}
                                     </dd>
                                 </div>
                             </dl>
@@ -615,6 +627,16 @@ function ProfilePageContent() {
                                     required
                                     value={editDraft.lastName}
                                 />
+                            </div>
+                            <div className="rounded-2xl bg-surface-2 px-4 py-3" aria-describedby="profile-dob-help">
+                                <p className="flex items-center justify-between gap-3 text-[15px]">
+                                    <span className="font-semibold text-ink-2">{copy.dob}</span>
+                                    <time className="flex items-center gap-1.5 font-medium text-ink" dateTime={patientProfile?.dateOfBirth}>
+                                        <Icon name="lock" className="h-4 w-4 text-muted" />
+                                        {patientProfile ? formatBirthDate(patientProfile.dateOfBirth) : ""}
+                                    </time>
+                                </p>
+                                <p className="mt-1 text-[13px] leading-5 text-muted" id="profile-dob-help">{copy.dobLocked}</p>
                             </div>
                             <div className="space-y-1">
                                 <label

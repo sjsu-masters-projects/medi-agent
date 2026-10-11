@@ -310,7 +310,7 @@ export function PatientDocumentsPanel({
                     {documents.map((doc) => (
                         <div className="scroll-mt-24 border-b border-line px-5 py-4 last:border-b-0 target:bg-primary-tint/40 target:ring-2 target:ring-inset target:ring-primary" id={`document-${doc.id}`} key={doc.id}>
                             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                                <div className="flex min-w-0 flex-1 items-start gap-3">
+                                <div className="flex min-w-0 flex-1 basis-[18rem] items-start gap-3">
                                     <DocumentTypeTile documentType={doc.documentType} />
                                     <div className="min-w-0">
                                         <div className="flex min-w-0 items-start gap-1.5"><SourceFileIcon className="mt-0.5" name={doc.fileName} /><p className="min-w-0 break-words text-sm font-semibold text-ink">{doc.fileName}</p></div>

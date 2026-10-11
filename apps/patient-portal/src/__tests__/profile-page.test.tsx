@@ -523,7 +523,7 @@ describe("Patient profile page", () => {
                     : "Profile updated successfully.",
             );
             expect(screen.getByText(/1985/)).toHaveAttribute("dateTime", "1985-03-15");
-            expect(screen.getByText("America/Los_Angeles")).toBeInTheDocument();
+            expect(screen.getByTitle("America/Los_Angeles")).toHaveTextContent("Los Angeles");
         },
     );
 

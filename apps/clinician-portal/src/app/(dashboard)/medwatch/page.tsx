@@ -134,8 +134,8 @@ export default function MedWatchPage() {
                         Review possible adverse drug reactions against patient evidence. Naranjo scores support your review; they do not make a clinical decision.
                     </p>
                 </div>
-                <div className="flex flex-wrap items-end gap-x-9 gap-y-5">
-                    <dl className="flex flex-wrap gap-x-9 gap-y-4">
+                <div className="flex w-full flex-wrap items-end justify-between gap-x-9 gap-y-5 xl:w-auto">
+                    <dl className="grid flex-1 grid-cols-3 gap-x-8 gap-y-4 xl:flex xl:flex-none xl:gap-x-9">
                         <div className="flex flex-col-reverse gap-0.5">
                             <dt className="text-[13px] text-muted">
                                 Pending ADR reviews
@@ -151,17 +151,17 @@ export default function MedWatchPage() {
                             </dd>
                         </div>
                         <div className="flex flex-col-reverse gap-0.5">
-                            <dt className="text-[13px] text-muted">Scoring</dt>
-                            <dd className="flex min-h-[35px] max-w-[20ch] items-end text-[15px] font-semibold leading-snug text-ink">
-                                Naranjo assessment support
+                            <dt className="text-[13px] text-muted">Scoring aid</dt>
+                            <dd className="flex min-h-[35px] items-end text-[15px] font-semibold leading-snug text-ink">
+                                Naranjo scale
                             </dd>
                         </div>
                         <div className="flex flex-col-reverse gap-0.5">
                             <dt className="text-[13px] text-muted">
-                                MedWatch status
+                                MedWatch report
                             </dt>
-                            <dd className="flex min-h-[35px] max-w-[22ch] items-end text-[15px] font-semibold leading-snug text-ink">
-                                ADR review does not create a report
+                            <dd className="flex min-h-[35px] items-end text-[15px] font-semibold leading-snug text-ink" title="Reviewing an ADR here does not file a MedWatch report.">
+                                Filed separately
                             </dd>
                         </div>
                     </dl>

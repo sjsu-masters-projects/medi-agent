@@ -20,15 +20,19 @@ export function SupervisedFlowStack() {
     const plane = "absolute left-[80px] flex h-[240px] w-[240px] flex-col gap-3.5 rounded-[28px] p-[30px] [transform:rotateX(60deg)_rotateZ(-45deg)]";
 
     return (
-        <div aria-hidden="true" className="relative h-[420px] w-[640px] origin-top-left scale-[.68] xl:scale-[.84] 2xl:scale-100">
+        <div aria-hidden="true" className="auth-flow-stack relative h-[420px] w-[640px] origin-top-left">
             {/* 01 Documents */}
             <div className={`${plane} top-[210px] border border-[rgba(148,163,184,.35)] bg-[rgba(148,163,184,.08)]`}>
                 <div className="flex h-full gap-3">{[0, 1, 2].map((index) => <div key={index} className="flex-1 rounded-lg border border-[rgba(148,163,184,.3)] bg-[rgba(148,163,184,.18)]" />)}</div>
             </div>
             {/* 02 AI draft */}
             <div className={`${plane} top-[138px] border-[1.5px] border-dashed border-[rgba(96,165,250,.6)] bg-[rgba(59,130,246,.12)]`}>
-                <Icon name="spark" className="h-[34px] w-[34px] text-[#93C5FD]" />
-                {[90, 70, 80, 55].map((width) => <div key={width} className="h-3.5 rounded-[7px] bg-[rgba(147,197,253,.45)]" style={{ width: `${width}%` }} />)}
+                {[90, 70, 80, 55].map((width, index) => (
+                    <div key={width} className="flex items-center gap-2.5">
+                        <div className={`h-[22px] w-[22px] flex-none rounded-[7px] border border-dashed border-[rgba(147,197,253,.7)] ${index === 0 ? "bg-[rgba(147,197,253,.5)]" : ""}`} />
+                        <div className="h-3 rounded-md bg-[rgba(147,197,253,.4)]" style={{ width: `${width}%` }} />
+                    </div>
+                ))}
             </div>
             {/* 03 Clinician gate */}
             <div className={`${plane} top-[66px] border-[1.5px] border-[rgba(45,212,191,.8)] bg-[rgba(15,118,110,.22)]`}>
@@ -50,19 +54,22 @@ export function SupervisedFlowStack() {
             <div className="absolute left-[199px] top-[114px] h-[216px] border-l border-dashed border-[rgba(94,234,212,.35)]" />
             <span className="absolute left-[194px] top-[324px] block h-3 w-3 rounded-full bg-[#5EEAD4] shadow-[0_0_16px_4px_rgba(94,234,212,.7)] motion-reduce:hidden"
                 style={{ animation: "ma-rise 6s ease-in-out infinite", ...play }} />
-            {/* flat labels */}
+            {/* flat labels: each centred on its plate; the leader starts at the plate's right corner */}
             {[
                 { y: 114, n: "04", t: "Patient Today", s: "Only approved items appear", c: "#F5C46A" },
-                { y: 186, n: "03 · GATE", t: "Clinician review", s: "Nothing passes without approval", c: "#5EEAD4" },
-                { y: 258, n: "02", t: "AI draft", s: "Not visible to the patient", c: "#93C5FD" },
+                { y: 186, n: "03 · Gate", t: "Clinician review", s: "Nothing passes without approval", c: "#5EEAD4" },
+                { y: 258, n: "02", t: "AI draft", s: "Never shown to the patient", c: "#93C5FD" },
                 { y: 330, n: "01", t: "Documents", s: "Source evidence with citations", c: "#A9B6CA" },
             ].map((label) => (
                 <div key={label.n}>
-                    <div className="absolute left-[378px] h-px w-9 opacity-60" style={{ top: label.y - 1, background: label.c }} />
-                    <div className="absolute left-[424px] flex flex-col gap-[3px]" style={{ top: label.y - 22 }}>
-                        <span className="font-mono text-xs tracking-[0.08em]" style={{ color: label.c }}>{label.n}</span>
-                        <span className="text-[15px] font-semibold text-rail-ink">{label.t}</span>
-                        <span className="text-[13px] text-[#8B9AB3]">{label.s}</span>
+                    <span className="absolute left-[372px] h-1.5 w-1.5 rounded-full" style={{ top: label.y - 3, background: label.c }} />
+                    <div className="absolute left-[378px] h-px w-[34px] opacity-50" style={{ top: label.y, background: label.c }} />
+                    <div className="absolute left-[424px] flex w-[216px] flex-col gap-1" style={{ top: label.y - 20 }}>
+                        <p className="flex items-baseline gap-2 whitespace-nowrap leading-none">
+                            <span className="font-mono text-[11px] uppercase tracking-[0.08em]" style={{ color: label.c }}>{label.n}</span>
+                            <span className="text-[15px] font-semibold text-rail-ink">{label.t}</span>
+                        </p>
+                        <span className="whitespace-nowrap text-[13px] leading-tight text-[#8B9AB3]">{label.s}</span>
                     </div>
                 </div>
             ))}
@@ -80,21 +87,26 @@ export function AuthShell({ headline, subcopy, footer, children, wide = false }:
 }) {
     return (
         <div className="flex min-h-screen bg-background">
-            <aside className="relative hidden w-[52%] max-w-[880px] flex-col overflow-hidden bg-rail px-12 pb-10 pt-12 text-rail-ink lg:flex xl:px-14">
+            <aside className="sticky top-0 hidden h-dvh w-1/2 flex-col overflow-hidden bg-rail px-12 pb-9 pt-10 text-rail-ink lg:flex xl:px-16">
                 <div className="radar-floor radar-floor--dark" aria-hidden="true" />
                 <div aria-hidden="true" className="pointer-events-none absolute -left-24 top-1/3 h-[420px] w-[520px] rounded-full bg-[radial-gradient(ellipse,rgba(45,212,191,.12),transparent_65%)]" />
-                <div className="relative flex items-center gap-3">
-                    <Image src="/brand/mark-sidebar.svg" alt="" width={34} height={34} className="rounded-md" />
-                    <p className="text-lg font-semibold tracking-[-0.01em]">MediAgent<span className="text-rail-accent">Pro</span></p>
+                <div className="relative mx-auto flex w-full max-w-[640px] flex-1 flex-col">
+                    <div className="flex items-center gap-3">
+                        <Image src="/brand/mark-sidebar.svg" alt="" width={34} height={34} className="rounded-md" />
+                        <p className="text-lg font-semibold tracking-[-0.01em]">MediAgent<span className="text-rail-accent">Pro</span></p>
+                    </div>
+                    {/* headline and flow sit together in the optical centre of the panel */}
+                    <div className="my-auto py-6">
+                        <div className="max-w-[600px] space-y-4">
+                            <h1 className="text-[36px] font-semibold leading-[1.08] tracking-[-0.03em] text-rail-ink xl:text-[44px]">{headline}</h1>
+                            <p className="max-w-[540px] text-[17px] leading-[1.55] text-rail-muted">{subcopy}</p>
+                        </div>
+                        <div className="auth-flow mt-8">
+                            <SupervisedFlowStack />
+                        </div>
+                    </div>
+                    {footer ? <p className="text-sm text-[#8B9AB3]">{footer}</p> : null}
                 </div>
-                <div className="relative mt-11 max-w-[600px] space-y-4">
-                    <h1 className="text-[40px] font-semibold leading-[1.06] tracking-[-0.03em] text-rail-ink xl:text-[44px]">{headline}</h1>
-                    <p className="text-[17px] leading-[1.55] text-rail-muted">{subcopy}</p>
-                </div>
-                <div className="relative mt-8 h-[286px] xl:h-[353px] 2xl:h-[420px]">
-                    <SupervisedFlowStack />
-                </div>
-                {footer ? <p className="relative mt-auto pt-8 text-sm text-[#8B9AB3]">{footer}</p> : null}
             </aside>
 
             <main className="relative flex flex-1 items-center justify-center px-5 py-10 sm:px-8">

@@ -153,7 +153,7 @@ export function Sidebar() {
                             <span>{roleMeta.label}</span>
                             {clinicName ? <span className="hidden md:inline"> · {clinicName}</span> : null}
                         </p>
-                        <p className="mt-1 hidden truncate text-[11px] text-rail-faint md:block">{email}</p>
+                        <p className="mt-1 hidden truncate text-[11px] text-rail-faint md:block" title={email}>{email}</p>
                     </div>
                 </div>
                 <button
