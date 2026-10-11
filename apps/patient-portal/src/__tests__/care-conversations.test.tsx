@@ -41,7 +41,8 @@ describe("human conversations", () => {
     vi.mocked(careConversations.list).mockResolvedValue([thread, { ...thread, id: "thread-two", clinician_id: "clinician-two", clinician_name: "Dr. Two" }]);
     render(<CareConversations compact conversationId="thread-two" />);
     await screen.findByRole("heading", { name: "Dr. Two" });
-    expect(careConversations.messages).toHaveBeenCalledWith("synthetic-token", "thread-two", undefined);
+    // The heading renders before the thread's first page is requested.
+    await waitFor(() => expect(careConversations.messages).toHaveBeenCalledWith("synthetic-token", "thread-two", undefined));
     expect(careConversations.open).not.toHaveBeenCalled();
   });
   it("shows unavailable rather than opening another thread for a missing exact conversation", async () => {
