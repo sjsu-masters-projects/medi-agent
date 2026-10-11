@@ -137,6 +137,7 @@ def patient_id():
 def connect(client, patient_id, monkeypatch):
     token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
     monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
     # A zero-argument factory: FastAPI reads an override's signature, and the MagicMock
     # class itself would expose *args/**kwargs as required query parameters.
     def _db() -> MagicMock:
