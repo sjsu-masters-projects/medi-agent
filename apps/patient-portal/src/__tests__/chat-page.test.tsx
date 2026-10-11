@@ -348,7 +348,7 @@ describe("Patient chat page", () => {
         await act(async () => {
             socket.emitOpen();
         });
-        await screen.findByText(/AI chat connected/i);
+        await screen.findByText(/^Connected$/);
 
         changePreferredLanguage(Language.ES);
         fireEvent.change(screen.getByPlaceholderText(/Escribe o habla/i), {
@@ -674,7 +674,7 @@ describe("Patient chat page", () => {
             socket.close();
         });
 
-        expect(await screen.findByText(/AI chat disconnected/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Offline$/)).toBeInTheDocument();
 
         await waitFor(() => {
             expect(MockWebSocket.instances.length).toBe(2);
@@ -682,7 +682,7 @@ describe("Patient chat page", () => {
         await act(async () => {
             MockWebSocket.instances[1].emitOpen();
         });
-        expect(await screen.findByText(/AI chat connected/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Connected$/)).toBeInTheDocument();
     });
 
     it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {

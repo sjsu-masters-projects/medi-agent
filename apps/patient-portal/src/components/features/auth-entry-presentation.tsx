@@ -17,5 +17,5 @@ export function AuthEntryInput({ label, trailingAction, ...props }: InputHTMLAtt
 }
 
 export function AuthEntryButton(props: ButtonHTMLAttributes<HTMLButtonElement>) {
-    return <button {...props} className="ma-press inline-flex min-h-[54px] w-full items-center justify-center rounded-btn bg-brand px-5 py-3 text-[17px] font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50" />;
+    return <button {...props} className="ma-press inline-flex min-h-[54px] w-full items-center justify-center rounded-btn bg-brand px-5 py-3 text-[17px] font-semibold text-white shadow-[0_14px_28px_-16px_rgba(20,116,101,.9)] hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none" />;
 }

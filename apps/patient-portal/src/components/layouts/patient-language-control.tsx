@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { HiOutlineInformationCircle, HiOutlineLanguage } from "react-icons/hi2";
+import { Icon } from "@/components/ui/icons";
 import { usePatientProfileState } from "@/hooks/use-patient-profile";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
@@ -39,22 +39,18 @@ export function PatientLanguageControl({ visible = true }: { visible?: boolean }
   }
 
   if (!visible) return null;
-  return <div className="border-b border-line bg-surface px-5 py-2">
-    <div className="flex items-center justify-end gap-2">
-      <HiOutlineLanguage aria-hidden="true" className="h-5 w-5 shrink-0 text-gray-500" />
-      <label className="text-sm font-medium text-gray-700" htmlFor="portal-language">{spanish ? "Idioma" : "Language"}</label>
+  return <div className="space-y-3">
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 text-sm font-semibold text-ink-2" htmlFor="portal-language"><Icon name="globe" className="h-[18px] w-[18px] text-muted" />{spanish ? "Idioma" : "Language"}</label>
       <select id="portal-language" aria-busy={saving} disabled={!profile || loading || saving}
-        className="min-h-11 max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:opacity-60"
+        className="min-h-[52px] w-full max-w-full rounded-2xl border border-line-strong bg-surface px-4 py-3 text-base font-medium text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15 disabled:opacity-60"
         value={locale} onChange={(event) => void changeLanguage(event.target.value as Locale)}>
         <option value="en-US">English</option><option value="es-MX">Español</option>
       </select>
     </div>
-    <details className="mt-1 text-xs text-gray-500">
-      <summary className="flex min-h-8 cursor-pointer items-center justify-end gap-1"><HiOutlineInformationCircle aria-hidden="true" className="h-4 w-4" />{spanish ? "Sobre el idioma" : "About language"}</summary>
-      <p className="mt-1">{spanish ? "El idioma se guarda para todo el portal. Las indicaciones médicas y los mensajes anteriores conservan su texto original. Pide a tu equipo de atención indicaciones revisadas en otro idioma." : "This saves the language for the whole portal. Medical instructions and previous messages keep their original wording. Ask your care team for reviewed instructions in another language."}</p>
-    </details>
-    {saving ? <p role="status" className="mt-1 text-right text-xs text-gray-500">{spanish ? "Guardando idioma…" : "Saving language…"}</p> : null}
-    {failed ? <p role="alert" className="mt-1 text-sm text-red-800">{spanish ? "No se pudo guardar el idioma. No cambió tu preferencia; intenta de nuevo." : "Could not save the language. Your preference is unchanged; try again."}</p> : null}
-    {error ? <div role="alert" className="mt-1 text-sm text-red-800"><p>Language preference unavailable / Idioma no disponible.</p><button className="min-h-11 underline" type="button" onClick={refresh}>Try again / Reintentar</button></div> : null}
+    {saving ? <p role="status" className="flex items-center gap-2 text-sm text-muted"><span aria-hidden="true" className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand/30 border-t-brand" />{spanish ? "Guardando idioma…" : "Saving language…"}</p> : null}
+    {failed ? <p role="alert" className="rounded-2xl bg-danger-tint px-4 py-3 text-sm text-danger-ink">{spanish ? "No se pudo guardar el idioma. No cambió tu preferencia; intenta de nuevo." : "Could not save the language. Your preference is unchanged; try again."}</p> : null}
+    {error ? <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-danger-tint px-4 py-3 text-sm text-danger-ink"><p>Language preference unavailable / Idioma no disponible.</p><button className="min-h-11 font-semibold underline" type="button" onClick={refresh}>Try again / Reintentar</button></div> : null}
+    <p className="flex items-start gap-2.5 rounded-2xl bg-surface-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2"><Icon name="info" className="mt-px h-4 w-4 shrink-0 text-muted" /><span>{spanish ? "El idioma se guarda para todo el portal. Las indicaciones médicas y los mensajes anteriores conservan su texto original. Pide a tu equipo de atención indicaciones revisadas en otro idioma." : "This saves the language for the whole portal. Medical instructions and previous messages keep their original wording. Ask your care team for reviewed instructions in another language."}</span></p>
   </div>;
 }

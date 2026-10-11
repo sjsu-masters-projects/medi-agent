@@ -6,7 +6,8 @@ import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/
 import { CareConversations } from "@/components/features/care-conversations";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
-import { ChatTextarea, chatButton } from "@/components/features/chat-presentation";
+import { ChatTextarea } from "@/components/features/chat-presentation";
+import { ProcessingDots } from "@/components/ui/motion";
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { usePatientShell } from "@/contexts/patient-shell-context";
@@ -37,7 +38,6 @@ export default function ChatPage() {
             ? { ...message, content: copy.welcomeMessage, language: locale, audioUrl: undefined }
             : message);
     const voiceBusy = ["listening", "processing", "playing"].includes(voiceStatus);
-    const button = chatButton;
     const back = locale === "es-MX" ? "Volver a mensajes" : "Back to messages";
     const threadOpen = (!inbox && conversation === "assistant") || Boolean(humanThreadId);
 
@@ -58,83 +58,90 @@ export default function ChatPage() {
         if (!inbox) bottomRef.current?.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
     }, [assistantDraft, isTyping, messages, conversation, inbox]);
 
-    return <div className={`flex w-full flex-col gap-4 px-4 py-4 text-ink ${threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"}`} lang={locale}>
-        <header hidden={Boolean(humanThreadId)} className="flex items-center gap-2.5 border-b border-line-strong pb-3">
-            {!inbox && <button type="button" className={button + " flex min-w-11 items-center justify-center px-0"} aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" /></button>}
-            {!inbox && conversation === "assistant" && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" /></span>}
+    const assistantThread = !inbox && conversation === "assistant";
+    const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
+    return <div className={`flex w-full flex-col text-ink ${threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
+        <header hidden={Boolean(humanThreadId)} className={inbox ? "px-1.5" : "sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
+            {!inbox && <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
+            {!inbox && conversation === "assistant" && <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" className="h-[18px] w-[18px]" /></span>}
             <div className="min-w-0 flex-1">
-            <h1 ref={headingRef} tabIndex={-1} className={inbox ? "break-words px-1.5 pt-2 text-[32px] font-semibold tracking-[-0.02em]" : "break-words text-lg font-semibold"}>{inbox ? "Chat" : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
+            <h1 ref={headingRef} tabIndex={-1} className={inbox ? "break-words pt-0 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] outline-none" : "break-words text-base font-semibold leading-tight outline-none"}>{inbox ? "Chat" : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
             {!inbox && conversation === "assistant" && <>
-                <p className="mt-1 text-xs text-muted">{copy.assistantDescription}</p>
-                <p className="mt-1 text-xs text-muted" role="status">{controls.connection[connectionStatus]}</p>
+                <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted"><span>{copy.assistantDescription}</span><span aria-hidden="true">·</span><span role="status" className={`inline-flex items-center gap-1 ${connectionStatus === "connected" ? "text-brand-ink" : connectionStatus === "connecting" ? "text-muted" : "text-danger-ink"}`}><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectionStatus === "connected" ? "bg-brand" : connectionStatus === "connecting" ? "bg-gold" : "bg-danger-seg"}`} />{controls.connection[connectionStatus]}</span></p>
             </>}
             </div>
             {!inbox && <button type="button" aria-label={conversation === "assistant" ? copy.careTeamLabel : `${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} disabled={voiceBusy}
-                className={button + " flex min-w-11 items-center justify-center px-2"}
+                className={iconButton}
                 onClick={() => { setCareTeamOpened(true); setConversation(conversation === "assistant" ? "care-team" : "assistant"); }}>
-                <Icon name={conversation === "assistant" ? "users" : "spark"} />
+                <Icon name={conversation === "assistant" ? "users" : "spark"} className="h-5 w-5" />
             </button>}
-            {!inbox && conversation === "assistant" && <button className={button + " flex min-w-11 items-center justify-center px-2"} aria-label={handsFreeMode ? controls.handsFreeOn : controls.handsFreeOff} aria-pressed={handsFreeMode} onClick={handleHandsFreeToggle} type="button"><Icon name="speaker" /></button>}
+            {!inbox && conversation === "assistant" && <button className={`${iconButton} ${handsFreeMode ? "!bg-brand !text-white" : ""}`} aria-label={handsFreeMode ? controls.handsFreeOn : controls.handsFreeOff} aria-pressed={handsFreeMode} onClick={handleHandsFreeToggle} type="button"><Icon name="speaker" className="h-5 w-5" /></button>}
         </header>
-        {inbox ? <section hidden={Boolean(humanThreadId)} className="relative flex flex-col gap-3 overflow-hidden rounded-[28px] bg-brand-deep p-5 text-[#F2F7F5] shadow-[0_18px_36px_-16px_rgba(15,61,55,.6)]">
+        {inbox ? <section hidden={Boolean(humanThreadId)} className="relative flex flex-col gap-4 overflow-hidden rounded-[28px] bg-brand-deep p-5 text-[#F2F7F5] shadow-[var(--shadow-nora)]">
             <span aria-hidden="true" className="pointer-events-none absolute -right-[60px] -top-[60px] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle,rgba(245,196,106,.28),transparent_70%)]" />
             <div className="relative flex items-center gap-3">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-gold"><Icon name="spark" /></span>
-                <div className="min-w-0 flex-1 break-words"><h2 className="text-[19px] font-semibold">{CARE_ASSISTANT_NAME} <span className="ml-1 rounded-md bg-[rgba(245,196,106,.18)] px-1.5 py-0.5 text-xs font-semibold tracking-[0.06em] text-gold">AI</span></h2><p className="text-[13px] text-[#B9D1CC]">{copy.assistantDescription} · {locale === "es-MX" ? "no es un profesional clínico" : "not a clinician"}</p></div>
+                <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-gold"><Icon name="spark" className="h-[22px] w-[22px]" /></span>
+                <div className="min-w-0 flex-1 break-words"><h2 className="flex items-center gap-2 text-[19px] font-semibold leading-tight">{CARE_ASSISTANT_NAME} <span className="rounded-md bg-[rgba(245,196,106,.18)] px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.06em] text-gold">AI</span></h2><p className="mt-0.5 text-[13px] text-[#B9D1CC]">{copy.assistantDescription} · {locale === "es-MX" ? "no es un profesional clínico" : "not a clinician"}</p></div>
             </div>
-            <p className="relative text-sm leading-relaxed">{controls.caution}</p>
+            <p className="relative text-[15px] leading-relaxed text-[#E4EEEB]">{controls.caution}</p>
             <div className="relative flex flex-wrap gap-2">
-            <button type="button" className="min-h-11 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-[#2B1F05]" onClick={() => { setInput(copy.quickPrompts[1]); setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Reportar un síntoma" : "Report a symptom"}</button>
-            <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="min-h-11 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white" onClick={() => { setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}</button>
+            <button type="button" className="ma-press min-h-11 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-[#2B1F05] hover:bg-[#F7CD80]" onClick={() => { setInput(copy.quickPrompts[1]); setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Reportar un síntoma" : "Report a symptom"}</button>
+            <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15" onClick={() => { setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}<Icon name="arrow" className="h-4 w-4" /></button>
             </div>
         </section> : null}
-        {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-4">
+        {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-3">
             <CareConversations compact locale={locale} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
-            {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="space-y-3 rounded-[22px] bg-surface p-4">
-                <button className={button} type="button" aria-expanded={showHistory}
+            {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="overflow-hidden rounded-[22px] bg-surface">
+                <button className="flex min-h-14 w-full items-center gap-3 px-[14px] py-3 text-left hover:bg-[#FBF7F0]" type="button" aria-expanded={showHistory}
                     onClick={() => setShowHistory((current) => !current)}>
-                    {copy.historicalCareTeamLabel} ({historicalMessages.length})
+                    <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-surface-2 text-ink-2"><Icon name="history" className="h-5 w-5" /></span>
+                    <span className="min-w-0 flex-1 text-[15px] font-medium text-ink">{copy.historicalCareTeamLabel} ({historicalMessages.length})</span>
+                    <Icon name="chevronDown" className={`h-[18px] w-[18px] shrink-0 text-muted transition-transform duration-[240ms] ${showHistory ? "rotate-180" : ""}`} />
                 </button>
-                {showHistory && (inbox || conversation === "care-team") && <>
-                    <p className="text-sm text-muted">{copy.historicalCareTeamIntro}</p>
+                {showHistory && (inbox || conversation === "care-team") && <div className="ma-enter space-y-3 border-t border-line px-[14px] pt-3 pb-4">
+                    <p className="text-[13px] leading-relaxed text-muted">{copy.historicalCareTeamIntro}</p>
                     {historicalMessages.map((message) => <ChatBubble key={message.id} role="clinician"
                         content={message.content} timestamp={message.createdAt} locale={locale}
                         language={message.language} clinicianLabel={copy.historicalCareTeamLabel} />)}
-                </>}
+                </div>}
             </section>}
         </div>}
-        {!inbox && conversation === "assistant" && <>
-            <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink">{controls.caution}</p>
-            {documentContext && <section className="rounded-[22px] border border-line-strong bg-brand-tint p-4">
-                <p className="text-xs font-semibold text-brand-ink">{controls.recordContext}</p>
-                <p className="mt-1 break-words font-semibold">{documentContext.documentName}</p>
-                {documentContext.provider && <p className="mt-1 text-sm text-ink-2">{documentContext.provider}</p>}
-                <button className={button + " mt-3"} onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
+        {assistantThread && <>
+            <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
+            {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
+                <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-brand-ink">{controls.recordContext}</p>
+                    <p className="mt-0.5 break-words text-[15px] font-semibold [overflow-wrap:anywhere]">{documentContext.documentName}</p>
+                    {documentContext.provider && <p className="mt-0.5 text-[13px] text-ink-2">{documentContext.provider}</p>}
+                </div>
+                <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
-            {error && <p className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink" role="alert">{controls.chatError}</p>}
-            {safetyNotice && <div className="flex items-start gap-3 rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink" role="alert">
-                <p className="flex-1">{copy.escalationNotice}</p>
-                <button className={button} onClick={dismissSafetyNotice} type="button">{controls.dismiss}</button>
+            {error && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.chatError}</p>}
+            {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
+                <Icon name="alert" className="mt-px h-5 w-5 shrink-0" />
+                <p className="flex-1 font-medium">{copy.escalationNotice}</p>
+                <button className="ma-press min-h-11 shrink-0 rounded-xl bg-surface px-3 text-sm font-semibold text-danger-ink" onClick={dismissSafetyNotice} type="button">{controls.dismiss}</button>
             </div>}
-            {voiceError && <p className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
-            <div className="flex-1 space-y-4" aria-busy={loading}>
-                {loading && <p className="text-sm text-muted" role="status">{controls.loading}</p>}
-                {!loading && !documentContext && !messages.some((message) => message.role === ChatRole.USER) && <section className="space-y-3 rounded-[22px] bg-surface p-4">
-                    <p className="text-sm text-ink-2">{copy.emptyStateIntro}</p>
-                    <div className="flex flex-col gap-2">{copy.quickPrompts.map((prompt) => <button className={button + " text-left"} key={prompt} type="button" onClick={() => setInput(prompt)}>{prompt}</button>)}</div>
-                </section>}
+            {voiceError && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
+            <div className="flex flex-1 flex-col gap-3 pt-1" aria-busy={loading}>
+                {loading && <p className="text-center text-sm text-muted" role="status">{controls.loading}</p>}
                 {visibleMessages.map((message) => <ChatBubble key={message.id} content={message.content}
                     language={message.language} locale={locale} role={message.role === ChatRole.USER ? "user" : "assistant"}
                     timestamp={message.createdAt} onPlayAudio={message.role === ChatRole.ASSISTANT && (Boolean(message.audioUrl) || canPlayAssistantAudio) ? () => handlePlayAssistantMessage(message) : undefined} />)}
+                {!loading && !documentContext && !messages.some((message) => message.role === ChatRole.USER) && <section className="ma-enter space-y-2.5 pt-1">
+                    <p className="px-1 text-[13px] text-muted">{copy.emptyStateIntro}</p>
+                    <div className="flex flex-col items-start gap-2">{copy.quickPrompts.map((prompt) => <button className="ma-press min-h-11 rounded-full border border-line-strong bg-surface px-4 py-2 text-left text-sm font-medium text-ink-2 hover:border-brand/40 hover:text-brand-ink" key={prompt} type="button" onClick={() => setInput(prompt)}>{prompt}</button>)}</div>
+                </section>}
                 {assistantDraft && <ChatBubble content={assistantDraft} isStreaming language={locale} locale={locale}
                     role="assistant" timestamp={assistantDraftStartedAt ?? new Date().toISOString()} />}
-                {isTyping && !assistantDraft && <p className="text-sm text-muted" role="status">{copy.typingMessage}</p>}
+                {isTyping && !assistantDraft && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
                 <div ref={bottomRef} />
             </div>
-            <form className="sticky bottom-0 z-10 mt-auto space-y-2 bg-background pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]" onSubmit={handleSend}>
+            <form className="sticky bottom-0 z-10 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={handleSend}>
                 <div className="flex items-end gap-2">
-                    <div className="flex min-h-[52px] min-w-0 flex-1 items-end rounded-[26px] border border-line-strong bg-surface pr-1 pb-1">
-                        <ChatTextarea aria-label={controls.message} onChange={(event) => setInput(event.target.value)}
+                    <div className="flex min-h-[52px] min-w-0 flex-1 items-end rounded-[26px] border border-line-strong bg-surface pr-1.5 pb-1.5 transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/12">
+                        <ChatTextarea aria-label={controls.message} className="pl-[18px]" onChange={(event) => setInput(event.target.value)}
                         onKeyDown={(event) => {
                             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                                 event.preventDefault();
@@ -143,16 +150,16 @@ export default function ChatPage() {
                             }
                         }}
                         placeholder={voiceStatus === "listening" ? controls.listening : voiceStatus === "processing" ? controls.transcribing : copy.inputPlaceholder} value={input} />
-                    <button className={button + " flex min-w-11 shrink-0 items-center justify-center rounded-full px-0"} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
+                    <button className={`ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
                         disabled={voiceStatus === "unsupported" || voiceStatus === "processing" || !profile} onClick={handleMicClick} type="button">
-                        {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : <Icon name="mic" />}
+                        {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
                     </button>
                     </div>
-                    <button className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white disabled:opacity-50"
+                    <button className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
                         aria-label={controls.send} disabled={!input.trim() || connectionStatus !== "connected" || !profile} type="submit"><Icon name="send" /></button>
                 </div>
-                {handsFreeMode && <p className="text-xs text-muted">{controls.autoPlay}</p>}
-                {!profile && <p className="text-sm text-muted" role="status">{controls.profileRequired}</p>}
+                {handsFreeMode && <p className="px-2 text-xs text-brand-ink">{controls.autoPlay}</p>}
+                {!profile && <p className="px-2 text-sm text-muted" role="status">{controls.profileRequired}</p>}
             </form>
         </>}
     </div>;

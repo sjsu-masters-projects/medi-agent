@@ -1,5 +1,6 @@
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon, type IconName } from "@/components/ui/icons";
+import { IconTile, type TileTone } from "@/components/ui/list";
 import {
   DocumentParseStatus,
   DocumentType,
@@ -25,6 +26,8 @@ export function cleanRecordTitle(filename: string, patientName?: string) {
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  // Drop a leading sequence number such as "05 " when words follow it.
+  title = title.replace(/^\d{1,3}\s+(?=\D)/, "");
   return title ? title.charAt(0).toUpperCase() + title.slice(1) : filename;
 }
 
@@ -60,21 +63,10 @@ export function groupRecordDates<T extends { createdAt: string }>(
   ].filter((group) => group.items.length);
 }
 
-const tiles: Partial<
-  Record<DocumentType, { icon: IconName; className: string }>
-> = {
-  [DocumentType.LAB_REPORT]: {
-    icon: "lab",
-    className: "bg-lab-tint text-lab-ink",
-  },
-  [DocumentType.PRESCRIPTION]: {
-    icon: "rx",
-    className: "bg-med-tint text-med-ink",
-  },
-  [DocumentType.DISCHARGE_SUMMARY]: {
-    icon: "note",
-    className: "bg-note-tint text-note-ink",
-  },
+const tiles: Partial<Record<DocumentType, { icon: IconName; tone: TileTone }>> = {
+  [DocumentType.LAB_REPORT]: { icon: "lab", tone: "lab" },
+  [DocumentType.PRESCRIPTION]: { icon: "rx", tone: "med" },
+  [DocumentType.DISCHARGE_SUMMARY]: { icon: "note", tone: "note" },
 };
 
 export function RecordRow({
@@ -100,35 +92,32 @@ export function RecordRow({
   const processing =
     document.parseStatus === DocumentParseStatus.PENDING ||
     document.parseStatus === DocumentParseStatus.PROCESSING;
-  const tile = tiles[document.documentType] ?? {
-    icon: document.uploadedByRole === "patient" ? "up" : "note",
-    className: "bg-upload-tint text-upload-ink",
-  };
+  const failed = document.parseStatus === DocumentParseStatus.FAILED;
+  const tile = tiles[document.documentType] ?? (document.uploadedByRole === "patient"
+    ? { icon: "up" as const, tone: "upload" as const }
+    : { icon: "note" as const, tone: "note" as const });
   const summary = statusLabel === recordsCopy(locale, "AI Summary");
+  const spanish = locale === "es-MX";
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex min-h-11 w-full items-start gap-3 border-b border-line px-[14px] py-[13px] text-left last:border-b-0 hover:bg-surface-2"
+      className="group flex min-h-11 w-full items-center gap-3 px-[14px] py-[13px] text-left transition-colors duration-[160ms] hover:bg-[#FBF7F0] active:bg-surface-2"
     >
-      <span
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] ${tile.className}`}
-      >
-        <Icon name={tile.icon} className="h-5 w-5" />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="min-w-0 flex-1 basis-[140px]">
+      <IconTile icon={tile.icon} tone={tile.tone} className={duplicate ? "opacity-70" : ""} />
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="min-w-0 flex-1 basis-[128px]">
           <h3
-            className={`break-words text-[15px] font-semibold ${duplicate ? "text-muted" : "text-ink"}`}
+            className={`break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${duplicate ? "text-nav-idle" : "text-ink"}`}
           >
             {cleanRecordTitle(document.fileName, patientName)}
           </h3>
           <span className="sr-only">{document.fileName}</span>
-          <span className="mt-0.5 block break-words text-[13px] text-muted">
+          <span className="mt-0.5 block break-words text-[13px] leading-snug text-muted first-letter:uppercase">
             <span>{typeLabel}</span> · {provider} · {date}
           </span>
           {duplicate ? (
-            <span className="mt-1 block text-[13px] text-muted">
+            <span className="mt-0.5 block text-[13px] text-muted">
               {statusLabel}
             </span>
           ) : null}
@@ -136,36 +125,33 @@ export function RecordRow({
         {!duplicate && statusLabel ? (
           <span className="ml-auto inline-flex min-w-0 max-w-full [&>span]:max-w-full [&>span]:break-words [&_svg]:shrink-0">
             {summary ? (
-              <AiChip>
+              <AiChip className="ma-fade">
                 <span className="sr-only">{statusLabel}</span>
                 <span aria-hidden="true">
-                  {locale === "es-MX" ? "Resumen" : "Summary"}
+                  {spanish ? "Resumen" : "Summary"}
                 </span>
               </AiChip>
             ) : (
               <span
-                className={`inline-flex flex-wrap items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${document.parseStatus === DocumentParseStatus.FAILED ? "bg-danger-tint text-danger-ink" : "bg-surface-2 text-muted"}`}
+                className={`inline-flex flex-wrap items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${failed ? "bg-danger-tint text-danger-ink" : processing ? "bg-surface-2 text-muted" : "bg-note-tint text-note-ink"}`}
               >
                 {processing ? (
                   <>
                     <span className="sr-only">{statusLabel}</span>
                     <span aria-hidden="true">
-                      {locale === "es-MX" ? "Leyendo" : "Reading"}
+                      {spanish ? "Leyendo" : "Reading"}
                     </span>
                   </>
                 ) : (
                   statusLabel
                 )}
                 {processing ? (
-                  <span aria-hidden="true" className="inline-flex gap-1">
-                    {[
-                      "",
-                      "[animation-delay:150ms]",
-                      "[animation-delay:300ms]",
-                    ].map((delay, index) => (
+                  <span aria-hidden="true" className="inline-flex gap-[3px]">
+                    {[0, 0.15, 0.3].map((delay) => (
                       <span
-                        key={index}
-                        className={`h-1 w-1 rounded-full bg-current motion-safe:animate-[ma-dot_1.2s_infinite] ${delay}`}
+                        key={delay}
+                        className="h-1 w-1 rounded-full bg-current"
+                        style={{ animation: `ma-dot 1.2s ${delay}s infinite` }}
                       />
                     ))}
                   </span>
@@ -175,7 +161,7 @@ export function RecordRow({
           </span>
         ) : null}
       </span>
-      <Icon name="arrow" className="mt-3 h-5 w-5 shrink-0 text-muted" />
+      <Icon name="chevron" className="h-[18px] w-[18px] shrink-0 text-faint transition-transform duration-[160ms] group-hover:translate-x-0.5" />
     </button>
   );
 }

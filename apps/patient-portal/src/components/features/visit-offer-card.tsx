@@ -71,7 +71,7 @@ export function VisitOfferCard({
           return (
             <li key={slot.id}>
               <Button
-                className="min-h-11 h-auto whitespace-normal py-3 text-left"
+                className="min-h-11 h-auto !justify-start whitespace-normal rounded-2xl border border-line-strong !bg-surface py-3 text-left hover:!border-brand/50 hover:!bg-brand-tint/40"
                 fullWidth
                 disabled={responding || !when}
                 aria-label={`${copy.choose}: ${when ?? copy.invalidDate} (${timezone})`}
@@ -110,7 +110,7 @@ export function VisitOfferCard({
             {composeCopy.label}
           </label>
           <textarea
-            className="min-h-11 w-full rounded-2xl border border-line-strong bg-surface px-3 py-2 text-base text-ink"
+            className="min-h-24 w-full rounded-2xl border border-line-strong bg-surface px-4 py-3 text-base text-ink outline-none transition placeholder:text-muted focus:border-brand focus:ring-4 focus:ring-brand/15"
             id={noteId}
             maxLength={1000}
             disabled={responding}

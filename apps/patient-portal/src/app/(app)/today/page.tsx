@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getTodayCopy, type TodayCopy } from "@/content/today-copy";
 import { resolveVisitsTimezone } from "@/content/visits-copy";
-import { HiOutlineArrowPath, HiOutlineCalendarDays, HiOutlineInformationCircle } from "react-icons/hi2";
 import { TodayTaskContent, TodayTaskRow } from "@/components/features/today-presentation";
 import { Icon } from "@/components/ui/icons";
+import { IconTile } from "@/components/ui/list";
+import { OverflowMenu } from "@/components/ui/overflow-menu";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import type { TaskCardStatus } from "@/components/features/task-card.types";
 import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui";
@@ -35,7 +36,6 @@ function formatTimeLabel(
     locale: Locale,
     copy: TodayCopy,
     scheduledTime?: string,
-    status?: TaskCardStatus,
     requiresScheduleConfiguration?: boolean,
 ) {
     if (!scheduledTime && requiresScheduleConfiguration) {
@@ -49,8 +49,14 @@ function formatTimeLabel(
     // The feed already supplies the patient-local clock time; avoid browser DST shifts.
     const value = new Date(0);
     value.setUTCHours(Number(hours), Number(minutes), 0, 0);
-    const label = value.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
-    return status === "active" ? `${label} • ${copy.now}` : label;
+    return value.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+}
+
+function segmentClass(status: FeedTask["status"]) {
+    if (status === FeedTaskStatus.COMPLETED) return "bg-brand";
+    if (status === FeedTaskStatus.MISSED) return "bg-danger-seg";
+    if (status === FeedTaskStatus.SKIPPED) return "bg-[#D9B783]";
+    return "bg-brand";
 }
 
 export default function TodayPage() {
@@ -58,7 +64,8 @@ export default function TodayPage() {
     const profile = usePatientProfile();
     const locale = normalizeLocale(profile?.preferredLanguage);
     const copy = getTodayCopy(locale);
-    const nextUpLabel = locale === "es-MX" ? "Siguiente actividad" : "Next up";
+    const spanish = locale === "es-MX";
+    const nextUpLabel = spanish ? "Siguiente actividad" : "Next up";
     const { timezone } = resolveVisitsTimezone(profile?.timezone);
     const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
@@ -136,74 +143,80 @@ export default function TodayPage() {
 
     if (loading && tasks.length === 0) {
         return (
-            <div className="patient-page space-y-4 px-5 py-10" aria-busy="true">
+            <div className="patient-page px-[22px] pt-5" aria-busy="true">
                 <p role="status" className="sr-only">{copy.loading}</p>
-                <Skeleton className="h-24 w-full" variant="rect" />
-                <Skeleton className="h-28 w-full" variant="rect" />
-                <Skeleton className="h-28 w-full" variant="rect" />
+                <div className="space-y-2 pb-5">
+                    <Skeleton className="h-4 w-32" variant="text" />
+                    <Skeleton className="h-8 w-52" variant="text" />
+                </div>
+                <div className="-mx-1.5 space-y-4">
+                    <Skeleton className="h-[260px] w-full !rounded-[28px]" variant="rect" />
+                    <Skeleton className="h-36 w-full" variant="rect" />
+                </div>
             </div>
         );
     }
 
     return (
         <PullToRefresh onRefresh={refreshFeed} busy={loading} label={copy.refresh}>
-        <div className="patient-page pb-8">
+        <div className="patient-page pb-6">
             <header className="flex items-start justify-between gap-3 px-[22px] pt-5">
                 <div className="min-w-0">
-                    <p className="text-sm text-muted">{new Date(now).toLocaleDateString(locale, { timeZone: timezone, day: "numeric", month: "long", weekday: "long" })}</p>
-                    <h1 className="mt-1 break-words text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">{displayName ? copy.greeting(displayName) : copy.hello}</h1>
+                    <p className="text-sm text-muted first-letter:uppercase">{new Date(now).toLocaleDateString(locale, { timeZone: timezone, day: "numeric", month: "long", weekday: "long" })}</p>
+                    <h1 className="mt-0.5 break-words text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">{displayName ? copy.greeting(displayName) : copy.hello}</h1>
                 </div>
-                <div aria-hidden="true" className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-brand-tint font-semibold text-brand">{avatarInitial}</div>
+                <div className="flex shrink-0 items-center gap-1.5 pt-1">
+                    <OverflowMenu label={spanish ? "Más opciones" : "More options"} items={[
+                        { label: loading ? copy.refreshing : copy.refresh, icon: "refresh", onSelect: refreshFeed, disabled: loading || disabled, busy: loading },
+                        { label: copy.progressHelp, icon: "info", onSelect: () => setProgressOpen(true) },
+                    ]} />
+                    <div aria-hidden="true" className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-brand-tint text-[17px] font-semibold text-brand">{avatarInitial}</div>
+                </div>
             </header>
 
-            <section aria-label={copy.progress} className="space-y-2 px-[22px] pt-[18px]">
-                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[13px] text-muted">
-                    <p className="font-medium text-ink">{completedLabel}</p>
-                    {nextReminder ? <p className="ml-auto">{locale === "es-MX" ? "Próximo recordatorio" : "Next reminder"} <span className="font-mono">{formatTimeLabel(locale, copy, nextReminder.scheduledTime)}</span></p> : null}
-                    <button type="button" aria-label={copy.progressHelp} onClick={() => setProgressOpen(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted"><HiOutlineInformationCircle aria-hidden="true" className="h-5 w-5" /></button>
+            <section aria-label={copy.progress} className="px-[22px] pt-4">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
+                    <p className="font-medium text-ink-2">{completedLabel}</p>
+                    {adherenceStats.currentStreakDays > 0 ? <p className="inline-flex items-center gap-1 text-brand-ink"><span aria-hidden="true" className="h-1 w-1 rounded-full bg-brand" />{copy.streak(adherenceStats.currentStreakDays)}</p> : null}
+                    <div className="ml-auto flex items-center gap-1">
+                        {nextReminder ? <p>{spanish ? "Próximo recordatorio" : "Next reminder"} <span className="font-mono text-ink-2">{formatTimeLabel(locale, copy, nextReminder.scheduledTime)}</span></p> : null}
+                        <button type="button" aria-label={copy.progressHelp} onClick={() => setProgressOpen(true)} className="-mr-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted hover:text-ink"><Icon name="info" className="h-[18px] w-[18px]" /></button>
+                    </div>
                 </div>
                 <div className="grid gap-[5px]" style={{ gridTemplateColumns: `repeat(${Math.max(tasks.length, 1)}, minmax(0, 1fr))` }} aria-hidden="true" data-testid="today-progress-segments">
-                    {tasks.map((task) => <span key={task.id} data-status={task.status} className="h-1.5 overflow-hidden rounded-[3px] bg-[#DCD5CA]">
-                        <span className={`block h-full rounded-[3px] transition-[width] duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)] ${task.status === FeedTaskStatus.MISSED ? "bg-[#E39A86]" : "bg-brand"}`} style={{ width: task.status === FeedTaskStatus.COMPLETED || task.status === FeedTaskStatus.MISSED ? "100%" : "0%" }} />
+                    {tasks.map((task) => <span key={task.id} data-status={task.status} className="h-1.5 overflow-hidden rounded-[3px] bg-idle-seg">
+                        <span className={`block h-full rounded-[3px] transition-[width] duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)] ${segmentClass(task.status)}`} style={{ width: task.status === FeedTaskStatus.COMPLETED || task.status === FeedTaskStatus.MISSED || task.status === FeedTaskStatus.SKIPPED ? "100%" : "0%" }} />
                     </span>)}
-                </div>
-                <div className="flex flex-wrap justify-between gap-2 text-[13px] text-muted">
-                    {adherenceStats.currentStreakDays > 0 ? <p>{copy.streak(adherenceStats.currentStreakDays)}</p> : null}
                 </div>
             </section>
 
-            <div className="space-y-4 pt-[18px]">
+            <div className="space-y-5 pt-[18px]">
                 {remainingTasks.length === 0 ? <h2 className="sr-only">{copy.schedule}</h2> : null}
-                {actionError && !barrierTask ? <p role="alert" className="mx-4 rounded-xl bg-danger-tint p-4 text-danger-ink">{actionError}</p> : null}
-                {error ? <div className="mx-4"><ErrorState description={error} action={<button className="min-h-11 rounded-2xl border border-line-strong bg-surface px-4 py-2 text-sm font-semibold text-danger-ink" onClick={refreshFeed} type="button">{copy.retry}</button>} title={tasks.length > 0 ? copy.stale : copy.loadError} /></div> : null}
-                {!error && tasks.length === 0 ? <div className="mx-4"><EmptyState description={copy.emptyDetail} icon={<HiOutlineCalendarDays />} title={copy.empty} /></div> : null}
-                {nextTask ? <article aria-label={nextUpLabel} data-completion-phase={completion?.phase ?? "idle"} className={`mx-4 space-y-4 rounded-[28px] bg-surface p-5 shadow-[var(--shadow-raised)] ${completion?.phase === "leaving" ? "ma-leave" : "ma-enter-spring"}`} key={nextTask.id}>
-                    <h2 className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{nextUpLabel}</h2>
-                    <TodayTaskContent task={nextTask} copy={copy} status={mapTaskStatus(nextTask, now)} timeLabel={formatTimeLabel(locale, copy, nextTask.scheduledTime, mapTaskStatus(nextTask, now), nextTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => void complete(nextTask)} onBarrier={() => openBarrier(nextTask)} hero phase={completion?.phase} />
-                    <button type="button" onClick={() => setDetailsId(nextTask.id)} className="min-h-11 w-full text-left text-sm font-medium text-brand underline underline-offset-4">{copy.details}</button>
+                {actionError && !barrierTask ? <p role="alert" className="mx-4 flex items-start gap-2.5 rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink"><Icon name="alert" className="h-5 w-5 shrink-0" />{actionError}</p> : null}
+                {error ? <div className="mx-4"><ErrorState description={error} action={<button className="ma-press min-h-11 rounded-[14px] bg-surface-2 px-4 py-2 text-sm font-semibold text-ink-2 hover:bg-line-strong" onClick={refreshFeed} type="button">{copy.retry}</button>} title={tasks.length > 0 ? copy.stale : copy.loadError} /></div> : null}
+                {!error && tasks.length === 0 ? <div className="mx-4 rounded-[22px] bg-surface"><EmptyState description={copy.emptyDetail} icon={<Icon name="cal" />} title={copy.empty} /></div> : null}
+                {nextTask ? <article aria-label={nextUpLabel} data-completion-phase={completion?.phase ?? "idle"} className={`mx-4 rounded-[28px] bg-surface p-5 shadow-[var(--shadow-raised)] ${completion?.phase === "leaving" ? "ma-leave" : "ma-enter-spring"}`} key={nextTask.id}>
+                    <TodayTaskContent task={nextTask} copy={copy} eyebrow={nextUpLabel} status={mapTaskStatus(nextTask, now)} timeLabel={formatTimeLabel(locale, copy, nextTask.scheduledTime, nextTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => void complete(nextTask)} onBarrier={() => openBarrier(nextTask)} hero phase={completion?.phase} />
+                    <button type="button" onClick={() => setDetailsId(nextTask.id)} className="mt-3 -mb-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-xl text-sm font-medium text-brand hover:bg-brand-tint/50">{copy.details}<Icon name="chevron" className="h-4 w-4" /></button>
                 </article> : null}
                 {remainingTasks.length > 0 ? <section aria-label={copy.schedule}>
-                    <h2 className="mb-2 px-[22px] font-mono text-xs uppercase tracking-[0.08em] text-muted">{copy.schedule}</h2>
-                    <ul className="mx-4 rounded-[22px] bg-surface">
-                        {remainingTasks.map((task) => <TodayTaskRow key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, mapTaskStatus(task, now), task.requiresScheduleConfiguration)} disabled={disabled} onDetails={() => setDetailsId(task.id)} onComplete={() => void complete(task)} />)}
+                    <h2 className="px-[22px] pb-2 text-[15px] font-semibold text-ink">{copy.schedule}</h2>
+                    <ul className="mx-4 overflow-hidden rounded-[22px] bg-surface [&>li+li]:border-t [&>li+li]:border-line">
+                        {remainingTasks.map((task) => <TodayTaskRow key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, task.requiresScheduleConfiguration)} disabled={disabled} onDetails={() => setDetailsId(task.id)} onComplete={() => void complete(task)} />)}
                     </ul>
                 </section> : null}
-                <div className="flex flex-wrap items-center justify-between gap-2 px-[22px]">
-                    <p className="text-[13px] text-muted">{copy.count(tasks.length)}</p>
-                    <button aria-label={loading ? copy.refreshing : copy.refresh} aria-busy={loading} disabled={loading || disabled} className="flex min-h-11 items-center gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm font-medium text-ink-2 disabled:opacity-50" onClick={refreshFeed} type="button"><HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span>{loading ? copy.refreshing : copy.refresh}</span></button>
+                <div className="px-4">
+                    <Link href="/chat" onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) setConversationOpen(true); }} className="ma-press flex min-h-11 items-center gap-3 rounded-[22px] bg-surface px-[14px] py-[13px] hover:bg-[#FFFBF4]">
+                        <IconTile icon="spark" tone="assistant" />
+                        <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-ink">{copy.symptom}</span><span className="block text-[13px] leading-snug text-muted">{copy.symptomDetail}</span></span>
+                        <Icon name="chevron" className="h-5 w-5 shrink-0 text-muted" />
+                    </Link>
                 </div>
             </div>
 
-            <div className="px-4 pt-5">
-                <Link href="/chat" onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) setConversationOpen(true); }} className="flex min-h-11 items-center gap-3 rounded-[22px] bg-surface px-[14px] py-[13px]">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-brand-deep text-gold"><Icon name="spark" className="h-5 w-5" /></span>
-                    <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-ink">{copy.symptom}</span><span className="block text-[13px] text-muted">{copy.symptomDetail}</span></span>
-                    <Icon name="arrow" className="h-5 w-5 shrink-0 text-brand" />
-                </Link>
-            </div>
-            <Modal closeLabel={copy.close} onClose={() => setProgressOpen(false)} open={progressOpen} title={copy.progressHelp}><p className="text-sm text-ink-2">{copy.progressDetail}</p></Modal>
+            <Modal closeLabel={copy.close} onClose={() => setProgressOpen(false)} open={progressOpen} title={copy.progressHelp}><p className="text-[15px] leading-relaxed text-ink-2">{copy.progressDetail}</p></Modal>
             <Modal closeLabel={copy.close} onClose={() => setDetailsId(null)} open={Boolean(detailTask)} title={copy.details}>
-                {detailTask ? <TodayTaskContent task={detailTask} copy={copy} status={mapTaskStatus(detailTask, now)} timeLabel={formatTimeLabel(locale, copy, detailTask.scheduledTime, mapTaskStatus(detailTask, now), detailTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setDetailsId(null); void complete(detailTask); }} onBarrier={() => openBarrier(detailTask)} /> : null}
+                {detailTask ? <TodayTaskContent task={detailTask} copy={copy} status={mapTaskStatus(detailTask, now)} timeLabel={formatTimeLabel(locale, copy, detailTask.scheduledTime, detailTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setDetailsId(null); void complete(detailTask); }} onBarrier={() => openBarrier(detailTask)} /> : null}
             </Modal>
             <Modal
                 closeLabel={copy.close}
@@ -211,16 +224,17 @@ export default function TodayPage() {
                 open={Boolean(barrierTask)}
                 title={copy.barrierTitle}
             >
-                <div className="space-y-3">
-                    {actionError ? <p role="alert" className="rounded-lg bg-danger-tint p-3 text-danger-ink">{actionError}</p> : null}
-                    <p className="text-sm text-muted">{copy.barrierDetail}</p>
+                <div className="space-y-4">
+                    {actionError ? <p role="alert" className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink">{actionError}</p> : null}
+                    {barrierTask ? <p className="text-[15px] font-semibold text-ink">{barrierTask.name}</p> : null}
+                    <p className="text-[15px] leading-relaxed text-muted">{copy.barrierDetail}</p>
                     <div className="grid grid-cols-2 gap-2">
                         {(["side_effects", "cost", "access", "schedule", "confusion"] as const).map((code) => (
-                            <button disabled={submitting} className="min-h-11 rounded-xl border border-line-strong px-3 py-2 text-sm font-semibold text-brand" key={code} onClick={() => void sendBarrier(code)} type="button">{copy.barriers[code]}</button>
+                            <button disabled={submitting} className="ma-press min-h-12 rounded-2xl border border-line-strong bg-surface px-3 py-2 text-[15px] font-semibold text-ink-2 hover:border-brand/40 hover:bg-brand-tint/50 hover:text-brand-ink disabled:opacity-50" key={code} onClick={() => void sendBarrier(code)} type="button">{copy.barriers[code]}</button>
                         ))}
                     </div>
-                    <label className="block text-sm font-semibold text-ink">{copy.barriers.other}<textarea className="mt-1 min-h-20 w-full rounded-xl border border-line-strong p-2 font-normal" value={barrierNote} onChange={(event) => setBarrierNote(event.target.value)} /></label>
-                    <button className="min-h-11 w-full rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={submitting || !barrierNote.trim()} onClick={() => void sendBarrier("other")} type="button">{submitting ? copy.saving : copy.send}</button>
+                    <label className="block text-sm font-semibold text-ink-2">{copy.barriers.other}<textarea className="mt-2 min-h-24 w-full rounded-2xl border border-line-strong bg-surface p-3.5 text-base font-normal text-ink outline-none transition placeholder:text-muted focus:border-brand focus:ring-4 focus:ring-brand/15" value={barrierNote} onChange={(event) => setBarrierNote(event.target.value)} /></label>
+                    <button className="ma-press min-h-[52px] w-full rounded-2xl bg-brand px-4 py-3 text-base font-semibold text-white hover:bg-brand-hover disabled:opacity-50" disabled={submitting || !barrierNote.trim()} onClick={() => void sendBarrier("other")} type="button">{submitting ? copy.saving : copy.send}</button>
                 </div>
             </Modal>
         </div>

@@ -12,24 +12,28 @@
   --color-ink: #10202B;          /* primary text */
   --color-ink-2: #33434E;        /* body text */
   --color-muted: #5B6872;        /* secondary text (passes 4.5:1 on surface) */
-  --color-faint: #5B6872;        /* timestamps only, ≥12px */
+  --color-faint: #5B6872;        /* timestamps; kept at muted so small text stays readable */
+  --color-nav-idle: #66737C;     /* inactive bottom-nav items */
 
   --color-brand: #147465;        /* primary action, approval seal */
   --color-brand-hover: #0F5F53;
   --color-brand-tint: #E3F0EC;
   --color-brand-ink: #0F5C50;    /* text on brand-tint */
-  --color-brand-deep: #0F3D37;   /* Nora AI card background */
-  --color-gold: #F5C46A;         /* logo check + Nora accent only */
+  --color-brand-deep: #0F3D37;   /* assistant card background */
+  --color-gold: #F5C46A;         /* logo check + assistant accent only */
 
   --color-danger-tint: #FBEAE5;  /* overdue / missed / emergency */
   --color-danger-ink: #A33A27;
+  --color-danger-seg: #E39A86;   /* missed progress segment */
+  --color-idle-seg: #DCD5CA;     /* upcoming progress segment */
 
   /* activity-type icon tiles: tint / ink */
   --color-med-tint: #E3F0EC;     --color-med-ink: #147465;   /* medication */
   --color-lab-tint: #E4EEF8;     --color-lab-ink: #285B8F;   /* glucose/monitoring, lab results */
   --color-hyd-tint: #E1F1F5;     --color-hyd-ink: #1D6F84;   /* hydration */
-  --color-note-tint: #F3E9D8;    --color-note-ink: #8A5A00;  /* visit notes */
+  --color-note-tint: #F3E9D8;    --color-note-ink: #8A5A00;  /* visit notes, care team */
   --color-upload-tint: #F1ECE3;  --color-upload-ink: #4A5964;/* patient uploads */
+  --color-move-tint: #EAEFE0;    --color-move-ink: #4E6A1F;  /* movement */
 
   --radius-card: 28px;   /* hero / next-up card */
   --radius-group: 22px;  /* grouped list container */
@@ -39,6 +43,15 @@
   --shadow-raised: 0 1px 0 rgba(16,32,43,.04), 0 12px 32px -12px rgba(16,32,43,.18), 0 2px 6px rgba(16,32,43,.05);
   --shadow-nav: 0 10px 30px -10px rgba(16,32,43,.25);
   --shadow-fab: 0 10px 20px -6px rgba(20,116,101,.55);
+  --shadow-nora: 0 18px 36px -16px rgba(15,61,55,.6);
+  --shadow-sheet: 0 -24px 60px -12px rgba(16,32,43,.22);
+}
+
+:root {
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+  --dur-micro: 160ms;  /* press, toggle, check-off */
+  --dur-panel: 240ms;  /* sheets, row expand, tab pill */
 }
 
 * {
@@ -57,7 +70,7 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 button,
@@ -76,6 +89,14 @@ a {
 :focus-visible {
   outline: 3px solid rgba(20, 116, 101, 0.45);
   outline-offset: 3px;
+  border-radius: 12px;
+}
+
+/* Fields show focus with their own border and ring. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
 }
 
 .app-shell {
@@ -83,13 +104,14 @@ a {
   margin: 0 auto;
   min-height: 100dvh;
   position: relative;
-  overflow-x: hidden;
+  overflow-x: clip;
   background: var(--color-background);
-  box-shadow: 0 24px 90px rgba(23, 35, 58, 0.14);
 }
 
-.patient-page {
-  animation: ma-enter 240ms var(--ease-out) both;
+@media (min-width: 768px) {
+  .app-shell {
+    box-shadow: 0 0 0 1px rgba(16, 32, 43, .04), 0 24px 90px rgba(23, 35, 58, 0.12);
+  }
 }
 
 /* Native choice controls share a padded caret; custom-caret controls opt out. */
@@ -111,7 +133,7 @@ select:not([multiple]):not([size]):not(.appearance-none) {
   }
 }
 
-/* The approved entry reference uses a soft teal glow, not a white page or hero. */
+/* Entry screens (sign in, sign up, onboarding) carry a soft teal glow over the canvas. */
 .patient-entry {
   position: relative;
   isolation: isolate;
@@ -123,82 +145,18 @@ select:not([multiple]):not([size]):not(.appearance-none) {
   z-index: -1;
   pointer-events: none;
   left: 50%;
-  top: -120px;
-  width: 520px;
-  height: 420px;
+  top: -140px;
+  width: 560px;
+  height: 460px;
   transform: translateX(-50%);
-  background: radial-gradient(ellipse at center, rgba(20,116,101,.16), rgba(20,116,101,0) 65%);
-}
-
-.patient-stack > * {
-  animation: ma-enter 240ms var(--ease-out) both;
-}
-
-.patient-stack > *:nth-child(2) {
-  animation-delay: 45ms;
-}
-
-.patient-stack > *:nth-child(3) {
-  animation-delay: 90ms;
-}
-
-.patient-stack > *:nth-child(4) {
-  animation-delay: 135ms;
+  background: radial-gradient(ellipse at center, rgba(20,116,101,.14), rgba(20,116,101,0) 65%);
 }
 
 .safe-bottom {
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
-@keyframes page-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (min-width: 768px) {
-  .app-shell {
-    margin-block: 18px;
-    min-height: calc(100dvh - 36px);
-    border-radius: 36px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-  }
-}
-
-/* Shared reference-led motion; only mount looping indicators for active states. */
-
-:root {
-  --ease-out: cubic-bezier(.2,.8,.2,1);
-  --ease-spring: cubic-bezier(.34,1.56,.64,1);
-  --dur-micro: 160ms;
-  --dur-panel: 240ms;
-}
+/* ---------- Motion ---------- */
 
 @keyframes ma-enter   { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 @keyframes ma-leave   { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-8px) } }
@@ -210,48 +168,60 @@ select:not([multiple]):not([size]):not(.appearance-none) {
 @keyframes ma-draw    { 0% { stroke-dashoffset: 1 } 45%, 80% { stroke-dashoffset: 0 } 100% { stroke-dashoffset: -1 } }
 @keyframes ma-check   { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
 @keyframes ma-bars    { 0%, 100% { transform: scaleY(.4) } 50% { transform: scaleY(1) } }
-@keyframes ma-flash   { 0% { box-shadow: 0 0 0 0 rgba(202,138,4,.6) } 100% { box-shadow: 0 0 0 10px rgba(202,138,4,0) } }
-@keyframes ma-swap-out{ to { opacity: 0; transform: translateY(-4px) } }
-@keyframes ma-swap-in { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
-/* sign-in supervised-flow stack (6s loop) */
-@keyframes ma-rise {
-  0% { transform: translateY(0); opacity: 0 } 6% { opacity: 1 }
-  40% { transform: translateY(-144px) } 58% { transform: translateY(-144px) }
-  88% { transform: translateY(-216px); opacity: 1 } 100% { transform: translateY(-216px); opacity: 0 }
-}
-@keyframes ma-gate {
-  0%, 36% { box-shadow: 0 0 0 0 rgba(45,212,191,0); background: rgba(45,212,191,0) }
-  46%, 56% { box-shadow: 0 0 44px 8px rgba(45,212,191,.5); background: rgba(45,212,191,.2) }
-  70%, 100% { box-shadow: 0 0 0 0 rgba(45,212,191,0); background: rgba(45,212,191,0) }
-}
+@keyframes ma-shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
 
-/* utilities */
 .ma-enter        { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
 .ma-enter-spring { animation: ma-enter var(--dur-panel) var(--ease-spring) both; }
 .ma-leave        { animation: ma-leave var(--dur-micro) var(--ease-out) both; }
 .ma-bubble       { animation: ma-bubble var(--dur-micro) var(--ease-out) both; }
 .ma-fade         { animation: ma-fade var(--dur-micro) ease-out both; }
-.ma-sheet-panel { animation: ma-sheet var(--dur-panel) var(--ease-out) both; }
-.ma-flash        { animation: ma-flash 600ms ease-out 1; }
+.ma-sheet-panel  { animation: ma-sheet var(--dur-panel) var(--ease-out) both; }
 .ma-check-draw path { stroke-dasharray: 1; animation: ma-check var(--dur-micro) var(--ease-out) both; }
-.ma-press        { transition: transform var(--dur-micro) var(--ease-out); }
+.ma-press        { transition: transform var(--dur-micro) var(--ease-out), background-color var(--dur-micro) ease-out, color var(--dur-micro) ease-out; }
 .ma-press:active { transform: scale(.98); }
 .ma-lift         { transition: transform var(--dur-panel) var(--ease-out), box-shadow var(--dur-panel) var(--ease-out); }
 .ma-lift:hover   { transform: translateY(-3px); box-shadow: var(--shadow-raised); }
 
-/* existing patient page enter, retimed */
+/* Page enter (tabs) and a short stagger, capped at four children. */
 .patient-page { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
 .patient-stack > * { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
 .patient-stack > *:nth-child(2) { animation-delay: 45ms; }
 .patient-stack > *:nth-child(3) { animation-delay: 90ms; }
 .patient-stack > *:nth-child(4) { animation-delay: 135ms; }
 
-/* native <dialog> bottom sheet */
-dialog.ma-sheet { margin: auto 0 0; width: 100%; max-width: 480px; margin-inline: auto; padding: 0; border: 0; background: transparent; }
-dialog.ma-sheet[open] > .ma-sheet-panel { animation: ma-sheet var(--dur-panel) var(--ease-out) both; }
-dialog.ma-sheet::backdrop { background: rgba(16,32,43,.4); animation: ma-fade var(--dur-micro) ease-out both; }
+/* Loading placeholders: a calm sweep instead of a blink. */
+.ma-skeleton {
+  background: linear-gradient(90deg, var(--color-line-strong) 0%, #F1EBE2 50%, var(--color-line-strong) 100%);
+  background-size: 200% 100%;
+  animation: ma-shimmer 1.6s ease-in-out infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-  .ma-3d-tilt { transform: none !important; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
+
+/* Opt-in disclosure: hides the native triangle and adds a rotating chevron. */
+details.ma-disclosure > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+details.ma-disclosure > summary::-webkit-details-marker { display: none; }
+details.ma-disclosure > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  background: currentColor;
+  opacity: .6;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform var(--dur-panel) var(--ease-out);
+}
+details.ma-disclosure[open] > summary::after { transform: rotate(180deg); }

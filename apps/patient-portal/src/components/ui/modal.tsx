@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Icon } from "./icons";
 
 interface ModalProps {
     open: boolean;
@@ -23,6 +24,7 @@ const overlayClasses: Record<NonNullable<ModalProps["size"]>, string> = {
     wide: "justify-end md:items-center md:justify-center md:p-6",
 };
 
+/** Bottom sheet on phones: slides up, traps focus, closes on backdrop tap and Escape. */
 export function Modal({ children, closeLabel = "Close modal", keepMounted = false, onClose, open, size = "default", title }: ModalProps) {
     const panel = useRef<HTMLDivElement>(null);
     const titleId = useId();
@@ -52,25 +54,26 @@ export function Modal({ children, closeLabel = "Close modal", keepMounted = fals
     }
 
     return createPortal(
-        <div hidden={!open} style={!open ? { display: "none" } : undefined} className={`ma-fade fixed inset-0 z-60 flex flex-col bg-ink/40 ${overlayClasses[size]}`} onClick={onClose}>
+        <div hidden={!open} style={!open ? { display: "none" } : undefined} className={`ma-fade fixed inset-0 z-60 flex flex-col bg-[rgba(16,32,43,.4)] ${overlayClasses[size]}`} onClick={onClose}>
             <div
                 aria-labelledby={open ? titleId : undefined}
                 aria-modal={open ? true : undefined}
                 ref={panel}
                 role={open ? "dialog" : undefined}
                 tabIndex={-1}
-                className={`ma-sheet-panel mx-auto max-h-[88dvh] w-full ${sizeClasses[size]} overflow-y-auto border border-line bg-surface p-6 pb-[calc(24px+env(safe-area-inset-bottom))] shadow-[0_-24px_80px_rgba(16,32,43,0.20)]`}
+                className={`ma-sheet-panel mx-auto max-h-[90dvh] w-full ${sizeClasses[size]} overflow-y-auto overscroll-contain bg-surface px-5 pt-2.5 pb-[calc(24px+env(safe-area-inset-bottom))] shadow-[var(--shadow-sheet)] outline-none`}
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="mb-4 flex items-center justify-between">
-                    <h3 id={titleId} className="min-w-0 break-words [overflow-wrap:anywhere] text-xl font-semibold text-ink">{title}</h3>
+                <div aria-hidden="true" className={`mx-auto mb-3 h-[5px] w-9 rounded-full bg-line-strong ${size === "wide" ? "md:hidden" : ""}`} />
+                <div className="mb-4 flex items-start justify-between gap-3">
+                    <h3 id={titleId} className="min-w-0 break-words pt-1.5 text-[20px] font-semibold leading-tight tracking-[-0.01em] text-ink [overflow-wrap:anywhere]">{title}</h3>
                     <button
                         aria-label={closeLabel}
-                        className="ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-muted transition hover:bg-surface-2 hover:text-ink"
+                        className="ma-press -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-2 hover:bg-surface-2"
                         onClick={onClose}
                         type="button"
                     >
-                        ✕
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2"><Icon name="close" className="h-4 w-4" strokeWidth={2} /></span>
                     </button>
                 </div>
                 {children}

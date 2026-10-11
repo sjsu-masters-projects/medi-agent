@@ -30,8 +30,8 @@ function NavItem({
     return (
         <Link
             aria-current={active ? "page" : undefined}
-            className={`relative flex min-h-11 min-w-11 flex-col items-center justify-center gap-[3px] rounded-2xl transition-colors ${
-                active ? "text-brand" : "text-muted hover:text-brand"
+            className={`relative flex h-[52px] min-w-11 flex-col items-center justify-center gap-[3px] rounded-2xl transition-colors duration-[160ms] ${
+                active ? "text-brand" : "text-nav-idle hover:text-ink-2"
             }`}
             href={href}
             prefetch={false}
@@ -49,8 +49,8 @@ export function BottomNav({ currentPath }: BottomNavProps) {
     const activeIndex = destinations.findIndex((path) => currentPath === path || currentPath.startsWith(`${path}/`));
     return (
         <nav aria-label={spanish ? "Navegación principal" : "Primary navigation"} className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-28px)] max-w-[452px] -translate-x-1/2">
-            <div className="relative grid h-[68px] grid-cols-5 items-center rounded-3xl border border-line bg-surface/90 shadow-[var(--shadow-nav)] backdrop-blur-[18px]">
-                {activeIndex >= 0 && activeIndex !== 2 ? <span aria-hidden="true" className="pointer-events-none absolute top-[10px] flex h-12 w-1/5 justify-center transition-transform duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)]" style={{ transform: `translateX(${activeIndex * 100}%)` }}><span className="h-12 w-[52px] rounded-2xl bg-brand-tint" /></span> : null}
+            <div className="relative grid h-[68px] grid-cols-5 items-center rounded-3xl border border-[rgba(16,32,43,.06)] bg-[rgba(255,253,249,.86)] shadow-[var(--shadow-nav)] backdrop-blur-[18px] backdrop-saturate-150">
+                {activeIndex >= 0 && activeIndex !== 2 ? <span aria-hidden="true" className="pointer-events-none absolute inset-y-[8px] left-0 flex w-1/5 justify-center transition-transform duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)]" style={{ transform: `translateX(${activeIndex * 100}%)` }}><span className="h-full w-[60px] rounded-2xl bg-brand-tint" /></span> : null}
                 <NavItem
                     active={activeIndex === 0}
                     href="/today"
