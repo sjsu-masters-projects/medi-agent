@@ -135,6 +135,8 @@ interface PatientChatSessionState {
     canPlayAssistantAudio: boolean;
     connectionStatus: RootState["chat"]["connectionStatus"];
     documentContext: PendingChatDocumentContext | null;
+    /** The conversation's document could no longer be read. */
+    documentUnavailable: boolean;
     error: string | null;
     handsFreeMode: boolean;
     input: string;
@@ -198,6 +200,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const [documentContext, setDocumentContext] =
         useState<PendingChatDocumentContext | null>(initialDocumentContext);
     const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
+    // A dismissal travels with the next connection so the server stops restoring the
+    // document it saved for this conversation; clearing it here alone brought it back.
+    const [documentDismissed, setDocumentDismissed] = useState(false);
+    const [documentUnavailable, setDocumentUnavailable] = useState(false);
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
     const [reconnectSignal, setReconnectSignal] = useState(0);
 
@@ -650,6 +656,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             buildChatWebSocketUrl(user.id, {
                 documentId: activeDocumentId,
                 sessionId,
+                ...(documentDismissed && !activeDocumentId ? { documentDismissed: true } : {}),
             }),
             socketAuthProtocols(accessToken),
         );
@@ -699,9 +706,18 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     if (loadedDocumentContext) {
                         setActiveDocumentId(loadedDocumentContext.documentId);
                         setDocumentContext(loadedDocumentContext);
+                        setDocumentDismissed(false);
+                        setDocumentUnavailable(false);
                     }
                     return;
                 }
+                case "chat_context_unavailable":
+                    // Nora would otherwise answer from the general chart while the card
+                    // still named a document she cannot read.
+                    setActiveDocumentId(null);
+                    setDocumentContext(null);
+                    setDocumentUnavailable(true);
+                    return;
                 case "clinician_message":
                     // Also protect clients during staggered backend/frontend rollout.
                     if (!isInternalChatAlert(payload.message)) {
@@ -833,7 +849,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, activeDocumentId, dispatch, reconnectSignal, sessionId, user]);
+    }, [accessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId, user]);
 
     useEffect(() => {
         return () => {
@@ -848,11 +864,14 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     function dismissDocumentContext(): void {
         setActiveDocumentId(null);
         setDocumentContext(null);
+        setDocumentDismissed(true);
     }
 
     function openConversation(nextSessionId: string): void {
         setActiveDocumentId(null);
         setDocumentContext(null);
+        setDocumentDismissed(false);
+        setDocumentUnavailable(false);
         setSessionId(nextSessionId);
     }
 
@@ -1069,6 +1088,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         dismissDocumentContext,
         dismissSafetyNotice,
         documentContext,
+        documentUnavailable,
         error,
         handleHandsFreeToggle,
         handleMicClick,

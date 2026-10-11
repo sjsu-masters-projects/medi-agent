@@ -89,6 +89,10 @@ def _chunk_text(text: str, chunk_size: int = 140) -> list[str]:
     ]
 
 
+DOCUMENT_CONTEXT_DISMISSED = "none"
+"""`?context=none`: the patient dismissed this conversation's document."""
+
+
 def _extract_document_context_id(websocket: WebSocket) -> str | None:
     context = str(websocket.query_params.get("context", "")).strip()
     if context.startswith("doc:"):
@@ -96,6 +100,57 @@ def _extract_document_context_id(websocket: WebSocket) -> str | None:
 
     document_id = str(websocket.query_params.get("document_id", "")).strip()
     return document_id or None
+
+
+def _document_context_dismissed(websocket: WebSocket) -> bool:
+    return str(websocket.query_params.get("context", "")).strip() == DOCUMENT_CONTEXT_DISMISSED
+
+
+async def _resolve_document_focus(
+    service: ChatService,
+    *,
+    patient_id: str,
+    session_id: str,
+    dismissed: bool,
+    requested_document_id: str | None,
+    requested_document: dict[str, Any] | None,
+    saved_document: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, bool]:
+    """The document this conversation is focused on, and whether a document went missing.
+
+    The saved focus is what lets a reopened conversation keep its document, so a dismissal
+    has to clear it there too; otherwise the next connection restored the document the
+    patient had just closed. A saved document is read again on every connection, so one
+    that was deleted (or never was the patient's) is reported rather than answered from.
+    """
+    if dismissed:
+        if saved_document is not None:
+            await service.set_document_context(patient_id, session_id, None)
+            logger.info("Chat document focus cleared", extra={"chat_document_focus": "dismissed"})
+        return None, False
+
+    if requested_document_id:
+        if requested_document is None:
+            if saved_document is not None:
+                await service.set_document_context(patient_id, session_id, None)
+            logger.info(
+                "Chat document focus unavailable", extra={"chat_document_focus": "unavailable"}
+            )
+            return None, True
+        if saved_document != requested_document:
+            await service.set_document_context(patient_id, session_id, requested_document)
+        return requested_document, False
+
+    if saved_document is None:
+        return None, False
+
+    saved_id = str(saved_document.get("id") or "").strip()
+    current = await service.get_document_context(patient_id, saved_id) if saved_id else None
+    if current is None:
+        await service.set_document_context(patient_id, session_id, None)
+        logger.info("Chat document focus unavailable", extra={"chat_document_focus": "unavailable"})
+        return None, True
+    return current, False
 
 
 def _build_conversation_state(
@@ -310,7 +365,6 @@ async def _persist_conversation_state_with_retry(
             "state_json": {
                 "history_window": conversation_history[-12:],
             },
-            "document_context": document_context,
         }
 
         updated_at_token = state_record.get("updated_at")
@@ -523,7 +577,8 @@ async def chat_websocket_endpoint(
         for message in clinician_messages:
             await websocket.send_json({"type": "clinician_message", "message": message})
 
-        context_document_id = _extract_document_context_id(websocket)
+        context_dismissed = _document_context_dismissed(websocket)
+        context_document_id = None if context_dismissed else _extract_document_context_id(websocket)
         chat_context = await service.get_context(
             patient_id=str(patient_id),
             document_id=context_document_id,
@@ -533,8 +588,27 @@ async def chat_websocket_endpoint(
             "conditions": chat_context.get("conditions", []),
             "recent_symptoms": chat_context.get("recent_symptoms", []),
         }
-        document_context = chat_context.get("document")
-        sent_document_context_event = False
+        requested_document = chat_context.get("document")
+
+        state_record = await service.get_or_create_conversation_state(
+            patient_id=str(patient_id),
+            options={
+                "session_id": session_id,
+                "language": Language.EN,
+                "document_context": requested_document,
+                "turn_count": len(conversation_history),
+            },
+        )
+        saved_document = state_record.get("document_context")
+        document_context, document_unavailable = await _resolve_document_focus(
+            service,
+            patient_id=str(patient_id),
+            session_id=session_id,
+            dismissed=context_dismissed,
+            requested_document_id=context_document_id,
+            requested_document=requested_document,
+            saved_document=saved_document if isinstance(saved_document, dict) else None,
+        )
         if document_context:
             await websocket.send_json(
                 {
@@ -543,26 +617,9 @@ async def chat_websocket_endpoint(
                     "document": document_context,
                 }
             )
-            sent_document_context_event = True
-
-        state_record = await service.get_or_create_conversation_state(
-            patient_id=str(patient_id),
-            options={
-                "session_id": session_id,
-                "language": Language.EN,
-                "document_context": document_context,
-                "turn_count": len(conversation_history),
-            },
-        )
-        if not document_context and isinstance(state_record.get("document_context"), dict):
-            document_context = state_record["document_context"]
-        if document_context and not sent_document_context_event:
+        elif document_unavailable:
             await websocket.send_json(
-                {
-                    "type": "chat_context_loaded",
-                    "context_type": "document",
-                    "document": document_context,
-                }
+                {"type": "chat_context_unavailable", "context_type": "document"}
             )
         conversation_state = _conversation_state_from_record(state_record)
     except WebSocketDisconnect:

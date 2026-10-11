@@ -315,3 +315,36 @@ async def test_messages_are_saved_into_their_conversation(mock_db):
 
     payload = mock_db.table().insert.call_args.args[0]
     assert payload["session_id"] == "chat-abc"
+
+
+@pytest.mark.asyncio
+async def test_set_document_context_clears_only_the_patients_own_conversation(mock_db):
+    mock_db.table().execute.return_value = _response([])
+
+    await ChatService(mock_db).set_document_context("synthetic-patient", "chat-abc", None)
+
+    mock_db.table.assert_called_with("chat_conversation_states")
+    mock_db.table().update.assert_called_with({"document_context": None})
+    mock_db.table().update().eq.assert_any_call("patient_id", "synthetic-patient")
+    mock_db.table().update().eq.assert_any_call("session_id", "chat-abc")
+
+
+@pytest.mark.asyncio
+async def test_a_turn_update_leaves_the_document_focus_alone(mock_db):
+    mock_db.table().execute.side_effect = [_response([{"id": "row"}])]
+
+    await ChatService(mock_db).update_conversation_state(
+        patient_id=str(uuid4()),
+        updates={"session_id": "s-1", "summary": "latest", "turn_count": 2},
+    )
+
+    payload = mock_db.table().update.call_args.args[0]
+    assert "document_context" not in payload
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_document_id_names_no_document_without_a_query(mock_db):
+    result = await ChatService(mock_db).get_document_context("synthetic-patient", "not-a-uuid")
+
+    assert result is None
+    mock_db.table().execute.assert_not_called()
