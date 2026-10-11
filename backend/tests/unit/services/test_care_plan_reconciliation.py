@@ -9,6 +9,7 @@ import pytest
 from app.core.exceptions import ValidationError
 from app.services.care_plan_reconciliation import overlaps, publication_key
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_wording import verified_wording
 
 
 def query(data):
@@ -23,10 +24,8 @@ def activity(item_id="one", **changes):
     return {
         "id": item_id,
         "category": "movement",
-        "instructions": "Walk 20 minutes",
-        "frequency": "daily",
+        **verified_wording(),
         "schedule": {},
-        "reviewed_locale": "en-US",
         **changes,
     }
 
@@ -188,7 +187,6 @@ def test_revision_retains_exact_source_exclusions_without_projection_or_attestat
     original = activity(
         source_fact_id=str(UUID(int=4)),
         is_removed=True,
-        reviewed_locale="en-US",
         projection_type="obligation",
         projection_id=str(UUID(int=5)),
     )
@@ -198,7 +196,10 @@ def test_revision_retains_exact_source_exclusions_without_projection_or_attestat
     assert payload["source_fact_id"] == original["source_fact_id"]
     assert payload["is_removed"] is True
     assert payload["projection_id"] is None
-    assert "reviewed_locale" not in payload
+    # Approved wording travels in both languages, but the new version is checked again.
+    assert payload["wording"] == original["wording"]
+    assert payload["source_locale"] == "en-US"
+    assert "wording_verified" not in payload
     assert original["projection_id"] == str(UUID(int=5))
 
 

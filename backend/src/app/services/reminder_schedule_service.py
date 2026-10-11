@@ -321,7 +321,11 @@ class ReminderScheduleService:
         self.db = db
 
     async def list_targets_for_patient(self, patient_id: str) -> list[dict[str, Any]]:
+        # Imported here: patient wording labels cadence with this module's vocabulary.
+        from app.services.patient_wording import patient_text
+
         patient = await self._get_patient(patient_id)
+        locale = str(patient.get("preferred_language") or "en-US")
         schedule_map = await self.get_schedule_map_for_patient(patient_id)
         provider_by_team = await self._get_provider_name_map(patient_id)
         medications, obligations = await self._get_active_targets(patient_id)
@@ -334,9 +338,7 @@ class ReminderScheduleService:
                 {
                     "target_type": "medication",
                     "target_id": medication["id"],
-                    "name": medication.get("name", ""),
-                    "description": medication.get("instructions"),
-                    "frequency": medication.get("frequency", ""),
+                    **patient_text("medication", medication, locale, include_dosage=False),
                     "provider_name": provider_by_team.get(
                         str(medication.get("prescribed_by_care_team_id") or "")
                     ),
@@ -352,9 +354,7 @@ class ReminderScheduleService:
                 {
                     "target_type": "obligation",
                     "target_id": obligation["id"],
-                    "name": obligation.get("description", ""),
-                    "description": obligation.get("notes"),
-                    "frequency": obligation.get("frequency", ""),
+                    **patient_text("obligation", obligation, locale),
                     "provider_name": provider_by_team.get(
                         str(obligation.get("set_by_care_team_id") or "")
                     ),
@@ -480,7 +480,10 @@ class ReminderScheduleService:
     async def _get_patient(self, patient_id: str) -> dict[str, Any]:
         response = await execute_async(
             self,
-            lambda db: db.table("patients").select("id, timezone").eq("id", patient_id).single(),
+            lambda db: db.table("patients")
+            .select("id, timezone, preferred_language")
+            .eq("id", patient_id)
+            .single(),
             operation="fetch patient timezone",
             retry_transient=True,
         )
@@ -517,7 +520,10 @@ class ReminderScheduleService:
             self,
             lambda db: (
                 db.table("medications")
-                .select("id, name, frequency, instructions, prescribed_by_care_team_id, is_active")
+                .select(
+                    "id, name, dosage, frequency, instructions, patient_wording, "
+                    "prescribed_by_care_team_id, is_active"
+                )
                 .eq("patient_id", patient_id)
                 .eq("is_active", True)
                 .order("created_at", desc=True)
@@ -529,7 +535,10 @@ class ReminderScheduleService:
             self,
             lambda db: (
                 db.table("obligations")
-                .select("id, description, notes, frequency, set_by_care_team_id, is_active")
+                .select(
+                    "id, description, notes, frequency, patient_wording, "
+                    "set_by_care_team_id, is_active"
+                )
                 .eq("patient_id", patient_id)
                 .eq("is_active", True)
                 .order("created_at", desc=True)

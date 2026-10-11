@@ -103,6 +103,7 @@ def proposed_records(
                 frequency=medication["frequency"],
                 instructions=item["instructions"],
                 care_plan_item_id=item["id"],
+                patient_wording=item.get("wording") or {},
             )
             medications = [
                 existing for existing in medications if str(existing["id"]) != str(row["id"])
@@ -117,6 +118,7 @@ def proposed_records(
                 frequency=item["frequency"],
                 obligation_type=obligation_type(item["category"]),
                 care_plan_item_id=item["id"],
+                patient_wording=item.get("wording") or {},
             )
             obligations.append(row)
     return PublicationRecords(medications, obligations, [])
@@ -224,6 +226,7 @@ class CarePlanPreviewService:
                 plan_items,
                 reminders,
                 adherence,
+                str(patient.get("preferred_language") or "en-US"),
             )
         )
         return {

@@ -10,6 +10,7 @@ import pytest
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.models.care_plan import CarePlanDraftUpdate
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_wording import verified_wording
 
 PATIENT_ID = UUID("00000000-0000-0000-0000-000000000201")
 CLINICIAN_ID = UUID("00000000-0000-0000-0000-000000000202")
@@ -236,7 +237,16 @@ def test_medication_decision_requires_explicit_match_or_new_name() -> None:
     validate({"decision": "create", "name": "Loratadine"}, active)
 
 
-def test_approval_denies_unreviewed_patient_language_before_rpc() -> None:
+@pytest.mark.parametrize(
+    "change,message",
+    [
+        ({"wording_verified": False}, "Check the English and Spanish wording"),
+        ({"wording": {"en-US": verified_wording()["wording"]["en-US"]}}, "Add English and Spanish"),
+        ({"source_locale": None}, "Add English and Spanish"),
+        ({"title": "Changed after translation"}, "Add English and Spanish"),
+    ],
+)
+def test_approval_denies_unverified_bilingual_wording_before_rpc(change, message) -> None:
     db = MagicMock()
     service = CarePlanService(db)
     service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
@@ -245,10 +255,10 @@ def test_approval_denies_unreviewed_patient_language_before_rpc() -> None:
     service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]
     service._active_medications = MagicMock(return_value=[])  # type: ignore[method-assign]
     service._items = MagicMock(  # type: ignore[method-assign]
-        return_value=[{"category": "movement", "is_removed": False, "reviewed_locale": None}]
+        return_value=[{"category": "movement", "is_removed": False, **verified_wording(), **change}]
     )
 
-    with pytest.raises(ValidationError, match="patient's language"):
+    with pytest.raises(ValidationError, match=message):
         service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, "reviewed")
 
     db.rpc.assert_not_called()
@@ -269,7 +279,7 @@ def test_approval_denies_unmatched_medication_before_rpc() -> None:
             {
                 "category": "medication",
                 "is_removed": False,
-                "reviewed_locale": "en-US",
+                **verified_wording(),
                 "medication": {"decision": "create", "name": "Metformin"},
             }
         ]
@@ -299,8 +309,7 @@ def test_approval_calls_transaction_for_reviewed_matching_medication(monkeypatch
             {
                 "category": "medication",
                 "is_removed": False,
-                "reviewed_locale": "en-US",
-                "frequency": "daily",
+                **verified_wording("Metformin 500 mg", "Take with breakfast", "daily"),
                 "id": str(PATIENT_ID),
                 "medication": {
                     "decision": "update",
@@ -331,6 +340,7 @@ def test_approval_calls_transaction_for_reviewed_matching_medication(monkeypatch
 
     db.rpc.reset_mock()
     service._items.return_value[0]["frequency"] = "twice daily"
+    service._items.return_value[0]["wording"]["en-US"]["frequency"] = "twice daily"
     with pytest.raises(ValidationError, match="frequency must match"):
         service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, "Reviewed source")
     db.rpc.assert_not_called()
@@ -354,7 +364,7 @@ def test_publication_preflight_denies_ineligible_fact_before_rpc(monkeypatch, ca
                 "id": "item",
                 "source_fact_id": "fact",
                 "category": "movement",
-                "reviewed_locale": "en-US",
+                **verified_wording(),
             }
         ]
     )
@@ -367,19 +377,29 @@ def test_publication_preflight_denies_ineligible_fact_before_rpc(monkeypatch, ca
     db.rpc.assert_not_called()
 
 
-def test_draft_save_persists_explicit_locale_review() -> None:
+def _draft_save_service(original: dict) -> tuple[MagicMock, CarePlanService]:
     db = MagicMock()
     service = CarePlanService(db)
     service._require_assignment = MagicMock()  # type: ignore[method-assign]
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
-    service._items = MagicMock(  # type: ignore[method-assign]
-        return_value=[{"id": str(PATIENT_ID), "category": "movement", "confidence_score": 0.95}]
-    )
-    service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]
+    service._items = MagicMock(return_value=[original])  # type: ignore[method-assign]
     service._active_medications = MagicMock(return_value=[])  # type: ignore[method-assign]
     service._audit = MagicMock()  # type: ignore[method-assign]
     service._plan = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._hydrate_plan = MagicMock(return_value={})  # type: ignore[method-assign]
+    return db, service
+
+
+def test_draft_save_records_bilingual_review_and_edited_language() -> None:
+    original = {
+        "id": str(PATIENT_ID),
+        "category": "movement",
+        "confidence_score": 0.95,
+        **verified_wording(),
+        "wording_verified": False,
+    }
+    db, service = _draft_save_service(original)
+    wording = original["wording"]
     update = CarePlanDraftUpdate.model_validate(
         {
             "items": [
@@ -388,8 +408,11 @@ def test_draft_save_persists_explicit_locale_review() -> None:
                     "title": "Walk",
                     "instructions": "Walk 20 minutes",
                     "frequency": "daily",
-                    "language_verified": True,
-                    "verified_locale": "en-US",
+                    "wording": {
+                        "en-US": wording["en-US"],
+                        "es-MX": {**wording["es-MX"], "title": "Caminar"},
+                    },
+                    "wording_verified": True,
                 }
             ]
         }
@@ -397,15 +420,79 @@ def test_draft_save_persists_explicit_locale_review() -> None:
 
     service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, update)
 
-    db.table.return_value.update.assert_called_once()
-    assert db.table.return_value.update.call_args.args[0]["reviewed_locale"] == "en-US"
+    payload = db.table.return_value.update.call_args.args[0]
+    assert payload["wording_verified"] is True
+    assert payload["wording"]["es-MX"]["title"] == "Caminar"
+    assert payload["wording_origin"] == {"en-US": "source", "es-MX": "clinician_edited"}
+    assert "reviewed_locale" not in payload
 
-    db.table.return_value.update.reset_mock()
-    stale = update.model_copy(deep=True)
-    stale.items[0].verified_locale = "es-MX"
-    with pytest.raises(ValidationError, match="language changed"):
-        service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, stale)
-    db.table.return_value.update.assert_not_called()
+
+def test_source_language_edit_updates_the_compared_copy() -> None:
+    original = {"id": str(PATIENT_ID), "category": "movement", **verified_wording()}
+    db, service = _draft_save_service(original)
+    wording = original["wording"]
+    update = CarePlanDraftUpdate.model_validate(
+        {
+            "items": [
+                {
+                    "id": str(PATIENT_ID),
+                    "title": "Walk",
+                    "instructions": "Walk 20 minutes",
+                    "frequency": "daily",
+                    "wording": {
+                        "en-US": {**wording["en-US"], "instructions": "Walk 30 minutes"},
+                        "es-MX": wording["es-MX"],
+                    },
+                }
+            ]
+        }
+    )
+
+    service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, update)
+
+    payload = db.table.return_value.update.call_args.args[0]
+    assert payload["instructions"] == "Walk 30 minutes"
+    assert payload["wording_origin"]["en-US"] == "clinician_edited"
+    assert payload["wording_verified"] is False
+
+
+def test_verification_is_not_recorded_for_missing_language() -> None:
+    original = {
+        "id": str(PATIENT_ID),
+        "category": "movement",
+        "title": "Walk",
+        "instructions": "Walk 20 minutes",
+        "frequency": "daily",
+    }
+    db, service = _draft_save_service(original)
+    update = CarePlanDraftUpdate.model_validate(
+        {
+            "items": [
+                {
+                    "id": str(PATIENT_ID),
+                    "title": "Walk",
+                    "instructions": "Walk 20 minutes",
+                    "frequency": "daily",
+                    "source_locale": "en-US",
+                    "wording": {
+                        "en-US": {
+                            "title": "Walk",
+                            "instructions": "Walk 20 minutes",
+                            "frequency": "daily",
+                        }
+                    },
+                    "wording_verified": True,
+                }
+            ]
+        }
+    )
+
+    service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, update)
+
+    payload = db.table.return_value.update.call_args.args[0]
+    assert payload["source_locale"] == "en-US"
+    assert payload["wording_origin"] == {"en-US": "source"}
+    assert payload["wording_verified"] is False
 
 
 @pytest.mark.parametrize("edited,removed", [(False, False), (True, False), (False, True)])

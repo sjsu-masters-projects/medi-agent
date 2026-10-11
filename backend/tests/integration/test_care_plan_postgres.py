@@ -1085,3 +1085,125 @@ def test_actual_publication_denies_unassigned_clinician(sql) -> None:
     )
     assert "not assigned" in error
     assert sql("SELECT count(*) FROM obligations") == "0"
+
+
+BILINGUAL = json.dumps(
+    {
+        "en-US": {"title": "Walk", "instructions": "Synthetic walk", "frequency": "daily"},
+        "es-MX": {"title": "Caminar", "instructions": "Caminata sintética", "frequency": "diario"},
+    }
+)
+
+
+def setup_bilingual(sql):
+    setup_review_sources(sql)
+    sql((MIGRATIONS / "049_bilingual_care_plan_wording.sql").read_text())
+    sql(review_batch())
+
+
+def test_publication_requires_verified_wording_in_both_languages(sql) -> None:
+    setup_bilingual(sql)
+    approve = f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review');"
+    # A legacy single-locale attestation no longer satisfies publication.
+    sql("UPDATE care_plan_items SET reviewed_locale='en-US'")
+    assert "verified English and Spanish wording" in sql(approve, succeeds=False)
+    sql(f"""UPDATE care_plan_items SET source_locale='en-US', wording='{BILINGUAL}',
+      wording_origin='{{"en-US":"source","es-MX":"ai_draft"}}'""")
+    assert "verified English and Spanish wording" in sql(approve, succeeds=False)
+    incomplete = json.loads(BILINGUAL)
+    incomplete["es-MX"]["instructions"] = " "
+    sql(f"UPDATE care_plan_items SET wording_verified=true, wording='{json.dumps(incomplete)}'")
+    assert "verified English and Spanish wording" in sql(approve, succeeds=False)
+    drifted = json.loads(BILINGUAL)
+    drifted["en-US"]["title"] = "Run"
+    sql(f"UPDATE care_plan_items SET wording='{json.dumps(drifted)}'")
+    assert "verified English and Spanish wording" in sql(approve, succeeds=False)
+    assert sql("SELECT count(*) FROM obligations") == "0"
+    sql(f"UPDATE care_plan_items SET wording='{BILINGUAL}'")
+    sql(approve)
+    assert sql("SELECT patient_wording #>> '{es-MX,title}' FROM obligations WHERE is_active") == (
+        "Caminar"
+    )
+    assert sql("SELECT description FROM obligations WHERE is_active") == "Walk"
+    audit = json.loads(
+        sql(
+            "SELECT event_data FROM care_plan_audit_events WHERE event_type='approved_and_published'"
+        )
+    )
+    (origin,) = audit["wording"].values()
+    assert origin == {"source_locale": "en-US", "origin": {"en-US": "source", "es-MX": "ai_draft"}}
+
+
+@pytest.mark.parametrize(
+    "wording",
+    [
+        '{"fr-FR": {"title": "Marcher"}}',
+        '{"en-US": {"title": "Walk", "note": "extra"}}',
+        '{"en-US": "Walk"}',
+        json.dumps({"es-MX": {"title": "x" * 301}}),
+    ],
+)
+def test_wording_shape_is_enforced_by_the_table(sql, wording) -> None:
+    setup_bilingual(sql)
+    assert "check constraint" in sql(
+        f"UPDATE care_plan_items SET wording='{wording}'", succeeds=False
+    )
+
+
+def test_carried_forward_wording_is_kept_but_must_be_verified_again(sql) -> None:
+    setup_bilingual(sql)
+    sql(f"""UPDATE care_plan_items SET source_locale='en-US', wording='{BILINGUAL}',
+      wording_origin='{{"en-US":"source","es-MX":"clinician_edited"}}', wording_verified=true""")
+    sql(f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')")
+    revision, request = (
+        "00000000-0000-0000-0000-000000000008",
+        "00000000-0000-0000-0000-000000000009",
+    )
+    second_fact = "00000000-0000-0000-0000-000000000010"
+    sql(f"""
+      INSERT INTO clinical_facts(id, patient_id, review_state, fact_type)
+        VALUES ('{second_fact}', '{PATIENT}', 'pending_review', 'obligation');
+      INSERT INTO documents VALUES ('{second_fact}', '{PATIENT}', 'patient', 'approved', 'completed');
+      INSERT INTO source_provenances VALUES ('{second_fact}', '{second_fact}', 'document', NULL);
+      INSERT INTO evidence_citations VALUES ('{second_fact}', '{second_fact}');
+      INSERT INTO care_plan_versions(id,patient_id,version_number,source_watermark)
+        VALUES ('{revision}', '{PATIENT}', 2, '2026-10-02T00:00:00Z');
+      INSERT INTO care_plan_generation_requests(id,patient_id,source_watermark,status)
+        VALUES ('{request}', '{PATIENT}', '2026-10-02T00:00:00Z', 'processing');
+    """)
+    new_item = json.dumps(
+        [
+            {
+                "source_fact_id": second_fact,
+                "category": "nutrition",
+                "title": "Water",
+                "instructions": "Synthetic water",
+                "frequency": "daily",
+                "confidence_score": 1,
+            }
+        ]
+    )
+    sql(f"""SELECT complete_care_plan_generation('{revision}', '{request}',
+      '2026-10-02T00:00:00Z', '{new_item}'::jsonb);""")
+    carried = sql(
+        f"""SELECT wording #>> '{{es-MX,title}}', wording_origin->>'es-MX', wording_verified
+        FROM care_plan_items WHERE plan_version_id='{revision}' AND source_fact_id='{FACT}'"""
+    )
+    assert carried == "Caminar|clinician_edited|f"
+    assert (
+        sql(
+            f"""SELECT wording::text, wording_verified FROM care_plan_items
+        WHERE plan_version_id='{revision}' AND source_fact_id='{second_fact}'"""
+        )
+        == "{}|f"
+    )
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+def test_bilingual_helpers_are_not_browser_callable(sql, role) -> None:
+    setup_bilingual(sql)
+    assert "permission denied" in sql(
+        f"""SET ROLE {role}; SELECT private.care_plan_wording_is_complete(
+          '{{}}'::jsonb, 'en-US', 'a', 'b', 'c');""",
+        succeeds=False,
+    )

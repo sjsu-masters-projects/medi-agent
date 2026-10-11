@@ -15,6 +15,7 @@ from app.models.care_plan import (
     CarePlanApprovalRequest,
     CarePlanDraftUpdate,
     CarePlanTodayPreviewRead,
+    CarePlanTranslationRequest,
 )
 from app.services.care_plan_preview_service import CarePlanPreviewService
 from app.services.care_plan_service import CarePlanService
@@ -107,6 +108,21 @@ async def update_care_plan_draft(
     service: CarePlanService = Depends(_service),
 ) -> Any:
     return service.update_draft(user.id, patient_id, plan_id, data)
+
+
+@router.post(
+    "/clinician/patients/{patient_id}/{plan_id}/items/{item_id}/translate",
+    summary="Redraft the other language of one draft item for clinician review",
+)
+async def translate_care_plan_item(
+    patient_id: UUID,
+    plan_id: UUID,
+    item_id: UUID,
+    data: CarePlanTranslationRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanService = Depends(_service),
+) -> Any:
+    return await service.retranslate_item(user.id, patient_id, plan_id, item_id, data.from_locale)
 
 
 @router.post(

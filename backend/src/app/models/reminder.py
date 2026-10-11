@@ -62,6 +62,8 @@ class ReminderTargetRead(BaseModel):
     name: str
     description: str | None = None
     frequency: str
+    # Set when the text's language is known; see FeedTask.content_locale.
+    content_locale: Literal["en-US", "es-MX"] | None = None
     provider_name: str | None = None
     reminder_schedule: ReminderScheduleRead | None = None
     guidance: ReminderGuidanceRead
