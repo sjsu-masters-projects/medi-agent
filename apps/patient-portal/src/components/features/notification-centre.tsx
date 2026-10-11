@@ -26,7 +26,7 @@ export function NotificationCentre({ onNavigate }: { onNavigate?: () => void }) 
       <button type="button" className={button} disabled={state.busy || state.loading || !state.canMarkDisplayed || !state.page?.items.some((item) => !item.is_read)} onClick={() => void state.markAllRead()}>{copy.readAll}</button>
     </div>
     {state.error && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{state.error === "write" ? copy.writeError : copy.loadError}</p>}
-    {state.loading && !state.page && <p role="status" className="text-sm text-muted">{copy.loading}</p>}
+    {state.loading && !state.page && !state.error && <p role="status" className="text-sm text-muted">{copy.loading}</p>}
     {state.page?.items.length === 0 && !state.error && <p className="rounded-[22px] bg-surface p-5 text-sm text-muted">{state.unread ? copy.emptyUnread : copy.empty}</p>}
     {state.page && <ul className="divide-y divide-line overflow-hidden rounded-[22px] bg-surface">
       {state.page.items.map((item) => {

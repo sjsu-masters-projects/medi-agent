@@ -7,8 +7,9 @@ import { PageHeader } from "@/components/layouts/page-header";
 
 export default function NotificationsPage() {
   const { locale } = useNotifications();
-  return <div className="patient-page space-y-5 px-4 pb-6" lang={locale}>
-    <PageHeader title={getNotificationsCopy(locale).title} />
-    <NotificationCentre />
+  // The header carries its own padding, like every other patient page; only the list is inset.
+  return <div className="patient-page space-y-3 pb-6" lang={locale}>
+    <PageHeader backButton title={getNotificationsCopy(locale).title} />
+    <div className="px-4"><NotificationCentre /></div>
   </div>;
 }
