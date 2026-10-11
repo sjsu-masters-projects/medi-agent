@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
@@ -37,6 +38,13 @@ MISS_RETRY_AFTER = timedelta(days=7)
 STALE_AFTER = timedelta(days=30)
 RESOLUTION_FRESH_FOR = timedelta(days=30)
 INLINE_BUDGET_SECONDS = 8.0
+# The weekly Job re-checks anything older than six days. A seven-day cutoff would skip
+# every row the previous run checked a few seconds after its own start, and the week that
+# loses an hour to daylight saving time, so each subject would be refreshed fortnightly.
+REFRESH_DUE_AFTER = FRESH_FOR - timedelta(days=1)
+REFRESH_BUDGET_SECONDS = 30.0
+REFRESH_LOCALES = ("en-US", "es-MX")
+_REFRESH_SCAN_ROWS = 1000
 
 Status = Literal["found", "not_found", "unavailable"]
 _MEDICATION_SOURCES = (("medlineplus", "en-US"), ("medlineplus", "es-MX"), ("dailymed", "en-US"))
@@ -92,11 +100,15 @@ class HealthKnowledgeService:
         client_factory: Callable[[], httpx.AsyncClient] = httpx.AsyncClient,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         budget_seconds: float = INLINE_BUDGET_SECONDS,
+        fresh_for: timedelta = FRESH_FOR,
     ) -> None:
         self.db = db
         self._client_factory = client_factory
         self._now = clock
         self._budget = budget_seconds
+        self._fresh_for = fresh_for
+        self._miss_retry_after = min(MISS_RETRY_AFTER, fresh_for)
+        self._source_outcomes: Counter[tuple[str, str]] = Counter()
 
     # ── reads ──────────────────────────────────────────────────────────────
 
@@ -191,7 +203,7 @@ class HealthKnowledgeService:
             age = now - _parse_time(cached["resolved_at"])
             if cached.get("rxcui") and age < RESOLUTION_FRESH_FOR:
                 return Ingredient(rxcui=str(cached["rxcui"]), name=str(cached["ingredient"]))
-            if not cached.get("rxcui") and age < MISS_RETRY_AFTER:
+            if not cached.get("rxcui") and age < self._miss_retry_after:
                 return None
         try:
             async with self._client_factory() as client:
@@ -241,7 +253,7 @@ class HealthKnowledgeService:
             row = by_source.get(key)
             if row is None:
                 return True
-            limit = FRESH_FOR if row["status"] == "found" else MISS_RETRY_AFTER
+            limit = self._fresh_for if row["status"] == "found" else self._miss_retry_after
             if now - _parse_time(row["checked_at"]) >= limit:
                 return True
         return False
@@ -258,11 +270,16 @@ class HealthKnowledgeService:
         now = self._now().isoformat()
         for (source, locale), result in fetched.items():
             if isinstance(result, SourceUnavailableError):
+                self._source_outcomes[(source, "unavailable")] += 1
                 continue  # Keep whatever is cached; an outage is not a miss.
             previous = by_source.get((source, locale))
             row = self._row(subject_type, key, subject_name, source, locale, result, now)
             if previous is not None and previous.get("content_hash") == row["content_hash"]:
                 row["fetched_at"] = previous["fetched_at"]
+                outcome = "unchanged"
+            else:
+                outcome = "updated" if result is not None else "not_found"
+            self._source_outcomes[(source, outcome)] += 1
             await self._execute(
                 self.db.table("health_knowledge").upsert(
                     row, on_conflict="subject_type,subject_key,source,locale"
@@ -337,46 +354,100 @@ class HealthKnowledgeService:
 
     # ── weekly refresh ─────────────────────────────────────────────────────
 
-    async def refresh_due(self, *, limit: int) -> dict[str, int]:
-        """Re-check the oldest cached subjects and every patient medication not yet cached.
+    async def refresh_due(self, *, limit: int) -> dict[str, Any]:
+        """Re-check due cached subjects, then every patient subject not yet cached.
+
+        Due: a cached subject whose oldest row was checked more than ``REFRESH_DUE_AFTER``
+        ago. New: an active medication whose name is unresolved, a recorded miss due a
+        retry, or an ingredient with no cached text; and an active documented condition
+        with no cached text, fetched in both supported languages.
 
         Counts only; no names are returned or logged, because the seed list comes from
-        patients' medication and condition rows.
+        patients' medication and condition rows. ``next_due_at`` says when the oldest
+        cached subject that is not yet due becomes due, so a run that checks nothing
+        explains itself.
         """
-        counts = {"subjects_checked": 0, "subjects_unavailable": 0, "subjects_failed": 0}
-        cutoff = (self._now() - FRESH_FOR).isoformat()
-        due = await self._execute(
-            self.db.table("health_knowledge")
-            .select("subject_type, subject_key, subject_name, locale")
-            .lt("checked_at", cutoff)
-            .order("checked_at")
-            .limit(limit * 3)
+        refresher = HealthKnowledgeService(
+            self.db,
+            client_factory=self._client_factory,
+            clock=self._now,
+            budget_seconds=max(self._budget, REFRESH_BUDGET_SECONDS),
+            fresh_for=REFRESH_DUE_AFTER,
         )
-        subjects: dict[tuple[str, str], tuple[str, set[str]]] = {}
-        for row in cast(list[dict[str, Any]], due.data or []):
-            entry = subjects.setdefault(
-                (row["subject_type"], row["subject_key"]), (row["subject_name"], set())
-            )
-            entry[1].add(str(row["locale"]))
-        for name in await self._uncached_medication_names(limit):
-            subjects.setdefault(("medication_name", name_key(name)), (name, set()))
+        return await refresher._refresh(limit)
 
-        for (subject_type, _key), (name, locales) in list(subjects.items())[:limit]:
+    async def _refresh(self, limit: int) -> dict[str, Any]:
+        now = self._now()
+        cached = await self._cached_subjects()
+        due_before = now - self._fresh_for
+        due = {key: entry for key, entry in cached.items() if entry["oldest"] < due_before}
+        not_due = [entry["oldest"] for key, entry in cached.items() if key not in due]
+
+        candidates: dict[tuple[str, str], tuple[str, tuple[str, ...]]] = {
+            key: (entry["name"], tuple(sorted(entry["locales"]))) for key, entry in due.items()
+        }
+        new_medications = await self._medication_names_to_seed(cached)
+        for name in new_medications:
+            candidates[("medication_name", name_key(name))] = (name, ())
+        new_conditions = await self._condition_names_to_seed(cached)
+        for name in new_conditions:
+            candidates[("condition", name_key(name))] = (name, REFRESH_LOCALES)
+
+        counts: dict[str, Any] = {
+            "subjects_total": len(cached),
+            "subjects_due": len(due),
+            "subjects_new_medications": len(new_medications),
+            "subjects_new_conditions": len(new_conditions),
+            "subjects_checked": 0,
+            "subjects_updated": 0,
+            "subjects_unavailable": 0,
+            "subjects_failed": 0,
+            "subjects_deferred": max(0, len(candidates) - limit),
+            "next_due_at": ((min(not_due) + self._fresh_for).isoformat() if not_due else None),
+        }
+        self._source_outcomes.clear()
+        for (subject_type, _key), (name, locales) in list(candidates.items())[:limit]:
             counts["subjects_checked"] += 1
+            updated_before = self._updated_rows()
             try:
                 if subject_type == "condition":
-                    results = [await self.condition(name, locale) for locale in sorted(locales)]
+                    results = [await self.condition(name, locale) for locale in locales]
                 else:
                     results = [await self.medication(name)]
             except Exception:  # noqa: BLE001 - one subject never stops the run
                 logger.exception("Reference refresh failed for one subject")
                 counts["subjects_failed"] += 1
                 continue
+            if self._updated_rows() > updated_before:
+                counts["subjects_updated"] += 1
             if any(result.status == "unavailable" for result in results):
                 counts["subjects_unavailable"] += 1
+        counts["sources"] = self._source_counts()
         return counts
 
-    async def _uncached_medication_names(self, limit: int) -> list[str]:
+    async def _cached_subjects(self) -> dict[tuple[str, str], dict[str, Any]]:
+        """Each cached subject with its name, languages and the oldest check of its rows."""
+        result = await self._execute(
+            self.db.table("health_knowledge")
+            .select("subject_type, subject_key, subject_name, locale, checked_at")
+            .order("checked_at")
+            .limit(_REFRESH_SCAN_ROWS)
+        )
+        subjects: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in cast(list[dict[str, Any]], result.data or []):
+            checked = _parse_time(row["checked_at"])
+            entry = subjects.setdefault(
+                (str(row["subject_type"]), str(row["subject_key"])),
+                {"name": str(row["subject_name"]), "locales": set(), "oldest": checked},
+            )
+            entry["locales"].add(str(row["locale"]))
+            entry["oldest"] = min(entry["oldest"], checked)
+        return subjects
+
+    async def _medication_names_to_seed(
+        self, cached: dict[tuple[str, str], dict[str, Any]]
+    ) -> list[str]:
+        """Active medication names with no fresh resolution or no cached reference text."""
         meds = await self._execute(
             self.db.table("medications").select("name").eq("is_active", True).limit(500)
         )
@@ -389,11 +460,53 @@ class HealthKnowledgeService:
             return []
         known = await self._execute(
             self.db.table("medication_name_resolutions")
-            .select("name_key")
+            .select("name_key, rxcui, resolved_at")
             .in_("name_key", sorted(name_key(name) for name in names))
         )
-        resolved = {str(row["name_key"]) for row in cast(list[dict[str, Any]], known.data or [])}
-        return sorted(name for name in names if name_key(name) not in resolved)[:limit]
+        resolutions = {
+            str(row["name_key"]): row for row in cast(list[dict[str, Any]], known.data or [])
+        }
+        now = self._now()
+        seeds: list[str] = []
+        for name in sorted(names):
+            row = resolutions.get(name_key(name))
+            if row is None:
+                seeds.append(name)
+            elif not row.get("rxcui"):
+                if now - _parse_time(row["resolved_at"]) >= self._miss_retry_after:
+                    seeds.append(name)
+            elif ("medication", str(row["rxcui"])) not in cached:
+                seeds.append(name)
+            # A cached ingredient is refreshed through its own row when due.
+        return seeds
+
+    async def _condition_names_to_seed(
+        self, cached: dict[tuple[str, str], dict[str, Any]]
+    ) -> list[str]:
+        """Active documented condition names with no cached reference text."""
+        result = await self._execute(
+            self.db.table("conditions").select("name").eq("status", "active").limit(1000)
+        )
+        names: dict[str, str] = {}
+        for row in cast(list[dict[str, Any]], result.data or []):
+            name = str(row.get("name") or "").strip()
+            key = name_key(name)
+            if key and ("condition", key) not in cached:
+                names.setdefault(key, name)
+        return [names[key] for key in sorted(names)]
+
+    def _updated_rows(self) -> int:
+        return sum(
+            count
+            for (_source, outcome), count in self._source_outcomes.items()
+            if outcome == "updated"
+        )
+
+    def _source_counts(self) -> dict[str, dict[str, int]]:
+        counts: dict[str, dict[str, int]] = {}
+        for (source, outcome), count in sorted(self._source_outcomes.items()):
+            counts.setdefault(source, {})[outcome] = count
+        return counts
 
     async def _execute(self, query: Any) -> Any:
         return await asyncio.to_thread(query.execute)
