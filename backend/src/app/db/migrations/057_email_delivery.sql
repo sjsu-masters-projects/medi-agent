@@ -243,7 +243,8 @@ BEGIN
  IF p_action IN ('create','list','revoke') THEN
   SELECT * INTO a FROM public.clinicians WHERE id=p_actor FOR UPDATE;
   IF NOT FOUND OR a.role<>'admin' OR a.clinic_id IS NULL THEN RAISE EXCEPTION 'Admin required' USING ERRCODE='42501'; END IF;
-  SELECT * INTO cl FROM public.clinics WHERE id=a.clinic_id AND status='active';
+  -- Serialize invitation creation across different admins of the same clinic.
+  SELECT * INTO cl FROM public.clinics WHERE id=a.clinic_id AND status='active' FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Clinic unavailable' USING ERRCODE='42501'; END IF;
   IF p_action='list' THEN
    RETURN jsonb_build_object('items',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',s.id,'email',s.email,'role',s.role,

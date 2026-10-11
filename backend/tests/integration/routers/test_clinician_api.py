@@ -315,7 +315,9 @@ class TestClinicianPatientMessages:
         assert response.json()["body"] == "Please bring your medication list."
         override_service.send_patient_message.assert_awaited_once()
 
-    def test_legacy_email_endpoint_does_not_claim_delivery(self, client, override_auth, override_service):
+    def test_legacy_email_endpoint_does_not_claim_delivery(
+        self, client, override_auth, override_service
+    ):
         override_service.get_patient_detail = AsyncMock(return_value={})
         patient_id = uuid4()
         override_service.send_patient_message = AsyncMock(
