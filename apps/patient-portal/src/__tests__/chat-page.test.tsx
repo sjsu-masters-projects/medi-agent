@@ -471,6 +471,28 @@ describe("Patient chat page", () => {
         expect(replace).toHaveBeenCalledWith("/chat");
     });
 
+    it("opens Nora with the document when navigation arrives before window.location updates", async () => {
+        // In-app navigation from Records renders the chat page while window.location still
+        // shows the previous page; the handoff must come from the router's search params.
+        searchParamsValue = new URLSearchParams("document=doc-1");
+        window.history.replaceState({}, "", "/records");
+        storePendingChatDocumentContext({
+            documentId: "doc-1",
+            documentName: "Physical activity instructions",
+            documentType: "other",
+            preferredLanguage: Language.EN,
+            provider: "Care team",
+            suggestedQuestion: "Help me understand this document.",
+            summary: "Walk after dinner.",
+        });
+
+        renderPage();
+
+        expect(await screen.findByText(/Physical activity instructions/i)).toBeInTheDocument();
+        expect(screen.getByDisplayValue(/Help me understand this document\./i)).toBeInTheDocument();
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith("patient-1", { documentId: "doc-1" });
+    });
+
     it("shows backend-loaded document context when no bridge payload is stored", async () => {
         searchParamsValue = new URLSearchParams("document=doc-2");
         window.history.replaceState({}, "", "/chat?document=doc-2");

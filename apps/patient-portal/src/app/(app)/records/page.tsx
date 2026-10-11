@@ -581,14 +581,15 @@ export default function RecordsPage() {
       return;
     }
 
+    const documentName = recordTitle(selectedDocument, explanationLang, patientName);
     storePendingChatDocumentContext({
       documentId: selectedDocument.id,
-      documentName: selectedDocument.fileName,
+      documentName,
       documentType: selectedDocument.documentType,
       preferredLanguage: explanationLang,
       provider: selectedDocument.provider,
       suggestedQuestion: buildSuggestedDocumentQuestion({
-        documentName: selectedDocument.fileName,
+        documentName,
         documentType: selectedDocument.documentType,
         preferredLanguage: explanationLang,
         provider: selectedDocument.provider,

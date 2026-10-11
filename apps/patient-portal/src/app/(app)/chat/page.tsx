@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
@@ -21,7 +22,9 @@ export default function ChatPage() {
     const controls = getChatControlsCopy(locale);
     const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
     const [careTeamOpened, setCareTeamOpened] = useState(false);
-    const [inbox, setInbox] = useState(() => !conversationOpen && (typeof window === "undefined" || !new URLSearchParams(window.location.search).has("document")));
+    const searchParams = useSearchParams();
+    // A document handoff from Records opens Nora directly (see usePatientChatSession).
+    const [inbox, setInbox] = useState(() => !conversationOpen && !searchParams.has("document"));
     const [showHistory, setShowHistory] = useState(false);
     const [humanThreadId, setHumanThreadId] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement | null>(null);
