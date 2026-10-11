@@ -72,5 +72,11 @@ Clearer nonclinical entry/settings wording was explicitly approved by the reques
 - Final CI and requester comparison against references. Clinician screen redesign
   remains the third PR, including the new Clinic Settings reference.
 
+Patient changes are in [draft PR #143](https://github.com/sjsu-masters-projects/medi-agent/pull/143).
+The local compiled preview uses the fallback `http://localhost:8000`; a read-only
+health request could not connect. Authenticated checks need a configured, reachable
+backend or the PR's deployed preview. No authentication code was changed to bypass
+this environment limitation.
+
 Live portals were signed out when inspected. No auth bypass, invented runtime
 records, remote publication, migration, deployment or merge was performed.
