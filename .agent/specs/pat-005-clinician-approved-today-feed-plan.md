@@ -144,15 +144,17 @@ medications can alter the final feed.
 
 Before live revision approval is considered complete, add explicit matching decisions for each
 medication against active canonical records, prevent duplicate projections, verify patient-facing
-wording in the patient's preferred locale, and test the v1-approved → new document → v2-draft →
+wording in English and Spanish (LOC-001), and test the v1-approved → new document → v2-draft →
 v2-approved path with unchanged adherence history. The current comparison surface is a review
 aid, not a substitute for those publication safeguards or clinician judgment.
 
-Publication review records the clinician-verified locale on each active draft item and an
-explicit create/update decision on each proposed medication. The API validates those decisions
+Publication review records the clinician's check of each active draft item's English and
+Spanish wording ([LOC-001](loc-001-bilingual-approved-wording.md)) and an explicit
+create/update decision on each proposed medication. The API validates those decisions
 against current patient and medication state; the atomic database publication operation checks
 again before any recommendation, supersession, or projection write. Verification is human
-attestation against the source, not automatic translation or a claim of clinical correctness.
+attestation against the source; the second language may be an AI draft, which the clinician
+checks or rewrites. It is not a claim of clinical correctness.
 An absent match decision or a same-name active medication blocks creation. The exact Today
 preview and live supersession proof remain separate acceptance gates.
 
