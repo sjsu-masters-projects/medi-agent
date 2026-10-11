@@ -245,35 +245,21 @@ network or published ports. It never pulls an image automatically and removes
 only containers created by this fixture. Synthetic test database contents are
 discarded afterward; no existing container or remote database is modified.
 
-## DailyMed Medication RAG Ingestion
+## Medication and condition reference (Nora)
 
-Run migration `015_drug_knowledge_rag.sql` before ingesting labels. The migration creates
-`drug_knowledge_chunks`, indexes, RLS, and the `match_drug_knowledge_chunks` RPC.
-
-Dry-run the first curated set:
-
-```bash
-cd backend
-PYTHONPATH=src .venv/bin/python scripts/ingest_dailymed_rag.py --default-curated --dry-run
-```
-
-Ingest into the configured Supabase project:
+Nora's general medical knowledge comes from public National Library of Medicine sources,
+shared by every patient and cached in `health_knowledge` (migration 051): MedlinePlus
+plain-language summaries in English and Spanish, DailyMed label sections (never dosage),
+and RxNorm for name resolution. A chat lookup fetches on a miss within a short time budget;
+the `mediagent-health-knowledge-refresh` Cloud Run Job re-checks the cache weekly and
+records each run in `cron_job_runs`. Run it locally against your configured project with:
 
 ```bash
 cd backend
-PYTHONPATH=src .venv/bin/python scripts/ingest_dailymed_rag.py --default-curated
+PYTHONPATH=src .venv/bin/python -m app.workers.health_knowledge_refresh
 ```
 
-For repeatable production ingestion, pin reviewed DailyMed SET IDs:
-
-```bash
-PYTHONPATH=src .venv/bin/python scripts/ingest_dailymed_rag.py \
-  --label metformin=<SETID> \
-  --label lisinopril=<SETID>
-```
-
-The script uses the service-role Supabase client and requires `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, and Google embedding configuration.
+Design, checks and failure behaviour: `.agent/specs/nora-002-grounded-answers.md`.
 
 ## Key Conventions
 

@@ -36,6 +36,7 @@ from app.adk.runner import build_runner
 from app.adk.tools import (
     DOCUMENT_CONTEXT_STATE_KEY,
     RECENT_CONVERSATION_STATE_KEY,
+    REPLY_LANGUAGE_STATE_KEY,
     submit_triage_decision,
 )
 from app.models.enums import Language
@@ -222,7 +223,10 @@ async def test_selected_document_context_is_passed_only_in_the_current_run() -> 
     assert runner.run_async.call_args.kwargs["state_delta"] == {
         DOCUMENT_CONTEXT_STATE_KEY: selected_document,
         RECENT_CONVERSATION_STATE_KEY: "(none: this is the first message)",
+        REPLY_LANGUAGE_STATE_KEY: Language.EN.value,
     }
+    # The runtime session is keyed by patient as well as conversation.
+    assert runner.run_async.call_args.kwargs["session_id"] == f"{PATIENT_ID}:document-turn"
 
 
 # ---------------------------------------------------------------------------
@@ -606,5 +610,156 @@ async def test_follow_up_turn_receives_the_recap_of_prior_events() -> None:
     )
 
     assert runner.run_async.call_args.kwargs["state_delta"] == {
-        RECENT_CONVERSATION_STATE_KEY: "Patient: Why metformin?\nNora: It lowers sugar."
+        RECENT_CONVERSATION_STATE_KEY: "Patient: Why metformin?\nNora: It lowers sugar.",
+        REPLY_LANGUAGE_STATE_KEY: Language.EN.value,
     }
+
+
+@pytest.mark.asyncio
+async def test_stored_messages_drive_the_recap_so_a_restart_keeps_context() -> None:
+    runner = MagicMock()
+    runner.session_service.get_session = AsyncMock(return_value=None)  # fresh process
+    runner.session_service.create_session = AsyncMock()
+    runner.run_async.return_value = _empty_stream()
+    runtime = CareCoordinatorRuntime(runner=runner)
+
+    await anext(
+        runtime.process_stream(
+            patient_id=PATIENT_ID,
+            user_id="user-1",
+            session_id="day-2026-10-10",
+            message="And with food?",
+            language=Language.EN.value,
+            earlier_messages=[
+                {"role": "user", "content": "Why metformin?"},
+                {"role": "assistant", "content": "It lowers sugar.\n\nSources: MedlinePlus: x"},
+            ],
+        )
+    )
+
+    assert runner.run_async.call_args.kwargs["state_delta"] == {
+        RECENT_CONVERSATION_STATE_KEY: "Patient: Why metformin?\nNora: It lowers sugar.",
+        REPLY_LANGUAGE_STATE_KEY: Language.EN.value,
+    }
+
+
+class _ReferenceCoordinator(BaseLlm):
+    """Decides, looks a medication up, then writes notes."""
+
+    fired: bool = False
+
+    async def generate_content_async(
+        self, llm_request: Any, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        if not self.fired:
+            self.fired = True
+            calls = [
+                types.FunctionCall(name="submit_triage_decision", args=dict(STANDARD_DECISION)),
+                types.FunctionCall(
+                    name="get_medication_information",
+                    args={"medication_name": "metformin", "topic": "overview", "language": "es-MX"},
+                ),
+            ]
+            yield LlmResponse(
+                content=types.Content(
+                    role="model", parts=[types.Part(function_call=call) for call in calls]
+                )
+            )
+            return
+        yield LlmResponse(
+            content=types.Content(role="model", parts=[types.Part(text=COORDINATOR_NOTES)])
+        )
+
+
+class _CitingResponder(BaseLlm):
+    async def generate_content_async(
+        self, llm_request: Any, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        text = "La metformina baja el azúcar.\nFuente: un sitio inventado"
+        yield LlmResponse(content=types.Content(role="model", parts=[types.Part(text=text)]))
+
+
+async def get_medication_information(
+    medication_name: str, topic: str, language: str, tool_context: Any
+) -> dict[str, Any]:
+    """Stub of the reference tool: records one source for this invocation."""
+    from app.adk.tools.health_reference import KNOWLEDGE_SOURCES_STATE_KEY
+
+    tool_context.state[KNOWLEDGE_SOURCES_STATE_KEY] = {
+        "invocation": tool_context.invocation_id,
+        "sources": [{"source": "medlineplus", "title": "Metformina", "checked_on": "2026-10-10"}],
+    }
+    return {"status": "found"}
+
+
+@pytest.mark.asyncio
+async def test_the_server_writes_the_source_line_and_drops_the_models_own() -> None:
+    runner = build_runner(
+        app_name=APP_NAME,
+        agent=SequentialAgent(
+            name="pipeline",
+            sub_agents=[
+                LlmAgent(
+                    name=COORDINATOR_AGENT_NAME,
+                    model=_ReferenceCoordinator(model="stub-coordinator"),
+                    instruction="stub",
+                    tools=[submit_triage_decision, get_medication_information],
+                ),
+                LlmAgent(
+                    name=RESPONDER_AGENT_NAME,
+                    model=_CitingResponder(model="stub-responder"),
+                    instruction="stub",
+                ),
+            ],
+        ),
+        tool_allowlist=TOOL_ALLOWLIST,
+    )
+    events = await _turn(
+        CareCoordinatorRuntime(runner=runner),
+        "¿Para qué es la metformina?",
+        language=Language.ES.value,
+    )
+    complete = _first(events, "complete")
+    assert complete["response_text"] == (
+        "La metformina baja el azúcar.\n\n"
+        "Fuentes: MedlinePlus: Metformina (consultado el 10 oct 2026)"
+    )
+
+    # The next turn uses no reference, so it carries no source line.
+    later = await _turn(
+        CareCoordinatorRuntime(runner=_build_runner(decision=STANDARD_DECISION)), "ok"
+    )
+    assert "Sources" not in _first(later, "complete")["response_text"]
+
+
+@pytest.mark.asyncio
+async def test_a_model_written_source_line_is_removed_even_when_no_tool_was_used() -> None:
+    class _Inventing(BaseLlm):
+        async def generate_content_async(
+            self, llm_request: Any, stream: bool = False
+        ) -> AsyncGenerator[LlmResponse, None]:
+            text = "Metformin lowers sugar.\nSources: www.made-up-health.org"
+            yield LlmResponse(content=types.Content(role="model", parts=[types.Part(text=text)]))
+
+    runner = build_runner(
+        app_name=APP_NAME,
+        agent=SequentialAgent(
+            name="pipeline",
+            sub_agents=[
+                LlmAgent(
+                    name=COORDINATOR_AGENT_NAME,
+                    model=_Coordinator(model="stub-coordinator", decision=STANDARD_DECISION),
+                    instruction="stub",
+                    tools=[submit_triage_decision],
+                ),
+                LlmAgent(
+                    name=RESPONDER_AGENT_NAME,
+                    model=_Inventing(model="stub-responder"),
+                    instruction="stub",
+                ),
+            ],
+        ),
+        tool_allowlist=TOOL_ALLOWLIST,
+    )
+    events = await _turn(CareCoordinatorRuntime(runner=runner), "What does metformin do?")
+    assert _first(events, "complete")["response_text"] == "Metformin lowers sugar."

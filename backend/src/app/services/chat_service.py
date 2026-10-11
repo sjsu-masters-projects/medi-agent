@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 
 from supabase import Client
@@ -12,6 +13,23 @@ from app.models.enums import ChatRole, coerce_locale
 from app.services.explanation_service import normalize_patient_summary
 
 DEFAULT_CHAT_SESSION_ID = "default"
+# Conversation ids are chosen by the patient app ("day-2026-10-10", "chat-<random>"), so
+# they are validated rather than trusted; anything else falls back to the default.
+_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+TITLE_CHARS = 80
+
+
+def normalize_session_id(value: Any) -> str:
+    raw = str(value or "").strip()
+    return raw if _SESSION_ID.fullmatch(raw) else DEFAULT_CHAT_SESSION_ID
+
+
+def conversation_title(first_message: str) -> str:
+    """A list label from the patient's first message: one line, word-boundary cut."""
+    text = " ".join(str(first_message or "").split())
+    if len(text) <= TITLE_CHARS:
+        return text
+    return text[:TITLE_CHARS].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
 
 
 def is_internal_chat_alert(message: dict[str, Any]) -> bool:
@@ -43,6 +61,7 @@ class ChatService:
             "language": self._coerce_language(data.get("language")),
             "audio_url": data.get("audio_url"),
             "intent": data.get("intent"),
+            "session_id": normalize_session_id(data.get("session_id")),
         }
 
         result = await self._execute(self.db.table("chat_messages").insert(payload))
@@ -57,19 +76,52 @@ class ChatService:
         patient_id: str,
         limit: int = 50,
         before: str | None = None,
+        session_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """The newest ``limit`` messages, oldest first, optionally for one conversation."""
         query = (
             self.db.table("chat_messages")
-            .select("id, patient_id, content, role, intent, language, audio_url, created_at")
+            .select(
+                "id, patient_id, session_id, content, role, intent, language, audio_url, created_at"
+            )
             .eq("patient_id", patient_id)
-            .order("created_at")
+            # Newest first, then reversed: ascending with a limit returned the oldest
+            # messages, so a long conversation never showed its latest turns.
+            .order("created_at", desc=True)
             .limit(limit)
         )
+        if session_id is not None:
+            query = query.eq("session_id", normalize_session_id(session_id))
         if before:
             query = query.lt("created_at", before)
 
         result = await self._execute(query)
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        return list(reversed(rows))
+
+    async def list_conversations(self, patient_id: str, limit: int = 30) -> list[dict[str, Any]]:
+        """This patient's conversations, most recent first, for the conversation list."""
+        result = await self._execute(
+            self.db.table("chat_conversation_states")
+            .select("session_id, title, turn_count, language, created_at, updated_at")
+            .eq("patient_id", patient_id)
+            .gt("turn_count", 0)
+            .order("updated_at", desc=True)
+            .limit(limit)
+        )
         return [row for row in (result.data or []) if isinstance(row, dict)]
+
+    async def set_conversation_title(self, patient_id: str, session_id: str, title: str) -> None:
+        """Label a conversation once, from its first message; an existing title stays."""
+        if not title:
+            return
+        await self._execute(
+            self.db.table("chat_conversation_states")
+            .update({"title": title[:120]})
+            .eq("patient_id", patient_id)
+            .eq("session_id", normalize_session_id(session_id))
+            .eq("title", "")
+        )
 
     async def get_recent_clinician_messages(
         self,
@@ -357,8 +409,7 @@ class ChatService:
 
     @staticmethod
     def _normalize_session_id(value: Any) -> str:
-        raw = str(value or DEFAULT_CHAT_SESSION_ID).strip()
-        return raw or DEFAULT_CHAT_SESSION_ID
+        return normalize_session_id(value)
 
     @staticmethod
     def _coerce_role(value: Any) -> str:

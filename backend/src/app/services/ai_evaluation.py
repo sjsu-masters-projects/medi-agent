@@ -24,9 +24,9 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 
 from app.agents.ingestion.prompts import (
     EXTRACT_CONTENT_SYSTEM,
-    EXTRACT_CONTENT_USER,
     GENERATE_SUMMARY_SYSTEM,
     GENERATE_SUMMARY_USER,
+    extraction_prompt,
 )
 from app.followup.models import SymptomExtractionResult
 from app.followup.prompts import (
@@ -484,7 +484,7 @@ def _build_document_request(scenario: EvalScenario, variant: PromptVariant) -> G
     if variant == "candidate":
         system = f"{EXTRACT_CONTENT_SYSTEM}\n{EXTRACTION_EVIDENCE_ADDENDUM}"
     return GenerationRequest(
-        prompt=EXTRACT_CONTENT_USER.format(raw_content=str(scenario.inputs["document_text"])),
+        prompt=extraction_prompt(str(scenario.inputs["document_text"])),
         system_instruction=system,
         temperature=0.3,
         max_tokens=4096,

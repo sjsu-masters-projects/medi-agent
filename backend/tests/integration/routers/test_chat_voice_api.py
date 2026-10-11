@@ -200,7 +200,7 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
     async def _mock_transcribe(audio, *, model, language, smart_format):
         assert audio == b"chunk"
         assert model == "nova-3"
-        assert language == "en-US"
+        assert language == "multi"
         assert smart_format is True
         return "I feel dizzy"
 

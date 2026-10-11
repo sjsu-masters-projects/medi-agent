@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
+import { NoraConversations } from "@/components/features/nora-conversations";
+import { todayConversationId } from "@/services/chat-api";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
 import { ChatTextarea } from "@/components/features/chat-presentation";
@@ -34,7 +36,13 @@ export default function ChatPage() {
     const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
         dismissDocumentContext, dismissSafetyNotice, documentContext, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
-        isTyping, loading, messages, safetyNotice, setInput, voiceError, voiceStatus } = usePatientChatSession(locale);
+        isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
+        startNewConversation, voiceError, voiceStatus } = usePatientChatSession(locale);
+    const newChat = locale === "es-MX" ? "Nueva conversación" : "New chat";
+    const openNora = (conversationId: string = todayConversationId()) => {
+        if (conversationId !== sessionId) openConversation(conversationId);
+        setCareTeamOpened(true); setConversation("assistant"); setInbox(false);
+    };
     const historicalMessages = messages.filter((message) => message.role === ChatRole.CLINICIAN);
     const visibleMessages = messages.filter((message) => message.role !== ChatRole.CLINICIAN)
         .map((message) => message.id === "welcome-message"
@@ -78,6 +86,7 @@ export default function ChatPage() {
                 onClick={() => { setCareTeamOpened(true); setConversation(conversation === "assistant" ? "care-team" : "assistant"); }}>
                 <Icon name={conversation === "assistant" ? "users" : "spark"} className="h-5 w-5" />
             </button>}
+            {!inbox && conversation === "assistant" && <button type="button" className={iconButton} aria-label={newChat} title={newChat} disabled={voiceBusy || isTyping} onClick={startNewConversation}><Icon name="plus" className="h-5 w-5" /></button>}
             {!inbox && conversation === "assistant" && <button className={`${iconButton} ${handsFreeMode ? "!bg-brand !text-white" : ""}`} aria-label={handsFreeMode ? controls.handsFreeOn : controls.handsFreeOff} aria-pressed={handsFreeMode} onClick={handleHandsFreeToggle} type="button"><Icon name="speaker" className="h-5 w-5" /></button>}
         </header>
         {inbox ? <section hidden={Boolean(humanThreadId)} className="relative flex flex-col gap-4 overflow-hidden rounded-[28px] bg-brand-deep p-5 text-[#F2F7F5] shadow-[var(--shadow-nora)]">
@@ -88,10 +97,11 @@ export default function ChatPage() {
             </div>
             <p className="relative text-[15px] leading-relaxed text-[#E4EEEB]">{controls.caution}</p>
             <div className="relative flex flex-wrap gap-2">
-            <button type="button" className="ma-press min-h-11 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-[#2B1F05] hover:bg-[#F7CD80]" onClick={() => { setInput(copy.quickPrompts[1]); setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Reportar un síntoma" : "Report a symptom"}</button>
-            <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15" onClick={() => { setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}<Icon name="arrow" className="h-4 w-4" /></button>
+            <button type="button" className="ma-press min-h-11 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-[#2B1F05] hover:bg-[#F7CD80]" onClick={() => { openNora(); setInput(copy.quickPrompts[1]); }}>{locale === "es-MX" ? "Reportar un síntoma" : "Report a symptom"}</button>
+            <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15" onClick={() => openNora()}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}<Icon name="arrow" className="h-4 w-4" /></button>
             </div>
         </section> : null}
+        {inbox && !humanThreadId && <NoraConversations locale={locale} activeSessionId={sessionId} onOpen={openNora} />}
         {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-3">
             <CareConversations compact locale={locale} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
             {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="overflow-hidden rounded-[22px] bg-surface">

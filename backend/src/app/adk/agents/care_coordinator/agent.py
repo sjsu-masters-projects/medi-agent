@@ -38,7 +38,12 @@ from app.adk.agents.care_coordinator.prompts import (
 from app.adk.models import adk_model_for_workload
 from app.adk.registry import Transport, Workload, route_for
 from app.adk.tools.document_context import get_active_document_context
+from app.adk.tools.health_reference import (
+    get_condition_information,
+    get_medication_information,
+)
 from app.adk.tools.patient_context import get_patient_context
+from app.adk.tools.patient_records import get_document_details, search_my_documents
 from app.adk.tools.triage_decision import submit_triage_decision
 
 COORDINATOR_AGENT_NAME = "care_coordinator"
@@ -55,6 +60,10 @@ TOOL_ALLOWLIST: dict[str, frozenset[str]] = {
         {
             get_patient_context.__name__,
             get_active_document_context.__name__,
+            get_document_details.__name__,
+            search_my_documents.__name__,
+            get_medication_information.__name__,
+            get_condition_information.__name__,
             submit_triage_decision.__name__,
         }
     ),
@@ -64,12 +73,7 @@ TOOL_ALLOWLIST: dict[str, frozenset[str]] = {
     # would be reaching for a record the reasoning stage did not think was needed.
     RESPONDER_AGENT_NAME: frozenset(),
 }
-"""The allowlist `build_runner` enforces for this pipeline.
-
-`search_patient_documents` is deliberately absent: it is WS6 work and its backing table
-does not exist yet. Granting a tool before it exists would mean the allowlist stops
-describing what is actually reachable.
-"""
+"""The allowlist `build_runner` enforces for this pipeline."""
 
 
 def route_for_intent(intent: str) -> str:
@@ -118,7 +122,15 @@ def build_care_coordinator() -> SequentialAgent:
         model=adk_model_for_workload(Workload.TRIAGE),
         description="Reads this patient's own record and works out what their message needs.",
         instruction=CARE_COORDINATOR_INSTRUCTION,
-        tools=[get_patient_context, get_active_document_context, submit_triage_decision],
+        tools=[
+            get_patient_context,
+            get_active_document_context,
+            get_document_details,
+            search_my_documents,
+            get_medication_information,
+            get_condition_information,
+            submit_triage_decision,
+        ],
         output_key=FINDINGS_STATE_KEY,
         # Current turn only, plus the recap in its instruction. With full history the
         # model saw its earlier submit_triage_decision call and skipped the new one,

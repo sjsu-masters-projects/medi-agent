@@ -22,6 +22,8 @@ import {
     buildChatWebSocketUrl,
     fetchChatHistory,
     isChatSocketEvent,
+    newConversationId,
+    todayConversationId,
     isInternalChatAlert,
     mapClinicianMessageFromApi,
     mapChatMessageFromApi,
@@ -141,6 +143,7 @@ interface PatientChatSessionState {
     messages: ChatMessage[];
     selectedLanguage: ChatLocale;
     safetyNotice: string | null;
+    sessionId: string;
     voiceError: string | null;
     voiceInterimTranscript: string;
     voiceStatus: VoiceStatus;
@@ -153,7 +156,9 @@ interface PatientChatSessionActions {
     handleMicClick: () => void;
     handlePlayAssistantMessage: (message: ChatMessage) => void;
     handleSend: (event: FormEvent<HTMLFormElement>) => void;
+    openConversation: (sessionId: string) => void;
     setInput: (value: string) => void;
+    startNewConversation: () => void;
 }
 
 export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOCALE): PatientChatSessionState & PatientChatSessionActions {
@@ -170,6 +175,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     );
     const [initialDocumentId] = useState<string | null>(
         () => initialDocumentContext?.documentId ?? (searchParams.get("document")?.trim() || null),
+    );
+    // Today's conversation by default; a question about a document starts its own.
+    const [sessionId, setSessionId] = useState<string>(() =>
+        searchParams.get("document") ? newConversationId() : todayConversationId(),
     );
     const [voiceCapabilities] = useState(getVoiceCapabilities);
     const [input, setInput] = useState(
@@ -606,7 +615,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         dispatch(clearChatState());
         dispatch(setLoading(true));
 
-        fetchChatHistory(user.id, accessToken)
+        fetchChatHistory(user.id, accessToken, sessionId)
             .then((history) => {
                 if (!isMounted) {
                     return;
@@ -640,6 +649,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         const socket = new WebSocket(
             buildChatWebSocketUrl(user.id, {
                 documentId: activeDocumentId,
+                sessionId,
             }),
             socketAuthProtocols(accessToken),
         );
@@ -823,7 +833,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, activeDocumentId, dispatch, reconnectSignal, user]);
+    }, [accessToken, activeDocumentId, dispatch, reconnectSignal, sessionId, user]);
 
     useEffect(() => {
         return () => {
@@ -838,6 +848,17 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     function dismissDocumentContext(): void {
         setActiveDocumentId(null);
         setDocumentContext(null);
+    }
+
+    function openConversation(nextSessionId: string): void {
+        setActiveDocumentId(null);
+        setDocumentContext(null);
+        setSessionId(nextSessionId);
+    }
+
+    function startNewConversation(): void {
+        openConversation(newConversationId());
+        setInput("");
     }
 
     function dismissSafetyNotice(): void {
@@ -1059,8 +1080,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         loading,
         messages,
         safetyNotice,
+        openConversation,
         selectedLanguage,
+        sessionId,
         setInput,
+        startNewConversation,
         voiceError,
         voiceInterimTranscript,
         voiceStatus,

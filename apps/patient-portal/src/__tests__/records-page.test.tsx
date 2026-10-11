@@ -194,6 +194,8 @@ describe("RecordsPage", () => {
     expect(
       screen.getByText(/Este mismo archivo ya se procesó/),
     ).toBeInTheDocument();
+    // The disclaimer follows the explanation's language, not the app's.
+    expect(screen.getByText(/Esta explicación describe el documento subido/)).toHaveAttribute("lang", "es-MX");
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "en-US" },
     });

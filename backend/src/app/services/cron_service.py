@@ -1,4 +1,4 @@
-"""Internal cron jobs for reminders and nightly ADR scanning."""
+"""Internal cron jobs: reminders, the nightly ADR scan and the weekly reference refresh."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from supabase import Client
 
 from app.core.exceptions import ValidationError
 from app.db.supabase_execute import execute_async
+from app.services.health_knowledge_service import HealthKnowledgeService
 from app.services.reminder_schedule_service import (
     occurrence_datetimes_for_day,
     schedule_matches_frequency,
@@ -184,6 +185,28 @@ class CronService:
                 error=str(exc),
             )
             raise
+
+    async def run_health_knowledge_refresh(self, *, limit: int = 150) -> dict[str, Any]:
+        """Re-check public medication and condition references; record the run."""
+        job_name = "health_knowledge_refresh"
+        await self._ensure_job_not_running(job_name)
+        run = await self._start_run(job_name, metadata={"limit": limit})
+        summary: dict[str, Any] = {}
+        try:
+            summary = await HealthKnowledgeService(self.db).refresh_due(limit=limit)
+            finished = await self._finish_run(run["id"], status="success", summary=summary)
+        except Exception as exc:
+            await self._finish_run(run["id"], status="failed", summary=summary, error=str(exc))
+            raise
+        return {
+            "run_id": run["id"],
+            "job_name": job_name,
+            "status": "success",
+            "dry_run": False,
+            "started_at": run["started_at"],
+            "finished_at": finished["finished_at"],
+            "summary": summary,
+        }
 
     async def _dispatch_appointment_reminders(
         self,

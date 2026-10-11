@@ -13,9 +13,9 @@ from langgraph.graph.message import add_messages
 
 from app.agents.ingestion.prompts import (
     EXTRACT_CONTENT_SYSTEM,
-    EXTRACT_CONTENT_USER,
     GENERATE_SUMMARY_SYSTEM,
     GENERATE_SUMMARY_USER,
+    extraction_prompt,
 )
 from app.clients.model_router import TaskType, get_router
 
@@ -118,7 +118,7 @@ async def extract_content(state: IngestionState) -> IngestionState:
     try:
         response, telemetry = await get_router().generate_text_with_telemetry(
             TaskType.DOCUMENT_PARSING,
-            prompt=EXTRACT_CONTENT_USER.format(raw_content=state["raw_content"] or ""),
+            prompt=extraction_prompt(state["raw_content"] or ""),
             system_instruction=EXTRACT_CONTENT_SYSTEM,
             temperature=0.1,
             max_tokens=2048,

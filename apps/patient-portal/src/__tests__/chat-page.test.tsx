@@ -11,6 +11,7 @@ import { getPatientChatCopy } from "@/content/chat-copy";
 
 const {
     buildChatWebSocketUrl,
+    fetchChatConversations,
     fetchChatHistory,
     getVoiceCapabilities,
     playAssistantVoiceResponse,
@@ -19,6 +20,7 @@ const {
     shell,
 } = vi.hoisted(() => ({
     buildChatWebSocketUrl: vi.fn(),
+    fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
     playAssistantVoiceResponse: vi.fn(() => null),
@@ -59,6 +61,7 @@ vi.mock("@/services/chat-api", async () => {
     return {
         ...actual,
         buildChatWebSocketUrl,
+        fetchChatConversations,
         fetchChatHistory,
     };
 });
@@ -162,6 +165,7 @@ describe("Patient chat page", () => {
 
         buildChatWebSocketUrl.mockReturnValue("ws://chat.test/patient-1");
         fetchChatHistory.mockResolvedValue([]);
+        fetchChatConversations.mockResolvedValue([]);
         getVoiceCapabilities.mockReturnValue({ recording: false, recognition: false, synthesis: false });
     });
 
@@ -464,9 +468,10 @@ describe("Patient chat page", () => {
         expect(screen.getByDisplayValue(/Ayúdame a entender este informe\./i)).toBeInTheDocument();
         expect(screen.getByPlaceholderText(/Type or speak/i)).toBeInTheDocument();
         expect(screen.queryByRole("group", { name: "Chat language" })).not.toBeInTheDocument();
+        // A question about a document starts its own conversation.
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            { documentId: "doc-1" },
+            { documentId: "doc-1", sessionId: expect.stringMatching(/^chat-/) },
         );
         expect(replace).toHaveBeenCalledWith("/chat");
     });
@@ -490,7 +495,9 @@ describe("Patient chat page", () => {
 
         expect(await screen.findByText(/Physical activity instructions/i)).toBeInTheDocument();
         expect(screen.getByDisplayValue(/Help me understand this document\./i)).toBeInTheDocument();
-        expect(buildChatWebSocketUrl).toHaveBeenCalledWith("patient-1", { documentId: "doc-1" });
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith("patient-1", {
+            documentId: "doc-1", sessionId: expect.stringMatching(/^chat-/),
+        });
     });
 
     it("shows backend-loaded document context when no bridge payload is stored", async () => {
@@ -519,7 +526,7 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/Discharge Summary\.pdf/i)).toBeInTheDocument();
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            { documentId: "doc-2" },
+            { documentId: "doc-2", sessionId: expect.stringMatching(/^(chat|day)-/) },
         );
         expect(replace).toHaveBeenCalledWith("/chat");
     });
@@ -545,7 +552,7 @@ describe("Patient chat page", () => {
         await waitFor(() => {
             expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
                 "patient-1",
-                { documentId: null },
+                { documentId: null, sessionId: expect.stringMatching(/^(chat|day)-/) },
             );
         });
         expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
@@ -819,5 +826,25 @@ describe("Patient chat page", () => {
         // Hands-free is on but the turn was NOT voice-initiated → still no
         // auto-play. Auto-play only fires when the user *spoke* the turn.
         expect(playAssistantVoiceResponse).not.toHaveBeenCalled();
+    });
+    it("opens today's conversation, starts a new one, and reopens a past one with its messages", async () => {
+        fetchChatConversations.mockResolvedValue([
+            { sessionId: "day-2026-10-01", title: "What is metformin for?", updatedAt: "2026-10-01T15:00:00Z" },
+        ]);
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        const past = await screen.findByRole("button", { name: /What is metformin for\?/ });
+        expect(screen.getByRole("heading", { name: "Past conversations with Nora" })).toBeInTheDocument();
+        await waitFor(() => expect(fetchChatHistory).toHaveBeenLastCalledWith(
+            "patient-1", "access-token", expect.stringMatching(/^day-\d{4}-\d{2}-\d{2}$/),
+        ));
+
+        fireEvent.click(past);
+        await waitFor(() => expect(fetchChatHistory).toHaveBeenLastCalledWith("patient-1", "access-token", "day-2026-10-01"));
+        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith("patient-1", { documentId: null, sessionId: "day-2026-10-01" });
+
+        fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+        await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+            "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
+        ));
     });
 });

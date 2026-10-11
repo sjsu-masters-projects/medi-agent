@@ -89,29 +89,17 @@ Clinician app often uses port 3001: `npm run dev -- --port 3001`.
 
 Full procedure, RLS, and Auth hooks: **[docs/supabase_setup_guide.md](docs/supabase_setup_guide.md)**.
 
-SQL migrations live in `backend/src/app/db/migrations/`. Apply **in numeric/filename order** against your Supabase Postgres (or local DB). Example:
+SQL migrations live in `backend/src/app/db/migrations/`. Apply them with the ledger
+script, which runs every not-yet-applied file in filename order, records a checksum per
+file in `public.schema_migrations`, and refuses to re-run a file whose contents changed:
 
 ```bash
-export DB_URL="postgresql://postgres:YOUR_PASSWORD@YOUR_HOST:5432/postgres"
-
-psql "$DB_URL" -f backend/src/app/db/migrations/001_initial_schema.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/002_rls_policies.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/005_document_parse_tracking.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/006_care_team_invite_compat.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/007_clinic_identity_foundation.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/011_enable_dashboard_realtime_publication.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/011_locale_contract_upgrade.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/012_document_review_queue.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/013_cron_scheduler_foundation.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/014_patient_timezones_and_reminder_schedules.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/015_drug_knowledge_rag.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/016_obligation_source_document.sql
+export MEDIAGENT_DB_URL="<Postgres connection string for the environment you may change>"
+./scripts/apply-supabase-migrations.sh
 ```
+
+Run it from the checkout whose migrations you mean to apply, and only against an
+environment you are authorized to change.
 
 After migrations, configure the JWT claims hook in Supabase Dashboard → Auth → Hooks per the setup guide.
 

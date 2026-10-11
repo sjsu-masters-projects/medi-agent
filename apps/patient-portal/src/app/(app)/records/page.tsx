@@ -955,8 +955,9 @@ export default function RecordsPage() {
                         "A plain-language explanation will appear here once it is ready.",
                       ))}
               </p>
-              <p className="mt-3 border-t border-brand/15 pt-3 text-[13px] leading-5 text-brand-ink/90">
-                {spanish
+              {/* Written in the explanation's language, which can differ from the app's. */}
+              <p className="mt-3 border-t border-brand/15 pt-3 text-[13px] leading-5 text-brand-ink/90" lang={explanationLang}>
+                {explanationLang === "es-MX"
                   ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
                   : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
               </p>

@@ -15,6 +15,7 @@ from deepgram.core.events import EventType
 from supabase import Client
 
 from app.clients.deepgram_client import (
+    STT_LANGUAGE,
     generate_speech_async,
     get_async_deepgram_client,
     transcribe_audio_bytes_async,
@@ -30,6 +31,7 @@ from app.services.generation_providers import (
     VoiceFallbackProvider,
     VoiceProvider,
 )
+from app.utils.localization import written_language
 
 SUPPORTED_AUDIO_MIME_TYPES = {
     "audio/webm",
@@ -93,7 +95,7 @@ class DeepgramLiveTranscriptionSession:
     async def __aenter__(self) -> DeepgramLiveTranscriptionSession:
         self._context = self._client.listen.v1.connect(
             model=self.model,
-            language=self.language.value,
+            language=STT_LANGUAGE,
             interim_results="true",
             smart_format="true",
         )
@@ -136,7 +138,7 @@ class DeepgramLiveTranscriptionSession:
         self._events.append(
             VoiceStreamTranscript(
                 transcript=transcript,
-                language=self.language,
+                language=Language(written_language(transcript, self.language)),
                 model=self.model,
                 is_final=bool(
                     getattr(message, "is_final", False) or getattr(message, "speech_final", False)
@@ -191,13 +193,14 @@ class VoiceService:
             VoiceTranscriptionRequest(
                 audio=audio_bytes,
                 mime_type=mime_type,
-                language=locale.value,
+                language=STT_LANGUAGE,
             )
         )
-
+        transcript = (response.transcript or "").strip()
         return VoiceTranscript(
-            transcript=(response.transcript or "").strip(),
-            language=locale,
+            transcript=transcript,
+            # The language spoken, which can differ from the app's; the app's when unclear.
+            language=Language(written_language(transcript, locale)),
             model=response.telemetry.model,
         )
 

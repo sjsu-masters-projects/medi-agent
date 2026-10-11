@@ -374,3 +374,31 @@ async def test_intake_provider_failure_is_localized_without_writing_a_report(lan
         result.response_text
         == resolve_locale_resource(language.value, FOLLOWUP_COPY)["report_unavailable"]
     )
+
+
+@pytest.mark.parametrize(
+    ("severity", "language", "expected"),
+    [
+        (9, "en-US", "call 911"),
+        (10, "es-MX", "llama al 911"),
+    ],
+)
+def test_a_worst_or_danger_sign_symptom_always_carries_911_guidance(
+    severity: int, language: str, expected: str
+) -> None:
+    from app.followup.service import with_emergency_guidance
+
+    reply = with_emergency_guidance("I logged this.", severity=severity, language=language)
+    assert expected in reply
+
+
+def test_911_guidance_is_not_added_twice_or_below_the_threshold() -> None:
+    from app.followup.service import with_emergency_guidance
+
+    once = with_emergency_guidance("Logged.", severity=10, language="en-US")
+    assert with_emergency_guidance(once, severity=10, language="en-US") == once
+    # "911" alone does not count: a reply saying not to call it still gets the guidance.
+    assert "call 911 or go" in with_emergency_guidance(
+        "No need to call 911.", severity=9, language="en-US"
+    )
+    assert with_emergency_guidance("Logged.", severity=8, language="en-US") == "Logged."

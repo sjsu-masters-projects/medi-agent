@@ -90,7 +90,7 @@ def _patch_chat_runtime(monkeypatch, patient_id):
     token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
     monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
-    async def _get_history(_self, patient_id, limit=50, before=None):
+    async def _get_history(_self, patient_id, limit=50, before=None, session_id=None):
         return []
 
     async def _get_context(_self, patient_id, document_id=None):
