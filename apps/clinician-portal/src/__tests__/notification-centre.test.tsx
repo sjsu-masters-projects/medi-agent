@@ -14,7 +14,6 @@ vi.mock("@/services/notification-centre", () => ({
   notificationCentre: { list: vi.fn(), summary: vi.fn(), read: vi.fn(), readThrough: vi.fn(), acknowledge: vi.fn() },
   notificationTarget: (url: string | null) => url?.startsWith("/") ? url : null,
 }));
-vi.mock("@/components/features/operational-alerts", () => ({ OperationalAlerts: () => <p>Legacy urgent history only</p> }));
 
 const item = (overrides: Partial<CentreItem> = {}): CentreItem => ({
   id: "receipt-1", event_type: "barrier.saved", category: "follow_up", title: "Patient reported a barrier", body: "Synthetic barrier details",
@@ -31,21 +30,20 @@ beforeEach(() => {
   vi.mocked(notificationCentre.list).mockResolvedValue(page());
   vi.mocked(notificationCentre.summary).mockResolvedValue({ unread_count: 1, action_item_count: 1 });
   vi.mocked(notificationCentre.read).mockResolvedValue({});
-  vi.mocked(notificationCentre.readThrough).mockResolvedValue({});
+  vi.mocked(notificationCentre.readThrough).mockResolvedValue({ skipped: 0 });
   vi.mocked(notificationCentre.acknowledge).mockResolvedValue({});
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("clinician notification centre", () => {
-  it("shares one cache between bell and Alerts; keeps legacy records in History", async () => {
+  it("shares one cache between bell and Alerts, with no legacy archive on Alerts", async () => {
     render(<NotificationProvider><NotificationBell /><AlertsPage /></NotificationProvider>);
     await screen.findByText("Patient reported a barrier");
     expect(notificationCentre.summary).toHaveBeenCalledTimes(1);
     expect(notificationCentre.list).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText("Legacy urgent history only")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review barrier" })).toHaveAttribute("href", "/patients/p1?tab=adherence&activity=med-1");
     fireEvent.click(screen.getByRole("button", { name: "History" }));
-    expect(screen.getByText("Legacy sent-message archive")).toBeInTheDocument();
+    expect(screen.queryByText(/Earlier messages|Legacy sent-message archive/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Acknowledge" })).not.toBeInTheDocument();
     expect(notificationCentre.list).toHaveBeenCalledTimes(2);
   });
@@ -132,7 +130,7 @@ describe("clinician notification centre", () => {
 
   it.each(["token refresh", "account change", "logout"])("stops a bulk read before the next snapshot after %s", async (change) => {
     let finishFirst!: (value: unknown) => void;
-    vi.mocked(notificationCentre.readThrough).mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }));
+    vi.mocked(notificationCentre.readThrough).mockImplementationOnce(() => new Promise((resolve) => { finishFirst = () => resolve({ skipped: 0 }); }));
     vi.mocked(notificationCentre.list).mockImplementation(async (_token, actions, cursor) => actions ? page([]) : cursor ? page([item({ id: "older", title: "Older receipt" })], { read_through: "signed-second-page" }) : page([item()], { next_cursor: "opaque-cursor" }));
     const view = render(<NotificationProvider><NotificationList /></NotificationProvider>);
     fireEvent.click(await screen.findByRole("button", { name: "Load more" }));

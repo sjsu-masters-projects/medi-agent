@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { NotificationList } from "@/components/features/notification-centre";
 import { useNotificationCentre } from "@/components/features/notification-provider";
-import { OperationalAlerts } from "@/components/features/operational-alerts";
 
 export default function AlertsPage() {
   const [view, setView] = useState<"actions" | "history">("actions");
@@ -20,10 +19,6 @@ export default function AlertsPage() {
       {(["actions", "history"] as const).map((value) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={`min-h-9 rounded-md px-4 text-sm ${view === value ? "bg-surface font-medium text-ink shadow-sm" : "text-muted"}`}>{value === "actions" ? "Needs attention" : "History"}</button>)}
     </div>
     <NotificationList key={view} actions={view === "actions"} />
-    {view === "history" && <details className="rounded-2xl border border-line bg-surface p-4">
-      <summary className="cursor-pointer text-sm font-semibold text-ink">Legacy sent-message archive</summary>
-      <p className="my-3 max-w-[80ch] text-sm text-muted">Earlier operational records and human messages are retained here as history. They are not active work; earlier urgency labels do not create new clinical alerts or current review tasks.</p>
-      <OperationalAlerts />
-    </details>}
+
   </div>;
 }

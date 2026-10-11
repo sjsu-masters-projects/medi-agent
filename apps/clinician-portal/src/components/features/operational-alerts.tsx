@@ -1,174 +1,121 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Card, Skeleton } from "@/components/ui";
-import { Icon, type IconName } from "@/components/ui/icons";
+import { Skeleton } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import { fetchAllSentMessages } from "@/services/clinicians";
 import type { ClinicianMessageInboxItem } from "@/services/clinicians";
 
-function channelLabel(channel: string): string {
-    return channel === "email" ? "Email" : "In-app";
+const ESCALATION_SUBJECT = "Urgent patient chat escalation";
+const ESCALATION_PREFIX = "Chat escalation flagged (";
+
+function patientName(msg: ClinicianMessageInboxItem): string {
+    return `${msg.patientFirstName ?? ""} ${msg.patientLastName ?? ""}`.trim() || "Unknown patient";
 }
 
-function channelVariant(channel: string): "info" | "neutral" {
-    return channel === "email" ? "info" : "neutral";
+/** Saved system escalation notices carry internal identifiers; show only what they were. */
+function escalationUrgency(msg: ClinicianMessageInboxItem): string | null {
+    if (msg.subject !== ESCALATION_SUBJECT || !msg.body.startsWith(ESCALATION_PREFIX)) return null;
+    const label = msg.body.slice(ESCALATION_PREFIX.length).split(/[/)]/)[0]?.trim();
+    return label || "flagged";
 }
 
-function formatPatientName(msg: ClinicianMessageInboxItem): string {
-    const first = msg.patientFirstName ?? "";
-    const last = msg.patientLastName ?? "";
-    const full = `${first} ${last}`.trim();
-    return full || "Unknown patient";
+function shortDate(iso: string): { short: string; full: string } {
+    const when = new Date(iso);
+    return {
+        short: when.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        full: when.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
+    };
 }
 
-function StatTile({ icon, label, value }: { icon: IconName; label: string; value: number }) {
-    return (
-        <Card className="flex items-center gap-3" padding="md">
-            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sunken text-ink-2">
-                <Icon name={icon} className="h-4 w-4" />
-            </span>
-            <div>
-                <p className="text-[13px] text-muted">{label}</p>
-                <p className="font-mono text-[28px] font-medium leading-tight text-ink">{value}</p>
-            </div>
-        </Card>
-    );
-}
-
-export function OperationalAlerts() {
+/**
+ * One-way messages and system escalation notices saved before two-way conversations.
+ * History only: nothing here is active work, and old urgency labels create no alerts.
+ */
+export function EarlierMessages() {
     const [messages, setMessages] = useState<ClinicianMessageInboxItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const loadMessages = useCallback(async () => {
+    const load = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const result = await fetchAllSentMessages();
-            setMessages(result);
+            setMessages(await fetchAllSentMessages());
         } catch (loadError) {
-            setError(
-                loadError instanceof Error
-                    ? loadError.message
-                    : "Unable to load messages.",
-            );
+            setError(loadError instanceof Error ? loadError.message : "Unable to load messages.");
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => {
-        void loadMessages();
-    }, [loadMessages]);
+    useEffect(() => { void load(); }, [load]);
 
     return (
-        <div className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h2 className="text-[17px] font-semibold text-ink">
-                        Legacy sent-message archive
-                    </h2>
-                    <p className="mt-1 text-sm text-muted">
-                        Earlier operational records and human messages, retained as history rather than active work.
-                    </p>
-                </div>
-                <button
-                    disabled={loading}
-                    className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]"
-                    onClick={() => void loadMessages()}
-                    type="button"
-                >
-                    <Icon aria-hidden="true" name="refresh" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                    {loading ? "Refreshing…" : "Refresh"}
-                </button>
-            </div>
-
-            <section className="grid gap-4 md:grid-cols-3">
-                <StatTile icon="send" label="Total sent" value={messages.length} />
-                <StatTile icon="chat" label="In-app" value={messages.filter((m) => m.channel === "in_app").length} />
-                <StatTile icon="inbox" label="Email" value={messages.filter((m) => m.channel === "email").length} />
-            </section>
-
-            {error && (
-                <div
-                    className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
-                    role="alert"
-                >
-                    <Icon aria-hidden="true" name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{error}</span>
-                </div>
-            )}
-
-            <Card className="overflow-hidden" padding="none">
-                <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-                    <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sunken text-ink-2">
-                        <Icon name="history" className="h-4 w-4" />
+        <details className="ma-disclosure overflow-hidden rounded-2xl border border-line bg-surface">
+            <summary className="flex min-h-12 cursor-pointer items-center gap-3 px-4 py-3">
+                <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sunken text-ink-2">
+                    <Icon name="history" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-ink">
+                        Earlier messages{loading ? "" : ` (${messages.length})`}
                     </span>
-                    <div className="min-w-0">
-                        <h2 className="text-[15px] font-semibold text-ink">Earlier sent records</h2>
-                        <p className="mt-0.5 text-[13px] text-muted">
-                            Ordered by most recent. Historical urgency labels do not create new clinical alerts or current review tasks.
-                        </p>
-                    </div>
+                    <span className="block text-xs text-muted">Sent before conversations. History only, not active work.</span>
+                    {error && <span role="alert" className="mt-0.5 block text-xs text-risk-ink">{error}</span>}
+                </span>
+                <Icon aria-hidden="true" name="chevronDown" className="h-4 w-4 shrink-0 text-muted" />
+            </summary>
+            <div className="border-t border-line">
+                <div className="flex justify-end px-4 pt-2">
+                    <button
+                        type="button"
+                        aria-label="Refresh earlier messages"
+                        title="Refresh"
+                        disabled={loading}
+                        onClick={() => void load()}
+                        className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 disabled:opacity-50"
+                    >
+                        <Icon aria-hidden="true" name="refresh" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                    </button>
                 </div>
-
                 {loading ? (
-                    <div className="space-y-4 px-[22px] py-5">
-                        {Array.from({ length: 3 }).map((_, index) => (
-                            <Skeleton className="h-24 w-full" key={index} />
-                        ))}
+                    <div className="space-y-3 px-4 pb-4">
+                        {Array.from({ length: 2 }).map((_, index) => <Skeleton className="h-12 w-full" key={index} />)}
                     </div>
-                ) : error && messages.length === 0 ? (
-                    <p className="px-[22px] py-10 text-sm text-ink-2">Sent-message history is unavailable. Refresh to check for earlier records.</p>
-                ) : messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-                        <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-muted">
-                            <Icon name="chat" className="h-5 w-5" />
-                        </span>
-                        <div>
-                            <p className="text-[15px] font-semibold text-ink">
-                                No legacy sent records
-                            </p>
-                            <p className="mt-1 text-sm text-muted">
-                                Earlier operational records and human messages appear here when available.
-                            </p>
-                        </div>
-                    </div>
+                ) : messages.length === 0 && !error ? (
+                    <p className="px-4 pb-4 text-sm text-muted">No earlier messages.</p>
                 ) : (
-                    <div className="divide-y divide-line">
-                        {messages.map((msg) => (
-                            <div className="px-[22px] py-4 transition-colors hover:bg-[rgba(100,116,139,.05)]" key={msg.id}>
-                                <div className="space-y-2">
-                                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                                        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                                            <p className="text-[15px] font-semibold text-ink">
-                                                {formatPatientName(msg)}
-                                            </p>
-                                            <Badge variant={channelVariant(msg.channel)}>
-                                                {channelLabel(msg.channel)}
-                                            </Badge>
+                    <ul className="divide-y divide-line">
+                        {messages.map((msg) => {
+                            const urgency = escalationUrgency(msg);
+                            const date = shortDate(msg.createdAt);
+                            return (
+                                <li key={msg.id} className="flex gap-3 px-4 py-3">
+                                    <span aria-hidden="true" className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${urgency ? "bg-risk-tint text-risk-ink" : "bg-surface-2 text-ink-2"}`}>
+                                        <Icon name={urgency ? "shield" : msg.channel === "email" ? "inbox" : "chat"} className="h-4 w-4" />
+                                    </span>
+                                    <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                                        <div className="flex items-start gap-2">
+                                            <p className="min-w-0 flex-1 text-sm font-semibold text-ink">{patientName(msg)}</p>
+                                            <time dateTime={msg.createdAt} title={date.full} aria-label={date.full} className="shrink-0 font-mono text-xs text-muted">{date.short}</time>
                                         </div>
-                                        <p className="font-mono text-xs text-muted">
-                                            {new Date(msg.createdAt).toLocaleString()}
-                                        </p>
+                                        {urgency ? (
+                                            <p className="text-[13px] text-ink-2">Chat escalation · {urgency} <span className="text-muted">(automatic notice, not a review task)</span></p>
+                                        ) : (
+                                            <>
+                                                {msg.subject && <p className="text-[13px] font-medium text-ink-2">{msg.subject}</p>}
+                                                <p className="line-clamp-2 whitespace-pre-wrap text-[13px] text-ink-2">{msg.body}</p>
+                                                {msg.channel === "email" && <p className="text-xs text-muted">Sent by email</p>}
+                                            </>
+                                        )}
                                     </div>
-                                    {msg.subject && (
-                                        <p className="text-sm font-medium text-ink-2">
-                                            {msg.subject}
-                                        </p>
-                                    )}
-                                    <p className="max-w-[80ch] break-words text-sm text-ink-2">
-                                        {msg.body.length > 200
-                                            ? `${msg.body.slice(0, 200)}…`
-                                            : msg.body}
-                                    </p>
-                                    {msg.body.length > 200 ? <details className="ma-disclosure max-w-[80ch] text-sm text-ink-2"><summary className="min-h-9 cursor-pointer py-1.5 text-[13px] font-medium text-primary">Read full record</summary><p className="whitespace-pre-wrap break-words pt-1">{msg.body}</p></details> : null}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
                 )}
-            </Card>
-        </div>
+            </div>
+        </details>
     );
 }
