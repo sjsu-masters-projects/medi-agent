@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useSharedPatientProfile } from "@/contexts/patient-profile-context";
 import { Icon } from "@/components/ui/icons";
+import { NotificationBell } from "@/components/features/notification-centre";
 
 interface PageHeaderProps {
     title: string;
@@ -30,7 +31,7 @@ export function PageHeader({ backButton = false, rightAction, subtitle, title }:
                         <Icon name="back" className="h-[22px] w-[22px]" />
                     </button>
                     <div className="min-w-0 flex-1" />
-                    {rightAction ? <div className="flex shrink-0 flex-wrap items-center gap-2">{rightAction}</div> : null}
+                    <div className="flex shrink-0 flex-wrap items-center gap-2"><NotificationBell />{rightAction}</div>
                 </div>
                 <div className="px-2.5 pt-2">
                     <h1 className="break-words text-[28px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">{title}</h1>
@@ -44,7 +45,7 @@ export function PageHeader({ backButton = false, rightAction, subtitle, title }:
         <header className="px-[22px] pt-4 pb-2">
             <div className="flex items-center justify-between gap-3">
                 <h1 className="min-w-0 break-words text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">{title}</h1>
-                {rightAction ? <div className="flex shrink-0 flex-wrap items-center gap-2">{rightAction}</div> : null}
+                <div className="flex shrink-0 flex-wrap items-center gap-2"><NotificationBell />{rightAction}</div>
             </div>
             {subtitle ? <p className="mt-1.5 max-w-prose text-[15px] leading-relaxed text-muted">{subtitle}</p> : null}
         </header>

@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   profile: vi.fn(),
   propose: vi.fn(),
   state: { auth: { accessToken: "clinician-token" as string | null } },
+  query: "",
 }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(mocks.query) }));
 vi.mock("react-redux", () => ({
   useSelector: (selector: (state: typeof mocks.state) => unknown) =>
     selector(mocks.state),
@@ -77,10 +79,26 @@ function submit() {
 }
 
 describe("clinician appointments page", () => {
+  it("selects the exact appointment's assigned patient and focuses its row", async () => {
+    mocks.query = "appointmentId=a2";
+    mocks.patients.mockResolvedValue(roster);
+    mocks.appointments.mockResolvedValue([appointment(), appointment({ id: "a2", patientId: "p2", careTeamId: "team2", proposalGroupId: "g2" })]);
+    render(<AppointmentsPage />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Patient" })).toHaveValue("team2"));
+    await waitFor(() => expect(document.getElementById("appointment-a2")).toHaveFocus());
+    expect(document.getElementById("appointment-a1")).toBeNull();
+  });
+  it("reports an unavailable appointment without selecting another patient", async () => {
+    mocks.query = "appointmentId=missing";
+    render(<AppointmentsPage />);
+    await screen.findByText(/The linked appointment is unavailable/);
+    expect(screen.getByRole("combobox", { name: "Patient" })).toHaveValue("");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-28T00:00:00Z"));
     mocks.state.auth.accessToken = "clinician-token";
+    mocks.query = "";
     mocks.patients.mockResolvedValue(roster);
     mocks.appointments.mockResolvedValue([]);
     mocks.profile.mockResolvedValue({ timezone: "America/Los_Angeles" });

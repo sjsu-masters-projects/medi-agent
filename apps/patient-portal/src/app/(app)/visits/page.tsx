@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icons";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { VisitOfferCard } from "@/components/features/visit-offer-card";
@@ -87,7 +87,7 @@ function VisitCard({
   }
 
   return (
-    <article className="border-b border-line px-[14px] py-[13px] last:border-b-0">
+    <article id={`visit-${visit.id}`} tabIndex={-1} className="border-b border-line px-[14px] py-[13px] last:border-b-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 break-words font-mono text-[15px] font-medium leading-6 text-ink">
           {formatVisitTime(visit.scheduledAt, locale, timezone) ??
@@ -262,6 +262,8 @@ function VisitGroup({
 
 export default function VisitsPage() {
   const router = useRouter();
+  const appointmentId = useSearchParams().get("appointmentId");
+  const focusedAppointment = useRef<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const updateClock = () => setNow(Date.now());
@@ -304,6 +306,16 @@ export default function VisitsPage() {
   };
   const actionMessage = actionMessages[actionError ?? ""] ?? copy.actionError;
   const actionsDisabled = Boolean(respondingId) || loading || Boolean(error);
+  const unavailableAppointment = Boolean(appointmentId && !loading && !error && !visits.some((visit) => visit.id === appointmentId));
+  useEffect(() => {
+    if (!appointmentId) { focusedAppointment.current = null; return; }
+    if (loading || error || focusedAppointment.current === appointmentId) return;
+    const target = document.getElementById(`visit-${appointmentId}`);
+    if (!target) return;
+    focusedAppointment.current = appointmentId;
+    target.focus();
+    target.scrollIntoView?.({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [appointmentId, loading, error, visits]);
 
   const proposed = orderVisits(
     visits.filter((visit) => PROPOSED_STATUSES.includes(visit.status)),
@@ -378,6 +390,7 @@ export default function VisitsPage() {
         />
 
         <div className="patient-stack space-y-5 px-4">
+          {unavailableAppointment && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{locale === "es-MX" ? "Esta cita no está disponible. Actualiza tus citas." : "This visit is unavailable. Refresh your visits."}</p>}
           {!settings.loading && zone.fallback ? (
             <Card className="rounded-[22px] shadow-none">
               <p role="status">{copy.fallback}</p>

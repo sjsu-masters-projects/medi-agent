@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { getTodayCopy, type TodayCopy } from "@/content/today-copy";
 import { resolveVisitsTimezone } from "@/content/visits-copy";
@@ -15,6 +16,8 @@ import { useFeedData } from "@/hooks/use-feed-data";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { usePatientShell } from "@/contexts/patient-shell-context";
 import { FeedTaskStatus, normalizeLocale, type Locale, type FeedTask } from "@/types";
+import { ApprovedPlanDetails } from "@/components/features/approved-plan-details";
+import { NotificationBell } from "@/components/features/notification-centre";
 
 function mapTaskStatus(task: FeedTask, now: number): TaskCardStatus {
     const status = task.status;
@@ -60,6 +63,12 @@ function segmentClass(status: FeedTask["status"]) {
 }
 
 export default function TodayPage() {
+    const params = useSearchParams();
+    const activityId = params.get("activity");
+    const planDestination = params.get("view") === "care-plan";
+    const handledActivity = useRef<string | null>(null);
+    const [planOpen, setPlanOpen] = useState(planDestination);
+    useEffect(() => { setPlanOpen(planDestination); }, [planDestination]);
     const { setConversationOpen } = usePatientShell();
     const profile = usePatientProfile();
     const locale = normalizeLocale(profile?.preferredLanguage);
@@ -79,6 +88,16 @@ export default function TodayPage() {
     const [barrierTask, setBarrierTask] = useState<FeedTask | null>(null);
     const [barrierNote, setBarrierNote] = useState("");
     const [detailsId, setDetailsId] = useState<string | null>(null);
+    const [activityGroupId, setActivityGroupId] = useState<string | null>(null);
+    const matchingActivities = tasks.filter((task) => task.targetId === activityId);
+    const exactActivity = tasks.find((task) => task.id === activityId) ?? (matchingActivities.length === 1 ? matchingActivities[0] : undefined);
+    useEffect(() => {
+        if (!activityId) { handledActivity.current = null; return; }
+        if (loading || error || handledActivity.current === activityId) return;
+        if (exactActivity) { handledActivity.current = activityId; setActivityGroupId(null); setDetailsId(exactActivity.id); }
+        else if (matchingActivities.length > 1) { handledActivity.current = activityId; setDetailsId(null); setActivityGroupId(activityId); }
+        else { setDetailsId(null); setActivityGroupId(null); }
+    }, [activityId, exactActivity, matchingActivities.length, loading, error]);
     const [progressOpen, setProgressOpen] = useState(false);
     const [completion, setCompletion] = useState<{ task: FeedTask; phase: "saving" | "checked" | "leaving" } | null>(null);
     const inFlight = useRef(false);
@@ -166,6 +185,7 @@ export default function TodayPage() {
                     <h1 className="mt-0.5 break-words text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">{displayName ? copy.greeting(displayName) : copy.hello}</h1>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5 pt-1">
+                    <NotificationBell />
                     <OverflowMenu label={spanish ? "Más opciones" : "More options"} items={[
                         { label: loading ? copy.refreshing : copy.refresh, icon: "refresh", onSelect: refreshFeed, disabled: loading || disabled, busy: loading },
                         { label: copy.progressHelp, icon: "info", onSelect: () => setProgressOpen(true) },
@@ -191,6 +211,7 @@ export default function TodayPage() {
             </section>
 
             <div className="space-y-5 pt-[18px]">
+                {activityId && !loading && !error && !exactActivity && matchingActivities.length === 0 && <p role="alert" className="mx-4 rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Esta actividad no está disponible hoy. Actualiza tus actividades." : "This activity is unavailable today. Refresh your activities."}</p>}
                 {remainingTasks.length === 0 ? <h2 className="sr-only">{copy.schedule}</h2> : null}
                 {actionError && !barrierTask ? <p role="alert" className="mx-4 flex items-start gap-2.5 rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink"><Icon name="alert" className="h-5 w-5 shrink-0" />{actionError}</p> : null}
                 {error ? <div className="mx-4"><ErrorState description={error} action={<button className="ma-press min-h-11 rounded-[14px] bg-surface-2 px-4 py-2 text-sm font-semibold text-ink-2 hover:bg-line-strong" onClick={refreshFeed} type="button">{copy.retry}</button>} title={tasks.length > 0 ? copy.stale : copy.loadError} /></div> : null}
@@ -215,6 +236,10 @@ export default function TodayPage() {
             </div>
 
             <Modal closeLabel={copy.close} onClose={() => setProgressOpen(false)} open={progressOpen} title={copy.progressHelp}><p className="text-[15px] leading-relaxed text-ink-2">{copy.progressDetail}</p></Modal>
+            <Modal closeLabel={copy.close} onClose={() => setPlanOpen(false)} open={planOpen} title={copy.details}>{planOpen && <ApprovedPlanDetails locale={locale} />}</Modal>
+            <Modal closeLabel={copy.close} onClose={() => setActivityGroupId(null)} open={Boolean(activityGroupId && tasks.some((task) => task.targetId === activityGroupId))} title={copy.details}>
+                <div className="space-y-6">{tasks.filter((task) => task.targetId === activityGroupId).map((task) => <TodayTaskContent key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, task.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setActivityGroupId(null); void complete(task); }} onBarrier={() => { setActivityGroupId(null); openBarrier(task); }} />)}</div>
+            </Modal>
             <Modal closeLabel={copy.close} onClose={() => setDetailsId(null)} open={Boolean(detailTask)} title={copy.details}>
                 {detailTask ? <TodayTaskContent task={detailTask} copy={copy} status={mapTaskStatus(detailTask, now)} timeLabel={formatTimeLabel(locale, copy, detailTask.scheduledTime, detailTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setDetailsId(null); void complete(detailTask); }} onBarrier={() => openBarrier(detailTask)} /> : null}
             </Modal>

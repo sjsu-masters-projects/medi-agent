@@ -1,23 +1,20 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import MessagesPage from "@/app/(dashboard)/messages/page";
 
 vi.mock("@/components/features/care-conversations", () => ({
-  CareConversations: ({ visible }: { visible: boolean }) => <p>Human conversations {visible ? "active" : "paused"}</p>,
+  CareConversations: ({ conversationId }: { conversationId: string | null }) => <p>Human conversations {conversationId}</p>,
 }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("conversation=exact-thread") }));
 vi.mock("@/components/features/operational-alerts", () => ({
   OperationalAlerts: () => <p>Separate operational history</p>,
 }));
 
 describe("Messages views", () => {
-  it("opens the conversation inbox by default and pauses it in operational alerts", () => {
+  it("keeps Messages human-only and forwards the exact conversation", () => {
     render(<MessagesPage />);
-    expect(screen.getByText("Human conversations active")).toBeInTheDocument();
+    expect(screen.getByText("Human conversations exact-thread")).toBeInTheDocument();
     expect(screen.queryByText("Separate operational history")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Operational alerts" }));
-    expect(screen.getByText("Separate operational history")).toBeInTheDocument();
-    expect(screen.getByText("Human conversations paused")).not.toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Conversations" }));
-    expect(screen.getByText("Human conversations active")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Operational alerts" })).not.toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Badge, Button } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { AppointmentStatus, type Appointment } from "@/types";
@@ -54,13 +55,22 @@ export function AppointmentOfferHistory({
   disabled,
   onRepropose,
   token,
+  appointmentId,
 }: {
   token?: string | null;
+  appointmentId?: string | null;
   appointments: Appointment[];
   timezone: string;
   disabled: boolean;
   onRepropose: (appointment: Appointment) => void;
 }) {
+  useEffect(() => {
+    if (appointmentId && appointments.some((visit) => visit.id === appointmentId)) {
+      const target = document.getElementById(`appointment-${appointmentId}`);
+      target?.scrollIntoView?.({ block: "center" });
+      target?.focus({ preventScroll: true });
+    }
+  }, [appointmentId, appointments]);
   if (!appointments.length)
     return (
       <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
@@ -129,7 +139,9 @@ export function AppointmentOfferHistory({
               {rows.map((row) => (
                 <li
                   key={row.id}
-                  className="rounded-[10px] bg-surface-2 px-3 py-2"
+                  id={`appointment-${row.id}`}
+                  tabIndex={row.id === appointmentId ? -1 : undefined}
+                  className={`scroll-mt-6 rounded-[10px] bg-surface-2 px-3 py-2 ${row.id === appointmentId ? "ring-2 ring-primary" : ""}`}
                 >
                   <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="font-mono text-[12.5px] text-ink">

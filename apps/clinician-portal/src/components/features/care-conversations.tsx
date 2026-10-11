@@ -27,18 +27,23 @@ function shortTime(value: string, locale: string) {
     : date.toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
-export function CareConversations({ locale = "en-US", audience = "patient", visible = true }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean }) {
+export function CareConversations({ locale = "en-US", audience = "patient", visible = true, conversationId = null }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean; conversationId?: string | null }) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
   if (!accessToken || !user) return null;
-  return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} />;
+  return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} conversationId={conversationId} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean }) {
+function ConversationInbox({ token, locale, audience, visible, conversationId }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean; conversationId: string | null }) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
   const [recipient, setRecipient] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(conversationId);
+  const [previousTarget, setPreviousTarget] = useState(conversationId);
+  if (previousTarget !== conversationId) {
+    setPreviousTarget(conversationId);
+    setSelected(conversationId);
+  }
   const [drafts, setDrafts] = useState<Record<string, ConversationDraft>>({});
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
@@ -151,6 +156,7 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
     </p>}
     {error && <p role="alert" className={`${alert} border-risk-line bg-risk-soft text-risk-ink`}><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" /><span>{copy[error]}</span></p>}
     {pollFailed && <p role="alert" className={`${alert} border-risk-line bg-risk-soft text-risk-ink`}><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" /><span>{copy.loadError}</span></p>}
+    {conversationId && !loading && !threads.some((thread) => thread.id === conversationId) && <p role="status" className="text-sm text-muted">The linked conversation is unavailable. Select an authorized conversation below.</p>}
     <div className="grid min-h-[calc(100dvh-180px)] grid-cols-1 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] md:h-[calc(100dvh-180px)] md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="flex min-h-0 min-w-0 flex-col border-b border-line md:border-b-0 md:border-r">
         <div className="space-y-3 border-b border-line px-4 py-4">

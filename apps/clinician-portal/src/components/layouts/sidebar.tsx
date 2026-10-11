@@ -20,6 +20,7 @@ const primaryNavigation: { href: string; icon: IconName; label: string }[] = [
     { href: "/review-queue", icon: "inbox", label: "Review Queue" },
     { href: "/medwatch", icon: "alert", label: "ADR Reviews" },
     { href: "/messages", icon: "chat", label: "Messages" },
+    { href: "/alerts", icon: "bell", label: "Alerts" },
 ];
 
 interface SidebarClinicianProfile {

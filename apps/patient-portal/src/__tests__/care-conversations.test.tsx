@@ -37,6 +37,28 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("human conversations", () => {
+  it("opens only the exact addressed conversation from a notification", async () => {
+    vi.mocked(careConversations.list).mockResolvedValue([thread, { ...thread, id: "thread-two", clinician_id: "clinician-two", clinician_name: "Dr. Two" }]);
+    render(<CareConversations compact conversationId="thread-two" />);
+    await screen.findByRole("heading", { name: "Dr. Two" });
+    expect(careConversations.messages).toHaveBeenCalledWith("synthetic-token", "thread-two", undefined);
+    expect(careConversations.open).not.toHaveBeenCalled();
+  });
+  it("shows unavailable rather than opening another thread for a missing exact conversation", async () => {
+    render(<CareConversations compact conversationId="revoked-thread" />);
+    await screen.findByText("This conversation is unavailable. Choose an authorized contact.");
+    expect(careConversations.messages).not.toHaveBeenCalled();
+    expect(careConversations.open).not.toHaveBeenCalled();
+  });
+  it("opens a new thread only for an authorized requested recipient", async () => {
+    render(<CareConversations compact recipientId="clinician-two" />);
+    await waitFor(() => expect(careConversations.open).toHaveBeenCalledWith("synthetic-token", "clinician-two"));
+  });
+  it("does not open a revoked requested recipient", async () => {
+    render(<CareConversations compact recipientId="revoked-clinician" />);
+    await screen.findByText("This conversation is unavailable. Choose an authorized contact.");
+    expect(careConversations.open).not.toHaveBeenCalled();
+  });
   it.each(["en-US", "es-MX"])("keeps emergency wording after the contacts and labels the compact thread actions (%s)", async (locale) => {
     const spanish = locale === "es-MX";
     const view = render(<CareConversations compact locale={locale} />);

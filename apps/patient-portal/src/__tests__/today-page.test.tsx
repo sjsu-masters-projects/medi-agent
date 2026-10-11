@@ -2,6 +2,9 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
+const destination = vi.hoisted(() => ({ params: new URLSearchParams() }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => destination.params }));
+vi.mock("@/components/features/approved-plan-details", () => ({ ApprovedPlanDetails: ({ locale }: { locale: string }) => <p>Approved snapshot {locale}</p> }));
 
 const { markComplete, reportBarrier, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
     markComplete: vi.fn(),
@@ -47,12 +50,50 @@ function baseFeedData() {
 describe("TodayPage", () => {
     afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
     beforeEach(() => {
+        destination.params = new URLSearchParams();
         markComplete.mockReset();
         reportBarrier.mockReset();
         refreshFeed.mockReset();
         useFeedData.mockReset();
         usePatientProfile.mockReset();
         usePatientProfile.mockReturnValue(null);
+    });
+
+    it("opens the exact authorized activity from its canonical UUID, without changing completion", async () => {
+        destination.params = new URLSearchParams("activity=exact-activity");
+        const task = { id: "obligation:exact-activity:unscheduled", targetId: "exact-activity", type: FeedTaskType.OBLIGATION, name: "Exact approved activity", status: FeedTaskStatus.PENDING } as FeedTask;
+        mockFeedData({ tasks: [task, { ...task, id: "other", targetId: "other", name: "Other activity" }] });
+        render(<TodayPage />);
+        const dialog = await screen.findByRole("dialog");
+        expect(within(dialog).getByText("Exact approved activity")).toBeInTheDocument();
+        expect(within(dialog).queryByText("Other activity")).not.toBeInTheDocument();
+        expect(markComplete).not.toHaveBeenCalled();
+    });
+
+    it("shows unavailable for a non-scheduled activity and never selects the next task instead", () => {
+        destination.params = new URLSearchParams("activity=not-today");
+        mockFeedData({ tasks: [{ id: "other", targetId: "other", type: FeedTaskType.OBLIGATION, name: "Other activity", status: FeedTaskStatus.PENDING } as FeedTask] });
+        render(<TodayPage />);
+        expect(screen.getByText("This activity is unavailable today. Refresh your activities.")).toBeInTheDocument();
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("opens approved-plan details even on a day with no scheduled activities", () => {
+        destination.params = new URLSearchParams("view=care-plan");
+        mockFeedData();
+        render(<TodayPage />);
+        expect(within(screen.getByRole("dialog")).getByText("Approved snapshot en-US")).toBeInTheDocument();
+    });
+
+    it("shows all today's occurrences of the exact activity without selecting an unrelated activity", async () => {
+        destination.params = new URLSearchParams("activity=twice-daily");
+        const task = { targetId: "twice-daily", type: FeedTaskType.MEDICATION, name: "Exact medication", status: FeedTaskStatus.PENDING } as FeedTask;
+        mockFeedData({ tasks: [{ ...task, id: "morning", scheduledTime: "08:00" }, { ...task, id: "evening", scheduledTime: "20:00" }, { ...task, id: "unrelated", targetId: "other", name: "Unrelated medication" }] });
+        render(<TodayPage />);
+        const dialog = await screen.findByRole("dialog");
+        expect(within(dialog).getAllByText("Exact medication")).toHaveLength(2);
+        expect(within(dialog).queryByText("Unrelated medication")).not.toBeInTheDocument();
+        expect(markComplete).not.toHaveBeenCalled();
     });
 
     it("localizes Spanish chrome and uses the saved timezone at a UTC day boundary", () => {

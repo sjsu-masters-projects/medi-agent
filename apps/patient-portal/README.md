@@ -101,6 +101,21 @@ cancellations do not sync, and the calendar app uses its own display timezone.
 Failed downloads keep the visit list visible with a translated retry notice.
 See [Slice 6 verification and click-through](../../.agent/specs/sch-001-appointment-scheduling.md#15-slice-6--one-time-calendar-export).
 
+## In-app notifications
+
+Authenticated headers include a compact bell and an accessible notification sheet;
+`/notifications` provides the full All/Unread history. Notification copy and dates
+follow the saved language and timezone. Human messages are not translated and
+clinical instructions use only approved wording. Opening the sheet does not mark
+everything read or approve care. Exact-resource links open Records, Visits, Today
+or the addressed private care-team conversation.
+
+One shared cache refreshes every 15 seconds while visible and on focus, preserving
+lists after network failure. Unavailable counts are not shown as zero. Each loaded
+page retains a server-signed viewing cutoff; marking displayed items read excludes
+concurrent arrivals. No new email, SMS or push delivery is introduced. See
+[NOT-001](../../.agent/specs/not-001-notification-centre.md) for rollout and tests.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

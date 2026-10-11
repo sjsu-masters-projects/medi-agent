@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/icons";
+import { NotificationBell } from "@/components/features/notification-centre";
 
 const sections: Record<string, { title: string; icon: IconName }> = {
     "/dashboard": { title: "Risk Radar", icon: "grid" },
@@ -11,6 +12,7 @@ const sections: Record<string, { title: string; icon: IconName }> = {
     "/review-queue": { title: "Patient upload reviews", icon: "inbox" },
     "/medwatch": { title: "ADR reviews", icon: "alert" },
     "/messages": { title: "Messages", icon: "chat" },
+    "/alerts": { title: "Alerts", icon: "bell" },
     "/smart-import": { title: "External record import", icon: "download" },
     "/settings": { title: "Clinic settings", icon: "gear" },
     "/settings/mfa": { title: "Account security", icon: "shield" },
@@ -40,12 +42,15 @@ export function TopHeader() {
                     </p>
                 )}
             </nav>
+            <div className="flex items-center gap-2">
             {pathname === "/dashboard" ? (
                 <Link href="/settings" className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-3.5 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
                     <Icon name="plus" className="h-4 w-4" />
                     Patient invitations
                 </Link>
             ) : null}
+            <NotificationBell />
+            </div>
         </header>
     );
 }

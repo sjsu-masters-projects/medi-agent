@@ -455,7 +455,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         id="tab-panel-adherence"
                         role="tabpanel"
                     >
-                        <PatientAdherencePanel patient={patient} />
+                        <PatientAdherencePanel patient={patient} activityId={searchParams.get("activity")} />
                     </div>
                 )}
 

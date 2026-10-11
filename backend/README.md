@@ -142,6 +142,20 @@ mutation, external calendar call, or migration is needed for this endpoint.
 
 ## Human care-team conversations
 
+### In-app notification centre (NOT-001)
+
+The role-scoped `/api/v1/notification-centre` API presents saved events and
+current clinician work; its read operations never perform clinical approval.
+See [the notification contract](../.agent/specs/not-001-notification-centre.md)
+for recipient rules, endpoints, migration/acceptance boundaries and portal behaviour.
+Short-lived actor-bound read snapshots contain exact receipt IDs, so a concurrent
+arrival is not consumed by a bulk read. Human conversation read markers remain
+authoritative. Events are captured atomically; browser event creation is denied.
+The legacy patient `/notifications` endpoints remain compatible. No new push,
+email or SMS channel is introduced. Remote migration/deployment is separately
+authorized; local test success is not deployed acceptance.
+
+
 Authenticated `/api/v1/care-conversations` routes implement explicitly addressed
 patient/linked-clinician threads, separately from Nora and operational alerts.
 Apply `048_care_team_conversations.sql` only with environment-specific approval

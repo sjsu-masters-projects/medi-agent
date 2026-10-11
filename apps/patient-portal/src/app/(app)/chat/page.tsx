@@ -6,6 +6,7 @@ import { HiStop } from "react-icons/hi2";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
+import { NotificationBell } from "@/components/features/notification-centre";
 import { todayConversationId } from "@/services/chat-api";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
@@ -25,8 +26,17 @@ export default function ChatPage() {
     const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
     const [careTeamOpened, setCareTeamOpened] = useState(false);
     const searchParams = useSearchParams();
+    const careTeamDestination = searchParams.get("view") === "care-team";
+    const conversationId = careTeamDestination ? searchParams.get("conversation") : null;
+    const recipientId = careTeamDestination ? searchParams.get("recipient") : null;
     // A document handoff from Records opens Nora directly (see usePatientChatSession).
     const [inbox, setInbox] = useState(() => !conversationOpen && !searchParams.has("document"));
+    const requestedDestination = careTeamDestination ? `${conversationId ?? ""}:${recipientId ?? ""}` : null;
+    const [appliedDestination, setAppliedDestination] = useState<string | null>(null);
+    if (requestedDestination !== appliedDestination) {
+        setAppliedDestination(requestedDestination);
+        if (requestedDestination !== null) { setConversation("care-team"); setCareTeamOpened(true); setInbox(true); }
+    }
     const [showHistory, setShowHistory] = useState(false);
     const [humanThreadId, setHumanThreadId] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -72,7 +82,7 @@ export default function ChatPage() {
     const assistantThread = !inbox && conversation === "assistant";
     const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
     return <div className={`flex w-full flex-col text-ink ${threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
-        <header hidden={Boolean(humanThreadId)} className={inbox ? "px-1.5" : "sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
+        <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
             {!inbox && <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
             {!inbox && conversation === "assistant" && <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" className="h-[18px] w-[18px]" /></span>}
             <div className="min-w-0 flex-1">
@@ -81,6 +91,7 @@ export default function ChatPage() {
                 <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted"><span>{copy.assistantDescription}</span><span aria-hidden="true">·</span><span role="status" className={`inline-flex items-center gap-1 ${connectionStatus === "connected" ? "text-brand-ink" : connectionStatus === "connecting" ? "text-muted" : "text-danger-ink"}`}><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectionStatus === "connected" ? "bg-brand" : connectionStatus === "connecting" ? "bg-gold" : "bg-danger-seg"}`} />{controls.connection[connectionStatus]}</span></p>
             </>}
             </div>
+            {inbox && !humanThreadId && <NotificationBell />}
             {!inbox && <button type="button" aria-label={conversation === "assistant" ? copy.careTeamLabel : `${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} disabled={voiceBusy}
                 className={iconButton}
                 onClick={() => { setCareTeamOpened(true); setConversation(conversation === "assistant" ? "care-team" : "assistant"); }}>
@@ -103,7 +114,7 @@ export default function ChatPage() {
         </section> : null}
         {inbox && !humanThreadId && <NoraConversations locale={locale} activeSessionId={sessionId} onOpen={openNora} />}
         {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-3">
-            <CareConversations compact locale={locale} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
+            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
             {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="overflow-hidden rounded-[22px] bg-surface">
                 <button className="flex min-h-14 w-full items-center gap-3 px-[14px] py-3 text-left hover:bg-[#FBF7F0]" type="button" aria-expanded={showHistory}
                     onClick={() => setShowHistory((current) => !current)}>
