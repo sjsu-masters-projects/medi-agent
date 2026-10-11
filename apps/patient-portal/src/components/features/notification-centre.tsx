@@ -30,7 +30,7 @@ export function NotificationCentre({ onNavigate }: { onNavigate?: () => void }) 
     {state.page?.items.length === 0 && !state.error && <p className="rounded-[22px] bg-surface p-5 text-sm text-muted">{state.unread ? copy.emptyUnread : copy.empty}</p>}
     {state.page && <ul className="divide-y divide-line overflow-hidden rounded-[22px] bg-surface">
       {state.page.items.map((item) => {
-        const href = item.actionable ? notificationDestination(item.action_url) : null;
+        const href = notificationDestination(item.action_url);
         let date = "";
         if (state.timezone && Number.isFinite(Date.parse(item.created_at))) {
           try { date = new Intl.DateTimeFormat(state.locale, { timeZone: state.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at)); } catch { /* Missing/invalid saved timezone cannot establish a local clock. */ }
@@ -38,7 +38,7 @@ export function NotificationCentre({ onNavigate }: { onNavigate?: () => void }) 
         return <li key={item.id} className="space-y-2 px-4 py-3.5">
           <div className="flex items-start gap-2">
             <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-surface-2 text-ink-2"><Icon name={categoryIcons[item.category] ?? "bell"} className="h-5 w-5" /></span>
-            {!item.is_read && <span aria-label={copy.unread} className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand" />}
+            {!item.is_read && <span role="img" aria-label={copy.unread} className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand" />}
             <div className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
               <h2 className="text-[15px] font-semibold text-ink">{item.title}</h2>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{item.body}</p>
@@ -46,7 +46,7 @@ export function NotificationCentre({ onNavigate }: { onNavigate?: () => void }) 
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {href && <Link prefetch={false} className={`${button} inline-flex items-center !bg-brand-tint !text-brand-ink`} href={href} onClick={onNavigate}>{item.action_label}</Link>}
+            {href && <Link prefetch={false} className={`${button} inline-flex items-center !bg-brand-tint !text-brand-ink`} href={href} onClick={() => { if (!item.is_read) void state.markRead(item.id); onNavigate?.(); }}>{item.action_label}</Link>}
             {!item.is_read && <button type="button" className={button} disabled={state.busy || state.loading} aria-label={`${copy.read}: ${item.title}`} onClick={() => void state.markRead(item.id)}>{copy.read}</button>}
           </div>
         </li>;

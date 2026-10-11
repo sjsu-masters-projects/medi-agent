@@ -69,6 +69,15 @@ describe("patient notification centre", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mark as read: Care team one" }));
     await waitFor(() => expect(notifications.read).toHaveBeenCalledWith("synthetic-token", "one"));
   });
+  it("marks an item read when its link is followed, and keeps links on history items", async () => {
+    vi.mocked(notifications.list).mockResolvedValue(page([item(), { ...item("past"), actionable: false, action_label: "View" }]));
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    await screen.findByText("Care team one");
+    expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", item().action_url);
+    fireEvent.click(screen.getByRole("link", { name: "Open conversation" }));
+    await waitFor(() => expect(notifications.read).toHaveBeenCalledWith("synthetic-token", "one"));
+  });
+
   it("preserves a draft across JWT refresh and saved-language change, while discarding stale notification responses", async () => {
     let resolveOld!: (value: NotificationPage) => void;
     vi.mocked(notifications.list).mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));

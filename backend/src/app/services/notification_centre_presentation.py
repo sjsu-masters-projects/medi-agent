@@ -265,8 +265,13 @@ def present_item(row: dict[str, Any], role: str, locale: str) -> CentreItem:
         body=body,
         created_at=row["created_at"],
         is_read=bool(row.get("is_read")),
-        action_url=link if actionable else None,
-        action_label=spanish_action if spanish else english_action,
+        # History keeps its exact-source link; only the call to act is dropped.
+        action_url=link,
+        action_label=(
+            (spanish_action if spanish else english_action)
+            if actionable
+            else ("Ver" if spanish else "View")
+        ),
         actionable=actionable,
         can_acknowledge=actionable and role == "clinician" and bool(row.get("can_acknowledge")),
         patient_name=_name(row.get("patient_name")) if role == "clinician" else None,

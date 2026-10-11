@@ -36,7 +36,7 @@ function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAc
             <time dateTime={item.created_at} className="block font-mono text-xs text-muted">{new Date(item.created_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</time>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:max-w-[220px] sm:justify-end">
-            {target && <Link href={target} onClick={onNavigate} className="inline-flex min-h-9 items-center rounded-lg px-2 text-sm font-medium text-primary hover:underline">{item.action_label || "Open details"}</Link>}
+            {target && <Link href={target} onClick={() => { if (!item.is_read) void centre.read(item.id); onNavigate?.(); }} className="inline-flex min-h-9 items-center rounded-lg px-2 text-sm font-medium text-primary hover:underline">{item.action_label || "Open details"}</Link>}
             {allowRead && !item.is_read && <Button variant="secondary" disabled={centre.busy} onClick={() => void centre.read(item.id)} aria-label={`Mark read: ${item.title}`}>Mark read</Button>}
             {allowAcknowledge && item.can_acknowledge && <Button variant="secondary" disabled={centre.busy || !!centre.actions.error} onClick={() => { setNote(""); setAcknowledging(item); }}>Acknowledge</Button>}
           </div>

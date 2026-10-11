@@ -66,7 +66,9 @@ def test_untrusted_url_is_never_used_as_destination():
 def test_stale_activity_has_no_action_and_read_is_not_acknowledgment():
     raw = item(event_type="barrier_reported", category="follow_up", actionable=False, is_read=True)
     result = present_item(raw, "clinician", "en-US")
-    assert result.action_url is None and not result.can_acknowledge
+    # History keeps its link to the exact source, but no longer asks for action.
+    assert result.action_url is not None and result.action_label == "View"
+    assert not result.can_acknowledge
     assert "not a confirmed" in result.body
 
 
