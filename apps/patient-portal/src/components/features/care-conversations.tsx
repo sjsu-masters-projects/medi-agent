@@ -172,7 +172,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
       {!recipients.length && <p>{copy.noRecipients}</p>}
       {!compact && <h2 className="text-lg font-semibold text-ink">{copy.threads}</h2>}
       {!threads.length && <p>{copy.empty}</p>}
-      <div hidden={focused}><PullToRefresh onRefresh={refreshInbox} busy={loading || opening || sending} label={copy.refresh}>
+      <div hidden={focused}><PullToRefresh onRefresh={refreshInbox} busy={opening || sending} label={copy.refresh}>
       <ul className="overflow-hidden rounded-[22px] bg-surface">
         {threads.map((thread) => <li key={thread.id}>
           <button ref={(element) => { if (element) contactButtons.current.set(thread.id, element); else contactButtons.current.delete(thread.id); }} className={`flex min-h-11 w-full items-center gap-3 border-b border-line p-3.5 text-left ${selected === thread.id ? "bg-brand-tint" : ""}`} type="button" aria-label={[`${name(thread)} · ${thread.clinic_name}`, thread.unread_count > 0 ? `${thread.unread_count} ${copy.unread}` : null, thread.last_message_preview, thread.last_message_at ? chatDisplayTime(thread.last_message_at, locale) : null].filter(Boolean).join(" · ")} aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => { setSelected(thread.id); setThreadFocused(true); }}>

@@ -61,6 +61,10 @@ squeezing titles; buttons constrain long labels. Profile/Records and Chat lane
 reviews removed duplicate interface copy without removing handlers or safety text.
 Clearer nonclinical entry/settings wording was explicitly approved by the requester.
 
+PR review follow-up removed a redundant `loading` predicate inside the already
+loaded inbox branch. Opening/sending refresh guards remain unchanged. Targeted
+ESLint, patient typecheck and 32 conversation/pull-to-refresh tests passed.
+
 ## Still required before visual acceptance
 
 - Authenticated screenshots and interaction checks for Today, Records, Nora,
