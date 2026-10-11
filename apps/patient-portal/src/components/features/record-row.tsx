@@ -116,30 +116,46 @@ export function RecordRow({
       >
         <Icon name={tile.icon} className="h-5 w-5" />
       </span>
-      <span className="min-w-0 flex-1">
-        <h3
-          className={`break-words text-[15px] font-semibold ${duplicate ? "text-muted" : "text-ink"}`}
-        >
-          {cleanRecordTitle(document.fileName, patientName)}
-        </h3>
-        <span className="sr-only">{document.fileName}</span>
-        <span className="mt-0.5 block break-words text-[13px] text-muted">
-          <span>{typeLabel}</span> · {provider} · {date}
-        </span>
-        {duplicate ? (
-          <span className="mt-1 block text-[13px] text-muted">
-            {statusLabel}
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="min-w-0 flex-1 basis-[140px]">
+          <h3
+            className={`break-words text-[15px] font-semibold ${duplicate ? "text-muted" : "text-ink"}`}
+          >
+            {cleanRecordTitle(document.fileName, patientName)}
+          </h3>
+          <span className="sr-only">{document.fileName}</span>
+          <span className="mt-0.5 block break-words text-[13px] text-muted">
+            <span>{typeLabel}</span> · {provider} · {date}
           </span>
-        ) : null}
+          {duplicate ? (
+            <span className="mt-1 block text-[13px] text-muted">
+              {statusLabel}
+            </span>
+          ) : null}
+        </span>
         {!duplicate && statusLabel ? (
-          <span className="mt-2 inline-flex max-w-full">
+          <span className="ml-auto inline-flex min-w-0 max-w-full [&>span]:max-w-full [&>span]:break-words [&_svg]:shrink-0">
             {summary ? (
-              <AiChip>{statusLabel}</AiChip>
+              <AiChip>
+                <span className="sr-only">{statusLabel}</span>
+                <span aria-hidden="true">
+                  {locale === "es-MX" ? "Resumen" : "Summary"}
+                </span>
+              </AiChip>
             ) : (
               <span
                 className={`inline-flex flex-wrap items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ${document.parseStatus === DocumentParseStatus.FAILED ? "bg-danger-tint text-danger-ink" : "bg-surface-2 text-muted"}`}
               >
-                {statusLabel}
+                {processing ? (
+                  <>
+                    <span className="sr-only">{statusLabel}</span>
+                    <span aria-hidden="true">
+                      {locale === "es-MX" ? "Leyendo" : "Reading"}
+                    </span>
+                  </>
+                ) : (
+                  statusLabel
+                )}
                 {processing ? (
                   <span aria-hidden="true" className="inline-flex gap-1">
                     {[

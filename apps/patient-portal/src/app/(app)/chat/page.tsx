@@ -63,36 +63,31 @@ export default function ChatPage() {
             {!inbox && <button type="button" className={button + " flex min-w-11 items-center justify-center px-0"} aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" /></button>}
             {!inbox && conversation === "assistant" && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" /></span>}
             <div className="min-w-0 flex-1">
-            <h1 ref={headingRef} tabIndex={-1} className={inbox ? "px-1.5 pt-2 text-[32px] font-semibold tracking-[-0.02em]" : "text-lg font-semibold"}>{inbox ? copy.careTeamLabel : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
+            <h1 ref={headingRef} tabIndex={-1} className={inbox ? "break-words px-1.5 pt-2 text-[32px] font-semibold tracking-[-0.02em]" : "break-words text-lg font-semibold"}>{inbox ? "Chat" : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
             {!inbox && conversation === "assistant" && <>
                 <p className="mt-1 text-xs text-muted">{copy.assistantDescription}</p>
                 <p className="mt-1 text-xs text-muted" role="status">{controls.connection[connectionStatus]}</p>
             </>}
             </div>
+            {!inbox && <button type="button" aria-label={conversation === "assistant" ? copy.careTeamLabel : `${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} disabled={voiceBusy}
+                className={button + " flex min-w-11 items-center justify-center px-2"}
+                onClick={() => { setCareTeamOpened(true); setConversation(conversation === "assistant" ? "care-team" : "assistant"); }}>
+                <Icon name={conversation === "assistant" ? "users" : "spark"} />
+            </button>}
             {!inbox && conversation === "assistant" && <button className={button + " flex min-w-11 items-center justify-center px-2"} aria-label={handsFreeMode ? controls.handsFreeOn : controls.handsFreeOff} aria-pressed={handsFreeMode} onClick={handleHandsFreeToggle} type="button"><Icon name="speaker" /></button>}
         </header>
         {inbox ? <section hidden={Boolean(humanThreadId)} className="relative flex flex-col gap-3 overflow-hidden rounded-[28px] bg-brand-deep p-5 text-[#F2F7F5] shadow-[0_18px_36px_-16px_rgba(15,61,55,.6)]">
-            <div className="flex items-center gap-3">
+            <span aria-hidden="true" className="pointer-events-none absolute -right-[60px] -top-[60px] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle,rgba(245,196,106,.28),transparent_70%)]" />
+            <div className="relative flex items-center gap-3">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-gold"><Icon name="spark" /></span>
-                <div><h2 className="text-[19px] font-semibold">{CARE_ASSISTANT_NAME} <span className="ml-1 rounded-md bg-gold/15 px-1.5 py-0.5 text-xs text-gold">AI</span></h2><p className="text-[13px] text-[#B9D1CC]">{copy.assistantDescription} · {locale === "es-MX" ? "no es un profesional clínico" : "not a clinician"}</p></div>
+                <div className="min-w-0 flex-1 break-words"><h2 className="text-[19px] font-semibold">{CARE_ASSISTANT_NAME} <span className="ml-1 rounded-md bg-[rgba(245,196,106,.18)] px-1.5 py-0.5 text-xs font-semibold tracking-[0.06em] text-gold">AI</span></h2><p className="text-[13px] text-[#B9D1CC]">{copy.assistantDescription} · {locale === "es-MX" ? "no es un profesional clínico" : "not a clinician"}</p></div>
             </div>
-            <p className="text-sm leading-relaxed">{controls.caution}</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="relative text-sm leading-relaxed">{controls.caution}</p>
+            <div className="relative flex flex-wrap gap-2">
             <button type="button" className="min-h-11 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-[#2B1F05]" onClick={() => { setInput(copy.quickPrompts[1]); setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Reportar un síntoma" : "Report a symptom"}</button>
             <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="min-h-11 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white" onClick={() => { setCareTeamOpened(true); setConversation("assistant"); setInbox(false); }}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}</button>
             </div>
-        </section> : <div hidden={Boolean(humanThreadId)} className="flex flex-wrap gap-2" role="group" aria-label={copy.careTeamLabel}>
-            <button type="button" aria-pressed={conversation === "assistant"}
-                className={button + (conversation === "assistant" ? " border-brand bg-brand-tint text-brand-ink" : "")}
-                onClick={() => { setConversation("assistant"); setInbox(false); }}>
-                {CARE_ASSISTANT_NAME} · {copy.assistantDescription}
-            </button>
-            <button type="button" aria-pressed={conversation === "care-team"} disabled={voiceBusy}
-                className={button + (conversation === "care-team" ? " border-brand bg-brand-tint text-brand-ink" : "")}
-                onClick={() => { setCareTeamOpened(true); setConversation("care-team"); }}>
-                {copy.careTeamLabel}
-            </button>
-        </div>}
+        </section> : null}
         {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-4">
             <CareConversations compact locale={locale} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
             {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="space-y-3 rounded-[22px] bg-surface p-4">

@@ -19,7 +19,7 @@ export function PageHeader({ backButton = false, rightAction, subtitle, title }:
     return (
         <header className="px-[22px] pt-6 pb-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-start gap-2">
+                <div className="flex min-w-0 flex-1 basis-40 items-start gap-2">
                     {backButton ? (
                         <button
                             aria-label={spanish ? "Volver" : "Go back"}
@@ -35,7 +35,7 @@ export function PageHeader({ backButton = false, rightAction, subtitle, title }:
                         {subtitle ? <p className="mt-2 max-w-prose text-[15px] leading-relaxed text-muted">{subtitle}</p> : null}
                     </div>
                 </div>
-                {rightAction ? <div className="flex shrink-0 flex-wrap items-center gap-2">{rightAction}</div> : null}
+                {rightAction ? <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">{rightAction}</div> : null}
             </div>
         </header>
     );

@@ -92,7 +92,7 @@ describe("TodayPage", () => {
         render(<TodayPage />);
         expect(screen.getByRole("link", { name: "Configurar horario del recordatorio" })).toHaveAttribute("href", "/reminders");
         expect(screen.getByText("Configurar horario del recordatorio")).toBeInTheDocument();
-        expect(screen.getByText("Aprobado por tu equipo de atención • seguimiento")).toBeInTheDocument();
+        expect(screen.getByText("Aprobado por tu equipo de atención")).toBeInTheDocument();
         expect(screen.getByText("Detalles del plan de atención")).toBeInTheDocument();
         expect(screen.getByText(task.name)).toBeInTheDocument();
         expect(screen.getByText(task.description!)).toBeInTheDocument();
@@ -141,6 +141,7 @@ describe("TodayPage", () => {
         usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX" });
         mockFeedData({ tasks: [{ id: "synthetic", name: "Source activity", type: FeedTaskType.OBLIGATION, status: FeedTaskStatus.PENDING, carePlan: { category, versionNumber: 1 } } as FeedTask] });
         render(<TodayPage />);
+        fireEvent.click(screen.getByRole("button", { name: "Detalles del plan de atención" }));
         expect(screen.getByText(`Aprobado por tu equipo de atención • ${label}`)).toBeInTheDocument();
     });
 
@@ -234,7 +235,7 @@ describe("TodayPage", () => {
 
         expect(screen.getByText(/8:00 AM .* Now/i)).toBeInTheDocument();
         expect(screen.getByText(/Lisinopril/i)).toBeInTheDocument();
-        expect(screen.getByText("Care-team approved • monitoring")).toBeInTheDocument();
+        expect(screen.queryByText("Care-team approved • monitoring")).not.toBeInTheDocument();
         expect(screen.getByText("Care plan approved by Dr. Chen")).toBeInTheDocument();
         expect(screen.queryByText("Prescribed by Dr. Chen")).not.toBeInTheDocument();
 

@@ -81,21 +81,130 @@ function SharedPreferenceProbe() {
 }
 
 describe("Patient profile page", () => {
+    it.each(["en-US", "es-MX"] as const)(
+        "keeps compact settings actions and helpers in %s",
+        async (locale) => {
+            get.mockImplementation(async (endpoint: string) =>
+                endpoint === "/api/v1/patients/me"
+                    ? profileResponse(locale)
+                    : [
+                          {
+                              id: "synthetic-team",
+                              status: "active",
+                              role: "provider",
+                              clinician_first_name: "Synthetic",
+                              clinician_last_name: "Clinician",
+                          },
+                      ],
+            );
+            render(<ProfilePage />);
+            const spanish = locale === "es-MX";
+            const reminders = await screen.findByRole("link", {
+                name: spanish
+                    ? "Administrar recordatorios"
+                    : "Manage reminders",
+            });
+            expect(reminders).toHaveAttribute("href", "/reminders");
+            expect(reminders).toHaveTextContent(
+                spanish
+                    ? "Elige las horas y los días"
+                    : "Choose the exact times and days",
+            );
+            expect(
+                screen.queryByText(
+                    spanish ? "Tú eliges" : "Patient controlled",
+                ),
+            ).not.toBeInTheDocument();
+            expect(
+                screen.getByRole("button", {
+                    name: spanish ? "Cerrar sesión" : "Sign out",
+                }),
+            ).toHaveTextContent(
+                spanish ? "compartes tu teléfono" : "shared phone",
+            );
+            expect(screen.getByText(/911/)).toHaveTextContent(
+                spanish
+                    ? "no se monitorean continuamente"
+                    : "not continuously monitored",
+            );
+            expect(
+                screen.getByRole("button", {
+                    name: spanish
+                        ? "Vincular otra clínica"
+                        : "Join another clinic",
+                }),
+            ).toBeInTheDocument();
+            fireEvent.click(
+                screen.getByRole("button", {
+                    name: spanish ? "Editar perfil" : "Edit profile",
+                }),
+            );
+            const selects = screen
+                .getByRole("dialog")
+                .querySelectorAll("select");
+            expect(selects).toHaveLength(2);
+            selects.forEach((select) =>
+                expect(select).toHaveClass(
+                    "min-w-0",
+                    "pr-10",
+                    "min-h-[3.25rem]",
+                ),
+            );
+        },
+    );
+    it.each(["en-US", "es-MX"] as const)(
+        "directs an unlinked patient to the clinic sheet in %s",
+        async (locale) => {
+            get.mockImplementation(async (endpoint: string) =>
+                endpoint === "/api/v1/patients/me"
+                    ? profileResponse(locale)
+                    : [],
+            );
+            render(<ProfilePage />);
+            const name =
+                locale === "es-MX"
+                    ? "Conectar tu clínica"
+                    : "Connect your clinic";
+            fireEvent.click(await screen.findByRole("button", { name }));
+            expect(screen.getByRole("dialog", { name })).toBeInTheDocument();
+            expect(
+                screen.queryByText(/invite code below/i),
+            ).not.toBeInTheDocument();
+            expect(post).not.toHaveBeenCalled();
+        },
+    );
     it("keeps the edit sheet and draft while a profile save is pending", async () => {
-        get.mockImplementation(async (endpoint: string) => endpoint === "/api/v1/patients/me" ? profileResponse() : []);
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me" ? profileResponse() : [],
+        );
         let rejectSave!: (error: Error) => void;
-        put.mockImplementation(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
+        put.mockImplementation(
+            () =>
+                new Promise((_resolve, reject) => {
+                    rejectSave = reject;
+                }),
+        );
         render(<ProfilePage />);
-        fireEvent.click(await screen.findByRole("button", { name: "Edit profile" }));
-        fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Updated" } });
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Edit profile" }),
+        );
+        fireEvent.change(screen.getByLabelText("First name"), {
+            target: { value: "Updated" },
+        });
         fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
         await waitFor(() => expect(put).toHaveBeenCalledOnce());
         fireEvent.keyDown(document, { key: "Escape" });
         fireEvent.click(screen.getByRole("button", { name: "Close" }));
-        expect(screen.getByRole("dialog", { name: "Personal information" })).toBeInTheDocument();
+        expect(
+            screen.getByRole("dialog", { name: "Personal information" }),
+        ).toBeInTheDocument();
         expect(screen.getByLabelText("First name")).toHaveValue("Updated");
         rejectSave(new Error("Unavailable"));
-        await waitFor(() => expect(screen.getByRole("button", { name: "Save changes" })).not.toBeDisabled());
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: "Save changes" }),
+            ).not.toBeDisabled(),
+        );
         expect(screen.getByRole("alert")).toBeInTheDocument();
     });
     it("retains pending saves and errors when the language sheet closes", async () => {
@@ -245,12 +354,12 @@ describe("Patient profile page", () => {
         post.mockRejectedValue(new Error("Uncertain transport outcome"));
         render(<ProfilePage />);
         const trigger = await screen.findByRole("button", {
-            name: "Join another clinic",
+            name: "Connect your clinic",
         });
         trigger.focus();
         fireEvent.click(trigger);
         expect(
-            screen.getByRole("dialog", { name: "Add care team access" }),
+            screen.getByRole("dialog", { name: "Connect your clinic" }),
         ).toHaveAttribute("aria-modal", "true");
         fireEvent.change(screen.getByLabelText("Clinic invite code"), {
             target: { value: " CITY /8832 " },
@@ -556,7 +665,7 @@ describe("Patient profile page", () => {
         render(<ProfilePage />);
         fireEvent.click(
             await screen.findByRole("button", {
-                name: "Vincular otra clínica",
+                name: "Conectar tu clínica",
             }),
         );
         const invite = await screen.findByLabelText(
@@ -764,7 +873,7 @@ describe("Patient profile page", () => {
         ).toBeInTheDocument();
 
         fireEvent.click(
-            screen.getByRole("button", { name: "Join another clinic" }),
+            screen.getByRole("button", { name: "Connect your clinic" }),
         );
         fireEvent.change(await screen.findByLabelText(/clinic invite code/i), {
             target: { value: "NORTH-8832" },
@@ -813,7 +922,7 @@ describe("Patient profile page", () => {
         ).toBeInTheDocument();
 
         fireEvent.click(
-            screen.getByRole("button", { name: "Join another clinic" }),
+            screen.getByRole("button", { name: "Connect your clinic" }),
         );
         fireEvent.change(await screen.findByLabelText(/clinic invite code/i), {
             target: { value: "BAD-CODE" },

@@ -885,7 +885,7 @@ export default function RecordsPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink">
                   {copy("Explain this to me")}
                 </p>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto">
                   <button
                     aria-label={copy("Read summary aloud")}
                     className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-brand-ink hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -900,7 +900,7 @@ export default function RecordsPage() {
                   </button>
                   <select
                     aria-label={copy("Explanation language")}
-                    className="min-h-11 max-w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-medium text-brand-ink"
+                    className="min-h-11 min-w-0 max-w-full flex-1 rounded-xl border border-line-strong bg-surface pl-3 pr-10 py-2 text-base font-medium text-brand-ink"
                     onChange={(event) =>
                       handleLanguageChange(event.target.value as Locale)
                     }

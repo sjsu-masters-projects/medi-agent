@@ -8,6 +8,30 @@ import {
 import { DocumentParseStatus, DocumentType, type Document } from "@/types";
 
 describe("Records presentation", () => {
+  it.each(["en-US", "es-MX"] as const)(
+    "uses a wrapping trailing AI status with its original accessible label in %s",
+    (locale) => {
+      const spanish = locale === "es-MX";
+      render(
+        <RecordRow
+          document={document}
+          locale={locale}
+          typeLabel="resumen de alta"
+          provider="Clínica con un nombre muy largo"
+          date="2 oct"
+          statusLabel={spanish ? "Explicación con IA" : "AI Summary"}
+          onOpen={() => {}}
+        />,
+      );
+      const status = screen.getByText(spanish ? "Resumen" : "Summary");
+      expect(status).toHaveAttribute("aria-hidden", "true");
+      expect(
+        screen.getByText(spanish ? "Explicación con IA" : "AI Summary"),
+      ).toHaveClass("sr-only");
+      expect(status.closest(".ml-auto")).toHaveClass("max-w-full", "min-w-0");
+      expect(status.closest(".flex-wrap")).toHaveClass("flex-1", "min-w-0");
+    },
+  );
   it("cleans only display metadata and preserves meaningful case and wording", () => {
     expect(
       cleanRecordTitle(
@@ -115,6 +139,7 @@ describe("Records presentation", () => {
       />,
     );
     expect(screen.getByText("En proceso...")).toBeInTheDocument();
+    expect(screen.getByText("Leyendo")).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelectorAll(".bg-current")).toHaveLength(3);
   });
 });

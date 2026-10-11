@@ -9,7 +9,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 export function Input({ className = "", error, icon, id, label, trailingAction, ...props }: InputProps) {
     return (
-        <label className="block">
+        <label className="block min-w-0">
             {label ? <span className="mb-2 block text-[0.95rem] font-semibold text-ink-2">{label}</span> : null}
             <span className="relative block">
                 {icon ? (

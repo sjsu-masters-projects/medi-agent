@@ -31,7 +31,7 @@ export function Button({
     ...props
 }: ButtonProps) {
     const classes = [
-        "ma-press inline-flex items-center justify-center rounded-2xl font-semibold transition-colors duration-[160ms] disabled:cursor-not-allowed disabled:opacity-50",
+        "ma-press inline-flex min-w-11 max-w-full items-center justify-center whitespace-normal break-words rounded-2xl font-semibold transition-colors duration-[160ms] disabled:cursor-not-allowed disabled:opacity-50",
         variantClasses[variant],
         sizeClasses[size],
         fullWidth ? "w-full" : "",

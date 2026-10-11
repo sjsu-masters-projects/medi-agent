@@ -185,6 +185,29 @@ describe("Patient chat page", () => {
         expect(setConversationOpen).toHaveBeenLastCalledWith(false);
     });
 
+    it.each([Language.EN, Language.ES])("uses one thread header with accessible care-team switching and preserves Nora drafts (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        const spanish = locale === Language.ES;
+        const team = getPatientChatCopy(locale).careTeamLabel;
+        const nora = `Nora · ${getPatientChatCopy(locale).assistantDescription}`;
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        expect(screen.getByRole("heading", { level: 1, name: "Chat" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: spanish ? "Tu equipo clínico" : "Your care team" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: nora }));
+        expect(screen.queryByRole("group", { name: team })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: nora })).not.toBeInTheDocument();
+        const message = screen.getByRole("textbox", { name: spanish ? "Mensaje para Nora" : "Message to Nora" });
+        fireEvent.change(message, { target: { value: "Unsent bilingual question" } });
+        const switchAction = screen.getByRole("button", { name: team });
+        expect(switchAction.closest("header")).not.toBeNull();
+        fireEvent.click(switchAction);
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+        expect(await screen.findByText(spanish ? "Todavía no hay conversaciones." : "No conversations yet.")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: nora }));
+        expect(screen.getByRole("textbox", { name: spanish ? "Mensaje para Nora" : "Message to Nora" })).toHaveValue("Unsent bilingual question");
+        expect(screen.getByRole("button", { name: spanish ? "Activar manos libres" : "Turn on hands-free mode" })).toBeInTheDocument();
+    });
+
     it("honors a direct Nora presentation request on the existing route", async () => {
         shell.conversationOpen = true;
         renderedPage = render(<Provider store={store}><ChatPage /></Provider>);

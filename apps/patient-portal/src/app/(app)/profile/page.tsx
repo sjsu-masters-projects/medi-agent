@@ -356,9 +356,7 @@ function ProfilePageContent() {
                         >
                             <div className="flex flex-wrap items-center justify-between gap-3 px-1">
                                 <div>
-                                    <p className="sr-only">
-                                        {copy.details}
-                                    </p>
+                                    <p className="sr-only">{copy.details}</p>
                                     <h3
                                         id="profile-personal"
                                         className="font-mono text-xs uppercase tracking-[0.08em] text-muted"
@@ -442,28 +440,22 @@ function ProfilePageContent() {
                             aria-labelledby="profile-reminders"
                             className="overflow-hidden rounded-group bg-surface"
                         >
-                            <div className="border-b border-line px-[14px] py-[13px]">
-                                <h3
-                                    id="profile-reminders"
-                                    className="text-[17px] font-semibold text-ink"
-                                >
-                                    {copy.reminders}
-                                </h3>
-                                <p className="mt-1 text-[15px] text-ink-2">
-                                    {copy.reminderTitle}
-                                </p>
-                                <p className="mt-1 text-sm text-muted">
-                                    {copy.reminderHelp}
-                                </p>
-                                <p className="mt-1 text-sm text-brand-ink">
-                                    {copy.patientControlled}
-                                </p>
-                            </div>
                             <Link
+                                aria-label={copy.manageReminders}
                                 className="flex min-h-11 items-center justify-between gap-3 px-[14px] py-[13px] text-[15px] font-semibold text-brand"
                                 href="/reminders"
                             >
-                                {copy.manageReminders}
+                                <div className="min-w-0">
+                                    <h3
+                                        id="profile-reminders"
+                                        className="break-words"
+                                    >
+                                        {copy.reminders}
+                                    </h3>
+                                    <p className="mt-1 break-words text-sm font-normal text-muted">
+                                        {copy.reminderHelp}
+                                    </p>
+                                </div>
                                 <HiOutlineChevronRight
                                     aria-hidden="true"
                                     className="h-5 w-5 shrink-0"
@@ -560,7 +552,11 @@ function ProfilePageContent() {
                                 type="button"
                                 onClick={() => setJoinExpanded(true)}
                             >
-                                {copy.joinAnother}
+                                <span className="min-w-0 break-words">
+                                    {careTeam.length
+                                        ? copy.joinAnother
+                                        : copy.connectClinic}
+                                </span>
                                 <HiOutlineChevronRight
                                     aria-hidden="true"
                                     className="h-5 w-5 shrink-0"
@@ -571,26 +567,21 @@ function ProfilePageContent() {
                             aria-labelledby="profile-account"
                             className="overflow-hidden rounded-group bg-surface"
                         >
-                            <div className="border-b border-line px-[14px] py-[13px]">
-                                <p className="text-xs text-muted">
-                                    {copy.account}
-                                </p>
-                                <h3
-                                    id="profile-account"
-                                    className="text-[17px] font-semibold text-ink"
-                                >
-                                    {copy.signOutTitle}
-                                </h3>
-                                <p className="mt-1 text-sm text-muted">
-                                    {copy.signOutHelp}
-                                </p>
-                            </div>
                             <button
+                                aria-label={copy.signOut}
                                 className="min-h-11 w-full px-[14px] py-[13px] text-left text-[15px] font-semibold text-danger-ink"
                                 type="button"
                                 onClick={handleLogout}
                             >
-                                {copy.signOut}
+                                <span
+                                    id="profile-account"
+                                    className="block break-words"
+                                >
+                                    {copy.signOut}
+                                </span>
+                                <span className="mt-1 block break-words text-sm font-normal text-muted">
+                                    {copy.signOutHelp}
+                                </span>
                             </button>
                         </section>
                     </>
@@ -598,7 +589,9 @@ function ProfilePageContent() {
             </div>
             <Modal
                 open={editing}
-                onClose={() => { if (!saving) cancelEditing(); }}
+                onClose={() => {
+                    if (!saving) cancelEditing();
+                }}
                 title={copy.personal}
                 closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}
             >
@@ -653,7 +646,7 @@ function ProfilePageContent() {
                                     {copy.language}
                                 </label>
                                 <select
-                                    className="min-h-[3.25rem] w-full rounded-2xl border border-line-strong bg-surface px-4 py-3 text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
+                                    className="min-h-[3.25rem] min-w-0 w-full rounded-2xl border border-line-strong bg-surface pl-4 pr-10 py-3 text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
                                     aria-describedby="profile-language-help"
                                     id="preferred-language"
                                     onChange={(event) =>
@@ -696,7 +689,7 @@ function ProfilePageContent() {
                                     </span>
                                 </label>
                                 <select
-                                    className="min-h-[3.25rem] w-full rounded-2xl border border-line-strong bg-surface px-4 py-3 text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
+                                    className="min-h-[3.25rem] min-w-0 w-full rounded-2xl border border-line-strong bg-surface pl-4 pr-10 py-3 text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
                                     id="gender"
                                     onChange={(event) =>
                                         setEditDraft((draft) =>
@@ -764,7 +757,7 @@ function ProfilePageContent() {
                     (joinExpanded ?? forceJoinOpen)
                 }
                 onClose={() => setJoinExpanded(false)}
-                title={copy.addTeam}
+                title={careTeam.length ? copy.addTeam : copy.connectClinic}
                 closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}
             >
                 <p className="mb-4 text-[15px] text-muted">{copy.joinHelp}</p>
@@ -825,7 +818,9 @@ function ProfilePageContent() {
                 title={copy.language}
                 closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}
             >
-                <PatientLanguageControl />
+                <div className="[&_select]:min-w-0 [&_select]:flex-1 [&_select]:pr-10 [&_summary]:min-h-11 [&_label]:shrink-0">
+                    <PatientLanguageControl />
+                </div>
             </Modal>
         </div>
     );

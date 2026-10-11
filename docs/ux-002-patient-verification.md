@@ -32,7 +32,7 @@ Commands run independently inside each app:
 | --- | --- | --- |
 | `npm run lint` | Pass | Pass |
 | `npm run typecheck` | Pass | Pass |
-| `npm test -- --reporter=dot` | 407 passed, 49 files | 262 passed, 39 files |
+| `npm test -- --reporter=dot` | 420 passed, 49 files | 262 passed, 39 files |
 | `npm run build -- --webpack` | Pass after final reviewer fixes | Pass |
 
 `git diff --check` passed. Existing Sentry configuration/deprecation, PDF.js Node
@@ -51,6 +51,15 @@ Guest browser checks at 360px: Spanish signup and login render; signup has no
 horizontal overflow, password buttons are 44×44px, submit is 54px high and document
 language is es-MX. Navigation initially hydrates guest preference; it is not a
 clinical translation operation.
+
+The subsequent fidelity pass verified the warm-sand entry canvas, reference teal
+glow, inset native-language chevron, 52px inputs and 54px submit control. Spanish
+entry at 360px and English signup at 430px had document widths matching their
+viewports (no horizontal overflow). Shared native selects reserve caret space;
+high-contrast mode retains the platform caret. Header actions wrap rather than
+squeezing titles; buttons constrain long labels. Profile/Records and Chat lane
+reviews removed duplicate interface copy without removing handlers or safety text.
+Clearer nonclinical entry/settings wording was explicitly approved by the requester.
 
 ## Still required before visual acceptance
 

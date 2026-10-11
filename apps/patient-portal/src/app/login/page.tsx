@@ -96,23 +96,20 @@ function LoginPageContent() {
     }
 
     return (
-        <div className="patient-page mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-white pb-[calc(env(safe-area-inset-bottom)+24px)]" lang={locale}>
+        <div className="patient-page patient-entry mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-[calc(env(safe-area-inset-bottom)+24px)]" lang={locale}>
             <AuthEntryLanguage locale={locale} onChange={setLocale} />
             <header className="px-6 pt-6 pb-6">
-                <Image alt="" className="mb-5 h-16 w-16" height={64} priority src="/brand/icon.svg" width={64} />
+                <Image alt="" className="mb-5 h-16 w-16 drop-shadow-[0_12px_18px_rgba(20,116,101,0.25)]" height={64} priority src="/brand/icon.svg" width={64} />
                 <p className="font-mono text-xs uppercase tracking-[.06em] text-brand">MediAgent Care</p>
                 <h1 className="mt-2 text-[32px] font-semibold leading-tight text-ink">{copy.welcome}</h1>
                 <p className="mt-2 text-base leading-relaxed text-muted">
                     {copy.loginIntro}
                 </p>
-                <p className="mt-2 text-sm text-muted">
-                    {copy.companion}
-                </p>
             </header>
 
             <div className="patient-stack flex flex-1 flex-col gap-6 px-6">
                     <form className="space-y-5" onSubmit={handleSubmit}>
-                        <div>
+                        <div className="sr-only">
                             <h2 className="text-[17px] font-semibold text-ink">{copy.signInHeading}</h2>
                             <p className="mt-1 text-sm text-muted">
                                 {copy.signInIntro}

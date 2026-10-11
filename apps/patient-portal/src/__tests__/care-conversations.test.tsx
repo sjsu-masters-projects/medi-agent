@@ -37,6 +37,35 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("human conversations", () => {
+  it.each(["en-US", "es-MX"])("keeps emergency wording after the contacts and labels the compact thread actions (%s)", async (locale) => {
+    const spanish = locale === "es-MX";
+    const view = render(<CareConversations compact locale={locale} />);
+    const notice = screen.getByRole("note");
+    expect(notice).toHaveTextContent(spanish ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911." : "Messages are not continuously monitored. For an emergency, call 911.");
+    expect(await screen.findByRole("heading", { name: spanish ? "Tu equipo clínico" : "Your care team" })).toBeInTheDocument();
+    const contact = await screen.findByRole("button", { name: /Dr. One · Clinic One/ });
+    expect(contact.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(contact);
+    await screen.findByText("Newest reply");
+    const heading = screen.getByRole("heading", { name: "Dr. One" });
+    const header = heading.closest("header")!;
+    expect(header).toHaveTextContent("Clinic One · Synthetic Patient");
+    expect(screen.getByRole("button", { name: spanish ? "Volver a conversaciones" : "Back to conversations" }).closest("header")).toBe(header);
+    expect(screen.getByRole("button", { name: spanish ? "Actualizar" : "Refresh" }).closest("header")).toBe(header);
+    expect(screen.getByRole("button", { name: spanish ? "Enviar mensaje" : "Send message" })).toBeDisabled();
+    expect(notice).toBeVisible();
+    view.unmount();
+  });
+
+  it("keeps the emergency notice visible when inbox loading fails", async () => {
+    vi.mocked(careConversations.list).mockRejectedValueOnce(new TypeError());
+    render(<CareConversations compact />);
+    expect(screen.getByRole("note")).toHaveTextContent("For an emergency, call 911.");
+    await screen.findByRole("alert");
+    expect(screen.getByRole("note")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  });
+
   it("opens a compact addressed thread, retains its uncertain retry through inbox return and restores contact focus", async () => {
     const presentation = vi.fn();
     vi.mocked(careConversations.send).mockRejectedValueOnce(new TypeError());

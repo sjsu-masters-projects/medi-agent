@@ -7,7 +7,7 @@ const en = {
     loadError: "We couldn’t load your account. Please try again.",
     retry: "Try again",
     onboarding:
-        "No active care team is linked yet. Enter your clinic invite code below to complete onboarding.",
+        "No active care team is linked yet. Open the clinic connection sheet to enter your clinic’s invite code.",
     patientAccount: "Patient account",
     details: "Profile details",
     personal: "Personal information",
@@ -49,9 +49,10 @@ const en = {
     messageHelp:
         "Choose a linked clinician in Chat to send a human message. Messages are not continuously monitored. Call 911 for an emergency.",
     joinAnother: "Join another clinic",
+    connectClinic: "Connect your clinic",
     addTeam: "Add care team access",
     joinHelp:
-        "If another clinic shares a code with you, enter it here to link that team to your account.",
+        "Enter the code your clinic shared with you to link its care team to your account.",
     inviteCode: "Clinic invite code",
     inviteHelp: "Use the code provided by your clinic.",
     enterCode: "Enter a clinic invite code to continue.",
@@ -75,7 +76,7 @@ const es: typeof en = {
     loadError: "No pudimos cargar tu cuenta. Inténtalo de nuevo.",
     retry: "Intentar de nuevo",
     onboarding:
-        "Aún no tienes un equipo de atención activo vinculado. Ingresa el código de tu clínica para completar tu registro.",
+        "Aún no tienes un equipo de atención activo vinculado. Abre el formulario para conectar una clínica e ingresar su código de invitación.",
     patientAccount: "Cuenta del paciente",
     details: "Detalles del perfil",
     personal: "Información personal",
@@ -118,9 +119,10 @@ const es: typeof en = {
     messageHelp:
         "Elige un profesional vinculado en Chat para enviar un mensaje a una persona. Los mensajes no se monitorean continuamente. En una emergencia, llama al 911.",
     joinAnother: "Vincular otra clínica",
+    connectClinic: "Conectar tu clínica",
     addTeam: "Agregar acceso a un equipo",
     joinHelp:
-        "Si otra clínica te comparte un código, ingrésalo aquí para vincular ese equipo con tu cuenta.",
+        "Ingresa el código que te compartió tu clínica para vincular su equipo de atención con tu cuenta.",
     inviteCode: "Código de invitación de la clínica",
     inviteHelp: "Usa el código que te proporcionó tu clínica.",
     enterCode: "Ingresa un código de invitación de la clínica para continuar.",

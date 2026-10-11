@@ -159,6 +159,7 @@ export default function TodayPage() {
             <section aria-label={copy.progress} className="space-y-2 px-[22px] pt-[18px]">
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[13px] text-muted">
                     <p className="font-medium text-ink">{completedLabel}</p>
+                    {nextReminder ? <p className="ml-auto">{locale === "es-MX" ? "Próximo recordatorio" : "Next reminder"} <span className="font-mono">{formatTimeLabel(locale, copy, nextReminder.scheduledTime)}</span></p> : null}
                     <button type="button" aria-label={copy.progressHelp} onClick={() => setProgressOpen(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted"><HiOutlineInformationCircle aria-hidden="true" className="h-5 w-5" /></button>
                 </div>
                 <div className="grid gap-[5px]" style={{ gridTemplateColumns: `repeat(${Math.max(tasks.length, 1)}, minmax(0, 1fr))` }} aria-hidden="true" data-testid="today-progress-segments">
@@ -168,29 +169,29 @@ export default function TodayPage() {
                 </div>
                 <div className="flex flex-wrap justify-between gap-2 text-[13px] text-muted">
                     {adherenceStats.currentStreakDays > 0 ? <p>{copy.streak(adherenceStats.currentStreakDays)}</p> : null}
-                    {nextReminder ? <p>{copy.statuses.upcoming} <span className="font-mono">{formatTimeLabel(locale, copy, nextReminder.scheduledTime)}</span></p> : null}
                 </div>
             </section>
 
             <div className="space-y-4 pt-[18px]">
+                {remainingTasks.length === 0 ? <h2 className="sr-only">{copy.schedule}</h2> : null}
                 {actionError && !barrierTask ? <p role="alert" className="mx-4 rounded-xl bg-danger-tint p-4 text-danger-ink">{actionError}</p> : null}
                 {error ? <div className="mx-4"><ErrorState description={error} action={<button className="min-h-11 rounded-2xl border border-line-strong bg-surface px-4 py-2 text-sm font-semibold text-danger-ink" onClick={refreshFeed} type="button">{copy.retry}</button>} title={tasks.length > 0 ? copy.stale : copy.loadError} /></div> : null}
-                <div className="flex flex-wrap items-center justify-between gap-2 px-[22px]">
-                    <h2 className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{copy.schedule}</h2>
-                    <button aria-label={loading ? copy.refreshing : copy.refresh} aria-busy={loading} disabled={loading || disabled} className="flex min-h-11 items-center gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm font-medium text-ink-2 disabled:opacity-50" onClick={refreshFeed} type="button"><HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span>{loading ? copy.refreshing : copy.refresh}</span></button>
-                    <p className="text-[13px] text-muted">{copy.count(tasks.length)}</p>
-                </div>
                 {!error && tasks.length === 0 ? <div className="mx-4"><EmptyState description={copy.emptyDetail} icon={<HiOutlineCalendarDays />} title={copy.empty} /></div> : null}
                 {nextTask ? <article aria-label={nextUpLabel} data-completion-phase={completion?.phase ?? "idle"} className={`mx-4 space-y-4 rounded-[28px] bg-surface p-5 shadow-[var(--shadow-raised)] ${completion?.phase === "leaving" ? "ma-leave" : "ma-enter-spring"}`} key={nextTask.id}>
-                    <p className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{nextUpLabel}</p>
+                    <h2 className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{nextUpLabel}</h2>
                     <TodayTaskContent task={nextTask} copy={copy} status={mapTaskStatus(nextTask, now)} timeLabel={formatTimeLabel(locale, copy, nextTask.scheduledTime, mapTaskStatus(nextTask, now), nextTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => void complete(nextTask)} onBarrier={() => openBarrier(nextTask)} hero phase={completion?.phase} />
                     <button type="button" onClick={() => setDetailsId(nextTask.id)} className="min-h-11 w-full text-left text-sm font-medium text-brand underline underline-offset-4">{copy.details}</button>
                 </article> : null}
                 {remainingTasks.length > 0 ? <section aria-label={copy.schedule}>
+                    <h2 className="mb-2 px-[22px] font-mono text-xs uppercase tracking-[0.08em] text-muted">{copy.schedule}</h2>
                     <ul className="mx-4 rounded-[22px] bg-surface">
                         {remainingTasks.map((task) => <TodayTaskRow key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, mapTaskStatus(task, now), task.requiresScheduleConfiguration)} disabled={disabled} onDetails={() => setDetailsId(task.id)} onComplete={() => void complete(task)} />)}
                     </ul>
                 </section> : null}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-[22px]">
+                    <p className="text-[13px] text-muted">{copy.count(tasks.length)}</p>
+                    <button aria-label={loading ? copy.refreshing : copy.refresh} aria-busy={loading} disabled={loading || disabled} className="flex min-h-11 items-center gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm font-medium text-ink-2 disabled:opacity-50" onClick={refreshFeed} type="button"><HiOutlineArrowPath aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span>{loading ? copy.refreshing : copy.refresh}</span></button>
+                </div>
             </div>
 
             <div className="px-4 pt-5">

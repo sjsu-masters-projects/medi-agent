@@ -18,7 +18,7 @@ function activityType(task: FeedTask) {
 }
 
 export function TodayTaskIcon({ task, large = false }: { task: FeedTask; large?: boolean }) {
-    let name: IconName = "note";
+    let name: IconName = "check";
     let color = "bg-surface-2 text-ink-2";
     if (task.type === FeedTaskType.MEDICATION) { name = "pill"; color = "bg-med-tint text-med-ink"; }
     else if (task.carePlan?.category === "monitoring") { name = "gauge"; color = "bg-lab-tint text-lab-ink"; }
@@ -52,7 +52,7 @@ export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onCo
         </div>
         {task.carePlan ? <div className="space-y-2">
             {hero ? <ApprovalSeal>{task.provider?.name ? copy.approvedBy(task.provider.name) : copy.approved}</ApprovalSeal> : null}
-            <p className="text-xs text-muted">{copy.approved} • {getCarePlanCategoryLabel(task.carePlan.category, copy)}</p>
+            {!hero ? <p className="text-xs text-muted">{copy.approved} • {getCarePlanCategoryLabel(task.carePlan.category, copy)}</p> : null}
             {!hero ? <><p className="text-sm text-ink-2">{copy.planDetail(task.carePlan.versionNumber)}</p>{task.provider?.name ? <p className="text-sm text-brand-ink">{copy.approvedBy(task.provider.name)}</p> : null}</> : null}
         </div> : medication && task.provider?.name ? <p className="text-sm text-brand-ink">{copy.prescribedBy(task.provider.name)}</p> : null}
         {task.requiresScheduleConfiguration ? <div className="space-y-1 text-sm"><Link href="/reminders" className="inline-flex min-h-11 items-center font-semibold text-brand underline underline-offset-4">{copy.setTime}</Link><p className="text-muted">{copy.setupDetail}</p></div> : null}
@@ -76,8 +76,10 @@ export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetail
             <span className="min-w-0 flex-1 space-y-1 break-words">
                 <span className="block text-[15px] font-semibold text-ink">{task.name}</span>
                 {task.description ? <span className="block whitespace-pre-wrap text-[13px] text-ink-2">{task.description}</span> : null}
-                <span className="block text-[13px] text-muted">{getTaskStatusLabel(status, task.scheduledTime ?? "", copy)}</span>
-                {!task.requiresScheduleConfiguration ? <span className="block font-mono text-[13px] text-muted">{timeLabel}</span> : null}
+            </span>
+            <span className="ml-auto flex min-w-0 max-w-[40%] shrink-0 flex-col items-end gap-1 break-words text-right text-[13px] text-muted">
+                <span>{getTaskStatusLabel(status, task.scheduledTime ?? "", copy)}</span>
+                {!task.requiresScheduleConfiguration ? <span className="font-mono">{timeLabel}</span> : null}
             </span>
         </button>
         {task.requiresScheduleConfiguration ? <Link href="/reminders" className="flex min-h-11 max-w-full items-center rounded-xl px-2 text-[13px] font-medium text-brand underline underline-offset-4">{copy.setTime}</Link> : task.type !== FeedTaskType.MEDICATION && (status === "active" || status === "missed") ? <button type="button" disabled={disabled} onClick={onComplete} className="ma-press min-h-11 max-w-full rounded-[11px] bg-brand-tint px-3 py-2 text-[13px] font-semibold text-brand disabled:opacity-60">{copy.done}</button> : null}

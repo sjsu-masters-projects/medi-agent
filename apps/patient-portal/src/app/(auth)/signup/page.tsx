@@ -100,10 +100,10 @@ export default function SignupPage() {
     }
 
     return (
-        <div className="patient-page mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-white pb-[calc(env(safe-area-inset-bottom)+24px)]" lang={locale}>
+        <div className="patient-page patient-entry mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background pb-[calc(env(safe-area-inset-bottom)+24px)]" lang={locale}>
             <AuthEntryLanguage locale={locale} onChange={setLocale} />
             <header className="px-6 pt-6 pb-6">
-                <Image alt="" className="mb-5 h-16 w-16" height={64} priority src="/brand/icon.svg" width={64} />
+                <Image alt="" className="mb-5 h-16 w-16 drop-shadow-[0_12px_18px_rgba(20,116,101,0.25)]" height={64} priority src="/brand/icon.svg" width={64} />
                 <p className="font-mono text-xs uppercase tracking-[.06em] text-brand">{copy.signup}</p>
                 <h1 className="mt-2 text-[32px] font-semibold leading-tight text-ink">{copy.join}</h1>
                 <p className="mt-2 text-base leading-relaxed text-muted">
