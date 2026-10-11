@@ -35,16 +35,25 @@ export function Modal({ children, closeLabel = "Close modal", keepMounted = fals
         const previous = document.activeElement as HTMLElement | null;
         const overflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
-        const focusable = () => Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]') ?? []).filter((element) => !element.closest("[hidden]"));
+        // Same rules as the clinician dialog: skip hidden, aria-hidden and collapsed-<details>
+        // controls, which cannot take focus and would otherwise let Tab leave the trap.
+        const focusable = () => Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]') ?? []).filter((element) => {
+            if (element.closest('[hidden], [aria-hidden="true"]')) return false;
+            for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+                if (ancestor.tagName === "DETAILS" && !ancestor.hasAttribute("open") && !ancestor.firstElementChild?.contains(element)) return false;
+            }
+            return true;
+        });
         (focusable()[0] ?? panel.current)?.focus();
         function onKey(event: KeyboardEvent) {
             if (event.key === "Escape") { event.preventDefault(); close.current(); }
             if (event.key !== "Tab") return;
             const elements = focusable();
             const first = elements[0]; const last = elements.at(-1);
+            const outside = !panel.current?.contains(document.activeElement);
             if (!first) { event.preventDefault(); panel.current?.focus(); }
-            else if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last?.focus(); }
-            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            else if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current || outside)) { event.preventDefault(); last?.focus(); }
+            else if (!event.shiftKey && (document.activeElement === last || outside)) { event.preventDefault(); first.focus(); }
         }
         document.addEventListener("keydown", onKey);
         return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; if (previous?.isConnected) previous.focus(); };
