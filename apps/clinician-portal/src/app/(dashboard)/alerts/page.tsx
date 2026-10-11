@@ -12,7 +12,7 @@ export default function AlertsPage() {
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Alerts</h1>
-        <p className="mt-1 max-w-[80ch] text-sm text-muted">Review assigned work and notification history. Reading or acknowledging an alert does not approve care or resolve a clinical concern.</p>
+        <p className="mt-1 max-w-[80ch] text-sm text-muted">Reading or acknowledging an alert does not approve care or resolve a clinical concern.</p>
       </div>
       <p className="text-sm text-muted" role="status">{summary.error || !summary.data ? "Counts unavailable" : `${summary.data.action_item_count} need attention · ${summary.data.unread_count} unread`}</p>
     </div>

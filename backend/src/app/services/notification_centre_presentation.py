@@ -10,27 +10,27 @@ from app.models.notification_centre import CentreItem
 _COPY: dict[str, tuple[str, str, str, str]] = {
     "legacy_update": (
         "Earlier notification",
-        "Historical notification retained from the previous inbox. It is not a new review task.",
+        "From the previous inbox; not a new task.",
         "Notificación anterior",
-        "Notificación conservada del buzón anterior. No es una nueva tarea de revisión.",
+        "De tu buzón anterior.",
     ),
     "message_received": (
         "New care-team message",
-        "Open your private conversation to read the message.",
+        "Open the conversation to read it.",
         "Nuevo mensaje del equipo de atención",
-        "Abre tu conversación privada para leer el mensaje.",
+        "Abre la conversación para leerlo.",
     ),
     "appointment_offered": (
         "Appointment offered",
-        "Review the proposed time and respond in Visits.",
+        "Choose a time in Visits.",
         "Propuesta de cita",
-        "Revisa el horario propuesto y responde en Citas.",
+        "Elige un horario en Citas.",
     ),
     "appointment_changed": (
         "Appointment updated",
-        "Review the current time and status in Visits.",
+        "See the current time in Visits.",
         "Cita actualizada",
-        "Revisa el horario y el estado actual en Citas.",
+        "Consulta el horario actual en Citas.",
     ),
     "appointment_response": (
         "Patient responded to an appointment",
@@ -40,15 +40,15 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     ),
     "appointment_reminder": (
         "Appointment reminder",
-        "Open Visits for the current time and location.",
+        "Time and place are in Visits.",
         "Recordatorio de cita",
-        "Abre Citas para consultar el horario y el lugar actual.",
+        "El horario y el lugar están en Citas.",
     ),
     "care_plan_published": (
         "Your care plan was updated",
-        "Your care team approved an updated plan. Review it in Today.",
+        "Your care team approved changes. See Today.",
         "Tu plan de cuidado se actualizó",
-        "Tu equipo de atención aprobó un plan actualizado. Revísalo en Hoy.",
+        "Tu equipo de atención aprobó cambios. Consulta Hoy.",
     ),
     "care_plan_draft": (
         "Care-plan draft ready for review",
@@ -64,21 +64,21 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     ),
     "document_processed": (
         "Document processing completed",
-        "Open Records to see the document and its separate review status.",
+        "See it in Records.",
         "Documento procesado",
-        "Abre Registros para ver el documento y el estado de su revisión.",
+        "Consúltalo en Registros.",
     ),
     "document_failed": (
         "Document needs attention",
-        "Processing did not finish. Open the document for available recovery steps.",
+        "Processing didn't finish. Open it for next steps.",
         "El documento necesita atención",
-        "El procesamiento no se completó. Abre el documento para ver las opciones disponibles.",
+        "El procesamiento no terminó. Ábrelo para ver los siguientes pasos.",
     ),
     "document_reviewed": (
         "Document review updated",
-        "Your care team recorded a review decision. See its status in Records.",
+        "Your care team reviewed it. See Records.",
         "Revisión del documento actualizada",
-        "Tu equipo de atención registró una decisión. Consulta el estado en Registros.",
+        "Tu equipo de atención lo revisó. Consulta Registros.",
     ),
     "barrier_reported": (
         "Care-plan barrier reported",
@@ -106,15 +106,15 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     ),
     "med_reminder": (
         "Medication reminder",
-        "Open Today to see your approved activity and current status.",
+        "It's on your Today list.",
         "Recordatorio de medicamento",
-        "Abre Hoy para ver la actividad aprobada y su estado actual.",
+        "Está en tu lista de Hoy.",
     ),
     "obligation_reminder": (
         "Care-plan reminder",
-        "Open Today to see your approved activity and current status.",
+        "It's on your Today list.",
         "Recordatorio del plan de cuidado",
-        "Abre Hoy para ver la actividad aprobada y su estado actual.",
+        "Está en tu lista de Hoy.",
     ),
 }
 

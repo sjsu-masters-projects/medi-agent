@@ -65,7 +65,8 @@ describe("patient notification centre", () => {
     await screen.findByText("Care team one");
     expect(screen.getByText(/Keep this clinical text intact/)).toHaveClass("whitespace-pre-wrap");
     expect(screen.getByRole("link", { name: "Open conversation" })).toHaveAttribute("href", item().action_url);
-    expect(screen.getByText("Oct 10, 2026, 6:00 PM")).toBeInTheDocument();
+    // The row shows a short time; the full saved-timezone date is its accessible name.
+    expect(screen.getByLabelText("Oct 10, 2026, 6:00 PM")).toHaveAttribute("dateTime", item().created_at);
     fireEvent.click(screen.getByRole("button", { name: "Mark as read: Care team one" }));
     await waitFor(() => expect(notifications.read).toHaveBeenCalledWith("synthetic-token", "one"));
   });
