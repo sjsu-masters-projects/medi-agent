@@ -63,7 +63,8 @@ export function BilingualWording({ item, patientLocale, fieldClass, busy, unsave
     }
     const target = otherLocale(source);
     const columns: CarePlanLocale[] = [source, target];
-    return <div className="grid gap-3 lg:grid-cols-2">
+    // Side by side only when the editor pane itself is wide enough; stacked otherwise.
+    return <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">
         {columns.map((locale) => {
             const text = item.wording?.[locale] ?? { title: "", instructions: "", frequency: "" };
             const isSource = locale === source;
@@ -82,15 +83,15 @@ export function BilingualWording({ item, patientLocale, fieldClass, busy, unsave
                 </div> : null}
             </fieldset>;
         })}
-    </div>;
+    </div></div>;
 }
 
 /** Read-only approved wording in both languages, or the single stored language. */
 export function ApprovedWording({ item }: { item: CarePlanItem }) {
     const locales = CARE_PLAN_LOCALES.filter((locale) => item.wording?.[locale]?.title);
     if (!locales.length) return <p className="rounded-xl border border-line bg-surface-2 p-3.5 text-[15px] leading-relaxed text-ink">{item.instructions} · {item.frequency}<span className="mt-1 block text-xs text-muted">Approved in one language before bilingual review.</span></p>;
-    return <div className="grid gap-3 lg:grid-cols-2">{locales.map((locale) => <div key={locale} className="rounded-xl border border-line bg-surface-2 p-3.5" lang={locale}>
+    return <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">{locales.map((locale) => <div key={locale} className="rounded-xl border border-line bg-surface-2 p-3.5" lang={locale}>
         <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-muted">{LOCALE_LABEL[locale]}</p>
         <p className="mt-1 text-[15px] leading-relaxed text-ink">{item.wording?.[locale]?.instructions} · {item.wording?.[locale]?.frequency}</p>
-    </div>)}</div>;
+    </div>)}</div></div>;
 }
