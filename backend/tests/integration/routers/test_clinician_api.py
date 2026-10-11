@@ -15,7 +15,7 @@ from app.db.connection import get_db
 from app.main import app
 from app.middleware.rate_limit import RateLimitResult
 from app.models.auth import CurrentUser
-from app.routers.clinicians import _clinician_dep, _get_service
+from app.routers.clinicians import _clinician_dep, _get_medwatch_service, _get_service
 
 
 @pytest.fixture
@@ -77,6 +77,18 @@ def override_service():
         return service
 
     app.dependency_overrides[_get_service] = _get_service_override
+    yield service
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def override_medwatch_service():
+    service = MagicMock()
+
+    def _get_medwatch_service_override():
+        return service
+
+    app.dependency_overrides[_get_medwatch_service] = _get_medwatch_service_override
     yield service
     app.dependency_overrides.clear()
 
@@ -1067,6 +1079,126 @@ class TestPatientA2ATimeline:
         response = client.get(f"/api/v1/clinicians/me/patients/{patient_id}/a2a-timeline")
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def _medwatch_draft_payload(
+    *, draft_id=None, assessment_id=None, patient_id=None, clinician_id=None
+):
+    draft_id = draft_id or uuid4()
+    assessment_id = assessment_id or uuid4()
+    patient_id = patient_id or uuid4()
+    clinician_id = clinician_id or uuid4()
+    return {
+        "id": str(draft_id),
+        "adr_assessment_id": str(assessment_id),
+        "patient_id": str(patient_id),
+        "form_data": {
+            "patient": {
+                "patient_identifier": "Maya Patel",
+                "date_of_birth": "1988-04-03",
+                "sex": "female",
+            },
+            "event": {
+                "description": "Dizziness",
+                "onset_date_or_time": "2026-10-01",
+                "outcome": "",
+                "seriousness": "",
+            },
+            "suspect_product": {
+                "name": "Fluticasone/salmeterol",
+                "dose": "1 puff",
+                "frequency": "twice daily",
+                "route": "inhaled",
+                "therapy_start_date": "2026-09-28",
+                "therapy_end_date": "",
+            },
+            "concomitant_products": {"products": "Albuterol"},
+            "tests_and_history": {
+                "relevant_tests": "",
+                "other_relevant_history": "",
+            },
+            "reporter": {
+                "name": "Elena Park",
+                "email": "elena@example.com",
+                "specialty": "Internal medicine",
+                "clinic_name": "MediAgent Clinic",
+            },
+            "clinical_review": {
+                "naranjo_score": 6,
+                "causality": "Probable",
+                "reportability_rationale": "Clinically significant new event.",
+            },
+        },
+        "source_evidence": [],
+        "clinician_edited_fields": [],
+        "de_identified": False,
+        "status": "draft",
+        "created_by": str(clinician_id),
+        "approved_by": None,
+        "approved_at": None,
+        "approval_note": None,
+        "revision": 1,
+        "export_version": "medwatch-3500a-draft-v1",
+        "created_at": "2026-10-09T10:00:00Z",
+        "updated_at": "2026-10-09T10:00:00Z",
+    }
+
+
+class TestMedWatchDraftRoutes:
+    def test_create_draft_records_explicit_decision(
+        self, client, override_auth, override_medwatch_service, clinician_id
+    ):
+        assessment_id = uuid4()
+        payload = _medwatch_draft_payload(assessment_id=assessment_id, clinician_id=clinician_id)
+        override_medwatch_service.create_draft = AsyncMock(return_value=payload)
+
+        response = client.post(
+            f"/api/v1/clinicians/me/adr-assessments/{assessment_id}/medwatch-draft",
+            json={
+                "decision": "prepare_draft",
+                "reportability_rationale": "Clinically significant new event.",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["status"] == "draft"
+        request = override_medwatch_service.create_draft.await_args.args[2]
+        assert request.decision.value == "prepare_draft"
+        assert request.reportability_rationale == "Clinically significant new event."
+
+    def test_approval_requires_attestation(self, client, override_auth, override_medwatch_service):
+        response = client.post(
+            f"/api/v1/clinicians/me/medwatch-drafts/{uuid4()}/approve",
+            json={
+                "approval_note": "Reviewed source evidence.",
+                "expected_revision": 1,
+                "attested": False,
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        override_medwatch_service.approve_draft.assert_not_called()
+
+    def test_export_returns_artifact_marked_not_submitted(
+        self, client, override_auth, override_medwatch_service
+    ):
+        draft_id = uuid4()
+        override_medwatch_service.export_draft = AsyncMock(
+            return_value={
+                "filename": f"medwatch-draft-{draft_id}.json",
+                "media_type": "application/json",
+                "content": {
+                    "artifact_type": "medwatch_3500a_draft",
+                    "not_submitted_to_fda": True,
+                },
+            }
+        )
+
+        response = client.get(f"/api/v1/clinicians/me/medwatch-drafts/{draft_id}/export")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["content"]["not_submitted_to_fda"] is True
+        override_medwatch_service.export_draft.assert_awaited_once()
 
 
 class TestAuthorization:

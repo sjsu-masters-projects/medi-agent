@@ -83,7 +83,10 @@ Invite history is intentionally role-sensitive:
 - The ADR review queue shows the deterministic Naranjo score, patient-grounded evidence, and missing inputs. It never exposes private model reasoning or presents the score as a clinician decision.
 - Information requests expose only retrospective questions the patient can safely answer. They do not ask for placebo exposure, tests, a medication restart, or an unprescribed dose change.
 - After the patient confirms every requested answer, the same draft is deterministically rescored. The queue shows the response evidence and request status while preserving clinician judgment as a separate decision.
-- MedWatch records remain a separate lifecycle and are not counted or presented as generated until a real `medwatch_drafts` record exists.
+- `POST /api/v1/clinicians/me/adr-assessments/{assessment_id}/medwatch-draft` requires an explicit clinician reportability rationale and creates a real evidence-attributed draft; the ADR decision and draft creation are atomic.
+- The MedWatch editor keeps unsupported fields empty, displays source attribution, saves with optimistic revision checks, and audits changed field paths.
+- Approval requires a clinician note and explicit attestation. Only approved drafts can be exported, and every export is recorded.
+- The export is a local MedWatch-compatible JSON artifact marked as not submitted. The application has no FDA filing action and never presents an export as a submission.
 
 ## Care-plan revision review
 

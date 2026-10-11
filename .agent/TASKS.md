@@ -311,7 +311,7 @@ PAT-005.
 | `CLN-001-A` — consolidated clinician queue | **Sequenced** | Clinician-portal lane — unassigned | Design the queue around demonstrated PAT-005 approval, adherence, and barrier artifacts. | Wait for `PAT-005-C`; that proof defines which records the queue must render. |
 | `MED-001/002-A` — reconciliation scope | **Sequenced** | Platform + clinician-portal lanes — unassigned | Use PAT-005's medication-conflict scenario to scope reviewed candidate-versus-local comparison. | Reuse PAT-005 evidence/approval boundaries; do not duplicate a competing clinical-decision lifecycle. |
 | `PV-001` — clinician ADR/Naranjo review | **Sequenced** | Ganesh — pharmacovigilance + clinician lanes | Review a confirmed symptom report, request missing information, and provide deterministic Naranjo assistance separate from clinician judgment. | Starts after `PAT-002-C`. It must not infer an ADR report from raw chat or submit anything externally. Blocks `PV-002`. |
-| `PV-002` — clinician-approved MedWatch draft/export | **Sequenced** | Jeevan — clinician portal + pharmacovigilance lanes | Produce an editable, evidence-linked MedWatch-compatible draft from patient-confirmed and clinician-approved facts; export it only after clinician/pharmacist approval. | Starts after `PV-001`; export is not FDA submission. |
+| `PV-002` — clinician-approved MedWatch draft/export | **Claimed** | Ganesh — `feature/medwatch-draft-lifecycle` | Locally implemented evidence-linked creation, editing, approval, audit, and JSON export; complete migration rollout and live assigned-clinician acceptance. | Stacked on the PV-001 branch. Export is not FDA submission; migration `048` is not yet applied. |
 | `COM-001-A` — clinician message send + inbox | **Claimed** | Jeevan Kurian — `feature/com-001-clinician-messages` | Backend list endpoints, clinician inbox page, and compose form on patient deep-dive. Tests pass. | Patient-to-clinician direction and outbound approval gate remain as separate slices. |
 
 **State meanings:** **Claimed** has one active owner and branch; **Ready** is safe to start in a
@@ -2232,26 +2232,43 @@ reset, or additional migration was performed. Canonical application deployment r
 
 ### PV-002 — MedWatch draft lifecycle
 
-**Status:** `[ ]` Backlog — depends on clinician ADR review (`PV-001`)
+**Status:** `[/]` In progress — local vertical slice implemented; migration rollout and live
+assigned-clinician acceptance remain
 
-**Owner:** Jeevan Kurian; clinician portal + pharmacovigilance lanes
+**Owner:** Ganesh Thampi; `feature/medwatch-draft-lifecycle`; clinician portal +
+pharmacovigilance lanes
 
 **Boundary:** The outcome is an editable, clinician-approved export artifact. This slice must
 never submit a report to FDA/MedWatch or portray a draft as filed.
 
-- [ ] Generate an editable MedWatch-compatible draft only from patient-confirmed facts,
+- [/] Generate an editable MedWatch-compatible draft only from patient-confirmed facts,
       document-grounded facts with citations, and clinician-approved assessments. Keep unknown,
       declined, or unsupported fields empty rather than inferred.
-- [ ] Map populated patient, event/outcome, suspect-product/therapy-date, concomitant-product,
+- [/] Map populated patient, event/outcome, suspect-product/therapy-date, concomitant-product,
       test/history, and reporter fields to their source evidence. A patient statement must remain
       attributable to the patient; a document fact must retain its document citation.
-- [ ] Require clinician/pharmacist approval.
-- [ ] Export the approved draft without submitting it.
-- [ ] Audit edits and reviewer sign-off.
+- [/] Require clinician/pharmacist approval.
+- [/] Export the approved draft without submitting it.
+- [/] Audit edits and reviewer sign-off.
 
 **R4 exit gate**
 
-- [ ] Every clinical recommendation has evidence, reviewer state, and an auditable outcome.
+- [/] Every populated draft field exposes source attribution; the clinician approval state and
+      creation/edit/approval/export events are auditable. Live database and browser acceptance
+      remain before this gate closes.
+
+Implementation evidence — 2026-10-11: migration `048` adds backend-only, assignment-scoped,
+optimistically locked create/edit/approve/export RPCs and an immutable MedWatch audit stream.
+The clinician portal records a reportability rationale, creates a draft from stored patient,
+symptom, medication, reviewed Naranjo and reporter facts, keeps unsupported outcome,
+seriousness, test and history fields empty, shows citations/attribution, saves audited field
+edits, requires approval note plus attestation, and exports JSON explicitly marked
+`not_submitted_to_fda`. There is no FDA submission route or status transition. Focused local
+verification covers migration contracts, service rules, API validation and the full page state
+flow. Full local verification passed 1,964 backend tests with 56 opt-in PostgreSQL tests skipped,
+222 clinician-portal tests, changed-file Ruff and formatting, source mypy across 210 files,
+clinician lint and typecheck, migration validation across 57 files, and the clinician production
+build. Migration rollout, deployment, and live synthetic acceptance have not been performed.
 
 ---
 

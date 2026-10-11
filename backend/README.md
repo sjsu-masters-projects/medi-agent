@@ -67,6 +67,16 @@ open backend/htmlcov/index.html
 
 See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing documentation.
 
+## MedWatch draft lifecycle
+
+Assigned clinicians can prepare an evidence-attributed MedWatch-compatible draft from a draft ADR
+assessment, edit it with optimistic revision control, approve it with an explicit attestation, and
+export the approved artifact as JSON. The workflow is implemented by
+`app.services.medwatch_service` and clinician routes under `/api/v1/clinicians/me`. Database
+migration `048_medwatch_draft_lifecycle.sql` keeps mutations behind service-role-only atomic RPCs
+and records immutable create, edit, approve, and export events. There is intentionally no FDA
+submission endpoint or application transition to `submitted`.
+
 ## Care-plan model preflight
 
 Before deploying a change to care-plan classification or its provider route, validate the

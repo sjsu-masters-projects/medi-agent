@@ -26,6 +26,12 @@ from app.models.adr import (
     ADRReviewDecisionRequest,
     ADRReviewDecisionResponse,
     ADRReviewQueueResponse,
+    MedWatchDraftApprovalRequest,
+    MedWatchDraftCreateRequest,
+    MedWatchDraftExportResponse,
+    MedWatchDraftListResponse,
+    MedWatchDraftRead,
+    MedWatchDraftUpdateRequest,
 )
 from app.models.auth import CurrentUser
 from app.models.care_plan import CarePlanVersionRead
@@ -61,6 +67,7 @@ from app.models.invite import (
 )
 from app.models.patient import PatientRead
 from app.services.clinician_service import ClinicianService
+from app.services.medwatch_service import MedWatchService
 
 router = APIRouter()
 
@@ -69,6 +76,10 @@ _clinician_dep = require_role("clinician")
 
 def _get_service(db: Client = Depends(get_db)) -> ClinicianService:
     return ClinicianService(db)
+
+
+def _get_medwatch_service(db: Client = Depends(get_db)) -> MedWatchService:
+    return MedWatchService(db)
 
 
 # ── Existing endpoints ───────────────────────────────────────────────────────
@@ -359,6 +370,79 @@ async def review_adr_assessment(
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
     return await service.review_adr_assessment(user.id, assessment_id, decision)
+
+
+@router.post(
+    "/me/adr-assessments/{assessment_id}/medwatch-draft",
+    response_model=MedWatchDraftRead,
+    summary="Prepare an editable MedWatch draft",
+    description=(
+        "Creates an evidence-attributed draft after an explicit clinician "
+        "reportability decision. This does not submit anything to the FDA."
+    ),
+)
+async def create_medwatch_draft(
+    assessment_id: UUID,
+    request: MedWatchDraftCreateRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.create_draft(user.id, assessment_id, request)
+
+
+@router.get(
+    "/me/medwatch-drafts",
+    response_model=MedWatchDraftListResponse,
+    summary="List assigned-patient MedWatch drafts",
+)
+async def list_medwatch_drafts(
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.list_drafts(user.id)
+
+
+@router.put(
+    "/me/medwatch-drafts/{draft_id}",
+    response_model=MedWatchDraftRead,
+    summary="Save an editable MedWatch draft",
+)
+async def update_medwatch_draft(
+    draft_id: UUID,
+    request: MedWatchDraftUpdateRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.update_draft(user.id, draft_id, request)
+
+
+@router.post(
+    "/me/medwatch-drafts/{draft_id}/approve",
+    response_model=MedWatchDraftRead,
+    summary="Approve a MedWatch draft for export",
+    description="Records clinician sign-off; it does not file the draft with the FDA.",
+)
+async def approve_medwatch_draft(
+    draft_id: UUID,
+    request: MedWatchDraftApprovalRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.approve_draft(user.id, draft_id, request)
+
+
+@router.get(
+    "/me/medwatch-drafts/{draft_id}/export",
+    response_model=MedWatchDraftExportResponse,
+    summary="Export an approved MedWatch draft",
+    description="Returns an approved JSON artifact and never submits it externally.",
+)
+async def export_medwatch_draft(
+    draft_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.export_draft(user.id, draft_id)
 
 
 @router.get(
