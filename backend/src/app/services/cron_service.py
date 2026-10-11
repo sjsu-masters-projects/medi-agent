@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -28,6 +29,13 @@ class CronService:
         ("1h", 1, "Upcoming appointment soon"),
     )
     RUNNING_STALE_AFTER_HOURS = 6
+    # Booked visits: an accepted offer is ``confirmed``; older rows are ``scheduled``. The
+    # notification centre treats both as booked (migrations 051 and 054).
+    BOOKED_APPOINTMENT_STATUSES = ("confirmed", "scheduled")
+    # Each dispatch starts where the last successful one ended, so a late or retried
+    # Scheduler run leaves no gap. After a longer pause the next run starts at "now":
+    # reminders for medicines that were due an hour ago are no longer useful.
+    MAX_REMINDER_CATCH_UP = timedelta(minutes=60)
 
     def __init__(self, db: Client) -> None:
         self.db = db
@@ -35,7 +43,12 @@ class CronService:
     async def dispatch_reminders(
         self, *, dry_run: bool = False, window_minutes: int = 15
     ) -> dict[str, Any]:
-        """Dispatch reminder notifications for due appointments."""
+        """Dispatch due appointment, medication and care-plan reminder notifications.
+
+        Windows are contiguous: this run covers ``[previous window end, now + window)``,
+        so nothing due between two Scheduler runs is skipped when a run is late. Dedupe
+        keys make any overlap harmless.
+        """
         job_name = "reminders_dispatch"
         await self._ensure_job_not_running(job_name)
         run = await self._start_run(
@@ -46,28 +59,38 @@ class CronService:
         started_at = run["started_at"]
         run_id = run["id"]
         summary: dict[str, Any] = {
+            "window_start": None,
+            "window_end": None,
+            "window_mode": None,
+            "catch_up_minutes": 0,
             "appointment_24h_candidates": 0,
             "appointment_24h_created": 0,
             "appointment_24h_existing": 0,
             "appointment_1h_candidates": 0,
             "appointment_1h_created": 0,
             "appointment_1h_existing": 0,
-            "medication_candidates": 0,
-            "medication_created": 0,
-            "medication_existing": 0,
-            "obligation_candidates": 0,
-            "obligation_created": 0,
-            "obligation_existing": 0,
+            **self._empty_schedule_summary(),
         }
 
         try:
             now = self._utc_now()
+            window_start, window_end, mode = self._reminder_window(
+                now=now,
+                window_minutes=window_minutes,
+                previous_end=await self._previous_reminder_window_end(job_name),
+            )
+            summary["window_start"] = self._iso(window_start)
+            summary["window_end"] = self._iso(window_end)
+            summary["window_mode"] = mode
+            summary["catch_up_minutes"] = round(
+                max(0.0, (now - window_start).total_seconds()) / 60, 1
+            )
             for reminder_kind, hours_before, _title in self.APPOINTMENT_REMINDER_CONFIG:
                 result = await self._dispatch_appointment_reminders(
-                    now=now,
+                    window_start=window_start,
+                    window_end=window_end,
                     reminder_kind=reminder_kind,
                     hours_before=hours_before,
-                    window_minutes=window_minutes,
                     dry_run=dry_run,
                 )
                 summary[f"appointment_{reminder_kind}_candidates"] = result["candidates"]
@@ -75,8 +98,8 @@ class CronService:
                 summary[f"appointment_{reminder_kind}_existing"] = result["existing"]
 
             scheduled_result = await self._dispatch_schedule_reminders(
-                window_start=now,
-                window_end=now + timedelta(minutes=window_minutes),
+                window_start=window_start,
+                window_end=window_end,
                 dry_run=dry_run,
             )
             for key, value in scheduled_result.items():
@@ -105,6 +128,41 @@ class CronService:
             )
             raise
 
+    @classmethod
+    def _reminder_window(
+        cls, *, now: datetime, window_minutes: int, previous_end: datetime | None
+    ) -> tuple[datetime, datetime, str]:
+        """The ``[start, end)`` this run covers and why it starts where it does."""
+        end = now + timedelta(minutes=window_minutes)
+        if previous_end is None:
+            return now, end, "first_run"
+        if previous_end < now - cls.MAX_REMINDER_CATCH_UP:
+            return now, end, "catch_up_capped"
+        # An early or repeated run never moves the window backwards.
+        return previous_end, max(end, previous_end), "contiguous"
+
+    async def _previous_reminder_window_end(self, job_name: str) -> datetime | None:
+        """Where the last successful real (not dry-run) dispatch window ended, if recorded."""
+        response = await execute_async(
+            self,
+            lambda db: (
+                db.table("cron_job_runs")
+                .select("summary, metadata")
+                .eq("job_name", job_name)
+                .eq("status", "success")
+                .order("started_at", desc=True)
+                .limit(10)
+            ),
+            operation=f"fetch last {job_name} window",
+            retry_transient=True,
+        )
+        for row in cast(list[dict[str, Any]], response.data or []):
+            if (row.get("metadata") or {}).get("dry_run"):
+                continue
+            window_end = (row.get("summary") or {}).get("window_end")
+            return self._parse_timestamp(str(window_end)) if window_end else None
+        return None
+
     async def run_health_knowledge_refresh(self, *, limit: int = 150) -> dict[str, Any]:
         """Re-check public medication and condition references; record the run."""
         job_name = "health_knowledge_refresh"
@@ -130,17 +188,17 @@ class CronService:
     async def _dispatch_appointment_reminders(
         self,
         *,
-        now: datetime,
+        window_start: datetime,
+        window_end: datetime,
         reminder_kind: str,
         hours_before: int,
-        window_minutes: int,
         dry_run: bool,
     ) -> dict[str, int]:
-        window_start = now + timedelta(hours=hours_before)
-        window_end = window_start + timedelta(minutes=window_minutes)
+        visit_window_start = window_start + timedelta(hours=hours_before)
+        visit_window_end = window_end + timedelta(hours=hours_before)
         appointments = await self._fetch_upcoming_appointments(
-            window_start=window_start,
-            window_end=window_end,
+            window_start=visit_window_start,
+            window_end=visit_window_end,
         )
 
         if not appointments:
@@ -151,8 +209,8 @@ class CronService:
                 appointment=appointment,
                 reminder_kind=reminder_kind,
                 hours_before=hours_before,
-                window_start=window_start,
-                window_end=window_end,
+                window_start=visit_window_start,
+                window_end=visit_window_end,
             )
             for appointment in appointments
         ]
@@ -161,13 +219,28 @@ class CronService:
         )
         pending_rows = [row for row in candidate_rows if row["dedupe_key"] not in existing_keys]
 
+        conflicts: set[str] = set()
         if pending_rows and not dry_run:
-            await self._insert_notifications(pending_rows)
+            conflicts = await self._insert_notifications(pending_rows)
 
+        created = len(pending_rows) - len(conflicts)
         return {
             "candidates": len(candidate_rows),
-            "created": len(pending_rows),
-            "existing": len(candidate_rows) - len(pending_rows),
+            "created": created,
+            "existing": len(candidate_rows) - created,
+        }
+
+    @staticmethod
+    def _empty_schedule_summary() -> dict[str, int]:
+        return {
+            "medication_candidates": 0,
+            "medication_created": 0,
+            "medication_existing": 0,
+            "obligation_candidates": 0,
+            "obligation_created": 0,
+            "obligation_existing": 0,
+            "skipped_inactive_target": 0,
+            "skipped_frequency_mismatch": 0,
         }
 
     async def _dispatch_schedule_reminders(
@@ -177,26 +250,13 @@ class CronService:
         window_end: datetime,
         dry_run: bool,
     ) -> dict[str, int]:
+        summary = self._empty_schedule_summary()
         if self.db is None:
-            return {
-                "medication_candidates": 0,
-                "medication_created": 0,
-                "medication_existing": 0,
-                "obligation_candidates": 0,
-                "obligation_created": 0,
-                "obligation_existing": 0,
-            }
+            return summary
 
         schedules = await self._fetch_enabled_reminder_schedules()
         if not schedules:
-            return {
-                "medication_candidates": 0,
-                "medication_created": 0,
-                "medication_existing": 0,
-                "obligation_candidates": 0,
-                "obligation_created": 0,
-                "obligation_existing": 0,
-            }
+            return summary
 
         medication_map = await self._fetch_medication_display_map(
             [str(row["target_id"]) for row in schedules if row.get("target_type") == "medication"]
@@ -207,6 +267,18 @@ class CronService:
 
         candidate_rows: list[dict[str, Any]] = []
         for schedule in schedules:
+            target_map = (
+                medication_map if schedule.get("target_type") == "medication" else obligation_map
+            )
+            target = target_map.get(str(schedule.get("target_id")))
+            if not target:
+                # The medicine or care-plan item was stopped or removed; the schedule is
+                # still enabled but must not remind anyone.
+                summary["skipped_inactive_target"] += 1
+                continue
+            if not schedule_matches_frequency(schedule, str(target.get("frequency") or "")):
+                summary["skipped_frequency_mismatch"] += 1
+                continue
             candidate_rows.extend(
                 self._build_schedule_notification_candidates(
                     schedule=schedule,
@@ -222,24 +294,17 @@ class CronService:
         )
         pending_rows = [row for row in candidate_rows if row["dedupe_key"] not in existing_keys]
 
+        conflicts: set[str] = set()
         if pending_rows and not dry_run:
-            await self._insert_notifications(pending_rows)
+            conflicts = await self._insert_notifications(pending_rows)
 
-        summary = {
-            "medication_candidates": 0,
-            "medication_created": 0,
-            "medication_existing": 0,
-            "obligation_candidates": 0,
-            "obligation_created": 0,
-            "obligation_existing": 0,
-        }
         for row in candidate_rows:
-            summary[f"{row['metadata']['target_type']}_candidates"] += 1
-        for row in pending_rows:
-            summary[f"{row['metadata']['target_type']}_created"] += 1
-        for row in candidate_rows:
-            if row["dedupe_key"] in existing_keys:
-                summary[f"{row['metadata']['target_type']}_existing"] += 1
+            target_type = row["metadata"]["target_type"]
+            summary[f"{target_type}_candidates"] += 1
+            if row["dedupe_key"] in existing_keys or row["dedupe_key"] in conflicts:
+                summary[f"{target_type}_existing"] += 1
+            else:
+                summary[f"{target_type}_created"] += 1
         return summary
 
     async def _ensure_job_not_running(self, job_name: str) -> None:
@@ -319,7 +384,7 @@ class CronService:
                 .select(
                     "id, patient_id, scheduled_at, clinician_name, location, appointment_type, reason"
                 )
-                .eq("status", "scheduled")
+                .in_("status", list(self.BOOKED_APPOINTMENT_STATUSES))
                 .gte("scheduled_at", self._iso(window_start))
                 .lt("scheduled_at", self._iso(window_end))
             ),
@@ -389,16 +454,53 @@ class CronService:
         )
         return {str(row["dedupe_key"]) for row in (response.data or []) if row.get("dedupe_key")}
 
-    async def _insert_notifications(self, rows: list[dict[str, Any]]) -> None:
-        if not rows:
-            return
+    async def _insert_notifications(self, rows: list[dict[str, Any]]) -> set[str]:
+        """Insert reminder rows; return the dedupe keys another writer already inserted.
 
-        await execute_async(
-            self,
-            lambda db: db.table("notifications").insert(rows),
-            operation="insert cron notifications",
-            retry_transient=True,
-        )
+        ``notifications.dedupe_key`` has a partial unique index, which PostgREST's
+        ``on_conflict`` cannot target. One conflicting row (a concurrent run, or a batch
+        that committed before its response was lost) fails the whole batch, so the batch
+        is never retried blindly: on a unique violation each row is inserted on its own
+        and a conflict is counted as already sent.
+        """
+        if not rows:
+            return set()
+
+        try:
+            await execute_async(
+                self,
+                lambda db: db.table("notifications").insert(rows),
+                operation="insert cron notifications",
+                retry_transient=False,
+            )
+            return set()
+        except Exception as exc:
+            if not self._is_unique_violation(exc):
+                raise
+
+        def insert_one(row: dict[str, Any]) -> Callable[[Client], Any]:
+            return lambda db: db.table("notifications").insert(row)
+
+        conflicts: set[str] = set()
+        for row in rows:
+            try:
+                await execute_async(
+                    self,
+                    insert_one(row),
+                    operation="insert cron notification",
+                    retry_transient=True,
+                )
+            except Exception as exc:
+                if not self._is_unique_violation(exc):
+                    raise
+                conflicts.add(str(row["dedupe_key"]))
+        return conflicts
+
+    @staticmethod
+    def _is_unique_violation(exc: BaseException) -> bool:
+        if str(getattr(exc, "code", "") or "").strip() == "23505":
+            return True
+        return "duplicate key" in str(exc).lower()
 
     def _build_schedule_notification_candidates(
         self,
@@ -498,7 +600,10 @@ class CronService:
         appointment_id = str(appointment["id"])
         patient_id = str(appointment["patient_id"])
         scheduled_at = str(appointment["scheduled_at"])
-        dedupe_key = f"appointment:{appointment_id}:{reminder_kind}"
+        # The visit time is part of the key, so a rescheduled visit is reminded again for
+        # its new time; one normalised form keeps the key stable across runs.
+        visit_at = self._iso(self._parse_timestamp(scheduled_at))
+        dedupe_key = f"appointment:{appointment_id}:{reminder_kind}:{visit_at}"
         location = appointment.get("location") or "your care team"
         clinician_name = appointment.get("clinician_name") or "your clinician"
 

@@ -90,6 +90,7 @@ async def test_dispatch_reminders_summarizes_created_notifications(monkeypatch, 
     monkeypatch.setattr(cron_service, "_start_run", _start_run)
     monkeypatch.setattr(cron_service, "_finish_run", _finish_run)
     monkeypatch.setattr(cron_service, "_dispatch_appointment_reminders", _dispatch)
+    monkeypatch.setattr(cron_service, "_previous_reminder_window_end", _noop)
 
     result = await cron_service.dispatch_reminders(dry_run=False, window_minutes=15)
 
