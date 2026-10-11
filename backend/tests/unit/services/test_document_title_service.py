@@ -38,10 +38,16 @@ def _response(payload: dict[str, str] | str) -> GenerationResponse:
 
 def _service(rows: list[dict[str, Any]]) -> tuple[MagicMock, DocumentTitleService]:
     db = MagicMock()
-    chain = db.table.return_value
-    for method in ("select", "eq", "lt", "in_", "order", "limit", "update"):
-        getattr(chain, method).return_value = chain
+    chain, patients = MagicMock(), MagicMock()
+    for query in (chain, patients):
+        for method in ("select", "eq", "lt", "in_", "order", "limit", "update"):
+            getattr(query, method).return_value = query
     chain.execute.return_value.data = rows
+    patients.execute.return_value.data = [
+        {"id": ROW["patient_id"], "first_name": "Morgan", "last_name": "Ellis"}
+    ]
+    db.table.side_effect = lambda name: patients if name == "patients" else chain
+    db.table.return_value = chain
     facts = MagicMock()
     facts.list_facts_for_document.return_value = [
         {"value": {"description": "Tome un vaso de agua con cada comida 3 veces"}}
@@ -79,7 +85,8 @@ async def test_drafts_both_languages_from_summary_without_numbers(monkeypatch) -
 
     assert counts == {"titles_claimed": 1, "titles_ready": 1, "titles_failed": 0}
     prompt = generate.await_args.kwargs["prompt"]
-    assert "Morgan Ellis 01 Hidratacion" in prompt
+    assert "File name words: 01 Hidratacion" in prompt
+    assert "Morgan" not in prompt and "Ellis" not in prompt
     assert "2026" not in prompt and "es-MX" not in prompt
     assert '"Tome un vaso de agua con cada comida"' in prompt  # topic kept, digits dropped
     payload = db.table.return_value.update.call_args.args[0]

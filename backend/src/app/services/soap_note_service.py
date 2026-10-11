@@ -60,11 +60,15 @@ async def _execute(query: Any) -> Any:
 def calculate_adherence_stats(logs: list[dict[str, Any]]) -> dict[str, Any]:
     """Summarise adherence logs into the four figures the prompt reports."""
     if not logs:
+        # Counts let the prompt say "no logs recorded" instead of reporting 0% adherence.
         return {
             "overall_score": 0.0,
             "medication_score": 0.0,
             "obligation_score": 0.0,
             "current_streak_days": 0,
+            "log_count": 0,
+            "medication_log_count": 0,
+            "obligation_log_count": 0,
         }
 
     total = len(logs)
@@ -80,6 +84,9 @@ def calculate_adherence_stats(logs: list[dict[str, Any]]) -> dict[str, Any]:
         "medication_score": med_completed / len(med_logs) if med_logs else 0.0,
         "obligation_score": obl_completed / len(obl_logs) if obl_logs else 0.0,
         "current_streak_days": calculate_current_streak_days(logs),
+        "log_count": total,
+        "medication_log_count": len(med_logs),
+        "obligation_log_count": len(obl_logs),
     }
 
 

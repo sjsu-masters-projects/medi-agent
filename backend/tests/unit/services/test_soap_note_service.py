@@ -396,3 +396,24 @@ class TestSoapPrompt:
 
         assert "<PATIENT_CHAT_MESSAGES>" in prompt
         assert "UNTRUSTED" in prompt
+
+
+def test_soap_prompt_reports_missing_adherence_logs_instead_of_zero_percent() -> None:
+    from app.services.soap_note_prompts import format_adherence
+
+    assert format_adherence(calculate_adherence_stats([])) == (
+        "- No adherence logs recorded in this period."
+    )
+    partial = format_adherence(
+        calculate_adherence_stats(
+            [
+                {
+                    "target_type": "medication",
+                    "status": "completed",
+                    "logged_at": "2026-10-01T08:00:00Z",
+                }
+            ]
+        )
+    )
+    assert "- Medication Score: 100%" in partial
+    assert "- Obligation Score: no logs recorded" in partial
