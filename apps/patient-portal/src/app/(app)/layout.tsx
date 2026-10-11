@@ -14,7 +14,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <ProtectedRoute>
               <PatientProfileProvider>
                 <div className="app-shell flex min-h-dvh flex-col">
-                    <PatientLanguageControl />
+                    <PatientLanguageControl visible={false} />
                     <main className="flex-1 overflow-y-auto pb-32">{children}</main>
                     <BottomNav currentPath={pathname} />
                 </div>

@@ -81,6 +81,47 @@ function SharedPreferenceProbe() {
 }
 
 describe("Patient profile page", () => {
+    it("retains pending saves and errors when the language sheet closes", async () => {
+        get.mockImplementation(async (endpoint: string) => endpoint === "/api/v1/patients/me" ? profileResponse() : []);
+        let rejectSave!: (error: Error) => void;
+        put.mockImplementation(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
+        render(<PatientProfileProvider><ProfilePage /></PatientProfileProvider>);
+        fireEvent.click(await screen.findByRole("button", { name: "English (US)" }));
+        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "es-MX" } });
+        fireEvent.keyDown(document, { key: "Escape" });
+        fireEvent.click(screen.getByRole("button", { name: "English (US)" }));
+        expect(screen.getByRole("combobox", { name: "Language" })).toBeDisabled();
+        expect(put).toHaveBeenCalledOnce();
+        fireEvent.keyDown(document, { key: "Escape" });
+        rejectSave(new Error("Unavailable"));
+        await waitFor(() => expect(screen.getByRole("combobox", { name: "Language", hidden: true })).not.toBeDisabled());
+        fireEvent.click(screen.getByRole("button", { name: "English (US)" }));
+        expect(screen.getByRole("alert")).toHaveTextContent("Could not save the language");
+    });
+    it("keeps language settings available when care teams cannot load", async () => {
+        get.mockImplementation(async (endpoint: string) => {
+            if (endpoint === "/api/v1/patients/me") return profileResponse();
+            throw new Error("Care teams unavailable");
+        });
+        render(<PatientProfileProvider><ProfilePage /></PatientProfileProvider>);
+        fireEvent.click(await screen.findByRole("button", { name: "Preferred language" }));
+        await waitFor(() => expect(screen.getByRole("combobox", { name: "Language" })).not.toBeDisabled());
+    });
+    it("opens the existing saved-language control in an accessible Profile sheet", async () => {
+        get.mockImplementation(async (endpoint: string) => endpoint === "/api/v1/patients/me" ? profileResponse() : []);
+        put.mockResolvedValue({ preferred_language: "es-MX" });
+        render(<PatientProfileProvider><ProfilePage /><SharedPreferenceProbe /></PatientProfileProvider>);
+        const trigger = await screen.findByRole("button", { name: "English (US)" });
+        trigger.focus();
+        fireEvent.click(trigger);
+        expect(screen.getByRole("dialog", { name: "Preferred language" })).toBeInTheDocument();
+        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "es-MX" } });
+        await waitFor(() => expect(screen.getByTestId("shared-preference")).toHaveTextContent("es-MX"));
+        expect(put).toHaveBeenCalledWith("/api/v1/patients/me", { preferred_language: "es-MX" }, { token: "access-token" });
+        fireEvent.keyDown(document, { key: "Escape" });
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Español (México)" })).toHaveFocus();
+    });
     beforeEach(() => {
         clearStoredSession.mockReset();
         dispatch.mockReset();

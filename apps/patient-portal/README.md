@@ -16,8 +16,9 @@ Records distinguishes duplicate-skipped uploads from empty successful extraction
 The duplicate explanation is static en-US/es-MX copy; switching its language does
 not invoke a model or carry that reason into Nora as a clinical summary.
 
-The authenticated layout shares one patient profile and language selector across
-all screens. Saving a language updates navigation, controls and explanatory UI;
+The authenticated layout shares one patient profile across all screens. The saved
+language selector is in Profile, not a repeated banner. Saving a language updates
+navigation, controls and explanatory UI;
 it does not translate clinical instructions or historical messages. Failed saves
 retain the prior preference. Guest entry screens carry a separate language choice
 until a profile exists; chat has no competing persisted language setting.

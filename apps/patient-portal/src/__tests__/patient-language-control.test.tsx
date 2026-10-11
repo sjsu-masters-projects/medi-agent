@@ -14,6 +14,14 @@ function Portal() { return <PatientProfileProvider><PatientLanguageControl /><Co
 beforeEach(() => { token = "synthetic-token"; get.mockReset(); put.mockReset(); get.mockResolvedValue(raw); document.documentElement.lang = "en-US"; });
 
 describe("Portal language preference", () => {
+  it("keeps the saved document language without a repeated screen control", async () => {
+    get.mockResolvedValue({ ...raw, preferred_language: "es-MX" });
+    render(<PatientProfileProvider><PatientLanguageControl visible={false} /><Consumer /><BottomNav currentPath="/today" /></PatientProfileProvider>);
+    await waitFor(() => expect(document.documentElement.lang).toBe("es-MX"));
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Hoy" })).toBeInTheDocument();
+    expect(put).not.toHaveBeenCalled();
+  });
   it("offers a bilingual recovery action when the preference cannot be loaded", async () => {
     get.mockRejectedValueOnce(new Error("synthetic load failure"));
     render(<Portal />);
