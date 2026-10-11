@@ -66,6 +66,10 @@ compliance or production-readiness certification.
   success, first-run window, 3 schedules skipped for inactive targets, nothing due). A
   document ingestion run and a manual weekly-refresh execution also logged success; the
   refresh seeded 13 documented conditions and updated 10 subjects, next due October 17.
+  MedlinePlus returned no topic for 13 of 29 condition lookups. Cause: Spanish was searched
+  with the English name, only the first hit was checked, and qualifiers ("mild persistent",
+  "of the knee") defeated the search. Every English topic has a Spanish page at
+  `/spanish/<same slug>`, which the fix uses.
 - Security: after the merge, GitHub showed 0 open Dependabot alerts, 0 open code-scanning
   alerts and 0 open CodeQL quality findings.
 - Profile gender: "Prefer not to say" saved and survived a reload (restored to Female
