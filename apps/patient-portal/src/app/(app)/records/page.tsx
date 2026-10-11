@@ -698,11 +698,11 @@ export default function RecordsPage() {
     >
       <div className="patient-page pb-6">
         <header className="px-[22px] pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="min-w-0 break-words text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="min-w-0 flex-1 basis-[180px] break-words text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">
               {copy("My Records")}
             </h1>
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
               <NotificationBell />
               <OverflowMenu
                 label={spanish ? "Más opciones" : "More options"}
