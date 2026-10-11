@@ -1,7 +1,7 @@
 # MediAgent UI redesign — implementation handoff
 
 > **Status:** Delivered in #142 (foundation), #143 (patient), #144 (clinician) and #145
-> (responsive/wording); deployed recheck pending (TASKS UX-002).
+> (responsive/wording); deployed recheck passed October 11 (docs/deployed-recheck-2026-10-11.md).
 
 Visual reference: the hosted redesign (screens A–F) linked from
 [DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md#canonical-visual-reference). This document is the source of truth for values. If the mockup and this file disagree, follow this file.

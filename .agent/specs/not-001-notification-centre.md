@@ -1,6 +1,6 @@
 # NOT-001 — Role-aware in-app notifications and clinician work
 
-> **Status:** Verify deployed — #148 (`e1ad3f4`) and NOT-002 #149 (`8b93b48`) merged and
+> **Status:** Done — deployed recheck October 11 (docs/deployed-recheck-2026-10-11.md); #148 (`e1ad3f4`) and NOT-002 #149 (`8b93b48`) merged and
 > deployed; `051_notification_centre.sql` and 052–056 applied to the synthetic Supabase
 > project on October 11.
 
