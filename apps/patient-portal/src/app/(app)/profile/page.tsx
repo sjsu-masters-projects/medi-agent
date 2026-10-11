@@ -11,6 +11,8 @@ import {
 } from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
 import { PageHeader } from "@/components/layouts";
+import { PatientLanguageControl } from "@/components/layouts/patient-language-control";
+import { Modal } from "@/components/ui/modal";
 import { api } from "@/services/api";
 import { clearStoredSession } from "@/services/auth-session";
 import {
@@ -110,6 +112,7 @@ function ProfilePageContent() {
     const [pageError, setPageError] = useState(false);
     const [joining, setJoining] = useState(false);
     const [editing, setEditing] = useState(false);
+    const [languageOpen, setLanguageOpen] = useState(false);
     const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(false);
@@ -294,6 +297,11 @@ function ProfilePageContent() {
         <div className="patient-page space-y-4 pb-8">
             <PageHeader subtitle={copy.subtitle} title={copy.title} />
             <div className="patient-stack -mt-4 space-y-4 px-5">
+                {(loading || pageError) ? (
+                    <button type="button" onClick={() => setLanguageOpen(true)} className="min-h-11 w-full rounded-xl border border-line bg-surface px-4 text-left font-semibold text-brand">
+                        {copy.language}
+                    </button>
+                ) : null}
                 {loading ? (
                     <div className="space-y-4">
                         <Skeleton className="h-32 w-full rounded-3xl" />
@@ -549,11 +557,11 @@ function ProfilePageContent() {
                                         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             {copy.language}
                                         </p>
-                                        <p className="mt-1 font-semibold text-gray-700">
+                                        <button type="button" onClick={() => setLanguageOpen(true)} className="mt-1 min-h-11 w-full text-left font-semibold text-brand underline-offset-4 hover:underline">
                                             {locale === "es-MX"
                                                 ? "Español (México)"
                                                 : "English (US)"}
-                                        </p>
+                                        </button>
                                     </div>
                                     {patientProfile.gender ? (
                                         <div className="rounded-2xl bg-gray-50 px-4 py-3 ring-1 ring-gray-200">
@@ -784,6 +792,9 @@ function ProfilePageContent() {
                     </>
                 ) : null}
             </div>
+            <Modal keepMounted open={languageOpen} onClose={() => setLanguageOpen(false)} title={copy.language} closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}>
+                <PatientLanguageControl />
+            </Modal>
         </div>
     );
 }

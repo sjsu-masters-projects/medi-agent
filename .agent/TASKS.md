@@ -38,8 +38,8 @@ editing this board.
 | PAT-005 core | Synthetic Morgan/Elena loop verified live, including V2 continuity, six barriers, audit, Spanish V3 and non-scheduled-day absence | V3 active; V4 is an unpublished overlap-blocked draft. Presentation follow-up is separate. |
 | Patient-upload review | [#138](https://github.com/sjsu-masters-projects/medi-agent/pull/138) deployed; pending/rejected exclusion, approval eligibility/queue handoff and exact-document link verified | Negative preview/publication guards have API/PostgreSQL evidence, not a newly repeated live blocked publication. |
 | Human messaging | [#139](https://github.com/sjsu-masters-projects/medi-agent/pull/139) deployed; migration checked; bilingual replies, actual sender/clinic, unread and reload persistence verified | Concurrency/reassignment/multiple-recipient isolation tested in isolated PostgreSQL, not repeated by the four-message live run. |
-| Portal polish | [#141](https://github.com/sjsu-masters-projects/medi-agent/pull/141) open; 372 patient + 260 clinician tests, lint/typecheck/build pass locally; previews succeed | Review/required CI/merge and authenticated deployed UI checks remain. |
-| Patient symptoms | Canonical live page still displays hard-coded examples; #141 removes them and routes Today directly to Nora | No connected patient timeline of confirmed reports; raw chat capture is not a complete confirmation workflow. |
+| Portal polish | [#141](https://github.com/sjsu-masters-projects/medi-agent/pull/141) merged at `657602d`; original local checks: 372 patient + 260 clinician tests and both app checks pass | Authenticated deployed UI checks remain separate from merge; UX-002 replaces the visual direction. |
+| Patient symptoms | #141 removes hard-coded examples and routes Today directly to Nora | No connected patient timeline of confirmed reports; raw chat capture is not a complete confirmation workflow. |
 | ADR patient information loop | Ganesh's [#136](https://github.com/sjsu-masters-projects/medi-agent/pull/136) open, conflicting; author reports staging migration and authenticated local-branch acceptance | Not merged or deployed on canonical apps. |
 
 Evidence: [PAT-005 acceptance](../docs/pat-005-final-acceptance-2026-10-10.md),
@@ -52,7 +52,8 @@ This is prototype acceptance, not clinical/compliance/production certification.
 
 | Issue | Priority | Status | Owner | Next observable result |
 | --- | --- | --- | --- | --- |
-| UX-001 — Both portal UI/UX polish | P1 | In review | Rajeev; patient/clinician lane review | Finish #141 review/CI; recheck authenticated screens at narrow widths and both patient locales after deployment. |
+| UX-001 — Both portal UI/UX polish | P1 | Verify deployed | Rajeev; patient/clinician lane review | #141 merged; recheck authenticated screens at narrow widths and both patient locales after deployment. |
+| UX-002 — Reference-led portal redesign | P1 | In progress | Rajeev | [Requirements](specs/ux-002-reference-redesign.md): Foundation → Patient screens → Clinician screens. [Foundation checks](../docs/ux-002-foundation-verification.md) pass; screen redesign remains. Unchanged routes/API/clinical gates; prior uncommitted theme draft is excluded. |
 | PAT-005-L — Presentation recheck | P1 | Verify deployed | Rajeev | Confirm #140 saved-locale Today controls and duplicate-skipped explanations in both document surfaces; sources/history unchanged. |
 | PV-001-B — ADR patient answers | P1 | Blocked | Ganesh | Resolve #136 conflicts, integrate current chat/language UI, reverify and request review; canonical rollout acceptance then follows. |
 | PAT-002-B — Confirmed symptom intake | P1 | Ready | Unassigned; Tushar + Ganesh lanes | Inventory existing capture, implement missing draft → correct/review → patient confirmation boundary with bilingual tests. |
@@ -84,7 +85,7 @@ this is functional demonstration, not independent clinical validation.
 - [x] Responsive layouts, tap/keyboard help, refresh/recovery and accessible dialogs.
 - [x] Four workstream reviews/cross-review fixes integrated; 632 tests and both app checks pass.
 - [x] Remove fabricated timeline; Today opens Nora directly, old Symptoms URL is an honest compact handoff.
-- [ ] Peer approval, required green CI and merge #141.
+- [x] Merge #141 (`657602d`); post-deployment observations remain separate.
 - [ ] Authenticated post-deployment mobile/bilingual screen checks.
 
 Local 320/768/1280 component/layout checks are not every deployed route.

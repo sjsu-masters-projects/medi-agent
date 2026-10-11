@@ -103,7 +103,7 @@ function LoginPageContent() {
                 <div className="absolute -bottom-20 left-5 h-56 w-56 rounded-full bg-[#d8aa57]/18" />
                 <div className="relative">
                     <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-[26px] bg-white/20 p-2 ring-1 ring-white/25">
-                        <Image alt="" height={52} priority src="/pwa-icon.svg" width={52} />
+                        <Image alt="" height={52} priority src="/brand/icon.svg" width={52} />
                     </div>
                     <p className="text-xs font-black uppercase tracking-[0.24em] text-white">MediAgent Care</p>
                     <h1 className="mt-3 text-[2.45rem] font-black leading-[0.98] tracking-[-0.04em]">{copy.welcome}</h1>

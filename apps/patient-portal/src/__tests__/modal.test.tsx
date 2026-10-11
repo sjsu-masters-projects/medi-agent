@@ -3,6 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { Modal } from "@/components/ui/modal";
 
 describe("Modal", () => {
+    it("includes help disclosures in the focus loop", () => {
+        render(<Modal open title="Language" onClose={vi.fn()}><select aria-label="Language"><option>English</option></select><details><summary>About language</summary><p>Help</p></details></Modal>);
+        fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+        expect(screen.getByText("About language")).toHaveFocus();
+        fireEvent.keyDown(document, { key: "Tab" });
+        expect(screen.getByRole("button", { name: "Close modal" })).toHaveFocus();
+    });
     it("labels the dialog, contains keyboard focus, closes on Escape and restores focus", () => {
         const close = vi.fn();
         const { rerender } = render(<><button>Open</button><Modal open={false} title="Review" onClose={close}><button>Last action</button></Modal></>);

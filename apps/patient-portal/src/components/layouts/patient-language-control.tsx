@@ -8,7 +8,7 @@ import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 import { normalizeLocale, type Locale } from "@/types";
 
-export function PatientLanguageControl() {
+export function PatientLanguageControl({ visible = true }: { visible?: boolean }) {
   const { profile, updateProfile, loading, error, refresh } = usePatientProfileState();
   const token = useSelector((state: RootState) => state.auth.accessToken);
   const currentToken = useRef(token);
@@ -38,7 +38,8 @@ export function PatientLanguageControl() {
     }
   }
 
-  return <div className="border-b border-gray-200 bg-white px-5 py-2">
+  if (!visible) return null;
+  return <div className="border-b border-line bg-surface px-5 py-2">
     <div className="flex items-center justify-end gap-2">
       <HiOutlineLanguage aria-hidden="true" className="h-5 w-5 shrink-0 text-gray-500" />
       <label className="text-sm font-medium text-gray-700" htmlFor="portal-language">{spanish ? "Idioma" : "Language"}</label>

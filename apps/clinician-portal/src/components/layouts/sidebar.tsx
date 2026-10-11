@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { HiOutlineArrowRightOnRectangle, HiOutlineCalendarDays, HiOutlineChartBarSquare, HiOutlineChatBubbleLeftRight, HiOutlineClipboardDocumentList, HiOutlineCog6Tooth, HiOutlineExclamationTriangle, HiOutlineUsers } from "react-icons/hi2";
@@ -97,8 +98,9 @@ export function Sidebar() {
     return (
         <aside className="flex shrink-0 flex-col bg-slate-900 text-white md:w-64 md:overflow-y-auto">
             <div className="hidden border-b border-slate-800 px-6 py-5 md:block">
-                <p className="text-xl font-semibold tracking-tight">
-                    MediAgent<span className="text-blue-400">Pro</span>
+                <p className="flex items-center gap-2.5 text-xl font-semibold tracking-tight">
+                    <Image src="/brand/mark-sidebar.svg" alt="" width={28} height={28} />
+                    <span>MediAgent<span className="text-blue-400">Pro</span></span>
                 </p>
             </div>
 
