@@ -180,6 +180,7 @@ def sql(postgres):
       INSERT INTO clinician_messages(clinician_id,patient_id,channel,subject,body) VALUES
       ('{CLINICIAN}','{PATIENT}','in_app','Urgent patient chat escalation','Chat escalation flagged (urgent/general). Historical');""")
     execute((MIGRATIONS / "051_notification_centre.sql").read_text())
+    execute((MIGRATIONS / "052_notification_source_times.sql").read_text())
     try:
         yield execute
     finally:
@@ -337,6 +338,20 @@ def test_conversation_marker_clears_notification_unread(sql):
         f"SET ROLE service_role; SELECT care_conversation_operation('{PATIENT}','patient','read','{payload}');"
     )
     assert all(r["is_read"] for r in call(sql)["items"] if r["event_type"] == "message_received")
+
+
+def test_existing_work_keeps_the_time_it_happened(sql):
+    """Work captured on a clinician's first load keeps its source time, not the load time."""
+    key = document(sql)
+    sql(f"UPDATE documents SET created_at=clock_timestamp()-interval '3 days' WHERE id='{key}';")
+    # Remove the trigger-captured event (owner only; no role is granted DELETE) so the
+    # first load has to capture this pending review as existing work.
+    sql(f"DELETE FROM notification_events WHERE source_id='{key}';")
+    row = next(r for r in clinician(sql)["items"] if r["source_id"] == key)
+    age = sql(
+        f"SELECT extract(epoch FROM clock_timestamp()-'{row['created_at']}'::timestamptz)::int;"
+    )
+    assert int(age) >= 3 * 24 * 3600 - 60
 
 
 def test_new_assignment_current_work_not_private_history(sql):
