@@ -229,3 +229,30 @@ def test_a_dose_not_in_the_record_or_sources_is_reported() -> None:
     record = '{"dosage": "500 mg"}'
     assert grounding.unsupported_doses("Take your 500 mg tablet.", record) == []
     assert grounding.unsupported_doses("Some people take 1000 mg.", record) == ["1000 mg"]
+
+
+def test_the_nora_question_set_is_paired_synthetic_and_well_formed() -> None:
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "fixtures/eval/nora_grounded_answers.json"
+    cases = json.loads(path.read_text())["cases"]
+    assert len({case["id"] for case in cases}) == len(cases)
+    assert {case["locale"] for case in cases} == {"en-US", "es-MX"}
+    allowed = {
+        "id",
+        "pair_id",
+        "locale",
+        "message",
+        "expect_sources",
+        "expect_urgency",
+        "must_include_any",
+        "must_not_include",
+    }
+    for case in cases:
+        assert set(case) <= allowed and case["message"].strip()
+        assert set(case.get("expect_sources") or []) <= {"medlineplus", "dailymed"}
+    # Every danger-sign case must demand 911 in both languages.
+    danger = [case for case in cases if case["pair_id"] == "danger-sign"]
+    assert {case["locale"] for case in danger} == {"en-US", "es-MX"}
+    assert all("911" in case["must_include_any"] for case in danger)
