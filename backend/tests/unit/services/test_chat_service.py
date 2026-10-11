@@ -288,3 +288,30 @@ async def test_update_conversation_state_raises_conflict_on_stale_updated_at(moc
             },
             expected_updated_at="2026-04-17T00:00:00Z",
         )
+
+
+@pytest.mark.asyncio
+async def test_history_is_the_newest_messages_in_order_for_one_conversation(mock_db):
+    newest_first = [{"id": "3"}, {"id": "2"}, {"id": "1"}]
+    query = mock_db.table().select().eq().order().limit()
+    query.eq().execute.return_value = _response(newest_first)
+
+    history = await ChatService(mock_db).get_history(
+        patient_id=str(uuid4()), limit=3, session_id="day-2026-10-10"
+    )
+
+    assert [row["id"] for row in history] == ["1", "2", "3"]
+    mock_db.table().select().eq().order.assert_any_call("created_at", desc=True)
+    query.eq.assert_any_call("session_id", "day-2026-10-10")
+
+
+@pytest.mark.asyncio
+async def test_messages_are_saved_into_their_conversation(mock_db):
+    mock_db.table().insert().execute.return_value = _response([{"id": "m1"}])
+
+    await ChatService(mock_db).save_message(
+        str(uuid4()), {"content": "hola", "role": "user", "session_id": "chat-abc"}
+    )
+
+    payload = mock_db.table().insert.call_args.args[0]
+    assert payload["session_id"] == "chat-abc"

@@ -28,6 +28,7 @@ authoritative text and is not re-emitted as a chunk.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -48,6 +49,12 @@ from app.adk.agents.care_coordinator import (
     TOOL_ALLOWLIST,
     build_care_coordinator,
     route_for_intent,
+)
+from app.adk.grounding import (
+    source_line,
+    sources_from_event,
+    unsupported_doses,
+    without_source_lines,
 )
 from app.adk.models.resilient import ResilientLlm
 from app.adk.plugins import LOCALE_STATE_KEY
@@ -155,6 +162,7 @@ class CareCoordinatorRuntime:
         message: str,
         language: str,
         document_context: dict[str, Any] | None = None,
+        earlier_messages: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Yield `classification`, then `chunk`s, then `complete` for one turn."""
         text = message.strip()
@@ -178,15 +186,22 @@ class CareCoordinatorRuntime:
             session_id=session_id,
             state={PATIENT_ID_STATE_KEY: patient_id, LOCALE_STATE_KEY: language},
         )
-        turn_state: dict[str, Any] = {
-            RECENT_CONVERSATION_STATE_KEY: recent_conversation(prior_events)
-        }
+        # The stored conversation is the source of the recap when the caller has it; the
+        # in-process session is lost on every restart and deploy.
+        recap = (
+            recap_from_messages(earlier_messages)
+            if earlier_messages is not None
+            else recent_conversation(prior_events)
+        )
+        turn_state: dict[str, Any] = {RECENT_CONVERSATION_STATE_KEY: recap}
         if document_context is not None:
             turn_state[DOCUMENT_CONTEXT_STATE_KEY] = document_context
 
         classified = floor is not None
         answer = ""
         streamed = False
+        sources: list[dict[str, Any]] = []
+        tool_results: list[str] = []
 
         try:
             stream = self.runner.run_async(
@@ -203,6 +218,11 @@ class CareCoordinatorRuntime:
                         intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
                         classified = True
                         yield _classification(intent, urgency, reason, escalate)
+
+                    used = sources_from_event(event)
+                    if used is not None:
+                        sources = used
+                    tool_results.extend(_tool_results_of(event))
 
                     if event.author == COORDINATOR_AGENT_NAME:
                         # Internal working notes. Never shown to the patient.
@@ -257,7 +277,29 @@ class CareCoordinatorRuntime:
             yield {"type": "complete", "response_text": unavailable, "fallback_used": True}
             return
 
+        if sources:
+            # The citation is written from what the tools returned, not by the model.
+            answer = without_source_lines(answer)
+            line = source_line(sources, language)
+            if line:
+                if streamed:
+                    yield {"type": "chunk", "content": f"\n\n{line}"}
+                answer = f"{answer}\n\n{line}"
+        unsupported = unsupported_doses(answer, *tool_results)
+        if unsupported:
+            # Measured before it is allowed to block: the count, never the text.
+            logger.warning(
+                "Reply mentions a dose not found in the record or sources",
+                extra={"unsupported_dose_count": len(unsupported)},
+            )
+
         yield {"type": "complete", "response_text": answer, "fallback_used": False}
+
+
+def _tool_results_of(event: Any) -> list[str]:
+    """Tool results in this event, as text, for the post-reply dose check."""
+    responses = event.get_function_responses() if hasattr(event, "get_function_responses") else []
+    return [json.dumps(getattr(item, "response", None), default=str) for item in responses or []]
 
 
 _RECAP_TURNS = 3
@@ -278,10 +320,31 @@ def recent_conversation(events: list[Any]) -> str:
         speaker = (
             "Patient" if author == "user" else "Nora" if author == RESPONDER_AGENT_NAME else None
         )
-        text = " ".join(_text_of(event).split())
-        if speaker and text:
-            clipped = text if len(text) <= _RECAP_CHARS else text[: _RECAP_CHARS - 1] + "…"
-            lines.append(f"{speaker}: {clipped}")
+        if speaker:
+            lines.extend(_recap_line(speaker, _text_of(event)))
+    return _recap(lines)
+
+
+def recap_from_messages(messages: list[dict[str, Any]]) -> str:
+    """The same recap, built from stored chat messages rather than in-process events."""
+    lines: list[str] = []
+    for message in messages:
+        role = str(message.get("role") or "")
+        speaker = "Patient" if role == "user" else "Nora" if role == "assistant" else None
+        if speaker:
+            lines.extend(_recap_line(speaker, str(message.get("content") or "")))
+    return _recap(lines)
+
+
+def _recap_line(speaker: str, text: str) -> list[str]:
+    flat = " ".join(without_source_lines(text).split())
+    if not flat:
+        return []
+    clipped = flat if len(flat) <= _RECAP_CHARS else flat[: _RECAP_CHARS - 1] + "…"
+    return [f"{speaker}: {clipped}"]
+
+
+def _recap(lines: list[str]) -> str:
     recent = lines[-2 * _RECAP_TURNS :]
     return "\n".join(recent) if recent else "(none: this is the first message)"
 

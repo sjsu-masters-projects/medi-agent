@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException
 from starlette import status
 
+from app.adk.grounding import without_source_lines
 from app.clients.deepgram_client import transcribe_audio_bytes_async
 from app.config import settings
 from app.core.exceptions import ValidationError
@@ -246,7 +247,8 @@ async def _handle_tts_request(
 ) -> None:
     try:
         audio = await service.synthesize_speech(
-            text=str(payload.get("text", "")),
+            # The written sources line is for reading, not for listening.
+            text=without_source_lines(str(payload.get("text", ""))),
             language=payload.get("language", Language.EN),
         )
         if not audio.audio:

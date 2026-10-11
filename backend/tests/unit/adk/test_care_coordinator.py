@@ -103,7 +103,11 @@ def test_the_tool_holder_is_named_exactly_as_its_allowlist_entry(
     assert permitted == frozenset(
         {
             "get_active_document_context",
+            "get_condition_information",
+            "get_document_details",
+            "get_medication_information",
             "get_patient_context",
+            "search_my_documents",
             "submit_triage_decision",
         }
     )
@@ -261,7 +265,11 @@ def test_the_pipeline_runs_with_every_runtime_guarantee_attached(
     assert policy.permitted_tools(COORDINATOR_AGENT_NAME) == frozenset(
         {
             "get_active_document_context",
+            "get_condition_information",
+            "get_document_details",
+            "get_medication_information",
             "get_patient_context",
+            "search_my_documents",
             "submit_triage_decision",
         }
     )
