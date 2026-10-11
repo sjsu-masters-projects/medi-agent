@@ -8,6 +8,7 @@ export function getNotificationsCopy(locale: string) {
     writeError: "No se pudo confirmar la lectura. Actualiza antes de intentar de nuevo.",
     more: "Cargar más", notice: "Marcar como leída no significa revisar ni aprobar la atención.",
     count: (count: number) => `${count} sin leer`,
+    skipped: (count: number) => count === 1 ? "1 notificación ya no está disponible y se omitió." : `${count} notificaciones ya no están disponibles y se omitieron.`,
   } : {
     title: "Notifications", all: "All", unread: "Unread", read: "Mark as read",
     readAll: "Mark displayed as read", full: "View all notifications", close: "Close notifications",
@@ -17,5 +18,6 @@ export function getNotificationsCopy(locale: string) {
     writeError: "Read could not be confirmed. Refresh before trying again.",
     more: "Load more", notice: "Marking as read does not review or approve care.",
     count: (count: number) => `${count} unread`,
+    skipped: (count: number) => count === 1 ? "1 notification is no longer available and was skipped." : `${count} notifications are no longer available and were skipped.`,
   };
 }

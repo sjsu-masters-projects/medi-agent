@@ -15,8 +15,10 @@ export const notifications = {
   read(token: string, id: string) {
     return api.put<void>(`${root}/${encodeURIComponent(id)}/read`, undefined, { token });
   },
-  readThrough(token: string, readThrough: string) {
-    return api.post<void>(`${root}/read-through`, { read_through: readThrough }, { token });
+  /** Marks a displayed page read; items no longer available are skipped, not fatal. */
+  async readThrough(token: string, readThrough: string): Promise<{ skipped: number }> {
+    const result = await api.post<{ skipped_count?: number } | null>(`${root}/read-through`, { read_through: readThrough }, { token });
+    return { skipped: Math.max(0, Number(result?.skipped_count ?? 0) || 0) };
   },
 };
 

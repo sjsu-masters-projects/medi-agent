@@ -57,6 +57,7 @@ export function NotificationCentre({ onNavigate }: { onNavigate?: () => void }) 
     {/* Unknown is not zero: say so when the count could not be loaded. */}
     {state.summary === null && !state.loading && <p className="px-1 text-[13px] text-muted" role="status">{copy.unavailable}</p>}
     {state.summary !== null && <p className="sr-only" role="status">{copy.count(state.summary.unread_count)}</p>}
+    {state.skipped > 0 && <p role="status" className="px-1 text-[13px] text-muted">{copy.skipped(state.skipped)}</p>}
     {state.error && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{state.error === "write" ? copy.writeError : copy.loadError}</p>}
     {state.loading && !state.page && !state.error && <p role="status" className="px-1 text-sm text-muted">{copy.loading}</p>}
     {state.page?.items.length === 0 && !state.error && <p className="flex items-center gap-3 rounded-[22px] bg-surface p-5 text-sm text-muted"><Icon name="bell" className="h-5 w-5 shrink-0" />{state.unread ? copy.emptyUnread : copy.empty}</p>}

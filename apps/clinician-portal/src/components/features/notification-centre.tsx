@@ -117,6 +117,7 @@ export function NotificationList({ actions = false, compact = false, onNavigate 
       </div>
     </div>
     {(resource.error || centre.writeError) && <p role="alert" className="border-b border-line px-4 py-3 text-sm text-risk-ink">{resource.error || centre.writeError}</p>}
+    {!actions && centre.skipped > 0 && <p role="status" className="border-b border-line px-4 py-2 text-sm text-muted">{centre.skipped === 1 ? "1 notification is no longer available and was skipped." : `${centre.skipped} notifications are no longer available and were skipped.`}</p>}
     {acknowledged && <p role="status" className="px-4 py-2 text-sm text-ok-ink">Acknowledgement recorded. Clinical review and resolution remain separate.</p>}
     {!resource.data && !resource.error && <p role="status" className="p-5 text-sm text-muted">Loading alerts…</p>}
     {resource.data && !items.length && <p className="p-5 text-sm text-muted">{actions ? "No items need attention in this view." : "No notifications in this view."}</p>}

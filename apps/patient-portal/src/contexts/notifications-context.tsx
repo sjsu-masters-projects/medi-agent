@@ -23,6 +23,8 @@ interface NotificationState {
   busy: boolean;
   canMarkDisplayed: boolean;
   error: "load" | "write" | null;
+  /** Items left unread by the last "mark all" because they are no longer available. */
+  skipped: number;
   setUnread: (unread: boolean) => void;
   refresh: () => Promise<void>;
   loadMore: () => Promise<void>;
@@ -47,6 +49,7 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
   const [busy, setBusy] = useState(false);
   const [canMarkDisplayed, setCanMarkDisplayed] = useState(false);
   const [error, setError] = useState<NotificationState["error"]>(null);
+  const [skipped, setSkipped] = useState(0);
   const revision = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const mounted = useRef(true);
@@ -128,13 +131,17 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
     if (!token || writing.current || (!id && !snapshots.current.length)) return;
     const captured = [...snapshots.current];
     const session = epoch.current;
-    writing.current = true; setBusy(true); setError(null);
+    writing.current = true; setBusy(true); setError(null); setSkipped(0);
     revision.current++; controller.current?.abort();
     try {
       if (id) await notifications.read(token, id);
-      else for (const snapshot of captured) {
-        if (!mounted.current || session !== epoch.current) return;
-        await notifications.readThrough(token, snapshot);
+      else {
+        let total = 0;
+        for (const snapshot of captured) {
+          if (!mounted.current || session !== epoch.current) return;
+          total += (await notifications.readThrough(token, snapshot)).skipped;
+        }
+        if (mounted.current && session === epoch.current) setSkipped(total);
       }
     } catch (failure) {
       if (mounted.current && session === epoch.current) {
@@ -151,7 +158,7 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
     if (mounted.current && session === epoch.current) await refresh();
   }
 
-  return <NotificationContext.Provider value={{ locale, timezone, page, summary, unread, loading, busy, error, canMarkDisplayed,
+  return <NotificationContext.Provider value={{ locale, timezone, page, summary, unread, loading, busy, error, skipped, canMarkDisplayed,
     setUnread: (value) => { if (value === unread || writing.current) return; revision.current++; controller.current?.abort(); depth.current = 1; snapshots.current = []; setCanMarkDisplayed(false); setPage(null); setUnread(value); },
     refresh: () => refresh(), loadMore: () => page?.next_cursor ? refresh(page.next_cursor) : Promise.resolve(),
     markRead: (id) => write(id), markAllRead: () => write(),

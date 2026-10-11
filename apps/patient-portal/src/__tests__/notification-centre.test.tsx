@@ -25,7 +25,7 @@ beforeEach(() => {
   session.profile = { preferredLanguage: "en-US", timezone: "America/Los_Angeles" };
   vi.mocked(notifications.list).mockResolvedValue(page());
   vi.mocked(notifications.summary).mockResolvedValue({ unread_count: 1, action_item_count: 0 });
-  vi.mocked(notifications.read).mockResolvedValue(); vi.mocked(notifications.readThrough).mockResolvedValue();
+  vi.mocked(notifications.read).mockResolvedValue(); vi.mocked(notifications.readThrough).mockResolvedValue({ skipped: 0 });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -79,6 +79,14 @@ describe("patient notification centre", () => {
     await waitFor(() => expect(notifications.read).toHaveBeenCalledWith("synthetic-token", "one"));
   });
 
+  it("tells the patient when mark-all skipped items that are no longer available", async () => {
+    vi.mocked(notifications.readThrough).mockResolvedValue({ skipped: 2 });
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    await screen.findByText("Care team one");
+    fireEvent.click(screen.getByRole("button", { name: "Mark displayed as read" }));
+    expect(await screen.findByText("2 notifications are no longer available and were skipped.")).toBeInTheDocument();
+  });
+
   it("preserves a draft across JWT refresh and saved-language change, while discarding stale notification responses", async () => {
     let resolveOld!: (value: NotificationPage) => void;
     vi.mocked(notifications.list).mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
@@ -118,7 +126,7 @@ describe("patient notification centre", () => {
   });
   it("does not mark a concurrently arriving notification from an older displayed snapshot", async () => {
     let finishWrite!: () => void;
-    vi.mocked(notifications.readThrough).mockImplementationOnce(() => new Promise((resolve) => { finishWrite = resolve; }));
+    vi.mocked(notifications.readThrough).mockImplementationOnce(() => new Promise((resolve) => { finishWrite = () => resolve({ skipped: 0 }); }));
     render(<App />); await screen.findByText("Care team one");
     fireEvent.click(screen.getByRole("button", { name: "Mark displayed as read" }));
     vi.mocked(notifications.list).mockResolvedValue(page([{ ...item(), is_read: true }, item("new-arrival")], null, "new-snapshot"));

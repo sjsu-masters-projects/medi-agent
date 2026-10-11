@@ -12,7 +12,11 @@ export const notificationCentre = {
   },
   summary: (token: string, signal?: AbortSignal) => api.get<CentreSummary>(`${root}/summary`, { token, signal }),
   read: (token: string, id: string) => api.put(`${root}/${encodeURIComponent(id)}/read`, undefined, { token }),
-  readThrough: (token: string, read_through: string) => api.post(`${root}/read-through`, { read_through }, { token }),
+  /** Marks a loaded page read; items no longer available are skipped, not fatal. */
+  readThrough: async (token: string, read_through: string): Promise<{ skipped: number }> => {
+    const result = await api.post<{ skipped_count?: number } | null>(`${root}/read-through`, { read_through }, { token });
+    return { skipped: Math.max(0, Number(result?.skipped_count ?? 0) || 0) };
+  },
   acknowledge: (token: string, id: string, note?: string) => api.post(`${root}/action-items/${encodeURIComponent(id)}/acknowledge`, note ? { note } : {}, { token }),
 };
 
