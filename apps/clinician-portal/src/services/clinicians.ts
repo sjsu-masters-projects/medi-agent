@@ -282,6 +282,11 @@ export interface ExtractedDocumentFact {
     citations?: Array<{ excerpt?: string; location?: { page?: number } }>;
 }
 
+export type CarePlanLocale = "en-US" | "es-MX";
+export type CarePlanWording = { title: string; instructions: string; frequency: string };
+/** Where each language's wording came from: the source, an AI draft, or a clinician edit. */
+export type CarePlanWordingOrigin = "source" | "ai_draft" | "clinician_edited";
+
 export interface CarePlanItem {
     id: string;
     source_fact_id?: string | null;
@@ -296,6 +301,10 @@ export interface CarePlanItem {
     conflict: Record<string, unknown>;
     blocker_reason?: string | null;
     reviewed_locale?: string | null;
+    source_locale?: CarePlanLocale | null;
+    wording?: Partial<Record<CarePlanLocale, CarePlanWording>>;
+    wording_origin?: Partial<Record<CarePlanLocale, CarePlanWordingOrigin>>;
+    wording_verified?: boolean;
     is_removed: boolean;
     imported_evidence?: boolean;
     overlapping_item_ids?: string[];
@@ -370,6 +379,7 @@ interface PatientDeepDiveResponse
     documents: Array<{
         id: string;
         file_name: string;
+        display_title?: Partial<Record<"en-US" | "es-MX", string>> | null;
         document_type: DocumentType;
         parse_status: string;
         parse_failure_code?: string;
@@ -400,6 +410,7 @@ interface DocumentReviewQueueItemResponse {
     patient_first_name: string;
     patient_last_name: string;
     file_name: string;
+    display_title?: Partial<Record<"en-US" | "es-MX", string>> | null;
     document_type: DocumentType;
     parse_status: string;
     parse_failure_code?: string;
@@ -556,6 +567,7 @@ function normalizePatientDocument(
     return {
         id: document.id,
         fileName: document.file_name,
+        displayTitle: document.display_title ?? undefined,
         documentType: document.document_type,
         parseStatus: document.parse_status,
         parseFailureCode: document.parse_failure_code,
@@ -585,6 +597,7 @@ function normalizeDocumentReviewQueueItem(
         patientFirstName: item.patient_first_name,
         patientLastName: item.patient_last_name,
         fileName: item.file_name,
+        displayTitle: item.display_title ?? undefined,
         documentType: item.document_type,
         parseStatus: item.parse_status,
         parseFailureCode: item.parse_failure_code,
@@ -862,14 +875,28 @@ export async function updateClinicianCarePlan(
         medication: Record<string, unknown>;
         is_removed: boolean;
         clinician_confirmed: boolean;
-        language_verified: boolean;
-        verified_locale: "en-US" | "es-MX" | null;
+        wording: Partial<Record<CarePlanLocale, CarePlanWording>>;
+        wording_verified: boolean;
+        source_locale: CarePlanLocale | null;
     }>,
 ): Promise<CarePlanVersion> {
     return apiFetch<CarePlanVersion>(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}`, {
         method: "PUT",
         body: JSON.stringify({ items }),
     });
+}
+
+/** Redraft the other language of one draft item from its saved source wording. */
+export async function translateClinicianCarePlanItem(
+    patientId: string,
+    planId: string,
+    itemId: string,
+    fromLocale: CarePlanLocale,
+): Promise<CarePlanVersion> {
+    return apiFetch<CarePlanVersion>(
+        `/api/v1/care-plans/clinician/patients/${patientId}/${planId}/items/${itemId}/translate`,
+        { method: "POST", body: JSON.stringify({ from_locale: fromLocale }) },
+    );
 }
 
 export async function approveClinicianCarePlan(

@@ -209,6 +209,12 @@ async def test_documents_keep_the_existing_lifecycle_before_retry_schedule_migra
                 "message": "column documents.summary_next_attempt_at does not exist",
             }
         ),
+        APIError(
+            {
+                "code": "42703",
+                "message": "column documents.summary_next_attempt_at does not exist",
+            }
+        ),
         _response(data=[{"id": str(uuid4()), "summary_status": "pending"}]),
         _response(data=[]),
     ]
@@ -227,6 +233,7 @@ async def test_documents_still_load_before_migration_038_is_applied(service, exe
     from postgrest.exceptions import APIError
 
     execute.side_effect = [
+        APIError({"code": "42703", "message": "column documents.summary_status does not exist"}),
         APIError({"code": "42703", "message": "column documents.summary_status does not exist"}),
         _response(data=[{"id": str(uuid4()), "parse_status": "completed"}]),
         _response(data=[]),
@@ -247,3 +254,22 @@ async def test_an_unrelated_read_failure_is_not_retried_away(service, execute):
 
     with pytest.raises(APIError):
         await service.fetch_patient_documents(uuid4())
+
+
+@pytest.mark.asyncio
+async def test_documents_include_titles_and_load_before_migration_050(service, execute):
+    """Record titles are read when present and never block the list when absent."""
+    from postgrest.exceptions import APIError
+
+    execute.side_effect = [
+        APIError({"code": "42703", "message": "column documents.display_title does not exist"}),
+        _response(data=[{"id": str(uuid4()), "summary_status": "ready"}]),
+        _response(data=[]),
+    ]
+
+    documents = await service.fetch_patient_documents(uuid4())
+
+    assert documents[0]["summary_status"] == "ready"
+    selects = [call.args[0] for call in service.db.table.return_value.select.call_args_list]
+    assert "display_title" in selects[0]
+    assert "display_title" not in selects[1]

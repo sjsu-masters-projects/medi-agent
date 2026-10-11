@@ -117,9 +117,9 @@ export default function ClinicAdminSignupPage() {
 
     return (
         <AuthShell
-            headline="Launch your clinic workspace in one secure step."
-            subcopy="Create the clinic, register the first admin account, and start onboarding your care team from the dashboard."
-            footer="Your account will manage clinic settings and team access."
+            headline="Set up your clinic in one step."
+            subcopy="Create the clinic, register yourself as its first admin, then invite your care team."
+            footer="As admin, you manage clinic settings and team access."
             wide
         >
                 <div className="space-y-6">

@@ -41,6 +41,7 @@ class Workload(StrEnum):
     ADR_EXTRACTION = "adr_extraction"
     EXPLANATION = "explanation"
     CARE_PLAN_CLASSIFICATION = "care_plan_classification"
+    CARE_PLAN_TRANSLATION = "care_plan_translation"
 
 
 class Transport(StrEnum):
@@ -271,6 +272,18 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         budget_seconds=None,
         deterministic="keep the current approved plan and leave the draft retryable",
         enabled_setting="care_plan_ai_enabled",
+        max_output_tokens=8192,
+        thinking_level="LOW",
+    ),
+    # Drafts the second language of clinician-reviewed wording. Never publishes: the
+    # clinician checks both languages, and a failed draft only leaves the item untranslated.
+    Workload.CARE_PLAN_TRANSLATION: WorkloadRoute(
+        workload=Workload.CARE_PLAN_TRANSLATION,
+        primary=FLASH,
+        fallback=None,
+        budget_seconds=None,
+        deterministic="leave the item untranslated for the clinician to retry or write",
+        enabled_setting="care_plan_translation_ai_enabled",
         max_output_tokens=8192,
         thinking_level="LOW",
     ),

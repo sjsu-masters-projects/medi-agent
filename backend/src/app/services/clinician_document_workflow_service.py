@@ -25,9 +25,15 @@ from app.services.document_summary_service import (
     is_missing_summary_schedule_column_error,
 )
 
+
 # Migration 038 is applied by hand after this image deploys. Naming the summary columns
 # in a select would make the clinician's document list fail outright during that window,
 # so each read degrades to the pre-038 column set and the API schema supplies defaults.
+def _is_missing_title_column(error: APIError) -> bool:
+    message = str(getattr(error, "message", error))
+    return str(getattr(error, "code", "")) in {"PGRST204", "42703"} and "display_title" in message
+
+
 _SUMMARY_LIFECYCLE_COLUMNS = "summary_status, summary_failure_code, summary_attempts, "
 _SUMMARY_COLUMNS = f"{_SUMMARY_LIFECYCLE_COLUMNS}summary_next_attempt_at, "
 
@@ -181,7 +187,19 @@ class ClinicianDocumentWorkflowService:
         return payload
 
     async def _select_documents(self, build: Callable[[str], Any]) -> list[dict[str, Any]]:
-        """Read documents with the summary lifecycle when the database has it."""
+        """Read documents with titles and the summary lifecycle when the database has them."""
+        try:
+            result = await self._execute(build(f"display_title, {_SUMMARY_COLUMNS}"))
+            return cast(list[dict[str, Any]], result.data or [])
+        except APIError as exc:
+            # The backend can reach Cloud Run before migrations 038, 039 or 050; read
+            # without titles and let the summary-lifecycle fallbacks below decide.
+            if not (
+                _is_missing_title_column(exc)
+                or is_missing_summary_column_error(exc)
+                or is_missing_summary_schedule_column_error(exc)
+            ):
+                raise
         try:
             result = await self._execute(build(_SUMMARY_COLUMNS))
         except APIError as exc:

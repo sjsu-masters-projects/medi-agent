@@ -41,6 +41,9 @@ class FeedTask(BaseModel):
     completed_at: str | None = None
     requires_schedule_configuration: bool = False
     provider: TaskProvider | None = None
+    # Language of name/description when known. Differs from the patient's language only
+    # for older single-language records, which the portal labels as shown as written.
+    content_locale: Literal["en-US", "es-MX"] | None = None
 
 
 class FeedSummary(BaseModel):

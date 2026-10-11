@@ -448,7 +448,7 @@ describe("Patient profile page", () => {
         expect(screen.getByLabelText("Idioma preferido")).toHaveValue("es-MX");
         expect(
             screen.getByLabelText("Idioma preferido"),
-        ).toHaveAccessibleDescription(/instrucciones clínicas aprobadas/);
+        ).toHaveAccessibleDescription(/lo aprueba en inglés y en español|los aprueba en inglés y en español/);
         expect(screen.getByLabelText("Nombre")).toHaveValue("Synthetic");
         expect(
             screen.getByRole("option", { name: "Prefiero no decirlo" }),
@@ -523,7 +523,7 @@ describe("Patient profile page", () => {
                     : "Profile updated successfully.",
             );
             expect(screen.getByText(/1985/)).toHaveAttribute("dateTime", "1985-03-15");
-            expect(screen.getByText("America/Los_Angeles")).toBeInTheDocument();
+            expect(screen.getByTitle("America/Los_Angeles")).toHaveTextContent("Los Angeles");
         },
     );
 

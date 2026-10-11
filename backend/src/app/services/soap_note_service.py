@@ -57,29 +57,41 @@ async def _execute(query: Any) -> Any:
     return await asyncio.to_thread(query.execute)
 
 
+# Medications are logged as "taken" and activities as "completed"; both are done.
+# Counting only "completed" reported every medication as 0% adherent.
+DONE_STATUSES = frozenset({"completed", "taken"})
+
+
 def calculate_adherence_stats(logs: list[dict[str, Any]]) -> dict[str, Any]:
     """Summarise adherence logs into the four figures the prompt reports."""
     if not logs:
+        # Counts let the prompt say "no logs recorded" instead of reporting 0% adherence.
         return {
             "overall_score": 0.0,
             "medication_score": 0.0,
             "obligation_score": 0.0,
             "current_streak_days": 0,
+            "log_count": 0,
+            "medication_log_count": 0,
+            "obligation_log_count": 0,
         }
 
     total = len(logs)
-    completed = sum(1 for log in logs if log.get("status") == "completed")
+    completed = sum(1 for log in logs if log.get("status") in DONE_STATUSES)
     med_logs = [log for log in logs if log.get("target_type") == "medication"]
     obl_logs = [log for log in logs if log.get("target_type") == "obligation"]
 
-    med_completed = sum(1 for log in med_logs if log.get("status") == "completed")
-    obl_completed = sum(1 for log in obl_logs if log.get("status") == "completed")
+    med_completed = sum(1 for log in med_logs if log.get("status") in DONE_STATUSES)
+    obl_completed = sum(1 for log in obl_logs if log.get("status") in DONE_STATUSES)
 
     return {
         "overall_score": completed / total if total else 0.0,
         "medication_score": med_completed / len(med_logs) if med_logs else 0.0,
         "obligation_score": obl_completed / len(obl_logs) if obl_logs else 0.0,
         "current_streak_days": calculate_current_streak_days(logs),
+        "log_count": total,
+        "medication_log_count": len(med_logs),
+        "obligation_log_count": len(obl_logs),
     }
 
 
@@ -92,7 +104,7 @@ def calculate_current_streak_days(logs: list[dict[str, Any]]) -> int:
             continue
         day = logged_at[:10]
         by_day_completed[day] = by_day_completed.get(day, False) or (
-            log.get("status") == "completed"
+            log.get("status") in DONE_STATUSES
         )
 
     if not by_day_completed:

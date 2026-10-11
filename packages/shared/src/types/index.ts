@@ -361,6 +361,8 @@ export interface ReminderTarget {
     providerName?: string;
     reminderSchedule?: ReminderSchedule | null;
     guidance: ReminderGuidance;
+    /** See FeedTask.contentLocale. */
+    contentLocale?: Locale;
 }
 
 export interface Medication {
@@ -408,6 +410,8 @@ export interface Document {
     fileSizeBytes: number;
     parsed: boolean;
     aiSummary?: string;
+    /** Short list title per locale, drafted from the summary; fileName stays the source. */
+    displayTitle?: Partial<Record<Locale, string>>;
     parseStatus: DocumentParseStatus;
     parseFailureCode?: string;
     parseAttempts: number;
@@ -431,6 +435,8 @@ export interface DocumentReviewer {
 export interface ClinicianPatientDocument {
     id: string;
     fileName: string;
+    /** Short list title per locale; fileName stays the source identity. */
+    displayTitle?: Partial<Record<Locale, string>>;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
     parseFailureCode?: string;
@@ -457,6 +463,8 @@ export interface DocumentReviewQueueItem {
     patientFirstName: string;
     patientLastName: string;
     fileName: string;
+    /** Short list title per locale; fileName stays the source identity. */
+    displayTitle?: Partial<Record<Locale, string>>;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
     parseFailureCode?: string;
@@ -523,6 +531,9 @@ export interface FeedTask {
     provider?: FeedProvider;
     carePlanItemId?: string;
     carePlan?: FeedCarePlanProvenance;
+    /** Language of the name and description, when known. Approved plans match the
+     * patient's language; an older single-language record may not. */
+    contentLocale?: Locale;
 }
 
 export interface FeedSummary {

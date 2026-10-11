@@ -144,14 +144,15 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
   const active = threads.find((thread) => thread.id === selected);
   const name = (thread: CareConversation) => audience === "patient" ? thread.clinician_name : thread.patient_name;
   return <section className="space-y-4 text-sm text-ink-2">
-    <p className={`${alert} border-warn-line bg-warn-soft text-warn-ink`}>
+    {/* The emergency-services notice is patient safety copy; clinicians do not need it. */}
+    {audience === "patient" && <p className={`${alert} border-warn-line bg-warn-soft text-warn-ink`}>
       <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
       <span>{copy.notice}</span>
-    </p>
+    </p>}
     {error && <p role="alert" className={`${alert} border-risk-line bg-risk-soft text-risk-ink`}><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" /><span>{copy[error]}</span></p>}
     {pollFailed && <p role="alert" className={`${alert} border-risk-line bg-risk-soft text-risk-ink`}><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" /><span>{copy.loadError}</span></p>}
-    <div className="grid min-h-[calc(100dvh-180px)] overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] lg:h-[calc(100dvh-180px)] lg:grid-cols-[320px_minmax(0,1fr)]">
-      <div className="flex min-h-0 flex-col border-b border-line lg:border-b-0 lg:border-r">
+    <div className="grid min-h-[calc(100dvh-180px)] grid-cols-1 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] md:h-[calc(100dvh-180px)] md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="flex min-h-0 min-w-0 flex-col border-b border-line md:border-b-0 md:border-r">
         <div className="space-y-3 border-b border-line px-4 py-4">
           <div className="flex items-center justify-between gap-3">
             {loading ? <p role="status" className="text-[13px] text-muted">{copy.loading}</p>
@@ -192,7 +193,7 @@ function ConversationInbox({ token, locale, audience, visible }: { token: string
           </ul>
         </div>}
       </div>
-      <div className="flex min-h-[420px] min-w-0 flex-col lg:min-h-0">
+      <div className="flex min-h-[420px] min-w-0 flex-col md:min-h-0">
         {loading ? <div aria-hidden="true" className="flex-1 space-y-4 p-5">
           <Skeleton className="h-10 w-1/2" />
           <Skeleton className="ml-auto h-14 w-2/3" />

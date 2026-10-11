@@ -235,7 +235,7 @@ export default function ReviewQueuePage() {
                                     <div className="flex min-w-0 items-center gap-3">
                                         <DocumentTypeTile documentType={item.documentType} />
                                         <div className="min-w-0">
-                                            <div className="flex min-w-0 items-start gap-1.5"><SourceFileIcon className="mt-0.5" name={item.fileName} /><p className="min-w-0 break-words text-sm font-semibold text-ink">{item.fileName}</p></div>
+                                            <div className="flex min-w-0 items-start gap-1.5"><SourceFileIcon className="mt-0.5" name={item.fileName} /><div className="min-w-0">{item.displayTitle?.["en-US"] ? <p className="break-words text-sm font-semibold text-ink">{item.displayTitle["en-US"]}</p> : null}<p className={item.displayTitle?.["en-US"] ? "break-all font-mono text-[11px] text-muted" : "break-words text-sm font-semibold text-ink"}>{item.fileName}</p></div></div>
                                             <p className="mt-0.5 text-xs text-muted">
                                                 <span className="capitalize">{getDocumentTypeLabel(item.documentType)}</span>
                                                 {item.sourceClinic ? ` · ${item.sourceClinic}` : ""}

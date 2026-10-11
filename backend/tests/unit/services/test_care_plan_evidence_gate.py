@@ -8,6 +8,7 @@ import pytest
 from app.core.exceptions import ValidationError
 from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_wording import verified_wording
 
 
 def query(data):
@@ -107,9 +108,7 @@ def test_stale_draft_preflight_blocks_publication_before_rpc(status):
     service._patient_locale = MagicMock(return_value="en-US")
     service._active_medications = MagicMock(return_value=[])
     service._items = MagicMock(
-        return_value=[
-            {"source_fact_id": "fact", "category": "movement", "reviewed_locale": "en-US"}
-        ]
+        return_value=[{"source_fact_id": "fact", "category": "movement", **verified_wording()}]
     )
     with pytest.raises(ValidationError, match="source documents before preview or publication"):
         service.approve(UUID(int=1), UUID(int=2), UUID(int=3), "Synthetic review")

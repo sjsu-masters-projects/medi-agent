@@ -1,6 +1,8 @@
 import { normalizeLocale, resolveLocaleResource, type Locale, type LocaleResourceMap } from "@/types";
 
 const english = {
+    locale: "en-US" as Locale,
+    writtenIn: (content: Locale): string => content === "es-MX" ? "Written in Spanish by your care team" : "Written in English by your care team",
     today: "Today", hello: "Hi there", greeting: (name: string) => `Hi, ${name}`,
     progress: "Daily progress", completed: (done: number, total: number) => `${done} of ${total} tasks completed`,
     progressHelp: "About this progress", progressDetail: "Completed activities out of the activities shown for today, including upcoming ones. It is not a health score.",
@@ -28,6 +30,8 @@ const english = {
 
 export type TodayCopy = typeof english;
 const spanish: TodayCopy = {
+    locale: "es-MX",
+    writtenIn: (content) => content === "en-US" ? "Escrito en inglés por tu equipo de atención" : "Escrito en español por tu equipo de atención",
     today: "Hoy", hello: "Hola", greeting: (name) => `Hola, ${name}`,
     progress: "Progreso diario", completed: (done, total) => `${done} de ${total} tareas completadas`,
     progressHelp: "Sobre este progreso", progressDetail: "Actividades completadas de las que se muestran hoy, incluidas las próximas. No es una calificación de salud.",

@@ -2,8 +2,8 @@
 
 Moved verbatim from the triage agent's package so it survives that package's removal. The
 production chat turn no longer uses these — the Care Coordinator carries its own
-instructions — but the evaluation harness scores against these exact strings, so editing a
-word here would move a benchmark without anyone deciding to.
+instructions. The evaluation harness scores the classification prompt, so editing it moves a
+benchmark; the chat-response prompt is kept for drug-knowledge formatting tests only.
 """
 
 from __future__ import annotations

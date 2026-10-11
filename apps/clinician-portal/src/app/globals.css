@@ -207,3 +207,28 @@ details.ma-disclosure[open] > summary::before { transform: rotate(90deg); }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .ma-3d-tilt { transform: none !important; }
 }
+
+/* Entry-screen flow stack: scaled by width, and reduced on short laptop screens so the
+   panel footer stays in view. The short-height rule is last so it wins. */
+.auth-flow { --flow-scale: .68; height: calc(420px * var(--flow-scale)); }
+.auth-flow-stack { transform: scale(var(--flow-scale)); }
+@media (min-width: 1280px) { .auth-flow { --flow-scale: .84; } }
+@media (min-width: 1536px) { .auth-flow { --flow-scale: 1; } }
+@media (max-height: 860px) { .auth-flow { --flow-scale: .62; } }
+
+/* Scrollable tab bars: hide the scrollbar and fade the edge that has more tabs. */
+.ma-tabbar { scrollbar-width: none; }
+.ma-tabbar::-webkit-scrollbar { display: none; }
+@property --fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@supports (animation-timeline: scroll()) {
+  .ma-tabbar {
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start, 0px), #000 calc(100% - var(--fade-end, 0px)), transparent 100%);
+    animation: ma-tabbar-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
+  @keyframes ma-tabbar-fade {
+    0% { --fade-start: 0px; --fade-end: 32px; }
+    100% { --fade-start: 32px; --fade-end: 0px; }
+  }
+}

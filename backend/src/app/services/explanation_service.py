@@ -137,16 +137,22 @@ class ExplanationService:
             ]
 
         prompt = GENERATE_SUMMARY_USER.format(
-            medications=json.dumps(document_data.get("medications", []), default=str),
-            conditions=json.dumps(document_data.get("conditions", []), default=str),
-            follow_up_instructions=json.dumps(follow_up_instructions, default=str),
+            medications=json.dumps(
+                document_data.get("medications", []), default=str, ensure_ascii=False
+            ),
+            conditions=json.dumps(
+                document_data.get("conditions", []), default=str, ensure_ascii=False
+            ),
+            follow_up_instructions=json.dumps(
+                follow_up_instructions, default=str, ensure_ascii=False
+            ),
         )
         response = await router.generate_text(
             TaskType.PATIENT_EXPLANATION,
             prompt=prompt,
             system_instruction=GENERATE_SUMMARY_SYSTEM,
             temperature=0.4,
-            max_tokens=512,
+            max_tokens=1024,
         )
         return normalize_patient_summary(response) or FALLBACK_MESSAGE
 
@@ -173,6 +179,6 @@ class ExplanationService:
             ),
             system_instruction=TRANSLATE_SUMMARY_SYSTEM.format(target_language=language_name),
             temperature=0.2,
-            max_tokens=512,
+            max_tokens=1024,
         )
         return normalize_patient_summary(response) or FALLBACK_MESSAGE

@@ -8,6 +8,11 @@ import type { IconName } from "@/components/ui/icons";
 import type { TaskCardStatus } from "./task-card.types";
 import { FeedTaskType, type FeedTask } from "@/types";
 
+/** Long patient instructions step down from headline size so the card stays scannable on a phone. */
+function heroTitleSize(text: string) {
+    return text.length > 72 ? "text-[19px]" : text.length > 40 ? "text-[20px]" : "text-[22px]";
+}
+
 function activityType(task: FeedTask) {
     switch (task.carePlan?.category) {
         case "movement": return "exercise";
@@ -44,6 +49,12 @@ function statusPillClass(status: TaskCardStatus) {
 }
 
 /** Status pill with the clock time in mono, e.g. "Missed · 8:00 AM". */
+/** Older single-language records keep their wording; say so instead of mixing silently. */
+export function WrittenIn({ task, copy }: { task: FeedTask; copy: TodayCopy }) {
+    if (!task.contentLocale || task.contentLocale === copy.locale) return null;
+    return <p className="flex items-center gap-1.5 text-[12px] font-medium text-muted"><Icon name="globe" className="h-3.5 w-3.5 shrink-0" />{copy.writtenIn(task.contentLocale)}</p>;
+}
+
 export function TaskStatusPill({ status, task, copy, timeLabel }: { status: TaskCardStatus; task: FeedTask; copy: TodayCopy; timeLabel: string }) {
     const showTime = Boolean(task.scheduledTime) || !task.requiresScheduleConfiguration;
     return <span className={`inline-flex max-w-full shrink-0 flex-wrap items-center gap-x-1 rounded-full px-2.5 py-1 text-xs font-semibold ${statusPillClass(status)}`}>
@@ -69,7 +80,8 @@ export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onCo
         <div className="flex items-start gap-3.5">
             <TodayTaskIcon task={task} large />
             <div className="min-w-0 flex-1 space-y-1 break-words [overflow-wrap:anywhere]">
-                <h3 className={`${hero ? "text-[22px]" : "text-xl"} font-semibold leading-tight tracking-[-0.01em] text-ink`}>{task.name}</h3>
+                <h3 lang={task.contentLocale} className={`${hero ? heroTitleSize(task.name) : "text-xl"} font-semibold leading-tight tracking-[-0.01em] text-ink`}>{task.name}</h3>
+                <WrittenIn task={task} copy={copy} />
                 {instruction.trim() !== task.name.trim() ? <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink-2">{instruction}</p> : null}
                 {!medication && task.frequency ? <p className="text-[13px] text-muted">{task.frequency}</p> : null}
             </div>
@@ -82,12 +94,14 @@ export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onCo
                 {task.provider?.name ? <p className="text-sm font-medium text-brand-ink">{copy.approvedBy(task.provider.name)}</p> : null}
             </div> : null}
         </div> : medication && task.provider?.name ? <p className="text-[13px] text-muted">{copy.prescribedBy(task.provider.name)}</p> : null}
-        {task.requiresScheduleConfiguration ? <div className="flex items-start gap-3 rounded-2xl bg-brand-tint/60 p-3.5 text-sm">
+        {task.requiresScheduleConfiguration ? <div className="ma-press relative flex items-start gap-3 rounded-2xl bg-brand-tint/60 p-3.5 text-sm transition-colors hover:bg-brand-tint">
             <Icon name="bell" className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
-            <div className="min-w-0 space-y-0.5">
-                <Link href="/reminders" className="inline-flex min-h-6 items-center font-semibold text-brand hover:underline">{copy.setTime}</Link>
+            <div className="min-w-0 flex-1 space-y-0.5">
+                {/* Stretched link: the whole card is the tap target, the link text stays the accessible name. */}
+                <Link href="/reminders" className="inline-flex min-h-6 items-center font-semibold text-brand after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:underline">{copy.setTime}</Link>
                 <p className="text-ink-2">{copy.setupDetail}</p>
             </div>
+            <Icon name="chevron" className="mt-0.5 h-4 w-4 shrink-0 self-center text-brand" />
         </div> : null}
         {actionable ? <div className="space-y-2">
             <button type="button" disabled={disabled} onClick={onComplete} className="ma-press flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-brand px-4 py-3 text-[17px] font-semibold text-white shadow-[0_10px_22px_-14px_rgba(20,116,101,.9)] hover:bg-brand-hover disabled:opacity-60">
@@ -111,7 +125,7 @@ export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetail
         <button type="button" aria-label={`${copy.details}: ${task.name}`} onClick={onDetails} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl text-left">
             <TodayTaskIcon task={task} />
             <span className="min-w-0 flex-1">
-                <span className={`line-clamp-2 break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${status === "completed" ? "text-muted" : "text-ink"}`}>{task.name}</span>
+                <span lang={task.contentLocale} className={`line-clamp-2 break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${status === "completed" ? "text-muted" : "text-ink"}`}>{task.name}</span>
                 {sub ? <span className="mt-0.5 line-clamp-1 break-words text-[13px] text-muted [overflow-wrap:anywhere]">{sub}</span> : null}
             </span>
         </button>
@@ -122,7 +136,7 @@ export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetail
                     ? <button type="button" disabled={disabled} onClick={onComplete} className="ma-press relative before:absolute before:-inset-x-1 before:-inset-y-[7px] before:content-[''] min-h-[34px] rounded-[11px] bg-brand-tint px-3 py-1.5 text-[13px] font-semibold text-brand hover:bg-[#D3E8E1] disabled:opacity-60">{copy.done}</button>
                     : <span className={`text-[12px] font-medium ${status === "missed" ? "text-danger-ink" : status === "skipped" ? "text-note-ink" : "text-muted"}`}>{statusLabel}</span>}
             {task.requiresScheduleConfiguration && !task.scheduledTime
-                ? <Link href="/reminders" className="inline-flex min-h-8 items-center text-[13px] font-medium leading-tight text-brand hover:underline">{copy.setTime}</Link>
+                ? <Link href="/reminders" className="-my-1 inline-flex min-h-10 items-center text-[13px] font-medium leading-tight text-brand hover:underline">{copy.setTime}</Link>
                 : status !== "completed" ? <span className="font-mono text-[13px] text-ink-2">{timeLabel}</span> : null}
         </div>
     </li>;

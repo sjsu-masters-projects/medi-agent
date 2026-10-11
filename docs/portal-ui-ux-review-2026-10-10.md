@@ -40,12 +40,12 @@ The global selector persists through the existing authenticated profile endpoint
 failure leaves the prior preference unchanged. Entry screens have a separate
 guest choice before a profile exists. Chat no longer owns a competing preference.
 
-Clinician controls remain English. Clinical instructions and historical messages
-retain their original, reviewed wording. A language switch does not translate,
-edit or publish them. The current contract is one clinician-reviewed locale per
-approved plan snapshot, not two automatically generated translations. For another
-clinical language, the team must review the actual wording through the established
-draft/publication path. Explain this distinction beside the language control.
+Clinician controls remain English. Superseded by
+[LOC-001](../.agent/specs/loc-001-bilingual-approved-wording.md): care-plan wording is
+approved in English and Spanish together, so a language switch changes Today and
+Reminders without new review. Historical messages keep the language they were written
+in, and older single-language records are labelled with their language. The language
+control explains this.
 
 ## Review coverage
 

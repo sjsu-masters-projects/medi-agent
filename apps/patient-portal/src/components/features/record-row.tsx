@@ -1,4 +1,3 @@
-import { AiChip } from "@/components/ui/ai-chip";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { IconTile, type TileTone } from "@/components/ui/list";
 import {
@@ -29,6 +28,11 @@ export function cleanRecordTitle(filename: string, patientName?: string) {
   // Drop a leading sequence number such as "05 " when words follow it.
   title = title.replace(/^\d{1,3}\s+(?=\D)/, "");
   return title ? title.charAt(0).toUpperCase() + title.slice(1) : filename;
+}
+
+/** The drafted title in the reader's language, else the cleaned file name. */
+export function recordTitle(document: Pick<Document, "displayTitle" | "fileName">, locale: Locale, patientName?: string) {
+  return document.displayTitle?.[locale]?.trim() || cleanRecordTitle(document.fileName, patientName);
 }
 
 export function groupRecordDates<T extends { createdAt: string }>(
@@ -110,7 +114,7 @@ export function RecordRow({
           <h3
             className={`break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${duplicate ? "text-nav-idle" : "text-ink"}`}
           >
-            {cleanRecordTitle(document.fileName, patientName)}
+            {recordTitle(document, locale, patientName)}
           </h3>
           <span className="sr-only">{document.fileName}</span>
           <span className="mt-0.5 block break-words text-[13px] leading-snug text-muted first-letter:uppercase">
@@ -125,12 +129,14 @@ export function RecordRow({
         {!duplicate && statusLabel ? (
           <span className="ml-auto inline-flex min-w-0 max-w-full [&>span]:max-w-full [&>span]:break-words [&_svg]:shrink-0">
             {summary ? (
-              <AiChip className="ma-fade">
+              // A quiet marker: most records have a summary, so a pill on every row is noise.
+              <span className="ma-fade inline-flex items-center gap-1 text-xs font-medium text-brand">
+                <Icon name="spark" className="h-3.5 w-3.5" />
                 <span className="sr-only">{statusLabel}</span>
                 <span aria-hidden="true">
                   {spanish ? "Resumen" : "Summary"}
                 </span>
-              </AiChip>
+              </span>
             ) : (
               <span
                 className={`inline-flex flex-wrap items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${failed ? "bg-danger-tint text-danger-ink" : processing ? "bg-surface-2 text-muted" : "bg-note-tint text-note-ink"}`}

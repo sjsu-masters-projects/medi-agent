@@ -24,10 +24,10 @@ type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" 
 
 const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
     { id: "profile", label: "Profile", icon: "user" },
-    { id: "imports", label: "External records", icon: "link" },
+    { id: "imports", label: "External Records", icon: "link" },
     { id: "adherence", label: "Adherence", icon: "gauge" },
     { id: "symptoms", label: "Symptoms", icon: "alert" },
-    { id: "chat", label: "Chat Transcript", icon: "chat" },
+    { id: "chat", label: "Chat", icon: "chat" },
     { id: "soap", label: "SOAP Notes", icon: "spark" },
     { id: "documents", label: "Documents", icon: "note" },
     { id: "care-plan", label: "Care Plan", icon: "check" },
@@ -40,6 +40,13 @@ function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab
         function measure() {
             const button = bar.current?.querySelector<HTMLElement>(`#tab-btn-${activeTab}`);
             if (button) setIndicator({ left: button.offsetLeft, width: button.offsetWidth });
+            // On narrow windows the bar scrolls; keep the active tab in view without moving the page.
+            const container = bar.current;
+            if (button && container) {
+                const overflowRight = button.offsetLeft + button.offsetWidth - (container.scrollLeft + container.clientWidth);
+                if (overflowRight > 0) container.scrollLeft += overflowRight + 24;
+                else if (button.offsetLeft < container.scrollLeft) container.scrollLeft = Math.max(0, button.offsetLeft - 24);
+            }
         }
         measure();
         window.addEventListener("resize", measure);
@@ -48,7 +55,7 @@ function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab
     return (
         <div
             aria-label="Patient data tabs"
-            className="relative flex h-11 shrink-0 gap-1 overflow-x-auto border-b border-line-strong"
+            className="ma-tabbar relative flex h-11 shrink-0 gap-0.5 overflow-x-auto border-b border-line-strong xl:gap-1"
             ref={bar}
             role="tablist"
         >
@@ -56,7 +63,7 @@ function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab
                 <button
                     aria-controls={`tab-panel-${id}`}
                     aria-selected={activeTab === id}
-                    className={`flex h-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-lg px-3 text-[13px] transition-colors duration-[160ms] ${
+                    className={`flex h-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-lg px-2.5 text-[13px] xl:px-3 transition-colors duration-[160ms] ${
                         activeTab === id
                             ? "font-medium text-ink"
                             : "text-muted hover:bg-[rgba(100,116,139,.06)] hover:text-ink-2"
@@ -79,7 +86,7 @@ function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab
                     role="tab"
                     type="button"
                 >
-                    <Icon name={icon} className={`h-4 w-4 shrink-0 ${activeTab === id ? "text-primary" : ""}`} />
+                    <Icon name={icon} className={`hidden h-4 w-4 shrink-0 xl:block ${activeTab === id ? "text-primary" : ""}`} />
                     <span>{label}</span>
                 </button>
             ))}

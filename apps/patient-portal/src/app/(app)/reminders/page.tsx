@@ -61,6 +61,7 @@ interface ReminderTargetResponse {
   description?: string;
   frequency: string;
   provider_name?: string;
+  content_locale?: string | null;
   reminder_schedule?: ReminderScheduleResponse | null;
   guidance: {
     supports_automatic_reminders: boolean;
@@ -105,6 +106,7 @@ function normalizeTarget(target: ReminderTargetResponse): ReminderTarget {
     description: target.description,
     frequency: target.frequency,
     providerName: target.provider_name,
+    contentLocale: target.content_locale === "en-US" || target.content_locale === "es-MX" ? target.content_locale : undefined,
     reminderSchedule: normalizeReminderSchedule(target.reminder_schedule),
     guidance: {
       supportsAutomaticReminders: target.guidance.supports_automatic_reminders,
@@ -494,9 +496,15 @@ export default function ReminderSettingsPage() {
                             ? copy("Medication")
                             : copy("Care activity")}
                         </p>
-                        <h3 className="mt-0.5 break-words text-[17px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">
+                        <h3 lang={target.contentLocale} className="mt-0.5 break-words text-[17px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">
                           {target.name}
                         </h3>
+                        {target.contentLocale && target.contentLocale !== locale ? (
+                          <p className="mt-0.5 flex items-center gap-1.5 text-[12px] font-medium text-muted">
+                            <Icon name="globe" className="h-3.5 w-3.5 shrink-0" />
+                            {copy(target.contentLocale === "es-MX" ? "Written in Spanish by your care team" : "Written in English by your care team")}
+                          </p>
+                        ) : null}
                         <p className="mt-0.5 break-words text-[13px] leading-5 text-muted">
                           {target.frequency}
                           {target.providerName

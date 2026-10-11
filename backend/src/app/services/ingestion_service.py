@@ -239,7 +239,8 @@ class IngestionService:
             prompt=EXTRACT_CONTENT_USER.format(raw_content=model_text),
             system_instruction=EXTRACT_CONTENT_SYSTEM,
             temperature=0.1,
-            max_tokens=2048,
+            # Matches the evaluated ceiling; 2048 truncated multi-medication documents.
+            max_tokens=4096,
         )
         return DocumentExtractionResult.model_validate(self._parse_json(response)), telemetry.model
 

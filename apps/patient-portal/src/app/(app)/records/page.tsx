@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { DocumentSourceViewer } from "@/components/features";
-import { cleanRecordTitle, groupRecordDates, RecordRow } from "@/components/features/record-row";
+import { groupRecordDates, RecordRow, recordTitle } from "@/components/features/record-row";
 import { Icon } from "@/components/ui/icons";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { OverflowMenu } from "@/components/ui/overflow-menu";
@@ -178,6 +178,7 @@ function needsHumanDocumentReview(status: string) {
 function mapDocument(record: DocumentApiRecord): PortalDocument {
   return {
     aiSummary: normalizePatientSummary(record.ai_summary),
+    displayTitle: record.display_title ?? undefined,
     createdAt: record.created_at,
     documentType: record.document_type,
     fileName: record.file_name,
@@ -869,7 +870,7 @@ export default function RecordsPage() {
           open={Boolean(selectedDocument)}
           closeLabel={spanish ? "Cerrar ventana" : "Close modal"}
           size="wide"
-          title={selectedDocument ? cleanRecordTitle(selectedDocument.fileName, patientName) : copy("Record details")}
+          title={selectedDocument ? recordTitle(selectedDocument, locale, patientName) : copy("Record details")}
         >
           <div className="space-y-4">
             <div className="-mt-2 space-y-1">

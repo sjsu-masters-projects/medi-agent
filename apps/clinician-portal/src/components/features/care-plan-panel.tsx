@@ -9,14 +9,18 @@ import { ApprovalSeal } from "@/components/ui/approval-seal";
 import { Icon } from "@/components/ui/icons";
 import { Popover } from "@/components/ui/popover";
 import { SourceFileIcon } from "@/components/features/source-file";
+import { ApprovedWording, BilingualWording, LOCALE_LABEL, otherLocale, wordingComplete } from "@/components/features/care-plan-wording";
 import {
     approveClinicianCarePlan,
     fetchClinicianCarePlanReviewContext,
     fetchClinicianCarePlanGeneration,
     fetchClinicianDocumentSource,
     retryClinicianCarePlanGeneration,
+    translateClinicianCarePlanItem,
     updateClinicianCarePlan,
     type CarePlanItem,
+    type CarePlanLocale,
+    type CarePlanWording,
     type ClinicianDocumentSource,
     type CarePlanGeneration,
     type CarePlanVersion,
@@ -28,7 +32,7 @@ interface CarePlanPanelProps {
     onPublished?: () => void;
 }
 
-type EditableItem = CarePlanItem & { clinician_confirmed: boolean; language_verified: boolean };
+type EditableItem = CarePlanItem & { clinician_confirmed: boolean };
 type ActiveMedication = CarePlanReviewContext["active_medications"][number];
 const SOURCE_TITLE_REVIEW = "Source title exceeds the draft limit; replace it after reviewing the full evidence.";
 const MEDICATION_ROUTES = ["oral", "topical", "inhaled", "iv", "im", "subcutaneous"];
@@ -110,7 +114,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             setPatientLocale(context.patient_locale);
             setActiveMedications(context.active_medications ?? []);
             setGeneration(nextGeneration);
-            setItems((next?.items ?? []).map((item) => ({ ...item, clinician_confirmed: false, language_verified: item.reviewed_locale === context.patient_locale })));
+            setItems((next?.items ?? []).map((item) => ({ ...item, clinician_confirmed: false })));
             setHasUnsavedChanges(false);
             setSelectedSourceItemId(null);
             setSelectedSourceDocumentId(null);
@@ -158,7 +162,9 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             Boolean(item.blocker_reason) && !item.clinician_confirmed)),
         [items, plan],
     );
-    const unverified = items.filter((item) => !item.is_removed && !item.language_verified);
+    // Both languages are approved together, so a later language switch needs no new review.
+    const untranslated = items.filter((item) => !item.is_removed && !wordingComplete(item));
+    const unverified = items.filter((item) => !item.is_removed && !(item.wording_verified && wordingComplete(item)));
     const undecidedMedications = items.filter((item) => !item.is_removed && item.category === "medication" && (
         !["create", "update"].includes(medicationText(item.medication.decision)) ||
         (item.medication.decision === "create" && activeMedications.some((active) => active.name.trim().toLowerCase() === medicationText(item.medication.name).trim().toLowerCase()))
@@ -172,7 +178,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     );
     const importedItems = items.filter((item) => item.imported_evidence && !item.is_removed && !previousByFact.has(item.source_fact_id));
     const removedCount = items.filter((item) => item.is_removed).length;
-    const languageLabel = patientLocale === "es-MX" ? "Español (México)" : patientLocale === "en-US" ? "English (US)" : "Language not available";
+    const languageLabel = patientLocale === "es-MX" || patientLocale === "en-US" ? LOCALE_LABEL[patientLocale] : "Language not available";
     const sourceDocuments = useMemo(() => {
         const byId = new Map<string, string>();
         for (const item of items) {
@@ -186,15 +192,53 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     function patchItem(id: string, change: Partial<EditableItem>) {
         setItems((current) => current.map((item) => item.id === id ? {
             ...item, ...change,
-            language_verified: change.language_verified ?? (change.is_removed === true ? false : item.language_verified && change.title === undefined && change.instructions === undefined && change.frequency === undefined && change.medication === undefined),
+            // Any wording or medication change needs a fresh check of both languages.
+            wording_verified: change.wording_verified ?? (change.is_removed === true ? false : Boolean(item.wording_verified) && change.title === undefined && change.instructions === undefined && change.frequency === undefined && change.medication === undefined && change.wording === undefined),
         } : item));
         setHasUnsavedChanges(true);
     }
 
+    function editWording(item: EditableItem, locale: CarePlanLocale, field: keyof CarePlanWording, value: string) {
+        const source = item.source_locale ?? null;
+        const isSource = !source || locale === source;
+        const change: Partial<EditableItem> = {};
+        if (isSource) {
+            // The source copy is also the text reconciliation and continuity compare.
+            change[field] = value;
+            if (field === "frequency" && item.category === "medication") change.medication = { ...item.medication, frequency: value };
+        }
+        if (source) {
+            const current = item.wording?.[locale] ?? { title: "", instructions: "", frequency: "" };
+            change.wording = { ...item.wording, [locale]: { ...current, [field]: value } };
+        }
+        patchItem(item.id, change);
+    }
+
+    function writeManually(item: EditableItem, sourceLocale: CarePlanLocale) {
+        patchItem(item.id, {
+            source_locale: sourceLocale,
+            wording: {
+                [sourceLocale]: { title: item.title, instructions: item.instructions, frequency: item.frequency },
+                [otherLocale(sourceLocale)]: { title: "", instructions: "", frequency: "" },
+            },
+        });
+    }
+
     function removeItems(ids: string[]) {
         setItems((current) => current.map((item) => ids.includes(item.id)
-            ? { ...item, is_removed: true, language_verified: false } : item));
+            ? { ...item, is_removed: true, wording_verified: false } : item));
         setHasUnsavedChanges(true);
+    }
+
+    async function translate(item: EditableItem, fromLocale: CarePlanLocale) {
+        if (!plan || plan.status !== "draft" || hasUnsavedChanges) return;
+        setSaving(true); setError(null);
+        try {
+            const saved = await translateClinicianCarePlanItem(patientId, plan.id, item.id, fromLocale);
+            setPlan(saved);
+            setItems(saved.items.map((next) => ({ ...next, clinician_confirmed: false })));
+        } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to draft the translation."); }
+        finally { setSaving(false); }
     }
 
     async function save() {
@@ -205,11 +249,11 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                 id: item.id, title: item.title, instructions: item.instructions,
                 frequency: item.frequency, schedule: item.schedule, medication: item.medication,
                 is_removed: item.is_removed, clinician_confirmed: item.clinician_confirmed,
-                language_verified: item.language_verified,
-                verified_locale: item.language_verified && (patientLocale === "en-US" || patientLocale === "es-MX") ? patientLocale : null,
+                wording: item.wording ?? {}, wording_verified: Boolean(item.wording_verified),
+                source_locale: item.source_locale ?? null,
             })));
             setPlan(saved);
-            setItems(saved.items.map((item) => ({ ...item, clinician_confirmed: false, language_verified: item.reviewed_locale === patientLocale })));
+            setItems(saved.items.map((item) => ({ ...item, clinician_confirmed: false })));
             setHasUnsavedChanges(false);
         } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save the draft."); }
         finally { setSaving(false); }
@@ -236,7 +280,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const undecidedIds = new Set(undecidedMedications.map((item) => item.id));
     const pendingUploadReview = (item: CarePlanItem) => (item.sources ?? (item.source ? [item.source] : [])).some((citation) => citation.upload_review_status && citation.upload_review_status !== "approved");
     const retained = items.filter((item) => !item.is_removed);
-    const verifiedCount = retained.filter((item) => item.language_verified).length;
+    const verifiedCount = retained.filter((item) => item.wording_verified && wordingComplete(item)).length;
     const blockerCount = unresolved.length + overlapping.size + undecidedMedications.length;
     const pendingUploads = retained.some(pendingUploadReview);
     const reviewReady = !saving && !generationBlocked && !hasUnsavedChanges && blockerCount === 0 && unverified.length === 0;
@@ -244,7 +288,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     function itemState(item: EditableItem): "verified" | "blocker" | "unverified" | "removed" {
         if (item.is_removed) return "removed";
         if (unresolvedIds.has(item.id) || overlapping.has(item.id) || undecidedIds.has(item.id) || pendingUploadReview(item)) return "blocker";
-        return item.language_verified ? "verified" : "unverified";
+        return item.wording_verified && wordingComplete(item) ? "verified" : "unverified";
     }
     const positionOf = (id: string) => visibleItems.findIndex((item) => item.id === id) + 1;
     const capitalize = (value: string) => value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
@@ -260,7 +304,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
         : null;
     const steps: { label: string; state: "done" | "current" | "blocked" | "todo" }[] = [
         { label: "Sources", state: pendingUploads ? "blocked" : "done" },
-        { label: `Patient wording ${verifiedCount}/${retained.length}`, state: unverified.length === 0 ? "done" : pendingUploads ? "todo" : "current" },
+        { label: `Wording EN · ES ${verifiedCount}/${retained.length}`, state: unverified.length === 0 ? "done" : pendingUploads ? "todo" : "current" },
         { label: `Resolve blockers ${Math.max(0, retained.length - new Set([...unresolvedIds, ...overlapping.keys(), ...undecidedIds]).size)}/${retained.length}`, state: blockerCount === 0 && !generationBlocked ? "done" : "blocked" },
         { label: "Preview Today", state: reviewReady ? "current" : "todo" },
         { label: "Approve", state: reviewReady && note.trim() ? "current" : "todo" },
@@ -317,15 +361,14 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
 
             {isDraft ? <div className="space-y-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="text-[13px] font-medium text-ink-2">Patient-facing wording · {languageLabel}</p>
-                    <p className="text-xs text-muted">Shown in Today exactly as written</p>
+                    <p className="text-[13px] font-medium text-ink-2">Patient-facing wording · English and Spanish</p>
+                    <p className="text-xs text-muted">Today shows the patient&apos;s chosen language exactly as written</p>
                 </div>
-                <div className="grid gap-3 rounded-xl border border-line bg-surface-2/60 p-3.5 md:grid-cols-2">
-                    <label className="text-xs font-semibold text-ink-2 md:col-span-2">Title<input className={fieldClass} value={item.title} onChange={(event) => patchItem(item.id, { title: event.target.value })} /></label>
-                    <label className="text-xs font-semibold text-ink-2 md:col-span-2">Instructions<textarea rows={3} className={`${fieldClass} text-[15px] leading-relaxed`} value={item.instructions} onChange={(event) => patchItem(item.id, { instructions: event.target.value })} /></label>
-                    <label className="text-xs font-semibold text-ink-2">Frequency<input className={fieldClass} value={item.frequency} onChange={(event) => patchItem(item.id, { frequency: event.target.value, ...(item.category === "medication" ? { medication: { ...item.medication, frequency: event.target.value } } : {}) })} /></label>
-                </div>
-            </div> : <p className="rounded-xl border border-line bg-surface-2 p-3.5 text-[15px] leading-relaxed text-ink">{item.instructions} · {item.frequency}</p>}
+                <BilingualWording busy={saving} fieldClass={fieldClass} item={item} patientLocale={patientLocale} unsaved={hasUnsavedChanges}
+                    onChange={(locale, field, value) => editWording(item, locale, field, value)}
+                    onTranslate={(fromLocale) => void translate(item, fromLocale)}
+                    onWriteManually={(sourceLocale) => writeManually(item, sourceLocale)} />
+            </div> : <ApprovedWording item={item} />}
 
             {isDraft && item.category === "medication" && !item.is_removed ? <div className="space-y-3 rounded-xl border border-line bg-surface p-3.5 text-sm text-ink-2">
                 <div>
@@ -339,7 +382,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
 
             {item.blocker_reason && !item.is_removed ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn-line bg-warn-soft px-3.5 py-3"><p className="flex items-start gap-2 text-sm text-warn-ink"><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />{item.blocker_reason}</p>{isDraft ? <label className="flex items-center gap-2 text-sm font-medium text-ink-2"><input checked={item.clinician_confirmed} className="h-4 w-4 accent-[var(--color-primary)]" type="checkbox" onChange={(event) => patchItem(item.id, { clinician_confirmed: event.target.checked })} /> Confirm after review</label> : null}</div> : null}
 
-            {isDraft && !item.is_removed ? <label className={`flex items-start gap-3 rounded-xl border p-3.5 text-[13px] leading-relaxed transition-colors duration-[160ms] ${item.language_verified ? "border-ok-line bg-ok-soft text-ok-ink" : "border-line-strong bg-surface text-ink-2 hover:border-primary-line"}`}><input checked={item.language_verified} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]" type="checkbox" onChange={(event) => patchItem(item.id, { language_verified: event.target.checked })} /><span>I checked this final title, instructions, frequency, and medication wording for the patient&apos;s {languageLabel} language against the source. This does not translate the document.</span></label> : null}
+            {isDraft && !item.is_removed ? <label className={`flex items-start gap-3 rounded-xl border p-3.5 text-[13px] leading-relaxed transition-colors duration-[160ms] ${!wordingComplete(item) ? "cursor-not-allowed border-line bg-surface-2 text-muted" : item.wording_verified ? "border-ok-line bg-ok-soft text-ok-ink" : "border-line-strong bg-surface text-ink-2 hover:border-primary-line"}`}><input checked={Boolean(item.wording_verified) && wordingComplete(item)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]" disabled={!wordingComplete(item)} type="checkbox" onChange={(event) => patchItem(item.id, { wording_verified: event.target.checked })} /><span>I checked the title, instructions, frequency and medication wording in English and Spanish against the source.{!wordingComplete(item) ? " Complete both languages first." : ""}</span></label> : null}
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-ink-2">
                 <span className="font-mono font-medium">{item.confidence_score == null ? "Extraction confidence unavailable" : `${Math.round(item.confidence_score * 100)}% extraction confidence`}</span>
@@ -368,7 +411,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                 <div className="min-w-0">
                     <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">Care plan</h2>
                     <p className="text-[13px] text-muted">Version {plan.version_number} · {isDraft ? "AI-generated draft — not visible to patient" : `Status: ${plan.status}`}</p>
-                    {isDraft ? <p className="mt-1 text-[13px] text-ink-2">Proposed version {plan.version_number} · Patient language: {languageLabel}</p> : null}
+                    {isDraft ? <p className="mt-1 text-[13px] text-ink-2">Proposed version {plan.version_number} · Patient reads {languageLabel} · Approved in English and Spanish</p> : null}
                 </div>
                 <div className="flex flex-col items-end gap-2">
                     <div className="flex flex-wrap items-center justify-end gap-2.5 text-[13px]" aria-live="polite">
@@ -383,7 +426,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             {/* Context and notices */}
             <div className="space-y-3 px-6 py-4 empty:hidden [&:not(:has(*))]:hidden">
                 {isDraft ? <div className="flex flex-wrap items-start gap-x-6 gap-y-2 text-[13px] text-ink-2">
-                    <p className="min-w-0 max-w-[90ch] flex-1 basis-[420px] leading-relaxed">{activePlan ? `Approved version ${activePlan.version_number} remains active in Today until this version is approved.` : "No approved care plan is active yet."} Check every patient-facing instruction against the patient language and source before publication.</p>
+                    <p className="min-w-0 max-w-[90ch] flex-1 basis-[420px] leading-relaxed">{activePlan ? `Approved version ${activePlan.version_number} remains active in Today until this version is approved.` : "No approved care plan is active yet."} Check every patient-facing instruction in English and Spanish against its source before publication.</p>
                     <div className="flex flex-wrap gap-x-5 gap-y-1">
                         <details className="ma-disclosure"><summary className="min-h-8 py-1 font-medium text-primary">Documents linked to proposed items ({sourceDocuments.length})</summary>
                             {sourceDocuments.length ? <ul className="mt-1.5 space-y-1 pl-6 text-ink-2">{sourceDocuments.map(([id, name]) => <li className="flex min-w-0 items-start gap-1.5" key={id}><SourceFileIcon className="mt-px" name={name} /><span className="min-w-0 break-all">{name}</span></li>)}</ul> : <p className="mt-1 pl-6">No source document is linked to these items.</p>}</details>
@@ -423,9 +466,9 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
                     <ol className="flex flex-wrap items-center gap-x-2 gap-y-2" aria-label="Publishing steps">
                         {steps.map((step, index) => <li key={step.label} className="flex items-center gap-2">
-                            {index > 0 ? <span aria-hidden="true" className="hidden h-px w-8 bg-line-strong sm:block xl:w-10" /> : null}
+                            {index > 0 ? <span aria-hidden="true" className="hidden h-px w-4 bg-line-strong sm:block xl:w-8 2xl:w-10" /> : null}
                             <span aria-hidden="true" className={`flex h-[22px] w-[22px] items-center justify-center rounded-full font-mono text-[11px] transition-colors duration-[160ms] ${step.state === "done" ? "bg-ok text-white" : step.state === "current" ? "border-2 border-primary text-ink" : step.state === "blocked" ? "border-[1.5px] border-warn text-warn-ink" : "border-[1.5px] border-[#CBD5E1] text-muted"}`}>{step.state === "done" ? <Icon name="check" className="h-3 w-3" strokeWidth={2.6} draw /> : index + 1}</span>
-                            <span aria-current={step.state === "current" ? "step" : undefined} className={`whitespace-nowrap text-[13px] ${step.state === "current" ? "font-semibold text-ink" : step.state === "done" ? "text-ok-ink" : step.state === "blocked" ? "text-warn-ink" : "text-muted"}`}>{step.label}</span>
+                            <span aria-current={step.state === "current" ? "step" : undefined} className={`whitespace-nowrap text-[13px] ${step.state === "current" ? "" : "sr-only xl:not-sr-only"} ${step.state === "current" ? "font-semibold text-ink" : step.state === "done" ? "text-ok-ink" : step.state === "blocked" ? "text-warn-ink" : "text-muted"}`}>{step.label}</span>
                         </li>)}
                     </ol>
                     <Popover align="end" className="ml-auto" label="Before publishing" trigger={(props) => <button {...props} aria-label="Before publishing" className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink" type="button"><Icon name="info" className="h-4 w-4" /></button>}>
@@ -434,10 +477,11 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                         <p className="mt-2 text-xs text-muted">“New evidence” means a new source fact, not a verified new therapy. Reconcile overlapping medication instructions before approval.</p>
                     </Popover>
                 </div>
-                {(hasUnsavedChanges || unresolved.length || unverified.length || undecidedMedications.length || overlapping.size || !note.trim()) ? <ul className="mt-2.5 grid gap-x-6 gap-y-1 text-[13px] leading-snug text-ink-2 lg:grid-cols-2">
+                {(hasUnsavedChanges || unresolved.length || unverified.length || untranslated.length || undecidedMedications.length || overlapping.size || !note.trim()) ? <ul className="mt-2.5 grid gap-x-6 gap-y-1 text-[13px] leading-snug text-ink-2 lg:grid-cols-2">
                     {hasUnsavedChanges ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Save your edits before approving. New evidence may have changed the draft while you reviewed it.</span></li> : null}
                     {unresolved.length ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{unresolved.length} unresolved item{unresolved.length === 1 ? "" : "s"} block whole-plan approval. Supply missing instructions or remove incomplete items. Confirm uncertainty only after reviewing the evidence.</span></li> : null}
-                    {unverified.length ? <li className="flex items-start gap-2"><span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /><span>Verify the final patient-facing wording of {unverified.length} item{unverified.length === 1 ? "" : "s"} in {languageLabel} before approval. This review does not translate source text automatically.</span></li> : null}
+                    {untranslated.length ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{untranslated.length} item{untranslated.length === 1 ? " needs" : "s need"} wording in both English and Spanish. Draft a translation or write it yourself.</span></li> : null}
+                    {unverified.length > untranslated.length ? <li className="flex items-start gap-2"><span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /><span>Check the English and Spanish wording of {unverified.length - untranslated.length} item{unverified.length - untranslated.length === 1 ? "" : "s"} before approval. AI translations are drafts until you check them.</span></li> : null}
                     {undecidedMedications.length ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Choose whether each medication updates a matching active record or creates a new record. Remove an unchanged proposal rather than publishing a duplicate.</span></li> : null}
                     {overlapping.size ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{overlapping.size} items overlap. Compare their sources and keep one reviewed proposal per activity or medication before publication. Different wording is not proof of a different therapy.</span></li> : null}
                     {!note.trim() ? <li className="flex items-start gap-2"><span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#94A3B8]" /><span>Add an approval note describing the basis for your decision.</span></li> : null}
@@ -499,15 +543,17 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
 
         {/* Sticky approval bar: same note, same save and approve gating */}
         {isDraft ? <div className="sticky bottom-0 z-20 -mx-4 border-t border-line-strong bg-white/90 px-4 py-3 backdrop-blur-md sm:-mx-7 sm:px-7">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <p className="text-[13px] text-ink-2 lg:max-w-[260px]">{activePlan ? `v${activePlan.version_number} stays active in Today until this version is approved.` : "Nothing is visible to the patient until approval."}</p>
-                <label className="min-w-[240px] flex-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-2 xl:grid-cols-[minmax(170px,220px)_minmax(220px,1fr)_auto_auto]">
+                <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+                    <p className="font-mono text-xs text-ink-2">{verifiedCount} of {retained.length} verified{blockerCount ? ` · ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}` : ""}</p>
+                    <p className="mt-0.5 text-xs leading-snug text-muted">{activePlan ? `v${activePlan.version_number} stays live in Today until you approve.` : "Nothing is visible to the patient until approval."}</p>
+                </div>
+                <label className="col-span-3 row-start-2 min-w-0 xl:col-span-1 xl:col-start-2 xl:row-start-1">
                     <span className="sr-only">Approval note</span>
                     <textarea rows={1} className="block max-h-28 min-h-[42px] w-full resize-y rounded-[10px] border border-line-strong bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:bg-surface focus:ring-4 focus:ring-[rgba(37,99,235,.12)]" placeholder="Record the basis for your approval." value={note} onChange={(event) => setNote(event.target.value)} />
                 </label>
-                <span className="font-mono text-xs text-muted">{verifiedCount} of {retained.length} verified{blockerCount ? ` · ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}` : ""}</span>
-                <button className="ma-press inline-flex h-[42px] items-center rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-60" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save review"}</button>
-                <button className="ma-press inline-flex h-[42px] items-center gap-2 rounded-[10px] bg-primary px-[18px] text-sm font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,.3)] hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8] disabled:shadow-none" disabled={!canApprove} onClick={() => void approve()} type="button"><Icon name="check" className="h-4 w-4" strokeWidth={2.4} />Approve and publish plan</button>
+                <button className="ma-press inline-flex h-[42px] items-center whitespace-nowrap rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-60" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save review"}</button>
+                <button className="ma-press inline-flex h-[42px] items-center gap-2 whitespace-nowrap rounded-[10px] bg-primary px-[18px] text-sm font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,.3)] hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8] disabled:shadow-none" disabled={!canApprove} onClick={() => void approve()} type="button"><Icon name="check" className="h-4 w-4" strokeWidth={2.4} />Approve and publish plan</button>
             </div>
         </div> : null}
     </section>;
