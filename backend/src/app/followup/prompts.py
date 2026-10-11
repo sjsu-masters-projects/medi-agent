@@ -111,6 +111,8 @@ Follow-up question: {follow_up_question or "none"}
 Constraints:
 - 1-3 short paragraphs.
 - If severity >= 8, advise urgent same-day care.
+- If severity >= 9, also say to call 911 or go to the nearest emergency department now if \
+it is severe, sudden or getting worse.
 - Include follow-up question only if provided.
 - Do not diagnose or prescribe.
 """

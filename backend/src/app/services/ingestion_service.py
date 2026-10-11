@@ -19,7 +19,7 @@ from postgrest.exceptions import APIError
 from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
-from app.agents.ingestion.prompts import EXTRACT_CONTENT_SYSTEM, EXTRACT_CONTENT_USER
+from app.agents.ingestion.prompts import EXTRACT_CONTENT_SYSTEM, extraction_prompt
 from app.clients.model_router import TaskType, get_router
 from app.core.exceptions import DocumentParseError
 from app.models.document_extraction import DocumentExtractionResult
@@ -236,7 +236,7 @@ class IngestionService:
     ) -> tuple[DocumentExtractionResult, str | None]:
         response, telemetry = await get_router().generate_text_with_telemetry(
             TaskType.DOCUMENT_PARSING,
-            prompt=EXTRACT_CONTENT_USER.format(raw_content=model_text),
+            prompt=extraction_prompt(model_text),
             system_instruction=EXTRACT_CONTENT_SYSTEM,
             temperature=0.1,
             # Matches the evaluated ceiling; 2048 truncated multi-medication documents.

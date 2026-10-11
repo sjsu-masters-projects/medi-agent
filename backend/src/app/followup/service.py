@@ -45,6 +45,11 @@ logger = logging.getLogger(__name__)
 SEVERE_THRESHOLD = 8
 """At or above this the reply adds same-day guidance, matching the extraction scale."""
 
+EMERGENCY_THRESHOLD = 9
+"""The extraction scale defines 9-10 as worst imaginable or with a danger sign (chest pain,
+trouble breathing, fainting, facial swelling). Every such reply carries 911 guidance,
+added here rather than left to the model, and the care team is alerted."""
+
 _ADR_LINK_QUESTIONS = frozenset(
     {
         NaranjoQuestion.EVENT_AFTER_DRUG,
@@ -191,6 +196,14 @@ async def _respond(*, language: str, extraction: SymptomExtractionResult) -> str
     return _compose_reply(language=language, extraction=extraction)
 
 
+def with_emergency_guidance(reply: str, *, severity: int, language: str) -> str:
+    """Add the reviewed 911 sentence to a 9-10 reply that does not already give it."""
+    if severity < EMERGENCY_THRESHOLD or "911" in reply:
+        return reply
+    suffix = resolve_locale_resource(language, FOLLOWUP_COPY)["emergency_suffix"]
+    return f"{reply.rstrip()}\n\n{suffix}"
+
+
 def _compose_reply(*, language: str, extraction: SymptomExtractionResult) -> str:
     """State back only what was extracted — never anything inferred here."""
     localized = resolve_locale_resource(language, FOLLOWUP_COPY)
@@ -251,7 +264,11 @@ async def analyse_symptom(
 
     return SymptomAnalysis(
         status="success",
-        response_text=await _respond(language=locale, extraction=extraction),
+        response_text=with_emergency_guidance(
+            await _respond(language=locale, extraction=extraction),
+            severity=extraction.severity,
+            language=locale,
+        ),
         symptom_report=report,
         follow_up_question=extraction.follow_up_question,
         flagged_for_adr=flagged_for_adr,
