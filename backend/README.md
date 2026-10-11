@@ -22,8 +22,12 @@ uv pip compile requirements-dev.in --universal --python-version 3.12 --output-fi
 
 Security floors also cover [multidict's items-view reference leak](https://github.com/aio-libs/multidict/security/advisories/GHSA-54p9-h82j-f925)
 (`>=6.9.1`) and [LangGraph SDK resource authorization](https://github.com/langchain-ai/langgraph/security/advisories/GHSA-fvww-7h3r-vfhp)
-(`>=0.4.4`). Both locks retain these patched versions. Run the CI audit with Python
-3.12; system Python 3.14 cannot resolve all packages in this lock.
+(`>=0.4.4`), and [Vertex AI predictable bucket naming](https://github.com/advisories/GHSA-wh2j-26j7-9728)
+(`google-cloud-aiplatform>=1.133.0`). Both locks retain these patched versions. Run the
+CI audit with Python 3.12; system Python 3.14 cannot resolve all packages in this lock.
+The universal lock omits the legacy `google-generativeai` SDK on Python 3.14: its
+`protobuf<6` pin cannot coexist with a patched Vertex AI SDK there, and Docker and CI
+run 3.12.
 
 ## Run
 
