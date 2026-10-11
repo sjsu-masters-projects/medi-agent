@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
     HiOutlineBuildingOffice2,
     HiOutlineCheck,
+    HiOutlineChevronRight,
     HiOutlinePencilSquare,
     HiOutlineXMark,
 } from "react-icons/hi2";
@@ -16,9 +17,7 @@ import { Modal } from "@/components/ui/modal";
 import { api } from "@/services/api";
 import { clearStoredSession } from "@/services/auth-session";
 import {
-    Badge,
     Button,
-    Card,
     EmptyState,
     ErrorState,
     Input,
@@ -296,20 +295,23 @@ function ProfilePageContent() {
     return (
         <div className="patient-page space-y-4 pb-8">
             <PageHeader subtitle={copy.subtitle} title={copy.title} />
-            <div className="patient-stack -mt-4 space-y-4 px-5">
-                {(loading || pageError) ? (
-                    <button type="button" onClick={() => setLanguageOpen(true)} className="min-h-11 w-full rounded-xl border border-line bg-surface px-4 text-left font-semibold text-brand">
+            <div className="patient-stack space-y-4 px-4">
+                {loading || pageError ? (
+                    <button
+                        type="button"
+                        onClick={() => setLanguageOpen(true)}
+                        className="min-h-11 w-full rounded-group bg-surface px-[14px] py-[13px] text-left font-semibold text-brand"
+                    >
                         {copy.language}
                     </button>
                 ) : null}
                 {loading ? (
                     <div className="space-y-4">
-                        <Skeleton className="h-32 w-full rounded-3xl" />
-                        <Skeleton className="h-48 w-full rounded-3xl" />
-                        <Skeleton className="h-56 w-full rounded-3xl" />
+                        <Skeleton className="h-32 w-full rounded-group" />
+                        <Skeleton className="h-48 w-full rounded-group" />
+                        <Skeleton className="h-56 w-full rounded-group" />
                     </div>
                 ) : null}
-
                 {!loading && pageError ? (
                     <ErrorState
                         description={copy.loadError}
@@ -321,479 +323,504 @@ function ProfilePageContent() {
                         title={copy.loadTitle}
                     />
                 ) : null}
-
                 {!loading && !pageError && patientProfile ? (
                     <>
-                        {showJoinClinicPrompt ? (
-                            <Card className="border-yellow-200 bg-yellow-100 text-yellow-800">
-                                <p className="text-sm font-medium">
-                                    {copy.onboarding}
-                                </p>
-                            </Card>
-                        ) : null}
-
-                        <Card className="overflow-hidden">
-                            <div className="flex items-center gap-4">
-                                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-2xl font-semibold text-blue-800">
-                                    {patientProfile.firstName.charAt(0)}
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                        {copy.patientAccount}
-                                    </p>
-                                    <h2 className="break-words text-xl font-semibold text-gray-900">
-                                        {patientProfile.firstName}{" "}
-                                        {patientProfile.lastName}
-                                    </h2>
-                                    <p className="mt-1 break-all text-sm text-gray-700">
-                                        {patientProfile.email}
-                                    </p>
-                                </div>
+                        <div className="flex items-center gap-3 rounded-group bg-surface px-4 py-4">
+                            <div
+                                aria-hidden="true"
+                                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-tint text-2xl font-semibold text-brand"
+                            >
+                                {patientProfile.firstName.charAt(0)}
                             </div>
-                        </Card>
-
-                        <Card className="space-y-4">
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-xs text-muted">
+                                    {copy.patientAccount}
+                                </p>
+                                <h2 className="break-words text-xl font-semibold text-ink">
+                                    {patientProfile.firstName}{" "}
+                                    {patientProfile.lastName}
+                                </h2>
+                                <p className="mt-1 break-all text-sm text-ink-2">
+                                    {patientProfile.email}
+                                </p>
+                            </div>
+                        </div>
+                        {showJoinClinicPrompt ? (
+                            <p className="rounded-group bg-note-tint px-4 py-3 text-sm font-medium text-note-ink">
+                                {copy.onboarding}
+                            </p>
+                        ) : null}
+                        <section
+                            aria-labelledby="profile-personal"
+                            className="space-y-2"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
                                 <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                        {copy.details}
-                                    </p>
-                                    <h3 className="mt-1 text-xl font-semibold text-gray-900">
+                                    <p className="sr-only">{copy.details}</p>
+                                    <h3
+                                        id="profile-personal"
+                                        className="font-mono text-xs uppercase tracking-[0.08em] text-muted"
+                                    >
                                         {copy.personal}
                                     </h3>
                                 </div>
-                                {editing ? (
-                                    <Badge variant="info">{copy.editing}</Badge>
-                                ) : (
-                                    <button
-                                        aria-label={copy.editProfile}
-                                        className="flex min-h-10 items-center gap-1.5 rounded-2xl border border-gray-200 bg-blue-100 px-3 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
-                                        onClick={startEditing}
-                                        type="button"
-                                    >
-                                        <HiOutlinePencilSquare className="h-4 w-4" />
-                                        {copy.edit}
-                                    </button>
-                                )}
+                                <button
+                                    aria-label={copy.editProfile}
+                                    className="inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-xl bg-brand-tint px-3 text-sm font-semibold text-brand"
+                                    onClick={startEditing}
+                                    type="button"
+                                >
+                                    <HiOutlinePencilSquare
+                                        aria-hidden="true"
+                                        className="h-4 w-4"
+                                    />
+                                    {copy.edit}
+                                </button>
                             </div>
                             {saveSuccess && !editing ? (
-                                <div
+                                <p
                                     role="status"
-                                    className="flex items-center gap-2 rounded-2xl bg-green-100 px-4 py-3 text-sm font-medium text-green-800"
+                                    className="flex items-center gap-2 bg-brand-tint px-[14px] py-[13px] text-sm font-medium text-brand-ink"
                                 >
-                                    <HiOutlineCheck className="h-4 w-4 shrink-0" />
+                                    <HiOutlineCheck
+                                        aria-hidden="true"
+                                        className="h-4 w-4 shrink-0"
+                                    />
                                     {copy.saved}
-                                </div>
+                                </p>
                             ) : null}
-                            {editing && editDraft ? (
-                                <form
-                                    className="space-y-4"
-                                    onSubmit={handleSaveProfile}
-                                >
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        <Input
-                                            label={copy.firstName}
-                                            onChange={(event) =>
-                                                setEditDraft((draft) =>
-                                                    draft
-                                                        ? {
-                                                              ...draft,
-                                                              firstName:
-                                                                  event.target
-                                                                      .value,
-                                                          }
-                                                        : draft,
-                                                )
-                                            }
-                                            required
-                                            value={editDraft.firstName}
-                                        />
-                                        <Input
-                                            label={copy.lastName}
-                                            onChange={(event) =>
-                                                setEditDraft((draft) =>
-                                                    draft
-                                                        ? {
-                                                              ...draft,
-                                                              lastName:
-                                                                  event.target
-                                                                      .value,
-                                                          }
-                                                        : draft,
-                                                )
-                                            }
-                                            required
-                                            value={editDraft.lastName}
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label
-                                            className="block text-[0.95rem] font-semibold text-gray-700"
-                                            htmlFor="preferred-language"
-                                        >
-                                            {copy.language}
-                                        </label>
-                                        <select
-                                            className="min-h-[3.25rem] w-full rounded-2xl border border-gray-300 bg-white/90 px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15"
-                                            aria-describedby="profile-language-help"
-                                            id="preferred-language"
-                                            onChange={(event) =>
-                                                setEditDraft((draft) =>
-                                                    draft
-                                                        ? {
-                                                              ...draft,
-                                                              preferredLanguage:
-                                                                  event.target
-                                                                      .value as Locale,
-                                                          }
-                                                        : draft,
-                                                )
-                                            }
-                                            value={editDraft.preferredLanguage}
-                                        >
-                                            {SUPPORTED_LOCALES.map((locale) => (
-                                                <option
-                                                    key={locale}
-                                                    value={locale}
-                                                >
-                                                    {locale === "es-MX"
-                                                        ? "Español (México)"
-                                                        : "English (US)"}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <p
-                                        className="text-sm text-gray-500"
-                                        id="profile-language-help"
-                                    >
-                                        {copy.languageHelp}
-                                    </p>
-                                    <div className="space-y-1">
-                                        <label
-                                            className="block text-[0.95rem] font-semibold text-gray-700"
-                                            htmlFor="gender"
-                                        >
-                                            {copy.gender}{" "}
-                                            <span className="font-normal text-gray-500">
-                                                {copy.optional}
-                                            </span>
-                                        </label>
-                                        <select
-                                            className="min-h-[3.25rem] w-full rounded-2xl border border-gray-300 bg-white/90 px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15"
-                                            id="gender"
-                                            onChange={(event) =>
-                                                setEditDraft((draft) =>
-                                                    draft
-                                                        ? {
-                                                              ...draft,
-                                                              gender: event
-                                                                  .target
-                                                                  .value as
-                                                                  | Patient["gender"]
-                                                                  | "",
-                                                          }
-                                                        : draft,
-                                                )
-                                            }
-                                            value={editDraft.gender}
-                                        >
-                                            <option value="">
-                                                {copy.unspecified}
-                                            </option>
-                                            {Object.entries(genderLabels).map(
-                                                ([value, label]) => (
-                                                    <option
-                                                        key={value}
-                                                        value={value}
-                                                    >
-                                                        {label}
-                                                    </option>
-                                                ),
-                                            )}
-                                        </select>
-                                    </div>
-                                    {saveError ? (
-                                        <div
-                                            role="alert"
-                                            className="rounded-2xl bg-red-100 px-4 py-3 text-sm font-medium text-red-800"
-                                        >
-                                            {copy.saveError}
-                                        </div>
-                                    ) : null}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <Button
-                                            disabled={saving}
-                                            fullWidth
-                                            size="lg"
-                                            type="submit"
-                                        >
-                                            {saving ? copy.saving : copy.save}
-                                        </Button>
-                                        <Button
-                                            disabled={saving}
-                                            fullWidth
-                                            onClick={cancelEditing}
-                                            size="lg"
+                            <dl className="overflow-hidden rounded-group bg-surface text-[15px]">
+                                <div className="flex flex-wrap justify-between gap-2 border-b border-line px-[14px] py-[13px]">
+                                    <dt className="text-muted">{copy.dob}</dt>
+                                    <dd className="text-ink-2">
+                                        {patientProfile.dateOfBirth}
+                                    </dd>
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-[14px] py-[13px]">
+                                    <dt className="text-muted">
+                                        {copy.language}
+                                    </dt>
+                                    <dd>
+                                        <button
                                             type="button"
-                                            variant="secondary"
+                                            onClick={() =>
+                                                setLanguageOpen(true)
+                                            }
+                                            className="min-h-11 min-w-11 text-left font-semibold text-brand underline-offset-4 hover:underline"
                                         >
-                                            <HiOutlineXMark className="mr-1 h-4 w-4" />
-                                            {copy.cancel}
-                                        </Button>
-                                    </div>
-                                </form>
-                            ) : (
-                                <div className="grid gap-3 text-sm text-gray-700">
-                                    <div className="rounded-2xl bg-gray-50 px-4 py-3 ring-1 ring-gray-200">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                            {copy.dob}
-                                        </p>
-                                        <p className="mt-1 font-semibold text-gray-700">
-                                            {patientProfile.dateOfBirth}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl bg-gray-50 px-4 py-3 ring-1 ring-gray-200">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                            {copy.language}
-                                        </p>
-                                        <button type="button" onClick={() => setLanguageOpen(true)} className="mt-1 min-h-11 w-full text-left font-semibold text-brand underline-offset-4 hover:underline">
                                             {locale === "es-MX"
                                                 ? "Español (México)"
                                                 : "English (US)"}
                                         </button>
-                                    </div>
-                                    {patientProfile.gender ? (
-                                        <div className="rounded-2xl bg-gray-50 px-4 py-3 ring-1 ring-gray-200">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                                {copy.gender}
-                                            </p>
-                                            <p className="mt-1 font-semibold text-gray-700">
-                                                {genderLabels[
-                                                    patientProfile.gender
-                                                ] ?? copy.unspecified}
-                                            </p>
-                                        </div>
-                                    ) : null}
-                                    <div className="rounded-2xl bg-gray-50 px-4 py-3 ring-1 ring-gray-200">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                            {copy.timezone}
-                                        </p>
-                                        <p className="mt-1 font-semibold text-gray-700">
-                                            {patientProfile.timezone ?? "UTC"}
-                                        </p>
-                                    </div>
+                                    </dd>
                                 </div>
-                            )}
-                        </Card>
-
-                        <Card className="space-y-4">
-                            <div className="flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                {patientProfile.gender ? (
+                                    <div className="flex flex-wrap justify-between gap-2 border-b border-line px-[14px] py-[13px]">
+                                        <dt className="text-muted">
+                                            {copy.gender}
+                                        </dt>
+                                        <dd className="text-ink-2">
+                                            {genderLabels[
+                                                patientProfile.gender
+                                            ] ?? copy.unspecified}
+                                        </dd>
+                                    </div>
+                                ) : null}
+                                <div className="flex flex-wrap justify-between gap-2 px-[14px] py-[13px]">
+                                    <dt className="text-muted">
+                                        {copy.timezone}
+                                    </dt>
+                                    <dd className="break-all text-ink-2">
+                                        {patientProfile.timezone ?? "UTC"}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </section>
+                        <section
+                            aria-labelledby="profile-reminders"
+                            className="overflow-hidden rounded-group bg-surface"
+                        >
+                            <Link
+                                aria-label={copy.manageReminders}
+                                className="flex min-h-11 items-center justify-between gap-3 px-[14px] py-[13px] text-[15px] font-semibold text-brand"
+                                href="/reminders"
+                            >
+                                <div className="min-w-0">
+                                    <h3
+                                        id="profile-reminders"
+                                        className="break-words"
+                                    >
                                         {copy.reminders}
-                                    </p>
-                                    <h3 className="mt-1 text-xl font-semibold text-gray-900">
-                                        {copy.reminderTitle}
                                     </h3>
-                                    <p className="mt-1 text-base leading-7 text-gray-700">
+                                    <p className="mt-1 break-words text-sm font-normal text-muted">
                                         {copy.reminderHelp}
                                     </p>
                                 </div>
-                                <Badge variant="info">
-                                    {copy.patientControlled}
-                                </Badge>
-                            </div>
-                            <Link
-                                className="flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500"
-                                href="/reminders"
-                            >
-                                {copy.manageReminders}
+                                <HiOutlineChevronRight
+                                    aria-hidden="true"
+                                    className="h-5 w-5 shrink-0"
+                                />
                             </Link>
-                        </Card>
-
-                        <Card className="space-y-4">
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        </section>
+                        <section
+                            aria-labelledby="profile-team"
+                            className="overflow-hidden rounded-group bg-surface"
+                        >
+                            <div className="border-b border-line px-[14px] py-[13px]">
+                                <p className="text-xs text-muted">
                                     {copy.connected}
                                 </p>
-                                <h3 className="mt-1 text-xl font-semibold text-gray-900">
+                                <h3
+                                    id="profile-team"
+                                    className="text-[17px] font-semibold text-ink"
+                                >
                                     {copy.teams}
                                 </h3>
                             </div>
+                            {careTeam.length ? (
+                                careTeam.map((member) => (
+                                    <div
+                                        className="border-b border-line px-[14px] py-[13px]"
+                                        key={member.id}
+                                    >
+                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="break-words text-[15px] font-semibold text-ink">
+                                                    {member.clinicianFirstName}{" "}
+                                                    {member.clinicianLastName}
+                                                </p>
+                                                <p className="mt-1 text-sm text-muted">
+                                                    {careTeamRoleLabel(
+                                                        member.role,
+                                                        locale,
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <span
+                                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${member.status === "active" ? "bg-brand-tint text-brand-ink" : "bg-surface-2 text-ink-2"}`}
+                                            >
+                                                {member.status === "active"
+                                                    ? copy.active
+                                                    : member.status ===
+                                                        "inactive"
+                                                      ? copy.inactive
+                                                      : member.status ===
+                                                          "transferred"
+                                                        ? copy.transferred
+                                                        : copy.unknownStatus}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 break-words text-sm text-ink-2">
+                                            {member.clinicName ||
+                                                member.specialtyContext ||
+                                                copy.teamFallback}
+                                        </p>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="px-[14px] py-[13px]">
+                                    <EmptyState
+                                        description={copy.noTeamsHelp}
+                                        icon={
+                                            <HiOutlineBuildingOffice2 aria-hidden="true" />
+                                        }
+                                        title={copy.noTeams}
+                                    />
+                                </div>
+                            )}
                             {hasActiveTeam ? (
-                                <div className="space-y-2">
+                                <div>
                                     <Link
-                                        className="inline-flex min-h-11 items-center rounded-lg px-3 py-2 font-semibold text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500"
+                                        className="flex min-h-11 items-center justify-between gap-3 px-[14px] py-[13px] text-[15px] font-semibold text-brand"
                                         href="/chat"
                                     >
                                         {copy.messages}
+                                        <HiOutlineChevronRight
+                                            aria-hidden="true"
+                                            className="h-5 w-5 shrink-0"
+                                        />
                                     </Link>
-                                    <p className="text-sm text-gray-500">
+                                    <p className="px-[14px] pb-[13px] text-sm text-muted">
                                         {copy.messageHelp}
                                     </p>
                                 </div>
                             ) : null}
-                            {careTeam.length ? (
-                                <div className="space-y-3">
-                                    {careTeam.map((member) => (
-                                        <div
-                                            className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4"
-                                            key={member.id}
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="break-words font-semibold text-gray-900">
-                                                        {
-                                                            member.clinicianFirstName
-                                                        }{" "}
-                                                        {
-                                                            member.clinicianLastName
-                                                        }
-                                                    </p>
-                                                    <p className="mt-1 text-sm text-gray-500">
-                                                        {careTeamRoleLabel(
-                                                            member.role,
-                                                            locale,
-                                                        )}
-                                                    </p>
-                                                </div>
-                                                <Badge
-                                                    variant={
-                                                        member.status ===
-                                                        "active"
-                                                            ? "success"
-                                                            : "warning"
-                                                    }
-                                                >
-                                                    {member.status === "active"
-                                                        ? copy.active
-                                                        : member.status ===
-                                                            "inactive"
-                                                          ? copy.inactive
-                                                          : member.status ===
-                                                              "transferred"
-                                                            ? copy.transferred
-                                                            : copy.unknownStatus}
-                                                </Badge>
-                                            </div>
-                                            <p className="mt-3 text-sm text-gray-700">
-                                                {member.clinicName ||
-                                                    member.specialtyContext ||
-                                                    copy.teamFallback}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <EmptyState
-                                    description={copy.noTeamsHelp}
-                                    icon={<HiOutlineBuildingOffice2 />}
-                                    title={copy.noTeams}
+                        </section>
+                        <div className="overflow-hidden rounded-group bg-surface">
+                            <button
+                                className="flex min-h-11 w-full items-center justify-between gap-3 px-[14px] py-[13px] text-left text-[15px] font-semibold text-ink"
+                                type="button"
+                                onClick={() => setJoinExpanded(true)}
+                            >
+                                <span className="min-w-0 break-words">
+                                    {careTeam.length
+                                        ? copy.joinAnother
+                                        : copy.connectClinic}
+                                </span>
+                                <HiOutlineChevronRight
+                                    aria-hidden="true"
+                                    className="h-5 w-5 shrink-0"
                                 />
-                            )}
-                        </Card>
-
-                        <Card className="space-y-4">
-                            <details
-                                open={
-                                    forceJoinOpen ||
-                                    (joinExpanded ?? !hasActiveTeam)
-                                }
-                                onToggle={(event) =>
-                                    setJoinExpanded(event.currentTarget.open)
-                                }
-                            >
-                                <summary className="min-h-11 cursor-pointer py-2 font-semibold text-gray-900">
-                                    {copy.joinAnother}
-                                </summary>
-                                <div>
-                                    <h3 className="mt-1 text-xl font-semibold text-gray-900">
-                                        {copy.addTeam}
-                                    </h3>
-                                    <p className="mt-1 text-base leading-7 text-gray-700">
-                                        {copy.joinHelp}
-                                    </p>
-                                </div>
-                                <form
-                                    className="space-y-3"
-                                    onSubmit={handleJoinClinic}
-                                >
-                                    <Input
-                                        aria-describedby="profile-invite-help"
-                                        label={copy.inviteCode}
-                                        onChange={(event) => {
-                                            setInviteCode(event.target.value);
-                                            if (joinError) {
-                                                setJoinError("");
-                                            }
-                                            if (joinSuccess) {
-                                                setJoinSuccess(false);
-                                            }
-                                        }}
-                                        placeholder="CITY-8832"
-                                        value={inviteCode}
-                                    />
-                                    <p
-                                        className="text-sm text-gray-500"
-                                        id="profile-invite-help"
-                                    >
-                                        {copy.inviteHelp}
-                                    </p>
-                                    {joinError ? (
-                                        <div
-                                            role="alert"
-                                            className="rounded-2xl bg-red-100 px-4 py-3 text-sm font-medium text-red-800"
-                                        >
-                                            {copy[joinError]}
-                                        </div>
-                                    ) : null}
-                                    {joinSuccess ? (
-                                        <div
-                                            role="status"
-                                            className="rounded-2xl bg-green-100 px-4 py-3 text-sm font-medium text-green-800"
-                                        >
-                                            {copy.joined}
-                                        </div>
-                                    ) : null}
-                                    <Button
-                                        disabled={joining}
-                                        fullWidth
-                                        size="lg"
-                                        type="submit"
-                                    >
-                                        {joining ? copy.joining : copy.join}
-                                    </Button>
-                                </form>
-                            </details>
-                        </Card>
-
-                        <Card className="space-y-3 border-red-100 bg-red-50/70">
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-red-400">
-                                    {copy.account}
-                                </p>
-                                <h3 className="mt-1 text-lg font-semibold text-slate-900">
-                                    {copy.signOutTitle}
-                                </h3>
-                                <p className="mt-1 text-sm text-slate-600">
-                                    {copy.signOutHelp}
-                                </p>
-                            </div>
-                            <Button
-                                fullWidth
+                            </button>
+                        </div>
+                        <section
+                            aria-labelledby="profile-account"
+                            className="overflow-hidden rounded-group bg-surface"
+                        >
+                            <button
+                                aria-label={copy.signOut}
+                                className="min-h-11 w-full px-[14px] py-[13px] text-left text-[15px] font-semibold text-danger-ink"
+                                type="button"
                                 onClick={handleLogout}
-                                size="lg"
-                                variant="danger"
                             >
-                                {copy.signOut}
-                            </Button>
-                        </Card>
+                                <span
+                                    id="profile-account"
+                                    className="block break-words"
+                                >
+                                    {copy.signOut}
+                                </span>
+                                <span className="mt-1 block break-words text-sm font-normal text-muted">
+                                    {copy.signOutHelp}
+                                </span>
+                            </button>
+                        </section>
                     </>
                 ) : null}
             </div>
-            <Modal keepMounted open={languageOpen} onClose={() => setLanguageOpen(false)} title={copy.language} closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}>
-                <PatientLanguageControl />
+            <Modal
+                open={editing}
+                onClose={() => {
+                    if (!saving) cancelEditing();
+                }}
+                title={copy.personal}
+                closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}
+            >
+                {editDraft ? (
+                    <div className="[&_label>span]:text-ink-2">
+                        <p className="mb-4 text-sm text-muted">
+                            {copy.editing}
+                        </p>
+                        <form
+                            className="space-y-4"
+                            onSubmit={handleSaveProfile}
+                        >
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <Input
+                                    label={copy.firstName}
+                                    onChange={(event) =>
+                                        setEditDraft((draft) =>
+                                            draft
+                                                ? {
+                                                      ...draft,
+                                                      firstName:
+                                                          event.target.value,
+                                                  }
+                                                : draft,
+                                        )
+                                    }
+                                    required
+                                    value={editDraft.firstName}
+                                />
+                                <Input
+                                    label={copy.lastName}
+                                    onChange={(event) =>
+                                        setEditDraft((draft) =>
+                                            draft
+                                                ? {
+                                                      ...draft,
+                                                      lastName:
+                                                          event.target.value,
+                                                  }
+                                                : draft,
+                                        )
+                                    }
+                                    required
+                                    value={editDraft.lastName}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label
+                                    className="block text-[0.95rem] font-semibold text-ink-2"
+                                    htmlFor="preferred-language"
+                                >
+                                    {copy.language}
+                                </label>
+                                <select
+                                    className="min-h-[3.25rem] min-w-0 w-full rounded-2xl border border-line-strong bg-surface pl-4 pr-10 py-3 text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
+                                    aria-describedby="profile-language-help"
+                                    id="preferred-language"
+                                    onChange={(event) =>
+                                        setEditDraft((draft) =>
+                                            draft
+                                                ? {
+                                                      ...draft,
+                                                      preferredLanguage: event
+                                                          .target
+                                                          .value as Locale,
+                                                  }
+                                                : draft,
+                                        )
+                                    }
+                                    value={editDraft.preferredLanguage}
+                                >
+                                    {SUPPORTED_LOCALES.map((locale) => (
+                                        <option key={locale} value={locale}>
+                                            {locale === "es-MX"
+                                                ? "Español (México)"
+                                                : "English (US)"}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <p
+                                className="text-sm text-muted"
+                                id="profile-language-help"
+                            >
+                                {copy.languageHelp}
+                            </p>
+                            <div className="space-y-1">
+                                <label
+                                    className="block text-[0.95rem] font-semibold text-ink-2"
+                                    htmlFor="gender"
+                                >
+                                    {copy.gender}{" "}
+                                    <span className="font-normal text-muted">
+                                        {copy.optional}
+                                    </span>
+                                </label>
+                                <select
+                                    className="min-h-[3.25rem] min-w-0 w-full rounded-2xl border border-line-strong bg-surface pl-4 pr-10 py-3 text-base text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
+                                    id="gender"
+                                    onChange={(event) =>
+                                        setEditDraft((draft) =>
+                                            draft
+                                                ? {
+                                                      ...draft,
+                                                      gender: event.target
+                                                          .value as
+                                                          | Patient["gender"]
+                                                          | "",
+                                                  }
+                                                : draft,
+                                        )
+                                    }
+                                    value={editDraft.gender}
+                                >
+                                    <option value="">{copy.unspecified}</option>
+                                    {Object.entries(genderLabels).map(
+                                        ([value, label]) => (
+                                            <option key={value} value={value}>
+                                                {label}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                            </div>
+                            {saveError ? (
+                                <div
+                                    role="alert"
+                                    className="rounded-2xl bg-danger-tint px-4 py-3 text-sm font-medium text-danger-ink"
+                                >
+                                    {copy.saveError}
+                                </div>
+                            ) : null}
+                            <div className="grid grid-cols-2 gap-3">
+                                <Button
+                                    disabled={saving}
+                                    fullWidth
+                                    size="lg"
+                                    type="submit"
+                                >
+                                    {saving ? copy.saving : copy.save}
+                                </Button>
+                                <Button
+                                    disabled={saving}
+                                    fullWidth
+                                    onClick={cancelEditing}
+                                    size="lg"
+                                    type="button"
+                                    variant="secondary"
+                                >
+                                    <HiOutlineXMark className="mr-1 h-4 w-4" />
+                                    {copy.cancel}
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                ) : null}
+            </Modal>
+            <Modal
+                open={
+                    !loading &&
+                    !pageError &&
+                    Boolean(patientProfile) &&
+                    (joinExpanded ?? forceJoinOpen)
+                }
+                onClose={() => setJoinExpanded(false)}
+                title={careTeam.length ? copy.addTeam : copy.connectClinic}
+                closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}
+            >
+                <p className="mb-4 text-[15px] text-muted">{copy.joinHelp}</p>
+                <div className="[&_label>span]:text-ink-2">
+                    <form className="space-y-3" onSubmit={handleJoinClinic}>
+                        <Input
+                            aria-describedby="profile-invite-help"
+                            label={copy.inviteCode}
+                            onChange={(event) => {
+                                setInviteCode(event.target.value);
+                                if (joinError) {
+                                    setJoinError("");
+                                }
+                                if (joinSuccess) {
+                                    setJoinSuccess(false);
+                                }
+                            }}
+                            placeholder="CITY-8832"
+                            value={inviteCode}
+                        />
+                        <p
+                            className="text-sm text-muted"
+                            id="profile-invite-help"
+                        >
+                            {copy.inviteHelp}
+                        </p>
+                        {joinError ? (
+                            <div
+                                role="alert"
+                                className="rounded-2xl bg-danger-tint px-4 py-3 text-sm font-medium text-danger-ink"
+                            >
+                                {copy[joinError]}
+                            </div>
+                        ) : null}
+                        {joinSuccess ? (
+                            <div
+                                role="status"
+                                className="rounded-2xl bg-brand-tint px-4 py-3 text-sm font-medium text-brand-ink"
+                            >
+                                {copy.joined}
+                            </div>
+                        ) : null}
+                        <Button
+                            disabled={joining}
+                            fullWidth
+                            size="lg"
+                            type="submit"
+                        >
+                            {joining ? copy.joining : copy.join}
+                        </Button>
+                    </form>
+                </div>
+            </Modal>
+            <Modal
+                keepMounted
+                open={languageOpen}
+                onClose={() => setLanguageOpen(false)}
+                title={copy.language}
+                closeLabel={locale === "es-MX" ? "Cerrar" : "Close"}
+            >
+                <div className="[&_select]:min-w-0 [&_select]:flex-1 [&_select]:pr-10 [&_summary]:min-h-11 [&_label]:shrink-0">
+                    <PatientLanguageControl />
+                </div>
             </Modal>
         </div>
     );

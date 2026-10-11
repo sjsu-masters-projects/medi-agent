@@ -15,12 +15,20 @@ const {
     getVoiceCapabilities,
     playAssistantVoiceResponse,
     replace,
+    setConversationOpen,
+    shell,
 } = vi.hoisted(() => ({
     buildChatWebSocketUrl: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
     playAssistantVoiceResponse: vi.fn(() => null),
     replace: vi.fn(),
+    setConversationOpen: vi.fn(),
+    shell: { conversationOpen: false },
+}));
+
+vi.mock("@/contexts/patient-shell-context", () => ({
+    usePatientShell: () => ({ conversationOpen: shell.conversationOpen, setConversationOpen }),
 }));
 
 vi.mock("@/services/care-conversations", () => ({
@@ -111,6 +119,9 @@ function renderPage() {
             <ChatPage />
         </Provider>,
     );
+    if (!searchParamsValue.has("document")) {
+        fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
+    }
     return renderedPage;
 }
 
@@ -122,6 +133,8 @@ describe("Patient chat page", () => {
         getVoiceCapabilities.mockReset();
         playAssistantVoiceResponse.mockReset();
         replace.mockReset();
+        setConversationOpen.mockReset();
+        shell.conversationOpen = false;
         vi.useRealTimers();
         searchParamsValue = new URLSearchParams();
         MockWebSocket.reset();
@@ -150,6 +163,69 @@ describe("Patient chat page", () => {
         buildChatWebSocketUrl.mockReturnValue("ws://chat.test/patient-1");
         fetchChatHistory.mockResolvedValue([]);
         getVoiceCapabilities.mockReturnValue({ recording: false, recognition: false, synthesis: false });
+    });
+
+    it("opens Nora from a distinct inbox card, restores inbox focus and resets the shell on exit", async () => {
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        expect(screen.getByRole("heading", { name: "Nora AI" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "New message" })).toBeInTheDocument();
+        expect(screen.queryByRole("textbox", { name: "Message to Nora" })).not.toBeInTheDocument();
+        expect(setConversationOpen).toHaveBeenLastCalledWith(false);
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(await screen.findByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
+        expect(setConversationOpen).toHaveBeenLastCalledWith(true);
+        expect(screen.getByRole("heading", { name: "Nora" })).toHaveFocus();
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Unsent question" } });
+        fireEvent.click(screen.getByRole("button", { name: "Back to messages" }));
+        expect(setConversationOpen).toHaveBeenLastCalledWith(false);
+        expect(screen.getByRole("button", { name: "Nora · AI care assistant" })).toHaveFocus();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(screen.getByRole("textbox", { name: "Message to Nora" })).toHaveValue("Unsent question");
+        renderedPage.unmount();
+        expect(setConversationOpen).toHaveBeenLastCalledWith(false);
+    });
+
+    it.each([Language.EN, Language.ES])("uses one thread header with accessible care-team switching and preserves Nora drafts (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        const spanish = locale === Language.ES;
+        const team = getPatientChatCopy(locale).careTeamLabel;
+        const nora = `Nora · ${getPatientChatCopy(locale).assistantDescription}`;
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        expect(screen.getByRole("heading", { level: 1, name: "Chat" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: spanish ? "Tu equipo clínico" : "Your care team" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: nora }));
+        expect(screen.queryByRole("group", { name: team })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: nora })).not.toBeInTheDocument();
+        const message = screen.getByRole("textbox", { name: spanish ? "Mensaje para Nora" : "Message to Nora" });
+        fireEvent.change(message, { target: { value: "Unsent bilingual question" } });
+        const switchAction = screen.getByRole("button", { name: team });
+        expect(switchAction.closest("header")).not.toBeNull();
+        fireEvent.click(switchAction);
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+        expect(await screen.findByText(spanish ? "Todavía no hay conversaciones." : "No conversations yet.")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: nora }));
+        expect(screen.getByRole("textbox", { name: spanish ? "Mensaje para Nora" : "Message to Nora" })).toHaveValue("Unsent bilingual question");
+        expect(screen.getByRole("button", { name: spanish ? "Activar manos libres" : "Turn on hands-free mode" })).toBeInTheDocument();
+    });
+
+    it("honors a direct Nora presentation request on the existing route", async () => {
+        shell.conversationOpen = true;
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "New message" })).not.toBeInTheDocument();
+        expect(window.location.pathname).toBe("/chat");
+        expect(setConversationOpen).toHaveBeenLastCalledWith(true);
+        await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+        expect(MockWebSocket.instances[0].sent).toEqual([]);
+    });
+
+    it("opens the symptom prompt for review without sending it", async () => {
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        fireEvent.click(screen.getByRole("button", { name: "Report a symptom" }));
+        expect(screen.getByRole("textbox", { name: "Message to Nora" })).toHaveValue(getPatientChatCopy(Language.EN).quickPrompts[1]);
+        await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+        expect(MockWebSocket.instances[0].sent).toEqual([]);
     });
 
     it("uses the patient preference instead of the old chat picker and preserves original message language", async () => {
@@ -247,6 +323,21 @@ describe("Patient chat page", () => {
             expect(screen.queryByText(/Live response/i)).not.toBeInTheDocument();
         });
         expect(screen.getByText("Please stay hydrated and rest today.")).toBeInTheDocument();
+    });
+
+    it("retains Enter-to-send while Shift+Enter and composition do not send", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => socket.emitOpen());
+        const field = screen.getByRole("textbox");
+        fireEvent.change(field, { target: { value: "Explain my plan" } });
+        fireEvent.keyDown(field, { key: "Enter", shiftKey: true });
+        fireEvent.keyDown(field, { key: "Enter", isComposing: true });
+        expect(socket.sent).toHaveLength(0);
+        fireEvent.keyDown(field, { key: "Enter" });
+        await waitFor(() => expect(socket.sent).toHaveLength(1));
+        expect(JSON.parse(socket.sent[0])).toMatchObject({ content: "Explain my plan", type: "user_message" });
     });
 
     it("sends the selected language in websocket payloads", async () => {
@@ -556,7 +647,7 @@ describe("Patient chat page", () => {
             content: "Hi Morgan, please bring your medication list.",
             createdAt: "2026-04-17T10:00:00Z", language: Language.EN,
         }]);
-        await act(async () => { renderPage(); });
+        renderPage();
         expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
         expect(screen.queryByText(/Hi Morgan/)).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));

@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dispatch, replace, post } = vi.hoisted(() => ({
+const { dispatch, replace, post, writeStoredSession } = vi.hoisted(() => ({
     dispatch: vi.fn(),
     replace: vi.fn(),
     post: vi.fn(),
+    writeStoredSession: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-patient-profile", () => ({
@@ -24,7 +25,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 vi.mock("@/services/auth-session", () => ({
-    writeStoredSession: vi.fn(),
+    writeStoredSession,
 }));
 
 import SignupPage from "@/app/(auth)/signup/page";
@@ -37,12 +38,20 @@ function fillSignup() {
 }
 
 describe("Patient signup page", () => {
+    it("uses the reference canvas and entry glow, not a white page override", () => {
+        const { container } = render(<SignupPage />);
+        expect(container.querySelector(".patient-page")).toHaveClass("bg-background");
+        expect(container.querySelector(".patient-page")).not.toHaveClass("bg-white");
+        expect(container.querySelector(".patient-page")).toHaveClass("patient-entry");
+        expect(screen.getByLabelText("Email address")).toHaveClass("bg-surface");
+    });
     beforeEach(() => {
         window.localStorage.clear();
         window.history.replaceState({}, "", "/");
         dispatch.mockReset();
         replace.mockReset();
         post.mockReset();
+        writeStoredSession.mockReset();
     });
 
     it("starts without an invented birth date and translates password mismatch feedback", () => {
@@ -57,6 +66,45 @@ describe("Patient signup page", () => {
         fireEvent.change(screen.getByLabelText("Confirmar contraseña"), { target: { value: "different" } });
         fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
         expect(screen.getByRole("alert")).toHaveTextContent("Las contraseñas no coinciden");
+        expect(document.documentElement).toHaveAttribute("lang", "es-MX");
+        expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login?lang=es-MX");
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it("preserves signup fields, session hydration and the localized onboarding route", async () => {
+        post.mockResolvedValue({
+            tokens: { access_token: "synthetic-access", expires_at: 1234567890, refresh_token: "synthetic-refresh" },
+            user: { email: "patient@example.com", id: "synthetic-patient", role: "patient" },
+        });
+        render(<SignupPage />);
+        fillSignup();
+        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "es-MX" } });
+        fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
+        await waitFor(() => expect(replace).toHaveBeenCalledWith("/onboarding?lang=es-MX"));
+        expect(post).toHaveBeenCalledWith("/api/v1/auth/signup/patient", {
+            date_of_birth: "1990-01-01", email: "patient@example.com", first_name: "Synthetic",
+            last_name: "Patient", password: "SyntheticPass123!",
+        });
+        expect(writeStoredSession).toHaveBeenCalledWith({
+            accessToken: "synthetic-access", expiresAt: 1234567890, refreshToken: "synthetic-refresh",
+            user: { email: "patient@example.com", id: "synthetic-patient", role: "patient" },
+        });
+        expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+            type: "onboarding/setOnboardingProfile",
+            payload: { dateOfBirth: "1990-01-01", firstName: "Synthetic", lastName: "Patient" },
+        }));
+        expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "auth/hydrateSession" }));
+    });
+
+    it("rejects a non-patient signup response without persisting or routing", async () => {
+        post.mockResolvedValue({ user: { role: "provider" } });
+        render(<SignupPage />);
+        fillSignup();
+        fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+        expect(await screen.findByRole("alert")).toBeInTheDocument();
+        expect(writeStoredSession).not.toHaveBeenCalled();
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(replace).not.toHaveBeenCalled();
     });
 
     it.each([

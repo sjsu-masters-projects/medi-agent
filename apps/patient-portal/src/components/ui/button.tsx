@@ -8,11 +8,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<NonNullable<ButtonProps["variant"]>, string> = {
     primary:
-        "bg-[#147465] text-white shadow-[0_14px_30px_rgba(20,116,101,0.24)] hover:bg-[#0f5f53]",
+        "bg-brand text-white hover:bg-brand-hover",
     secondary:
-        "border border-[#d9cbc0] bg-white/88 text-[#30415f] shadow-[0_10px_24px_rgba(37,52,82,0.08)] hover:bg-[#fffaf4]",
-    ghost: "text-[#5b6b83] hover:bg-white/70 hover:text-[#17233a]",
-    danger: "border border-[#f0b8ae] bg-[#fff2ef] text-[#b94032] hover:bg-[#ffe8e3]",
+        "bg-surface-2 text-ink-2 hover:bg-line-strong",
+    ghost: "text-muted hover:bg-surface-2 hover:text-ink",
+    danger: "border border-danger-ink/20 bg-danger-tint text-danger-ink hover:bg-danger-ink/10",
 };
 
 const sizeClasses: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -31,7 +31,7 @@ export function Button({
     ...props
 }: ButtonProps) {
     const classes = [
-        "inline-flex items-center justify-center rounded-2xl font-semibold transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50",
+        "ma-press inline-flex min-w-11 max-w-full items-center justify-center whitespace-normal break-words rounded-2xl font-semibold transition-colors duration-[160ms] disabled:cursor-not-allowed disabled:opacity-50",
         variantClasses[variant],
         sizeClasses[size],
         fullWidth ? "w-full" : "",

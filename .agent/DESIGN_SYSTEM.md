@@ -13,6 +13,10 @@ The handoff provides exact tokens and component values. The updated reference ad
 clinician sign-in layers and motion demonstrations. Where these differ materially,
 record the decision before implementation; do not silently invent a new design.
 
+[Profile & Clinic settings](https://claude.ai/artifact/HWCwWAVWQCp3aGGk5Abp1Q)
+supplements that reference for those two screens. Keep their existing fields,
+handlers and permissions; sample values in mockups must not become product data.
+
 ## Delivery sequence
 
 1. Foundation: brand assets, Geist/Geist Mono, role-specific tokens, shared icons,

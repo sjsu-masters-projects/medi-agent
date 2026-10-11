@@ -37,6 +37,76 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("human conversations", () => {
+  it.each(["en-US", "es-MX"])("keeps emergency wording after the contacts and labels the compact thread actions (%s)", async (locale) => {
+    const spanish = locale === "es-MX";
+    const view = render(<CareConversations compact locale={locale} />);
+    const notice = screen.getByRole("note");
+    expect(notice).toHaveTextContent(spanish ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911." : "Messages are not continuously monitored. For an emergency, call 911.");
+    expect(await screen.findByRole("heading", { name: spanish ? "Tu equipo clínico" : "Your care team" })).toBeInTheDocument();
+    const contact = await screen.findByRole("button", { name: /Dr. One · Clinic One/ });
+    expect(contact.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(contact);
+    await screen.findByText("Newest reply");
+    const heading = screen.getByRole("heading", { name: "Dr. One" });
+    const header = heading.closest("header")!;
+    expect(header).toHaveTextContent("Clinic One · Synthetic Patient");
+    expect(screen.getByRole("button", { name: spanish ? "Volver a conversaciones" : "Back to conversations" }).closest("header")).toBe(header);
+    expect(screen.getByRole("button", { name: spanish ? "Actualizar" : "Refresh" }).closest("header")).toBe(header);
+    expect(screen.getByRole("button", { name: spanish ? "Enviar mensaje" : "Send message" })).toBeDisabled();
+    expect(notice).toBeVisible();
+    view.unmount();
+  });
+
+  it("keeps the emergency notice visible when inbox loading fails", async () => {
+    vi.mocked(careConversations.list).mockRejectedValueOnce(new TypeError());
+    render(<CareConversations compact />);
+    expect(screen.getByRole("note")).toHaveTextContent("For an emergency, call 911.");
+    await screen.findByRole("alert");
+    expect(screen.getByRole("note")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  });
+
+  it("opens a compact addressed thread, retains its uncertain retry through inbox return and restores contact focus", async () => {
+    const presentation = vi.fn();
+    vi.mocked(careConversations.send).mockRejectedValueOnce(new TypeError());
+    render(<CareConversations compact onThreadPresentationChange={presentation} />);
+    expect(await screen.findByText("2 unread")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    await select();
+    expect(presentation).toHaveBeenLastCalledWith(thread.id);
+    expect(screen.queryByRole("button", { name: /Dr. One · Clinic One/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Preserved question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText(/Send could not be confirmed/);
+    const first = vi.mocked(careConversations.send).mock.calls[0];
+    fireEvent.click(screen.getByRole("button", { name: "Back to conversations" }));
+    expect(presentation).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    const contact = screen.getByRole("button", { name: /Dr. One · Clinic One/ });
+    await waitFor(() => expect(contact).toHaveFocus());
+    fireEvent.click(contact);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled());
+    expect(screen.getByRole("textbox")).toHaveValue("Preserved question");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(careConversations.send).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(careConversations.send).mock.calls[1]).toEqual(first);
+  });
+
+  it("puts the explicit recipient chooser in a dismissible sheet without selecting or opening a recipient", async () => {
+    render(<CareConversations compact locale="es-MX" />);
+    const trigger = await screen.findByRole("button", { name: "Nuevo mensaje" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Nuevo mensaje" })).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Elegir destinatario" })).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Abrir conversación" })).toBeDisabled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(careConversations.open).not.toHaveBeenCalled();
+    expect(careConversations.messages).not.toHaveBeenCalled();
+  });
+
   it("preserves human text across interface locale changes without inventing a language or exposing IDs", async () => {
     const view = render(<CareConversations />);
     await select();

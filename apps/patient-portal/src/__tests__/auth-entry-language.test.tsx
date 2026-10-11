@@ -14,6 +14,7 @@ beforeEach(() => {
   window.localStorage.clear();
   window.history.replaceState({}, "", "/login");
   context.profile = null;
+  document.documentElement.lang = "en-US";
 });
 afterEach(cleanup);
 
@@ -22,12 +23,15 @@ describe("auth entry language", () => {
     window.localStorage.setItem(GUEST_LOCALE_STORAGE_KEY, "es-MX");
     const view = render(<Entry />);
     expect(screen.getByRole("combobox", { name: "Idioma" })).toHaveValue("es-MX");
+    expect(document.documentElement).toHaveAttribute("lang", "es-MX");
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "en-US" } });
     expect(window.localStorage.getItem(GUEST_LOCALE_STORAGE_KEY)).toBe("en-US");
+    expect(document.documentElement).toHaveAttribute("lang", "en-US");
     view.unmount();
     window.history.replaceState({}, "", "/signup?lang=es-MX");
     render(<Entry />);
     expect(screen.getByRole("combobox", { name: "Idioma" })).toHaveValue("es-MX");
+    expect(document.documentElement).toHaveAttribute("lang", "es-MX");
   });
 
   it("keeps each loaded patient preference authoritative over guest and route language", () => {
@@ -36,9 +40,11 @@ describe("auth entry language", () => {
     context.profile = { preferredLanguage: "en-US" };
     const view = render(<Entry />);
     expect(screen.getByLabelText("Interface language")).toHaveTextContent("en-US");
+    expect(document.documentElement).toHaveAttribute("lang", "en-US");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     context.profile = { preferredLanguage: "es-MX" };
     view.rerender(<Entry />);
     expect(screen.getByLabelText("Interface language")).toHaveTextContent("es-MX");
+    expect(document.documentElement).toHaveAttribute("lang", "es-MX");
   });
 });

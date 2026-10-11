@@ -1,8 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import SymptomsPage from "@/app/(app)/symptoms/page";
 
-const settings = vi.hoisted(() => ({ locale: "en-US" }));
+const settings = vi.hoisted(() => ({ locale: "en-US", setConversationOpen: vi.fn() }));
+vi.mock("@/contexts/patient-shell-context", () => ({
+  usePatientShell: () => ({ setConversationOpen: settings.setConversationOpen }),
+}));
 vi.mock("@/hooks/use-patient-profile", () => ({
   usePatientProfile: () => ({ preferredLanguage: settings.locale }),
   useSharedPatientProfile: () => null,
@@ -14,6 +17,7 @@ describe("SymptomsPage", () => {
     "offers an honest capture handoff in %s without invented reports or save actions",
     (locale) => {
       settings.locale = locale;
+      settings.setConversationOpen.mockClear();
       render(<SymptomsPage />);
       const spanish = locale === "es-MX";
       expect(
@@ -21,6 +25,8 @@ describe("SymptomsPage", () => {
           name: spanish ? "Abrir chat con Nora" : "Open chat with Nora",
         }),
       ).toHaveAttribute("href", "/chat");
+      fireEvent.click(screen.getByRole("link", { name: spanish ? "Abrir chat con Nora" : "Open chat with Nora" }));
+      expect(settings.setConversationOpen).toHaveBeenCalledWith(true);
       expect(
         screen.getByText(
           spanish

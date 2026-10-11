@@ -2,9 +2,25 @@
 
 Visual reference: `MediAgent Redesign.dc.html` (screens A–F). This document is the source of truth for values. If the mockup and this file disagree, follow this file.
 
+Additional approved reference: [Profile & Clinic settings](https://claude.ai/artifact/HWCwWAVWQCp3aGGk5Abp1Q).
+Patient Profile uses an identity card, grouped label/value settings, language and
+edit sheets, linked care teams and account actions. Clinician settings keeps its
+existing tabs and forms, with a desktop section navigator, clearly read-only
+fields and compact card action footers. Illustrative account values, signatures,
+approval marks and saved-state examples in the references are not application data.
+Only actual persisted state may be shown. Readable timestamps and patient touch
+areas of at least 44×44px override smaller/lighter reference values.
+
 ## 0. Scope rules (read first)
 
 This is a **visual, layout and interaction-polish PR only**.
+
+The requester additionally approved clearer nonclinical interface copy from the
+reference (entry screens, navigation and settings help). Keep existing locale keys
+and behavior. This does not authorize changing clinical instructions, approval
+claims, historical messages or emergency/safety wording. Entry screens may use the
+reference's subtle teal glow over the warm-sand canvas; authenticated screens keep
+the flat canvas.
 
 - Do NOT add, remove or rename routes, API calls, Redux slices, i18n keys, data fields, or features.
 - Do NOT change any clinical workflow, approval gating, safety copy, or emergency wording. You may move them, never weaken them.

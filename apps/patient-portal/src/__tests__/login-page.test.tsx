@@ -40,6 +40,13 @@ vi.mock("@/services/auth-session", () => ({
 import LoginPage from "@/app/login/page";
 
 describe("Patient login page", () => {
+    it("uses the reference canvas and entry glow, not a white page override", () => {
+        const { container } = render(<LoginPage />);
+        expect(container.querySelector(".patient-page")).toHaveClass("bg-background");
+        expect(container.querySelector(".patient-page")).not.toHaveClass("bg-white");
+        expect(container.querySelector(".patient-page")).toHaveClass("patient-entry");
+        expect(screen.getByLabelText("Email address")).toHaveClass("bg-surface");
+    });
     beforeEach(() => {
         window.localStorage.clear();
         window.history.replaceState({}, "", "/");
@@ -61,6 +68,7 @@ describe("Patient login page", () => {
         expect(screen.getByRole("button", { name: "Mostrar contraseña" })).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "Crear cuenta" })).toHaveAttribute("href", "/signup?lang=es-MX");
         expect(window.localStorage.getItem("patient-portal.guest.locale")).toBe("es-MX");
+        expect(document.documentElement).toHaveAttribute("lang", "es-MX");
         expect(post).not.toHaveBeenCalled();
     });
 

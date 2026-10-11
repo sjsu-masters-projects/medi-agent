@@ -10,5 +10,5 @@ const variantClasses: Record<NonNullable<SkeletonProps["variant"]>, string> = {
 };
 
 export function Skeleton({ className = "", variant = "rect" }: SkeletonProps) {
-    return <div className={`animate-pulse bg-[#e7ddd2] ${variantClasses[variant]} ${className}`} />;
+    return <div className={`motion-safe:animate-pulse bg-line-strong ${variantClasses[variant]} ${className}`} />;
 }

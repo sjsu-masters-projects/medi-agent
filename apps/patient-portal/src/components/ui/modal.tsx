@@ -14,8 +14,8 @@ interface ModalProps {
 }
 
 const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
-    default: "max-w-[480px] rounded-t-[34px] pb-32",
-    wide: "max-w-[480px] rounded-t-[34px] pb-32 md:max-w-[960px] md:rounded-[34px] md:pb-6 xl:max-w-[1080px]",
+    default: "max-w-[480px] rounded-t-[28px]",
+    wide: "max-w-[480px] rounded-t-[28px] md:max-w-[960px] md:rounded-[28px] xl:max-w-[1080px]",
 };
 
 const overlayClasses: Record<NonNullable<ModalProps["size"]>, string> = {
@@ -52,21 +52,21 @@ export function Modal({ children, closeLabel = "Close modal", keepMounted = fals
     }
 
     return createPortal(
-        <div hidden={!open} style={!open ? { display: "none" } : undefined} className={`fixed inset-0 z-60 flex flex-col bg-[#17233a]/45 backdrop-blur-sm ${overlayClasses[size]}`} onClick={onClose}>
+        <div hidden={!open} style={!open ? { display: "none" } : undefined} className={`ma-fade fixed inset-0 z-60 flex flex-col bg-ink/40 ${overlayClasses[size]}`} onClick={onClose}>
             <div
                 aria-labelledby={open ? titleId : undefined}
                 aria-modal={open ? true : undefined}
                 ref={panel}
                 role={open ? "dialog" : undefined}
                 tabIndex={-1}
-                className={`mx-auto max-h-[88vh] w-full ${sizeClasses[size]} overflow-y-auto border border-white/70 bg-[#fffaf4] p-6 shadow-[0_-24px_80px_rgba(23,35,58,0.20)]`}
+                className={`ma-sheet-panel mx-auto max-h-[88dvh] w-full ${sizeClasses[size]} overflow-y-auto border border-line bg-surface p-6 pb-[calc(24px+env(safe-area-inset-bottom))] shadow-[0_-24px_80px_rgba(16,32,43,0.20)]`}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-center justify-between">
-                    <h3 id={titleId} className="text-xl font-bold text-[#17233a]">{title}</h3>
+                    <h3 id={titleId} className="min-w-0 break-words [overflow-wrap:anywhere] text-xl font-semibold text-ink">{title}</h3>
                     <button
                         aria-label={closeLabel}
-                        className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#64748b] shadow-sm transition hover:bg-[#f4f0ea] hover:text-[#17233a]"
+                        className="ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-muted transition hover:bg-surface-2 hover:text-ink"
                         onClick={onClose}
                         type="button"
                     >
