@@ -75,6 +75,9 @@ handled deliberately:
   specifically to avoid a new column and the window that comes with it.
 
 Prefer one of those shapes over adding a column that the write path immediately requires.
+When a migration is unavoidable before deploy, say so in the PR and apply it first: NORA-002's
+`051_health_knowledge_and_chat_sessions.sql` added `chat_messages.session_id`, which the chat
+write path needs.
 
 ## Traps found the hard way
 
@@ -88,6 +91,22 @@ Prefer one of those shapes over adding a column that the write path immediately 
   A CLI that imports it at module scope cannot even print `--help` without credentials.
 - **Reading the CodeQL alert:** the code-scanning API returns 403 for this repository, but
   the check-run annotations endpoint is readable and names the exact file and line.
+- **Absolute deadlines under uvicorn.** The server runs on uvloop, whose clock differs from
+  `time.monotonic()`. `asyncio.timeout_at(time.monotonic() + t)` therefore cancelled every
+  model call at once in production, while scripts on the default loop passed. Use
+  relative `asyncio.timeout(t)`.
+- **Mocked RPC tests cannot see SQL bugs.** The notification centre's Python tests passed
+  while every RPC failed in PostgreSQL (an ambiguous PL/pgSQL variable). Run the opt-in
+  Docker PostgreSQL contract suites (`*_TEST_POSTGRES_DOCKER=1`) for any migration with
+  functions or triggers.
+- **Turbopack refuses a symlinked `node_modules`** that points outside the worktree. In a
+  new worktree, run `npm ci` in each app instead of linking another checkout's packages.
+- **Speech-to-text pinned to English returns nothing for Spanish speech.** Transcription
+  uses nova-3's `multi` mode; the transcript's language is detected afterwards.
+- **CI checks read pull request state when a run starts.** The PR Policy Check reads the
+  live body, so tick the checklist before pushing (or push again). The secret scan reads
+  every commit in the range, so a credential-shaped placeholder in an earlier commit keeps
+  failing until that commit is rewritten.
 
 ## Never put patient or clinician identifiers in logs
 
