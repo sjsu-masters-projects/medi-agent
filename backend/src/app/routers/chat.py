@@ -33,7 +33,7 @@ from app.services.chat_document_catalog import (
 )
 from app.services.chat_service import ChatService, ConversationStateConflictError
 from app.services.drug_knowledge_service import DrugKnowledgeService
-from app.utils.localization import resolve_locale_resource
+from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -617,6 +617,11 @@ async def chat_websocket_endpoint(
                 )
                 continue
 
+            # Label and answer the message in the language it is written in; the client
+            # sends the app language, which mislabelled Spanish messages as English.
+            incoming = incoming.model_copy(
+                update={"language": written_language(incoming.content, incoming.language)}
+            )
             user_message = await service.save_message(
                 patient_id=str(patient_id),
                 data=incoming.model_dump(),
@@ -879,7 +884,7 @@ async def chat_websocket_endpoint(
                     "content": assistant_content,
                     "role": ChatRole.ASSISTANT,
                     "intent": assistant_intent,
-                    "language": incoming.language,
+                    "language": written_language(assistant_content, incoming.language),
                 },
             )
             assistant_payload = _serialize_chat_message(assistant_message)

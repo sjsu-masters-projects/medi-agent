@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from app.services.care_plan_translation import detect_locale
 from app.services.frequency_labels import localized_frequency
+from app.utils.localization import detect_locale
 
 
 def patient_text(

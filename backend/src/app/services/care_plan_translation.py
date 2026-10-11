@@ -20,6 +20,7 @@ from pydantic import ValidationError as PydanticValidationError
 from app.adk.background_generation import generate_for_workload
 from app.adk.registry import Workload
 from app.models.care_plan import PATIENT_LOCALES, CarePlanWording, PatientLocale
+from app.utils.localization import detect_locale
 
 _FIELDS = ("title", "instructions", "frequency")
 _BATCH = 20
@@ -45,17 +46,6 @@ decide which of the two the wording is written in and report it as source_locale
 Items:
 {items_json}"""
 
-# Strong, common function words only. Medication titles alone carry no signal.
-_SPANISH = re.compile(
-    r"[áéíóúñ¿¡]|\b(el|la|los|las|del|con|por|para|cada|veces|semana|tome|tomar|después|"
-    r"antes|minutos|vaso|agua|su|sus|en|al|y)\b",
-    re.IGNORECASE,
-)
-_ENGLISH = re.compile(
-    r"\b(the|and|with|of|for|each|every|times|day|daily|week|weekly|take|after|before|"
-    r"minutes|glass|water|your|by|mouth|at|in|on)\b",
-    re.IGNORECASE,
-)
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 
 
@@ -80,17 +70,6 @@ class TranslationDraft:
 
 def other_locale(locale: PatientLocale) -> PatientLocale:
     return "es-MX" if locale == "en-US" else "en-US"
-
-
-def detect_locale(*texts: str) -> PatientLocale | None:
-    """Return a locale only when the wording clearly reads as one language."""
-    text = " ".join(texts)
-    spanish, english = len(_SPANISH.findall(text)), len(_ENGLISH.findall(text))
-    if spanish >= 2 and spanish > 2 * english:
-        return "es-MX"
-    if english >= 2 and english > 2 * spanish:
-        return "en-US"
-    return None
 
 
 def response_schema() -> dict[str, Any]:
