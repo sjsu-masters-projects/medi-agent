@@ -30,6 +30,7 @@ from app.routers import (
     feed,
     medications,
     mfa,
+    notification_centre,
     notifications,
     obligations,
     patients,
@@ -151,6 +152,11 @@ def create_app() -> FastAPI:
     )
     application.include_router(
         notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
+    )
+    application.include_router(
+        notification_centre.router,
+        prefix=f"{api}/notification-centre",
+        tags=["Notification centre"],
     )
     application.include_router(reminders.router, prefix=f"{api}/reminders", tags=["Reminders"])
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])

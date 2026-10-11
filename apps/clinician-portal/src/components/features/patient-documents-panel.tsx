@@ -1,7 +1,7 @@
 "use client";
 
 import { SourceFileIcon } from "@/components/features/source-file";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Modal } from "@/components/ui";
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
@@ -31,6 +31,12 @@ import type { ClinicianDocumentSource, ExtractedDocumentFact } from "@/services/
 
 const compactSecondary =
     "ma-press inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]";
+
+function subscribeDocumentTarget(change: () => void) {
+    window.addEventListener("hashchange", change);
+    window.addEventListener("popstate", change);
+    return () => { window.removeEventListener("hashchange", change); window.removeEventListener("popstate", change); };
+}
 
 interface PatientDocumentsPanelProps {
     documents: ClinicianPatientDocument[];
@@ -85,12 +91,15 @@ export function PatientDocumentsPanel({
     patientId,
     onRefresh,
 }: PatientDocumentsPanelProps) {
+    const target = useSyncExternalStore(subscribeDocumentTarget, () => window.location.hash.slice(1), () => "");
+    const hasTarget = documents.some((doc) => target === `document-${doc.id}`);
     useEffect(() => {
-        const target = window.location.hash.slice(1);
-        if (documents.some((doc) => target === `document-${doc.id}`)) {
-            document.getElementById(target)?.scrollIntoView?.({ block: "center" });
+        if (hasTarget) {
+            const row = document.getElementById(target);
+            row?.scrollIntoView?.({ block: "center" });
+            row?.focus({ preventScroll: true });
         }
-    }, [documents]);
+    }, [target, hasTarget]);
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [reviewingDocumentId, setReviewingDocumentId] = useState<string | null>(null);
     const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
@@ -277,6 +286,7 @@ export function PatientDocumentsPanel({
 
     return (
         <div aria-labelledby="tab-btn-documents" id="tab-panel-documents" role="tabpanel">
+            {target.startsWith("document-") && !hasTarget && <p role="status" className="mb-4 text-sm text-muted">The linked document is unavailable in the returned records.</p>}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-[15px] font-semibold text-ink">Documents</h2>
                 <a
@@ -308,7 +318,7 @@ export function PatientDocumentsPanel({
             ) : (
                 <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
                     {documents.map((doc) => (
-                        <div className="scroll-mt-24 border-b border-line px-5 py-4 last:border-b-0 target:bg-primary-tint/40 target:ring-2 target:ring-inset target:ring-primary" id={`document-${doc.id}`} key={doc.id}>
+                        <div tabIndex={target === `document-${doc.id}` ? -1 : undefined} className="scroll-mt-24 border-b border-line px-5 py-4 last:border-b-0 target:bg-primary-tint/40 target:ring-2 target:ring-inset target:ring-primary" id={`document-${doc.id}`} key={doc.id}>
                             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                                 <div className="flex min-w-0 flex-1 basis-[18rem] items-start gap-3">
                                     <DocumentTypeTile documentType={doc.documentType} />

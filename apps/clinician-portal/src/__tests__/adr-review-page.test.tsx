@@ -12,6 +12,8 @@ const { fetchADRReviewQueueMock, reviewADRAssessmentMock } = vi.hoisted(() => ({
     fetchADRReviewQueueMock: vi.fn(),
     reviewADRAssessmentMock: vi.fn(),
 }));
+const query = vi.hoisted(() => ({ value: "" }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(query.value) }));
 
 vi.mock("@/services/clinicians", () => ({
     fetchADRReviewQueue: fetchADRReviewQueueMock,
@@ -56,9 +58,19 @@ const assessment = {
 };
 
 describe("ADR review queue", () => {
+    it("focuses the exact assessment and explains an unavailable target", async () => {
+        query.value = "assessment=adr-1";
+        fetchADRReviewQueueMock.mockResolvedValue([assessment]);
+        const view = render(<MedWatchPage />);
+        await waitFor(() => expect(document.getElementById("assessment-adr-1")).toHaveFocus());
+        query.value = "assessment=missing";
+        view.rerender(<MedWatchPage />);
+        expect(screen.getByText(/linked assessment is no longer awaiting review/)).toBeInTheDocument();
+    });
     beforeEach(() => {
         fetchADRReviewQueueMock.mockReset();
         reviewADRAssessmentMock.mockReset();
+        query.value = "";
     });
 
     it("shows the Naranjo score and patient-grounded evidence", async () => {

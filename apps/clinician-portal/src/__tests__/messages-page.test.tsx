@@ -19,9 +19,9 @@ describe("MessagesPage", () => {
 
         render(<MessagesPage />);
 
-        expect(screen.getByText("Operational alert history")).toBeInTheDocument();
+        expect(screen.getByText("Earlier sent records")).toBeInTheDocument();
         // Skeletons are rendered during load
-        expect(screen.queryByText("No operational alerts yet")).not.toBeInTheDocument();
+        expect(screen.queryByText("No legacy sent records")).not.toBeInTheDocument();
     });
 
     it("renders the empty state when no messages exist", async () => {
@@ -29,9 +29,9 @@ describe("MessagesPage", () => {
 
         render(<MessagesPage />);
 
-        expect(await screen.findByText("No operational alerts yet")).toBeInTheDocument();
+        expect(await screen.findByText("No legacy sent records")).toBeInTheDocument();
         expect(
-            screen.getByText(/Operational notification history/i),
+            screen.getByText(/Earlier operational records and human messages appear here/i),
         ).toBeInTheDocument();
     });
 
@@ -88,7 +88,7 @@ describe("MessagesPage", () => {
 
         render(<MessagesPage />);
 
-        await screen.findByText("No operational alerts yet");
+        await screen.findByText("No legacy sent records");
         expect(fetchAllSentMessages).toHaveBeenCalledTimes(1);
 
         vi.mocked(fetchAllSentMessages).mockResolvedValue([

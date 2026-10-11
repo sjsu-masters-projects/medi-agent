@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ADRReviewCard } from "@/components/features/adr-review-card";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
@@ -45,7 +46,8 @@ function LoadingQueue() {
     );
 }
 
-export default function MedWatchPage() {
+function MedWatchContent() {
+    const assessmentId = useSearchParams().get("assessment");
     const [items, setItems] = useState<ADRReviewQueueItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -54,6 +56,12 @@ export default function MedWatchPage() {
     const [reviewError, setReviewError] = useState<string | null>(null);
     const queuePending = useRef(false);
     const reviewPending = useRef(false);
+    useEffect(() => {
+        if (!assessmentId || loading || error) return;
+        const target = document.getElementById(`assessment-${assessmentId}`);
+        target?.scrollIntoView?.({ block: "center" });
+        target?.focus({ preventScroll: true });
+    }, [assessmentId, items, loading, error]);
 
     const loadQueue = useCallback(async () => {
         if (queuePending.current) return;
@@ -186,6 +194,7 @@ export default function MedWatchPage() {
                     {notice}
                 </p>
             ) : null}
+            {assessmentId && !loading && !error && !items.some((item) => item.id === assessmentId) && <p role="status" className="text-sm text-muted">The linked assessment is no longer awaiting review or is unavailable to you.</p>}
 
             {reviewError ? (
                 <p
@@ -242,6 +251,7 @@ export default function MedWatchPage() {
                     aria-label="ADR assessments awaiting review"
                 >
                     {items.map((item) => (
+                        <div key={item.id} id={`assessment-${item.id}`} tabIndex={item.id === assessmentId ? -1 : undefined} className={item.id === assessmentId ? "scroll-mt-6 rounded-2xl ring-2 ring-primary" : ""}>
                         <ADRReviewCard
                             item={item}
                             key={item.id}
@@ -252,9 +262,14 @@ export default function MedWatchPage() {
                                 Boolean(error)
                             }
                         />
+                        </div>
                     ))}
                 </section>
             ) : null}
         </div>
     );
+}
+
+export default function MedWatchPage() {
+    return <Suspense fallback={<p role="status">Loading ADR reviews…</p>}><MedWatchContent /></Suspense>;
 }

@@ -654,7 +654,7 @@ class CronService:
                 if kind == reminder_kind
             ),
             "body": body,
-            "action_url": f"/appointments?appointmentId={appointment_id}",
+            "action_url": f"/visits?appointmentId={appointment_id}",
             "dedupe_key": dedupe_key,
             "metadata": {
                 "appointment_id": appointment_id,

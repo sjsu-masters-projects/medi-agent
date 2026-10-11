@@ -85,6 +85,16 @@ is represented as available. No real-PHI production readiness is claimed.
 
 ## Evidence, FHIR, and safety
 
+NOT-001 extends deterministic notifications with role-scoped event receipts and
+current clinician work. Source transitions capture events in the source transaction;
+recipient delivery is retryable and duplicate-safe. Notification reads are personal
+presentation state, not approval or clinical resolution. Private-message events stay
+bound to the addressed patient/clinician thread; shared work follows current clinical
+assignment and source state. Signed bulk-read snapshots exclude later arrivals.
+The new portal API and migration require reviewed rollout and deployed verification.
+See `.agent/specs/not-001-notification-centre.md` for the contract.
+
+
 The codebase validates a supported import subset with maintained FHIR R4B models and
 emits R4-compatible payload fields. SMART authorization-code + PKCE handling stores
 only encrypted transient verifier state, raw FHIR envelopes, and a short-lived local

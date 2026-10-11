@@ -16,7 +16,7 @@ import { conversationAccessDenied, conversationRoleLabel, conversationSendFailur
 
 const button = chatButton;
 const input = "min-h-[52px] w-full rounded-2xl border border-line-strong bg-surface px-4 py-2 text-base font-normal text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
-type Presentation = { compact?: boolean; onThreadPresentationChange?: (id: string | null) => void };
+type Presentation = { compact?: boolean; conversationId?: string | null; recipientId?: string | null; onThreadPresentationChange?: (id: string | null) => void };
 
 export function CareConversations({ locale = "en-US", audience = "patient", visible = true, ...presentation }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean } & Presentation) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
@@ -24,7 +24,7 @@ export function CareConversations({ locale = "en-US", audience = "patient", visi
   return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} {...presentation} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible, compact = false, onThreadPresentationChange }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
+function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, onThreadPresentationChange }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
@@ -45,6 +45,8 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
   const pollVersion = useRef(0);
   const pollController = useRef<AbortController | null>(null);
   const [pollFailed, setPollFailed] = useState(false);
+  const handledDestination = useRef<string | null>(null);
+  const [destinationUnavailable, setDestinationUnavailable] = useState(false);
   const inboxUi = useRef({ visible, loading, opening, sending });
   useEffect(() => { inboxUi.current = { visible, loading, opening, sending }; }, [visible, loading, opening, sending]);
   const invalidateInbox = useCallback(() => {
@@ -120,6 +122,26 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
     };
   }, [refreshInbox, invalidateInbox, visible, loading, opening, sending]);
 
+  useEffect(() => {
+    const destination = conversationId ? `conversation:${conversationId}` : recipientId ? `recipient:${recipientId}` : null;
+    if (!destination) { handledDestination.current = null; return; }
+    if (loading || !visible || error || handledDestination.current === destination) return;
+    handledDestination.current = destination;
+    const thread = conversationId ? threads.find((item) => item.id === conversationId) : threads.find((item) => item.clinician_id === recipientId);
+    if (thread) { setSelected(thread.id); setThreadFocused(true); setDestinationUnavailable(false); return; }
+    // A missing exact thread must never fall back to another recipient.
+    setSelected(null); setThreadFocused(false);
+    if (conversationId || !recipients.some((person) => person.id === recipientId)) { setDestinationUnavailable(true); return; }
+    const session = version.current;
+    setOpening(true); setDestinationUnavailable(false);
+    void careConversations.open(token, recipientId!).then((opened) => {
+      if (session !== version.current || handledDestination.current !== destination) return;
+      setThreads((current) => [opened, ...current.filter((item) => item.id !== opened.id)]);
+      setSelected(opened.id); setThreadFocused(true);
+    }).catch(() => { if (session === version.current && handledDestination.current === destination) setDestinationUnavailable(true); })
+      .finally(() => { if (session === version.current && handledDestination.current === destination) setOpening(false); });
+  }, [conversationId, recipientId, loading, visible, error, threads, recipients, token]);
+
   async function open() {
     if (!recipient || opening || sending) return;
     const request = version.current;
@@ -159,6 +181,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
       {!compact ? <button className={button} disabled={loading || opening || sending} onClick={() => setAttempt((value) => value + 1)} type="button">{loading ? copy.loading : copy.refresh}</button> : null}
     </div>;
   return <section className="min-w-0 space-y-4 text-sm text-ink-2" aria-busy={loading}>
+    {destinationUnavailable && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-danger-ink">{locale === "es-MX" ? "Esta conversación no está disponible. Elige un contacto autorizado." : "This conversation is unavailable. Choose an authorized contact."}</p>}
     {compact ? <>
       <div hidden={focused} className="flex items-end justify-between gap-2 pl-1.5 pt-2">
         <h2 className="pb-2 font-mono text-xs uppercase tracking-[0.08em] text-muted">{locale === "es-MX" ? "Tu equipo clínico" : "Your care team"}</h2>

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import RecordsPage from "@/app/(app)/records/page";
 import { DocumentParseStatus, DocumentType } from "@/types";
+const destination = vi.hoisted(() => ({ params: new URLSearchParams() }));
 
 const {
   authState,
@@ -40,6 +41,7 @@ const {
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
+  useSearchParams: () => destination.params,
 }));
 
 vi.mock("react-redux", () => ({
@@ -87,7 +89,26 @@ vi.mock("@/hooks/use-patient-profile", () => ({
 }));
 
 describe("RecordsPage", () => {
+  it("opens only the requested authorized document, retaining the original filename", async () => {
+    destination.params = new URLSearchParams("document=exact-record");
+    get.mockResolvedValue([
+      { id: "other", file_name: "Other record.pdf", document_type: DocumentType.LAB_REPORT, created_at: "2026-10-10T12:00:00Z", parse_status: DocumentParseStatus.PENDING },
+      { id: "exact-record", file_name: "Exact record.pdf", document_type: DocumentType.LAB_REPORT, created_at: "2026-10-10T12:00:00Z", parse_status: DocumentParseStatus.PENDING },
+    ]);
+    render(<RecordsPage />);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Exact record.pdf");
+    expect(dialog).not.toHaveTextContent("Other record.pdf");
+  });
+  it("does not open another document for an unavailable requested record", async () => {
+    destination.params = new URLSearchParams("document=revoked-record");
+    get.mockResolvedValue([]);
+    render(<RecordsPage />);
+    await screen.findByText("This document is unavailable. Refresh your records.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
   beforeEach(() => {
+    destination.params = new URLSearchParams();
     profileSettings.locale = "en-US";
     authState.value = {
       accessToken: "access-token",

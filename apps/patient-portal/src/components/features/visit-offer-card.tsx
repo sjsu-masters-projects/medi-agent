@@ -69,7 +69,7 @@ export function VisitOfferCard({
         {slots.map((slot) => {
           const when = formatVisitTime(slot.scheduledAt, locale, timezone);
           return (
-            <li key={slot.id}>
+            <li key={slot.id} id={`visit-${slot.id}`} tabIndex={-1}>
               <Button
                 className="min-h-11 h-auto !justify-start whitespace-normal rounded-2xl border border-line-strong !bg-surface py-3 text-left hover:!border-brand/50 hover:!bg-brand-tint/40"
                 fullWidth

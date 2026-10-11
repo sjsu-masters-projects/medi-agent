@@ -16,6 +16,7 @@ implementation guidance.
 | Current implementation and delivery boundaries | `../.agent/ARCHITECTURE.md` |
 | Model routing, safety controls, and evaluation limits | [AI runtime decision](decisions/ai-runtime-2026-09.md) |
 | Nora's reference knowledge, document answers and conversations | [NORA-002 specification](../.agent/specs/nora-002-grounded-answers.md) |
+| In-app notifications, clinician Alerts and their database contract | [NOT-001 specification](../.agent/specs/not-001-notification-centre.md) |
 | Document ingestion design and Cloud Run Job operation | [Document intelligence decision](document-intelligence-assessment.md) and [worker guide](document-ingestion-worker.md) |
 | Database, RLS, migrations, and local setup | [Supabase setup](supabase_setup_guide.md) |
 | Synthetic demonstration setup and fixture scope | [Demo environment](demo-environment.md) and [synthetic-data catalog](synthetic-data-catalog.md) |

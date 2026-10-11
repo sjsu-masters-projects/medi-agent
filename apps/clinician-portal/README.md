@@ -134,8 +134,18 @@ Sender and clinic names come from the server. An explicit send is the clinician'
 approval; no AI transcript composer or automatic clinical send is provided.
 The patient AI transcript links to Messages.
 
-**Operational alerts** retains legacy notification history as a separate view.
-It is not a human conversation or evidence of a patient reply.
+**Alerts** separates current authorized work from notification history. Documents,
+care-plan drafts, appointments and follow-up/safety items open their exact existing
+workflow; reading does not approve care. Only supported barrier/safety items offer
+an audited acknowledgement, meaning seen for follow-up, not clinically resolved.
+The historical archive preserves legacy sent-message records without converting
+old urgency labels into active work. Messages remains private human conversations.
+
+The shared notification cache polls `/api/v1/notification-centre` once a minute
+while visible and refreshes on focus. Signed per-page cutoffs protect bulk reads
+against new arrivals; assignment revocation removes access. Counts unavailable
+is not zero. See [NOT-001](../../.agent/specs/not-001-notification-centre.md) for
+the migration prerequisite and deployed acceptance boundary.
 
 The conversation API is `/api/v1/care-conversations`. Pages contain at most 50
 messages; older pages use the server cursor. The visible inbox and selected thread

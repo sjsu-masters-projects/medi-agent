@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
 interface ModalProps {
@@ -55,7 +56,10 @@ export function Modal({ children, contentClassName, onClose, open, title }: Moda
         return null;
     }
 
-    return (
+    // Rendered into <body>: an animated or transformed ancestor would otherwise become the
+    // containing block for `fixed`, so the backdrop covered only part of the screen and
+    // left the sidebar and header clickable behind the dialog.
+    const dialog = (
         <div className="ma-fade fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,.45)] p-4 backdrop-blur-[2px]" onClick={onClose}>
             <div
                 ref={dialogRef}
@@ -80,4 +84,5 @@ export function Modal({ children, contentClassName, onClose, open, title }: Moda
             </div>
         </div>
     );
+    return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }

@@ -37,6 +37,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("human conversations", () => {
+  it("selects only the exact linked conversation and reports unavailable targets", async () => {
+    vi.mocked(careConversations.list).mockResolvedValue([thread, { ...thread, id: "second", clinician_name: "Dr. Two" }]);
+    const view = render(<CareConversations conversationId="second" />);
+    await waitFor(() => expect(careConversations.messages).toHaveBeenCalledWith("synthetic-token", "second", undefined));
+    expect(screen.getByRole("button", { name: /Dr. Two · Clinic One/ })).toHaveAttribute("aria-pressed", "true");
+    expect(careConversations.messages).not.toHaveBeenCalledWith("synthetic-token", thread.id, undefined);
+    view.rerender(<CareConversations conversationId="missing" />);
+    await screen.findByText(/The linked conversation is unavailable/);
+    expect(careConversations.messages).not.toHaveBeenCalledWith("synthetic-token", "missing", undefined);
+  });
   it("requires one explicit recipient and opens only that clinician's thread", async () => {
     render(<CareConversations />);
     await screen.findByRole("option", { name: /Dr. Two/ });

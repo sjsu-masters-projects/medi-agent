@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import { AppointmentOfferForm } from "@/components/features/appointment-offer-form";
 import { AppointmentOfferHistory } from "@/components/features/appointment-offer-history";
@@ -22,6 +23,7 @@ function PatientAppointments({
   disabled,
   onCreated,
   onSendingChange,
+  appointmentId,
 }: {
   token: string;
   patient: AssignedSchedulingPatient;
@@ -29,6 +31,7 @@ function PatientAppointments({
   disabled: boolean;
   onCreated: (rows: Appointment[]) => void;
   onSendingChange: (sending: boolean) => void;
+  appointmentId?: string | null;
 }) {
   const [settings, setSettings] = useState<ReturnType<
     typeof resolveSchedulingTimezone
@@ -134,6 +137,7 @@ function PatientAppointments({
             </span>
           </div>
           <AppointmentOfferHistory
+            appointmentId={appointmentId}
             token={token}
             appointments={appointments}
             timezone={settings.timezone}
@@ -150,13 +154,20 @@ function PatientAppointments({
   );
 }
 
-function SchedulingWorkspace({ token }: { token: string }) {
+function SchedulingWorkspace({ token, appointmentId }: { token: string; appointmentId: string | null }) {
   const { patients, appointments, loading, error, refresh, addOffer } =
     useAppointmentScheduling(token);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [previousTarget, setPreviousTarget] = useState(appointmentId);
+  if (previousTarget !== appointmentId) {
+    setPreviousTarget(appointmentId);
+    setSelectedId(null);
+  }
+  const linkedAppointment = appointments.find((visit) => visit.id === appointmentId);
+  const effectiveSelectedId = selectedId ?? linkedAppointment?.careTeamId ?? "";
   const [sending, setSending] = useState(false);
   const selected = patients.find(
-    (patient) => patient.care_team_id === selectedId,
+    (patient) => patient.care_team_id === effectiveSelectedId,
   );
   return (
     <div className="ma-page space-y-5">
@@ -195,6 +206,7 @@ function SchedulingWorkspace({ token }: { token: string }) {
           </Button>
         </div>
       )}
+      {appointmentId && !loading && !error && (!linkedAppointment || !patients.some((patient) => patient.id === linkedAppointment.patientId && patient.care_team_id === linkedAppointment.careTeamId)) && <p role="status" className="text-sm text-muted">The linked appointment is unavailable. Select an assigned patient to review other appointments.</p>}
       {loading && !patients.length ? (
         <div className="space-y-3 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
           <p role="status" className="text-sm text-muted">
@@ -219,7 +231,7 @@ function SchedulingWorkspace({ token }: { token: string }) {
                 </span>
                 <select
                   className="h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted"
-                  value={selectedId}
+                  value={effectiveSelectedId}
                   disabled={loading || error || sending}
                   onChange={(event) => setSelectedId(event.target.value)}
                 >
@@ -241,6 +253,7 @@ function SchedulingWorkspace({ token }: { token: string }) {
           )}
           {selected && (
             <PatientAppointments
+              appointmentId={appointmentId}
               key={selected.care_team_id}
               token={token}
               patient={selected}
@@ -260,13 +273,18 @@ function SchedulingWorkspace({ token }: { token: string }) {
   );
 }
 
-export default function AppointmentsPage() {
+function AppointmentsContent() {
+  const appointmentId = useSearchParams().get("appointmentId");
   const token = useSelector((state: RootState) => state.auth.accessToken);
   return token ? (
-    <SchedulingWorkspace key={token} token={token} />
+    <SchedulingWorkspace key={token} token={token} appointmentId={appointmentId} />
   ) : (
     <p role="status" className="text-sm text-muted">
       Sign in as a clinician to manage appointments.
     </p>
   );
+}
+
+export default function AppointmentsPage() {
+  return <Suspense fallback={<p role="status">Loading appointments…</p>}><AppointmentsContent /></Suspense>;
 }

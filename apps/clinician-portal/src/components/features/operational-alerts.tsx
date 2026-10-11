@@ -66,10 +66,10 @@ export function OperationalAlerts() {
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 className="text-[17px] font-semibold text-ink">
-                        Operational alerts
+                        Legacy sent-message archive
                     </h2>
                     <p className="mt-1 text-sm text-muted">
-                        Legacy operational notifications, separate from patient conversations.
+                        Earlier operational records and human messages, retained as history rather than active work.
                     </p>
                 </div>
                 <button
@@ -105,9 +105,9 @@ export function OperationalAlerts() {
                         <Icon name="history" className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">
-                        <h2 className="text-[15px] font-semibold text-ink">Operational alert history</h2>
+                        <h2 className="text-[15px] font-semibold text-ink">Earlier sent records</h2>
                         <p className="mt-0.5 text-[13px] text-muted">
-                            Ordered by most recent. These notifications are not conversation replies.
+                            Ordered by most recent. Historical urgency labels do not create new clinical alerts or current review tasks.
                         </p>
                     </div>
                 </div>
@@ -119,7 +119,7 @@ export function OperationalAlerts() {
                         ))}
                     </div>
                 ) : error && messages.length === 0 ? (
-                    <p className="px-[22px] py-10 text-sm text-ink-2">Alert history is unavailable. Refresh to check for notifications.</p>
+                    <p className="px-[22px] py-10 text-sm text-ink-2">Sent-message history is unavailable. Refresh to check for earlier records.</p>
                 ) : messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
                         <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-muted">
@@ -127,10 +127,10 @@ export function OperationalAlerts() {
                         </span>
                         <div>
                             <p className="text-[15px] font-semibold text-ink">
-                                No operational alerts yet
+                                No legacy sent records
                             </p>
                             <p className="mt-1 text-sm text-muted">
-                                Operational notification history appears here.
+                                Earlier operational records and human messages appear here when available.
                             </p>
                         </div>
                     </div>
@@ -162,7 +162,7 @@ export function OperationalAlerts() {
                                             ? `${msg.body.slice(0, 200)}…`
                                             : msg.body}
                                     </p>
-                                    {msg.body.length > 200 ? <details className="ma-disclosure max-w-[80ch] text-sm text-ink-2"><summary className="min-h-9 cursor-pointer py-1.5 text-[13px] font-medium text-primary">Read full alert</summary><p className="whitespace-pre-wrap break-words pt-1">{msg.body}</p></details> : null}
+                                    {msg.body.length > 200 ? <details className="ma-disclosure max-w-[80ch] text-sm text-ink-2"><summary className="min-h-9 cursor-pointer py-1.5 text-[13px] font-medium text-primary">Read full record</summary><p className="whitespace-pre-wrap break-words pt-1">{msg.body}</p></details> : null}
                                 </div>
                             </div>
                         ))}

@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { DocumentSourceViewer } from "@/components/features";
+import { NotificationBell } from "@/components/features/notification-centre";
 import { groupRecordDates, RecordRow, recordTitle } from "@/components/features/record-row";
 import { Icon } from "@/components/ui/icons";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
@@ -249,6 +250,9 @@ export default function RecordsPage() {
   );
   const dispatch = useDispatch<AppDispatch>();
   const router = useRouter();
+  const requestedDocument = useSearchParams().get("document");
+  const handledDocument = useRef<string | null>(null);
+  const [documentUnavailable, setDocumentUnavailable] = useState(false);
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
   const [selectedDocument, setSelectedDocument] =
     useState<PortalDocument | null>(null);
@@ -348,6 +352,14 @@ export default function RecordsPage() {
     setDeleteConfirming(false);
     setDeleteError(null);
   }, []);
+
+  useEffect(() => {
+    if (!requestedDocument) { handledDocument.current = null; setDocumentUnavailable(false); return; }
+    if (loading || pageError || handledDocument.current === requestedDocument) return;
+    const document = documents.find((item) => item.id === requestedDocument);
+    if (document) { handledDocument.current = requestedDocument; setDocumentUnavailable(false); openDocument(document); }
+    else { setSelectedDocument(null); setDocumentUnavailable(true); }
+  }, [requestedDocument, documents, loading, pageError, openDocument]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -686,11 +698,12 @@ export default function RecordsPage() {
     >
       <div className="patient-page pb-6">
         <header className="px-[22px] pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="min-w-0 break-words text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="min-w-0 flex-1 basis-[180px] break-words text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">
               {copy("My Records")}
             </h1>
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <NotificationBell />
               <OverflowMenu
                 label={spanish ? "Más opciones" : "More options"}
                 items={[
@@ -729,6 +742,7 @@ export default function RecordsPage() {
           type="file"
         />
         <div className="space-y-3 px-4 pt-4 empty:hidden">
+          {documentUnavailable && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Este documento no está disponible. Actualiza tus registros." : "This document is unavailable. Refresh your records."}</p>}
           {uploading ? (
             <p
               role="status"

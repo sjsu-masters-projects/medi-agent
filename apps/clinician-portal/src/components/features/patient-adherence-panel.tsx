@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PatientDeepDive } from "@/services/clinicians";
 import { Icon } from "@/components/ui/icons";
 import { AdherenceChart } from "./adherence-chart";
@@ -89,7 +89,7 @@ const CARD = "rounded-2xl border border-line bg-surface shadow-[var(--shadow-car
 const CARD_HEADER = "flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4";
 const CARD_TITLE = "text-[15px] font-semibold text-ink";
 
-function Barriers({ patient }: { patient: PatientDeepDive }) {
+function Barriers({ patient, activityId }: { patient: PatientDeepDive; activityId?: string | null }) {
   const barriers = patient.adherence_barriers ?? [];
   return (
     <section className={CARD}>
@@ -115,7 +115,9 @@ function Barriers({ patient }: { patient: PatientDeepDive }) {
           {barriers.map((barrier, index) => (
             <li
               key={`${barrier.target_id}-${barrier.logged_at}-${index}`}
-              className="border-b border-line px-5 py-4 last:border-b-0 hover:bg-[rgba(100,116,139,.05)]"
+              id={`barrier-${barrier.target_id}-${index}`}
+              tabIndex={barrier.target_id === activityId ? -1 : undefined}
+              className={`scroll-mt-6 border-b border-line px-5 py-4 last:border-b-0 hover:bg-[rgba(100,116,139,.05)] ${barrier.target_id === activityId ? "ring-2 ring-inset ring-primary" : ""}`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-warn-tint px-2 py-1 text-xs font-medium text-warn-ink">
@@ -231,7 +233,7 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
   );
 }
 
-function CurrentActivities({ patient }: { patient: PatientDeepDive }) {
+function CurrentActivities({ patient, activityId }: { patient: PatientDeepDive; activityId?: string | null }) {
   const rows = [
     ...patient.medications
       .filter((med) => med.isActive)
@@ -251,7 +253,7 @@ function CurrentActivities({ patient }: { patient: PatientDeepDive }) {
       })),
   ];
   return (
-    <details className={`ma-disclosure ${CARD} px-5 py-2`}>
+    <details open={activityId && rows.some((row) => row.id === activityId) ? true : undefined} className={`ma-disclosure ${CARD} px-5 py-2`}>
       <summary className="min-h-9 py-1.5 text-[13px] font-medium text-ink">
         Current medication & activity context ({rows.length})
       </summary>
@@ -261,7 +263,7 @@ function CurrentActivities({ patient }: { patient: PatientDeepDive }) {
       </p>
       <ul className="mt-2 pb-2">
         {rows.map((row) => (
-          <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line py-3 last:border-b-0" key={`${row.kind}-${row.id}`}>
+          <li id={`activity-${row.id}`} tabIndex={row.id === activityId ? -1 : undefined} className={`flex scroll-mt-6 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line py-3 last:border-b-0 ${row.id === activityId ? "ring-2 ring-primary" : ""}`} key={`${row.kind}-${row.id}`}>
             <p className="text-sm font-medium text-ink">{row.name}</p>
             <p className="text-xs text-muted">
               {row.kind} · {row.detail}
@@ -280,11 +282,22 @@ function CurrentActivities({ patient }: { patient: PatientDeepDive }) {
 
 export function PatientAdherencePanel({
   patient,
+  activityId,
 }: {
   patient: PatientDeepDive;
+  activityId?: string | null;
 }) {
+  const barrierIndex = patient.adherence_barriers?.findIndex((barrier) => barrier.target_id === activityId) ?? -1;
+  const currentActivity = patient.medications.some((med) => med.id === activityId && med.isActive) || patient.obligations?.some((item) => item.id === activityId && item.is_active);
+  useEffect(() => {
+    if (!activityId) return;
+    const target = document.getElementById(barrierIndex >= 0 ? `barrier-${activityId}-${barrierIndex}` : `activity-${activityId}`);
+    target?.scrollIntoView?.({ block: "center" });
+    target?.focus({ preventScroll: true });
+  }, [activityId, barrierIndex, patient]);
   return (
     <div className="space-y-5">
+      {activityId && barrierIndex < 0 && !currentActivity && <p role="status" className="text-sm text-muted">The linked activity is not in the returned reports or current records. Earlier barriers may fall outside the latest 20 reports.</p>}
       <div>
         <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
           Adherence & patient follow-up
@@ -322,9 +335,9 @@ export function PatientAdherencePanel({
           <AdherenceChart data={patient.adherence_series} />
         </div>
       </section>
-      <Barriers patient={patient} />
+      <Barriers patient={patient} activityId={activityId} />
       <DailyResponses patient={patient} />
-      <CurrentActivities patient={patient} />
+      <CurrentActivities patient={patient} activityId={activityId} />
     </div>
   );
 }

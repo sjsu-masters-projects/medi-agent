@@ -6,6 +6,7 @@ import { BottomNav, ProtectedRoute } from "@/components/layouts";
 import { PatientProfileProvider } from "@/hooks/use-patient-profile";
 import { PatientLanguageControl } from "@/components/layouts/patient-language-control";
 import { PatientShellProvider, usePatientShell } from "@/contexts/patient-shell-context";
+import { NotificationProvider } from "@/contexts/notifications-context";
 
 function PatientShell({ children }: { children: ReactNode }) {
     const pathname = usePathname();
@@ -24,7 +25,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <Suspense fallback={null}>
             <ProtectedRoute>
               <PatientProfileProvider>
-                <PatientShellProvider><PatientShell>{children}</PatientShell></PatientShellProvider>
+                <NotificationProvider><PatientShellProvider><PatientShell>{children}</PatientShell></PatientShellProvider></NotificationProvider>
               </PatientProfileProvider>
             </ProtectedRoute>
         </Suspense>
