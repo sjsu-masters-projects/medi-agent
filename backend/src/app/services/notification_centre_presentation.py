@@ -18,43 +18,43 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "New care-team message",
         "Open your private conversation to read the message.",
         "Nuevo mensaje del equipo de atención",
-        "Abra su conversación privada para leer el mensaje.",
+        "Abre tu conversación privada para leer el mensaje.",
     ),
     "appointment_offered": (
         "Appointment offered",
         "Review the proposed time and respond in Visits.",
         "Propuesta de cita",
-        "Revise el horario propuesto y responda en Citas.",
+        "Revisa el horario propuesto y responde en Citas.",
     ),
     "appointment_changed": (
         "Appointment updated",
         "Review the current time and status in Visits.",
         "Cita actualizada",
-        "Revise el horario y el estado actual en Citas.",
+        "Revisa el horario y el estado actual en Citas.",
     ),
     "appointment_response": (
         "Patient responded to an appointment",
         "Review the saved patient response.",
         "Respuesta a la cita",
-        "Revise la respuesta guardada.",
+        "Revisa la respuesta guardada.",
     ),
     "appointment_reminder": (
         "Appointment reminder",
         "Open Visits for the current time and location.",
         "Recordatorio de cita",
-        "Abra Citas para consultar el horario y el lugar actual.",
+        "Abre Citas para consultar el horario y el lugar actual.",
     ),
     "care_plan_published": (
         "Your care plan was updated",
         "Your care team approved an updated plan. Review it in Today.",
-        "Su plan de cuidado se actualizó",
-        "Su equipo de atención aprobó un plan actualizado. Revíselo en Hoy.",
+        "Tu plan de cuidado se actualizó",
+        "Tu equipo de atención aprobó un plan actualizado. Revísalo en Hoy.",
     ),
     "care_plan_draft": (
         "Care-plan draft ready for review",
         "This draft is not published. Review sources, wording and blockers.",
         "Borrador del plan listo para revisión",
-        "Este borrador no está publicado. Revise las fuentes, el texto y los bloqueos.",
+        "Este borrador no está publicado. Revisa las fuentes, el texto y los bloqueos.",
     ),
     "document_review": (
         "Patient document awaiting review",
@@ -66,19 +66,19 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Document processing completed",
         "Open Records to see the document and its separate review status.",
         "Documento procesado",
-        "Abra Registros para ver el documento y el estado de su revisión.",
+        "Abre Registros para ver el documento y el estado de su revisión.",
     ),
     "document_failed": (
         "Document needs attention",
         "Processing did not finish. Open the document for available recovery steps.",
         "El documento necesita atención",
-        "El procesamiento no se completó. Abra el documento para ver las opciones disponibles.",
+        "El procesamiento no se completó. Abre el documento para ver las opciones disponibles.",
     ),
     "document_reviewed": (
         "Document review updated",
         "Your care team recorded a review decision. See its status in Records.",
         "Revisión del documento actualizada",
-        "Su equipo de atención registró una decisión. Consulte el estado en Registros.",
+        "Tu equipo de atención registró una decisión. Consulta el estado en Registros.",
     ),
     "barrier_reported": (
         "Care-plan barrier reported",
@@ -95,8 +95,8 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     "adr_information_requested": (
         "Your care team requested information",
         "Contact the requesting clinician through Care team messages.",
-        "Su equipo de atención solicita información",
-        "Contacte al profesional que hizo la solicitud en Mensajes del equipo de atención.",
+        "Tu equipo de atención solicita información",
+        "Contacta al profesional que hizo la solicitud en Mensajes del equipo de atención.",
     ),
     "safety_flag": (
         "Patient safety flag needs review",
@@ -108,13 +108,13 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Medication reminder",
         "Open Today to see your approved activity and current status.",
         "Recordatorio de medicamento",
-        "Abra Hoy para ver la actividad aprobada y su estado actual.",
+        "Abre Hoy para ver la actividad aprobada y su estado actual.",
     ),
     "obligation_reminder": (
         "Care-plan reminder",
         "Open Today to see your approved activity and current status.",
         "Recordatorio del plan de cuidado",
-        "Abra Hoy para ver la actividad aprobada y su estado actual.",
+        "Abre Hoy para ver la actividad aprobada y su estado actual.",
     ),
 }
 
@@ -224,7 +224,7 @@ def _questions(row: dict[str, Any], spanish: bool) -> str:
     if not reviewed:
         return ""
     heading = (
-        "Preguntas de su profesional de salud (texto original):"
+        "Preguntas de tu profesional de salud (texto original):"
         if spanish
         else "Questions from your clinician (shown as written):"
     )
@@ -238,7 +238,7 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
             "Update available",
             "Open the source to review the saved update.",
             "Actualización disponible",
-            "Abra la fuente para revisar la actualización guardada.",
+            "Abre la fuente para revisar la actualización guardada.",
         ),
     )
     title, body = copy[2:] if spanish else copy[:2]
