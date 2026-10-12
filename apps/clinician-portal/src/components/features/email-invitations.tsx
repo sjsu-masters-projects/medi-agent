@@ -10,7 +10,7 @@ interface Invitation {
 }
 const deliveryLabels: Record<string, string> = {
   queued: "Queued", sending: "Sending", accepted: "Provider accepted — delivery not confirmed",
-  delivered: "Provider confirmed delivery", bounced: "Bounced", failed: "Delivery failed", suppressed: "Delivery stopped",
+  delivered: "Provider confirmed delivery", bounced: "Bounced — invite again to send a new link", failed: "Delivery failed — invite again to send a new link", suppressed: "Delivery stopped",
 };
 
 export function EmailInvitations({ token, revision }: { token: string; revision: string | null }) {

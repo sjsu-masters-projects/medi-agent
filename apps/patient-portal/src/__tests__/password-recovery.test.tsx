@@ -50,6 +50,22 @@ describe("password recovery", () => {
         expect(screen.getByLabelText("Email address")).toHaveValue("test@example.com");
         expect(screen.queryByText("private provider details")).not.toBeInTheDocument();
     });
+    it("moves focus to the neutral status that replaces the form", async () => {
+        render(<PasswordRecoveryForm mode="request" portal="clinician" />);
+        fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "test@example.com" } });
+        fireEvent.click(screen.getByRole("button", { name: "Request reset link" }));
+        const status = await screen.findByText(/If an account exists/);
+        await waitFor(() => expect(status).toHaveFocus());
+    });
+    it("describes request errors on the email field", async () => {
+        mocks.post.mockRejectedValue(new Error("unavailable"));
+        render(<PasswordRecoveryForm mode="request" portal="patient" />);
+        fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "test@example.com" } });
+        fireEvent.click(screen.getByRole("button", { name: "Request reset link" }));
+        const alert = await screen.findByRole("alert");
+        expect(screen.getByLabelText("Email address")).toHaveAttribute("aria-describedby", alert.id);
+        expect(screen.getByLabelText("Email address")).toHaveAttribute("aria-invalid", "true");
+    });
     it("does not offer password entry without a valid recovery link", async () => {
         render(<PasswordRecoveryForm mode="reset" portal="patient" />);
         await screen.findByText(/This link is unavailable/);
@@ -72,13 +88,15 @@ describe("password recovery", () => {
         fireEvent.change(screen.getByLabelText("New password"), { target: { value: "SyntheticTest123!" } });
         fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "DifferentTest123!" } });
         fireEvent.click(screen.getByRole("button", { name: "Save password" }));
-        expect(await screen.findByRole("alert")).toHaveTextContent("Passwords must match");
+        const mismatch = await screen.findByRole("alert");
+        expect(mismatch).toHaveTextContent("Passwords must match");
+        expect(screen.getByLabelText("Confirm password")).toHaveAttribute("aria-describedby", mismatch.id);
         expect(mocks.updateUser).not.toHaveBeenCalled();
         fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "SyntheticTest123!" } });
         fireEvent.click(screen.getByRole("button", { name: "Save password" }));
         await screen.findByText(/Your password was updated/);
         expect(mocks.updateUser).toHaveBeenCalledWith({ password: "SyntheticTest123!" });
-        await waitFor(() => expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" }));
+        await waitFor(() => expect(mocks.signOut).toHaveBeenCalledWith({ scope: "global" }));
         expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
     });
     it("shows an invalid link when the Auth server rejects its session", async () => {

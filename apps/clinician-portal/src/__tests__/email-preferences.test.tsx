@@ -40,6 +40,20 @@ describe("optional email preferences", () => {
     await screen.findByText("The code is invalid or expired. Request a new code.");
     expect(screen.queryByText("Email verified")).not.toBeInTheDocument();
   });
+  it("explains the daily code limit", async () => {
+    mocks.get.mockResolvedValue({ ...account, verified: false });
+    mocks.post.mockResolvedValue({ status: "limit" });
+    render(<EmailPreferences token="test-session" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Send verification code" }));
+    await screen.findByText(/requested several codes today/);
+  });
+  it("shows a calm notice before email setup is installed", async () => {
+    mocks.get.mockResolvedValue({ ...account, verified: false, available: false });
+    render(<EmailPreferences token="test-session" />);
+    await screen.findByText("Email preferences are not available yet. In-app notifications still work.");
+    expect(screen.queryByRole("button", { name: "Send verification code" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
   it("redacts provider errors and supports retry", async () => {
     mocks.get.mockRejectedValueOnce(new Error("private-provider-error"));
     render(<EmailPreferences token="test-session" />);

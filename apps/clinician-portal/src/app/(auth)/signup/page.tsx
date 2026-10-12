@@ -19,6 +19,8 @@ import type { AppDispatch, RootState } from "@/store/store";
 import { ClinicianRole, PortalUserRole } from "@/types";
 
 interface SignupResponse {
+    clinic?: ClinicResolveResponse | null;
+    invitation_status?: "accepted" | "pending" | null;
     tokens: {
         access_token: string;
         expires_at: number;
@@ -37,6 +39,24 @@ interface ClinicResolveResponse {
     clinic_name: string;
     status: "active" | "suspended";
 }
+
+/** Unauthenticated preview: the clinic code is shared only after acceptance. */
+interface InvitationPreview {
+    clinic_name: string;
+    email: string;
+    role: ClinicianRole;
+}
+
+interface InvitationAcceptResponse {
+    clinic: ClinicResolveResponse;
+    status: "accepted";
+}
+
+const roleLabels: Record<string, string> = {
+    [ClinicianRole.ADMIN]: "Clinic Admin",
+    [ClinicianRole.NURSE]: "Nurse / MA",
+    [ClinicianRole.PROVIDER]: "Provider",
+};
 
 function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
     return {
@@ -58,6 +78,10 @@ function ClinicianSignupPageContent() {
     const [inviteRole, setInviteRole] = useState<ClinicianRole | null>(null);
     const inviteHydrated = useRef(false);
     const [invitationToken, setInvitationToken] = useState("");
+    const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
+    const [signInOpen, setSignInOpen] = useState(false);
+    const [signInPassword, setSignInPassword] = useState("");
+    const [accepted, setAccepted] = useState(false);
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
     const [formData, setFormData] = useState({
         confirmPassword: "",
@@ -89,13 +113,14 @@ function ClinicianSignupPageContent() {
             inviteHydrated.current = true;
             window.history.replaceState(null, "", window.location.pathname + window.location.search);
             setInvitationToken(token); setInviteLoading(true);
-            void api.post<ClinicResolveResponse & { email: string; role: ClinicianRole }>(
+            void api.post<InvitationPreview>(
                 "/api/v1/email/invitations/preview", { token },
             ).then(value => {
-                const context = mapClinicContext(value);
-                setClinicContext(context); writeStoredClinicContext(context);
+                setInvitation(value);
                 updateField("email", value.email); updateField("role", value.role); setInviteRole(value.role);
-            }).catch(() => setError("This invitation is invalid, expired or no longer available."))
+            }).catch((previewError) => setError(
+                (previewError as Error).message || "This invitation is invalid, expired or no longer available.",
+            ))
               .finally(() => setInviteLoading(false));
             return;
         }
@@ -108,10 +133,9 @@ function ClinicianSignupPageContent() {
             updateField("email", emailParam);
         }
 
+        // Admin access is granted only by an addressed invitation, never a query string.
         const resolvedRole =
-            roleParam === ClinicianRole.ADMIN
-                ? ClinicianRole.ADMIN
-                : roleParam === ClinicianRole.NURSE
+            roleParam === ClinicianRole.NURSE
                   ? ClinicianRole.NURSE
                   : roleParam === ClinicianRole.PROVIDER
                     ? ClinicianRole.PROVIDER
@@ -157,7 +181,7 @@ function ClinicianSignupPageContent() {
         event.preventDefault();
         setError("");
 
-        if (!clinicContext) {
+        if (!invitationToken && !clinicContext) {
             setError("Verify your clinic code first to continue.");
             return;
         }
@@ -171,7 +195,8 @@ function ClinicianSignupPageContent() {
 
         try {
             const response = await api.post<SignupResponse>("/api/v1/auth/signup/clinician", {
-                clinic_code: clinicContext.clinicCode,
+                // An invitation names its clinic; the code is not shared before acceptance.
+                clinic_code: invitationToken ? undefined : clinicContext?.clinicCode,
                 email: formData.email,
                 first_name: formData.firstName,
                 last_name: formData.lastName,
@@ -198,15 +223,16 @@ function ClinicianSignupPageContent() {
             };
             writeStoredSession(session);
             dispatch(hydrateSession(session));
-            // Claim membership separately: a retry must not delete a successfully created account.
-            if (invitationToken) {
-                try {
-                    await api.post("/api/v1/email/invitations/accept", { token: invitationToken }, { token: session.accessToken });
-                } catch {
-                    setError("Your account was created, but clinic membership could not be confirmed. Use the accept invitation button to retry with this account.");
-                    setSubmitting(false);
-                    return;
-                }
+            if (response.clinic) {
+                const context = mapClinicContext(response.clinic);
+                writeStoredClinicContext(context); setClinicContext(context);
+            }
+            // The server claims membership in the same request. If that did not finish,
+            // the account is kept and this signed-in session can retry the claim.
+            if (invitationToken && response.invitation_status !== "accepted") {
+                setError("Your account was created, but joining the clinic could not be confirmed yet. Use Accept invitation to try again.");
+                setSubmitting(false);
+                return;
             }
             router.replace("/dashboard");
         } catch (submissionError) {
@@ -231,7 +257,12 @@ function ClinicianSignupPageContent() {
                         <p className="text-xs font-medium text-ink-2">Role access options: Provider or Nurse / MA</p>
                     </div>
 
-                    {clinicContext ? (
+                    {invitation ? (
+                        <div className="rounded-[14px] border border-ok-line bg-ok-soft p-3.5 text-sm">
+                            <p className="font-semibold text-ink">Invitation to join {invitation.clinic_name}</p>
+                            <p className="text-ok-ink">{roleLabels[invitation.role] ?? invitation.role} · {invitation.email}</p>
+                        </div>
+                    ) : invitationToken ? null : clinicContext ? (
                         <VerifiedClinic code={clinicContext.clinicCode} name={clinicContext.clinicName}>
                             <p className="sr-only">Clinic: {clinicContext.clinicName}</p>
                             <p className="sr-only">Code: {clinicContext.clinicCode}</p>
@@ -243,14 +274,44 @@ function ClinicianSignupPageContent() {
                         </div>
                     )}
 
-                    {invitationToken && accessToken ? <Button disabled={submitting || inviteLoading} onClick={() => {
+                    {invitationToken && accessToken && !accepted ? <Button disabled={submitting || inviteLoading} onClick={() => {
                         setSubmitting(true); setError("");
-                        void api.post("/api/v1/email/invitations/accept", { token: invitationToken }, { token: accessToken })
-                            .then(() => router.replace("/settings"))
-                            .catch(() => setError("This invitation cannot be accepted by the signed-in account."))
+                        void api.post<InvitationAcceptResponse>("/api/v1/email/invitations/accept", { token: invitationToken }, { token: accessToken })
+                            .then((result) => {
+                                writeStoredClinicContext(mapClinicContext(result.clinic));
+                                router.replace("/dashboard");
+                            })
+                            .catch((acceptError) => setError((acceptError as Error).message || "This invitation cannot be accepted by the signed-in account."))
                             .finally(() => setSubmitting(false));
-                    }}>Accept invitation with signed-in account</Button> : null}
-                    <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
+                    }}>Accept invitation</Button> : null}
+                    {invitation && !accessToken ? (
+                        accepted ? (
+                            <div role="status" className="space-y-2 rounded-xl bg-surface-2 p-4 text-sm text-ink-2">
+                                <p>Invitation accepted. Sign in to continue to {invitation.clinic_name}.</p>
+                                <Link className="font-medium text-primary hover:underline" href="/login">Continue to sign in</Link>
+                            </div>
+                        ) : signInOpen ? (
+                            <form aria-label="Sign in to accept" className="space-y-3 rounded-xl border border-line p-4" onSubmit={(event) => {
+                                event.preventDefault();
+                                setSubmitting(true); setError("");
+                                void api.post<InvitationAcceptResponse>("/api/v1/auth/invitations/accept", {
+                                    email: invitation.email, password: signInPassword, invitation_token: invitationToken,
+                                }).then((result) => {
+                                    const context = mapClinicContext(result.clinic);
+                                    writeStoredClinicContext(context); setClinicContext(context);
+                                    setSignInPassword(""); setAccepted(true);
+                                }).catch((acceptError) => setError((acceptError as Error).message || "This invitation could not be accepted."))
+                                  .finally(() => setSubmitting(false));
+                            }}>
+                                <p className="text-sm text-muted">Use your existing clinician account for {invitation.email}. You will sign in normally afterwards, including MFA.</p>
+                                <Input label="Existing account password" autoComplete="current-password" type="password" value={signInPassword} onChange={(event) => setSignInPassword(event.target.value)} />
+                                <Button disabled={submitting || !signInPassword} type="submit">{submitting ? "Accepting..." : "Sign in to accept"}</Button>
+                            </form>
+                        ) : (
+                            <Button variant="secondary" onClick={() => setSignInOpen(true)}>Already have an account? Sign in to accept</Button>
+                        )
+                    ) : null}
+                    {accepted ? null : <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
                         <Input label="First name" onChange={(event) => updateField("firstName", event.target.value)} value={formData.firstName} />
                         <Input label="Last name" onChange={(event) => updateField("lastName", event.target.value)} value={formData.lastName} />
                         <Input label="Email" readOnly={Boolean(invitationToken)} onChange={(event) => updateField("email", event.target.value)} type="email" value={formData.email} />
@@ -284,7 +345,7 @@ function ClinicianSignupPageContent() {
                         {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink md:col-span-2">{error}</p> : null}
                         <div className="md:col-span-2">
                             <Button
-                                disabled={submitting || inviteLoading || !clinicContext}
+                                disabled={submitting || inviteLoading || (invitationToken ? !invitation : !clinicContext)}
                                 fullWidth
                                 size="lg"
                                 type="submit"
@@ -292,7 +353,7 @@ function ClinicianSignupPageContent() {
                                 {submitting ? "Creating account..." : "Create clinician account"}
                             </Button>
                         </div>
-                    </form>
+                    </form>}
                     <div className="text-sm text-muted">
                         Already have a clinician account?{" "}
                         <Link className="font-medium text-primary hover:underline" href="/login">

@@ -24,6 +24,14 @@ export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
     const [state, setState] = useState<State>("checking");
     const recovery = useRef<Promise<{ client: Client | null; state: State }> | null>(null);
     const client = useRef<Client | null>(null);
+    const statusRef = useRef<HTMLParagraphElement | null>(null);
+    const statusVisible = (mode === "request" && sent) || (mode === "reset" && state !== "ready" && state !== "checking");
+
+    // The form is replaced by a status message; move focus there so it is announced
+    // and keyboard users are not left on a removed control.
+    useEffect(() => {
+        if (statusVisible) statusRef.current?.focus();
+    }, [statusVisible]);
 
     useEffect(() => {
         if (mode !== "reset") return;
@@ -70,8 +78,9 @@ export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
                 const result = await client.current.auth.updateUser({ password });
                 if (result.error) { setError(copy.failure); return; }
                 setPassword(""); setConfirm(""); setState("success");
-                // Do not keep the recovery session, or log into the portal around its MFA.
-                await client.current.auth.signOut({ scope: "local" }).catch(() => undefined);
+                // End every session for this account, including this recovery one, so a
+                // stolen session cannot outlive the reset. Normal login (and MFA) follows.
+                await client.current.auth.signOut({ scope: "global" }).catch(() => undefined);
                 client.current = null;
                 recovery.current = null;
             }
@@ -86,25 +95,26 @@ export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
     const input = "mt-2 min-h-12 w-full rounded-xl border border-line-strong bg-surface px-4 text-base text-ink";
     const link = portal === "patient" ? "text-brand" : "text-primary";
     const resetReady = mode === "reset" && state === "ready";
+    const errorId = `${portal}-recovery-error`;
     return <section className="space-y-6" lang={locale}>
         <header>
             <h1 className="text-2xl font-semibold text-ink">{mode === "request" ? copy.forgot : copy.reset}</h1>
             <p className="mt-2 text-sm leading-relaxed text-muted">{mode === "request" ? copy.intro : copy.resetIntro}</p>
         </header>
-        {mode === "request" && sent ? <p role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2">{copy.sent}</p> : null}
-        {mode === "reset" && state !== "ready" ? <p role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2">{copy[state]}</p> : null}
+        {mode === "request" && sent ? <p ref={statusRef} tabIndex={-1} role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2 outline-none">{copy.sent}</p> : null}
+        {mode === "reset" && state !== "ready" ? <p ref={statusRef} tabIndex={-1} role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2 outline-none">{copy[state]}</p> : null}
         {(mode === "request" && !sent) || resetReady ? <form onSubmit={submit} className="space-y-5">
             {mode === "request" ? <label className="block text-sm font-medium text-ink-2">
-                {copy.email}<input autoComplete="email" className={input} type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
+                {copy.email}<input autoComplete="email" aria-describedby={error ? errorId : undefined} aria-invalid={error ? true : undefined} className={input} type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
             </label> : <>
                 <label className="block text-sm font-medium text-ink-2">{copy.password}
-                    <input autoComplete="new-password" className={input} type="password" required minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} />
+                    <input autoComplete="new-password" aria-describedby={error ? errorId : undefined} aria-invalid={error ? true : undefined} className={input} type="password" required minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} />
                 </label>
                 <label className="block text-sm font-medium text-ink-2">{copy.confirm}
-                    <input autoComplete="new-password" className={input} type="password" required minLength={8} maxLength={128} value={confirm} onChange={(event) => setConfirm(event.target.value)} />
+                    <input autoComplete="new-password" aria-describedby={error ? errorId : undefined} aria-invalid={error ? true : undefined} className={input} type="password" required minLength={8} maxLength={128} value={confirm} onChange={(event) => setConfirm(event.target.value)} />
                 </label>
             </>}
-            {error ? <p role="alert" className="text-sm text-ink">{error}</p> : null}
+            {error ? <p id={errorId} role="alert" className="text-sm text-ink">{error}</p> : null}
             <button className={`min-h-12 w-full rounded-xl px-4 font-semibold text-white disabled:opacity-50 ${action}`} disabled={busy} type="submit">
                 {mode === "request" ? busy ? copy.sending : copy.send : busy ? copy.saving : copy.save}
             </button>

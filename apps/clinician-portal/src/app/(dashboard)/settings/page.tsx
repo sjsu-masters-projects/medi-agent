@@ -329,7 +329,9 @@ export default function SettingsPage() {
             );
             setInviteStatus(result.status === "already_pending"
                 ? "An invitation is already pending. Sending does not change clinic membership."
-                : "Invitation queued for email delivery. Clinic access changes only after acceptance.");
+                : result.email_sent
+                  ? "Invitation email handed to the provider; inbox delivery is not confirmed yet. Clinic access changes only after acceptance."
+                  : "Invitation queued for email delivery. Clinic access changes only after acceptance.");
             setInviteEmail("");
             void loadStaff();
         } catch (e) {

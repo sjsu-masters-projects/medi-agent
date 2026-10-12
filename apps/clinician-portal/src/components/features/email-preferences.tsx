@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Input } from "@/components/ui";
 import { api } from "@/services/api";
-import { emailPreferenceCopy, type EmailPreferenceKey, type EmailPreferenceState } from "../../../../../packages/shared/src/utils/email-preferences";
+import { emailPreferenceCopy, verificationNotice, type EmailPreferenceKey, type EmailPreferenceState } from "../../../../../packages/shared/src/utils/email-preferences";
 
 export function EmailPreferences({ token }: { token: string }) {
   const copy = emailPreferenceCopy["en-US"];
@@ -39,7 +39,7 @@ export function EmailPreferences({ token }: { token: string }) {
       if (kind === "request") {
         const result = await api.post<{ status: string }>("/api/v1/email/verify/request", {}, { token });
         if (current !== generation.current) return;
-        setNotice(result.status === "wait" ? copy.wait : result.status === "synthetic" ? copy.synthetic : copy.queued);
+        setNotice(verificationNotice(copy, result.status));
       } else if (kind === "verify") {
         const result = await api.post<{ verified: boolean }>("/api/v1/email/verify", { code }, { token });
         if (current !== generation.current) return;
@@ -60,6 +60,7 @@ export function EmailPreferences({ token }: { token: string }) {
     {error ? <div role="alert" className="space-y-2"><p>{copy.unavailable}</p><Button variant="secondary" onClick={() => void load()}>{copy.retry}</Button></div> : null}
     {!account && !error ? <p role="status">{copy.loading}</p> : null}
     {account ? <>
+      {account.available === false ? <p role="status" className="text-sm text-muted">{copy.notAvailable}</p> : <>
       <p className="break-all text-sm text-ink-2">{account.email}</p>
       {account.synthetic ? <p className="text-sm text-muted">{copy.synthetic}</p> : account.verified ? <>
         <p className="text-sm font-medium text-ok-ink">{copy.verified}</p>
@@ -76,6 +77,7 @@ export function EmailPreferences({ token }: { token: string }) {
         <Input label={copy.code} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ""))} />
         <Button disabled={busy || !/^\d{6}$/.test(code)} onClick={() => void action("verify")}>{copy.confirm}</Button>
       </div>}
+      </>}
     </> : null}
     {notice ? <p role="status" className="text-sm text-ink-2">{notice}</p> : null}
     <p className="text-xs leading-relaxed text-muted">{copy.privacy}</p>
