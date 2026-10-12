@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.models.enums import Language
 
@@ -44,10 +44,26 @@ class ClinicianSignupRequest(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     specialty: str = Field(..., min_length=1, max_length=100)
-    clinic_code: str = Field(..., min_length=6, max_length=20)
+    # Required for code-based signup. An invitation names its clinic, so the code is
+    # ignored (and not needed) when ``invitation_token`` is present.
+    clinic_code: str | None = Field(default=None, min_length=6, max_length=20)
     type1_npi: str | None = Field(default=None, pattern=r"^\d{10}$")
     role: ClinicianSignupRole = "provider"
     invitation_token: str | None = Field(default=None, min_length=32, max_length=128)
+
+    @model_validator(mode="after")
+    def _clinic_or_invitation(self) -> ClinicianSignupRequest:
+        if not self.invitation_token and not self.clinic_code:
+            raise ValueError("clinic_code is required without an invitation")
+        return self
+
+
+class InvitationSignInRequest(BaseModel):
+    """Accept an addressed invitation with an existing clinician account's password."""
+
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=128)
+    invitation_token: str = Field(..., min_length=32, max_length=128)
 
 
 class ClinicAdminSignupRequest(BaseModel):
@@ -109,11 +125,34 @@ class UserInfo(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InvitationClinic(BaseModel):
+    """Clinic context returned once an invitation has granted membership."""
+
+    clinic_id: UUID
+    clinic_code: str
+    clinic_name: str
+    status: Literal["active", "suspended"] = "active"
+
+
 class AuthResponse(BaseModel):
     """Full auth response — tokens + user metadata."""
 
     tokens: AuthTokens
     user: UserInfo
+
+
+class ClinicianSignupResponse(AuthResponse):
+    """Clinician signup; invitation signups also report the membership claim."""
+
+    invitation_status: Literal["accepted", "pending"] | None = None
+    clinic: InvitationClinic | None = None
+
+
+class InvitationAcceptResponse(BaseModel):
+    """Membership granted by an invitation; no session is issued here."""
+
+    status: Literal["accepted"]
+    clinic: InvitationClinic
 
 
 class MFAFactorSummary(BaseModel):

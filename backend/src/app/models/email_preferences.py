@@ -27,3 +27,5 @@ class EmailPreferencesRead(BaseModel):
     verified: bool
     synthetic: bool
     preferences: EmailPreferences
+    # False until the email migrations are installed; portals show a calm notice.
+    available: bool = True

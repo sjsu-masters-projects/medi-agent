@@ -7,18 +7,23 @@ service, and returns a structured response.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from supabase import Client
 
 from app.core.security import get_current_user
 from app.db.connection import get_db
+from app.middleware.rate_limit import client_key
 from app.models.auth import (
     AuthLoginResponse,
     AuthResponse,
     AuthTokens,
     ClinicAdminSignupRequest,
     ClinicianSignupRequest,
+    ClinicianSignupResponse,
     CurrentUser,
+    InvitationAcceptResponse,
+    InvitationClinic,
+    InvitationSignInRequest,
     LoginRequest,
     PasswordResetRequest,
     PatientSignupRequest,
@@ -92,7 +97,7 @@ async def signup_clinic_admin(
 
 @router.post(
     "/signup/clinician",
-    response_model=AuthResponse,
+    response_model=ClinicianSignupResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new clinician",
     description="Creates a Supabase auth user and a clinician profile row.",
@@ -100,7 +105,7 @@ async def signup_clinic_admin(
 async def signup_clinician(
     body: ClinicianSignupRequest,
     service: AuthService = Depends(_get_auth_service),
-) -> AuthResponse:
+) -> ClinicianSignupResponse:
     result = await service.signup_clinician(
         email=body.email,
         password=body.password,
@@ -112,10 +117,33 @@ async def signup_clinician(
         role=body.role,
         invitation_token=body.invitation_token,
     )
-    return AuthResponse(
+    return ClinicianSignupResponse(
         tokens=AuthTokens(**result["tokens"]),
         user=UserInfo(**result["user"]),
+        invitation_status=result.get("invitation_status"),
+        clinic=InvitationClinic(**result["clinic"]) if result.get("clinic") else None,
     )
+
+
+@router.post(
+    "/invitations/accept",
+    response_model=InvitationAcceptResponse,
+    summary="Accept a clinic invitation with an existing clinician account",
+    description=(
+        "Signs in only to confirm the invited account, claims membership, and ends that "
+        "temporary session. The clinician then signs in normally, including MFA."
+    ),
+)
+async def accept_invitation_with_password(
+    body: InvitationSignInRequest,
+    response: Response,
+    service: AuthService = Depends(_get_auth_service),
+) -> InvitationAcceptResponse:
+    response.headers["Cache-Control"] = "no-store"
+    result = await service.accept_invitation_with_password(
+        email=body.email, password=body.password, invitation_token=body.invitation_token
+    )
+    return InvitationAcceptResponse(**result)
 
 
 # ── Login ───────────────────────────────────────────────────
@@ -181,9 +209,12 @@ async def refresh_token(
 )
 async def password_reset(
     body: PasswordResetRequest,
+    request: Request,
     service: AuthService = Depends(_get_auth_service),
 ) -> None:
-    await service.request_password_reset(body.email, portal=body.portal, locale=body.locale.value)
+    await service.request_password_reset(
+        body.email, portal=body.portal, locale=body.locale.value, client=client_key(request)
+    )
 
 
 # ── Current User ────────────────────────────────────────────

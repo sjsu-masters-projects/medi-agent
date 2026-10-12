@@ -636,3 +636,95 @@ class TestGetMe:
     def test_missing_auth(self, client):
         response = client.get("/api/v1/auth/me")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestInvitationAuth:
+    TOKEN = "t" * 43
+
+    def test_clinic_code_required_without_invitation(self, client, override_db):
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "new@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Demo",
+                "last_name": "Person",
+                "specialty": "Synthetic",
+            },
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+    def test_invitation_signup_reports_claim_and_clinic(
+        self, client, override_db, override_auth_service, mock_supabase_db, monkeypatch
+    ):
+        async def signup(self, **kwargs):
+            assert kwargs["clinic_code"] is None and kwargs["invitation_token"]
+            response = _make_auth_response(
+                user_id=str(uuid4()), email="invitee@example.com", role="clinician"
+            )
+            return {
+                **AuthService._format_session(response),
+                "invitation_status": "accepted",
+                "clinic": {
+                    "clinic_id": str(uuid4()),
+                    "clinic_code": "ABC123",
+                    "clinic_name": "Synthetic Clinic",
+                    "status": "active",
+                },
+            }
+
+        monkeypatch.setattr(AuthService, "signup_clinician", signup)
+        response = client.post(
+            "/api/v1/auth/signup/clinician",
+            json={
+                "email": "invitee@example.com",
+                "password": "SecurePass123!",
+                "first_name": "Demo",
+                "last_name": "Invitee",
+                "specialty": "Synthetic",
+                "invitation_token": self.TOKEN,
+            },
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        body = response.json()
+        assert body["invitation_status"] == "accepted"
+        assert body["clinic"]["clinic_code"] == "ABC123"
+
+    def test_sign_in_to_accept_returns_clinic_without_tokens(
+        self, client, override_db, override_auth_service, monkeypatch
+    ):
+        async def accept(self, **kwargs):
+            return {
+                "status": "accepted",
+                "clinic": {
+                    "clinic_id": str(uuid4()),
+                    "clinic_code": "ABC123",
+                    "clinic_name": "Synthetic Clinic",
+                    "status": "active",
+                },
+            }
+
+        monkeypatch.setattr(AuthService, "accept_invitation_with_password", accept)
+        response = client.post(
+            "/api/v1/auth/invitations/accept",
+            json={
+                "email": "invitee@example.com",
+                "password": "pw",
+                "invitation_token": self.TOKEN,
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.headers["Cache-Control"] == "no-store"
+        assert "tokens" not in response.json()
+
+    def test_password_reset_stays_neutral_when_limited(
+        self, client, override_db, override_auth_service, mock_supabase_db
+    ):
+        for _ in range(5):
+            response = client.post(
+                "/api/v1/auth/password-reset",
+                json={"email": "limited@example.com"},
+                headers={"X-Forwarded-For": "198.51.100.1, 203.0.113.7"},
+            )
+            assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert mock_supabase_db.auth.reset_password_email.call_count == 3

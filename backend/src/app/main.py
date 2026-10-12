@@ -69,6 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     Shutdown: Nothing to clean up — Supabase SDK handles it.
     """
     logger.info("Starting MediAgent backend")
+    if settings.resend_api_key.strip() and not settings.resend_from_email.strip():
+        # Invitations can still use the onboarding sender; verification codes and
+        # optional notices stay queued until a notification sender is configured.
+        logger.warning("RESEND_FROM_EMAIL is not set; verification and notice email are paused")
 
     retry_worker: A2ARetryWorker | None = None
     if settings.a2a_retry_worker_enabled:

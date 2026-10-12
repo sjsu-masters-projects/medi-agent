@@ -1,6 +1,6 @@
 """Tests for Auth service."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -1051,3 +1051,183 @@ async def test_format_session_missing_expires_at(auth_service):
 
     # Should default to 0
     assert result["tokens"]["expires_at"] == 0
+
+
+# ── Invitation signup, invitation sign-in and recovery limits ─────────────────
+
+INVITE_TOKEN = "t" * 43
+
+
+def _clinician_session(user_id: str = "00000000-0000-0000-0000-0000000000aa"):
+    user = Mock()
+    user.id = user_id
+    user.email = "invitee@example.com"
+    user.created_at = "2024-01-01T00:00:00Z"
+    user.app_metadata = {"user_role": "clinician"}
+    session = Mock()
+    session.access_token = "access"
+    session.refresh_token = "refresh"
+    session.expires_at = 1234567890
+    response = Mock()
+    response.user = user
+    response.session = session
+    return response
+
+
+def _invitation_service(preview: dict | None = None, accept: Exception | dict | None = None):
+    service = MagicMock()
+    service.preview = AsyncMock(
+        return_value=preview or {"email": "Invitee@Example.com", "role": "nurse"}
+    )
+    if isinstance(accept, Exception):
+        service.accept = AsyncMock(side_effect=accept)
+    else:
+        service.accept = AsyncMock(
+            return_value=accept
+            or {
+                "status": "accepted",
+                "clinic": {
+                    "clinic_id": "00000000-0000-0000-0000-0000000000c1",
+                    "clinic_code": "ABC123",
+                    "clinic_name": "Synthetic Clinic",
+                    "status": "active",
+                },
+            }
+        )
+    return service
+
+
+async def _invited_signup(auth_service, *, role="provider", email="invitee@example.com"):
+    return await auth_service.signup_clinician(
+        email=email,
+        password="SecurePass123!",
+        first_name="Demo",
+        last_name="Invitee",
+        specialty="Synthetic",
+        clinic_code=None,
+        role=role,
+        invitation_token=INVITE_TOKEN,
+    )
+
+
+@pytest.mark.asyncio
+async def test_invitation_signup_forces_role_and_claims_membership(
+    auth_service, mock_supabase_client, mock_auth_client
+):
+    mock_auth_client.auth.sign_up.return_value = Mock(
+        user=Mock(id="00000000-0000-0000-0000-0000000000aa")
+    )
+    mock_auth_client.auth.sign_in_with_password.return_value = _clinician_session()
+    invitations = _invitation_service()
+    with patch("app.services.auth_service.EmailInvitationService", return_value=invitations):
+        result = await _invited_signup(auth_service, role="admin")
+    row = mock_supabase_client.table.return_value.insert.call_args.args[0]
+    # The requested role is ignored; membership comes only from the claimed invitation.
+    assert row["clinic_id"] is None and row["role"] == "provider"
+    mock_supabase_client.table.assert_called_once_with("clinicians")
+    invitations.accept.assert_awaited_once()
+    assert invitations.accept.await_args.kwargs["address"] == "invitee@example.com"
+    assert result["invitation_status"] == "accepted"
+    assert result["clinic"]["clinic_code"] == "ABC123"
+
+
+@pytest.mark.asyncio
+async def test_invitation_signup_rejects_other_address(auth_service, mock_auth_client):
+    invitations = _invitation_service(preview={"email": "someone@example.com", "role": "nurse"})
+    with (
+        patch("app.services.auth_service.EmailInvitationService", return_value=invitations),
+        pytest.raises(ValidationError, match="this invitation was sent to"),
+    ):
+        await _invited_signup(auth_service)
+    mock_auth_client.auth.sign_up.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_invitation_signup_admin_role_comes_from_invitation(
+    auth_service, mock_supabase_client, mock_auth_client
+):
+    mock_auth_client.auth.sign_up.return_value = Mock(
+        user=Mock(id="00000000-0000-0000-0000-0000000000aa")
+    )
+    mock_auth_client.auth.sign_in_with_password.return_value = _clinician_session()
+    invitations = _invitation_service(preview={"email": "invitee@example.com", "role": "admin"})
+    with patch("app.services.auth_service.EmailInvitationService", return_value=invitations):
+        result = await _invited_signup(auth_service)
+    assert result["invitation_status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_invitation_claim_failure_keeps_account(
+    auth_service, mock_supabase_client, mock_auth_client
+):
+    mock_auth_client.auth.sign_up.return_value = Mock(
+        user=Mock(id="00000000-0000-0000-0000-0000000000aa")
+    )
+    mock_auth_client.auth.sign_in_with_password.return_value = _clinician_session()
+    invitations = _invitation_service(accept=ExternalServiceError("Email", "down"))
+    with patch("app.services.auth_service.EmailInvitationService", return_value=invitations):
+        result = await _invited_signup(auth_service)
+    assert result["invitation_status"] == "pending"
+    assert result["tokens"]["access_token"] == "access"
+    mock_supabase_client.auth.admin.delete_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_invitation_sign_in_accepts_and_ends_temporary_session(
+    auth_service, mock_auth_client
+):
+    mock_auth_client.auth.sign_in_with_password.return_value = _clinician_session()
+    invitations = _invitation_service()
+    with patch("app.services.auth_service.EmailInvitationService", return_value=invitations):
+        result = await auth_service.accept_invitation_with_password(
+            email="invitee@example.com", password="pw", invitation_token=INVITE_TOKEN
+        )
+    assert result["clinic"]["clinic_name"] == "Synthetic Clinic"
+    # The address is read from Auth by the service, not taken from the request.
+    assert "address" not in invitations.accept.await_args.kwargs
+    mock_auth_client.auth.sign_out.assert_called_once_with({"scope": "local"})
+
+
+@pytest.mark.asyncio
+async def test_invitation_sign_in_rejects_patient_accounts(auth_service, mock_auth_client):
+    session = _clinician_session()
+    session.user.app_metadata = {"user_role": "patient"}
+    mock_auth_client.auth.sign_in_with_password.return_value = session
+    with pytest.raises(AuthenticationError):
+        await auth_service.accept_invitation_with_password(
+            email="invitee@example.com", password="pw", invitation_token=INVITE_TOKEN
+        )
+
+
+def test_unassigned_clinician_login_points_to_invitation(auth_service, mock_supabase_client):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[{"id": "clinic-1", "code": "ABC123", "display_name": "Clinic", "status": "active"}]
+    )
+    clinician_query = MagicMock()
+    clinician_query.select.return_value = clinician_query
+    clinician_query.eq.return_value = clinician_query
+    clinician_query.single.return_value = clinician_query
+    clinician_query.execute.return_value = Mock(data={"clinic_id": None, "clinic_name": None})
+    mock_supabase_client.table.side_effect = [clinic_query, clinician_query]
+    with pytest.raises(AuthenticationError) as raised:
+        auth_service._assert_clinician_matches_clinic("clinician-123", "ABC123")
+    assert raised.value.code == "INVITATION_ACCEPTANCE_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_password_reset_limits_stay_neutral(auth_service, mock_auth_client, caplog):
+    for _ in range(5):
+        await auth_service.request_password_reset("Repeat@Example.com", client="203.0.113.5")
+    assert mock_auth_client.auth.reset_password_email.call_count == 3
+    assert "Repeat@Example.com".lower() not in caplog.text.lower()
+    assert "rate limited (address)" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_password_reset_limits_per_client(auth_service, mock_auth_client):
+    for index in range(25):
+        await auth_service.request_password_reset(f"user{index}@example.com", client="203.0.113.9")
+    assert mock_auth_client.auth.reset_password_email.call_count == 20

@@ -8,6 +8,8 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
+from starlette.requests import Request
+
 
 @dataclass(frozen=True)
 class RateLimitResult:
@@ -54,3 +56,22 @@ class SlidingWindowRateLimiter:
 
 # SOAP note generation is expensive (LLM + DB aggregation). Keep bursts low per clinician.
 soap_note_rate_limiter = SlidingWindowRateLimiter(limit=3, window_seconds=60)
+
+# Account recovery requests. The response stays neutral when a limit is reached; the
+# provider request is skipped. Limits are per process, so they are approximate across
+# Cloud Run instances; Supabase Auth applies its own email rate limits as well.
+password_reset_email_limiter = SlidingWindowRateLimiter(limit=3, window_seconds=900)
+password_reset_client_limiter = SlidingWindowRateLimiter(limit=20, window_seconds=900)
+
+
+def client_key(request: Request) -> str:
+    """Best-effort caller address for rate limiting.
+
+    Cloud Run's front end appends the connecting address as the last
+    ``X-Forwarded-For`` entry; earlier entries are caller supplied.
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+    if hops:
+        return hops[-1]
+    return request.client.host if request.client else "unknown"

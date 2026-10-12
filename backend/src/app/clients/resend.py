@@ -51,14 +51,32 @@ class ResendClient:
             logger.warning("Email provider request failed; delivery state retained for retry")
             return None
 
+    # Status polling needs a full-access API key. A sending-only key answers 401/403;
+    # remember that for the life of the process and log it once instead of repolling.
+    _status_unavailable = False
+    _STATUS_DENIED_TYPES = {"restricted_api_key", "invalid_api_key", "missing_api_key"}
+
+    def status_available(self) -> bool:
+        return self.enabled and not ResendClient._status_unavailable
+
     def status(self, provider_id: str) -> str | None:
-        if not self.enabled:
+        if not self.status_available():
             return None
         try:
             result = resend.Emails.get(provider_id)
             state = result.get("last_event") if isinstance(result, dict) else None
             return state if isinstance(state, str) else None
-        except Exception:
+        except Exception as exc:
+            code = str(getattr(exc, "code", "") or "")
+            if code in {"401", "403"} or getattr(exc, "error_type", None) in (
+                self._STATUS_DENIED_TYPES
+            ):
+                ResendClient._status_unavailable = True
+                logger.warning(
+                    "Email delivery status needs a full-access provider key; "
+                    "statuses stay at provider accepted"
+                )
+                return None
             logger.warning("Email delivery status temporarily unavailable")
             return None
 
