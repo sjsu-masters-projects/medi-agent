@@ -14,6 +14,7 @@ from app.adk.tools.scoping import (
     PatientScopeError,
     require_patient_id,
 )
+from app.adk.tools.turn_sources import document_citation, record_turn_sources
 
 
 def get_active_document_context(tool_context: Any) -> dict[str, Any]:
@@ -52,6 +53,9 @@ def get_active_document_context(tool_context: Any) -> dict[str, Any]:
             "notice": "The selected document does not have a usable summary yet.",
         }
 
+    # The answer can rest on this summary, so the server cites the document.
+    citation = document_citation(context, selected=True)
+    record_turn_sources(tool_context, [citation] if citation else [])
     return {
         "document_id": document_id,
         "file_name": file_name,

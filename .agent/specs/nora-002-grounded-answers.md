@@ -136,6 +136,25 @@ The explanation prompt is rewritten for plain language (what it is, what it says
 ask the care team), paraphrasing rather than quoting and translating; the Records disclaimer
 follows the explanation language.
 
+**Document citations (PAT-004, 2026-10-11).** An answer grounded in the patient's own
+documents ends with a server-written source line, the same way reference answers do:
+"Source: Metformin prescription (Morgan-Ellis_Metformin-Medication-Order_2026-10-02.pdf),
+page 1" / "Fuente: Receta de metformina (…pdf), página 1".
+
+- **Recorded by the tools.** `get_active_document_context` (when it returns a summary),
+  `get_document_details` (when it returns items) and `search_my_documents` record what they
+  returned for the turn (`app/adk/tools/turn_sources.py`), beside the reference sources.
+- **Naming.** A document is named by its LOC-001 record title in the reply's language,
+  else by its file name; the file name is always shown. Pages come only from the returned
+  items (approved or pending review), so rejected items are never cited. Both tools are
+  patient-scoped, and the focused document is re-verified on each connection.
+- **Narrowing.** The reply narrows a citation and never widens it. Search results are
+  narrowed to the documents the reply names, and pages to the items it names. When it
+  names none, every returned document and page is cited.
+- **Format and storage.** One line holds both kinds: "Source:"/"Fuente:" for one source,
+  "Sources:"/"Fuentes:" for several. Speech skips it as before. `chat_messages` has no
+  metadata column, so the line in the saved text is the stored citation; no schema change.
+
 ### Voice
 
 One persona in both languages: Aura-2 Asteria (English) and Estrella (Mexican Spanish),

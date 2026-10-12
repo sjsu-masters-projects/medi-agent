@@ -25,6 +25,7 @@ from app.adk.tools.scoping import (
     PatientScopeError,
     require_patient_id,
 )
+from app.adk.tools.turn_sources import TURN_SOURCES_STATE_KEY, record_turn_sources
 from app.clients.supabase import get_admin_client
 from app.services.health_knowledge_service import (
     HealthKnowledgeService,
@@ -36,10 +37,8 @@ from app.services.health_knowledge_sources import Ingredient, names_match, strip
 
 logger = logging.getLogger(__name__)
 
-KNOWLEDGE_SOURCES_STATE_KEY = "knowledge_sources"
-"""Sources used in the current turn, tagged with its invocation so an earlier turn's are
-never read as this turn's. A plain key because ``temp:`` keys never appear in an event's
-state delta, which is where the runtime reads them."""
+KNOWLEDGE_SOURCES_STATE_KEY = TURN_SOURCES_STATE_KEY
+"""Where the sources this turn used are recorded (see ``turn_sources``)."""
 
 SECTION_CHARS = 1800
 SUMMARY_CHARS = 2400
@@ -82,21 +81,6 @@ async def _patient_rows(table: str, columns: str, patient_id: str) -> list[dict[
     query = query.eq("is_active", True) if table == "medications" else query.eq("status", "active")
     result = await asyncio.to_thread(query.limit(25).execute)
     return cast(list[dict[str, Any]], result.data or [])
-
-
-def _record_sources(tool_context: Any, used: list[dict[str, Any]]) -> None:
-    state = getattr(tool_context, "state", None)
-    if state is None or not used:
-        return
-    invocation = str(getattr(tool_context, "invocation_id", "") or "")
-    current = state.get(KNOWLEDGE_SOURCES_STATE_KEY)
-    sources: list[dict[str, Any]] = []
-    if isinstance(current, dict) and current.get("invocation") == invocation:
-        sources = list(current.get("sources") or [])
-    for item in used:
-        if item not in sources:
-            sources.append(item)
-    state[KNOWLEDGE_SOURCES_STATE_KEY] = {"invocation": invocation, "sources": sources}
 
 
 def _citation(reference: Reference) -> dict[str, Any]:
@@ -243,7 +227,7 @@ async def _medication_information(
     result["notice"] = _NOTICE
     if translated:
         result["language_note"] = "Only an English source exists; explain it in Spanish."
-    _record_sources(tool_context, used)
+    record_turn_sources(tool_context, used)
     logger.info(
         "Medication reference served",
         extra={"knowledge_status": knowledge.status, "knowledge_topic": topic},
@@ -314,5 +298,5 @@ async def _condition_information(
     result["notice"] = _NOTICE
     if translated:
         result["language_note"] = "Only an English source was found; explain it in Spanish."
-    _record_sources(tool_context, [_citation(reference)])
+    record_turn_sources(tool_context, [_citation(reference)])
     return result

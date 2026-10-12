@@ -421,7 +421,7 @@ class ChatService:
             return None
         result = await self._execute(
             self.db.table("documents")
-            .select("id, file_name, document_type, ai_summary, notes, parse_status")
+            .select("id, file_name, display_title, document_type, ai_summary, notes, parse_status")
             .eq("id", document_id)
             .eq("patient_id", patient_id)
             .limit(1)
@@ -434,6 +434,8 @@ class ChatService:
         return {
             "id": row.get("id"),
             "file_name": row.get("file_name"),
+            # The LOC-001 record titles, so an answer can cite the document as Records names it.
+            "display_title": row.get("display_title") or {},
             "document_type": row.get("document_type"),
             "summary": normalize_patient_summary(
                 str(row.get("ai_summary") or row.get("notes") or "")

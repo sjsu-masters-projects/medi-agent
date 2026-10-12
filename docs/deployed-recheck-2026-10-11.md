@@ -80,3 +80,17 @@ compliance or production-readiness certification.
   reload restored the card. Dismiss did not remove the card (the server restored the
   saved document) — fixed in the follow-up PR. Answers do not yet show which document
   they used.
+
+## After #153 deployed (night)
+
+- Profile gender: "Not specified" saved and the Gender row stayed hidden after reload;
+  restored to Female afterwards.
+- Focused-document chat: Dismiss removed the card, and it stayed gone after a reload and
+  reopening the conversation; the earlier answer remained.
+- SMART standalone launch from the clinician import page reached the sandbox patient
+  login (previously the provider patient picker). Stopped before signing in.
+- Condition references: the synthetic condition rows were marked due and one refresh was
+  run (with requester approval; the service role cannot delete them by design). All 29
+  rows were found, in English and Spanish where both exist, for example Osteoarthritis /
+  Osteoartritis and Eczema / Eccema; the run logged `scheduled_job.finished` (success).
+  Three subjects cached in one language were not seeded in the other (OPS-004).
