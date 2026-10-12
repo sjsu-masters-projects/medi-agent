@@ -55,8 +55,12 @@ References: [Resend SMTP](https://resend.com/docs/send-with-supabase-smtp),
 [Supabase password recovery](https://supabase.com/docs/guides/auth/passwords).
 
 Application email uses separate verified opt-in contacts and server-only outbox
-records from `057_email_delivery.sql`. Apply this migration through the ledger
-only with project-specific authorization before activating these APIs. The
+records from `057_email_delivery.sql` (applied to staging October 11) and its fixes in
+`058_email_delivery_fixes.sql`. Apply 058 through the ledger, with project-specific
+authorization, before the backend that uses it is merged or deployed. No email
+function reads the `auth` schema: a hosted migration cannot grant `service_role`
+access there (057's attempt only produced "no privileges were granted"), so the
+backend reads account addresses through the Auth Admin API with the service-role key. The
 notification and onboarding sender identities are documented in `.env.example`;
 they are not Supabase SMTP configuration. With no configured notification sender,
 verification is unavailable rather than sent from a default testing identity.

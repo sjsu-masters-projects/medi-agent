@@ -58,6 +58,7 @@ Validate:
 | `RESEND_API_KEY` | Backend transactional email (addressed invitations, contact verification and opted-in event notices); Supabase Auth SMTP is configured separately |
 | `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL` | From address for clinician invite mail (use a verified-domain sender in production) |
 | `RESEND_FROM_EMAIL` | Verified-domain sender for contact verification and opted-in notices; no default testing sender |
+| `EMAIL_CODE_HMAC_SECRET` | Optional dedicated key for hashing email verification codes; falls back to `SUPABASE_JWT_SECRET` |
 | `BACKEND_URL`, `PATIENT_PORTAL_URL`, `CLINICIAN_PORTAL_URL` | App URLs (email links, CORS) |
 | `*_SENTRY_*` | Error monitoring (optional in dev) |
 

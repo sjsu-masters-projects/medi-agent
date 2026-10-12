@@ -315,8 +315,14 @@ America/Los_Angeles) and reminder dispatch (every 15 minutes, via
 `POST /api/v1/cron/reminders/dispatch` with `X-Cron-Auth`) each write one
 `scheduled_job.started` and one `scheduled_job.finished` JSON line per run
 (`app/core/job_logging.py`). The finished line carries `status`, `duration_ms` and the same
-`summary` as `cron_job_runs`. The nightly ADR scan is retired. Triggers, auth, healthy-run
-signals and Cloud Logging queries: `.agent/CLOUD_INFRASTRUCTURE_GUIDE.md`, section 5.
+`summary` as `cron_job_runs`. Email delivery runs as its own `email_dispatch` job after
+every real reminder run (a failure there never fails the reminder response) and on
+`POST /api/v1/cron/emails/dispatch` (`X-Cron-Auth`, optional `{"dry_run": true}`), with the
+same two log lines and a `cron_job_runs` record. New invitations and verification codes are
+sent at once by their own request; the job retries, sends notices and reconciles provider
+status (full-access Resend key needed for status). The nightly ADR scan is retired.
+Triggers, auth, healthy-run signals and Cloud Logging queries:
+`.agent/CLOUD_INFRASTRUCTURE_GUIDE.md`, section 5.
 
 ## Key Conventions
 

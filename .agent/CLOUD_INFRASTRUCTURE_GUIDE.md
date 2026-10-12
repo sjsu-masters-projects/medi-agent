@@ -85,6 +85,7 @@ Scheduler and Cloud Run region `us-central1`.
 | `document_ingestion` | `mediagent-document-ingestion-every-5m` (enabled) | `*/5 * * * *` (America/Los_Angeles) | Cloud Run Job `mediagent-document-ingestion` (`python -m app.workers.document_ingestion`) | OAuth: service account `mediagent-doc-ingest-sched`, `roles/run.invoker` on the Job only | None at job level (state is kept per document); the two log lines are the run record | `status="success"`, `summary.failed=0`; `summary.claimed=0` is normal when nothing is pending. Exit code 1 when any document failed or the batch could not run. |
 | `health_knowledge_refresh` | `mediagent-health-knowledge-refresh-weekly` (enabled) | `0 3 * * 0`, Sundays 03:00 (America/Los_Angeles) | Cloud Run Job `mediagent-health-knowledge-refresh` (`python -m app.workers.health_knowledge_refresh`) | OAuth: service account `mediagent-knowledge-sched`, `roles/run.invoker` on the Job only | `cron_job_runs`, `job_name='health_knowledge_refresh'` | `status="success"`, `summary.subjects_failed=0`. `subjects_checked=0` is correct only with `subjects_due=0` and no new subjects; `next_due_at` then says when the oldest cached subject becomes due. Exit code 1 when any subject raised. |
 | `reminders_dispatch` | `medi-agent-reminders-dispatch-prod` (**paused since April**) | `*/15 * * * *` (UTC) | `POST https://api.mediagent.live/api/v1/cron/reminders/dispatch` on service `mediagent-backend` | Shared secret: `X-Cron-Auth` header equal to the backend's `CRON_AUTH_TOKEN` | `cron_job_runs`, `job_name='reminders_dispatch'` | `status="success"`, `summary.window_mode="contiguous"` and a small `catch_up_minutes`. `catch_up_capped` means the previous run ended over an hour earlier. |
+| `email_dispatch` | Runs after every real `reminders_dispatch` (same trigger, so paused with it); also `POST https://api.mediagent.live/api/v1/cron/emails/dispatch` for a manual or dedicated trigger (none configured) | Each reminder run; on demand | Service `mediagent-backend` | Shared secret: `X-Cron-Auth` | `cron_job_runs`, `job_name='email_dispatch'` | `status="success"`, `summary.errors=0`. `claimed=0` is normal. `retry` counts provider refusals kept for a later run; `stopped` counts sends cancelled because access, consent or the address changed. A failure here never fails the reminder run. |
 | `nightly_adr_scan` | `medi-agent-adr-nightly-scan-prod` (paused since April) | was `0 2 * * *` (UTC) | **Retired.** The `/api/v1/cron/adr/nightly-scan` route was removed. | was the shared-secret header | Earlier rows stay in `cron_job_runs` | Not applicable. |
 
 **Why the ADR scan was retired.** Chat intake already sets `flagged_for_adr` under the
@@ -137,6 +138,11 @@ Summary counts per job:
   `subjects_new_conditions`, `subjects_checked`, `subjects_updated`,
   `subjects_unavailable`, `subjects_failed`, `subjects_deferred` (over the limit of 150),
   `next_due_at`, and `sources.<medlineplus|dailymed>.<updated|unchanged|not_found|unavailable>`.
+- **Email dispatch:** `claimed`, `accepted` (provider accepted, not inbox delivery),
+  `retry`, `stopped`, `errors`, `status_checked`, `delivered`, `bounced`, `failed`,
+  `complained`. A dry run reports only `due` and `awaiting_status`. Status checks need a
+  full-access Resend key; with a sending-only key the service logs one warning and
+  statuses stay "accepted". The failed `reason` is `N email rows deferred`.
 - **Reminders:** `window_start`, `window_end`, `window_mode`, `catch_up_minutes`,
   `appointment_<24h|1h>_<candidates|created|existing>`,
   `<medication|obligation>_<candidates|created|existing>`, `skipped_inactive_target` and
@@ -156,6 +162,10 @@ jsonPayload.event="scheduled_job.finished" AND jsonPayload.job="health_knowledge
 # Reminders: every finished run (API service)
 resource.type="cloud_run_revision" AND resource.labels.service_name="mediagent-backend"
 jsonPayload.event="scheduled_job.finished" AND jsonPayload.job="reminders_dispatch"
+
+# Email dispatch: every finished run (API service)
+resource.type="cloud_run_revision" AND resource.labels.service_name="mediagent-backend"
+jsonPayload.event="scheduled_job.finished" AND jsonPayload.job="email_dispatch"
 
 # Any job that failed or was skipped
 jsonPayload.event="scheduled_job.finished" AND jsonPayload.status!="success"

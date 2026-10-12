@@ -129,7 +129,8 @@ The EMAIL-001 branch adds:
 - Server-only `email_contacts`, `email_outbox` and addressed clinician invitations
   in new **057_email_delivery.sql**. It also permits an unassigned clinician's
   `clinic_name` to be NULL while invitation acceptance is pending; no invented
-  clinic grants access. This migration has **not** been applied remotely.
+  clinic grants access. 057 was applied to staging on October 11; the review fixes
+  in **058_email_delivery_fixes.sql** are not applied yet (see rollout order).
 - Saved notification receipts enqueue future opted-in event emails. The delivery
   worker prepares receipts even with portals closed, rechecks access/current work,
   groups private messages and shared reviews, freezes retry payloads, leases with
@@ -139,8 +140,8 @@ The EMAIL-001 branch adds:
   record. Sending grants no membership. Address ownership, current inviter/clinic
   authority, expiry and revocation are checked on explicit acceptance. An existing
   different-clinic membership cannot be moved by an invitation. Duplicate
-  acceptance by the same current member is safe; account creation is separate from
-  membership claim so a failed claim does not delete an account.
+  acceptance by the same current member is safe. Invitation signup claims membership
+  in the same request; a failed claim keeps the account and offers a retry.
 - Clinic-admin invitation history separates acceptance from delivery and supports
   revoking unused links. The legacy false-success patient email endpoint returns
   410; human messages stay in private conversations with optional notices.
@@ -150,16 +151,34 @@ The EMAIL-001 branch adds:
 
 ### Rollout order — requires separate authorization
 
-1. Review/merge with CI and peer approval; preserve newer main work, especially the
-   scheduled-job changes in #151. Do not restore the retired nightly ADR scan.
-2. Apply only `057_email_delivery.sql` through the full-filename/checksum ledger
-   against the explicitly approved staging project, before activating email APIs.
-3. Confirm backend `RESEND_API_KEY`, notification/onboarding From identities and
-   portal URLs through the operator; never print or copy credential values.
-4. Deploy the reviewed backend and both portals. Email dispatch is also called by
-   the existing reminder heartbeat, or the authenticated `/cron/emails/dispatch`
-   endpoint. The paused reminder trigger must be resumed by its separately
-   authorized OPS-003 workflow; do not assume email dispatch is running.
+`057_email_delivery.sql` was applied to the synthetic staging project through the
+ledger on October 11, before review fixes. It is immutable in the ledger; the
+fixes are in **`058_email_delivery_fixes.sql`** (additive `ALTER` / `CREATE OR
+REPLACE`, same function signatures and grants). 058 is **not** applied yet.
+
+1. Apply only `058_email_delivery_fixes.sql` through the ledger against the approved
+   staging project **before merging**: merging deploys the backend automatically
+   (`deploy-backend.yml` on `backend/**`), and the new backend needs 058.
+   058 is backward compatible with current `main`: main never calls the email
+   functions, and the replaced `notification_receipts` trigger only adds outbox rows
+   for verified, opted-in contacts (there are none). It only adds columns/indexes to
+   the email tables and replaces email functions. If the backend ever runs without
+   the email schema, email endpoints answer `503 EMAIL_SETUP_PENDING` and Settings /
+   Profile show "not available yet"; nothing else is affected.
+2. Review/merge with CI and peer approval; preserve newer main work.
+3. Confirm through the operator, never by printing values: `RESEND_API_KEY`,
+   `RESEND_FROM_EMAIL` (required for verification codes and notices; without it they
+   stay queued and the backend logs one warning), `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL`,
+   both portal URLs and `CRON_AUTH_TOKEN`. Optional: `EMAIL_CODE_HMAC_SECRET`
+   (falls back to the Supabase JWT secret). Provider status reconciliation needs a
+   **full-access** Resend key; a sending-only key still sends, logs one warning and
+   leaves statuses at "provider accepted".
+4. Deploy the reviewed backend and both portals. New invitations and verification
+   codes are sent immediately; failures stay queued. Retries, notices and status
+   reconciliation run as the `email_dispatch` job: after each reminder heartbeat
+   (isolated, its own run record) or via authenticated `POST /api/v1/cron/emails/dispatch`
+   (`{"dry_run": true}` counts only). The paused reminder trigger must be resumed by
+   its separately authorized OPS-003 workflow; until then only immediate sends happen.
 5. Install the recovery HTML candidate in Supabase's Reset password template with
    separate authorization. Keep Confirm email **off**; pending-confirmation signup
    is not implemented or part of this reviewed slice.
@@ -168,9 +187,54 @@ The EMAIL-001 branch adds:
    to a synthetic sink is **not implemented**: synthetic addresses are blocked,
    and genuine notices/Auth links are never diverted.
 7. Operator requests recovery, checks the actual inbox, enters the new password,
-   and verifies fresh normal login/MFA. Then verify code + explicit opt-in, saved
-   event → email → authorized destination, invitation acceptance/revocation, EN/ES,
-   opt-out, and delivered/bounced provider status. Record actual outcomes here.
+   and verifies fresh normal login/MFA (other sessions are signed out). Then verify
+   code + explicit opt-in, saved event → email → `/notifications` or `/alerts`,
+   invitation signup, Sign in to accept, revocation and re-invite, EN/ES, opt-out,
+   and delivered/bounced provider status. Record actual outcomes here.
+
+### Review fixes — October 11 (058 and backend)
+
+- **No auth-schema dependency.** The hosted migration role could not grant
+  `service_role` access to `auth` ("no privileges were granted"), so 057's reads of
+  `auth.users` would fail at runtime. The backend now reads the account address via
+  the Auth Admin API and passes it in; SQL compares it with the verified contact on
+  every account operation, immediately before each send (freeze) and on invitation
+  acceptance. 058 revokes the 057 table grant where the migration role made it.
+- **Locking.** Invitation operations lock clinic → clinician rows (by id) →
+  invitation; history is lock-free. Docker tests prove a waiting accept/create holds
+  no clinician or invitation lock and that concurrent create/list/accept complete.
+- **Invitation signup in one request.** Signup creates the account and claims the
+  invitation server-side. If the claim fails, the account is kept, signed in, and
+  can retry. An unassigned account that cannot pass clinic login uses **Sign in to
+  accept** on the invitation link (`POST /api/v1/auth/invitations/accept`), which
+  confirms the password, claims membership, ends that temporary session and sends
+  the clinician to normal login with MFA. Login for an unassigned account explains
+  this (`INVITATION_ACCEPTANCE_REQUIRED`). The unauthenticated preview no longer
+  returns the clinic code; acceptance returns clinic context. The legacy
+  `?role=admin` signup option was removed.
+- **Immediate, isolated sends.** New invitations and codes send only their own row
+  at once; user requests never run the shared worker. A re-invite replaces a pending
+  link whose delivery failed, bounced or was stopped. Email dispatch after reminders
+  is isolated and has its own `email_dispatch` run record and log lines.
+- **Provider status.** Opened/clicked → delivered; canceled → failed; complaints are
+  recorded on a delivered row (not a bounce) and withdraw optional-notice consent.
+  Polling stops 72 hours after acceptance; delivered notices are rechecked every six
+  hours for complaints. A sending-only key is detected once per process.
+- **Grouping.** A stopped grouped summary is reopened as a new generation (new
+  provider idempotency key) when a new unread item arrives.
+- **Errors, caps and links.** Per-operation error messages (invalid/expired,
+  wrong account, existing membership, demo address, verify first). Five
+  verification codes per contact per day; password recovery requests are limited
+  per address and per caller while the response stays neutral. Notice links go to
+  `/notifications` (patients) or `/alerts` (clinicians) without identifiers; the
+  provider idempotency key is a hash.
+- **Smaller fixes.** Unsent codes/links leave the outbox when superseded, verified,
+  revoked or accepted; consent is stamped only when notices go from off to on;
+  optional dedicated `EMAIL_CODE_HMAC_SECRET`; missing notification sender is
+  validated at startup and never claimed; successful password reset signs out all
+  sessions; recovery status receives focus and errors are linked to their fields.
+- Not changed: constant-time comparison (code hashes are compared in SQL behind a
+  five-attempt limit; no secret is compared in Python).
 
 Local tests are not proof of delivered mail. Browser/email-client rendering,
 inbox receipt, deployed links and provider status reconciliation remain unverified.
@@ -220,6 +284,31 @@ Installed both portal locks with `npm ci --no-audit --no-fund`.
 - The pre-commit hook expects a worktree-local `backend/.venv`, which this checkout
   does not have. Equivalent checks used the existing base virtualenv; commit hook
   was skipped with `HUSKY=0`, not CI. Keep this reproducibility limitation explicit.
+
+### Verification — review fixes (October 11)
+
+Dummy Supabase settings, offline disposable `postgres:16` containers, no remote
+database, provider or mail. From `backend/` with `PYTHONPATH=src`:
+
+- `ruff check src/ scripts/` and `ruff format --check src/ scripts/`: passed.
+- `mypy src/app`: no issues in 235 source files.
+- `python scripts/validate_migrations.py`: 68 migration files validated.
+- `pytest tests/unit tests/integration -q --ignore=tests/integration/test_appointment_offer_transactions.py`:
+  **2404 passed, 187 skipped**, coverage 88.27%.
+- `EMAIL_TEST_POSTGRES_DOCKER=1 pytest tests/integration/test_email_postgres.py`:
+  **31 passed** (057 applied, service_role auth access removed, then 058). The three
+  lock-order tests were also run against 057's original functions and failed there.
+- `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 pytest tests/integration/test_notification_centre_postgres.py`:
+  **50 passed**.
+- Both portals: `eslint .` and `tsc --noEmit` clean; `vitest run` **502 patient /
+  324 clinician passed**; `next build` succeeded.
+- Commits ran the repository pre-commit hook (lint-staged: ruff, ruff format, mypy,
+  eslint) with temporary links to the main checkout's backend virtualenv and root
+  tooling; the links were removed after each commit.
+
+Not verified here: applying 058 to staging, deployment, real inbox delivery,
+provider status with a full-access key, mobile email rendering and the live
+Sign in to accept and recovery journeys.
 
 The repository handoff is this section plus the rollout checklist above, reachable
 from TASKS.md, architecture, contributor and Supabase guides. The next contributor
