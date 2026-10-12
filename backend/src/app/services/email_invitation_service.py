@@ -59,8 +59,10 @@ class EmailInvitationService:
             f"Invitation to join {clinic}",
             [
                 f"You have been invited to join {clinic} as {role.replace('_', ' ').title()}.",
-                "Open this link to create your clinician account. If you already have a "
-                "MediAgent clinician account, open the link and choose Sign in to accept.",
+                (
+                    "Open this link to create your clinician account. If you already have a "
+                    "MediAgent clinician account, open the link and choose Sign in to accept."
+                ),
                 "This invitation expires in seven days. Sending or opening it does not change clinic access.",
             ],
             action_url=settings.clinician_portal_url.rstrip("/") + "/signup#invitation=" + token,
