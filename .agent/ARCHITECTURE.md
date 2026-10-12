@@ -34,6 +34,22 @@ Naranjo evidence and atomically mark a draft reviewed, dismiss it, or request in
 review action writes an immutable ADR audit event. Confirmed-report intake, evidence-driven
 reassessment, and MedWatch drafting remain delivery targets.
 
+## Selective email (EMAIL-001, pending rollout)
+
+Supabase Auth owns recovery tokens and uses operator-configured Resend SMTP.
+Backend `/api/v1/email` owns contact verification, optional preferences and
+addressed clinician invitations. SQL event capture and a server-only outbox
+extend saved in-app notifications with selective email; no model writes email
+copy, recipients or access decisions. Membership changes only through explicit
+addressed invitation acceptance, not sending or opening a message. Dispatch
+rechecks current authorization, consent, unread/work state and freezes retry
+payloads. Provider acceptance and confirmed delivery remain different states.
+The existing authenticated reminder heartbeat also dispatches email.
+
+This is implemented on the EMAIL-001 branch, not deployed acceptance. Migration
+057, the recovery-template installation and inbox/password QA remain separate
+authorized rollout steps. [Contract and handoff](specs/email-001-email-flows.md).
+
 ## Worker and service boundaries
 
 Only these four work boundaries are supported by the product direction:

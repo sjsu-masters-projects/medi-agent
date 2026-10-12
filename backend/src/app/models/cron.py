@@ -16,6 +16,12 @@ class ReminderDispatchRequest(BaseModel):
     window_minutes: int = Field(default=15, ge=1, le=120)
 
 
+class EmailDispatchRequest(BaseModel):
+    """Manual override inputs for the email dispatcher."""
+
+    dry_run: bool = False
+
+
 class CronJobRunResponse(BaseModel):
     """Standard response for internal cron job runs."""
 

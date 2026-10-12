@@ -13,6 +13,7 @@ from supabase import Client
 from app.core.exceptions import ValidationError
 from app.core.job_logging import JobRunLog
 from app.db.supabase_execute import execute_async
+from app.services.email_service import EmailDeliveryService
 from app.services.health_knowledge_service import HealthKnowledgeService
 from app.services.reminder_schedule_service import (
     occurrence_datetimes_for_day,
@@ -171,6 +172,44 @@ class CronService:
             summary={},
             work=work,
         )
+
+    async def dispatch_emails(self, *, dry_run: bool = False) -> dict[str, Any]:
+        """Send due verified opt-in email and reconcile provider status; record the run.
+
+        A dry run only counts due rows and sends awaiting a status check. Rows that
+        raised are retried by a later run, so the run counts as failed when any did.
+        """
+
+        async def work(summary: dict[str, Any]) -> str | None:
+            service = EmailDeliveryService(self.db)
+            if dry_run:
+                summary.update(await service.pending())
+                return None
+            summary.update(await service.dispatch())
+            errors = int(summary.get("errors") or 0)
+            return f"{errors} email rows deferred" if errors else None
+
+        return await self._run_job(
+            "email_dispatch",
+            dry_run=dry_run,
+            metadata={"dry_run": dry_run},
+            summary={},
+            work=work,
+        )
+
+    async def dispatch_emails_isolated(self) -> None:
+        """Run email dispatch after reminders without letting it fail the reminder run.
+
+        The email run has its own run record and log lines; here any failure is reduced
+        to a type name so a provider or network error cannot turn a successful reminder
+        run into an HTTP error.
+        """
+        try:
+            await self.dispatch_emails()
+        except Exception as exc:  # noqa: BLE001 - isolation is the purpose
+            logger.warning(
+                "Email dispatch after reminders did not complete (%s)", type(exc).__name__
+            )
 
     async def _run_job(
         self,

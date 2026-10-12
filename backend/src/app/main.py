@@ -27,6 +27,7 @@ from app.routers import (
     clinics,
     cron,
     documents,
+    email_preferences,
     feed,
     medications,
     mfa,
@@ -68,6 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     Shutdown: Nothing to clean up — Supabase SDK handles it.
     """
     logger.info("Starting MediAgent backend")
+    if settings.resend_api_key.strip() and not settings.resend_from_email.strip():
+        # Invitations can still use the onboarding sender; verification codes and
+        # optional notices stay queued until a notification sender is configured.
+        logger.warning("RESEND_FROM_EMAIL is not set; verification and notice email are paused")
 
     retry_worker: A2ARetryWorker | None = None
     if settings.a2a_retry_worker_enabled:
@@ -133,6 +138,9 @@ def create_app() -> FastAPI:
     application.include_router(patients.router, prefix=f"{api}/patients", tags=["Patients"])
     application.include_router(clinicians.router, prefix=f"{api}/clinicians", tags=["Clinicians"])
     application.include_router(documents.router, prefix=f"{api}/documents", tags=["Documents"])
+    application.include_router(
+        email_preferences.router, prefix=f"{api}/email", tags=["Email preferences"]
+    )
     application.include_router(
         medications.router, prefix=f"{api}/medications", tags=["Medications"]
     )

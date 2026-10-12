@@ -8,6 +8,8 @@ import { Icon, type IconName } from "@/components/ui/icons";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 import { ClinicianRole } from "@/types";
+import { EmailPreferences } from "@/components/features/email-preferences";
+import { EmailInvitations } from "@/components/features/email-invitations";
 
 const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Interoperability"] as const;
 type SettingsTab = (typeof settingsTabs)[number];
@@ -325,11 +327,11 @@ export default function SettingsPage() {
                 { email: inviteEmail, role: inviteRole },
                 { token },
             );
-            if (result.email_sent) {
-                setInviteStatus(result.status === "added" ? "Added to clinic and invitation email sent" : "Invitation email sent");
-            } else {
-                setInviteStatus(result.status === "added" ? "Added to clinic (email not sent)" : "Invitation pending (email not sent)");
-            }
+            setInviteStatus(result.status === "already_pending"
+                ? "An invitation is already pending. Sending does not change clinic membership."
+                : result.email_sent
+                  ? "Invitation email handed to the provider; inbox delivery is not confirmed yet. Clinic access changes only after acceptance."
+                  : "Invitation queued for email delivery. Clinic access changes only after acceptance.");
             setInviteEmail("");
             void loadStaff();
         } catch (e) {
@@ -619,12 +621,14 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                         </Card>
+                        {token ? <EmailPreferences token={token} /> : null}
                     </div>
                 </div>
             ) : null}
 
             {activeTab === "Team & Roles" ? (
                 <div className="ma-enter space-y-5">
+                    {token && profile?.role === ClinicianRole.ADMIN ? <EmailInvitations token={token} revision={inviteStatus} /> : null}
                     <Card padding="none">
                         <CardHeader icon="users" sub="Send an email invitation to add staff to your MediAgent workspace.">
                             <h2 className="text-[15px] font-semibold text-ink">Invite Team Member</h2>

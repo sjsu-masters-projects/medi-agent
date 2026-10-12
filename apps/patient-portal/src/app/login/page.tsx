@@ -140,6 +140,9 @@ function LoginPageContent() {
                             value={password}
                         />
                         {notice ? <p role="status" className="rounded-2xl bg-brand-tint px-4 py-3 text-sm font-medium text-brand-ink">{notice}</p> : null}
+                        <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-brand" href={"/forgot-password?lang=" + locale}>
+                            {locale === "es-MX" ? "¿Olvidaste tu contraseña?" : "Forgot your password?"}
+                        </Link>
                         {errorKey ? <p role="alert" className="rounded-2xl bg-danger-tint px-4 py-3 text-sm font-semibold text-danger-ink">{copy[errorKey]}</p> : null}
                         <Button disabled={submitting} type="submit">
                             {submitting ? copy.signingIn : copy.signIn}

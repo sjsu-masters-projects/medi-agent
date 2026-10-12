@@ -122,3 +122,72 @@ async def test_a_refresh_that_checks_nothing_is_a_success(
     finished = job_logs.lines[-1]
     assert finished["status"] == "success"
     assert finished["summary"]["next_due_at"] == "2026-10-17T08:00:31+00:00"
+
+
+class _Delivery:
+    """Stands in for EmailDeliveryService so no provider or database is touched."""
+
+    calls: list[str] = []
+    result: dict[str, int] | Exception = {}
+
+    def __init__(self, _db: Any) -> None:
+        pass
+
+    async def dispatch(self) -> dict[str, int]:
+        _Delivery.calls.append("dispatch")
+        if isinstance(_Delivery.result, Exception):
+            raise _Delivery.result
+        return dict(_Delivery.result)
+
+    async def pending(self) -> dict[str, int]:
+        _Delivery.calls.append("pending")
+        return {"due": 2, "awaiting_status": 1}
+
+
+@pytest.fixture
+def delivery(monkeypatch: pytest.MonkeyPatch) -> type[_Delivery]:
+    _Delivery.calls, _Delivery.result = [], {"claimed": 1, "accepted": 1, "errors": 0}
+    monkeypatch.setattr(module, "EmailDeliveryService", _Delivery)
+    return _Delivery
+
+
+@pytest.mark.asyncio
+async def test_email_dispatch_has_its_own_run_record_and_log(
+    store: Store, job_logs, delivery
+) -> None:
+    result = await service_for(store).dispatch_emails()
+    [run] = store.tables["cron_job_runs"]
+    started, finished = job_logs.lines
+    assert started["job"] == finished["job"] == run["job_name"] == "email_dispatch"
+    assert finished["status"] == "success" and finished["summary"]["accepted"] == 1
+    assert result["summary"] == run["summary"]
+
+
+@pytest.mark.asyncio
+async def test_email_dry_run_only_counts(store: Store, job_logs, delivery) -> None:
+    result = await service_for(store).dispatch_emails(dry_run=True)
+    assert delivery.calls == ["pending"]
+    assert result["dry_run"] is True and result["summary"] == {"due": 2, "awaiting_status": 1}
+
+
+@pytest.mark.asyncio
+async def test_deferred_rows_mark_the_email_run_failed(store: Store, job_logs, delivery) -> None:
+    delivery.result = {"claimed": 2, "accepted": 1, "errors": 1}
+    result = await service_for(store).dispatch_emails()
+    assert result["status"] == "failed"
+    assert job_logs.lines[-1]["reason"] == "1 email rows deferred"
+
+
+@pytest.mark.asyncio
+async def test_email_failure_after_reminders_is_isolated(
+    store: Store, job_logs, delivery, caplog
+) -> None:
+    delivery.result = TimeoutError("owner@example.com provider timeout")
+    service = service_for(store)
+    await service.dispatch_emails_isolated()
+    [run] = store.tables["cron_job_runs"]
+    assert run["job_name"] == "email_dispatch" and run["status"] == "failed"
+    finished = job_logs.lines[-1]
+    assert finished["error_type"] == "TimeoutError"
+    assert "owner@example.com" not in json.dumps(finished)
+    assert "owner@example.com" not in caplog.text

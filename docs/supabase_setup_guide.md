@@ -12,6 +12,66 @@ Use this guide to recreate the project after an inactive instance is removed. It
    dashboard remains functional through its authenticated backend API while it is disabled.
 4. Enable email authentication and MFA for clinician accounts. After migrations complete, configure **Authentication → Auth Hooks → Customize Access Token (JWT) Claims hook** to use `public.custom_access_token_hook` and confirm it shows as enabled. This Auth control-plane setting is not recorded by a SQL migration.
 
+## Account email delivery (EMAIL-001)
+
+See [the email contract](../.agent/specs/email-001-email-flows.md) before changing
+Auth settings. Initial dashboard inspection on October 11 found Confirm email
+**off** and custom SMTP **off** in the synthetic staging project. After operator
+setup, a dashboard reload confirmed SMTP **on**, Resend host/port and a stored
+hidden password. This verifies saved configuration, not delivery. With explicit
+requester approval, Site URL was set to `https://app.mediagent.live` and the three
+exact deployed reset destinations listed below were added. Reload confirmed they
+persisted. No wildcard redirects or signup-confirmation changes were made.
+Existing signup expects an
+immediate session; do not enable confirmation until the pending-verification flow
+is implemented and reviewed. SMTP delivery can be configured independently.
+
+For the verified `mail.mediagent.live` domain, the proposed Auth identity is
+`MediAgent Account Access <accounts@mail.mediagent.live>`. In Authentication →
+Emails → SMTP Settings, use Resend's documented host `smtp.resend.com`, port `465`,
+username `resend`; the operator enters a Resend API key as the SMTP password.
+Never paste that key into a chat, source file or command. An exposed key must be
+revoked and replaced, including any deployment that used it. Keep click tracking
+off for recovery links. SMTP configuration does not require a schema migration.
+
+The backend recovery API accepts `portal: patient|clinician` and `locale:
+en-US|es-MX`, building the destination from `PATIENT_PORTAL_URL` or
+`CLINICIAN_PORTAL_URL`. It never accepts an arbitrary return URL. Authorize these
+exact deployed redirects in Authentication → URL Configuration:
+
+- `https://app.mediagent.live/reset-password?lang=en-US`
+- `https://app.mediagent.live/reset-password?lang=es-MX`
+- `https://clinician.mediagent.live/reset-password?lang=en-US`
+
+Add exact localhost/preview redirects only for an explicitly selected test target;
+do not use broad wildcard redirects. Both portals already document the public
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in their examples.
+Recovery uses these public values, never a service-role key. The recovery session
+stays in memory, its URL fragment is removed, and successful reset returns to
+normal login (including clinician clinic/MFA checks). The operator must enter the
+new password during live verification. Neutral API success does not prove delivery.
+
+References: [Resend SMTP](https://resend.com/docs/send-with-supabase-smtp),
+[Supabase password recovery](https://supabase.com/docs/guides/auth/passwords).
+
+Application email uses separate verified opt-in contacts and server-only outbox
+records from `057_email_delivery.sql` (applied to staging October 11) and its fixes in
+`058_email_delivery_fixes.sql`. Apply 058 through the ledger, with project-specific
+authorization, before the backend that uses it is merged or deployed. No email
+function reads the `auth` schema: a hosted migration cannot grant `service_role`
+access there (057's attempt only produced "no privileges were granted"), so the
+backend reads account addresses through the Auth Admin API with the service-role key. The
+notification and onboarding sender identities are documented in `.env.example`;
+they are not Supabase SMTP configuration. With no configured notification sender,
+verification is unavailable rather than sent from a default testing identity.
+
+The reviewed rollout and continuation checklist is in
+[EMAIL-001](../.agent/specs/email-001-email-flows.md#current-implementation-and-continuation-handoff).
+The installable Reset password template candidate is
+`docs/email-templates/supabase-password-recovery.html`. Do not install it or enable
+confirmation as a side effect of applying SQL. The existing reminder heartbeat
+also dispatches application email; a paused trigger means no periodic delivery.
+
 ## Apply migrations
 
 Apply every SQL file through the repository migration ledger against an empty development database. The ledger records the complete filename and SHA-256 checksum, so a rerun skips unchanged files and stops if an applied migration was edited. Do not run a reset, seed, or migration command against a production database.

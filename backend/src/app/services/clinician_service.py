@@ -146,11 +146,15 @@ class ClinicianService:
         patient_id: UUID,
         data: dict[str, Any],
     ) -> dict[str, Any]:
-        """Send an in-app/email-tracked message to an assigned patient."""
+        """Record a legacy in-app message; email notices use private conversations."""
         await self.get_patient_detail(clinician_id, patient_id)
 
         channel = data.get("channel") or MessageChannel.IN_APP
         channel_value = channel.value if isinstance(channel, MessageChannel) else str(channel)
+        if channel_value == "email":
+            raise ValidationError(
+                "Use care-team messages. Optional email notices are sent only to verified, opted-in recipients."
+            )
 
         subject = data.get("subject")
         body = str(data.get("body", "")).strip()
