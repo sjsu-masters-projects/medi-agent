@@ -12,7 +12,7 @@ spring-2026 meeting records. Neither is current implementation guidance.
 | Detailed task acceptance (required before coding) | [Backlog requirements](../.agent/specs/project-backlog-acceptance.md), or the issue's dedicated spec below |
 | Care-plan generation, review, approval and Today contract | [PAT-005 specification](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md) and [patient-upload evidence gate](patient-upload-care-plan-review-gate.md) |
 | Scheduling and addressed human messaging | [Scheduling specification](../.agent/specs/sch-001-appointment-scheduling.md) and [conversation specification](../.agent/specs/com-001-two-way-conversations.md) |
-| Latest prototype acceptance and pending presentation checks | [Deployed recheck, October 11–12](deployed-recheck-2026-10-11.md), [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md), [portal UI/UX evidence](portal-ui-ux-review-2026-10-10.md) and [UX-002 overhaul verification](ux-002-overhaul-verification.md) |
+| Latest prototype acceptance and pending presentation checks | [Deployed recheck, October 11–13](deployed-recheck-2026-10-11.md), [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md), [portal UI/UX evidence](portal-ui-ux-review-2026-10-10.md) and [UX-002 overhaul verification](ux-002-overhaul-verification.md) |
 | Visual design and app icons | `../.agent/DESIGN_SYSTEM.md` and [app icons](brand-icons.md) |
 | Current implementation and delivery boundaries | `../.agent/ARCHITECTURE.md` |
 | Model routing, safety controls, and evaluation limits | [AI runtime decision](decisions/ai-runtime-2026-09.md) and the [AI-005 agent quality plan](../.agent/specs/ai-005-agent-quality.md) |

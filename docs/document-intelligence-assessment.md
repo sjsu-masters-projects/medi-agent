@@ -3,6 +3,9 @@
 **Status:** The bounded worker and scheduled synthetic-demo operation are verified.
 Current issue status is in [TASKS.md](../.agent/TASKS.md); full capacity/production
 qualification is outside this demonstrated scope.
+Extraction of results, vitals, immunizations, procedures and medication actions, row-level
+evidence and phone-photo OCR were added by AI-005; see its
+[specification](../.agent/specs/ai-005-agent-quality.md).
 
 ## Decision
 

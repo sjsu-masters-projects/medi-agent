@@ -209,3 +209,25 @@ The synthetic lab report above, uploaded by Morgan at 05:59 UTC:
 - **Patient:** Today shows the same five tasks credited to Dr. Elena Park; notifications
   show "Document processing completed", "Document review updated" and "Your care plan was
   updated".
+
+## AI-005 production check (October 13)
+
+Synthetic test patient (Rajeev Chaurasia) and Elena Park, both portals, after #161–#164
+deployed. #164's backend was live only after #165 redeployed `main`: #163 and #164 had
+deployed in parallel and the older image took the traffic.
+
+- Critical result: the synthetic potassium 6.9 report raised "Critical test result
+  reported" under Alerts → Needs attention; acknowledging it removed it (22 → 21 open).
+- Evidence: each result on a new synthetic lipid/A1c upload cites its whole printed row
+  (`HDL cholesterol | 38 | L | > 40 | mg/dL`). The first upload lost A1c because the report
+  heading names it; after #166 the recheck upload registered all seven results.
+- Nora: a question about the lipid report shows the results card (five flagged results,
+  "Show 1 result in range", link to Records), still present after a reload; a general
+  question in the same conversation gets no card.
+- Care plan: the discharge draft was reviewed (glipizide removed per its STOP line,
+  lisinopril changed to the printed 20 mg in both languages, routes chosen) and published;
+  the patient's Today shows the four activities and "Care plan approved by Dr. Elena Park".
+- Email: Resend lists every recent send as Delivered.
+
+Defects found and their fixes are recorded in the
+[AI-005 spec](../.agent/specs/ai-005-agent-quality.md).
