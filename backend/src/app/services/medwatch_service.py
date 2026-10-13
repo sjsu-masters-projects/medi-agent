@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import date
 from typing import Any, cast
 from uuid import UUID
 
@@ -18,6 +21,473 @@ from app.models.adr import (
     MedWatchFormData,
 )
 from app.models.enums import ADRStatus, MedWatchStatus
+from app.models.medwatch_form_3500 import FORM_3500_VERSION, MAX_OTHER_PRODUCTS, MedWatchFormDataV2
+from app.pharmacovigilance import NaranjoQuestion
+from app.services.medwatch_3500.dates import (
+    clinic_date_of,
+    clinic_today,
+    coerce_date,
+    earliest_day,
+)
+from app.services.medwatch_3500.identifier import PatientIdentity, default_code
+from app.services.medwatch_3500.legacy import match_frequency, match_route, past_date, split_dose
+
+_NARRATIVE_MAX = 4000
+_HISTORY_MAX = 2000
+_NAME_MAX = 255
+_REPORTER_NAME_MAX = 100
+
+# Naranjo questions that answer Section D items 7 and 8.
+_DECHALLENGE_ITEMS = (
+    (NaranjoQuestion.IMPROVED_ON_DECHALLENGE, "abated"),
+    (NaranjoQuestion.REAPPEARED_ON_RECHALLENGE, "reappeared"),
+)
+
+
+@dataclass(frozen=True)
+class Form3500Sources:
+    """Stored records a Form 3500 draft is prepared from. Nothing else is consulted."""
+
+    draft_id: UUID
+    assessment: Mapping[str, Any]
+    patient: Mapping[str, Any]
+    symptom: Mapping[str, Any]
+    medication: Mapping[str, Any]
+    clinician: Mapping[str, Any]
+    medications: Sequence[Mapping[str, Any]] = ()
+    conditions: Sequence[Mapping[str, Any]] = ()
+    allergies: Sequence[Mapping[str, Any]] = ()
+    # Approved clinical facts are accepted but never prefill B6: an ``observation`` fact
+    # does not record its FHIR category, so a laboratory result cannot be told apart from
+    # a vital sign or survey answer.
+    clinical_facts: Sequence[Mapping[str, Any]] = ()
+    rationale: str = ""
+    today: date | None = None
+
+
+def patient_identity(patient: Mapping[str, Any]) -> PatientIdentity:
+    """The patient facts the A1 identifier and free text must not reveal."""
+    return PatientIdentity(
+        first_name=str(patient.get("first_name") or ""),
+        last_name=str(patient.get("last_name") or ""),
+        email=str(patient.get("email") or ""),
+        date_of_birth=coerce_date(patient.get("date_of_birth")),
+    )
+
+
+def _text(record: Mapping[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = record.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _fit(value: str, limit: int, legacy: dict[str, str], key: str) -> str:
+    """Keep text within an item's length; the full text goes to ``legacy`` when cut."""
+    if len(value) <= limit:
+        return value
+    legacy[key] = value
+    return value[:limit]
+
+
+def _evidence_source_type(entry: Mapping[str, Any]) -> tuple[str, str]:
+    """(source type, attribution) by the evidence entry's own ``source``."""
+    source = entry.get("source")
+    if source == "patient_follow_up":
+        return "patient_confirmed_adr_evidence", "Patient-confirmed follow-up answer"
+    if not source:
+        return "ai_extracted_adr_evidence", "AI-extracted from the patient's report"
+    return "adr_assessment_evidence", f"Recorded ADR evidence ({source})"
+
+
+class _Evidence:
+    """One evidence entry per filled field path and source."""
+
+    def __init__(self) -> None:
+        self.entries: list[dict[str, Any]] = []
+
+    def add(
+        self,
+        path: str,
+        source_type: str,
+        source_id: object,
+        attribution: str,
+        citation: str,
+        excerpt: str | None = None,
+    ) -> None:
+        self.entries.append(
+            {
+                "field_paths": [path],
+                "source_type": source_type,
+                "source_id": str(source_id) if source_id else None,
+                "attribution": attribution,
+                "excerpt": excerpt or None,
+                "citation": citation,
+            }
+        )
+
+
+def build_form_3500(sources: Form3500Sources) -> tuple[MedWatchFormDataV2, list[dict[str, Any]]]:
+    """Prefill a Form 3500 draft from stored records, with evidence for every filled item.
+
+    Items without a stored source stay blank: race, ethnicity, weight, outcomes, B4, B6
+    rows (see ``Form3500Sources.clinical_facts``), product identifiers, reporter phone,
+    address, health-professional answer and occupation, and sex for any gender other than
+    female or male. Reporter identity goes only into Section G.
+    """
+    today = sources.today or clinic_today()
+    patient, symptom = sources.patient, sources.symptom
+    assessment, clinician = sources.assessment, sources.clinician
+    patient_ref, symptom_ref = (
+        f"patients/{patient.get('id')}",
+        f"symptom_reports/{symptom.get('id')}",
+    )
+    assessment_ref = f"adr_assessments/{assessment.get('id')}"
+    evidence = _Evidence()
+    legacy: dict[str, str] = {}
+
+    identity = patient_identity(patient)
+    identifier = default_code(identity.first_name, identity.last_name, sources.draft_id, identity)
+    evidence.add(
+        "section_a.identifier",
+        "default_patient_code",
+        sources.draft_id,
+        "Default code: patient initials and a draft reference",
+        f"medwatch_drafts/{sources.draft_id}",
+    )
+    section_a: dict[str, Any] = {"identifier": identifier}
+    date_of_birth = past_date(patient.get("date_of_birth"), today)
+    if date_of_birth:
+        section_a["date_of_birth"] = date_of_birth
+        evidence.add(
+            "section_a.date_of_birth",
+            "patient_profile",
+            patient.get("id"),
+            "Patient account profile",
+            patient_ref,
+        )
+    sex = {"female": "F", "male": "M"}.get(_text(patient, "gender"))
+    if sex:
+        section_a["sex"] = sex
+        evidence.add(
+            "section_a.sex",
+            "patient_profile",
+            patient.get("id"),
+            "Patient account profile",
+            patient_ref,
+        )
+
+    section_b: dict[str, Any] = {"report_types": ["adverse_event"], "event_date_confirmed": False}
+    evidence.add(
+        "section_b.report_types",
+        "deterministic_adr_assessment",
+        assessment.get("id"),
+        "Adverse drug reaction assessment",
+        assessment_ref,
+    )
+    onset = _text(symptom, "onset")
+    event_date = past_date(onset, today)
+    if event_date:
+        excerpt, basis = onset, "Best estimate, confirm: patient-reported onset"
+    else:
+        reported = clinic_date_of(symptom.get("created_at"))
+        event_date = past_date(reported, today) if reported else None
+        excerpt = onset or _text(symptom, "created_at")
+        basis = "Best estimate, confirm: date the symptom was reported"
+    if event_date:
+        section_b["event_date"] = event_date
+        evidence.add(
+            "section_b.event_date",
+            "patient_symptom_report",
+            symptom.get("id"),
+            basis,
+            symptom_ref,
+            excerpt,
+        )
+
+    narrative = _text(symptom, "symptom")
+    if symptom.get("severity") is not None:
+        narrative = f"{narrative} (patient-reported severity {symptom['severity']}/10)"
+    if _text(symptom, "notes"):
+        narrative = f"{narrative}. {_text(symptom, 'notes')}"
+    if narrative:
+        section_b["narrative"] = _fit(narrative, _NARRATIVE_MAX, legacy, "symptom_report.narrative")
+        evidence.add(
+            "section_b.narrative",
+            "patient_symptom_report",
+            symptom.get("id"),
+            "Patient-reported symptom",
+            symptom_ref,
+            narrative,
+        )
+
+    history: list[str] = []
+    condition_names = [
+        _text(item, "name")
+        for item in sources.conditions
+        if _text(item, "status") in {"", "active"}
+    ]
+    if any(condition_names):
+        history.append("Conditions: " + "; ".join(name for name in condition_names if name) + ".")
+        evidence.add(
+            "section_b.other_history",
+            "patient_condition_record",
+            None,
+            "Active conditions",
+            f"{patient_ref}/conditions",
+        )
+    allergy_texts = [
+        f"{_text(item, 'allergen')} ({_text(item, 'reaction')})"
+        if _text(item, "reaction")
+        else _text(item, "allergen")
+        for item in sources.allergies
+        if _text(item, "allergen")
+    ]
+    if allergy_texts:
+        history.append("Allergies: " + "; ".join(allergy_texts) + ".")
+        evidence.add(
+            "section_b.other_history",
+            "patient_allergy_record",
+            None,
+            "Recorded allergies and reactions",
+            f"{patient_ref}/allergies",
+        )
+    if history:
+        section_b["other_history"] = _fit(
+            " ".join(history), _HISTORY_MAX, legacy, "patient.history"
+        )
+
+    product = _prefill_product(sources, today, evidence, legacy)
+    others = _prefill_others(sources, today, evidence, legacy)
+
+    section_g: dict[str, Any] = {}
+    for key, path in (
+        ("first_name", "section_g.first_name"),
+        ("last_name", "section_g.last_name"),
+        ("email", "section_g.email"),
+    ):
+        value = _text(clinician, key)
+        limit = 254 if key == "email" else _REPORTER_NAME_MAX
+        if value and len(value) <= limit:
+            section_g[key] = value
+            evidence.add(
+                path,
+                "authenticated_clinician",
+                clinician.get("id"),
+                "Authenticated clinician",
+                f"clinicians/{clinician.get('id')}",
+            )
+
+    review: dict[str, Any] = {"reportability_rationale": sources.rationale.strip()}
+    if sources.rationale.strip():
+        evidence.add(
+            "mediagent_review.reportability_rationale",
+            "clinician_attestation",
+            clinician.get("id"),
+            "Authenticated clinician",
+            f"clinicians/{clinician.get('id')}",
+            sources.rationale.strip(),
+        )
+    if assessment.get("naranjo_score") is not None:
+        review["naranjo_score"] = assessment["naranjo_score"]
+        review["causality"] = assessment.get("causality")
+        excerpt = f"Naranjo {assessment['naranjo_score']}: {assessment.get('causality')}"
+        for path in ("mediagent_review.naranjo_score", "mediagent_review.causality"):
+            evidence.add(
+                path,
+                "deterministic_adr_assessment",
+                assessment.get("id"),
+                "Naranjo decision support reviewed by clinician",
+                assessment_ref,
+                excerpt,
+            )
+    for entry in assessment.get("evidence") or []:
+        excerpt = _text(entry, "evidence")
+        if excerpt:
+            source_type, attribution = _evidence_source_type(entry)
+            question = _text(entry, "question")
+            evidence.add(
+                "mediagent_review.causality",
+                source_type,
+                entry.get("information_request_id"),
+                f"{attribution}: {question}" if question else attribution,
+                f"{assessment_ref}/evidence",
+                excerpt,
+            )
+    for key in legacy:
+        evidence.add(
+            f"legacy.{key}", "prefill_overflow", None, "Source text with no Form 3500 item", key
+        )
+
+    form = MedWatchFormDataV2.model_validate(
+        {
+            "form_version": FORM_3500_VERSION,
+            "section_a": section_a,
+            "section_b": section_b,
+            "section_d": {"product_1": product},
+            "section_f": {"others": others},
+            "section_g": section_g,
+            "mediagent_review": review,
+            "legacy": dict(sorted(legacy.items())),
+        },
+        context={"today": today},
+    )
+    return form, evidence.entries
+
+
+def _prefill_product(
+    sources: Form3500Sources, today: date, evidence: _Evidence, legacy: dict[str, str]
+) -> dict[str, Any]:
+    medication, assessment = sources.medication, sources.assessment
+    medication_id = medication.get("id")
+    document_id = medication.get("source_document_id")
+    source_type = "document_grounded_medication" if document_id else "patient_medication_record"
+    citation = f"documents/{document_id}" if document_id else f"medications/{medication_id}"
+    instructions = _text(medication, "instructions") or None
+    base = "section_d.product_1"
+    product: dict[str, Any] = {}
+
+    def record(field: str) -> None:
+        evidence.add(
+            f"{base}.{field}",
+            source_type,
+            medication_id,
+            "Medication record",
+            citation,
+            instructions,
+        )
+
+    name = _text(medication, "name", "generic_name")
+    if name:
+        product["name"] = _fit(name, _NAME_MAX, legacy, "medication.name")
+        record("name")
+    elif _text(assessment, "suspect_medication_name"):
+        product["name"] = _fit(
+            _text(assessment, "suspect_medication_name"), _NAME_MAX, legacy, "medication.name"
+        )
+        evidence.add(
+            f"{base}.name",
+            "deterministic_adr_assessment",
+            assessment.get("id"),
+            "Suspect medication on the ADR assessment",
+            f"adr_assessments/{assessment.get('id')}",
+        )
+
+    dosage = _text(medication, "dosage")
+    dose = split_dose(dosage) if dosage else None
+    if dose:
+        product["dose"], product["dose_unit"] = dose
+        record("dose")
+        record("dose_unit")
+    elif dosage:
+        legacy["medication.dosage"] = dosage
+    for key, matcher, other in (
+        ("frequency", match_frequency, "frequency_other"),
+        ("route", match_route, "route_other"),
+    ):
+        text = _text(medication, key)
+        option, other_text = matcher(text)
+        if option and len(other_text) <= 100:
+            product[key], product[other] = option, other_text
+            record(key)
+            if other_text:
+                record(other)
+        elif text:
+            legacy[f"medication.{key}"] = text
+
+    start = past_date(medication.get("start_date"), today)
+    stop = past_date(medication.get("end_date"), today)
+    if stop and start and earliest_day(stop) < earliest_day(start):
+        stop = None
+    if start:
+        product["therapy_start"] = start
+        record("therapy_start")
+    if stop:
+        product["therapy_stop"] = stop
+        record("therapy_stop")
+    elif _text(medication, "end_date"):
+        legacy["medication.end_date"] = _text(medication, "end_date")
+    if medication.get("is_active") is True and not stop:
+        product["ongoing"] = "yes"
+        record("ongoing")
+
+    answers = cast(Mapping[str, Any], assessment.get("naranjo_answers") or {})
+    for question, field in _DECHALLENGE_ITEMS:
+        answer = answers.get(question.value)
+        if answer not in {"yes", "no"}:
+            continue
+        product[field] = answer
+        entry = _latest_evidence(assessment, question.value)
+        if entry is None:
+            evidence.add(
+                f"{base}.{field}",
+                "deterministic_adr_assessment",
+                assessment.get("id"),
+                "Naranjo answer on the ADR assessment",
+                f"adr_assessments/{assessment.get('id')}",
+            )
+        else:
+            source_type_for_answer, attribution = _evidence_source_type(entry)
+            evidence.add(
+                f"{base}.{field}",
+                source_type_for_answer,
+                entry.get("information_request_id"),
+                attribution,
+                f"adr_assessments/{assessment.get('id')}/evidence",
+                _text(entry, "evidence"),
+            )
+    return product
+
+
+def _latest_evidence(assessment: Mapping[str, Any], question: str) -> Mapping[str, Any] | None:
+    matches = [
+        entry
+        for entry in assessment.get("evidence") or []
+        if isinstance(entry, Mapping) and entry.get("question") == question
+    ]
+    return matches[-1] if matches else None
+
+
+def _prefill_others(
+    sources: Form3500Sources, today: date, evidence: _Evidence, legacy: dict[str, str]
+) -> list[dict[str, Any]]:
+    suspect_id = str(sources.medication.get("id"))
+    rows: list[dict[str, Any]] = []
+    extra: list[str] = []
+    for item in sources.medications:
+        name = _text(item, "name", "generic_name")
+        if not name or str(item.get("id")) == suspect_id:
+            continue
+        if len(rows) >= MAX_OTHER_PRODUCTS or len(name) > _NAME_MAX:
+            extra.append(name)
+            continue
+        index = len(rows)
+        path, citation = f"section_f.others[{index}]", f"medications/{item.get('id')}"
+        row: dict[str, Any] = {"name": name}
+        start = past_date(item.get("start_date"), today)
+        end = past_date(item.get("end_date"), today)
+        if end and start and earliest_day(end) < earliest_day(start):
+            end = None
+        fields = ["name"]
+        if start:
+            row["start"] = start
+            fields.append("start")
+        if end:
+            row["end"] = end
+            fields.append("end")
+        for field in fields:
+            evidence.add(
+                f"{path}.{field}",
+                "patient_medication_record",
+                item.get("id"),
+                "Other active medication",
+                citation,
+            )
+        rows.append(row)
+    if extra:
+        legacy["medications.additional"] = "; ".join(extra)
+    return rows
 
 
 class MedWatchService:

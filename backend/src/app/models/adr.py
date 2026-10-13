@@ -1,12 +1,13 @@
 """ADR assessment, clinician review, and MedWatch draft schemas."""
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.enums import ADRStatus, MedWatchStatus, NaranjoCausality
+from app.models.medwatch_form_3500 import MedWatchNameWarning
 from app.pharmacovigilance import (
     PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
     NaranjoAnswer,
@@ -344,10 +345,26 @@ class MedWatchDraftUpdateRequest(BaseModel):
     expected_revision: int = Field(..., ge=1)
 
 
+MEDWATCH_APPROVAL_ATTESTATION_VERSION = "medwatch-3500-approval-v1"
+
+# The one approval attestation text, keyed by version. The portal shows the text returned
+# with the draft, and the approved audit event records the version the clinician accepted.
+MEDWATCH_APPROVAL_ATTESTATIONS: dict[str, str] = {
+    MEDWATCH_APPROVAL_ATTESTATION_VERSION: (
+        "I have reviewed this draft and its sources. Approving it makes it exportable as "
+        "Form FDA 3500. I will submit it to FDA myself; MediAgent does not submit it to "
+        "FDA. I am responsible for its content."
+    ),
+}
+
+
 class MedWatchDraftApprovalRequest(BaseModel):
     approval_note: str = Field(..., min_length=1, max_length=2000)
     expected_revision: int = Field(..., ge=1)
     attested: bool
+    attestation_version: Literal["medwatch-3500-approval-v1"]
+    non_serious_attested: bool = False
+    acknowledged_warnings: list[MedWatchNameWarning] = Field(default_factory=list, max_length=200)
 
     @model_validator(mode="after")
     def validate_attestation(self) -> "MedWatchDraftApprovalRequest":
@@ -356,6 +373,7 @@ class MedWatchDraftApprovalRequest(BaseModel):
             raise ValueError("An approval note is required")
         if not self.attested:
             raise ValueError("Clinician attestation is required")
+        self.acknowledged_warnings = list(dict.fromkeys(self.acknowledged_warnings))
         return self
 
 
