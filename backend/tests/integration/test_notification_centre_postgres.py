@@ -187,6 +187,8 @@ def sql(postgres):
         "055_notification_one_response_per_offer.sql",
         "056_notification_prepare_waits.sql",
         "059_critical_result_alerts.sql",
+        "060_critical_result_open_work.sql",
+        "061_critical_result_acknowledge.sql",
     ):
         execute((MIGRATIONS / name).read_text())
     try:
@@ -1123,3 +1125,18 @@ def test_critical_alert_stops_being_work_when_the_document_is_rejected(sql):
     rows = [row for row in clinician(sql)["items"] if row["source_id"] == doc
             and row["event_type"] == "critical_result"]
     assert rows == [] or not rows[0]["actionable"]
+
+
+def test_critical_result_is_open_work_until_acknowledged(sql):
+    doc = document(sql)
+    result(sql, doc)
+    items = [
+        row for row in clinician(sql, "action_items")["items"]
+        if row["event_type"] == "critical_result" and row["source_id"] == doc
+    ]
+    assert len(items) == 1 and items[0]["can_acknowledge"]
+    clinician(sql, "acknowledge", {"id": items[0]["id"], "note": "Reviewed the document"})
+    assert all(
+        row["source_id"] != doc or row["event_type"] != "critical_result"
+        for row in clinician(sql, "action_items")["items"]
+    )
