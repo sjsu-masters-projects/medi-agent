@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const { dispatch, get, post, replace, writeStoredSession, setSearchParams, getSearchParams } = vi.hoisted(() => {
@@ -15,6 +15,10 @@ const { dispatch, get, post, replace, writeStoredSession, setSearchParams, getSe
         getSearchParams: () => new URLSearchParams(searchParamsString),
     };
 });
+
+vi.mock("@/hooks/use-patient-profile", () => ({
+    useSharedPatientProfile: () => null,
+}));
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace }),
@@ -36,13 +40,65 @@ vi.mock("@/services/auth-session", () => ({
 import LoginPage from "@/app/login/page";
 
 describe("Patient login page", () => {
+    it("uses the reference canvas and entry glow, not a white page override", () => {
+        const { container } = render(<LoginPage />);
+        expect(container.querySelector(".patient-page")).toHaveClass("bg-background");
+        expect(container.querySelector(".patient-page")).not.toHaveClass("bg-white");
+        expect(container.querySelector(".patient-page")).toHaveClass("patient-entry");
+        expect(screen.getByLabelText("Email address")).toHaveClass("bg-surface");
+    });
     beforeEach(() => {
+        window.localStorage.clear();
+        window.history.replaceState({}, "", "/");
         replace.mockReset();
         dispatch.mockReset();
         get.mockReset();
         post.mockReset();
         writeStoredSession.mockReset();
         setSearchParams("");
+    });
+
+    it("localizes entry controls and session notices and carries only a guest preference", () => {
+        setSearchParams("reason=session_expired");
+        render(<LoginPage />);
+        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "es-MX" } });
+        expect(screen.getByRole("heading", { name: "Bienvenido de nuevo" })).toBeInTheDocument();
+        expect(screen.getByRole("status")).toHaveTextContent("Tu sesión expiró");
+        expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Mostrar contraseña" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Crear cuenta" })).toHaveAttribute("href", "/signup?lang=es-MX");
+        expect(window.localStorage.getItem("patient-portal.guest.locale")).toBe("es-MX");
+        expect(document.documentElement).toHaveAttribute("lang", "es-MX");
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it("hides internal server errors behind a localized recovery message", async () => {
+        window.history.replaceState({}, "", "/login?lang=es-MX");
+        post.mockRejectedValue(new Error("Internal auth failure for UUID private-user-id"));
+        render(<LoginPage />);
+        fireEvent.change(screen.getByLabelText("Correo electrónico"), { target: { value: "patient@example.com" } });
+        fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "SyntheticPass123!" } });
+        fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo completar la solicitud");
+        expect(screen.queryByText(/private-user-id/)).not.toBeInTheDocument();
+    });
+
+    it.each([false, true])("localizes an authentication failure when language changes, deferred=%s", async (deferred) => {
+        const failure = Object.assign(new Error("Synthetic authentication failure"), { status: 401 });
+        let reject!: (error: unknown) => void;
+        if (deferred) post.mockReturnValue(new Promise<never>((_, fail) => { reject = fail; }));
+        else post.mockRejectedValue(failure);
+        render(<LoginPage />);
+        fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "patient@example.com" } });
+        fireEvent.change(screen.getByLabelText("Password"), { target: { value: "SyntheticPass123!" } });
+        fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+        if (!deferred) expect(await screen.findByRole("alert")).toHaveTextContent("The email or password is incorrect");
+        fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "es-MX" } });
+        if (deferred) await act(async () => reject(failure));
+        expect(await screen.findByRole("alert")).toHaveTextContent("El correo o la contraseña no son correctos");
+        fireEvent.change(screen.getByRole("combobox", { name: "Idioma" }), { target: { value: "en-US" } });
+        expect(screen.getByRole("alert")).toHaveTextContent("The email or password is incorrect");
+        expect(post).toHaveBeenCalledTimes(1);
     });
 
     it("stores full session and redirects on successful patient login", async () => {

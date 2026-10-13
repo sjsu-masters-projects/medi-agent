@@ -28,6 +28,7 @@ authoritative text and is not re-emitted as a chunk.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -44,9 +45,18 @@ from google.genai import types
 
 from app.adk.agents.care_coordinator import (
     COORDINATOR_AGENT_NAME,
+    RESPONDER_AGENT_NAME,
     TOOL_ALLOWLIST,
     build_care_coordinator,
     route_for_intent,
+)
+from app.adk.grounding import (
+    cited_sources,
+    plain_reply,
+    source_line,
+    sources_from_event,
+    unsupported_doses,
+    without_source_lines,
 )
 from app.adk.models.resilient import ResilientLlm
 from app.adk.plugins import LOCALE_STATE_KEY
@@ -54,6 +64,8 @@ from app.adk.runner import build_runner
 from app.adk.tools import (
     DOCUMENT_CONTEXT_STATE_KEY,
     PATIENT_ID_STATE_KEY,
+    RECENT_CONVERSATION_STATE_KEY,
+    REPLY_LANGUAGE_STATE_KEY,
     TRIAGE_DECISION_STATE_KEY,
 )
 from app.config import settings
@@ -131,7 +143,8 @@ class CareCoordinatorRuntime:
 
     async def _ensure_session(
         self, *, user_id: str, session_id: str, state: dict[str, Any]
-    ) -> None:
+    ) -> list[Any]:
+        """Create the session if needed; return its prior events for the recap."""
         service = self.runner.session_service
         existing = await service.get_session(
             app_name=APP_NAME, user_id=user_id, session_id=session_id
@@ -140,6 +153,8 @@ class CareCoordinatorRuntime:
             await service.create_session(
                 app_name=APP_NAME, user_id=user_id, session_id=session_id, state=state
             )
+            return []
+        return list(getattr(existing, "events", None) or [])
 
     async def process_stream(
         self,
@@ -150,6 +165,7 @@ class CareCoordinatorRuntime:
         message: str,
         language: str,
         document_context: dict[str, Any] | None = None,
+        earlier_messages: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Yield `classification`, then `chunk`s, then `complete` for one turn."""
         text = message.strip()
@@ -168,26 +184,41 @@ class CareCoordinatorRuntime:
         if floor is not None:
             yield _classification(floor.intent, floor.urgency, floor.reason, True)
 
-        await self._ensure_session(
+        # Keyed by patient as well as conversation: a clinician's user id with the same
+        # conversation id for two patients must never reuse the first patient's session,
+        # whose state names that patient for every tool.
+        runtime_session_id = f"{patient_id}:{session_id}"
+        prior_events = await self._ensure_session(
             user_id=user_id,
-            session_id=session_id,
+            session_id=runtime_session_id,
             state={PATIENT_ID_STATE_KEY: patient_id, LOCALE_STATE_KEY: language},
         )
+        # The stored conversation is the source of the recap when the caller has it; the
+        # in-process session is lost on every restart and deploy.
+        recap = (
+            recap_from_messages(earlier_messages)
+            if earlier_messages is not None
+            else recent_conversation(prior_events)
+        )
+        turn_state: dict[str, Any] = {
+            RECENT_CONVERSATION_STATE_KEY: recap,
+            REPLY_LANGUAGE_STATE_KEY: language,
+        }
+        if document_context is not None:
+            turn_state[DOCUMENT_CONTEXT_STATE_KEY] = document_context
 
         classified = floor is not None
         answer = ""
         streamed = False
+        sources: list[dict[str, Any]] = []
+        tool_results: list[str] = []
 
         try:
             stream = self.runner.run_async(
                 user_id=user_id,
-                session_id=session_id,
+                session_id=runtime_session_id,
                 new_message=types.Content(role="user", parts=[types.Part(text=text)]),
-                state_delta=(
-                    {DOCUMENT_CONTEXT_STATE_KEY: document_context}
-                    if document_context is not None
-                    else {}
-                ),
+                state_delta=turn_state,
                 run_config=RunConfig(streaming_mode=StreamingMode.SSE),
             )
             async with asyncio.timeout(settings.chat_turn_timeout_seconds):
@@ -197,6 +228,11 @@ class CareCoordinatorRuntime:
                         intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
                         classified = True
                         yield _classification(intent, urgency, reason, escalate)
+
+                    used = sources_from_event(event)
+                    if used is not None:
+                        sources = used
+                    tool_results.extend(_tool_results_of(event))
 
                     if event.author == COORDINATOR_AGENT_NAME:
                         # Internal working notes. Never shown to the patient.
@@ -251,7 +287,89 @@ class CareCoordinatorRuntime:
             yield {"type": "complete", "response_text": unavailable, "fallback_used": True}
             return
 
+        # The citation is written from what the tools returned, never by the model: a
+        # source line it wrote is removed whether or not a tool returned anything. The
+        # patient's documents are cited the same way as reference pages, in one line.
+        answer = plain_reply(without_source_lines(answer))
+        if sources:
+            line = source_line(cited_sources(sources, answer), language)
+            if line:
+                if streamed:
+                    yield {"type": "chunk", "content": f"\n\n{line}"}
+                answer = f"{answer}\n\n{line}"
+        unsupported = unsupported_doses(answer, *tool_results)
+        if unsupported:
+            # Measured before it is allowed to block: the count, never the text.
+            logger.warning(
+                "Reply mentions a dose not found in the record or sources",
+                extra={"unsupported_dose_count": len(unsupported)},
+            )
+
         yield {"type": "complete", "response_text": answer, "fallback_used": False}
+
+
+_REFERENCE_TOOLS = frozenset({"get_medication_information", "get_condition_information"})
+
+
+def _tool_results_of(event: Any) -> list[str]:
+    """The patient's own record from this event's tool results, for the dose check.
+
+    Reference tools are left out on purpose: a dose found only in general reference text
+    is exactly what the check exists to catch.
+    """
+    responses = event.get_function_responses() if hasattr(event, "get_function_responses") else []
+    return [
+        json.dumps(getattr(item, "response", None), default=str)
+        for item in responses or []
+        if getattr(item, "name", None) not in _REFERENCE_TOOLS
+    ]
+
+
+_RECAP_TURNS = 3
+_RECAP_CHARS = 280
+
+
+def recent_conversation(events: list[Any]) -> str:
+    """The last few patient messages and Nora replies as plain text, for the coordinator.
+
+    Tool calls, tool results and internal notes are left out on purpose: replaying them
+    is what made the coordinator skip the current turn's decision.
+    """
+    lines: list[str] = []
+    for event in events:
+        if getattr(event, "partial", False):
+            continue
+        author = getattr(event, "author", "")
+        speaker = (
+            "Patient" if author == "user" else "Nora" if author == RESPONDER_AGENT_NAME else None
+        )
+        if speaker:
+            lines.extend(_recap_line(speaker, _text_of(event)))
+    return _recap(lines)
+
+
+def recap_from_messages(messages: list[dict[str, Any]]) -> str:
+    """The same recap, built from stored chat messages rather than in-process events."""
+    lines: list[str] = []
+    for message in messages:
+        role = str(message.get("role") or "")
+        speaker = "Patient" if role == "user" else "Nora" if role == "assistant" else None
+        if speaker:
+            lines.extend(_recap_line(speaker, str(message.get("content") or "")))
+    return _recap(lines)
+
+
+def _recap_line(speaker: str, text: str) -> list[str]:
+    flat = " ".join(without_source_lines(text).split())
+    if not flat:
+        return []
+    clipped = flat if len(flat) <= _RECAP_CHARS else flat[: _RECAP_CHARS - 1] + "…"
+    return [f"{speaker}: {clipped}"]
+
+
+def _recap(lines: list[str]) -> str:
+    recent = lines[-2 * _RECAP_TURNS :]
+    return "\n".join(recent) if recent else "(none: this is the first message)"
 
 
 def _apply_floor_rules(decision: dict[str, Any], message: str) -> tuple[str, str, str, bool]:

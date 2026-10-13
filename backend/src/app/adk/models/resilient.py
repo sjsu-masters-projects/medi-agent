@@ -125,9 +125,13 @@ class ResilientLlm(BaseLlm):
             self._record(503, 0, "circuit_open", time.monotonic())
             raise ModelCircuitOpenError(self.model)
 
+        # `deadline` is on the monotonic clock for this module's own expiry checks. The
+        # asyncio timeout must be relative: `timeout_at` reads the event loop's clock, which
+        # under uvloop (uvicorn's loop) is not time.monotonic(), so an absolute monotonic
+        # deadline expired instantly and cancelled every chat model call in the server.
         deadline = time.monotonic() + self.timeout_seconds
         try:
-            async with asyncio.timeout_at(deadline):
+            async with asyncio.timeout(self.timeout_seconds):
                 buffered = await self._attempts(llm_request, stream, deadline)
         except TimeoutError as error:
             self._open_circuit()

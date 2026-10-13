@@ -14,6 +14,8 @@ export const DEFAULT_LOCALE: Locale = Locale.EN_US;
 export const SUPPORTED_LOCALES = [Locale.EN_US, Locale.ES_MX] as const satisfies readonly Locale[];
 
 const LOCALE_VALUES = new Set<Locale>(Object.values(Locale));
+// Keys are matched after normalizeLocale lowercases input and maps "_" to "-",
+// so the lowercase canonical tags are needed for inputs such as "en_US" or "ES-mx".
 const LOCALE_ALIASES: Record<string, Locale> = {
     en: Locale.EN_US,
     "en-us": Locale.EN_US,
@@ -89,7 +91,7 @@ export function resolveLocaleResource<T>(
     resources: LocaleResourceMap<T>,
 ): T {
     const locale = normalizeLocale(value);
-    const baseLanguage = locale.split("-")[0];
+    const [baseLanguage] = locale.split("-");
     const candidates = [locale, baseLanguage, DEFAULT_LOCALE];
 
     for (const candidate of candidates) {
@@ -107,10 +109,15 @@ export function isSpanishLocale(value: unknown): boolean {
 }
 
 // Backward-compatible aliases while the codebase transitions from language to locale naming.
+/** @deprecated Use {@link Locale} (`Locale.EN_US` / `Locale.ES_MX`). */
 export const Language = { EN: Locale.EN_US, ES: Locale.ES_MX } as const;
+/** @deprecated Use {@link Locale}. */
 export type Language = Locale;
+/** @deprecated Use {@link isLocale}. */
 export const isLanguage = isLocale;
+/** @deprecated Use {@link normalizeLocale}. */
 export const normalizeLanguage = normalizeLocale;
+/** @deprecated Use {@link isSpanishLocale}. */
 export const isSpanishLanguage = isSpanishLocale;
 
 export const Gender = { MALE: "male", FEMALE: "female", OTHER: "other", PREFER_NOT_TO_SAY: "prefer_not_to_say" } as const;
@@ -127,6 +134,7 @@ export const DocumentParseStatus = {
     PENDING: "pending",
     PROCESSING: "processing",
     COMPLETED: "completed",
+    DUPLICATE: "duplicate",
     FAILED: "failed",
     NEEDS_OCR: "needs_ocr",
     NEEDS_EVIDENCE_REVIEW: "needs_evidence_review",
@@ -360,6 +368,8 @@ export interface ReminderTarget {
     providerName?: string;
     reminderSchedule?: ReminderSchedule | null;
     guidance: ReminderGuidance;
+    /** See FeedTask.contentLocale. */
+    contentLocale?: Locale;
 }
 
 export interface Medication {
@@ -407,6 +417,8 @@ export interface Document {
     fileSizeBytes: number;
     parsed: boolean;
     aiSummary?: string;
+    /** Short list title per locale, drafted from the summary; fileName stays the source. */
+    displayTitle?: Partial<Record<Locale, string>>;
     parseStatus: DocumentParseStatus;
     parseFailureCode?: string;
     parseAttempts: number;
@@ -430,6 +442,8 @@ export interface DocumentReviewer {
 export interface ClinicianPatientDocument {
     id: string;
     fileName: string;
+    /** Short list title per locale; fileName stays the source identity. */
+    displayTitle?: Partial<Record<Locale, string>>;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
     parseFailureCode?: string;
@@ -456,6 +470,8 @@ export interface DocumentReviewQueueItem {
     patientFirstName: string;
     patientLastName: string;
     fileName: string;
+    /** Short list title per locale; fileName stays the source identity. */
+    displayTitle?: Partial<Record<Locale, string>>;
     documentType: DocumentType;
     parseStatus: DocumentParseStatus | string;
     parseFailureCode?: string;
@@ -522,6 +538,9 @@ export interface FeedTask {
     provider?: FeedProvider;
     carePlanItemId?: string;
     carePlan?: FeedCarePlanProvenance;
+    /** Language of the name and description, when known. Approved plans match the
+     * patient's language; an older single-language record may not. */
+    contentLocale?: Locale;
 }
 
 export interface FeedSummary {

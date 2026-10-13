@@ -19,14 +19,21 @@ from app.core.exceptions import AuthorizationError, NotFoundError, ValidationErr
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus, UploaderRole
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.document_processing_status import attach_duplicate_status
 from app.services.document_summary_service import (
     is_missing_summary_column_error,
     is_missing_summary_schedule_column_error,
 )
 
+
 # Migration 038 is applied by hand after this image deploys. Naming the summary columns
 # in a select would make the clinician's document list fail outright during that window,
 # so each read degrades to the pre-038 column set and the API schema supplies defaults.
+def _is_missing_title_column(error: APIError) -> bool:
+    message = str(getattr(error, "message", error))
+    return str(getattr(error, "code", "")) in {"PGRST204", "42703"} and "display_title" in message
+
+
 _SUMMARY_LIFECYCLE_COLUMNS = "summary_status, summary_failure_code, summary_attempts, "
 _SUMMARY_COLUMNS = f"{_SUMMARY_LIFECYCLE_COLUMNS}summary_next_attempt_at, "
 
@@ -58,6 +65,7 @@ class ClinicianDocumentWorkflowService:
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
         )
+        await attach_duplicate_status(self.db, docs, self._execute)
         return await self._attach_document_reviewers(docs)
 
     async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
@@ -93,6 +101,7 @@ class ClinicianDocumentWorkflowService:
             .order("created_at", desc=True)
         )
 
+        await attach_duplicate_status(self.db, docs, self._execute)
         queue_items: list[dict[str, Any]] = []
         for row in docs:
             patient = patients_by_id.get(str(row.get("patient_id")))
@@ -178,7 +187,19 @@ class ClinicianDocumentWorkflowService:
         return payload
 
     async def _select_documents(self, build: Callable[[str], Any]) -> list[dict[str, Any]]:
-        """Read documents with the summary lifecycle when the database has it."""
+        """Read documents with titles and the summary lifecycle when the database has them."""
+        try:
+            result = await self._execute(build(f"display_title, {_SUMMARY_COLUMNS}"))
+            return cast(list[dict[str, Any]], result.data or [])
+        except APIError as exc:
+            # The backend can reach Cloud Run before migrations 038, 039 or 050; read
+            # without titles and let the summary-lifecycle fallbacks below decide.
+            if not (
+                _is_missing_title_column(exc)
+                or is_missing_summary_column_error(exc)
+                or is_missing_summary_schedule_column_error(exc)
+            ):
+                raise
         try:
             result = await self._execute(build(_SUMMARY_COLUMNS))
         except APIError as exc:
@@ -260,9 +281,12 @@ class ClinicianDocumentWorkflowService:
             .update(update_payload)
             .eq("id", str(document_id))
             .eq("patient_id", str(patient_id))
+            .eq("review_status", DocumentReviewStatus.PENDING.value)
         )
         updated_rows = cast(list[dict[str, Any]], result.data or [])
-        updated = updated_rows[0] if updated_rows else {**document, **update_payload}
+        if not updated_rows:
+            raise ValidationError("Document review changed; reload before trying again")
+        updated = updated_rows[0]
 
         return {
             "status": "reviewed",

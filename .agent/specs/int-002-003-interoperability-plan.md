@@ -1,5 +1,9 @@
 # INT-002 and INT-003 interoperability plan
 
+> **Status:** INT-003 Done (live public-sandbox EHR launch recorded; standalone launch
+> diagnosis is INT-003-V). INT-002 in progress: identifier quality and export/round-trip
+> fixtures remain. Current status is in `.agent/TASKS.md`.
+
 ## Goal
 
 Demonstrate a clinician-facing SMART on FHIR R4 launch against a public sandbox,
@@ -7,7 +11,7 @@ import a bounded synthetic patient record, preserve the original FHIR resources 
 provenance, and show the imported context in the clinician portal. This is a sandbox
 demonstration only; it does not claim production EHR connectivity or real-PHI support.
 
-## Verified starting point
+## Starting point (September 2026, historical)
 
 - The backend has an extraction-oriented FHIR builder for Condition,
   AllergyIntolerance, and MedicationRequest. It did not import/export a FHIR record.
@@ -18,8 +22,6 @@ demonstration only; it does not claim production EHR connectivity or real-PHI su
   exchange, FHIR bundle persistence, or portal launch-context screen exists.
 - Current portal authentication is local. A SMART token must not be treated as a local
   clinician credential or bypass care-team authorization.
-- The prior Supabase project no longer exists. All database work remains migration-led
-  and can be tested with fakes/fixtures until a new development project is available.
 
 ## Security and product decisions
 
@@ -49,7 +51,7 @@ demonstration only; it does not claim production EHR connectivity or real-PHI su
    extraction confidence. Scanned/image sources without usable embedded text remain
    stored provenance in `needs_ocr`; no OCR provider is implied or selected by this
    contract, and neither document state can create local truth.
-7. Mapper improvements may re-project only untouched, pending candidates from their
+8. Mapper improvements may re-project only untouched, pending candidates from their
    preserved source envelopes. The operation requires a reviewed dry-run report, exact
    source-version match, active care-team clinician, service-role-only transaction, and
    an append-only before/after mapping revision. It never alters canonical truth or the
@@ -60,10 +62,13 @@ demonstration only; it does not claim production EHR connectivity or real-PHI su
 
 ### Deliverables
 
-- A single resource registry that accepts only the supported resource types:
-  Patient, Practitioner, Organization, CareTeam, Condition, AllergyIntolerance,
-  MedicationRequest, MedicationStatement, Observation, DocumentReference,
-  Appointment, Communication, CarePlan, Provenance, and AuditEvent.
+- A single resource registry that accepts only the supported import types (inside a
+  Bundle): Patient, Encounter, Condition, AllergyIntolerance, MedicationRequest,
+  MedicationStatement, Observation, DiagnosticReport, Procedure, CarePlan, and
+  DocumentReference. Provenance and AuditEvent are generated read-only from local
+  lineage and audit records. Practitioner, Organization, and CareTeam are intentionally
+  not mapped because the local clinician/care-team model is authoritative; Appointment
+  and Communication are outside the committed import set.
 - Domain-to-FHIR export mappers and FHIR-to-normalized import mappers. Each mapper must
   preserve identifiers, distinguish unknown from absent values, and reject unsupported
   shapes without partial persistence.
@@ -108,9 +113,17 @@ are present. Do not reuse Supabase JWT configuration for SMART validation.
    issuer, retrieves SMART configuration, creates a short-lived launch session, generates
    PKCE values and state, encrypts the opaque handle at rest, and redirects to the
    authorization endpoint. In standalone mode, the same protected endpoint omits the
-   opaque handle and requests patient/encounter launch context instead.
+   opaque handle and requests patient/encounter launch context instead. The portal
+   omits the issuer for standalone launch and the backend applies
+   `SMART_STANDALONE_ISSUER` (INT-003-V): for SMART Health IT this is
+   `https://launch.smarthealthit.org/v/r4/sim/WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0/fhir`,
+   a launcher options array for patient standalone. The earlier JSON-object segment
+   was read as a legacy code and ran the provider EHR flow.
 2. `GET /api/v1/smart/callback` rejects provider errors, missing or mismatched state,
    expired/replayed sessions, an unexpected issuer/audience, and insufficient scopes.
+   A provider `error`/`error_description` is sanitized (plain characters, opaque values
+   redacted, 200 characters), logged as a warning, and, for a live launch session,
+   returned to the portal as `smart_error_detail`; see `docs/smart-fhir-review-mapping.md`.
    It exchanges the code server-side and captures patient and encounter context.
 3. The callback performs a bounded, read-only patient import through the INT-002
    registry. It stores a launch summary and produces a short-lived, single-use portal
@@ -121,10 +134,9 @@ are present. Do not reuse Supabase JWT configuration for SMART validation.
 
 ### Supported sandbox import
 
-Import Patient first, then the supported patient-scoped resources. Resolve referenced
-Practitioner, Organization, and CareTeam records only when present in the returned
-bundle or bounded follow-up reads. Retain unsupported resources as import warnings,
-not silent drops or hard failures of the whole launch.
+Import Patient first, then the supported patient-scoped resources. Referenced
+Practitioner, Organization, and CareTeam records are not imported. Retain unsupported
+resources as import warnings, not silent drops or hard failures of the whole launch.
 
 ## Phase C — clinician portal and demonstration
 
@@ -141,10 +153,9 @@ not silent drops or hard failures of the whole launch.
 
 ## External prerequisites
 
-The code and fixture work can proceed without Supabase. End-to-end launch requires:
+End-to-end launch requires (all in place for the recorded INT-003 launch):
 
-1. A replacement Supabase development project with migrations through the SMART/import
-   migrations applied.
+1. A Supabase development project with the SMART/import migrations applied.
 2. A deployed HTTPS backend callback URL and matching clinician-portal URL; localhost
    is insufficient for the public sandbox unless tunneled.
 3. A registered public or confidential sandbox client and the exact redirect URI.
@@ -159,8 +170,8 @@ The code and fixture work can proceed without Supabase. End-to-end launch requir
    authorization server.
 3. Add callback token exchange, context validation, and bounded bundle import.
 4. Add portal handoff/status/provenance UI and browser tests.
-5. Recreate Supabase, deploy the callback, perform the public sandbox launch, then run
-   the reproducible conformance script.
+5. Deploy the callback, perform the public sandbox launch, then run the reproducible
+   conformance script.
 
 ## Exit evidence
 

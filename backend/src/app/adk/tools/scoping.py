@@ -33,6 +33,13 @@ whole session, not of one turn, and every tool on every turn must resolve the sa
 """
 
 DOCUMENT_CONTEXT_STATE_KEY = "temp:document_context"
+# A short plain-text recap of earlier turns for the coordinator, rebuilt every turn. The
+# coordinator does not replay raw history: earlier tool calls in it led the model to skip
+# the current turn's triage decision.
+RECENT_CONVERSATION_STATE_KEY = "temp:recent_conversation"
+# The language the patient's current message is written in, as the server detected it.
+# Nora answers in that language whatever the app is set to; tools read it from here.
+REPLY_LANGUAGE_STATE_KEY = "temp:reply_language"
 """One server-loaded document context for the current chat invocation.
 
 The ``temp:`` prefix makes the record available to the coordinator only while it

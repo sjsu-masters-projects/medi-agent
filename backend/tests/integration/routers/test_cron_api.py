@@ -55,9 +55,7 @@ class TestReminderDispatchCron:
     def test_dispatches_with_auth_header(
         self, client, cron_auth_token, mock_cron_service, override_cron_service
     ):
-        mock_cron_service.dispatch_reminders.return_value = _sample_response(
-            "reminders_dispatch"
-        )
+        mock_cron_service.dispatch_reminders.return_value = _sample_response("reminders_dispatch")
 
         response = client.post(
             "/api/v1/cron/reminders/dispatch",
@@ -74,25 +72,44 @@ class TestReminderDispatchCron:
         )
 
 
-class TestNightlyAdrCron:
-    def test_runs_with_auth_header(
+class TestEmailDispatchCron:
+    def test_rejects_without_auth_header(self, client, cron_auth_token):
+        response = client.post("/api/v1/cron/emails/dispatch")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_dry_run_is_forwarded(
         self, client, cron_auth_token, mock_cron_service, override_cron_service
     ):
-        mock_cron_service.run_nightly_adr_scan.return_value = _sample_response(
-            "nightly_adr_scan"
-        )
-
+        mock_cron_service.dispatch_emails.return_value = {
+            **_sample_response("email_dispatch"),
+            "dry_run": True,
+        }
         response = client.post(
-            "/api/v1/cron/adr/nightly-scan",
+            "/api/v1/cron/emails/dispatch",
             headers={"X-Cron-Auth": cron_auth_token},
-            json={"dry_run": True, "lookback_hours": 48, "limit": 250},
+            json={"dry_run": True},
         )
-
         assert response.status_code == status.HTTP_200_OK
-        payload = response.json()
-        assert payload["job_name"] == "nightly_adr_scan"
-        mock_cron_service.run_nightly_adr_scan.assert_awaited_once_with(
-            dry_run=True,
-            lookback_hours=48,
-            limit=250,
+        assert response.json()["job_name"] == "email_dispatch"
+        mock_cron_service.dispatch_emails.assert_awaited_once_with(dry_run=True)
+
+    def test_reminders_dispatch_email_separately(
+        self, client, cron_auth_token, mock_cron_service, override_cron_service
+    ):
+        mock_cron_service.dispatch_reminders.return_value = _sample_response("reminders_dispatch")
+        response = client.post(
+            "/api/v1/cron/reminders/dispatch", headers={"X-Cron-Auth": cron_auth_token}
         )
+        assert response.status_code == status.HTTP_200_OK
+        mock_cron_service.dispatch_emails_isolated.assert_awaited_once_with()
+
+    def test_dry_run_reminders_send_no_email(
+        self, client, cron_auth_token, mock_cron_service, override_cron_service
+    ):
+        mock_cron_service.dispatch_reminders.return_value = _sample_response("reminders_dispatch")
+        client.post(
+            "/api/v1/cron/reminders/dispatch",
+            headers={"X-Cron-Auth": cron_auth_token},
+            json={"dry_run": True},
+        )
+        mock_cron_service.dispatch_emails_isolated.assert_not_awaited()

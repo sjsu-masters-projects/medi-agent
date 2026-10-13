@@ -31,6 +31,7 @@ from app.core.exceptions import (
     ExternalServiceError,
     MediAgentError,
     NotFoundError,
+    ServiceUnavailableError,
     ValidationError,
 )
 from app.services.authorization_audit_service import record_denial
@@ -121,6 +122,11 @@ async def _external_service_handler(request: Request, exc: ExternalServiceError)
     )
     logger.error("External service failure: %s", exc.message)
     return _error_response(502, exc.code, exc.message)
+
+
+async def _service_unavailable_handler(_: Request, exc: ServiceUnavailableError) -> JSONResponse:
+    logger.warning("Service unavailable: [%s]", exc.code)
+    return _error_response(503, exc.code, exc.message)
 
 
 async def _pydantic_handler(_: Request, exc: PydanticValidationError) -> JSONResponse:
@@ -228,6 +234,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AuthorizationError, _forbidden_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ValidationError, _validation_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ExternalServiceError, _external_service_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(ServiceUnavailableError, _service_unavailable_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _request_validation_handler)  # type: ignore[arg-type]
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(PydanticValidationError, _pydantic_handler)  # type: ignore[arg-type]

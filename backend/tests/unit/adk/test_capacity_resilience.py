@@ -196,9 +196,9 @@ async def test_background_jobs_leave_a_slot_for_interactive_calls() -> None:
         assert starts == ["first"]
     second.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await second
+        _ = await second
     release.set()
-    await first
+    assert await first is None
     async with model_slot("reserved", "global", background=True):
         pass
 

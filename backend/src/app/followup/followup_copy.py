@@ -20,6 +20,10 @@ FOLLOWUP_COPY = {
             "(estimated severity {severity}/10)."
         ),
         "severe_suffix": " Please contact your care team today for urgent guidance.",
+        "emergency_suffix": (
+            "If this is severe, sudden or getting worse, call 911 or go to the nearest "
+            "emergency department now."
+        ),
         "report_unavailable": (
             "I could not record the details of this symptom just now, and I would rather "
             "tell you than note something I am unsure of. Please try again in a few "
@@ -33,6 +37,10 @@ FOLLOWUP_COPY = {
             "(estimated severity {severity}/10)."
         ),
         "severe_suffix": " Please contact your care team today for urgent guidance.",
+        "emergency_suffix": (
+            "If this is severe, sudden or getting worse, call 911 or go to the nearest "
+            "emergency department now."
+        ),
         "report_unavailable": (
             "I could not record the details of this symptom just now, and I would rather "
             "tell you than note something I am unsure of. Please try again in a few "
@@ -46,6 +54,10 @@ FOLLOWUP_COPY = {
             "(severidad aproximada {severity}/10)."
         ),
         "severe_suffix": " Es importante contactar a tu equipo clínico hoy mismo.",
+        "emergency_suffix": (
+            "Si es fuerte, repentino o está empeorando, llama al 911 o acude al servicio "
+            "de urgencias más cercano ahora."
+        ),
         "report_unavailable": (
             "No pude registrar los detalles de este síntoma en este momento, y prefiero "
             "decírtelo en lugar de anotar algo de lo que no estoy segura. Intenta de nuevo "

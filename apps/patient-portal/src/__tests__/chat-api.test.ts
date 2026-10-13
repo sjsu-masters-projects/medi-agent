@@ -88,4 +88,29 @@ describe("chat API helpers", () => {
 
         vi.unstubAllEnvs();
     });
+
+    it("asks the server to drop a dismissed document, unless a document is being attached", () => {
+        vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.com");
+
+        expect(buildChatWebSocketUrl("patient-1", { documentDismissed: true, sessionId: "chat-1" })).toBe(
+            "wss://api.example.com/ws/chat/patient-1?context=none&session_id=chat-1",
+        );
+        expect(
+            buildChatWebSocketUrl("patient-1", { documentDismissed: true, documentId: "doc-2" }),
+        ).toBe("wss://api.example.com/ws/chat/patient-1?context=doc%3Adoc-2");
+
+        vi.unstubAllEnvs();
+    });
+});
+
+describe("conversation ids", () => {
+    it("names today's conversation by local date and makes new ones unguessable", async () => {
+        const { newConversationId, todayConversationId } = await import("@/services/chat-api");
+        expect(todayConversationId(new Date(2026, 9, 1, 23, 30))).toBe("day-2026-10-01");
+        const first = newConversationId();
+        // The server accepts only [A-Za-z0-9_-]{1,64}; a UUID keeps it unpredictable.
+        expect(first).toMatch(/^chat-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+        expect(first.length).toBeLessThanOrEqual(64);
+        expect(newConversationId()).not.toBe(first);
+    });
 });

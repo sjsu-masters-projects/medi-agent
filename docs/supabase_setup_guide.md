@@ -12,6 +12,66 @@ Use this guide to recreate the project after an inactive instance is removed. It
    dashboard remains functional through its authenticated backend API while it is disabled.
 4. Enable email authentication and MFA for clinician accounts. After migrations complete, configure **Authentication → Auth Hooks → Customize Access Token (JWT) Claims hook** to use `public.custom_access_token_hook` and confirm it shows as enabled. This Auth control-plane setting is not recorded by a SQL migration.
 
+## Account email delivery (EMAIL-001)
+
+See [the email contract](../.agent/specs/email-001-email-flows.md) before changing
+Auth settings. Initial dashboard inspection on October 11 found Confirm email
+**off** and custom SMTP **off** in the synthetic staging project. After operator
+setup, a dashboard reload confirmed SMTP **on**, Resend host/port and a stored
+hidden password. This verifies saved configuration, not delivery. With explicit
+requester approval, Site URL was set to `https://app.mediagent.live` and the three
+exact deployed reset destinations listed below were added. Reload confirmed they
+persisted. No wildcard redirects or signup-confirmation changes were made.
+Existing signup expects an
+immediate session; do not enable confirmation until the pending-verification flow
+is implemented and reviewed. SMTP delivery can be configured independently.
+
+For the verified `mail.mediagent.live` domain, the proposed Auth identity is
+`MediAgent Account Access <accounts@mail.mediagent.live>`. In Authentication →
+Emails → SMTP Settings, use Resend's documented host `smtp.resend.com`, port `465`,
+username `resend`; the operator enters a Resend API key as the SMTP password.
+Never paste that key into a chat, source file or command. An exposed key must be
+revoked and replaced, including any deployment that used it. Keep click tracking
+off for recovery links. SMTP configuration does not require a schema migration.
+
+The backend recovery API accepts `portal: patient|clinician` and `locale:
+en-US|es-MX`, building the destination from `PATIENT_PORTAL_URL` or
+`CLINICIAN_PORTAL_URL`. It never accepts an arbitrary return URL. Authorize these
+exact deployed redirects in Authentication → URL Configuration:
+
+- `https://app.mediagent.live/reset-password?lang=en-US`
+- `https://app.mediagent.live/reset-password?lang=es-MX`
+- `https://clinician.mediagent.live/reset-password?lang=en-US`
+
+Add exact localhost/preview redirects only for an explicitly selected test target;
+do not use broad wildcard redirects. Both portals already document the public
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in their examples.
+Recovery uses these public values, never a service-role key. The recovery session
+stays in memory, its URL fragment is removed, and successful reset returns to
+normal login (including clinician clinic/MFA checks). The operator must enter the
+new password during live verification. Neutral API success does not prove delivery.
+
+References: [Resend SMTP](https://resend.com/docs/send-with-supabase-smtp),
+[Supabase password recovery](https://supabase.com/docs/guides/auth/passwords).
+
+Application email uses separate verified opt-in contacts and server-only outbox
+records from `057_email_delivery.sql` (applied to staging October 11) and its fixes in
+`058_email_delivery_fixes.sql`. Apply 058 through the ledger, with project-specific
+authorization, before the backend that uses it is merged or deployed. No email
+function reads the `auth` schema: a hosted migration cannot grant `service_role`
+access there (057's attempt only produced "no privileges were granted"), so the
+backend reads account addresses through the Auth Admin API with the service-role key. The
+notification and onboarding sender identities are documented in `.env.example`;
+they are not Supabase SMTP configuration. With no configured notification sender,
+verification is unavailable rather than sent from a default testing identity.
+
+The reviewed rollout and continuation checklist is in
+[EMAIL-001](../.agent/specs/email-001-email-flows.md#current-implementation-and-continuation-handoff).
+The installable Reset password template candidate is
+`docs/email-templates/supabase-password-recovery.html`. Do not install it or enable
+confirmation as a side effect of applying SQL. The existing reminder heartbeat
+also dispatches application email; a paused trigger means no periodic delivery.
+
 ## Apply migrations
 
 Apply every SQL file through the repository migration ledger against an empty development database. The ledger records the complete filename and SHA-256 checksum, so a rerun skips unchanged files and stops if an applied migration was edited. Do not run a reset, seed, or migration command against a production database.
@@ -26,79 +86,27 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-This integrated checkout contains 56 SQL migration files through prefix `047`.
-The newer main files include care-plan publication review guards (`042`), incomplete
-drafts (`043`), overlap publication guards (`044`), activity continuity (`045`), and
-an independent auditable ADR assessment migration (`042`) and atomic clinician ADR
-review actions (`046`). The patient-confirmed ADR information and deterministic
-reassessment loop is migration `047`. Scheduling adds appointment
-lifecycle/group/audit migrations `038`–`041`, expired status `042`, and booking/expiry
-guards `043`. These coexist with the document/care-plan migrations sharing those
-prefixes, just as the two `011` files coexist. The ledger identifies migrations by
-full filename and checksum; preserve applied names and bytes. A local file count
-does not establish remote application or authorize applying unrelated migrations.
+The checkout contains 69 SQL migration files, prefixes `001`–`058`. Some prefixes are
+shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
+branches; they coexist because the ledger identifies migrations by full filename and
+checksum, not by prefix. Preserve applied names and bytes. The ledger in
+`public.schema_migrations` is authoritative: a local file count does not establish remote
+application or authorize applying unrelated migrations.
 
-### Appointment Slice 5 rollout
+Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
+request, deterministic reassessment, notification closure, and patient-actor audit transaction.
+It does not create a MedWatch draft or external submission.
 
-Before authorizing remote application, review this read-only preflight in the
-synthetic development database:
+### Appointment booking guards (042/043)
 
-```bash
-psql "$MEDIAGENT_DB_URL" -v ON_ERROR_STOP=1 -f backend/scripts/appointment-booking-preflight.sql
-```
-
-It must return zero overlap pairs. Resolve existing bookings through a separately
-reviewed workflow; migration 043 will stop rather than automatically cancel/delete
-them. The exclusion constraint scans and locks the appointments table during setup.
-The migration requires `btree_gist`; it creates the extension in `extensions` if absent.
-
-Apply `042_appointment_expired_status.sql` and commit before applying
-`043_appointment_booking_guards.sql`. Use the existing ledger command from the
-scheduling integration checkout so each full filename/checksum is recorded and
-each migration is transactional. Apply schema before starting the updated backend.
-Existing proposed rows receive a deadline from their original creation time, so
-old offers may appear expired on their first authorized read. Booked visits do not
-expire. The client refreshes at pending deadlines; no new background Job is required.
-
-Verify the valid `appointments_patient_no_overlap` exclusion constraint,
-`proposal_expires_at`, and service-role-only `expire_appointment_proposals` and
-`respond_to_appointment_offer` functions. Run the synthetic conflict and expiry
-journey in [the scheduling design](../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry).
-On 2026-10-03, the requester authorized the migration-only rollout against the
-selected synthetic Supabase project. Preflight returned zero overlap pairs; both
-042/043 scheduling migrations committed through the ledger script. All 52 remote
-ledger checksums matched their sources: 48 files in this checkout and four newer
-independent care-plan migrations checked against `origin/main` at `019598b`.
-The read-only Slice 5 verifier passed. Backend/portal activation and authenticated
-live acceptance remain pending; no server restart or seed/reset accompanied this
-operation. Do not compare this remote ledger to an older checkout's file count.
-
-The read-only structural verification script checks the expiry enum/column, valid
-overlap constraint, enabled booking/expiry/append-only triggers, RLS, and RPC grants:
-
-```bash
-psql "$MEDIAGENT_DB_URL" -v ON_ERROR_STOP=1 -f backend/scripts/verify-appointment-slice5.sql
-```
-
-It must print `Slice 5 schema and function permissions verified`. It does not mutate
-or expire appointments and does not replace the ledger checksum comparison or live
-patient/clinician acceptance steps.
-
-After authorized migration application, stop the existing local backend and start
-the integration code using the original virtual environment and configuration:
-
-```bash
-MEDIAGENT_ROOT=/path/to/medi-agent
-cd "$MEDIAGENT_ROOT" # use "$MEDIAGENT_ROOT/backend" if the existing .env is there
-PYTHONPATH="$MEDIAGENT_ROOT/.worktrees/clinician-scheduling/backend/src" \
-  "$MEDIAGENT_ROOT/backend/.venv/bin/uvicorn" app.main:app --reload \
-  --reload-dir "$MEDIAGENT_ROOT/.worktrees/clinician-scheduling/backend/src" \
-  --host 127.0.0.1 --port 8000
-```
-
-The working directory lets settings load the existing `.env`; do not copy or edit it.
-The original restart script points to the original checkout and will not activate
-the integration code. Both updated portal servers use the existing configuration.
+Appointment Slice 5 is applied to the synthetic project. For a new environment, run the
+read-only preflight (`backend/scripts/appointment-booking-preflight.sql`, must return zero
+overlap pairs), apply `042_appointment_expired_status.sql` before
+`043_appointment_booking_guards.sql`, then run the read-only verifier
+`backend/scripts/verify-appointment-slice5.sql`, which must print
+`Slice 5 schema and function permissions verified`. Rollout order and the synthetic
+conflict/expiry journey are in
+[the scheduling design §14](../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry).
 
 ## Configure SMART staging
 
@@ -110,7 +118,7 @@ SMART_CLIENT_SECRET=<only if the sandbox registration requires one>
 SMART_REDIRECT_URI=https://YOUR_BACKEND/api/v1/smart/callback
 SMART_STATE_ENCRYPTION_KEY=<a Fernet-compatible key generated in the secret store>
 SMART_ALLOWED_ISSUERS=https://launch.smarthealthit.org/v/r4/fhir
-SMART_STANDALONE_ISSUER=https://launch.smarthealthit.org/v/r4/sim/eyJsYXVuY2hfdHlwZSI6InBhdGllbnQtc3RhbmRhbG9uZSJ9/fhir
+SMART_STANDALONE_ISSUER=https://launch.smarthealthit.org/v/r4/sim/WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0/fhir
 # The backend adds `launch` for EHR launch or `launch/patient launch/encounter`
 # for standalone launch. Keep this value to least-privilege resource reads.
 SMART_SCOPES="patient/Patient.read patient/Encounter.read patient/Condition.read patient/AllergyIntolerance.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Observation.read patient/DiagnosticReport.read patient/Procedure.read patient/CarePlan.read patient/DocumentReference.read"
@@ -126,7 +134,13 @@ codes remain server-side; the browser receives only a short-lived, single-use re
 The SMART Health IT launcher has two distinct sandbox bases. EHR-initiated testing uses
 `https://launch.smarthealthit.org/v/r4/fhir`; direct portal testing uses the configured
 simulator issuer above. Do not replace the EHR issuer with the simulator issuer: the
-simulator base is what enables its standalone synthetic-patient picker.
+simulator base is what enables its standalone synthetic-patient picker. The `sim` segment
+must be a launcher launch-options array; the value above decodes to
+`[3,"","","AUTO",0,0,0,"","","","","","","",0,1,""]` (patient standalone). A JSON object
+such as `{"launch_type":"patient-standalone"}` is read as a legacy code and silently runs
+the provider EHR flow instead, and a standalone launch against the plain EHR base fails
+with `Invalid launch options`. The portal does not hard-code this issuer; it omits the
+issuer for standalone launch and the backend uses `SMART_STANDALONE_ISSUER`.
 
 ## Reconciliation and legacy-data review
 
@@ -155,8 +169,6 @@ it stores no patient identifier, prompt, or model response. Migration
 care-team-authorized retry RPC used by the Cloud Run Job. The migration ledger, not an
 individual SQL file, records applied filenames and checksums.
 
-## Verification checklist
-
 ### Care-plan read-policy repair (047)
 
 `047_care_plan_private_rls_helpers.sql` repairs policies introduced after migration
@@ -182,6 +194,8 @@ Use normal test settings and local PostgreSQL, never a remote connection string.
 After authorized rollout, verify ledger checksum, owner vs assigned/unassigned clinician
 reads, and browser write/publication-RPC denial. Local tests do not prove remote application.
 
+## Verification checklist
+
 - [ ] Every committed migration is recorded with its exact filename and SHA-256 checksum in `public.schema_migrations`.
 - [ ] Tables include `clinical_facts`, `source_provenances`, `fhir_imports`, `fhir_import_resources`, `external_patient_bindings`, `document_ingestion_runs`, and reconciliation-event tables.
 - [ ] RLS is enabled for clinical facts and FHIR import tables.
@@ -192,7 +206,7 @@ reads, and browser write/publication-RPC denial. Local tests do not prove remote
 - [ ] Cloud Run staging callback is HTTPS and registered with the SMART sandbox.
 - [ ] A sandbox import creates raw resource envelopes and pending facts only.
 - [ ] A clinician can inspect lineage, confirm an external-patient binding, and reconcile selected medication, condition, or allergy fields without altering demographics.
-- [ ] A synthetic text PDF produces only page-cited pending candidates; a scanned/image upload reaches `needs_ocr` without a model call or candidate.
+- [ ] A synthetic text PDF produces only page-cited pending candidates; a scanned/image upload is OCR'd (Tesseract, `eng`/`spa`) and reaches `needs_ocr` without a model call or candidate only when no usable page text is recovered.
 - [ ] An assigned clinician can retry a retryable failed document, while a concurrent retry and a fourth total attempt are denied.
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.

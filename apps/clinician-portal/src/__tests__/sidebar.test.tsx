@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "@/components/layouts/sidebar";
@@ -21,6 +21,12 @@ vi.mock("@/services/auth-session", () => ({
 
 vi.mock("@/services/clinic-context", () => ({
     clearStoredClinicContext: vi.fn(),
+    readStoredClinicContext: vi.fn(() => null),
+}));
+
+const { notificationSummary } = vi.hoisted(() => ({ notificationSummary: { current: null as null | { unread_count: number; action_item_count: number } } }));
+vi.mock("@/components/features/notification-provider", () => ({
+    useOptionalNotificationCentre: () => notificationSummary.current ? { summary: { data: notificationSummary.current, error: null } } : null,
 }));
 
 vi.mock("@/services/api", () => ({
@@ -70,7 +76,9 @@ describe("Sidebar", () => {
         expect(screen.getByText("Rajeevranjan Chaurasia")).toBeInTheDocument();
         expect(screen.getByText("Clinic Admin")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-blue-600");
+        expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-rail-active");
+        expect(screen.getByRole("link", { name: /risk radar/i })).toHaveAttribute("aria-current", "page");
+        expect(screen.getByRole("navigation", { name: "Clinician navigation" })).toBeInTheDocument();
     });
 
     it("does not invent an invalid fallback email when the session is unavailable", () => {
@@ -82,7 +90,46 @@ describe("Sidebar", () => {
             </Provider>,
         );
 
-        expect(screen.getByText("Email unavailable")).toBeInTheDocument();
+        expect(screen.getByRole("group", { name: "Signed-in clinician" })).toHaveTextContent("Clinician");
         expect(screen.queryByText("clinician@mediagent.local")).not.toBeInTheDocument();
+    });
+
+    it("keeps the actual clinician name and role in the compact account row", async () => {
+        render(<Provider store={store}><Sidebar /></Provider>);
+        const identity = screen.getByRole("group", { name: "Signed-in clinician" });
+        expect(await within(identity).findByText("Rajeevranjan Chaurasia")).toBeInTheDocument();
+        expect(within(identity).getByText("Clinic Admin")).toBeInTheDocument();
+        expect(identity).not.toHaveClass("hidden");
+        expect(identity).toHaveClass("flex", "min-w-0");
+        // The email is not repeated in the rail; it remains the account row's tooltip.
+        expect(within(identity).queryByText("dr.smith@cityhealth.org")).not.toBeInTheDocument();
+        expect(identity).toHaveAttribute("title", "dr.smith@cityhealth.org");
+    });
+
+    it("collapses to an icon rail that keeps accessible labels and remembers the choice", async () => {
+        window.localStorage.removeItem("clinician-portal.sidebar-collapsed");
+        render(<Provider store={store}><Sidebar /></Provider>);
+        const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+        expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+        fireEvent.click(toggle);
+
+        const expand = await screen.findByRole("button", { name: "Expand sidebar" });
+        expect(expand).toHaveAttribute("aria-expanded", "false");
+        expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("title", "Appointments");
+        expect(screen.getByText("Appointments")).toHaveClass("md:sr-only");
+        expect(window.localStorage.getItem("clinician-portal.sidebar-collapsed")).toBe("1");
+
+        fireEvent.click(expand);
+        expect(await screen.findByRole("button", { name: "Collapse sidebar" })).toBeInTheDocument();
+        expect(window.localStorage.getItem("clinician-portal.sidebar-collapsed")).toBe("0");
+    });
+    it("shows the same unread count on Alerts as the header bell", () => {
+        notificationSummary.current = { unread_count: 8, action_item_count: 11 };
+        render(<Provider store={store}><Sidebar /></Provider>);
+        const alerts = screen.getByRole("link", { name: /Alerts/ });
+        expect(within(alerts).getByText("8")).toBeInTheDocument();
+        expect(within(alerts).queryByText("11")).not.toBeInTheDocument();
+        notificationSummary.current = null;
     });
 });

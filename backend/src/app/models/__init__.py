@@ -39,7 +39,7 @@ from app.models.clinician_message import (
 # Schemas
 from app.models.common import ErrorResponse, PaginatedResponse, SuccessResponse, TimestampMixin
 from app.models.condition import AllergyCreate, AllergyRead, ConditionCreate, ConditionRead
-from app.models.cron import CronJobRunResponse, NightlyAdrScanRequest, ReminderDispatchRequest
+from app.models.cron import CronJobRunResponse, ReminderDispatchRequest
 from app.models.dashboard import (
     AdherenceDataPoint,
     AnnotationCreate,
@@ -160,7 +160,6 @@ __all__ = [
     "AllergyRead",
     # Cron
     "CronJobRunResponse",
-    "NightlyAdrScanRequest",
     "ReminderDispatchRequest",
     # Document
     "DocumentRead",

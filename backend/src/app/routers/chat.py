@@ -22,8 +22,10 @@ from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
 from app.db.connection import get_db
 from app.followup import analyse_symptom
+from app.followup.service import EMERGENCY_THRESHOLD
 from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
+from app.models.chat import ChatConversation
 from app.models.enums import ChatRole, Language
 from app.safety import TRIAGE_COPY
 from app.services.a2a_task_service import A2ATaskService
@@ -31,9 +33,13 @@ from app.services.chat_document_catalog import (
     build_document_catalog_reply,
     is_document_catalog_question,
 )
-from app.services.chat_service import ChatService, ConversationStateConflictError
-from app.services.drug_knowledge_service import DrugKnowledgeService
-from app.utils.localization import resolve_locale_resource
+from app.services.chat_service import (
+    ChatService,
+    ConversationStateConflictError,
+    conversation_title,
+    normalize_session_id,
+)
+from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -83,6 +89,10 @@ def _chunk_text(text: str, chunk_size: int = 140) -> list[str]:
     ]
 
 
+DOCUMENT_CONTEXT_DISMISSED = "none"
+"""`?context=none`: the patient dismissed this conversation's document."""
+
+
 def _extract_document_context_id(websocket: WebSocket) -> str | None:
     context = str(websocket.query_params.get("context", "")).strip()
     if context.startswith("doc:"):
@@ -90,6 +100,57 @@ def _extract_document_context_id(websocket: WebSocket) -> str | None:
 
     document_id = str(websocket.query_params.get("document_id", "")).strip()
     return document_id or None
+
+
+def _document_context_dismissed(websocket: WebSocket) -> bool:
+    return str(websocket.query_params.get("context", "")).strip() == DOCUMENT_CONTEXT_DISMISSED
+
+
+async def _resolve_document_focus(
+    service: ChatService,
+    *,
+    patient_id: str,
+    session_id: str,
+    dismissed: bool,
+    requested_document_id: str | None,
+    requested_document: dict[str, Any] | None,
+    saved_document: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, bool]:
+    """The document this conversation is focused on, and whether a document went missing.
+
+    The saved focus is what lets a reopened conversation keep its document, so a dismissal
+    has to clear it there too; otherwise the next connection restored the document the
+    patient had just closed. A saved document is read again on every connection, so one
+    that was deleted (or never was the patient's) is reported rather than answered from.
+    """
+    if dismissed:
+        if saved_document is not None:
+            await service.set_document_context(patient_id, session_id, None)
+            logger.info("Chat document focus cleared", extra={"chat_document_focus": "dismissed"})
+        return None, False
+
+    if requested_document_id:
+        if requested_document is None:
+            if saved_document is not None:
+                await service.set_document_context(patient_id, session_id, None)
+            logger.info(
+                "Chat document focus unavailable", extra={"chat_document_focus": "unavailable"}
+            )
+            return None, True
+        if saved_document != requested_document:
+            await service.set_document_context(patient_id, session_id, requested_document)
+        return requested_document, False
+
+    if saved_document is None:
+        return None, False
+
+    saved_id = str(saved_document.get("id") or "").strip()
+    current = await service.get_document_context(patient_id, saved_id) if saved_id else None
+    if current is None:
+        await service.set_document_context(patient_id, session_id, None)
+        logger.info("Chat document focus unavailable", extra={"chat_document_focus": "unavailable"})
+        return None, True
+    return current, False
 
 
 def _build_conversation_state(
@@ -122,8 +183,7 @@ def _build_conversation_state(
 
 
 def _read_session_id(websocket: WebSocket) -> str:
-    session_id = str(websocket.query_params.get("session_id") or "default").strip()
-    return session_id or "default"
+    return normalize_session_id(websocket.query_params.get("session_id"))
 
 
 def _conversation_state_from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -226,6 +286,7 @@ async def _send_document_catalog_reply(
             "role": ChatRole.ASSISTANT,
             "intent": "document_catalog",
             "language": incoming.language,
+            "session_id": session_id,
         },
     )
     assistant_payload = _serialize_chat_message(assistant_message)
@@ -304,7 +365,6 @@ async def _persist_conversation_state_with_retry(
             "state_json": {
                 "history_window": conversation_history[-12:],
             },
-            "document_context": document_context,
         }
 
         updated_at_token = state_record.get("updated_at")
@@ -464,12 +524,28 @@ async def get_chat_history(
     patient_id: UUID,
     limit: int = Query(default=50, ge=1, le=200),
     before: str | None = Query(default=None),
+    session_id: str | None = Query(default=None, max_length=64),
     current_user: CurrentUser = Depends(get_current_user),
     service: ChatService = Depends(_get_service),
 ) -> Any:
     await _ensure_chat_access(current_user, patient_id, service.db)
-    history = await service.get_history(str(patient_id), limit=limit, before=before)
+    history = await service.get_history(
+        str(patient_id), limit=limit, before=before, session_id=session_id
+    )
     return [ChatMessage.model_validate(message) for message in history]
+
+
+@router.get("/conversations/{patient_id}", response_model=list[ChatConversation])
+async def list_chat_conversations(
+    patient_id: UUID,
+    limit: int = Query(default=30, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
+    service: ChatService = Depends(_get_service),
+) -> Any:
+    """The patient's conversations with Nora, most recent first."""
+    await _ensure_chat_access(current_user, patient_id, service.db)
+    rows = await service.list_conversations(str(patient_id), limit=limit)
+    return [ChatConversation.model_validate(row) for row in rows]
 
 
 async def chat_websocket_endpoint(
@@ -490,18 +566,19 @@ async def chat_websocket_endpoint(
     await websocket.accept(subprotocol=negotiated_subprotocol(websocket))
     service = ChatService(db)
     a2a_service = A2ATaskService(db)
-    drug_knowledge_service = DrugKnowledgeService(db)
     care_coordinator = CareCoordinatorRuntime()
 
     try:
-        history = await service.get_history(str(patient_id), limit=50)
+        session_id = _read_session_id(websocket)
+        history = await service.get_history(str(patient_id), limit=50, session_id=session_id)
         conversation_history = [_serialize_chat_message(item) for item in history]
         await websocket.send_json({"type": "chat_history", "messages": conversation_history})
         clinician_messages = await service.get_recent_clinician_messages(str(patient_id))
         for message in clinician_messages:
             await websocket.send_json({"type": "clinician_message", "message": message})
 
-        context_document_id = _extract_document_context_id(websocket)
+        context_dismissed = _document_context_dismissed(websocket)
+        context_document_id = None if context_dismissed else _extract_document_context_id(websocket)
         chat_context = await service.get_context(
             patient_id=str(patient_id),
             document_id=context_document_id,
@@ -511,8 +588,27 @@ async def chat_websocket_endpoint(
             "conditions": chat_context.get("conditions", []),
             "recent_symptoms": chat_context.get("recent_symptoms", []),
         }
-        document_context = chat_context.get("document")
-        sent_document_context_event = False
+        requested_document = chat_context.get("document")
+
+        state_record = await service.get_or_create_conversation_state(
+            patient_id=str(patient_id),
+            options={
+                "session_id": session_id,
+                "language": Language.EN,
+                "document_context": requested_document,
+                "turn_count": len(conversation_history),
+            },
+        )
+        saved_document = state_record.get("document_context")
+        document_context, document_unavailable = await _resolve_document_focus(
+            service,
+            patient_id=str(patient_id),
+            session_id=session_id,
+            dismissed=context_dismissed,
+            requested_document_id=context_document_id,
+            requested_document=requested_document,
+            saved_document=saved_document if isinstance(saved_document, dict) else None,
+        )
         if document_context:
             await websocket.send_json(
                 {
@@ -521,27 +617,9 @@ async def chat_websocket_endpoint(
                     "document": document_context,
                 }
             )
-            sent_document_context_event = True
-
-        session_id = _read_session_id(websocket)
-        state_record = await service.get_or_create_conversation_state(
-            patient_id=str(patient_id),
-            options={
-                "session_id": session_id,
-                "language": Language.EN,
-                "document_context": document_context,
-                "turn_count": len(conversation_history),
-            },
-        )
-        if not document_context and isinstance(state_record.get("document_context"), dict):
-            document_context = state_record["document_context"]
-        if document_context and not sent_document_context_event:
+        elif document_unavailable:
             await websocket.send_json(
-                {
-                    "type": "chat_context_loaded",
-                    "context_type": "document",
-                    "document": document_context,
-                }
+                {"type": "chat_context_unavailable", "context_type": "document"}
             )
         conversation_state = _conversation_state_from_record(state_record)
     except WebSocketDisconnect:
@@ -617,10 +695,19 @@ async def chat_websocket_endpoint(
                 )
                 continue
 
+            # Label and answer the message in the language it is written in; the client
+            # sends the app language, which mislabelled Spanish messages as English.
+            incoming = incoming.model_copy(
+                update={"language": written_language(incoming.content, incoming.language)}
+            )
             user_message = await service.save_message(
                 patient_id=str(patient_id),
-                data=incoming.model_dump(),
+                data={**incoming.model_dump(), "session_id": session_id},
             )
+            if not any(item.get("role") == ChatRole.USER.value for item in conversation_history):
+                await service.set_conversation_title(
+                    str(patient_id), session_id, conversation_title(incoming.content)
+                )
             user_payload = _serialize_chat_message(user_message)
             conversation_history.append(user_payload)
             await websocket.send_json({"type": "user_message_saved", "message": user_payload})
@@ -637,29 +724,6 @@ async def chat_websocket_endpoint(
                     conversation_state=conversation_state,
                 )
                 continue
-
-            # Drug knowledge is best-effort; failures must NOT collapse the turn.
-            try:
-                drug_knowledge_context = await drug_knowledge_service.retrieve_for_patient_message(
-                    message=incoming.content,
-                    medications=patient_context.get("medications", []),
-                )
-                if drug_knowledge_context.get("status") != "not_applicable":
-                    patient_context = {
-                        **patient_context,
-                        "drug_knowledge": drug_knowledge_context,
-                    }
-            except Exception as exc:
-                fallback_reason = categorize_llm_failure(exc)
-                record_chat_fallback(layer="drug_knowledge", reason=fallback_reason)
-                logger.warning(
-                    "Drug knowledge retrieval failed; continuing without RAG context: %s",
-                    exc,
-                    extra={
-                        "chat_fallback_layer": "drug_knowledge",
-                        "chat_fallback_reason": fallback_reason,
-                    },
-                )
 
             assistant_content = ""
             assistant_intent = "general"
@@ -682,6 +746,8 @@ async def chat_websocket_endpoint(
                     message=incoming.content,
                     language=incoming.language.value,
                     document_context=document_context,
+                    # Stored messages, not the process's memory, so a restart keeps context.
+                    earlier_messages=conversation_history[:-1],
                 )
                 async for event in stream_iter:
                     ev_type = event.get("type")
@@ -809,6 +875,14 @@ async def chat_websocket_endpoint(
                                 :6
                             ]
 
+                    severity = int((symptom_result.symptom_report or {}).get("severity") or 0)
+                    if severity >= EMERGENCY_THRESHOLD:
+                        # Worst-imaginable or danger-sign symptoms reach the care team even
+                        # when no medication is linked; the reply already carries 911 advice.
+                        escalation_required = True
+                        if assistant_urgency == "routine":
+                            assistant_urgency = "urgent"
+
                     if symptom_result.flagged_for_adr:
                         escalation_required = True
                         if assistant_urgency == "routine":
@@ -879,7 +953,8 @@ async def chat_websocket_endpoint(
                     "content": assistant_content,
                     "role": ChatRole.ASSISTANT,
                     "intent": assistant_intent,
-                    "language": incoming.language,
+                    "language": written_language(assistant_content, incoming.language),
+                    "session_id": session_id,
                 },
             )
             assistant_payload = _serialize_chat_message(assistant_message)

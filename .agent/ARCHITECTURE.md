@@ -1,6 +1,6 @@
 # MediAgent — Architecture Truth Record
 
-> **Updated:** 2026-09-19. This distinguishes code that exists today from the
+> **Updated:** 2026-10-11. This distinguishes code that exists today from the
 > approved delivery target. Do not present a planned interface as deployed.
 
 ## Current implementation
@@ -13,7 +13,9 @@ Clinician portal (Next.js)┘                         │
                                                     ├─ chat, triage, symptom capture
                                                     ├─ medication/adherence/feed/reminder services
                                                     ├─ internal delegated-task lifecycle and retry worker
-                                                    └─ DailyMed/RxNorm and voice-provider adapters
+                                                    ├─ shared medication/condition reference cache
+                                                    │   (MedlinePlus, DailyMed, RxNorm; weekly refresh)
+                                                    └─ voice-provider adapters
 ```
 
 The repository contains two Next.js applications (`apps/patient-portal` and
@@ -24,8 +26,9 @@ and authenticated patient chat/voice WebSockets; it also has health and version
 endpoints.
 
 Implemented route groups include auth/MFA, clinics, patients, clinicians, documents,
-medications, obligations, adherence, chat, feed, appointments, notifications,
-reminders, staff, and cron. The previous standalone ADR REST group was removed because every
+medications, obligations, adherence, chat, care plans, care conversations, feed,
+appointments, notifications, the notification centre, reminders, staff, SMART, and cron;
+chat and voice also have patient WebSockets. The previous standalone ADR REST group was removed because every
 handler was an unimplemented placeholder. Assigned clinicians can now inspect deterministic
 Naranjo evidence and atomically mark a draft reviewed, dismiss it, or request information. Every
 review action writes an immutable ADR audit event. A structured follow-up loop lets the patient
@@ -34,14 +37,30 @@ attributed evidence, deterministically rescores the same draft, closes the notif
 a patient-actor audit event. Confirmed-report intake and MedWatch drafting remain delivery targets;
 the follow-up schema is not available in an environment until migration `047` is applied there.
 
+## Selective email (EMAIL-001, pending rollout)
+
+Supabase Auth owns recovery tokens and uses operator-configured Resend SMTP.
+Backend `/api/v1/email` owns contact verification, optional preferences and
+addressed clinician invitations. SQL event capture and a server-only outbox
+extend saved in-app notifications with selective email; no model writes email
+copy, recipients or access decisions. Membership changes only through explicit
+addressed invitation acceptance, not sending or opening a message. Dispatch
+rechecks current authorization, consent, unread/work state and freezes retry
+payloads. Provider acceptance and confirmed delivery remain different states.
+The existing authenticated reminder heartbeat also dispatches email.
+
+This is implemented on the EMAIL-001 branch, not deployed acceptance. Migration
+057, the recovery-template installation and inbox/password QA remain separate
+authorized rollout steps. [Contract and handoff](specs/email-001-email-flows.md).
+
 ## Worker and service boundaries
 
 Only these four work boundaries are supported by the product direction:
 
 | Boundary | Current implementation anchor | Authority |
 | --- | --- | --- |
-| Care Coordinator | Chat triage and persisted conversation state | Guides and routes; cannot approve clinical action |
-| Document and Evidence Worker | Document ingestion graph, extraction, explanation, DailyMed/RxNorm retrieval | Produces source-linked candidates |
+| Care Coordinator | Chat triage, per-conversation stored history, and read-only tools over the patient's record, documents and the shared reference cache | Guides, explains and routes; cannot approve clinical action |
+| Document and Evidence Worker | Document ingestion graph, extraction and explanation | Produces source-linked candidates |
 | Medication Safety Worker | Rule-based symptom-to-ADR task lifecycle and clinician-review candidate | Produces review candidate; cannot submit or alter medication |
 | Follow-up Worker | Symptom capture, adherence, reminders, and care-gap follow-up | Collects and schedules follow-up only |
 
@@ -49,12 +68,51 @@ The current chat runtime is implemented under `backend/src/app/adk/`: a Care Coo
 uses a registry with explicit model transports, budgets, fallback, deterministic outcomes,
 and safety/tool-policy plugins. The older `app/agents` modules are compatibility paths,
 not the starting point for new agent work. The empty pre-visit, scheduling,
-pharmacovigilance, and A2A shells were removed in REV-004.
+pharmacovigilance, and unused delegation shells were removed in REV-004.
 
 Scheduling, notification delivery, authentication/authorization, database access,
 retry/idempotency, and approval enforcement are deterministic services. Model output
 may suggest or draft; it must not decide authority, bypass rules, or write an approved
 clinical fact without review.
+
+## Nora's knowledge and conversations (NORA-002)
+
+General medication and condition information is public reference text shared by every
+patient: MedlinePlus plain-language summaries (English and Spanish), DailyMed label
+sections (dosage excluded) and RxNorm name resolution, cached in `health_knowledge` and
+re-checked weekly by the `mediagent-health-knowledge-refresh` Cloud Run Job. What is
+specific to one patient (their medications, conditions, documents and care plan) is read
+by patient-scoped tools whose patient comes from session state, never from the model. The
+reply's source line is written by the server from the tool results. Chat messages belong
+to a conversation (`session_id`): one per day by default, plus any the patient starts; the
+model's recap is built from stored messages, so a restart loses nothing. Design and
+checks: [NORA-002](specs/nora-002-grounded-answers.md).
+
+## Human conversations (COM-001-B)
+
+COM-001-B adds deterministic in-app conversations partitioned by patient and
+individual linked clinician, not by AI session. Explicit recipient selection
+prevents broadcast across multiple care teams. Sender identity comes from the
+authenticated actor; clinic labels and permissions come from current assignment.
+Message writes, idempotency and audit commit atomically, and assignment revocation
+blocks further access. Nora transcripts and legacy operational notifications are
+separate stores and UI views. A clinician explicitly sending their own text is the
+approval action; the model does not generate or send human conversation messages.
+
+The contract is `.agent/specs/com-001-two-way-conversations.md`. Merged in #139 and
+deployed; live acceptance is recorded in TASKS (COM-001-B Done). No real-PHI production
+readiness is claimed.
+
+## Notifications (NOT-001/NOT-002)
+
+NOT-001 extends deterministic notifications with role-scoped event receipts and
+current clinician work. Source transitions capture events in the source transaction;
+recipient delivery is retryable and duplicate-safe. Notification reads are personal
+presentation state, not approval or clinical resolution. Private-message events stay
+bound to the addressed patient/clinician thread; shared work follows current clinical
+assignment and source state. Signed bulk-read snapshots exclude later arrivals.
+Merged in #148 and #149 and deployed; `051_notification_centre.sql` and 052–056 were
+applied October 11. See `.agent/specs/not-001-notification-centre.md` for the contract.
 
 ## Evidence, FHIR, and safety
 
@@ -65,7 +123,7 @@ review handoff; SMART identity never grants local clinical authority. Imported r
 are bound to an assigned synthetic patient and become pending provenance-backed facts.
 Canonical clinical-fact provenance retains citations, confidence/uncertainty, review
 state, lineage queries, and lifecycle audit events. Exact public-sandbox and Inferno
-conformance, FHIR export, CDS Hooks, and action-approval infrastructure remain
+conformance, FHIR export, and action-approval infrastructure remain
 acceptance work rather than completed integrations.
 
 Safety rules are deterministic before probabilistic routing for emergency signals,
@@ -85,22 +143,24 @@ private source URL, or the original file. See
 The current model decision is recorded in
 [`docs/decisions/ai-runtime-2026-09.md`](../docs/decisions/ai-runtime-2026-09.md).
 
-## MCP and A2A status
+## Internal tools and worker delegation
 
-`backend/src/app/mcp` currently contains in-process provider adapters; it is **not**
-an official MCP server or a published `/mcp` endpoint. The backend also persists an
-internal delegated-task lifecycle (`a2a_tasks`) with status, retry, idempotency, and
-clinician timeline support for the symptom-to-medication-safety handoff. It is **not**
-a published A2A Agent Card or externally conformant A2A service.
+In-process provider adapters expose validated tools to MediAgent's runtime. The
+backend persists delegated-task status, retries, duplicate protection and clinician
+timeline support for the symptom-to-medication-safety handoff. These are internal
+application capabilities, not externally published agent services.
 
-The target is one authenticated Care Coordinator → Medication Safety delegation with
-request IDs, authorization, artifacts, cancellation, idempotency, failures, and
-end-to-end tests. Add an official MCP surface and an A2A Agent Card only when that
-conformance work is complete.
+Care Coordinator → Medication Safety work retains request identity, authorization,
+evidence/results, bounded failures and audit. External discovery or protocol servers
+are not required by the product and are not planned delivery work.
 
 ## Deployment and verification
 
-The deployment structure is FastAPI on Cloud Run and the portals on Vercel. CI checks
+The deployment structure is FastAPI on Cloud Run and the portals on Vercel. Two Cloud
+Run Jobs share the backend image: `mediagent-document-ingestion` (triggered every 5
+minutes) and `mediagent-health-knowledge-refresh` (weekly). Cloud Scheduler also calls
+the backend's reminder dispatch route. Triggers, auth and run logs are in
+[CLOUD_INFRASTRUCTURE_GUIDE.md §5](CLOUD_INFRASTRUCTURE_GUIDE.md#5-scheduled-jobs-cloud-scheduler-and-run-logs). CI checks
 dependency locks/audit, backend lint/format/type/tests/coverage, migrations, secrets,
 portal lint/type/tests/build, and production placeholder protection. CI configuration
 is the authoritative source for exact jobs.

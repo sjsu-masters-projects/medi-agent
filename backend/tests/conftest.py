@@ -58,3 +58,17 @@ def denial_audit(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
 def client() -> TestClient:
     """Create a test client for the FastAPI app."""
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def reset_process_limits() -> None:
+    """Per-process recovery limits and provider-status state must not leak across tests."""
+    from app.clients.resend import ResendClient
+    from app.middleware.rate_limit import (
+        password_reset_client_limiter,
+        password_reset_email_limiter,
+    )
+
+    password_reset_client_limiter._events.clear()
+    password_reset_email_limiter._events.clear()
+    ResendClient._status_unavailable = False

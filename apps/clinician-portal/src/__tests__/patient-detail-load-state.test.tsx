@@ -6,11 +6,12 @@ import type { PatientDeepDive } from "@/services/clinicians";
 
 const mocks = vi.hoisted(() => ({
     patientId: "synthetic-a", userId: "synthetic-clinician-a",
+    tab: null as string | null,
     fetch: vi.fn(), soap: vi.fn(), push: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: mocks.patientId }),
-    useSearchParams: () => ({ get: () => null }),
+    useSearchParams: () => ({ get: () => mocks.tab }),
     useRouter: () => ({ push: mocks.push }),
 }));
 vi.mock("react-redux", () => ({
@@ -32,8 +33,33 @@ function deferred() {
 }
 
 describe("patient detail load states", () => {
+    it("shows SOAP draft review context without exposing provider names or changing stored provenance", async () => {
+        mocks.tab = "soap";
+        const note = { subjective: "Patient report", objective: "Recorded observations", assessment: "Draft assessment",
+            plan: "Draft plan", model_used: "internal-model-version", generated_at: "2026-10-10T10:00:00Z" };
+        mocks.fetch.mockResolvedValue({ ...patient(), latest_soap_note: note });
+        render(<PatientPage />);
+        expect(await screen.findByText(/AI-assisted draft based on available recent records/)).toBeInTheDocument();
+        expect(screen.queryByText(/internal-model-version|Gemini/)).not.toBeInTheDocument();
+        expect(screen.getByText("Draft assessment")).toBeInTheDocument();
+        expect(note.model_used).toBe("internal-model-version");
+    });
+    it("shows Spanish care activity wording once and labels missing reminder settings", async () => {
+        const instruction = "Caminar veinte minutos después de comer";
+        mocks.fetch.mockResolvedValue({ ...patient(), obligations: [{ id: "activity", description: instruction,
+            notes: instruction, frequency: "diariamente", reminder_schedule: null }] });
+        render(<PatientPage />);
+        await screen.findByRole("heading", { name: "Synthetic synthetic-a" });
+        expect(screen.getAllByText(instruction)).toHaveLength(1);
+        expect(screen.getByText("Reminders not configured")).toBeInTheDocument();
+        expect(screen.queryByText("0%")).not.toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Care Plan" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Back to patients" }));
+        expect(mocks.push).toHaveBeenCalledWith("/patients");
+    });
     beforeEach(() => {
         mocks.patientId = "synthetic-a";
+        mocks.tab = null;
         mocks.userId = "synthetic-clinician-a";
         mocks.fetch.mockReset();
         mocks.soap.mockReset();
@@ -114,5 +140,16 @@ describe("patient detail load states", () => {
         mocks.fetch.mockResolvedValue(patient());
         view.rerender(<PatientPage />);
         await waitFor(() => expect(mocks.fetch).toHaveBeenCalledOnce());
+    });
+
+    it("opens Documents when the review link changes the query on the same patient", async () => {
+        mocks.fetch.mockResolvedValue(patient());
+        const view = render(<PatientPage />);
+        await screen.findByRole("heading", { name: "Synthetic synthetic-a" });
+        expect(screen.getByRole("tab", { name: "Profile" })).toHaveAttribute("aria-selected", "true");
+        mocks.tab = "documents";
+        view.rerender(<PatientPage />);
+        expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
+        expect(mocks.push).not.toHaveBeenCalled();
     });
 });

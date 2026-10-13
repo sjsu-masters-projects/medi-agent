@@ -4,9 +4,14 @@ import {
   type LocaleResourceMap,
 } from "@/types";
 
-export const CARE_ASSISTANT_NAME = "MediGuide";
+export const CARE_ASSISTANT_NAME = "Nora";
 
 interface PatientChatCopy {
+  careTeamLabel: string;
+  careTeamIntro: string;
+  careTeamEmpty: string;
+  historicalCareTeamLabel: string;
+  historicalCareTeamIntro: string;
   assistantDescription: string;
   typingMessage: string;
   documentContextIntro: string;
@@ -20,6 +25,11 @@ interface PatientChatCopy {
 
 const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
   default: {
+    careTeamLabel: "Care team messages",
+    careTeamIntro: "Choose a linked clinician to exchange messages, separate from your AI conversation.",
+    careTeamEmpty: "No care-team messages yet.",
+    historicalCareTeamLabel: "Historical care-team messages",
+    historicalCareTeamIntro: "Read-only prior messages. Sender and recipient routing is not available for these records. They are separate from addressed conversations and cannot be replied to here.",
     assistantDescription: "AI care assistant",
     typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
@@ -38,6 +48,11 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "en-US": {
+    careTeamLabel: "Care team messages",
+    careTeamIntro: "Choose a linked clinician to exchange messages, separate from your AI conversation.",
+    careTeamEmpty: "No care-team messages yet.",
+    historicalCareTeamLabel: "Historical care-team messages",
+    historicalCareTeamIntro: "Read-only prior messages. Sender and recipient routing is not available for these records. They are separate from addressed conversations and cannot be replied to here.",
     assistantDescription: "AI care assistant",
     typingMessage: `${CARE_ASSISTANT_NAME} is typing...`,
     documentContextIntro: "Asking in",
@@ -56,6 +71,11 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "es-MX": {
+    careTeamLabel: "Mensajes del equipo clínico",
+    careTeamIntro: "Elige a un profesional clínico vinculado para intercambiar mensajes, separados de tu conversación con IA.",
+    careTeamEmpty: "Todavía no hay mensajes de tu equipo clínico.",
+    historicalCareTeamLabel: "Mensajes históricos del equipo clínico",
+    historicalCareTeamIntro: "Mensajes anteriores de solo lectura. Estos registros no incluyen información sobre quién envió o recibió el mensaje. Están separados de las conversaciones dirigidas y no se pueden responder aquí.",
     assistantDescription: "Asistente de cuidado con IA",
     typingMessage: `${CARE_ASSISTANT_NAME} está escribiendo...`,
     documentContextIntro: "Consultando en",
@@ -77,4 +97,30 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
 
 export function getPatientChatCopy(locale: Locale): PatientChatCopy {
   return resolveLocaleResource(locale, PATIENT_CHAT_COPY);
+}
+
+export function getChatControlsCopy(locale: Locale) {
+  return locale === "es-MX" ? {
+    connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión" },
+    caution: "Nora es una IA y puede equivocarse. No cambies tu tratamiento sin consultar a tu equipo clínico. Para una emergencia, llama al 911.",
+    loading: "Cargando conversación…", recordContext: "Registro adjunto", dismiss: "Cerrar", message: "Mensaje para Nora", send: "Enviar mensaje",
+    documentUnavailable: "Este documento ya no está disponible. Puedes seguir preguntando sobre el resto de tu expediente.",
+    speak: "Toca para hablar", stopVoice: "Detener grabación de voz", interrupt: "Interrumpir y hablar", listening: "Escuchando…", transcribing: "Transcribiendo…",
+    handsFreeOn: "Manos libres: activado", handsFreeOff: "Activar manos libres", autoPlay: "Las respuestas de voz se reproducirán automáticamente.",
+    chatError: "No se pudo cargar o completar la conversación. Revisa la conexión y vuelve a intentarlo.", voiceError: "No se pudo completar la función de voz. Puedes escribir tu mensaje.",
+    original: "Idioma original", originalUnknown: "Mensaje original · idioma no registrado", live: "Respuesta en curso", listen: "Escuchar",
+    humanOriginal: "Los mensajes se muestran tal como se escribieron, sin traducción automática.",
+    profileRequired: "Necesitamos cargar tu idioma preferido antes de enviar. Si tarda demasiado, vuelve a abrir Chat.",
+  } : {
+    connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue" },
+    caution: "Nora is AI and can make mistakes. Check with your care team before changing treatment. For an emergency, call 911.",
+    loading: "Loading conversation…", recordContext: "Record context attached", dismiss: "Dismiss", message: "Message to Nora", send: "Send message",
+    documentUnavailable: "This document isn't available anymore. You can keep asking about the rest of your record.",
+    speak: "Tap to speak", stopVoice: "Stop voice recording", interrupt: "Interrupt and speak", listening: "Listening…", transcribing: "Transcribing…",
+    handsFreeOn: "Hands-free mode is on. Tap to turn off.", handsFreeOff: "Turn on hands-free mode", autoPlay: "Voice replies will play automatically.",
+    chatError: "Could not load or complete the conversation. Check your connection and try again.", voiceError: "Could not complete the voice action. You can type your message.",
+    original: "Original language", originalUnknown: "Original message · language not recorded", live: "Live response", listen: "Listen",
+    humanOriginal: "Messages appear as written, without automatic translation.",
+    profileRequired: "Your preferred language needs to load before sending. If this takes too long, reopen Chat.",
+  };
 }

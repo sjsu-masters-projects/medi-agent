@@ -9,12 +9,15 @@ Dual-portal healthcare platform with AI-assisted patient support and clinician w
 
 ## What It Does
 
-- Patient document upload + AI explanation
-- Medication/obligation tracking and adherence logging
-- Real-time patient chat (WebSocket) with triage/symptom routing
-- Voice transport foundation for chat/assistive workflows
-- Clinician dashboard and clinic/team management flows
-- Pharmacovigilance workflow foundations (ADR lifecycle tracking)
+- Patient document upload with OCR, source-cited extraction and a plain-language explanation
+- Nora, the patient assistant: text and voice in en-US and es-MX, grounded in the patient's
+  record and citing MedlinePlus, DailyMed and RxNorm, with deterministic triage first
+- Clinician-approved care plans (wording approved in both languages) projected into Today,
+  with adherence and barrier logging
+- Appointment offers, patient responses and one-time calendar export
+- Two-way patient/care-team messaging and an in-app notification centre in both portals
+- SMART on FHIR sandbox import into provenance-backed review candidates
+- Clinician dashboard, clinic/team management and audited ADR (Naranjo) review
 
 For exact phase-by-phase status and backlog, use `.agent/TASKS.md`.
 
@@ -110,7 +113,7 @@ npm run dev -- --port 3001
 ## Core Stack
 
 - Backend: FastAPI, Pydantic, Supabase
-- AI: ADK workload runtime with separate Vertex Gemini and managed open-weight transports
+- AI: ADK workload runtime on Vertex AI Gemini (managed open-weight models only in the evaluation harness)
 - Voice: Deepgram
 - Email: Resend
 - Frontend: Next.js 16 + Redux Toolkit + Tailwind v4
@@ -128,12 +131,12 @@ Start here:
 Workflow docs:
 
 - `.agent/workflows/new-agent.md`
-- `.agent/workflows/ai-code-review.md`
-- `.agent/workflows/create-pr.md`
+- `.github/pull_request_template.md`
 
-Infra docs:
+Documentation map and infrastructure:
 
-- `docs/README.md`
+- `docs/README.md` — routes every need to its source document
+- `.agent/CLOUD_INFRASTRUCTURE_GUIDE.md` — Cloud Run, Jobs, Cloud Scheduler and run logs
 
 ## Quality Gates
 
@@ -156,7 +159,8 @@ Base path: `/api/v1`
 
 Primary route groups:
 
-- `/auth`
+- `/auth`, `/auth/mfa`
+- `/clinics`
 - `/patients`
 - `/clinicians`
 - `/staff`
@@ -164,9 +168,17 @@ Primary route groups:
 - `/medications`
 - `/obligations`
 - `/adherence`
-- `/chat` (REST + WebSocket)
+- `/chat` (REST)
+- `/care-plans`
+- `/care-conversations`
 - `/feed`
-- `/cron`
+- `/appointments`
+- `/notifications`, `/notification-centre`
+- `/reminders`
+- `/smart`
+- `/cron` (Cloud Scheduler only)
+
+WebSockets: `/ws/chat/{patient_id}` and `/ws/voice/{patient_id}`.
 
 Health check: `GET /health`
 

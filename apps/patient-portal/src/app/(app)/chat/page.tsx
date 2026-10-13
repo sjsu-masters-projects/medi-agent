@@ -1,372 +1,193 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { CARE_ASSISTANT_NAME, getPatientChatCopy } from "@/content/chat-copy";
-import {
-    HiArrowUp,
-    HiChevronDown,
-    HiDocumentText,
-    HiMicrophone,
-    HiSparkles,
-    HiSpeakerWave,
-    HiStop,
-} from "react-icons/hi2";
-import { ChatBubble } from "@/components/features";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { HiStop } from "react-icons/hi2";
+import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
+import { CareConversations } from "@/components/features/care-conversations";
+import { NoraConversations } from "@/components/features/nora-conversations";
+import { NotificationBell } from "@/components/features/notification-centre";
 import { ADRFollowUpPanel } from "@/components/features/adr-follow-up-panel";
-import { Input } from "@/components/ui";
+import { todayConversationId } from "@/services/chat-api";
+import { ChatBubble } from "@/components/features";
+import { Icon } from "@/components/ui/icons";
+import { ChatTextarea } from "@/components/features/chat-presentation";
+import { ProcessingDots } from "@/components/ui/motion";
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
-import {
-    ChatRole,
-    SUPPORTED_LOCALES,
-    getLocaleLabel,
-    getLocaleSelectorLabel,
-    type Locale as ChatLocale,
-} from "@/types";
-
-function getConnectionLabel(
-    connectionStatus: "idle" | "connected" | "connecting" | "disconnected" | "error",
-): string {
-    if (connectionStatus === "connected") {
-        return "Online";
-    }
-    if (connectionStatus === "connecting") {
-        return "Connecting";
-    }
-    if (connectionStatus === "error") {
-        return "Connection issue";
-    }
-    return "Offline";
-}
-
-function formatSessionTimeLabel(locale: ChatLocale): string {
-    return new Intl.DateTimeFormat(locale, {
-        dateStyle: "medium",
-        timeStyle: "short",
-    }).format(new Date());
-}
+import { usePatientProfile } from "@/hooks/use-patient-profile";
+import { usePatientShell } from "@/contexts/patient-shell-context";
+import { ChatRole, DEFAULT_LOCALE } from "@/types";
 
 export default function ChatPage() {
+    const profile = usePatientProfile();
+    const { conversationOpen, setConversationOpen } = usePatientShell();
+    const locale = profile?.preferredLanguage ?? DEFAULT_LOCALE;
+    const copy = getPatientChatCopy(locale);
+    const controls = getChatControlsCopy(locale);
+    const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
+    const [careTeamOpened, setCareTeamOpened] = useState(false);
+    const searchParams = useSearchParams();
+    const careTeamDestination = searchParams.get("view") === "care-team";
+    const conversationId = careTeamDestination ? searchParams.get("conversation") : null;
+    const recipientId = careTeamDestination ? searchParams.get("recipient") : null;
+    // A document handoff from Records opens Nora directly (see usePatientChatSession).
+    const [inbox, setInbox] = useState(() => !conversationOpen && !searchParams.has("document"));
+    const requestedDestination = careTeamDestination ? `${conversationId ?? ""}:${recipientId ?? ""}` : null;
+    const [appliedDestination, setAppliedDestination] = useState<string | null>(null);
+    if (requestedDestination !== appliedDestination) {
+        setAppliedDestination(requestedDestination);
+        if (requestedDestination !== null) { setConversation("care-team"); setCareTeamOpened(true); setInbox(true); }
+    }
+    const [showHistory, setShowHistory] = useState(false);
+    const [humanThreadId, setHumanThreadId] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement | null>(null);
-    const {
-        assistantDraft,
-        assistantDraftStartedAt,
-        canPlayAssistantAudio,
-        connectionStatus,
-        dismissDocumentContext,
-        dismissSafetyNotice,
-        documentContext,
-        error,
-        handleHandsFreeToggle,
-        handleLanguageSelection,
-        handleMicClick,
-        handlePlayAssistantMessage,
-        handleSend,
-        handsFreeMode,
-        input,
-        isTyping,
-        loading,
-        messages,
-        safetyNotice,
-        selectedLanguage,
-        setInput,
-        voiceError,
-        voiceStatus,
-    } = usePatientChatSession();
-    const sessionTimeLabel = formatSessionTimeLabel(selectedLanguage);
-
-    const chatCopy = getPatientChatCopy(selectedLanguage);
-    const quickPrompts = chatCopy.quickPrompts;
-    const showQuickPrompts =
-        !loading
-        && !documentContext
-        && !messages.some((message) => message.role === ChatRole.USER);
+    const headingRef = useRef<HTMLHeadingElement | null>(null);
+    const noraOpenRef = useRef<HTMLButtonElement | null>(null);
+    const previousInbox = useRef(inbox);
+    const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
+        dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
+        handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
+        isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
+        startNewConversation, voiceError, voiceStatus } = usePatientChatSession(locale);
+    const newChat = locale === "es-MX" ? "Nueva conversación" : "New chat";
+    const openNora = (conversationId: string = todayConversationId()) => {
+        if (conversationId !== sessionId) openConversation(conversationId);
+        setCareTeamOpened(true); setConversation("assistant"); setInbox(false);
+    };
+    const historicalMessages = messages.filter((message) => message.role === ChatRole.CLINICIAN);
+    const visibleMessages = messages.filter((message) => message.role !== ChatRole.CLINICIAN)
+        .map((message) => message.id === "welcome-message"
+            ? { ...message, content: copy.welcomeMessage, language: locale, audioUrl: undefined }
+            : message);
+    const voiceBusy = ["listening", "processing", "playing"].includes(voiceStatus);
+    const back = locale === "es-MX" ? "Volver a mensajes" : "Back to messages";
+    const threadOpen = (!inbox && conversation === "assistant") || Boolean(humanThreadId);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [assistantDraft, isTyping, messages]);
+        setConversationOpen(threadOpen);
+        return () => setConversationOpen(false);
+    }, [threadOpen, setConversationOpen]);
 
-    return (
-        <div className="patient-page min-h-full px-3 py-4 text-[#17233a] sm:px-6 sm:py-6">
-            <div className="mx-auto flex min-h-[100dvh] max-w-[28rem] flex-col">
-                <div className="rounded-[32px] border border-white/70 bg-white/88 px-4 pt-5 pb-4 shadow-[0_18px_48px_rgba(42,58,84,0.10)] ring-1 ring-[#eadfd4]/70 backdrop-blur sm:px-5">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#b6d9d2] bg-[#e6f4f1] text-sm text-[#147465] shadow-[0_12px_26px_rgba(20,116,101,0.12)]">
-                                <HiSparkles className="h-5 w-5" />
-                            </div>
-                            <div className="space-y-1">
-                                <h1 className="text-[1.45rem] font-black tracking-[-0.03em] text-[#17233a]">
-                                    {CARE_ASSISTANT_NAME}
-                                </h1>
-                                <p className="text-xs text-gray-500">
-                                    {chatCopy.assistantDescription}
-                                </p>
-                                <p className="inline-flex items-center gap-2 text-sm font-medium text-[#64748b]">
-                                    <span
-                                        className={`h-2 w-2 rounded-full ${
-                                            connectionStatus === "connected"
-                                                ? "bg-emerald-400"
-                                                : connectionStatus === "connecting"
-                                                  ? "bg-amber-400"
-                                                  : "bg-rose-500"
-                                        }`}
-                                    />
-                                    {getConnectionLabel(connectionStatus)}
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            aria-label={
-                                handsFreeMode
-                                    ? "Hands-free mode is on. Tap to turn off."
-                                    : "Turn on hands-free mode"
-                            }
-                            aria-pressed={handsFreeMode}
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border shadow-[0_10px_24px_rgba(42,58,84,0.08)] transition ${
-                                handsFreeMode
-                                    ? "border-[#b6d9d2] bg-[#147465] text-white"
-                                    : "border-[#d9cbc0] bg-[#fffaf4] text-[#5b6b83] hover:bg-white"
-                            }`}
-                            onClick={handleHandsFreeToggle}
-                            title={
-                                handsFreeMode
-                                    ? "Hands-free on: voice replies will play automatically"
-                                    : "Hands-free off: dictate then review before sending"
-                            }
-                            type="button"
-                        >
-                            <HiSpeakerWave className="h-4 w-4" />
-                        </button>
-                        <div
-                            aria-label="Chat language"
-                            className="inline-flex rounded-full border border-[#d9cbc0] bg-[#fffaf4] p-1 shadow-[0_10px_24px_rgba(42,58,84,0.08)]"
-                            role="group"
-                        >
-                            {SUPPORTED_LOCALES.map((locale) => {
-                                const isActive = selectedLanguage === locale;
-                                return (
-                                    <button
-                                        aria-pressed={isActive}
-                                        className={`min-h-9 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                                            isActive
-                                                ? "bg-[#147465] text-white"
-                                                : "text-[#5b6b83] hover:bg-white"
-                                        }`}
-                                        key={locale}
-                                        onClick={() => handleLanguageSelection(locale)}
-                                        type="button"
-                                    >
-                                        {getLocaleSelectorLabel(locale)}
-                                    </button>
-                                );
-                            })}
-                            <span className="pointer-events-none flex items-center px-1 text-[#8090a5]">
-                                <HiChevronDown className="h-3.5 w-3.5" />
-                            </span>
-                        </div>
-                    </div>
-                </div>
+    useEffect(() => {
+        if (previousInbox.current !== inbox) {
+            if (inbox) noraOpenRef.current?.focus();
+            else headingRef.current?.focus();
+        }
+        previousInbox.current = inbox;
+    }, [inbox]);
 
-                <div className="mt-4 flex-1 px-1 pb-[260px]">
-                    <div className="mx-auto w-fit rounded-full border border-[#eadfd4] bg-white/82 px-3 py-1 text-[11px] font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
-                        {sessionTimeLabel}
-                    </div>
+    useEffect(() => {
+        if (!inbox) bottomRef.current?.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+    }, [assistantDraft, isTyping, messages, conversation, inbox]);
 
-                    <div className="mt-4 space-y-4">
-                        <ADRFollowUpPanel />
-                        {documentContext ? (
-                            <div className="rounded-[26px] border border-[#b6d9d2] bg-[#e6f4f1] p-4 shadow-[0_18px_40px_rgba(20,116,101,0.10)]">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="flex items-start gap-3">
-                                        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#b6d9d2] bg-white text-[#147465]">
-                                            <HiDocumentText className="h-5 w-5" />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#147465]">
-                                                Record context attached
-                                            </p>
-                                            <p className="text-base font-bold text-[#17233a]">
-                                                {documentContext.documentName}
-                                            </p>
-                                            <p className="text-sm leading-6 text-[#5b6b83]">
-                                                {chatCopy.documentContextIntro} {getLocaleLabel(documentContext.preferredLanguage)}
-                                                {documentContext.provider
-                                                    ? ` about ${documentContext.provider}`
-                                                    : ""}
-                                                {chatCopy.documentContextSuffix}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        className="min-h-10 rounded-full border border-[#b6d9d2] bg-white px-3 py-1 text-xs font-bold text-[#147465] transition hover:bg-[#fffaf4]"
-                                        onClick={dismissDocumentContext}
-                                        type="button"
-                                    >
-                                        Dismiss
-                                    </button>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        {error ? (
-                            <div className="rounded-[20px] border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]">
-                                {error}
-                            </div>
-                        ) : null}
-
-                        {safetyNotice ? (
-                            <div
-                                className="rounded-[20px] border border-[#F6D49A] bg-[#FFF7E8] px-4 py-3 text-sm text-[#7A4C00]"
-                                role="alert"
-                            >
-                                <div className="flex items-start justify-between gap-3">
-                                    <p>{safetyNotice}</p>
-                                    <button
-                                        className="rounded-full border border-[#F0D7AA] bg-white/70 px-3 py-1 text-xs font-semibold text-[#7A4C00] transition hover:bg-white"
-                                        onClick={dismissSafetyNotice}
-                                        type="button"
-                                    >
-                                        Dismiss
-                                    </button>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        {voiceError ? (
-                            <div className="rounded-[20px] border border-[#efbeb5] bg-[#fff2ef] px-4 py-3 text-sm font-semibold text-[#b94032]">
-                                {voiceError}
-                            </div>
-                        ) : null}
-
-                        {showQuickPrompts ? (
-                            <div className="space-y-3">
-                                <div className="rounded-[24px] border border-white/70 bg-white/86 px-4 py-3 text-base leading-7 text-[#42526b] shadow-[0_16px_32px_rgba(42,58,84,0.08)]">
-                                    {chatCopy.emptyStateIntro}
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                    {quickPrompts.map((prompt) => (
-                                        <button
-                                            className="min-h-12 rounded-[20px] border border-[#d9cbc0] bg-white/88 px-4 py-3 text-left text-base text-[#30415f] shadow-[0_10px_24px_rgba(42,58,84,0.06)] transition hover:bg-[#fffaf4]"
-                                            key={prompt}
-                                            onClick={() => setInput(prompt)}
-                                            type="button"
-                                        >
-                                            {prompt}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : null}
-
-                        <div className="space-y-4">
-                            {loading && messages.length === 0 ? (
-                                <div className="rounded-[20px] border border-[#eadfd4] bg-white/88 px-4 py-3 text-base text-[#64748b] shadow-[0_14px_30px_rgba(42,58,84,0.08)]">
-                                    Loading conversation...
-                                </div>
-                            ) : null}
-
-                            {messages.map((message) => (
-                                <ChatBubble
-                                    content={message.content}
-                                    key={message.id}
-                                    language={message.language}
-                                    onPlayAudio={
-                                        message.role === ChatRole.ASSISTANT
-                                        && (Boolean(message.audioUrl) || canPlayAssistantAudio)
-                                            ? () => handlePlayAssistantMessage(message)
-                                            : undefined
-                                    }
-                                    role={message.role === ChatRole.USER ? "user" : message.role === ChatRole.CLINICIAN ? "clinician" : "assistant"}
-                                    timestamp={message.createdAt}
-                                />
-                            ))}
-
-                            {assistantDraft ? (
-                                <ChatBubble
-                                    content={assistantDraft}
-                                    isStreaming
-                                    language={selectedLanguage}
-                                    role="assistant"
-                                    timestamp={assistantDraftStartedAt ?? new Date().toISOString()}
-                                />
-                            ) : null}
-
-                            {isTyping && !assistantDraft ? (
-                                <div className="w-fit rounded-full border border-[#eadfd4] bg-white/88 px-3 py-2 text-xs font-bold text-[#64748b] shadow-[0_10px_24px_rgba(42,58,84,0.08)]">
-                                    {chatCopy.typingMessage}
-                                </div>
-                            ) : null}
-                            <div ref={bottomRef} />
-                        </div>
-                    </div>
-                </div>
-
-                <form
-                    className="fixed bottom-[calc(94px+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-1.5rem)] max-w-[28rem] -translate-x-1/2 rounded-[30px] border border-white/75 bg-white/92 px-4 py-4 shadow-[0_20px_48px_rgba(42,58,84,0.14)] ring-1 ring-[#eadfd4]/80 backdrop-blur sm:px-5"
-                    onSubmit={handleSend}
-                >
-                    <div className="rounded-[26px] bg-[#fffaf4] p-2.5">
-                        <div className="flex items-end gap-3">
-                            <button
-                                aria-label={
-                                    voiceStatus === "listening"
-                                        ? "Stop voice recording"
-                                        : voiceStatus === "playing"
-                                          ? "Interrupt and speak"
-                                          : "Tap to speak"
-                                }
-                                aria-pressed={voiceStatus === "listening"}
-                                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border shadow-[0_12px_22px_rgba(70,96,140,0.12)] transition ${
-                                    voiceStatus === "listening"
-                                        ? "animate-pulse border-[#efbeb5] bg-[#fff2ef] text-[#b94032]"
-                                        : voiceStatus === "processing"
-                                          ? "border-[#d9cbc0] bg-[#fffaf4] text-[#8090a5]"
-                                          : voiceStatus === "playing"
-                                            ? "border-[#b6d9d2] bg-[#e6f4f1] text-[#147465]"
-                                            : "border-[#d9cbc0] bg-white text-[#30415f]"
-                                }`}
-                                disabled={voiceStatus === "unsupported" || voiceStatus === "processing"}
-                                onClick={handleMicClick}
-                                type="button"
-                            >
-                                {voiceStatus === "listening" ? (
-                                    <HiStop className="h-5 w-5" />
-                                ) : (
-                                    <HiMicrophone className="h-5 w-5" />
-                                )}
-                            </button>
-                            <div className="flex-1 rounded-[24px] border border-[#d9cbc0] bg-white px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-                                <Input
-                                    className="border-0 bg-transparent px-3 py-3 text-[#17233a] shadow-none placeholder:text-[#8d9bae] focus:border-0 focus:ring-0"
-                                    onChange={(event) => setInput(event.target.value)}
-                                    placeholder={
-                                        voiceStatus === "listening"
-                                            ? "Listening…"
-                                            : voiceStatus === "processing"
-                                              ? "Transcribing…"
-                                              : chatCopy.inputPlaceholder
-                                    }
-                                    value={input}
-                                />
-                            </div>
-                            <button
-                                aria-label="Send message"
-                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#147465] text-white shadow-[0_14px_28px_rgba(20,116,101,0.24)] transition hover:bg-[#0f5f53] disabled:cursor-not-allowed disabled:bg-[#d7dce5] disabled:text-[#8090a5] disabled:shadow-none"
-                                disabled={!input.trim() || connectionStatus !== "connected"}
-                                type="submit"
-                            >
-                                <HiArrowUp className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        {handsFreeMode ? (
-                            <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[#147465]">
-                                Hands-free on — replies will play automatically
-                            </p>
-                        ) : null}
-                    </div>
-                </form>
+    const assistantThread = !inbox && conversation === "assistant";
+    const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
+    return <div className={`flex w-full flex-col text-ink ${threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
+        <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
+            {!inbox && <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
+            {!inbox && conversation === "assistant" && <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" className="h-[18px] w-[18px]" /></span>}
+            <div className="min-w-0 flex-1">
+            <h1 ref={headingRef} tabIndex={-1} className={inbox ? "break-words pt-0 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] outline-none" : "break-words text-base font-semibold leading-tight outline-none"}>{inbox ? "Chat" : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
+            {!inbox && conversation === "assistant" && <>
+                <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted"><span>{copy.assistantDescription}</span><span aria-hidden="true">·</span><span role="status" className={`inline-flex items-center gap-1 ${connectionStatus === "connected" ? "text-brand-ink" : connectionStatus === "connecting" ? "text-muted" : "text-danger-ink"}`}><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectionStatus === "connected" ? "bg-brand" : connectionStatus === "connecting" ? "bg-gold" : "bg-danger-seg"}`} />{controls.connection[connectionStatus]}</span></p>
+            </>}
             </div>
-        </div>
-    );
+            {inbox && !humanThreadId && <NotificationBell />}
+            {!inbox && <button type="button" aria-label={conversation === "assistant" ? copy.careTeamLabel : `${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} disabled={voiceBusy}
+                className={iconButton}
+                onClick={() => { setCareTeamOpened(true); setConversation(conversation === "assistant" ? "care-team" : "assistant"); }}>
+                <Icon name={conversation === "assistant" ? "users" : "spark"} className="h-5 w-5" />
+            </button>}
+            {!inbox && conversation === "assistant" && <button type="button" className={iconButton} aria-label={newChat} title={newChat} disabled={voiceBusy || isTyping} onClick={startNewConversation}><Icon name="plus" className="h-5 w-5" /></button>}
+            {!inbox && conversation === "assistant" && <button className={`${iconButton} ${handsFreeMode ? "!bg-brand !text-white" : ""}`} aria-label={handsFreeMode ? controls.handsFreeOn : controls.handsFreeOff} aria-pressed={handsFreeMode} onClick={handleHandsFreeToggle} type="button"><Icon name="speaker" className="h-5 w-5" /></button>}
+        </header>
+        {inbox ? <section hidden={Boolean(humanThreadId)} className="relative flex flex-col gap-4 overflow-hidden rounded-[28px] bg-brand-deep p-5 text-[#F2F7F5] shadow-[var(--shadow-nora)]">
+            <span aria-hidden="true" className="pointer-events-none absolute -right-[60px] -top-[60px] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle,rgba(245,196,106,.28),transparent_70%)]" />
+            <div className="relative flex items-center gap-3">
+                <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-gold"><Icon name="spark" className="h-[22px] w-[22px]" /></span>
+                <div className="min-w-0 flex-1 break-words"><h2 className="flex items-center gap-2 text-[19px] font-semibold leading-tight">{CARE_ASSISTANT_NAME} <span className="rounded-md bg-[rgba(245,196,106,.18)] px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.06em] text-gold">AI</span></h2><p className="mt-0.5 text-[13px] text-[#B9D1CC]">{copy.assistantDescription} · {locale === "es-MX" ? "no es un profesional clínico" : "not a clinician"}</p></div>
+            </div>
+            <p className="relative text-[15px] leading-relaxed text-[#E4EEEB]">{controls.caution}</p>
+            <div className="relative flex flex-wrap gap-2">
+            <button type="button" className="ma-press min-h-11 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-[#2B1F05] hover:bg-[#F7CD80]" onClick={() => { openNora(); setInput(copy.quickPrompts[1]); }}>{locale === "es-MX" ? "Reportar un síntoma" : "Report a symptom"}</button>
+            <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15" onClick={() => openNora()}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}<Icon name="arrow" className="h-4 w-4" /></button>
+            </div>
+        </section> : null}
+        {inbox && !humanThreadId && <NoraConversations locale={locale} activeSessionId={sessionId} onOpen={openNora} />}
+        {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-3">
+            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
+            {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="overflow-hidden rounded-[22px] bg-surface">
+                <button className="flex min-h-14 w-full items-center gap-3 px-[14px] py-3 text-left hover:bg-[#FBF7F0]" type="button" aria-expanded={showHistory}
+                    onClick={() => setShowHistory((current) => !current)}>
+                    <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-surface-2 text-ink-2"><Icon name="history" className="h-5 w-5" /></span>
+                    <span className="min-w-0 flex-1 text-[15px] font-medium text-ink">{copy.historicalCareTeamLabel} ({historicalMessages.length})</span>
+                    <Icon name="chevronDown" className={`h-[18px] w-[18px] shrink-0 text-muted transition-transform duration-[240ms] ${showHistory ? "rotate-180" : ""}`} />
+                </button>
+                {showHistory && (inbox || conversation === "care-team") && <div className="ma-enter space-y-3 border-t border-line px-[14px] pt-3 pb-4">
+                    <p className="text-[13px] leading-relaxed text-muted">{copy.historicalCareTeamIntro}</p>
+                    {historicalMessages.map((message) => <ChatBubble key={message.id} role="clinician"
+                        content={message.content} timestamp={message.createdAt} locale={locale}
+                        language={message.language} clinicianLabel={copy.historicalCareTeamLabel} />)}
+                </div>}
+            </section>}
+        </div>}
+        {assistantThread && <>
+            <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
+            <ADRFollowUpPanel />
+            {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
+                <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-brand-ink">{controls.recordContext}</p>
+                    <p className="mt-0.5 break-words text-[15px] font-semibold [overflow-wrap:anywhere]">{documentContext.documentName}</p>
+                    {documentContext.provider && <p className="mt-0.5 text-[13px] text-ink-2">{documentContext.provider}</p>}
+                </div>
+                <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
+            </section>}
+            {!documentContext && documentUnavailable && <p className="flex items-start gap-2 rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] leading-snug text-ink-2" role="status"><Icon name="note" className="mt-px h-4 w-4 shrink-0 text-muted" />{controls.documentUnavailable}</p>}
+            {error && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.chatError}</p>}
+            {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
+                <Icon name="alert" className="mt-px h-5 w-5 shrink-0" />
+                <p className="flex-1 font-medium">{copy.escalationNotice}</p>
+                <button className="ma-press min-h-11 shrink-0 rounded-xl bg-surface px-3 text-sm font-semibold text-danger-ink" onClick={dismissSafetyNotice} type="button">{controls.dismiss}</button>
+            </div>}
+            {voiceError && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
+            <div className="flex flex-1 flex-col gap-3 pt-1" aria-busy={loading}>
+                {loading && <p className="text-center text-sm text-muted" role="status">{controls.loading}</p>}
+                {visibleMessages.map((message) => <ChatBubble key={message.id} content={message.content}
+                    language={message.language} locale={locale} role={message.role === ChatRole.USER ? "user" : "assistant"}
+                    timestamp={message.createdAt} onPlayAudio={message.role === ChatRole.ASSISTANT && (Boolean(message.audioUrl) || canPlayAssistantAudio) ? () => handlePlayAssistantMessage(message) : undefined} />)}
+                {!loading && !documentContext && !messages.some((message) => message.role === ChatRole.USER) && <section className="ma-enter space-y-2.5 pt-1">
+                    <p className="px-1 text-[13px] text-muted">{copy.emptyStateIntro}</p>
+                    <div className="flex flex-col items-start gap-2">{copy.quickPrompts.map((prompt) => <button className="ma-press min-h-11 rounded-full border border-line-strong bg-surface px-4 py-2 text-left text-sm font-medium text-ink-2 hover:border-brand/40 hover:text-brand-ink" key={prompt} type="button" onClick={() => setInput(prompt)}>{prompt}</button>)}</div>
+                </section>}
+                {assistantDraft && <ChatBubble content={assistantDraft} isStreaming language={locale} locale={locale}
+                    role="assistant" timestamp={assistantDraftStartedAt ?? new Date().toISOString()} />}
+                {isTyping && !assistantDraft && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
+                <div ref={bottomRef} />
+            </div>
+            <form className="sticky bottom-0 z-10 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={handleSend}>
+                <div className="flex items-end gap-2">
+                    <div className="flex min-h-[52px] min-w-0 flex-1 items-end rounded-[26px] border border-line-strong bg-surface pr-1.5 pb-1.5 transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/12">
+                        <ChatTextarea aria-label={controls.message} className="pl-[18px]" onChange={(event) => setInput(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                                event.preventDefault();
+                                if (input.trim() && connectionStatus === "connected" && profile)
+                                    event.currentTarget.form?.requestSubmit();
+                            }
+                        }}
+                        placeholder={voiceStatus === "listening" ? controls.listening : voiceStatus === "processing" ? controls.transcribing : copy.inputPlaceholder} value={input} />
+                    <button className={`ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
+                        disabled={voiceStatus === "unsupported" || voiceStatus === "processing" || !profile} onClick={handleMicClick} type="button">
+                        {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
+                    </button>
+                    </div>
+                    <button className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
+                        aria-label={controls.send} disabled={!input.trim() || connectionStatus !== "connected" || !profile} type="submit"><Icon name="send" /></button>
+                </div>
+                {handsFreeMode && <p className="px-2 text-xs text-brand-ink">{controls.autoPlay}</p>}
+                {!profile && <p className="px-2 text-sm text-muted" role="status">{controls.profileRequired}</p>}
+            </form>
+        </>}
+    </div>;
 }

@@ -1,20 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-    HiOutlineArrowPath,
-    HiOutlineBeaker,
-    HiOutlineClipboardDocumentCheck,
-    HiOutlineExclamationTriangle,
-} from "react-icons/hi2";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ADRReviewCard } from "@/components/features/adr-review-card";
-import {
-    Button,
-    Card,
-    EmptyState,
-    ErrorState,
-    Skeleton,
-} from "@/components/ui";
+import { EmptyState, ErrorState, Skeleton } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
+import { ProcessingDots } from "@/components/ui/motion";
 import {
     fetchADRReviewQueue,
     reviewADRAssessment,
@@ -24,14 +15,39 @@ import {
 
 function LoadingQueue() {
     return (
-        <div className="space-y-4" aria-label="Loading ADR reviews">
-            <Skeleton className="h-48 w-full" />
-            <Skeleton className="h-48 w-full" />
+        <div className="space-y-5" aria-label="Loading ADR reviews">
+            {Array.from({ length: 2 }).map((_, index) => (
+                <div
+                    className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]"
+                    key={index}
+                >
+                    <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-4">
+                        <div className="space-y-2">
+                            <Skeleton className="h-5 w-40" variant="text" />
+                            <Skeleton className="h-3 w-28" variant="text" />
+                        </div>
+                        <Skeleton className="h-6 w-20" />
+                    </div>
+                    <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+                        <div className="space-y-3">
+                            <Skeleton className="h-4 w-32" variant="text" />
+                            <Skeleton className="h-4 w-3/4" variant="text" />
+                            <Skeleton className="h-16 w-full" />
+                            <Skeleton className="h-16 w-full" />
+                        </div>
+                        <div className="space-y-3">
+                            <Skeleton className="h-20 w-full" />
+                            <Skeleton className="h-28 w-full" />
+                        </div>
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }
 
-export default function MedWatchPage() {
+function MedWatchContent() {
+    const assessmentId = useSearchParams().get("assessment");
     const [items, setItems] = useState<ADRReviewQueueItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -40,6 +56,12 @@ export default function MedWatchPage() {
     const [reviewError, setReviewError] = useState<string | null>(null);
     const queuePending = useRef(false);
     const reviewPending = useRef(false);
+    useEffect(() => {
+        if (!assessmentId || loading || error) return;
+        const target = document.getElementById(`assessment-${assessmentId}`);
+        target?.scrollIntoView?.({ block: "center" });
+        target?.focus({ preventScroll: true });
+    }, [assessmentId, items, loading, error]);
 
     const loadQueue = useCallback(async () => {
         if (queuePending.current) return;
@@ -100,90 +122,98 @@ export default function MedWatchPage() {
         [error, loadQueue],
     );
 
+    const initialLoad = loading && items.length === 0;
+
     return (
-        <div className="mx-auto max-w-7xl space-y-6">
-            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+        <div className="ma-page space-y-5">
+            {/* Header band: Risk Radar layout without the perspective floor */}
+            <section
+                aria-label="ADR review summary"
+                className="relative flex flex-wrap items-end justify-between gap-x-10 gap-y-6 overflow-hidden rounded-[20px] border border-line bg-surface px-7 py-[26px] shadow-[var(--shadow-card)]"
+            >
+                <div className="flex min-w-0 max-w-[72ch] flex-col gap-1.5">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                        Pharmacovigilance
+                    </p>
+                    <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em] text-ink">
                         ADR Review Queue
                     </h1>
-                    <p className="mt-1 text-sm text-gray-500">
-                        Review deterministic Naranjo assistance and the
-                        patient’s source evidence.
+                    <p className="text-[15px] leading-relaxed text-ink-2">
+                        Review possible adverse drug reactions against patient evidence. Naranjo scores support your review; they do not make a clinical decision.
                     </p>
                 </div>
-                <button
-                    disabled={loading || Boolean(submittingId)}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                    onClick={() => void loadQueue()}
-                    type="button"
-                >
-                    <HiOutlineArrowPath
-                        aria-hidden="true"
-                        className="h-4 w-4"
-                    />
-                    Refresh
-                </button>
-            </div>
-
-            <section className="grid gap-4 md:grid-cols-3">
-                <Card className="flex items-center gap-3" padding="sm">
-                    <div className="rounded-full bg-yellow-100 p-3 text-yellow-800">
-                        <HiOutlineExclamationTriangle className="h-5 w-5" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-gray-500">
-                            Pending ADR reviews
-                        </p>
-                        <p className="text-2xl font-bold text-gray-900">
-                            {items.length}
-                        </p>
-                    </div>
-                </Card>
-                <Card className="flex items-center gap-3" padding="sm">
-                    <div className="rounded-full bg-blue-100 p-3 text-blue-800">
-                        <HiOutlineBeaker className="h-5 w-5" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-gray-500">Scoring</p>
-                        <p className="text-sm font-semibold text-gray-900">
-                            Deterministic Naranjo assistance
-                        </p>
-                    </div>
-                </Card>
-                <Card className="flex items-center gap-3" padding="sm">
-                    <div className="rounded-full bg-green-100 p-3 text-green-800">
-                        <HiOutlineClipboardDocumentCheck className="h-5 w-5" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-gray-500">MedWatch status</p>
-                        <p className="text-sm font-semibold text-gray-900">
-                            Generated only after review
-                        </p>
-                    </div>
-                </Card>
+                <div className="flex w-full flex-wrap items-end justify-between gap-x-9 gap-y-5 xl:w-auto">
+                    <dl className="grid flex-1 grid-cols-3 gap-x-8 gap-y-4 xl:flex xl:flex-none xl:gap-x-9">
+                        <div className="flex flex-col-reverse gap-0.5">
+                            <dt className="text-[13px] text-muted">
+                                Pending ADR reviews
+                            </dt>
+                            <dd className="font-mono text-[28px] font-medium leading-tight text-warn-ink">
+                                {initialLoad ? (
+                                    <Skeleton className="h-8 w-14" />
+                                ) : loading || error ? (
+                                    "—"
+                                ) : (
+                                    items.length
+                                )}
+                            </dd>
+                        </div>
+                        <div className="flex flex-col-reverse gap-0.5">
+                            <dt className="text-[13px] text-muted">Scoring aid</dt>
+                            <dd className="flex min-h-[35px] items-end text-[15px] font-semibold leading-snug text-ink">
+                                Naranjo scale
+                            </dd>
+                        </div>
+                        <div className="flex flex-col-reverse gap-0.5">
+                            <dt className="text-[13px] text-muted">
+                                MedWatch report
+                            </dt>
+                            <dd className="flex min-h-[35px] items-end text-[15px] font-semibold leading-snug text-ink" title="Reviewing an ADR here does not file a MedWatch report.">
+                                Filed separately
+                            </dd>
+                        </div>
+                    </dl>
+                    <button
+                        disabled={loading || Boolean(submittingId)}
+                        className="ma-press inline-flex h-[34px] items-center justify-center gap-2 rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface"
+                        onClick={() => void loadQueue()}
+                        type="button"
+                    >
+                        <Icon aria-hidden="true" className="h-4 w-4" name="refresh" />
+                        Refresh
+                    </button>
+                </div>
             </section>
 
             {notice ? (
                 <p
-                    className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+                    className="ma-enter flex items-start gap-2.5 rounded-xl border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink"
                     role="status"
                 >
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0" name="check" />
                     {notice}
                 </p>
             ) : null}
+            {assessmentId && !loading && !error && !items.some((item) => item.id === assessmentId) && <p role="status" className="text-sm text-muted">The linked assessment is no longer awaiting review or is unavailable to you.</p>}
 
             {reviewError ? (
                 <p
                     role="alert"
-                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                    className="ma-enter flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
                 >
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0" name="alert" />
                     {reviewError}
                 </p>
             ) : null}
-            {loading && items.length === 0 ? <LoadingQueue /> : null}
+            {initialLoad ? <LoadingQueue /> : null}
             {loading && items.length > 0 ? (
-                <p role="status">Refreshing ADR reviews…</p>
+                <p
+                    className="flex items-center gap-2.5 text-[13px] text-muted"
+                    role="status"
+                >
+                    <ProcessingDots />
+                    Refreshing ADR reviews…
+                </p>
             ) : null}
             {!loading && error && items.length === 0 ? (
                 <ErrorState
@@ -193,30 +223,35 @@ export default function MedWatchPage() {
                 />
             ) : null}
             {error && items.length > 0 ? (
-                <Card>
-                    <p role="alert">{error}</p>
-                    <Button
+                <div className="ma-enter flex flex-wrap items-center justify-between gap-3 rounded-xl border border-risk-line bg-risk-soft px-5 py-3.5 text-sm text-risk-ink">
+                    <p className="flex items-start gap-2.5" role="alert">
+                        <Icon className="mt-0.5 h-4 w-4 shrink-0" name="alert" />
+                        {error}
+                    </p>
+                    <button
+                        className="ma-press h-8 rounded-lg border border-risk-line bg-surface px-3 text-xs font-semibold text-risk-ink hover:bg-risk-tint disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface"
                         disabled={loading || Boolean(submittingId)}
                         onClick={() => void loadQueue()}
-                        variant="ghost"
+                        type="button"
                     >
                         Try again
-                    </Button>
-                </Card>
+                    </button>
+                </div>
             ) : null}
             {!loading && !error && items.length === 0 ? (
                 <EmptyState
                     description="New patient-grounded ADR assessments will appear here for clinician review."
-                    icon={<HiOutlineExclamationTriangle />}
+                    icon={<Icon name="inbox" />}
                     title="No ADR assessments awaiting review"
                 />
             ) : null}
             {items.length > 0 ? (
                 <section
-                    className="space-y-4"
+                    className="space-y-5"
                     aria-label="ADR assessments awaiting review"
                 >
                     {items.map((item) => (
+                        <div key={item.id} id={`assessment-${item.id}`} tabIndex={item.id === assessmentId ? -1 : undefined} className={item.id === assessmentId ? "scroll-mt-6 rounded-2xl ring-2 ring-primary" : ""}>
                         <ADRReviewCard
                             item={item}
                             key={item.id}
@@ -227,9 +262,14 @@ export default function MedWatchPage() {
                                 Boolean(error)
                             }
                         />
+                        </div>
                     ))}
                 </section>
             ) : null}
         </div>
     );
+}
+
+export default function MedWatchPage() {
+    return <Suspense fallback={<p role="status">Loading ADR reviews…</p>}><MedWatchContent /></Suspense>;
 }

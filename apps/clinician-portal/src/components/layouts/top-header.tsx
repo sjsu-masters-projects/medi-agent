@@ -1,88 +1,56 @@
 "use client";
 
-import { useMemo } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HiOutlineBell, HiOutlineUserPlus } from "react-icons/hi2";
-import { Button } from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icons";
+import { NotificationBell } from "@/components/features/notification-centre";
+
+const sections: Record<string, { title: string; icon: IconName }> = {
+    "/dashboard": { title: "Risk Radar", icon: "grid" },
+    "/patients": { title: "Patient roster", icon: "users" },
+    "/appointments": { title: "Appointments", icon: "cal" },
+    "/review-queue": { title: "Patient upload reviews", icon: "inbox" },
+    "/medwatch": { title: "ADR reviews", icon: "alert" },
+    "/messages": { title: "Messages", icon: "chat" },
+    "/alerts": { title: "Alerts", icon: "bell" },
+    "/smart-import": { title: "External record import", icon: "download" },
+    "/settings": { title: "Clinic settings", icon: "gear" },
+    "/settings/mfa": { title: "Account security", icon: "shield" },
+};
 
 export function TopHeader() {
     const pathname = usePathname();
-
-    const header = useMemo(() => {
-        if (pathname === "/dashboard") {
-            return {
-                title: "Risk Radar Dashboard",
-                subtitle: "",
-                rightContent: (
-                    <div className="flex items-center gap-4">
-                        <div className="relative text-slate-400">
-                            <HiOutlineBell className="h-5 w-5" />
-                            <span className="absolute -right-0.5 top-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-600" />
-                        </div>
-                        <Button className="px-4 py-2 text-xs font-semibold leading-tight">
-                            <span className="inline-flex items-center gap-1">
-                                <HiOutlineUserPlus className="h-4 w-4" />
-                                Invite
-                            </span>
-                            <br />
-                            Patient
-                        </Button>
-                    </div>
-                ),
-            };
-        }
-
-        if (pathname === "/settings") {
-            return {
-                title: "Clinic Setup & Administration",
-                subtitle: "Manage your organization's profile, team access, and patient onboarding.",
-                rightContent: (
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
-                        <span className="h-2 w-2 rounded-full bg-green-600" />
-                        <span>System Online</span>
-                    </div>
-                ),
-            };
-        }
-
-        if (pathname === "/patients") {
-            return {
-                title: "Patient Roster",
-                subtitle: "Review panel risk, adherence, and recent activity across shared care.",
-                rightContent: null,
-            };
-        }
-
-        if (pathname === "/medwatch") {
-            return {
-                title: "ADR Review Queue",
-                subtitle: "Review patient-grounded evidence before any clinical or MedWatch decision.",
-                rightContent: null,
-            };
-        }
-
-        if (pathname === "/messages") {
-            return {
-                title: "Messages",
-                subtitle: "Coordinate staff and patient follow-up from one inbox.",
-                rightContent: null,
-            };
-        }
-
-        return {
-            title: pathname.startsWith("/patients/") ? "Patient Detail" : "Clinical Intelligence",
-            subtitle: "",
-            rightContent: null,
-        };
-    }, [pathname]);
-
+    const exact = sections[pathname];
+    const patientDetail = !exact && pathname.startsWith("/patients/");
+    const title = exact?.title ?? (pathname.endsWith("/upload") ? "Document upload" : "Patient detail");
     return (
-        <header className="flex items-start justify-between border-b border-slate-200 bg-white px-8 py-5">
-            <div>
-                <h1 className="text-[28px] font-bold leading-tight text-slate-900">{header.title}</h1>
-                {header.subtitle ? <p className="mt-1 text-sm text-slate-500">{header.subtitle}</p> : null}
+        <header className="flex min-h-[60px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2.5 sm:px-7">
+            <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm">
+                {patientDetail ? (
+                    <>
+                        <Link href="/patients" className="inline-flex items-center gap-2 rounded-md text-muted transition-colors hover:text-ink">
+                            <Icon name="users" className="h-4 w-4" />
+                            Patient roster
+                        </Link>
+                        <Icon name="chevron" className="h-3.5 w-3.5 text-[#94A3B8]" />
+                        <p aria-current="page" className="truncate font-medium text-ink">{title}</p>
+                    </>
+                ) : (
+                    <p className="inline-flex items-center gap-2 font-medium text-ink-2">
+                        <Icon name={exact?.icon ?? "grid"} className="h-4 w-4 text-muted" />
+                        {title}
+                    </p>
+                )}
+            </nav>
+            <div className="flex items-center gap-2">
+            {pathname === "/dashboard" ? (
+                <Link href="/settings" className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-3.5 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
+                    <Icon name="plus" className="h-4 w-4" />
+                    Patient invitations
+                </Link>
+            ) : null}
+            <NotificationBell />
             </div>
-            {header.rightContent}
         </header>
     );
 }

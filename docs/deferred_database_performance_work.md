@@ -10,8 +10,10 @@ profile validation before they are changed:
   delete/update paths, and existing composite-index coverage.
 - Multiple permissive policies: consolidate only after validating the patient,
   clinician, service-role, and storage access matrices for each table.
-- Unused indexes: staging currently has no application data or query history;
-  do not drop indexes based on this initial advisor snapshot.
+- Unused indexes: the original advisor snapshot preceded the populated synthetic
+  staging environment. Do not drop indexes based on that stale snapshot; inspect
+  current representative query history before proposing a change.
 
-The `vector` extension remains in `public` pending a separate compatibility
-review of existing vector types, operators, indexes, functions, and clients.
+The `vector` extension remains in `public`. Its only user is the retired
+`drug_knowledge_chunks` table and `match_drug_knowledge_chunks` function (migrations 015
+and 020); drop the extension with that table in the planned cleanup migration (MED-001).

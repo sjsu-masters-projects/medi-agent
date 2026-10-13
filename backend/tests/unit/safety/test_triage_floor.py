@@ -185,6 +185,18 @@ def test_adverse_effect_detection_is_case_insensitive() -> None:
 
 EDUCATIONAL_MESSAGES = [
     (
+        "Synthetic QA educational question only; I am not reporting symptoms. Is a "
+        "patient-reported barrier automatically a confirmed adverse drug reaction? "
+        "Explain briefly in plain English. Do not change my care plan or medications."
+    ),
+    (
+        "Pregunta educativa: ¿una barrera para seguir el plan de cuidado significa "
+        "que ya se confirmó una reacción adversa a un medicamento? No tengo síntomas. "
+        "Explícalo brevemente en español sencillo; no cambies mi plan ni mis medicamentos."
+    ),
+    "Is a patient-reported barrier automatically an adverse drug reaction?",
+    "¿Una barrera significa una reacción adversa?",
+    (
         "Synthetic QA only, not a symptom report: explain in plain English what a "
         "patient-reported barrier means. Is it automatically a confirmed adverse drug "
         "reaction? Do not change my care plan or medication."
@@ -210,6 +222,10 @@ EDUCATIONAL_MESSAGES = [
 ]
 
 ADVERSE_REPORTS = [
+    "Is a patient-reported barrier a reaction? I have a rash now",
+    "Is a patient-reported barrier my reaction after this dose?",
+    "¿Una barrera significa una reacción? Tengo una erupción ahora",
+    "¿Una barrera significa mi reacción al medicamento?",
     "I had a reaction to it",
     "I feel dizzy",
     "Tengo una reacción al medicamento",

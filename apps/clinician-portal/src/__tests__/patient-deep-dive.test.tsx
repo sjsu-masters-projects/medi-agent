@@ -133,9 +133,9 @@ describe("ChatTranscript", () => {
         expect(screen.getByText(/Patient/i)).toBeDefined();
     });
 
-    it("shows AI Assistant label for assistant messages", () => {
+    it("identifies Nora as an AI care assistant", () => {
         render(<ChatTranscript messages={[mockMessages[1]!]} />);
-        expect(screen.getByText(/AI Assistant/i)).toBeDefined();
+        expect(screen.getByText(/Nora · AI care assistant/i)).toBeInTheDocument();
     });
 
     it("shows empty state when no messages", () => {

@@ -315,7 +315,10 @@ class TestClinicianPatientMessages:
         assert response.json()["body"] == "Please bring your medication list."
         override_service.send_patient_message.assert_awaited_once()
 
-    def test_send_patient_email_forces_email_channel(self, client, override_auth, override_service):
+    def test_legacy_email_endpoint_does_not_claim_delivery(
+        self, client, override_auth, override_service
+    ):
+        override_service.get_patient_detail = AsyncMock(return_value={})
         patient_id = uuid4()
         override_service.send_patient_message = AsyncMock(
             return_value={
@@ -339,10 +342,8 @@ class TestClinicianPatientMessages:
             },
         )
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json()["channel"] == "email"
-        _, _, payload = override_service.send_patient_message.await_args.args
-        assert payload["channel"] == "email"
+        assert response.status_code == status.HTTP_410_GONE
+        override_service.send_patient_message.assert_not_awaited()
 
     def test_patient_not_found(self, client, override_auth, override_db, mock_supabase_db):
         """Handle patient not found after authorization check."""

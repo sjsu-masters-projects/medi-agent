@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     adr_extraction_ai_enabled: bool = True
     explanation_ai_enabled: bool = True
     care_plan_ai_enabled: bool = True
+    care_plan_translation_ai_enabled: bool = True
 
     # NVIDIA NIM (independent provider for evaluation comparison)
     nvidia_nim_api_key: str = ""
@@ -85,15 +86,19 @@ class Settings(BaseSettings):
     deepgram_api_key: str = ""
     deepgram_stt_model: str = "nova-3"
     deepgram_tts_model_en: str = "aura-2-asteria-en"
-    deepgram_tts_model_es: str = ""
+    # Female Mexican-Spanish voice, matching the English one, so Nora keeps one persona.
+    deepgram_tts_model_es: str = "aura-2-estrella-es"
     voice_max_audio_bytes: int = 5 * 1024 * 1024
 
     # Resend (email)
     resend_api_key: str = ""
-    resend_from_email: str = "MediAgent <onboarding@resend.dev>"
+    resend_from_email: str = ""
     resend_clinician_onboarding_from_email: str = (
         "MediAgent Clinician Onboarding <onboarding@mail.mediagent.live>"
     )
+    # Optional dedicated key for hashing email verification codes. Falls back to the
+    # Supabase JWT secret when empty.
+    email_code_hmac_secret: str = ""
 
     # Sentry
     sentry_environment: str = "development"
@@ -113,11 +118,15 @@ class Settings(BaseSettings):
     smart_state_encryption_key: str = ""
     smart_allowed_issuers: str = "https://launch.smarthealthit.org/v/r4/fhir"
     # SMART Health IT's launcher uses a simulator-specific issuer for a direct
-    # standalone launch. EHR-initiated launches continue to use the issuer
-    # received from the EHR launch context and must still match the allowlist.
+    # standalone launch. The sim segment is the launcher's base64url launch
+    # options array; this one decodes to
+    # [3,"","","AUTO",0,0,0,"","","","","","","",0,1,""]: patient-standalone,
+    # patient login and picker, public client, PKCE "auto". EHR-initiated
+    # launches continue to use the issuer received from the EHR launch context
+    # and must still match the allowlist.
     smart_standalone_issuer: str = (
         "https://launch.smarthealthit.org/v/r4/sim/"
-        "eyJsYXVuY2hfdHlwZSI6InBhdGllbnQtc3RhbmRhbG9uZSJ9/fhir"
+        "WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0/fhir"
     )
     smart_scopes: str = (
         "patient/Patient.read patient/Encounter.read patient/Condition.read "

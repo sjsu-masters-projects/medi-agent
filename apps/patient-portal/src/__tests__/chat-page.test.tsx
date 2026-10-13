@@ -5,24 +5,48 @@ import ChatPage from "@/app/(app)/chat/page";
 import { store } from "@/store/store";
 import { clearChatState, setMessages } from "@/store/slices/chat-slice";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
-import { Language } from "@/types";
+import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
+import { getPatientChatCopy } from "@/content/chat-copy";
 
 const {
     buildChatWebSocketUrl,
+    fetchChatConversations,
     fetchChatHistory,
     getVoiceCapabilities,
     playAssistantVoiceResponse,
     replace,
+    setConversationOpen,
+    shell,
 } = vi.hoisted(() => ({
     buildChatWebSocketUrl: vi.fn(),
+    fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
     playAssistantVoiceResponse: vi.fn(() => null),
     replace: vi.fn(),
+    setConversationOpen: vi.fn(),
+    shell: { conversationOpen: false },
+}));
+
+vi.mock("@/contexts/patient-shell-context", () => ({
+    usePatientShell: () => ({ conversationOpen: shell.conversationOpen, setConversationOpen }),
+}));
+
+vi.mock("@/services/care-conversations", () => ({
+    careConversations: { recipients: vi.fn().mockResolvedValue([]), list: vi.fn().mockResolvedValue([]) },
 }));
 
 let searchParamsValue = new URLSearchParams();
+const profile: { preferredLanguage: Locale } = { preferredLanguage: Language.EN };
+vi.mock("@/hooks/use-patient-profile", () => ({
+    usePatientProfile: () => profile,
+}));
+let renderedPage: ReturnType<typeof render>;
+function changePreferredLanguage(locale: Locale) {
+    profile.preferredLanguage = locale;
+    renderedPage.rerender(<Provider store={store}><ChatPage /></Provider>);
+}
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace }),
@@ -37,6 +61,7 @@ vi.mock("@/services/chat-api", async () => {
     return {
         ...actual,
         buildChatWebSocketUrl,
+        fetchChatConversations,
         fetchChatHistory,
     };
 });
@@ -96,20 +121,27 @@ class MockWebSocket {
 }
 
 function renderPage() {
-    return render(
+    renderedPage = render(
         <Provider store={store}>
             <ChatPage />
         </Provider>,
     );
+    if (!searchParamsValue.has("document")) {
+        fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
+    }
+    return renderedPage;
 }
 
 describe("Patient chat page", () => {
     beforeEach(() => {
+        profile.preferredLanguage = Language.EN;
         buildChatWebSocketUrl.mockReset();
         fetchChatHistory.mockReset();
         getVoiceCapabilities.mockReset();
         playAssistantVoiceResponse.mockReset();
         replace.mockReset();
+        setConversationOpen.mockReset();
+        shell.conversationOpen = false;
         vi.useRealTimers();
         searchParamsValue = new URLSearchParams();
         MockWebSocket.reset();
@@ -137,7 +169,123 @@ describe("Patient chat page", () => {
 
         buildChatWebSocketUrl.mockReturnValue("ws://chat.test/patient-1");
         fetchChatHistory.mockResolvedValue([]);
+        fetchChatConversations.mockResolvedValue([]);
         getVoiceCapabilities.mockReturnValue({ recording: false, recognition: false, synthesis: false });
+    });
+
+    it("opens Nora from a distinct inbox card, restores inbox focus and resets the shell on exit", async () => {
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        expect(screen.getByRole("heading", { name: "Nora AI" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "New message" })).toBeInTheDocument();
+        expect(screen.queryByRole("textbox", { name: "Message to Nora" })).not.toBeInTheDocument();
+        expect(setConversationOpen).toHaveBeenLastCalledWith(false);
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(await screen.findByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
+        expect(setConversationOpen).toHaveBeenLastCalledWith(true);
+        expect(screen.getByRole("heading", { name: "Nora" })).toHaveFocus();
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Unsent question" } });
+        fireEvent.click(screen.getByRole("button", { name: "Back to messages" }));
+        expect(setConversationOpen).toHaveBeenLastCalledWith(false);
+        expect(screen.getByRole("button", { name: "Nora · AI care assistant" })).toHaveFocus();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(screen.getByRole("textbox", { name: "Message to Nora" })).toHaveValue("Unsent question");
+        renderedPage.unmount();
+        expect(setConversationOpen).toHaveBeenLastCalledWith(false);
+    });
+
+    it.each([Language.EN, Language.ES])("uses one thread header with accessible care-team switching and preserves Nora drafts (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        const spanish = locale === Language.ES;
+        const team = getPatientChatCopy(locale).careTeamLabel;
+        const nora = `Nora · ${getPatientChatCopy(locale).assistantDescription}`;
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        expect(screen.getByRole("heading", { level: 1, name: "Chat" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: spanish ? "Tu equipo clínico" : "Your care team" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: nora }));
+        expect(screen.queryByRole("group", { name: team })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: nora })).not.toBeInTheDocument();
+        const message = screen.getByRole("textbox", { name: spanish ? "Mensaje para Nora" : "Message to Nora" });
+        fireEvent.change(message, { target: { value: "Unsent bilingual question" } });
+        const switchAction = screen.getByRole("button", { name: team });
+        expect(switchAction.closest("header")).not.toBeNull();
+        fireEvent.click(switchAction);
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+        expect(await screen.findByText(spanish ? "Todavía no hay conversaciones." : "No conversations yet.")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: nora }));
+        expect(screen.getByRole("textbox", { name: spanish ? "Mensaje para Nora" : "Message to Nora" })).toHaveValue("Unsent bilingual question");
+        expect(screen.getByRole("button", { name: spanish ? "Activar manos libres" : "Turn on hands-free mode" })).toBeInTheDocument();
+    });
+
+    it("honors a direct Nora presentation request on the existing route", async () => {
+        shell.conversationOpen = true;
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "New message" })).not.toBeInTheDocument();
+        expect(window.location.pathname).toBe("/chat");
+        expect(setConversationOpen).toHaveBeenLastCalledWith(true);
+        await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+        expect(MockWebSocket.instances[0].sent).toEqual([]);
+    });
+
+    it("opens the symptom prompt for review without sending it", async () => {
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        fireEvent.click(screen.getByRole("button", { name: "Report a symptom" }));
+        expect(screen.getByRole("textbox", { name: "Message to Nora" })).toHaveValue(getPatientChatCopy(Language.EN).quickPrompts[1]);
+        await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+        expect(MockWebSocket.instances[0].sent).toEqual([]);
+    });
+
+    it("uses the patient preference instead of the old chat picker and preserves original message language", async () => {
+        window.localStorage.setItem("patient-portal.chat.language", "en-US");
+        profile.preferredLanguage = Language.ES;
+        fetchChatHistory.mockResolvedValue([{
+            id: "original-en", patientId: "patient-1", role: ChatRole.USER,
+            content: "My original English question", createdAt: "2026-04-17T10:00:00Z", language: Language.EN,
+        }]);
+        renderPage();
+        expect(await screen.findByText("My original English question")).toHaveAttribute("lang", "en-US");
+        expect(screen.getByText(/Idioma original: English/)).toBeInTheDocument();
+        expect(screen.queryByRole("group", { name: "Chat language" })).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Online$/)).not.toBeInTheDocument();
+        const sockets = MockWebSocket.instances.length;
+        changePreferredLanguage(Language.EN);
+        expect(screen.getByText("My original English question")).toBeInTheDocument();
+        expect(MockWebSocket.instances).toHaveLength(sockets);
+        expect(screen.getByText(/Original language: English/)).toBeInTheDocument();
+    });
+
+    it("plays the displayed welcome text and locale after the patient language changes", async () => {
+        renderPage();
+        await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+        changePreferredLanguage(Language.ES);
+        expect(screen.getByText(getPatientChatCopy(Language.ES).welcomeMessage)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Escuchar" }));
+        const voiceSocket = MockWebSocket.instances[1];
+        await act(async () => voiceSocket.emitOpen());
+        expect(voiceSocket.sent.map((event) => JSON.parse(event))).toContainEqual({
+            type: "tts_request", message_id: "welcome-message",
+            text: getPatientChatCopy(Language.ES).welcomeMessage, language: Language.ES,
+        });
+        expect(store.getState().chat.messages[0]).toMatchObject({
+            content: getPatientChatCopy(Language.EN).welcomeMessage, language: Language.EN,
+        });
+    });
+
+    it("keeps historical assistant playback in the original language after an interface switch", async () => {
+        fetchChatHistory.mockResolvedValue([{
+            id: "original-assistant", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "Original English reply", createdAt: "2026-04-17T10:00:00Z", language: Language.EN,
+        }]);
+        renderPage();
+        await screen.findByText("Original English reply");
+        changePreferredLanguage(Language.ES);
+        fireEvent.click(screen.getByRole("button", { name: "Escuchar" }));
+        const voiceSocket = MockWebSocket.instances[1];
+        await act(async () => voiceSocket.emitOpen());
+        expect(voiceSocket.sent.map((event) => JSON.parse(event))).toContainEqual({
+            type: "tts_request", message_id: "original-assistant", text: "Original English reply", language: Language.EN,
+        });
     });
 
     it("renders assistant chunks progressively before completion", async () => {
@@ -185,6 +333,21 @@ describe("Patient chat page", () => {
         expect(screen.getByText("Please stay hydrated and rest today.")).toBeInTheDocument();
     });
 
+    it("retains Enter-to-send while Shift+Enter and composition do not send", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => socket.emitOpen());
+        const field = screen.getByRole("textbox");
+        fireEvent.change(field, { target: { value: "Explain my plan" } });
+        fireEvent.keyDown(field, { key: "Enter", shiftKey: true });
+        fireEvent.keyDown(field, { key: "Enter", isComposing: true });
+        expect(socket.sent).toHaveLength(0);
+        fireEvent.keyDown(field, { key: "Enter" });
+        await waitFor(() => expect(socket.sent).toHaveLength(1));
+        expect(JSON.parse(socket.sent[0])).toMatchObject({ content: "Explain my plan", type: "user_message" });
+    });
+
     it("sends the selected language in websocket payloads", async () => {
         renderPage();
 
@@ -193,13 +356,13 @@ describe("Patient chat page", () => {
         await act(async () => {
             socket.emitOpen();
         });
-        await screen.findByText(/Online/i);
+        await screen.findByText(/^Connected$/);
 
-        fireEvent.click(screen.getByRole("button", { name: "ES" }));
+        changePreferredLanguage(Language.ES);
         fireEvent.change(screen.getByPlaceholderText(/Escribe o habla/i), {
             target: { value: "Tengo mareos" },
         });
-        const sendButton = screen.getByRole("button", { name: /send message/i });
+        const sendButton = screen.getByRole("button", { name: /send message|enviar mensaje/i });
 
         await waitFor(() => {
             expect(sendButton).not.toHaveAttribute("disabled");
@@ -229,11 +392,11 @@ describe("Patient chat page", () => {
         fireEvent.change(screen.getByPlaceholderText(/Type or speak/i), {
             target: { value: "What documents do you have on me?" },
         });
-        fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+        fireEvent.click(screen.getByRole("button", { name: /send message|enviar mensaje/i }));
 
-        expect(screen.getByRole("heading", { name: "MediGuide" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
         expect(screen.getByText("AI care assistant")).toBeInTheDocument();
-        expect(screen.getByText("MediGuide is typing...")).toBeInTheDocument();
+        expect(screen.getByText("Nora is typing...")).toBeInTheDocument();
         expect(screen.queryByText(/Maya/)).not.toBeInTheDocument();
     });
 
@@ -243,15 +406,15 @@ describe("Patient chat page", () => {
         const socket = MockWebSocket.instances[0];
         await act(async () => { socket.emitOpen(); });
 
-        fireEvent.click(screen.getByRole("button", { name: "ES" }));
-        expect(screen.getByRole("heading", { name: "MediGuide" })).toBeInTheDocument();
+        changePreferredLanguage(Language.ES);
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
         expect(screen.getByText("Asistente de cuidado con IA")).toBeInTheDocument();
         fireEvent.change(screen.getByPlaceholderText(/Escribe o habla/i), {
             target: { value: "Ayúdame a entender mis resultados" },
         });
-        fireEvent.click(screen.getByRole("button", { name: /send message/i }));
-        expect(screen.getByText("MediGuide está escribiendo...")).toBeInTheDocument();
-        expect(screen.queryByText("MediGuide is typing...")).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /send message|enviar mensaje/i }));
+        expect(screen.getByText("Nora está escribiendo...")).toBeInTheDocument();
+        expect(screen.queryByText("Nora is typing...")).not.toBeInTheDocument();
         expect(screen.queryByText(/Maya/)).not.toBeInTheDocument();
     });
 
@@ -307,15 +470,38 @@ describe("Patient chat page", () => {
             await screen.findByText(/Lab Report April\.pdf/i),
         ).toBeInTheDocument();
         expect(screen.getByDisplayValue(/Ayúdame a entender este informe\./i)).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "ES" })).toHaveAttribute(
-            "aria-pressed",
-            "true",
-        );
+        expect(screen.getByPlaceholderText(/Type or speak/i)).toBeInTheDocument();
+        expect(screen.queryByRole("group", { name: "Chat language" })).not.toBeInTheDocument();
+        // A question about a document starts its own conversation.
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            { documentId: "doc-1" },
+            { documentId: "doc-1", sessionId: expect.stringMatching(/^chat-/) },
         );
         expect(replace).toHaveBeenCalledWith("/chat");
+    });
+
+    it("opens Nora with the document when navigation arrives before window.location updates", async () => {
+        // In-app navigation from Records renders the chat page while window.location still
+        // shows the previous page; the handoff must come from the router's search params.
+        searchParamsValue = new URLSearchParams("document=doc-1");
+        window.history.replaceState({}, "", "/records");
+        storePendingChatDocumentContext({
+            documentId: "doc-1",
+            documentName: "Physical activity instructions",
+            documentType: "other",
+            preferredLanguage: Language.EN,
+            provider: "Care team",
+            suggestedQuestion: "Help me understand this document.",
+            summary: "Walk after dinner.",
+        });
+
+        renderPage();
+
+        expect(await screen.findByText(/Physical activity instructions/i)).toBeInTheDocument();
+        expect(screen.getByDisplayValue(/Help me understand this document\./i)).toBeInTheDocument();
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith("patient-1", {
+            documentId: "doc-1", sessionId: expect.stringMatching(/^chat-/),
+        });
     });
 
     it("shows backend-loaded document context when no bridge payload is stored", async () => {
@@ -344,12 +530,12 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/Discharge Summary\.pdf/i)).toBeInTheDocument();
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            { documentId: "doc-2" },
+            { documentId: "doc-2", sessionId: expect.stringMatching(/^(chat|day)-/) },
         );
         expect(replace).toHaveBeenCalledWith("/chat");
     });
 
-    it("reconnects without document context when the user dismisses it", async () => {
+    it("tells the server about a dismissal so a reconnect does not bring the document back", async () => {
         searchParamsValue = new URLSearchParams("document=doc-3");
         window.history.replaceState({}, "", "/chat?document=doc-3");
         storePendingChatDocumentContext({
@@ -365,15 +551,80 @@ describe("Patient chat page", () => {
         renderPage();
 
         expect(await screen.findByText(/Medication List\.pdf/i)).toBeInTheDocument();
+        const sessionId = buildChatWebSocketUrl.mock.lastCall?.[1].sessionId;
         fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
 
         await waitFor(() => {
             expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
                 "patient-1",
-                { documentId: null },
+                { documentId: null, documentDismissed: true, sessionId },
             );
         });
         expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
+
+        // The server has cleared the saved document, so the reconnected socket sends
+        // only history; a later transient reconnect still carries the dismissal.
+        const reconnected = MockWebSocket.instances.at(-1)!;
+        await act(async () => {
+            reconnected.emitOpen();
+            reconnected.emitMessage({ type: "chat_history", messages: [] });
+        });
+        vi.useFakeTimers();
+        const socketsBefore = MockWebSocket.instances.length;
+        await act(async () => {
+            reconnected.close();
+            vi.advanceTimersByTime(1_000);
+        });
+        vi.useRealTimers();
+        await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(socketsBefore));
+        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+            "patient-1",
+            { documentId: null, documentDismissed: true, sessionId },
+        );
+        expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Record context attached/i)).not.toBeInTheDocument();
+    });
+
+    it("removes the document and says so when the server cannot read it any more", async () => {
+        searchParamsValue = new URLSearchParams("document=doc-4");
+        window.history.replaceState({}, "", "/chat?document=doc-4");
+        storePendingChatDocumentContext({
+            documentId: "doc-4",
+            documentName: "Old Lab.pdf",
+            documentType: "lab_report",
+            preferredLanguage: Language.EN,
+            provider: "Care team",
+            suggestedQuestion: "Help me understand this lab report.",
+            summary: "Old results.",
+        });
+
+        renderPage();
+
+        expect(await screen.findByText(/Old Lab\.pdf/i)).toBeInTheDocument();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "chat_context_unavailable", context_type: "document" });
+        });
+
+        expect(screen.queryByText(/Old Lab\.pdf/i)).not.toBeInTheDocument();
+        expect(await screen.findByText("This document isn't available anymore. You can keep asking about the rest of your record.")).toBeInTheDocument();
+        // It stops asking for the missing document on the next connection.
+        await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+            "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
+        ));
+    });
+
+    it("shows the unavailable-document note in Spanish", async () => {
+        profile.preferredLanguage = Language.ES;
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "chat_context_unavailable", context_type: "document" });
+        });
+
+        expect(await screen.findByText("Este documento ya no está disponible. Puedes seguir preguntando sobre el resto de tu expediente.")).toBeInTheDocument();
     });
 
     it("does not auto-play assistant audio for typed (non-voice) turns", async () => {
@@ -409,7 +660,7 @@ describe("Patient chat page", () => {
         expect(playAssistantVoiceResponse).not.toHaveBeenCalled();
     });
 
-    it("renders clinician message and appointment proposal websocket events", async () => {
+    it("keeps legacy clinician events out of human threads and shows appointment events in Nora", async () => {
         renderPage();
 
         await screen.findByText(/I can help explain results/i);
@@ -442,9 +693,73 @@ describe("Patient chat page", () => {
             });
         });
 
-        expect(await screen.findByText(/Visit prep/i)).toBeInTheDocument();
-        expect(screen.getByText(/Please bring your medication list/i)).toBeInTheDocument();
         expect(screen.getByText(/Appointment request noted with Emily Smith/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Visit prep/i)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+        expect(await screen.findByText("No conversations yet.")).toBeInTheDocument();
+        expect(screen.queryByText(/Visit prep/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Please bring your medication list/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Appointment request noted with Emily Smith/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(screen.queryByText(/Visit prep/i)).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
+    });
+
+    it("separates human conversations from Nora in Spanish", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        changePreferredLanguage(Language.ES);
+        fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
+        expect(screen.getByRole("heading", { name: "Mensajes del equipo clínico" })).toBeInTheDocument();
+        expect(await screen.findByText("Todavía no hay conversaciones.")).toBeInTheDocument();
+        expect(screen.queryByPlaceholderText(/Escribe o habla/i)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · Asistente de cuidado con IA" }));
+        expect(screen.getByPlaceholderText(/Escribe o habla/i)).toBeInTheDocument();
+    });
+
+    it("never renders internal escalation alerts from an older backend", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        await act(async () => {
+            MockWebSocket.instances[0].emitMessage({
+                type: "clinician_message",
+                message: {
+                    id: "internal-1", clinician_id: "clinician-1", patient_id: "patient-1",
+                    channel: "in_app", subject: "Urgent patient chat escalation",
+                    body: "Chat escalation flagged (urgent/general) for patient private-id. Latest message: test",
+                    created_at: "2026-10-09T04:00:00Z",
+                },
+            });
+        });
+        expect(screen.queryByText(/private-id|Chat escalation flagged/i)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+        expect(await screen.findByText("No conversations yet.")).toBeInTheDocument();
+        expect(screen.queryByText(/Urgent patient chat escalation/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /Historical care-team messages/ })).not.toBeInTheDocument();
+    });
+
+    it("keeps genuine old human messages accessible in a read-only archive, separate from Nora and addressed threads", async () => {
+        fetchChatHistory.mockResolvedValue([{
+            id: "legacy-human", patientId: "patient-1", role: ChatRole.CLINICIAN,
+            content: "Hi Morgan, please bring your medication list.",
+            createdAt: "2026-04-17T10:00:00Z", language: Language.EN,
+        }]);
+        renderPage();
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
+        expect(screen.queryByText(/Hi Morgan/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Historical care-team messages (1)" }));
+        expect(screen.getByText("Hi Morgan, please bring your medication list.")).toBeInTheDocument();
+        expect(screen.getByText(/Read-only prior messages/)).toBeInTheDocument();
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Nora · AI care assistant" }));
+        expect(screen.queryByText(/Hi Morgan/)).not.toBeInTheDocument();
+        changePreferredLanguage(Language.ES);
+        fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
+        expect(screen.getByRole("button", { name: "Mensajes históricos del equipo clínico (1)" })).toBeInTheDocument();
+        expect(screen.getByText(/Mensajes anteriores de solo lectura/)).toBeInTheDocument();
     });
 
     it("reconnects the chat websocket after a transient close", async () => {
@@ -457,7 +772,7 @@ describe("Patient chat page", () => {
             socket.close();
         });
 
-        expect(await screen.findByText(/Offline/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Offline$/)).toBeInTheDocument();
 
         await waitFor(() => {
             expect(MockWebSocket.instances.length).toBe(2);
@@ -465,7 +780,7 @@ describe("Patient chat page", () => {
         await act(async () => {
             MockWebSocket.instances[1].emitOpen();
         });
-        expect(await screen.findByText(/Online/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Connected$/)).toBeInTheDocument();
     });
 
     it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {
@@ -580,5 +895,25 @@ describe("Patient chat page", () => {
         // Hands-free is on but the turn was NOT voice-initiated → still no
         // auto-play. Auto-play only fires when the user *spoke* the turn.
         expect(playAssistantVoiceResponse).not.toHaveBeenCalled();
+    });
+    it("opens today's conversation, starts a new one, and reopens a past one with its messages", async () => {
+        fetchChatConversations.mockResolvedValue([
+            { sessionId: "day-2026-10-01", title: "What is metformin for?", updatedAt: "2026-10-01T15:00:00Z" },
+        ]);
+        renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        const past = await screen.findByRole("button", { name: /What is metformin for\?/ });
+        expect(screen.getByRole("heading", { name: "Past conversations with Nora" })).toBeInTheDocument();
+        await waitFor(() => expect(fetchChatHistory).toHaveBeenLastCalledWith(
+            "patient-1", "access-token", expect.stringMatching(/^day-\d{4}-\d{2}-\d{2}$/),
+        ));
+
+        fireEvent.click(past);
+        await waitFor(() => expect(fetchChatHistory).toHaveBeenLastCalledWith("patient-1", "access-token", "day-2026-10-01"));
+        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith("patient-1", { documentId: null, sessionId: "day-2026-10-01" });
+
+        fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+        await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
+            "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
+        ));
     });
 });

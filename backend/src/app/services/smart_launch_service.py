@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -19,6 +21,43 @@ from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.services.fhir_import_service import FhirImportService
 
+logger = logging.getLogger(__name__)
+
+_PROVIDER_ERROR_CODE_MAX = 64
+_PROVIDER_ERROR_DETAIL_MAX = 200
+_UNSAFE_ERROR_CODE_CHARS = re.compile(r"[^A-Za-z0-9_.-]")
+_UNSAFE_ERROR_TEXT_CHARS = re.compile(r"[^A-Za-z0-9 .,:;()'_/-]")
+# Long unbroken runs look like codes, tokens, or encoded payloads; never echo them.
+_OPAQUE_VALUE = re.compile(r"[A-Za-z0-9_./-]{32,}")
+
+
+def sanitize_provider_error(error: str | None, description: str | None) -> str:
+    """Reduce an OAuth provider error to short, display-safe diagnostic text.
+
+    The authorization server controls ``error`` and ``error_description``.  Keep
+    only a bounded set of plain characters, redact long opaque values, and cap
+    the length so the result can be logged and shown to the clinician.
+    """
+    code = _UNSAFE_ERROR_CODE_CHARS.sub("", error or "")[:_PROVIDER_ERROR_CODE_MAX]
+    text = _UNSAFE_ERROR_TEXT_CHARS.sub(" ", description or "")
+    text = _OPAQUE_VALUE.sub("[redacted]", text)
+    text = " ".join(text.split())
+    detail = f"{code}: {text}" if code and text else code or text
+    if len(detail) > _PROVIDER_ERROR_DETAIL_MAX:
+        detail = detail[: _PROVIDER_ERROR_DETAIL_MAX - 3].rstrip() + "..."
+    return detail or "unspecified"
+
+
+class SmartProviderAuthorizationError(ValidationError):
+    """The authorization server returned an OAuth error for a genuine callback.
+
+    ``provider_detail`` is already sanitized and safe to show the clinician.
+    """
+
+    def __init__(self, provider_detail: str) -> None:
+        super().__init__(f"SMART authorization failed: {provider_detail}")
+        self.provider_detail = provider_detail
+
 
 class SmartLaunchService:
     """Run OAuth server-side and hand results only to an authorized local clinician."""
@@ -33,7 +72,7 @@ class SmartLaunchService:
         *,
         clinician_id: UUID,
         patient_id: UUID,
-        issuer: str,
+        issuer: str | None,
         launch_context: str | None = None,
     ) -> dict[str, Any]:
         """Create a PKCE-bound session after confirming local care-team authority.
@@ -41,9 +80,17 @@ class SmartLaunchService:
         An EHR may supply an opaque ``launch`` handle alongside ``iss``.  It is
         echoed only to the authorization endpoint and stored encrypted for the
         short lifetime of the session; it never substitutes for local authority.
+        A standalone launch without an issuer uses the configured standalone
+        issuer, so the browser does not need to know the sandbox address.
         """
         self._require_config()
         self._require_assignment(clinician_id, patient_id)
+        if issuer is None:
+            if launch_context:
+                raise ValidationError("An EHR launch context requires the EHR issuer")
+            issuer = settings.smart_standalone_issuer.strip()
+            if not issuer:
+                raise ValidationError("SMART standalone launch is not configured")
         issuer = self._validate_issuer(issuer)
         configuration = self._discover(issuer)
         state = secrets.token_urlsafe(32)
@@ -88,14 +135,32 @@ class SmartLaunchService:
             "expires_at": expires_at,
         }
 
-    def handle_callback(self, *, state: str, code: str | None, error: str | None) -> dict[str, Any]:
+    def handle_callback(
+        self,
+        *,
+        state: str,
+        code: str | None,
+        error: str | None,
+        error_description: str | None = None,
+    ) -> dict[str, Any]:
         """Consume one callback, fetch contextual resources, and mint a local handoff."""
+        provider_detail = (
+            sanitize_provider_error(error, error_description)
+            if error or error_description
+            else None
+        )
+        if provider_detail:
+            logger.warning(
+                "SMART authorization server returned an error: %s",
+                provider_detail,
+                extra={"smart_provider_error": provider_detail},
+            )
         session = self._load_active_session(state)
         try:
             # A provider error is still a callback for this state. Consume it so
             # it cannot be replayed after a failed authorization attempt.
-            if error:
-                raise ValidationError(f"SMART authorization failed: {error}")
+            if provider_detail:
+                raise SmartProviderAuthorizationError(provider_detail)
             if not code:
                 raise ValidationError("SMART callback is missing authorization code")
             verifier = self._decrypt_verifier(str(session["pkce_verifier_ciphertext"]))

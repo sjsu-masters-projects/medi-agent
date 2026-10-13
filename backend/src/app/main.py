@@ -20,15 +20,18 @@ from app.routers import (
     adherence,
     appointments,
     auth,
+    care_conversations,
     care_plans,
     chat,
     clinicians,
     clinics,
     cron,
     documents,
+    email_preferences,
     feed,
     medications,
     mfa,
+    notification_centre,
     notifications,
     obligations,
     patients,
@@ -66,6 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     Shutdown: Nothing to clean up — Supabase SDK handles it.
     """
     logger.info("Starting MediAgent backend")
+    if settings.resend_api_key.strip() and not settings.resend_from_email.strip():
+        # Invitations can still use the onboarding sender; verification codes and
+        # optional notices stay queued until a notification sender is configured.
+        logger.warning("RESEND_FROM_EMAIL is not set; verification and notice email are paused")
 
     retry_worker: A2ARetryWorker | None = None
     if settings.a2a_retry_worker_enabled:
@@ -132,6 +139,9 @@ def create_app() -> FastAPI:
     application.include_router(clinicians.router, prefix=f"{api}/clinicians", tags=["Clinicians"])
     application.include_router(documents.router, prefix=f"{api}/documents", tags=["Documents"])
     application.include_router(
+        email_preferences.router, prefix=f"{api}/email", tags=["Email preferences"]
+    )
+    application.include_router(
         medications.router, prefix=f"{api}/medications", tags=["Medications"]
     )
     application.include_router(
@@ -139,6 +149,9 @@ def create_app() -> FastAPI:
     )
     application.include_router(adherence.router, prefix=f"{api}/adherence", tags=["Adherence"])
     application.include_router(chat.router, prefix=f"{api}/chat", tags=["Chat"])
+    application.include_router(
+        care_conversations.router, prefix=f"{api}/care-conversations", tags=["Care conversations"]
+    )
     application.include_router(care_plans.router, prefix=f"{api}/care-plans", tags=["Care plans"])
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])
@@ -147,6 +160,11 @@ def create_app() -> FastAPI:
     )
     application.include_router(
         notifications.router, prefix=f"{api}/notifications", tags=["Notifications"]
+    )
+    application.include_router(
+        notification_centre.router,
+        prefix=f"{api}/notification-centre",
+        tags=["Notification centre"],
     )
     application.include_router(reminders.router, prefix=f"{api}/reminders", tags=["Reminders"])
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])

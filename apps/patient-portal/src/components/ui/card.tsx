@@ -16,7 +16,7 @@ const paddingClasses: Record<NonNullable<CardProps["padding"]>, string> = {
 export function Card({ as: Component = "div", children, className = "", padding = "md" }: CardProps) {
     return (
         <Component
-            className={`rounded-[26px] border border-white/70 bg-white/88 shadow-[0_18px_48px_rgba(42,58,84,0.10)] ring-1 ring-[#eadfd4]/70 backdrop-blur ${paddingClasses[padding]} ${className}`}
+            className={`rounded-[22px] border border-line bg-surface ${paddingClasses[padding]} ${className}`}
         >
             {children}
         </Component>

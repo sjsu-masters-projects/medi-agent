@@ -45,6 +45,18 @@ class CarePlanDraftProposal(BaseModel):
     items: list[CarePlanDraftSelection] = Field(min_length=1, max_length=100)
 
 
+PatientLocale = Literal["en-US", "es-MX"]
+PATIENT_LOCALES: tuple[PatientLocale, ...] = ("en-US", "es-MX")
+
+
+class CarePlanWording(BaseModel):
+    """Patient-facing wording in one locale; both locales are reviewed together."""
+
+    title: str = Field(max_length=300)
+    instructions: str = Field(max_length=2000)
+    frequency: str = Field(max_length=200)
+
+
 class CarePlanItemUpdate(BaseModel):
     id: UUID
     title: str = Field(min_length=1, max_length=300)
@@ -56,8 +68,19 @@ class CarePlanItemUpdate(BaseModel):
     medication: dict[str, Any] = Field(default_factory=dict)
     is_removed: bool = False
     clinician_confirmed: bool = False
-    language_verified: bool = False
-    verified_locale: Literal["en-US", "es-MX"] | None = None
+    # Both languages as reviewed. Title, instructions and frequency above remain the
+    # source-language copy that reconciliation and continuity compare.
+    wording: dict[PatientLocale, CarePlanWording] = Field(default_factory=dict)
+    wording_verified: bool = False
+    # Needed only when an item has no recorded source language yet (translation failed
+    # and the clinician writes the other language); ignored once one is recorded.
+    source_locale: PatientLocale | None = None
+
+
+class CarePlanTranslationRequest(BaseModel):
+    """Redraft the other language from the wording the clinician kept in this one."""
+
+    from_locale: PatientLocale
 
 
 class CarePlanDraftUpdate(BaseModel):
@@ -91,6 +114,10 @@ class CarePlanItemRead(BaseModel):
     conflict: dict[str, Any] = Field(default_factory=dict)
     blocker_reason: str | None = None
     reviewed_locale: str | None = None
+    source_locale: PatientLocale | None = None
+    wording: dict[str, CarePlanWording] = Field(default_factory=dict)
+    wording_origin: dict[str, str] = Field(default_factory=dict)
+    wording_verified: bool = False
     is_removed: bool = False
     projection_type: str | None = None
     projection_id: UUID | None = None

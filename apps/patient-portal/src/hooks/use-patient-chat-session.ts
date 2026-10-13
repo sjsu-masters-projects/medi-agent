@@ -22,6 +22,9 @@ import {
     buildChatWebSocketUrl,
     fetchChatHistory,
     isChatSocketEvent,
+    newConversationId,
+    todayConversationId,
+    isInternalChatAlert,
     mapClinicianMessageFromApi,
     mapChatMessageFromApi,
     type ChatDocumentContextApi,
@@ -47,12 +50,10 @@ import type { AppDispatch, RootState } from "@/store/store";
 import {
     ChatRole,
     DEFAULT_LOCALE,
-    normalizeLocale,
     type ChatMessage,
     type Locale as ChatLocale,
 } from "@/types";
 
-const CHAT_LANGUAGE_STORAGE_KEY = "patient-portal.chat.language";
 const HANDS_FREE_STORAGE_KEY = "patient-portal.chat.handsFree";
 const FALLBACK_DOCUMENT_NAME = "medical record";
 
@@ -78,19 +79,6 @@ const MAX_CHAT_RECONNECT_ATTEMPTS = 5;
 const BASE_CHAT_RECONNECT_DELAY_MS = 800;
 const MAX_CHAT_RECONNECT_DELAY_MS = 8_000;
 
-function resolveInitialLanguage(): ChatLocale {
-    if (typeof window === "undefined") {
-        return DEFAULT_LOCALE;
-    }
-
-    const stored = window.localStorage.getItem(CHAT_LANGUAGE_STORAGE_KEY);
-    if (stored) {
-        return normalizeLocale(stored);
-    }
-
-    return normalizeLocale(window.navigator.language);
-}
-
 function buildWelcomeMessage(patientId: string, language: ChatLocale): ChatMessage {
     return {
         content: getPatientChatCopy(language).welcomeMessage,
@@ -102,21 +90,14 @@ function buildWelcomeMessage(patientId: string, language: ChatLocale): ChatMessa
     };
 }
 
-function resolveInitialDocumentContext(): PendingChatDocumentContext | null {
+// The document id comes from useSearchParams, not window.location: during in-app
+// navigation from Records, window.location still shows the previous page while the chat
+// page renders, so the handoff was lost and the inbox opened instead of Nora.
+function resolveInitialDocumentContext(documentId: string | null): PendingChatDocumentContext | null {
     if (typeof window === "undefined") {
         return null;
     }
-
-    const documentId = new URLSearchParams(window.location.search).get("document");
     return consumePendingChatDocumentContext(documentId);
-}
-
-function resolveInitialDocumentId(): string | null {
-    if (typeof window === "undefined") {
-        return null;
-    }
-
-    return new URLSearchParams(window.location.search).get("document");
 }
 
 function mapLoadedDocumentContext(
@@ -154,6 +135,8 @@ interface PatientChatSessionState {
     canPlayAssistantAudio: boolean;
     connectionStatus: RootState["chat"]["connectionStatus"];
     documentContext: PendingChatDocumentContext | null;
+    /** The conversation's document could no longer be read. */
+    documentUnavailable: boolean;
     error: string | null;
     handsFreeMode: boolean;
     input: string;
@@ -162,6 +145,7 @@ interface PatientChatSessionState {
     messages: ChatMessage[];
     selectedLanguage: ChatLocale;
     safetyNotice: string | null;
+    sessionId: string;
     voiceError: string | null;
     voiceInterimTranscript: string;
     voiceStatus: VoiceStatus;
@@ -171,14 +155,15 @@ interface PatientChatSessionActions {
     dismissDocumentContext: () => void;
     dismissSafetyNotice: () => void;
     handleHandsFreeToggle: () => void;
-    handleLanguageSelection: (language: ChatLocale) => void;
     handleMicClick: () => void;
     handlePlayAssistantMessage: (message: ChatMessage) => void;
     handleSend: (event: FormEvent<HTMLFormElement>) => void;
+    openConversation: (sessionId: string) => void;
     setInput: (value: string) => void;
+    startNewConversation: () => void;
 }
 
-export function usePatientChatSession(): PatientChatSessionState & PatientChatSessionActions {
+export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOCALE): PatientChatSessionState & PatientChatSessionActions {
     const dispatch = useDispatch<AppDispatch>();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -187,20 +172,20 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         (state: RootState) => state.chat,
     );
 
-    const [initialDocumentContext] = useState<PendingChatDocumentContext | null>(
-        resolveInitialDocumentContext,
+    const [initialDocumentContext] = useState<PendingChatDocumentContext | null>(() =>
+        resolveInitialDocumentContext(searchParams.get("document")),
     );
     const [initialDocumentId] = useState<string | null>(
-        () => initialDocumentContext?.documentId ?? resolveInitialDocumentId(),
+        () => initialDocumentContext?.documentId ?? (searchParams.get("document")?.trim() || null),
     );
-    const [initialLanguage] = useState<ChatLocale>(
-        () => initialDocumentContext?.preferredLanguage ?? resolveInitialLanguage(),
+    // Today's conversation by default; a question about a document starts its own.
+    const [sessionId, setSessionId] = useState<string>(() =>
+        searchParams.get("document") ? newConversationId() : todayConversationId(),
     );
     const [voiceCapabilities] = useState(getVoiceCapabilities);
     const [input, setInput] = useState(
         () => initialDocumentContext?.suggestedQuestion ?? "",
     );
-    const [selectedLanguage, setSelectedLanguage] = useState<ChatLocale>(initialLanguage);
     const [assistantDraft, setAssistantDraft] = useState("");
     const [assistantDraftStartedAt, setAssistantDraftStartedAt] = useState<string | null>(null);
     const [handsFreeMode, setHandsFreeMode] = useState<boolean>(resolveInitialHandsFree);
@@ -215,6 +200,10 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     const [documentContext, setDocumentContext] =
         useState<PendingChatDocumentContext | null>(initialDocumentContext);
     const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
+    // A dismissal travels with the next connection so the server stops restoring the
+    // document it saved for this conversation; clearing it here alone brought it back.
+    const [documentDismissed, setDocumentDismissed] = useState(false);
+    const [documentUnavailable, setDocumentUnavailable] = useState(false);
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
     const [reconnectSignal, setReconnectSignal] = useState(0);
 
@@ -245,7 +234,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         queuedVoiceEvents: [],
         recognition: null,
         recordedAudioUrl: null,
-        selectedLanguage: initialLanguage,
+        selectedLanguage,
         autoPlayNextAssistantMessage: false,
         inputPrefixForDictation: "",
         handsFreeMode: resolveInitialHandsFree(),
@@ -612,9 +601,6 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
 
     useEffect(() => {
         voiceRefs.current.selectedLanguage = selectedLanguage;
-        if (typeof window !== "undefined") {
-            window.localStorage.setItem(CHAT_LANGUAGE_STORAGE_KEY, selectedLanguage);
-        }
     }, [selectedLanguage]);
 
     useEffect(() => {
@@ -635,7 +621,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         dispatch(clearChatState());
         dispatch(setLoading(true));
 
-        fetchChatHistory(user.id, accessToken)
+        fetchChatHistory(user.id, accessToken, sessionId)
             .then((history) => {
                 if (!isMounted) {
                     return;
@@ -645,7 +631,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     setMessages(
                         history.length > 0
                             ? history
-                            : [buildWelcomeMessage(user.id, initialLanguage)],
+                            : [buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)],
                     ),
                 );
             })
@@ -654,7 +640,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     return;
                 }
 
-                dispatch(setMessages([buildWelcomeMessage(user.id, initialLanguage)]));
+                dispatch(setMessages([buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)]));
                 dispatch(setChatError("Unable to load chat history. Live chat is still available."));
             })
             .finally(() => {
@@ -669,6 +655,8 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         const socket = new WebSocket(
             buildChatWebSocketUrl(user.id, {
                 documentId: activeDocumentId,
+                sessionId,
+                ...(documentDismissed && !activeDocumentId ? { documentDismissed: true } : {}),
             }),
             socketAuthProtocols(accessToken),
         );
@@ -718,22 +706,35 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                     if (loadedDocumentContext) {
                         setActiveDocumentId(loadedDocumentContext.documentId);
                         setDocumentContext(loadedDocumentContext);
+                        setDocumentDismissed(false);
+                        setDocumentUnavailable(false);
                     }
                     return;
                 }
+                case "chat_context_unavailable":
+                    // Nora would otherwise answer from the general chart while the card
+                    // still named a document she cannot read.
+                    setActiveDocumentId(null);
+                    setDocumentContext(null);
+                    setDocumentUnavailable(true);
+                    return;
                 case "clinician_message":
-                    dispatch(addMessage(mapClinicianMessageFromApi(payload.message)));
+                    // Also protect clients during staggered backend/frontend rollout.
+                    if (!isInternalChatAlert(payload.message)) {
+                        dispatch(addMessage(mapClinicianMessageFromApi(payload.message)));
+                    }
                     return;
                 case "appointment_proposal": {
+                    const spanish = voiceRefs.current.selectedLanguage === "es-MX";
                     const clinician = payload.proposal.clinician_name
-                        ? ` with ${payload.proposal.clinician_name}`
+                        ? `${spanish ? " con" : " with"} ${payload.proposal.clinician_name}`
                         : "";
                     const reason = payload.proposal.reason
-                        ? `\n\nReason: ${payload.proposal.reason}`
+                        ? `\n\n${spanish ? "Motivo" : "Reason"}: ${payload.proposal.reason}`
                         : "";
                     dispatch(
                         addMessage({
-                            content: `Appointment request noted${clinician}. ${payload.proposal.next_step}${reason}`,
+                            content: `${spanish ? "Solicitud de cita registrada" : "Appointment request noted"}${clinician}. ${payload.proposal.next_step}${reason}`,
                             createdAt: new Date().toISOString(),
                             id: `appointment-proposal-${payload.proposal.proposal_id}`,
                             language: voiceRefs.current.selectedLanguage,
@@ -746,7 +747,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
                 case "appointment_created":
                     dispatch(
                         addMessage({
-                            content: `Appointment scheduled for ${new Intl.DateTimeFormat(
+                            content: `${voiceRefs.current.selectedLanguage === "es-MX" ? "Cita programada para" : "Appointment scheduled for"} ${new Intl.DateTimeFormat(
                                 voiceRefs.current.selectedLanguage,
                                 {
                                     dateStyle: "medium",
@@ -848,7 +849,7 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, activeDocumentId, dispatch, initialLanguage, reconnectSignal, user]);
+    }, [accessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId, user]);
 
     useEffect(() => {
         return () => {
@@ -863,17 +864,24 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
     function dismissDocumentContext(): void {
         setActiveDocumentId(null);
         setDocumentContext(null);
+        setDocumentDismissed(true);
+    }
+
+    function openConversation(nextSessionId: string): void {
+        setActiveDocumentId(null);
+        setDocumentContext(null);
+        setDocumentDismissed(false);
+        setDocumentUnavailable(false);
+        setSessionId(nextSessionId);
+    }
+
+    function startNewConversation(): void {
+        openConversation(newConversationId());
+        setInput("");
     }
 
     function dismissSafetyNotice(): void {
         setSafetyNotice(null);
-    }
-
-    function handleLanguageSelection(language: ChatLocale): void {
-        const nextLocale = normalizeLocale(language);
-        voiceRefs.current.selectedLanguage = nextLocale;
-        setSelectedLanguage(nextLocale);
-        setVoiceError(null);
     }
 
     function handleSend(event: FormEvent<HTMLFormElement>): void {
@@ -1080,9 +1088,9 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         dismissDocumentContext,
         dismissSafetyNotice,
         documentContext,
+        documentUnavailable,
         error,
         handleHandsFreeToggle,
-        handleLanguageSelection,
         handleMicClick,
         handlePlayAssistantMessage,
         handleSend,
@@ -1092,8 +1100,11 @@ export function usePatientChatSession(): PatientChatSessionState & PatientChatSe
         loading,
         messages,
         safetyNotice,
+        openConversation,
         selectedLanguage,
+        sessionId,
         setInput,
+        startNewConversation,
         voiceError,
         voiceInterimTranscript,
         voiceStatus,

@@ -14,6 +14,7 @@ env:
   REGION: us-central1
   SERVICE_NAME: mediagent-backend
   INGESTION_JOB_NAME: mediagent-document-ingestion
+  KNOWLEDGE_JOB_NAME: mediagent-health-knowledge-refresh
   RUNTIME_SERVICE_ACCOUNT: github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com
 
 permissions:
@@ -128,4 +129,27 @@ jobs:
             --max-retries 0 \
             --service-account ${RUNTIME_SERVICE_ACCOUNT} \
             --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,DOCUMENT_INGESTION_BATCH_SIZE=5 \
+            --set-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest
+
+      - name: Deploy health-knowledge refresh job
+        run: |
+          IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
+
+          # Weekly refresh of the public MedlinePlus, DailyMed and RxNorm reference text
+          # Nora cites. It reads only public sources and medication names; deployed beside
+          # the service so its code never drifts behind the chat tools that read the cache.
+          gcloud run jobs deploy ${KNOWLEDGE_JOB_NAME} \
+            --project ${PROJECT_ID} \
+            --image ${IMAGE_PATH} \
+            --region ${REGION} \
+            --command python \
+            --args=-m,app.workers.health_knowledge_refresh \
+            --cpu 1 \
+            --memory 512Mi \
+            --tasks 1 \
+            --parallelism 1 \
+            --task-timeout 1800s \
+            --max-retries 0 \
+            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
+            --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID} \
             --set-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest

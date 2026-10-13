@@ -6,6 +6,7 @@ import { AppointmentStatus, type Appointment } from "@/types";
 const respond = vi.fn();
 const push = vi.fn();
 const retrySettings = vi.fn();
+const destination = vi.hoisted(() => ({ params: new URLSearchParams() }));
 let settings: {
   profile: { preferredLanguage: "en-US" | "es-MX"; timezone: string } | null;
   loading: boolean;
@@ -32,6 +33,7 @@ let hookState: VisitsHookState;
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ back: vi.fn(), push }),
+  useSearchParams: () => destination.params,
 }));
 
 vi.mock("@/hooks/use-visits-data", () => ({
@@ -55,6 +57,7 @@ function makeVisit(overrides: Partial<Appointment> = {}): Appointment {
 }
 
 beforeEach(() => {
+  destination.params = new URLSearchParams();
   vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-05-07T00:30:00Z"));
   respond.mockReset();
   push.mockReset();
@@ -82,6 +85,20 @@ afterEach(() => {
 });
 
 describe("VisitsPage", () => {
+  it("focuses the exact visit without accepting or changing it", () => {
+    destination.params = new URLSearchParams("appointmentId=exact-visit");
+    hookState.visits = [makeVisit(), makeVisit({ id: "exact-visit" })];
+    render(<VisitsPage />);
+    expect(document.getElementById("visit-exact-visit")).toHaveFocus();
+    expect(respond).not.toHaveBeenCalled();
+  });
+  it("shows an unavailable exact-visit destination", () => {
+    destination.params = new URLSearchParams("appointmentId=revoked-visit");
+    hookState.visits = [makeVisit()];
+    render(<VisitsPage />);
+    expect(screen.getByText("This visit is unavailable. Refresh your visits.")).toBeInTheDocument();
+    expect(respond).not.toHaveBeenCalled();
+  });
   it.each([
     ["en-US", "Open chat", false],
     ["en-US", "Open chat", true],
@@ -175,7 +192,8 @@ describe("VisitsPage", () => {
       render(<VisitsPage />);
       expect(screen.getByText(label)).toBeInTheDocument();
       expect(screen.getByText(/As written/)).toBeInTheDocument();
-      expect(screen.getAllByRole("button")).toHaveLength(1);
+      expect(screen.getAllByRole("button")).toHaveLength(2);
+      expect(screen.getByRole("button", { name: locale === "en-US" ? "Refresh visits" : "Actualizar citas" })).toBeInTheDocument();
       expect(
         screen.getByRole("button", {
           name: locale === "en-US" ? "Open chat" : "Abrir chat",

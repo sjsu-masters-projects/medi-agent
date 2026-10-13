@@ -22,4 +22,16 @@ class ChatMessage(BaseModel):
     intent: str | None = None  # classified by Triage Agent
     language: Language = Language.EN
     audio_url: str | None = None
+    session_id: str = "default"
     created_at: str
+
+
+class ChatConversation(BaseModel):
+    """One entry in the patient's conversation list."""
+
+    session_id: str
+    title: str = ""
+    turn_count: int = 0
+    language: Language = Language.EN
+    created_at: str
+    updated_at: str

@@ -24,8 +24,8 @@ the table and `.agent/TASKS.md` whenever responsibility changes.
 
 - Maintain one integrated vertical increment each week.
 - Use GitHub pull requests for all code review; one peer approval is required.
-- Require the safety owner and clinical reviewer for safety-sensitive behavior.
-- Keep a clinician/pharmacist review schedule for recommendation and escalation work.
+- Require the safety owner and peer review for safety-sensitive behavior; preserve clinician-role approval in the application.
+- For the expo, presenters operate fictional patient/clinician roles. Professional recruitment or clinician/pharmacist adjudication is not a completion gate; do not claim clinical validation.
 - Record status, acceptance evidence, and owner in `.agent/TASKS.md`.
 
 ## Definition of done
@@ -33,7 +33,7 @@ the table and `.agent/TASKS.md` whenever responsibility changes.
 A task is done only when its behavior and tests are complete, its documentation and
 task tracker are current, a peer review is recorded, it is merged to `main`, CI is
 green, and the required manual verification has been performed. Safety-sensitive work
-also requires the assigned safety and clinical review.
+also requires assigned safety/peer review and tests of the in-app clinical approval boundary. This is synthetic functional acceptance, not professional clinical validation.
 
 ## Branch and review workflow
 
