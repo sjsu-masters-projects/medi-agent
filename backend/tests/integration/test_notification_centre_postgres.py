@@ -186,6 +186,7 @@ def sql(postgres):
         "054_notification_page_proportional_reads.sql",
         "055_notification_one_response_per_offer.sql",
         "056_notification_prepare_waits.sql",
+        "059_critical_result_alerts.sql",
     ):
         execute((MIGRATIONS / name).read_text())
     try:
@@ -1074,3 +1075,51 @@ def test_cancelled_visit_needs_attention_whatever_its_time(sql):
     sql("ALTER TABLE appointments ENABLE TRIGGER appointments_booking_guard;")
     items = clinician(sql, "action_items")["items"]
     assert [(r["source_id"], r["can_acknowledge"]) for r in items] == [(key, True)]
+
+
+def result(sql, doc, *, flag_meaning="critical", state="pending_review"):
+    """A lab-result candidate cited to ``doc``, as document grounding writes it."""
+    fact, provenance = str(uuid4()), str(uuid4())
+    value = json.dumps({"test_name": "Potassium", "value": "6.9", "flag_meaning": flag_meaning})
+    sql(f"""INSERT INTO clinical_facts(id,patient_id,fact_type,subject_type,value,review_state)
+      VALUES('{fact}','{PATIENT}','lab_result','lab_result','{value}'::jsonb,'{state}');
+      INSERT INTO source_provenances(id,artifact_type,source_system,source_reference,document_id)
+      VALUES('{provenance}','document','document_intelligence','document:{doc}','{doc}');
+      INSERT INTO evidence_citations(fact_id,provenance_id,excerpt)
+      VALUES('{fact}','{provenance}','Potassium | 6.9 | HH');""")
+    return fact
+
+
+def critical_events(sql, doc):
+    rows = sql(f"""SELECT e.audience||'|'||coalesce((SELECT string_agg(d.recipient_id::text,','
+        ORDER BY d.recipient_id) FROM notification_pending_deliveries d WHERE d.event_id=e.id),'')
+      FROM notification_events e WHERE e.event_type='critical_result' AND e.source_id='{doc}'""")
+    return [tuple(row.split("|")) for row in rows.splitlines()]
+
+
+def test_critical_result_alerts_the_care_team_once_per_document(sql):
+    doc = document(sql)
+    result(sql, doc)
+    result(sql, doc)  # a second critical result on the same report adds no second alert
+    assert critical_events(sql, doc) == [("shared", CLINICIAN)]
+    rows = [row for row in clinician(sql)["items"] if row["event_type"] == "critical_result"]
+    assert len(rows) == 1 and rows[0]["source_id"] == doc and rows[0]["actionable"]
+    assert rows[0]["category"] == "safety"
+    # The patient is told by their own explanation; they never receive this alert.
+    assert all(row["event_type"] != "critical_result" for row in call(sql)["items"])
+
+
+def test_non_critical_or_rejected_results_raise_no_alert(sql):
+    doc = document(sql)
+    result(sql, doc, flag_meaning="high")
+    result(sql, doc, state="rejected")
+    assert critical_events(sql, doc) == []
+
+
+def test_critical_alert_stops_being_work_when_the_document_is_rejected(sql):
+    doc = document(sql)
+    result(sql, doc)
+    sql(f"UPDATE documents SET review_status='rejected' WHERE id='{doc}'")
+    rows = [row for row in clinician(sql)["items"] if row["source_id"] == doc
+            and row["event_type"] == "critical_result"]
+    assert rows == [] or not rows[0]["actionable"]

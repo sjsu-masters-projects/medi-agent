@@ -41,6 +41,17 @@ Records distinguishes duplicate-skipped uploads from empty successful extraction
 The duplicate explanation is static en-US/es-MX copy; switching its language does
 not invoke a model or carry that reason into Nora as a clinical summary.
 
+An opened record shows **Test results / Resultados** from
+`GET /api/v1/documents/{id}/results`, requested only for that opened document (not
+for list rows, and not while it is still being read or is a duplicate). Lab results
+are grouped by printed panel and measurements are listed separately. Names, values,
+units, ranges and dates are shown exactly as printed. The only client logic is the
+status chip: the report's own flag first (High, Low, Outside range, Critical), else
+its own printed range; within range shows no chip. Critical adds "Contact your care
+team today." Unreviewed rows are marked, and the section states that results were
+read automatically and that the care team will review them. An empty response
+renders nothing; a failed request shows a retry.
+
 The authenticated layout shares one patient profile across all screens. The saved
 language selector is in Profile, not a repeated banner. Saving a language updates
 navigation, controls and explanatory UI, and switches care-plan items to their wording

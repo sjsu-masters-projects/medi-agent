@@ -33,7 +33,8 @@ Do not choose emergency solely because a danger phrase appears inside a denial.
 sign. Use urgent for a new or worsening symptom or possible medication side effect without \
 an immediate-danger sign. Use routine for stable, non-symptom requests.
 - Requests to double or otherwise change a prescription dose, or reports of an accidental \
-extra dose, require urgent care-team review even if no symptoms are reported. Do not label \
+extra dose, require urgent care-team review even if no symptoms are reported. So does \
+taking a medication a document or the care team says to stop or hold. Do not label \
 them routine merely because the question concerns medication rather than a symptom.
 - Call `get_patient_context` whenever the answer depends on what the patient is taking or \
 being treated for. It returns only this patient's own record.

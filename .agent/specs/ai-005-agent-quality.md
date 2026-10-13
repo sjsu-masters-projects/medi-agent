@@ -78,17 +78,39 @@ follow-up visit, and a Spanish visit summary with "Suspender". A 200-dpi scan of
 report reads at OCR confidence 0.93; its one decimal loss ("4.0 - 5.6" read as "40-56") is
 caught by the contradiction check.
 
+## Second slice — follow-ups
+
+Branch `feature/agent-quality-followups` (stacked on the first slice):
+
+- **Critical-result alert** (migration `059_critical_result_alerts.sql`, requester applies):
+  when a lab result the report flags critical is cited to its document, the patient's active
+  care team gets one Safety notification per document ("Critical test result reported",
+  link to that document). Patients never get it; it stays work until read, or until the
+  document is rejected. Opted-in clinicians get the grouped review email, subject "Urgent
+  review work available", with no health detail. Verified in disposable PostgreSQL 16 with
+  the notification suite (53 passed).
+- **Triage evaluation on the production prompt:** the harness now sends the Care
+  Coordinator instruction (with record context in place of tool results) instead of a
+  stand-in. Eight new cases: a critical potassium, an A1c question, having taken a stopped
+  medication, and chest pain, each in English and Spanish. Production model: 36 cases,
+  92% accuracy, 100% safety (no under-triage); the six misses are over-triage of urgent
+  symptoms as emergency and of mild routine symptoms or low mood as urgent. The coordinator
+  now treats taking a medication a document stopped as urgent.
+- **Phone-photo OCR:** synthetic degraded photos (rotation, keystone, blur, glare, dim, noise,
+  low resolution, unreadable) through the real pipeline, and OCR quality passed to the model
+  in each page header.
+- **Patient Records results:** `GET /api/v1/documents/{id}/results` returns the patient's own
+  results and measurements as printed, with review status and page; Records shows them by
+  panel with High/Low/Outside range/Critical chips (Critical adds "contact your care team
+  today"), "not yet reviewed" markers and no interpretation, in English and Spanish.
+- **One Spanish register (tú):** care-plan translation, explanations, Nora and all patient
+  UI copy (31 strings converted). Approved wording is unchanged until its next review.
+
 ## Remaining
 
-1. **Critical result alert to clinicians.** Needs a new notification event type, which is
-   a migration (`notification_events.event_type` check), so it waits for authorization.
-2. **Triage evaluation on the production coordinator prompt** with result and Spanish
-   cases; today it scores a proxy prompt.
-3. **OCR fixtures:** phone photos (skew, glare), handwriting routed to clinician-only review,
-   and OCR quality passed to the model.
-4. **Patient Records view** of results (today patients see the explanation only).
-5. **Consistency:** one Spanish register across care-plan wording ("usted") and the
-   explanation and assistant ("tú"); SOAP generation through the model registry.
+1. Over-triage calibration for mild symptoms and low mood (safe, but noisy for the care team).
+2. Remove the unused legacy ingestion graph (`agents/ingestion/graph.py`) and its test.
+3. SOAP generation through the model registry.
 
 ## Acceptance
 

@@ -22,6 +22,7 @@ from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from app.adk.agents.care_coordinator.prompts import CARE_COORDINATOR_INSTRUCTION
 from app.agents.ingestion.prompts import (
     EXTRACT_CONTENT_SYSTEM,
     GENERATE_SUMMARY_SYSTEM,
@@ -47,7 +48,6 @@ from app.models.generation import GenerationErrorCode, GenerationRequest, Provid
 from app.safety import IntentType, UrgencyType, deterministic_safety_floor
 from app.services.eval_statistics import bootstrap_mean_interval
 from app.services.triage_prompts import (
-    TRIAGE_CLASSIFICATION_SYSTEM_INSTRUCTION,
     build_triage_classification_prompt,
 )
 
@@ -477,7 +477,18 @@ def build_request(
     return builders[scenario.workload](scenario, variant)
 
 
+# The production coordinator reports its decision with `submit_triage_decision` after
+# reading the record through tools. A single scored generation has no tools, so the record
+# those tools would return is given in the prompt and the tool's arguments are the answer.
+PRODUCTION_TRIAGE_EVAL_ADDENDUM = """
+For this evaluation you cannot call tools and you do not write working notes. The record
+context the tools would return is included in the message below. Instead of calling
+`submit_triage_decision`, return exactly its arguments as one JSON object with the keys
+"reason", "intent" and "urgency", and nothing else."""
+
+
 def _build_triage_request(scenario: EvalScenario, _variant: PromptVariant) -> GenerationRequest:
+    """Score the instruction production runs: the Care Coordinator's, not a stand-in."""
     inputs = scenario.inputs
     prompt = build_triage_classification_prompt(
         message=str(inputs["message"]),
@@ -489,7 +500,7 @@ def _build_triage_request(scenario: EvalScenario, _variant: PromptVariant) -> Ge
     )
     return GenerationRequest(
         prompt=prompt,
-        system_instruction=TRIAGE_CLASSIFICATION_SYSTEM_INSTRUCTION,
+        system_instruction=f"{CARE_COORDINATOR_INSTRUCTION}\n{PRODUCTION_TRIAGE_EVAL_ADDENDUM}",
         temperature=0.1,
         max_tokens=1024,
         task=scenario.workload.value,

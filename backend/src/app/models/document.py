@@ -1,5 +1,6 @@
 """Document schemas."""
 
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -53,3 +54,24 @@ class DocumentRead(BaseModel):
     reviewed_at: str | None = None
     review_note: str | None = None
     created_at: str
+
+
+class DocumentResultRead(BaseModel):
+    """One test result or measurement read from a patient's own document.
+
+    Values are as printed. ``flag_meaning`` and ``range_status`` restate the report's own
+    flag and printed range; nothing here interprets the result.
+    """
+
+    kind: Literal["lab_result", "vital_sign"]
+    name: str
+    value: str
+    unit: str | None = None
+    reference_range: str | None = None
+    flag: str | None = None
+    flag_meaning: str | None = None
+    range_status: str | None = None
+    panel: str | None = None
+    observed_at: str | None = None
+    page: int | None = None
+    reviewed: bool
