@@ -1,6 +1,6 @@
 # candidate-1 — paired-locale review worksheet
 
-**Status: requester reports Ganesh reviewed and approved candidate-1; actual review date/reference pending. Intake is not activated.**
+**Status: requester reports Ganesh approved candidate-1 on October 12, 2026. The approval record is below; intake activation is tracked separately.**
 
 - Version: `candidate-1`
 - Canonical bundle SHA-256: `a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab`
@@ -50,12 +50,19 @@ The reviewer can place the decision on PR #159, with these fields:
 | Findings / scope | Both locales, applicability and explicit branch/red-flag decisions |
 | Reference | Stable link to the actual decision/comment |
 
-On October 12, 2026, the requester stated: “Yes he reviewed it and approved it.”
-This records requester-reported approval by Ganesh of the opened candidate-1 review
-package, not an independently observed reviewer signature or GitHub approval.
-The candidate hash above remains unchanged. The actual review date and reference
-were requested; if the approval was verbal, record that provenance explicitly.
-The manifest stays inactive until those required metadata are complete.
+## Requester-reported approval
+
+On October 12, 2026, while this worksheet and `candidate-1.json` were open, the
+requester stated “Yes he reviewed it and approved it,” then clarified “Today just
+now he reviewed and approved it.” This records their report that Ganesh Thampi,
+the designated safety/backend reviewer, approved `candidate-1` on **October 12,
+2026**. The reviewed resource is the unchanged canonical bundle hash shown above;
+its package contains the paired English and Mexican Spanish wording, applicability,
+and safety-rule fields displayed here. The requester did not provide itemized
+findings or an independently observable reviewer signature. The unchecked review
+prompts above remain prompts, not independently verified findings. This record is
+the approval reference and provenance for the synthetic-demo library gate; it is
+not a GitHub PR approval or professional clinical validation.
 
 This synthetic-demo team review does not claim professional clinical validation.
 Approved content is immutable; later changes require a new version and review.
