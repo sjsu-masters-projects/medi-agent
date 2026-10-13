@@ -89,6 +89,11 @@ Branch `feature/agent-quality-followups` (stacked on the first slice):
   document is rejected. Opted-in clinicians get the grouped review email, subject "Urgent
   review work available", with no health detail. Verified in disposable PostgreSQL 16 with
   the notification suite (53 passed).
+  Production check (October 13, synthetic test patient): a basic metabolic panel with
+  potassium 6.9 "HH" yielded 7 results and 2 vitals with correct flags, one alert delivered
+  only to Elena, no patient alert, no care-plan draft, and an explanation that leads with
+  "contact your care team today". The alert showed under History but not Needs attention;
+  `060_critical_result_open_work.sql` adds it to open work until acknowledged.
 - **Triage evaluation on the production prompt:** the harness now sends the Care
   Coordinator instruction (with record context in place of tool results) instead of a
   stand-in. Eight new cases: a critical potassium, an A1c question, having taken a stopped
