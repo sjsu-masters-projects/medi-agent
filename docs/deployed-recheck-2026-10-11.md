@@ -148,4 +148,8 @@ changed. The requester typed every password and one-time code.
   and Supabase accepted it. A new clinician reset (requested 05:34 UTC) was opened from
   the email, continued, saved, and the requester signed in again at 05:36 UTC, landing on
   Risk Radar. Supabase cleared the recovery token. The account has no MFA factor, so MFA
-  after reset was not exercised. The patient en-US and es-MX resets were not run.
+  after reset was not exercised.
+- **Patient reset:** requested from `app.mediagent.live` at 05:47:11 UTC (neutral 204);
+  the requester opened the email, saved a new password and signed in at 05:47:47 UTC;
+  Supabase cleared the recovery token. The email itself was checked by the requester,
+  not inspected here.
