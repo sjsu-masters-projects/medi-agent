@@ -625,10 +625,14 @@ describe("Patient profile page", () => {
                     }),
                 ).toBeInTheDocument();
                 fireEvent.keyDown(document, { key: "Escape" });
-                await waitFor(() =>
-                    expect(
-                        screen.queryByRole("dialog"),
-                    ).not.toBeInTheDocument(),
+                // The sheet unmounts after its close animation; a slow CI runner can
+                // take longer than the default one-second wait.
+                await waitFor(
+                    () =>
+                        expect(
+                            screen.queryByRole("dialog"),
+                        ).not.toBeInTheDocument(),
+                    { timeout: 3000 },
                 );
             } else {
                 expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
