@@ -290,3 +290,53 @@ def test_result_evidence_quotes_the_whole_printed_row_first(extraction) -> None:
     assert {evidence.excerpt for evidence in item.evidence if evidence.field != "collected_at"} == {
         row
     }
+
+
+def _report_with_a_heading_naming_a_test() -> bytes:
+    """A section heading repeats a test's name above its own result row."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=612, height=792)
+    page.insert_text((40, 60), "SYNTHETIC TEST DOCUMENT - NOT A REAL PATIENT RECORD", fontsize=9)
+    page.insert_text((40, 90), "LIPID PANEL AND HEMOGLOBIN A1C", fontsize=12)
+    rows = [
+        ("Total cholesterol", "242", "H", "< 200", "mg/dL"),
+        ("HDL cholesterol", "38", "L", "> 40", "mg/dL"),
+        ("Hemoglobin A1c", "8.1", "H", "4.0 - 5.6", "%"),
+    ]
+    for index, row in enumerate(rows):
+        for x, cell in zip((40, 250, 330, 380, 500), row, strict=True):
+            page.insert_text((x, 120 + index * 18), cell, fontsize=10)
+    content = doc.tobytes()
+    doc.close()
+    return content
+
+
+@pytest.fixture(scope="module")
+def headed_extraction():
+    return DocumentIntelligenceService().extract(
+        _report_with_a_heading_naming_a_test(), mime_type="application/pdf"
+    )
+
+
+def test_result_named_in_a_heading_anchors_on_its_own_row(headed_extraction) -> None:
+    item = ground_item(
+        headed_extraction,
+        "lab_result",
+        _result(
+            test_name="Hemoglobin A1c", value="8.1", unit="%", reference_range="4.0 - 5.6", flag="H"
+        ),
+    )
+    assert item.confidence_band is ConfidenceBand.HIGH
+    assert item.value["value"] == "8.1"
+    assert item.value["flag_meaning"] == "high"
+    assert item.evidence[0].excerpt == "Hemoglobin A1c | 8.1 | H | 4.0 - 5.6 | %"
+    assert all("HEMOGLOBIN A1C" not in evidence.excerpt for evidence in item.evidence)
+
+
+def test_heading_never_rescues_a_value_that_is_not_printed(headed_extraction) -> None:
+    item = ground_item(
+        headed_extraction,
+        "lab_result",
+        _result(test_name="Hemoglobin A1c", value="9.1", unit="%", flag="H"),
+    )
+    assert item.confidence_score == 0

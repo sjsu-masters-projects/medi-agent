@@ -132,6 +132,17 @@ Nora's instructions are unchanged except one line saying the values are shown in
 Older messages keep no card. Before 062 is applied the reply is saved as text and the card
 still shows live.
 
+## Result named in a heading (production check, October 13)
+
+A synthetic lipid panel uploaded after #163 printed "LIPID PANEL AND HEMOGLOBIN A1C" above
+its rows. The model read all seven results, but grounding matched the A1c name on the
+heading first, found no 8.1 on that line, scored the result zero and dropped it without a
+warning: the reviewer saw six results and no A1c. Branch `fix/result-row-anchoring`: a
+result's name is looked up at every printed occurrence, and the copy whose row also carries
+the value, unit, range and flag is chosen; a heading never supplies a value that is not
+printed on the row. Items the model proposed but no page could confirm are now counted in
+the ingestion run's warnings and logged, instead of disappearing.
+
 ## Remaining
 
 1. Over-triage calibration for mild symptoms and low mood (safe, but noisy for the care team).
