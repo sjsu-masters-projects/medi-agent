@@ -340,6 +340,8 @@ def _anchor_attributes(
             )
         elif field == fields[0] and row_fields:
             anchor = _row_primary(extraction, fields, row_fields, value, text, policy)
+        elif field != fields[0] and fields[0] in anchors:
+            anchor = _near_primary(extraction, anchors[fields[0]], text, policy)
         else:
             anchor = anchor_value(extraction, text, policy=policy)
         if anchor is not None and field in EXACT_FIELDS and anchor.match_score < 1.0:
@@ -440,6 +442,33 @@ def _row_primary(
 
     # Ties keep the earlier, better-matching copy, which is the previous behaviour.
     return max(occurrences, key=lambda candidate: (found_on_row(candidate), candidate.match_score))
+
+
+def _near_primary(
+    extraction: DocumentExtraction,
+    primary: EvidenceAnchor,
+    text: str,
+    policy: DocumentIntelligencePolicy,
+) -> EvidenceAnchor | None:
+    """The printed copy of an attribute nearest its item's name, preferring lines below it.
+
+    "1 tablet by mouth daily" or "Continue" can belong to any medication in a list; the
+    first copy on the page cited Metformin's line as Atorvastatin's dose.
+    """
+    occurrences = anchor_occurrences(extraction, text, policy=policy)
+    if len(occurrences) < 2:
+        return occurrences[0] if occurrences else None
+    best = occurrences[0].match_score
+    slack = 0.35 * max(primary.bbox.y1 - primary.bbox.y0, 1.0)
+
+    def distance(candidate: EvidenceAnchor) -> tuple[int, int, float]:
+        if candidate.page_number != primary.page_number:
+            return (1, abs(candidate.page_number - primary.page_number), 0.0)
+        offset = candidate.bbox.y0 - primary.bbox.y0
+        return (0, 0 if offset >= -slack else 1, abs(offset))
+
+    # Only equally good matches compete; a closer but weaker copy never wins.
+    return min((item for item in occurrences if item.match_score >= best), key=distance)
 
 
 def _anchor_on_row(

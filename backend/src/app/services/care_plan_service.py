@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -56,6 +57,8 @@ def _medication_action(fact: dict[str, Any]) -> str | None:
     return str(stored) if stored else medication_action(value.get("status"))
 
 
+# A printed strength in a medication name ("20 mg", "0.5 mL", "100 units", "2.5%").
+_STRENGTH = re.compile(r"\d+(?:[.,]\d+)?\s*(?:mg|mcg|µg|g|ml|units?|iu|meq|%)(?![a-z])", re.I)
 _SOURCE_TITLE_REVIEW = (
     "Source title exceeds the draft limit; replace it after reviewing the full evidence."
 )
@@ -786,7 +789,11 @@ class CarePlanService:
                 for key in ("name", "dosage", "frequency", "route")
                 if value.get(key)
             }
-            title = " ".join(filter(None, [name, str(value.get("dosage") or "")])).strip()
+            dosage = str(value.get("dosage") or "")
+            # "Atorvastatin 20 mg tablet" already carries its strength; appending the
+            # per-dose count gave "Atorvastatin 20 mg tablet 1 tablet".
+            title = name if _STRENGTH.search(name) else " ".join(filter(None, [name, dosage]))
+            title = title.strip()
             frequency = str(value.get("frequency") or "")
             # Missing source instructions are a clinician-review blocker.  Do not
             # manufacture a patient-facing instruction such as "take as directed".

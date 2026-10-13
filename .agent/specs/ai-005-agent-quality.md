@@ -143,6 +143,31 @@ the value, unit, range and flag is chosen; a heading never supplies a value that
 printed on the row. Items the model proposed but no page could confirm are now counted in
 the ingestion run's warnings and logged, instead of disappearing.
 
+## Production check after #164–#166 (October 13)
+
+Verified in both portals with the synthetic test patient and Elena Park: the critical
+potassium alert sits under Alerts → Needs attention and leaves it when acknowledged; new
+lab uploads quote whole printed rows; the recheck report (after #166) registers all seven
+results including A1c; Nora's document answer carries the results card, which survives a
+reload, and a general question gets none; the discharge draft was reviewed (glipizide
+removed per the STOP line, lisinopril raised to the printed 20 mg, routes chosen, wording
+checked in both languages) and published to Today. Three defects found there, fixed on
+branch `fix/medication-evidence-and-draft-titles`:
+
+- A medication's dose and action were cited from the first matching line on the page:
+  Atorvastatin's "1 tablet" evidence quoted Metformin's "1 tablet by mouth twice daily".
+  Every attribute after the name is now taken from the equally good copy nearest the
+  name, preferring lines below it.
+- Draft titles repeated the dose after a printed strength ("Atorvastatin 20 mg tablet
+  1 tablet"); a name that already carries a strength is used alone.
+- A report footer ("Discuss with your clinician before changing any medication") was
+  extracted as a patient obligation, which queued a care-plan regeneration for a
+  results-only report. The extraction prompt (`document-extraction/3`) now leaves report
+  boilerplate out.
+
+Still open: asked for general sleep tips, Nora said it could not look up reference
+information and pointed to the care team instead of giving general guidance.
+
 ## Remaining
 
 1. Over-triage calibration for mild symptoms and low mood (safe, but noisy for the care team).
