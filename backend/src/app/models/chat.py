@@ -1,5 +1,6 @@
 """Chat message schemas."""
 
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -24,6 +25,8 @@ class ChatMessage(BaseModel):
     audio_url: str | None = None
     session_id: str = "default"
     created_at: str
+    # Server-built cards under a reply, e.g. the results of a document the reply cited.
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ChatConversation(BaseModel):

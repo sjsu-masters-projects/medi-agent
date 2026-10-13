@@ -153,7 +153,7 @@ export default function ChatPage() {
             {voiceError && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
             <div className="flex flex-1 flex-col gap-3 pt-1" aria-busy={loading}>
                 {loading && <p className="text-center text-sm text-muted" role="status">{controls.loading}</p>}
-                {visibleMessages.map((message) => <ChatBubble key={message.id} content={message.content}
+                {visibleMessages.map((message) => <ChatBubble key={message.id} attachments={message.role === ChatRole.ASSISTANT ? message.attachments : undefined} content={message.content}
                     language={message.language} locale={locale} role={message.role === ChatRole.USER ? "user" : "assistant"}
                     timestamp={message.createdAt} onPlayAudio={message.role === ChatRole.ASSISTANT && (Boolean(message.audioUrl) || canPlayAssistantAudio) ? () => handlePlayAssistantMessage(message) : undefined} />)}
                 {!loading && !documentContext && !messages.some((message) => message.role === ChatRole.USER) && <section className="ma-enter space-y-2.5 pt-1">

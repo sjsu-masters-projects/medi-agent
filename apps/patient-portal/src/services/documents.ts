@@ -81,7 +81,7 @@ function optionalText(value: unknown): string | null {
 }
 
 /** Keep only well-formed rows; an unknown flag or range value is treated as absent. */
-function toDocumentResult(item: unknown): DocumentResult | null {
+export function toDocumentResult(item: unknown): DocumentResult | null {
     if (typeof item !== "object" || item === null) {
         return null;
     }

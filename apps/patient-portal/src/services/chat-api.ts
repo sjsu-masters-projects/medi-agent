@@ -1,6 +1,8 @@
 import { api } from "@/services/api";
+import { toDocumentResult, type DocumentResult } from "@/services/documents";
 import {
     normalizeLocale,
+    type ChatAttachment,
     type ChatMessage,
     type ChatRole,
     type DocumentType,
@@ -16,6 +18,8 @@ export interface ChatMessageApi {
     language: Locale;
     audio_url?: string | null;
     created_at: string;
+    /** Server-built cards under the message; missing or null on older messages. */
+    attachments?: unknown[] | null;
 }
 
 export interface AssistantCompleteEvent {
@@ -134,7 +138,59 @@ export type ChatSocketEvent =
     | UserMessageSavedEvent
     | { type: "pong" };
 
+function optionalText(value: unknown): string | null {
+    return typeof value === "string" && value.trim() ? value : null;
+}
+
+/**
+ * Keep a well-formed document-results card; anything else is not shown.
+ *
+ * Rows are validated exactly like Records validates them. A card left with no valid
+ * rows, or an attachment type this portal does not know, is dropped.
+ */
+function toChatAttachment(item: unknown): ChatAttachment | null {
+    if (typeof item !== "object" || item === null) {
+        return null;
+    }
+    const raw = item as Record<string, unknown>;
+    const documentId = optionalText(raw.document_id);
+    if (raw.type !== "document_results" || !documentId || !Array.isArray(raw.results)) {
+        return null;
+    }
+    const results = raw.results
+        .map(toDocumentResult)
+        .filter((result): result is DocumentResult => result !== null);
+    if (!results.length) {
+        return null;
+    }
+    const rawTitle = typeof raw.title === "object" && raw.title !== null
+        ? raw.title as Record<string, unknown>
+        : {};
+    const title: Partial<Record<"en-US" | "es-MX", string>> = {};
+    for (const locale of ["en-US", "es-MX"] as const) {
+        const text = optionalText(rawTitle[locale]);
+        if (text) title[locale] = text;
+    }
+    return {
+        type: "document_results",
+        documentId,
+        fileName: optionalText(raw.file_name),
+        title,
+        results,
+    };
+}
+
+export function mapChatAttachmentsFromApi(value: unknown): ChatAttachment[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value
+        .map(toChatAttachment)
+        .filter((attachment): attachment is ChatAttachment => attachment !== null);
+}
+
 export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
+    const attachments = mapChatAttachmentsFromApi(message.attachments);
     return {
         audioUrl: message.audio_url ?? undefined,
         content: message.content,
@@ -144,6 +200,8 @@ export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
         language: normalizeLocale(message.language),
         patientId: message.patient_id,
         role: message.role,
+        // Only set when there is a card, so a message without one is unchanged.
+        ...(attachments.length ? { attachments } : {}),
     };
 }
 
