@@ -55,22 +55,22 @@ References: [Resend SMTP](https://resend.com/docs/send-with-supabase-smtp),
 [Supabase password recovery](https://supabase.com/docs/guides/auth/passwords).
 
 Application email uses separate verified opt-in contacts and server-only outbox
-records from `057_email_delivery.sql` (applied to staging October 11) and its fixes in
-`058_email_delivery_fixes.sql`. Apply 058 through the ledger, with project-specific
-authorization, before the backend that uses it is merged or deployed. No email
-function reads the `auth` schema: a hosted migration cannot grant `service_role`
-access there (057's attempt only produced "no privileges were granted"), so the
-backend reads account addresses through the Auth Admin API with the service-role key. The
-notification and onboarding sender identities are documented in `.env.example`;
-they are not Supabase SMTP configuration. With no configured notification sender,
-verification is unavailable rather than sent from a default testing identity.
+records from `057_email_delivery.sql` and `058_email_delivery_fixes.sql` (both applied
+to the synthetic project). No email function reads the `auth` schema: a hosted migration
+cannot grant `service_role` access there, so the backend reads account addresses through
+the Auth Admin API with the service-role key. The notification and onboarding sender
+identities are documented in `.env.example`; they are not Supabase SMTP configuration.
+With no configured notification sender, verification is unavailable rather than sent
+from a default testing identity.
 
-The reviewed rollout and continuation checklist is in
-[EMAIL-001](../.agent/specs/email-001-email-flows.md#current-implementation-and-continuation-handoff).
-The installable Reset password template candidate is
-`docs/email-templates/supabase-password-recovery.html`. Do not install it or enable
-confirmation as a side effect of applying SQL. The existing reminder heartbeat
-also dispatches application email; a paused trigger means no periodic delivery.
+The Reset password template is `docs/email-templates/supabase-password-recovery.html`,
+installed October 12. Reinstall it in Authentication → Emails → Reset password after
+every change to that file, with separate authorization; never enable confirmation as a
+side effect of applying SQL. Its link opens the portal reset page, so both portals'
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` must be the project's exact public key: `/verify` does not
+check the key, but saving the new password does. Periodic email delivery runs after each
+reminder run. Configuration and production status:
+[EMAIL-001](../.agent/specs/email-001-email-flows.md#operations-and-configuration).
 
 ## Apply migrations
 

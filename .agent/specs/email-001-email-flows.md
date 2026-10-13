@@ -48,12 +48,14 @@ the existing eight-character minimum. The operator enters passwords during live 
 
 ## Templates, sending and testing
 
-The requester reattached the standalone design export on October 11. Its three
-templates are preserved as [version-controlled HTML references](../../docs/email-templates/README.md)
-without the export's script bundle. They are not installed remotely or wired to
-application delivery yet. Keep confirmation disabled; add es-MX and plaintext
-variants before patient email acceptance. The reference's clinic-added footer
-does not substitute for verified contact ownership or optional-email consent.
+The requester's design export (October 11) is preserved as
+[version-controlled HTML references](../../docs/email-templates/README.md). Application
+emails are rendered by `backend/src/app/services/email_templates.py` (escaped HTML and
+plaintext, patient en-US/es-MX, clinician English in the MediAgent Pro blue). The
+scanner-safe Supabase Reset password template, `supabase-password-recovery.html`, is
+installed (October 12) and must be reinstalled after every change to that file.
+Confirmation stays disabled. The reference's clinic-added footer does not substitute
+for verified contact ownership or optional-email consent.
 
 Use role-specific brand colors, simple responsive HTML, plain text, readable
 contrast, one action and escaped dynamic parameters. Patient locale follows saved
@@ -75,257 +77,88 @@ Genuine verified mailboxes receive their own opted-in notices, never the demo si
 
 ## Acceptance
 
-- [ ] Verified sending domain and approved onboarding/Auth/notification From values.
-- [x] Supabase SMTP configured by operator (persisted configuration verified),
-  with correct exact redirect allowlist (saved with approval and reload verified).
-- [ ] Forgot/reset password in both portals; neutral request and no sensitive logs.
-- [ ] Inbox receipt, link, operator password reset and fresh login including MFA.
-- [ ] Invitation delivery, acceptance permissions and invalid/expired handling.
-- [ ] Consent, locale and verified contact eligibility; optional event integration.
-- [ ] Durable retries/deduplication and recipient revocation tests.
-- [ ] Synthetic sink cannot divert genuine account or Auth emails.
-- [ ] EN/ES templates visually checked on mobile; plaintext and unavailable states.
-- [ ] Focused backend/portal tests, lint/type/build, migration permission tests if added.
-- [ ] Reviewed merge, separately authorized rollout and deployed evidence recorded.
+- [x] Verified sending domain and From values: `mail.mediagent.live`; SPF, DKIM and
+  DMARC pass on delivered mail.
+- [x] Supabase SMTP configured by operator, with the exact three-URL redirect allowlist.
+- [x] Forgot/reset password in both portals: clinician and patient passed on production.
+- [ ] Inbox receipt, link, operator password reset and fresh login: passed for the
+  clinician; MFA after reset not exercised (the test account has no factor).
+- [x] Invitation delivery, acceptance permissions and invalid/expired handling.
+- [x] Consent, locale and verified contact eligibility; optional event integration
+  (unread message, Spanish appointment notice, opt-out).
+- [x] Durable retries/deduplication and recipient revocation tests (PostgreSQL suite).
+- [x] Synthetic addresses are never sent to; genuine account and Auth email is never diverted.
+- [ ] EN/ES templates visually checked on mobile; patient en-US/es-MX and clinician reset emails received and checked on desktop.
+- [x] Focused backend/portal tests, lint/type/build and migration permission tests.
+- [ ] Provider delivery status (needs a full-access Resend key).
+- [x] Reviewed merge (#152, #156, #157), authorized rollout and deployed evidence recorded.
 
 This contract extends NOT-001 with a separate channel; it does not change existing
 review/publication gates or describe local tests as deployed acceptance.
 
-## Local recovery slice — October 11 (earlier checkpoint)
+## Implementation
 
-Implemented `/forgot-password` and `/reset-password` in both portals, entry links,
-neutral role-scoped reset requests, bilingual patient controls, recovery-fragment
-removal and a nonpersisted SDK session. Normal login/clinic/MFA is still required
-after reset. The later approved remote Site URL/redirect setup is recorded above;
-no email has been sent by this work and inbox/link acceptance remains unverified.
+- **Recovery:** `/forgot-password` and `/reset-password` in both portals. The backend
+  builds the reset destination from the portal URL and locale and answers neutrally.
+  The email links to the portal page with `token_hash`; the page removes it from history
+  and calls `verifyOtp` only after **Continue**, so mail scanners cannot use the link up.
+  Older `#access_token` links still work. The recovery session lives in an isolated,
+  non-persisted client; a successful save signs out every session, then normal login
+  (clinic and MFA checks) follows.
+- **Contacts and preferences:** server-only `email_contacts` (057/058). A code proves
+  mailbox ownership; verification does not opt in. Consent is stamped only when notices go
+  from off to on. Patient controls are bilingual. Five codes per contact per day.
+- **Preferences presentation (#158):** patient Profile shows an **EMAIL NOTICES /
+  AVISOS POR CORREO** grouped card like the other Profile sections: address with a
+  Verified / Not verified / Email unavailable chip, then Send code, code + Verify, or the
+  notice checkboxes and Save, and one footnote. Demo addresses get one muted line and no
+  controls. Clinician Settings shows the same states in a standard Settings card.
+- **Event notices:** saved notification receipts enqueue opted-in email in
+  `email_outbox`. Dispatch rechecks access, consent, the address and unread/current
+  work, groups private messages (15 minutes) and shared reviews (1 hour), freezes retry
+  payloads and leases rows with SKIP LOCKED. Links go to `/notifications` (patients) or
+  `/alerts` (clinicians) with no identifiers.
+- **Invitations:** opaque fragment tokens stored as hashes; sending grants nothing.
+  Only clinic admins invite. Acceptance checks the address, inviter authority, expiry and
+  revocation; signup claims the invitation in the same request, and an existing account
+  uses **Sign in to accept**. History separates delivery from acceptance and supports
+  revoking unused links.
+- **No auth-schema reads:** a hosted migration cannot grant `service_role` access to
+  `auth`, so the backend reads account addresses through the Auth Admin API and SQL
+  compares them with the verified contact before every send and acceptance.
+- **Provider states:** queued → accepted → delivered / bounced / failed / complained.
+  Opened or clicked counts as delivered; a complaint withdraws optional-notice consent.
+  Polling stops 72 hours after acceptance.
 
-Verification from the isolated EMAIL-001 checkout (dummy public test settings):
+## Operations and configuration
 
-- Backend `PYTHONPATH=src pytest tests/unit/services/test_auth_service.py
-  tests/integration/routers/test_auth_api.py --no-cov -q`: **59 passed**.
-- Ruff check and format check for the five changed Python files: passed.
-- Mypy for changed Auth service, models and router: passed.
-- Both portals `NODE_OPTIONS=--no-experimental-webstorage npm run test`:
-  **481 patient / 307 clinician passed**, including seven new recovery tests each.
-- Both portals `npm run typecheck` and `npm run lint`: passed.
-- Both portals `npm run build -- --webpack`: passed with network access for the
-  existing Google Fonts. The first sandboxed builds failed only fetching fonts.
-- `git diff --check`: passed.
+- Backend: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL`,
+  both portal URLs and `CRON_AUTH_TOKEN`; optional `EMAIL_CODE_HMAC_SECRET` (falls back to
+  the Supabase JWT secret). See `CONTRIBUTING.md` and `.env.example`. Status
+  reconciliation needs a **full-access** Resend key; a sending-only key still sends, logs
+  one warning and leaves statuses at "accepted".
+- Portals: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be the
+  project's exact public values. Supabase's `/verify` route does not check the key, so a
+  wrong key only shows up when the password is saved.
+- New invitations and codes send immediately; failures stay queued. Retries, notices and
+  status checks run as the `email_dispatch` job after each reminder run, or through
+  `POST /api/v1/cron/emails/dispatch` (`{"dry_run": true}` counts only). See the
+  [scheduled jobs runbook](../CLOUD_INFRASTRUCTURE_GUIDE.md#5-scheduled-jobs-cloud-scheduler-and-run-logs).
+- End-to-end QA uses dedicated fictional accounts whose genuine mailbox the operator owns.
+  Do not change Morgan/Elena's login email. The operator types passwords and codes.
 
-Dependency install reported six high-severity advisories per portal in unchanged
-locks; no force-upgrade was performed. Existing Sentry configuration warnings remain.
-Those results predate the delivery/preferences implementation below. Inbox
-delivery, actual recovery/password entry, mobile visual QA and deployment remain
-open. The operator subsequently rotated the exposed credential and saved SMTP;
-the persisted configuration was verified without inspecting credentials.
+## Production status — October 12
 
-## Current implementation and continuation handoff
+Evidence: [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#email-001-on-production-october-12).
+Verified: invitation, verification code, unread-message and Spanish appointment notices,
+opt-out, neutral reset request and the clinician and patient password resets (after both portals were
+rebuilt with the correct public Supabase key; the earlier builds had it missing its first
+character, so the save returned 401 "Invalid API key"). Open:
 
-The EMAIL-001 branch adds:
+1. Replace the sending-only Resend key with a full-access key so statuses reach delivered.
+2. The first invitation landed in Spam; watch placement as the sending domain ages.
 
-- Both-portal recovery and explicit verification/optional-email controls in patient
-  Profile and clinician Settings. Verification does not opt in. Failed and stale
-  requests cannot restore another account's settings. Patient controls are bilingual.
-- Server-only `email_contacts`, `email_outbox` and addressed clinician invitations
-  in new **057_email_delivery.sql**. It also permits an unassigned clinician's
-  `clinic_name` to be NULL while invitation acceptance is pending; no invented
-  clinic grants access. 057 was applied to staging on October 11; the review fixes
-  in **058_email_delivery_fixes.sql** are not applied yet (see rollout order).
-- Saved notification receipts enqueue future opted-in event emails. The delivery
-  worker prepares receipts even with portals closed, rechecks access/current work,
-  groups private messages and shared reviews, freezes retry payloads, leases with
-  SKIP LOCKED, and distinguishes provider acceptance from confirmed delivery.
-  Ambiguous sends stop retrying before Resend's 24-hour idempotency retention ends.
-- Invitation links use opaque fragment tokens, stored as hashes in the invitation
-  record. Sending grants no membership. Address ownership, current inviter/clinic
-  authority, expiry and revocation are checked on explicit acceptance. An existing
-  different-clinic membership cannot be moved by an invitation. Duplicate
-  acceptance by the same current member is safe. Invitation signup claims membership
-  in the same request; a failed claim keeps the account and offers a retry.
-- Clinic-admin invitation history separates acceptance from delivery and supports
-  revoking unused links. The legacy false-success patient email endpoint returns
-  410; human messages stay in private conversations with optional notices.
-- Branded, escaped bilingual HTML/plaintext application templates and an installable
-  Supabase recovery-template candidate in `docs/email-templates/`. No remote
-  template has been installed.
-
-### Rollout order — requires separate authorization
-
-`057_email_delivery.sql` was applied to the synthetic staging project through the
-ledger on October 11, before review fixes. It is immutable in the ledger; the
-fixes are in **`058_email_delivery_fixes.sql`** (additive `ALTER` / `CREATE OR
-REPLACE`, same function signatures and grants). 058 is **not** applied yet.
-
-1. Apply only `058_email_delivery_fixes.sql` through the ledger against the approved
-   staging project **before merging**: merging deploys the backend automatically
-   (`deploy-backend.yml` on `backend/**`), and the new backend needs 058.
-   058 is backward compatible with current `main`: main never calls the email
-   functions, and the replaced `notification_receipts` trigger only adds outbox rows
-   for verified, opted-in contacts (there are none). It only adds columns/indexes to
-   the email tables and replaces email functions. If the backend ever runs without
-   the email schema, email endpoints answer `503 EMAIL_SETUP_PENDING` and Settings /
-   Profile show "not available yet"; nothing else is affected.
-2. Review/merge with CI and peer approval; preserve newer main work.
-3. Confirm through the operator, never by printing values: `RESEND_API_KEY`,
-   `RESEND_FROM_EMAIL` (required for verification codes and notices; without it they
-   stay queued and the backend logs one warning), `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL`,
-   both portal URLs and `CRON_AUTH_TOKEN`. Optional: `EMAIL_CODE_HMAC_SECRET`
-   (falls back to the Supabase JWT secret). Provider status reconciliation needs a
-   **full-access** Resend key; a sending-only key still sends, logs one warning and
-   leaves statuses at "provider accepted".
-4. Deploy the reviewed backend and both portals. New invitations and verification
-   codes are sent immediately; failures stay queued. Retries, notices and status
-   reconciliation run as the `email_dispatch` job: after each reminder heartbeat
-   (isolated, its own run record) or via authenticated `POST /api/v1/cron/emails/dispatch`
-   (`{"dry_run": true}` counts only). The paused reminder trigger must be resumed by
-   its separately authorized OPS-003 workflow; until then only immediate sends happen.
-5. Install the recovery HTML candidate in Supabase's Reset password template with
-   separate authorization. Keep Confirm email **off**; pending-confirmation signup
-   is not implemented or part of this reviewed slice.
-6. Use dedicated fictional accounts whose genuine login mailbox the operator owns
-   for end-to-end QA. Do not change Morgan/Elena's login email. Automated redirection
-   to a synthetic sink is **not implemented**: synthetic addresses are blocked,
-   and genuine notices/Auth links are never diverted.
-7. Operator requests recovery, checks the actual inbox, enters the new password,
-   and verifies fresh normal login/MFA (other sessions are signed out). Then verify
-   code + explicit opt-in, saved event → email → `/notifications` or `/alerts`,
-   invitation signup, Sign in to accept, revocation and re-invite, EN/ES, opt-out,
-   and delivered/bounced provider status. Record actual outcomes here.
-
-### Review fixes — October 11 (058 and backend)
-
-- **No auth-schema dependency.** The hosted migration role could not grant
-  `service_role` access to `auth` ("no privileges were granted"), so 057's reads of
-  `auth.users` would fail at runtime. The backend now reads the account address via
-  the Auth Admin API and passes it in; SQL compares it with the verified contact on
-  every account operation, immediately before each send (freeze) and on invitation
-  acceptance. 058 revokes the 057 table grant where the migration role made it.
-- **Locking.** Invitation operations lock clinic → clinician rows (by id) →
-  invitation; history is lock-free. Docker tests prove a waiting accept/create holds
-  no clinician or invitation lock and that concurrent create/list/accept complete.
-- **Invitation signup in one request.** Signup creates the account and claims the
-  invitation server-side. If the claim fails, the account is kept, signed in, and
-  can retry. An unassigned account that cannot pass clinic login uses **Sign in to
-  accept** on the invitation link (`POST /api/v1/auth/invitations/accept`), which
-  confirms the password, claims membership, ends that temporary session and sends
-  the clinician to normal login with MFA. Login for an unassigned account explains
-  this (`INVITATION_ACCEPTANCE_REQUIRED`). The unauthenticated preview no longer
-  returns the clinic code; acceptance returns clinic context. The legacy
-  `?role=admin` signup option was removed.
-- **Immediate, isolated sends.** New invitations and codes send only their own row
-  at once; user requests never run the shared worker. A re-invite replaces a pending
-  link whose delivery failed, bounced or was stopped. Email dispatch after reminders
-  is isolated and has its own `email_dispatch` run record and log lines.
-- **Provider status.** Opened/clicked → delivered; canceled → failed; complaints are
-  recorded on a delivered row (not a bounce) and withdraw optional-notice consent.
-  Polling stops 72 hours after acceptance; delivered notices are rechecked every six
-  hours for complaints. A sending-only key is detected once per process.
-- **Grouping.** A stopped grouped summary is reopened as a new generation (new
-  provider idempotency key) when a new unread item arrives.
-- **Errors, caps and links.** Per-operation error messages (invalid/expired,
-  wrong account, existing membership, demo address, verify first). Five
-  verification codes per contact per day; password recovery requests are limited
-  per address and per caller while the response stays neutral. Notice links go to
-  `/notifications` (patients) or `/alerts` (clinicians) without identifiers; the
-  provider idempotency key is a hash.
-- **Smaller fixes.** Unsent codes/links leave the outbox when superseded, verified,
-  revoked or accepted; consent is stamped only when notices go from off to on;
-  optional dedicated `EMAIL_CODE_HMAC_SECRET`; missing notification sender is
-  validated at startup and never claimed; successful password reset signs out all
-  sessions; recovery status receives focus and errors are linked to their fields.
-- Not changed: constant-time comparison (code hashes are compared in SQL behind a
-  five-attempt limit; no secret is compared in Python).
-
-Local tests are not proof of delivered mail. Browser/email-client rendering,
-inbox receipt, deployed links and provider status reconciliation remain unverified.
-Do not mark EMAIL-001 Done before those acceptance steps and reviewed merge.
-
-### Local verification — current slice
-
-All backend tests below use dummy Supabase values; PostgreSQL runs in cached,
-disposable `postgres:16` containers with network disabled. No mail was sent.
-
-- `PYTHONPATH=src pytest tests/unit/services/test_email_service.py
-  tests/unit/services/test_auth_service.py tests/unit/services/test_staff_service.py
-  tests/integration/routers/test_email_api.py tests/integration/routers/test_auth_api.py
-  tests/integration/routers/test_clinician_api.py tests/integration/routers/test_cron_api.py
-  --no-cov -q`: **138 passed** before integrating newer main.
-- `EMAIL_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src pytest
-  tests/integration/test_email_postgres.py --no-cov -q`: **14 passed**, including
-  browser permissions, verification attempts/cooldown, consent/address changes,
-  synthetic-address suppression, concurrent claims, stable retry keys, shared-work
-  status, invitation acceptance/revocation and private-recipient revocation.
-- Both portals `NODE_OPTIONS=--no-experimental-webstorage npm run test`:
-  **487 patient / 313 clinician passed** before newer-main integration.
-- Both portal lint/typecheck and `npm run build -- --webpack`: passed; clinician
-  unused-locale warning corrected afterward. Existing Sentry warnings remain.
-- Ruff: passed for changed Python. Mypy: passed for ten delivery/Auth/Staff/cron files.
-- `python scripts/validate_migrations.py`: **67 migration files validated**.
-- Manual live recovery/inbox, mobile email rendering, consent/opt-out journeys and
-  template installation remain open, not passed by mocks or static HTML checks.
-
-The next contributor should run the same checks after integrating current main;
-use the PR's final CI evidence rather than these earlier dependency-version results.
-
-### Main #151 integration verification
-
-Integrated main `8b44610`; no retired ADR endpoint or old dependency lock restored.
-Installed both portal locks with `npm ci --no-audit --no-fund`.
-
-- The focused backend command above: **137 passed** (the retired nightly-ADR
-  API test was removed on main).
-- Portal full suites: **493 patient / 313 clinician passed**, plus three focused
-  invitation-history tests added afterward. Both lint/typecheck and webpack builds
-  passed with Next.js **16.3.8**; existing Sentry/workspace warnings remain.
-- Mypy: **17 changed source files passed**. Changed-file Ruff passed; migration
-  naming/syntax validator passed for **67 files**. Git diff whitespace checks passed.
-- Offline PostgreSQL full email suite: **14 passed**; invitation/membership subset
-  **3 passed** after final transaction-lock changes. No remote DB or outbound mail used.
-- The pre-commit hook expects a worktree-local `backend/.venv`, which this checkout
-  does not have. Equivalent checks used the existing base virtualenv; commit hook
-  was skipped with `HUSKY=0`, not CI. Keep this reproducibility limitation explicit.
-
-### Verification — review fixes (October 11)
-
-Dummy Supabase settings, offline disposable `postgres:16` containers, no remote
-database, provider or mail. From `backend/` with `PYTHONPATH=src`:
-
-- `ruff check src/ scripts/` and `ruff format --check src/ scripts/`: passed.
-- `mypy src/app`: no issues in 235 source files.
-- `python scripts/validate_migrations.py`: 68 migration files validated.
-- `pytest tests/unit tests/integration -q --ignore=tests/integration/test_appointment_offer_transactions.py`:
-  **2404 passed, 187 skipped**, coverage 88.27%.
-- `EMAIL_TEST_POSTGRES_DOCKER=1 pytest tests/integration/test_email_postgres.py`:
-  **31 passed** (057 applied, service_role auth access removed, then 058). The three
-  lock-order tests were also run against 057's original functions and failed there.
-- `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 pytest tests/integration/test_notification_centre_postgres.py`:
-  **50 passed**.
-- Both portals: `eslint .` and `tsc --noEmit` clean; `vitest run` **502 patient /
-  324 clinician passed**; `next build` succeeded.
-- Commits ran the repository pre-commit hook (lint-staged: ruff, ruff format, mypy,
-  eslint) with temporary links to the main checkout's backend virtualenv and root
-  tooling; the links were removed after each commit.
-
-Not verified here: applying 058 to staging, deployment, real inbox delivery,
-provider status with a full-access key, mobile email rendering and the live
-Sign in to accept and recovery journeys.
-
-### Profile and Settings presentation — October 12
-
-Requester feedback: the patient Profile card was wider than the other sections and
-text-heavy. Patient Profile now shows an **EMAIL NOTICES / AVISOS POR CORREO** label
-above one inset grouped card (same section label, 16px gutter and rows as the other
-Profile groups). Top row: mail tile, truncated account address (full value in
-`title` and in the Profile header) and a Verified / Not verified / Email unavailable
-chip. Demo addresses get one muted line and no controls; unverified shows Send code,
-then a single code + Verify row with Send a new code; verified shows checkbox rows,
-Save and a recovery-unaffected line. One footnote: no health details, replies unread.
-Clinician Settings uses the same states in a standard Settings card (icon header and
-badge, rows, footer with footnote/status/Save) and an Email notices section link.
-Presentation only: API calls, limits, setup-pending state, stale-response guards and
-`one-time-code` are unchanged; status messages use one persistent live region.
-
-The repository handoff is this section plus the rollout checklist above, reachable
-from TASKS.md, architecture, contributor and Supabase guides. The next contributor
-does not need chat history or access to any credential pasted into earlier chats.
-Pull request: [#152](https://github.com/sjsu-masters-projects/medi-agent/pull/152).
+Pull requests: [#152](https://github.com/sjsu-masters-projects/medi-agent/pull/152),
+[#156](https://github.com/sjsu-masters-projects/medi-agent/pull/156),
+[#157](https://github.com/sjsu-masters-projects/medi-agent/pull/157),
+[#158](https://github.com/sjsu-masters-projects/medi-agent/pull/158) (email preferences presentation).
