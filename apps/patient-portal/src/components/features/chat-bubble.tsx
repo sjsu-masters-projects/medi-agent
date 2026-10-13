@@ -1,101 +1,59 @@
-import { HiMiniSpeakerWave, HiOutlineUser } from "react-icons/hi2";
-import { ChatRole, getLocaleBadgeLabel, type Locale } from "@/types";
+import { Icon } from "@/components/ui/icons";
+import { ProcessingDots } from "@/components/ui/motion";
+import { ChatRole, DEFAULT_LOCALE, getLocaleLabel, type Locale } from "@/types";
+import { CARE_ASSISTANT_NAME, getChatControlsCopy } from "@/content/chat-copy";
+import { chatDisplayTime } from "./chat-presentation";
 
 interface ChatBubbleProps {
+    clinicianLabel?: string;
     role: typeof ChatRole.USER | typeof ChatRole.ASSISTANT | typeof ChatRole.CLINICIAN;
     content: string;
     timestamp: Date | string;
     language?: Locale;
+    locale?: Locale;
     isStreaming?: boolean;
     onPlayAudio?: () => void;
 }
 
-function formatTimestamp(timestamp: Date | string) {
-    const value = timestamp instanceof Date ? timestamp : new Date(timestamp);
-    return value.toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-    });
-}
-
-function formatLanguage(language?: Locale): string | null {
-    if (!language) {
-        return null;
-    }
-
-    return getLocaleBadgeLabel(language);
-}
-
 export function ChatBubble({
-    content,
-    isStreaming = false,
-    language,
-    onPlayAudio,
-    role,
-    timestamp,
+    clinicianLabel = "Care team messages", content, isStreaming = false,
+    language, locale = DEFAULT_LOCALE, onPlayAudio, role, timestamp,
 }: ChatBubbleProps) {
     const isUser = role === ChatRole.USER;
     const isClinician = role === ChatRole.CLINICIAN;
-    const languageLabel = formatLanguage(language);
+    const copy = getChatControlsCopy(locale);
+    const time = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    const validTime = !Number.isNaN(time.getTime());
+    const languageLabel = language ? copy.original + ": " + getLocaleLabel(language) : copy.originalUnknown;
+    const timeNode = validTime ? <time dateTime={time.toISOString()}>{chatDisplayTime(time, locale)}</time> : null;
 
-    return (
-        <div className={`flex items-end gap-3 ${isUser ? "justify-end" : ""}`}>
-            {!isUser ? (
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border shadow-[0_10px_24px_rgba(20,116,101,0.10)] ${
-                    isClinician
-                        ? "border-[#93c5fd] bg-[#dbeafe] text-[#1d4ed8]"
-                        : "border-[#b6d9d2] bg-[#e6f4f1] text-[#147465]"
-                }`}>
-                    {isClinician ? (
-                        <HiOutlineUser className="h-4 w-4" />
-                    ) : (
-                        <span className="text-[10px] font-black uppercase tracking-[0.22em]">M</span>
-                    )}
-                </span>
-            ) : null}
-            <div className={`max-w-[82%] space-y-1.5 ${isUser ? "items-end text-right" : ""}`}>
-                {isClinician && (
-                    <p className="px-1 text-[11px] font-semibold text-[#1d4ed8]">Your care team</p>
-                )}
-                <div
-                    className={`rounded-[24px] px-4 py-3.5 text-base leading-7 shadow-[0_18px_40px_rgba(3,8,22,0.16)] ${
-                        isUser
-                            ? "rounded-br-[10px] border border-[#147465] bg-[#147465] text-white shadow-[0_16px_30px_rgba(20,116,101,0.20)]"
-                            : isClinician
-                              ? "rounded-bl-[10px] border border-[#93c5fd] bg-[#eff6ff] text-[#17233a] shadow-[0_12px_28px_rgba(29,78,216,0.10)]"
-                              : "rounded-bl-[10px] border border-[#eadfd4] bg-white/90 text-[#17233a] shadow-[0_12px_28px_rgba(42,58,84,0.10)]"
-                    }`}
-                >
-                    <div className="space-y-3">
-                        <p className="whitespace-pre-wrap">{content}</p>
-                        {!isUser && (languageLabel || onPlayAudio || isStreaming) ? (
-                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                                {languageLabel ? (
-                                    <span className="rounded-full border border-[#b6d9d2] bg-[#e6f4f1] px-2.5 py-1 text-[#147465]">
-                                        {languageLabel}
-                                    </span>
-                                ) : null}
-                                {isStreaming ? (
-                                    <span className="rounded-full border border-[#b6d9d2] bg-[#e6f4f1] px-2.5 py-1 text-[#147465]">
-                                        Live response
-                                    </span>
-                                ) : null}
-                                {onPlayAudio ? (
-                                    <button
-                                        className="inline-flex items-center gap-1 rounded-full border border-[#d9cbc0] bg-white/80 px-2.5 py-1 text-[#30415f] transition hover:border-[#b6d9d2] hover:bg-white"
-                                        onClick={onPlayAudio}
-                                        type="button"
-                                    >
-                                        <HiMiniSpeakerWave className="h-3.5 w-3.5" />
-                                        Listen
-                                    </button>
-                                ) : null}
-                            </div>
-                        ) : null}
-                    </div>
-                </div>
-                <p className="px-1 text-[11px] font-medium text-[#8090a5]">{formatTimestamp(timestamp)}</p>
+    if (isUser) {
+        return <div className="ma-bubble flex flex-col items-end gap-1">
+            <div className="max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand px-3.5 py-[11px] text-[15px] leading-[1.45] text-white">
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]" lang={language}>{content}</p>
+            </div>
+            <p className="max-w-[90%] px-1 text-right font-mono text-[11px] text-muted first-letter:uppercase">
+                {timeNode ? <>{timeNode} · </> : null}<span>{languageLabel}</span>
+            </p>
+        </div>;
+    }
+
+    return <div className="ma-bubble flex flex-col items-start gap-1">
+        {isClinician && <p className="px-1 text-xs font-semibold text-note-ink">{clinicianLabel}</p>}
+        <div className={`max-w-[88%] rounded-[20px_20px_20px_6px] px-[15px] py-[13px] text-[15px] leading-[1.5] text-ink ${isClinician ? "bg-note-tint/70" : "bg-surface shadow-[0_1px_0_rgba(16,32,43,.04)]"}`}>
+            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]" lang={language}>{content}</p>
+            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2.5 text-xs text-muted">
+                {isStreaming
+                    ? <span role="status" className="inline-flex items-center gap-2 text-brand-ink">{copy.live}<ProcessingDots className="bg-brand" /></span>
+                    : <span className="min-w-0">{languageLabel}</span>}
+                {onPlayAudio && <button className="ma-press relative before:absolute before:-inset-x-1 before:-inset-y-[7px] before:content-[''] inline-flex min-h-[30px] items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1 text-[13px] font-medium text-ink-2 hover:bg-line-strong" onClick={onPlayAudio} type="button">
+                    <Icon name="speaker" className="h-4 w-4" />{copy.listen}
+                </button>}
             </div>
         </div>
-    );
+        <p className="px-1 font-mono text-[11px] text-muted first-letter:uppercase">
+            {isClinician ? null : <>{CARE_ASSISTANT_NAME}{timeNode ? " · " : ""}</>}{timeNode}
+            {isStreaming ? <span className="sr-only"> · {languageLabel}</span> : null}
+        </p>
+    </div>;
 }

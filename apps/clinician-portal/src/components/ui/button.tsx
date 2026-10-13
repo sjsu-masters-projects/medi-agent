@@ -1,22 +1,23 @@
 import type { ButtonHTMLAttributes } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: "primary" | "secondary" | "ghost" | "danger";
+    variant?: "primary" | "secondary" | "ghost" | "danger" | "approve";
     size?: "sm" | "md" | "lg";
     fullWidth?: boolean;
 }
 
 const variantClasses: Record<NonNullable<ButtonProps["variant"]>, string> = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700",
-    secondary: "border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50",
-    ghost: "text-gray-500 hover:bg-gray-100 hover:text-gray-700",
-    danger: "border border-red-300 bg-red-50 text-red-600 hover:bg-red-100",
+    primary: "bg-primary text-white shadow-[0_1px_2px_rgba(37,99,235,.25)] hover:bg-primary-hover disabled:bg-track disabled:text-[#94A3B8] disabled:shadow-none",
+    secondary: "border border-line-strong bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink disabled:text-[#94A3B8]",
+    ghost: "text-muted hover:bg-sunken hover:text-ink disabled:text-[#94A3B8]",
+    danger: "border border-risk-line bg-surface text-risk-ink hover:bg-risk-soft disabled:text-[#94A3B8]",
+    approve: "bg-ok text-white hover:bg-ok-strong disabled:bg-track disabled:text-[#94A3B8]",
 };
 
 const sizeClasses: Record<NonNullable<ButtonProps["size"]>, string> = {
-    sm: "px-3 py-2 text-xs",
-    md: "px-4 py-2 text-sm",
-    lg: "px-4 py-3 text-sm",
+    sm: "h-8 rounded-lg px-3 text-xs",
+    md: "min-h-[34px] rounded-[9px] px-4 py-1.5 text-[13px]",
+    lg: "min-h-[42px] rounded-[10px] px-[18px] py-2 text-sm",
 };
 
 export function Button({
@@ -29,7 +30,7 @@ export function Button({
     ...props
 }: ButtonProps) {
     const classes = [
-        "rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "ma-press inline-flex items-center justify-center gap-2 font-semibold disabled:cursor-not-allowed",
         variantClasses[variant],
         sizeClasses[size],
         fullWidth ? "w-full" : "",

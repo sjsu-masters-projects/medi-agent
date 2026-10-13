@@ -127,6 +127,31 @@ sandbox import**, MediAgent starts a fresh standalone SMART authorization. The
 sandbox then supplies its own patient and encounter launch context. The same
 candidate/provenance/review rules apply.
 
+The portal does not send an issuer for a standalone launch; the backend uses
+`SMART_STANDALONE_ISSUER`. For the public SMART Health IT sandbox this is
+`https://launch.smarthealthit.org/v/r4/sim/WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0/fhir`,
+whose `sim` segment decodes to the launcher's positional options array
+`[3,"","","AUTO",0,0,0,"","","","","","","",0,1,""]` (patient standalone, public
+client, PKCE auto). The resulting authorization request goes to
+`.../sim/<code>/auth/authorize` with `aud` set to that issuer, scopes starting
+`launch/patient launch/encounter`, and no `launch` parameter; the sandbox then
+shows its patient login and picker. A JSON-object segment such as
+`{"launch_type":"patient-standalone"}` is decoded as a legacy code and runs the
+provider EHR flow instead, and a standalone request against the plain
+`/v/r4/fhir` base fails with `Invalid launch options`.
+
+### Reading a failed authorization
+
+When the sandbox redirects back with an OAuth `error`, the backend logs a
+warning `SMART authorization server returned an error: <error>: <description>`
+(also in the `smart_provider_error` log field) and consumes the launch session.
+If the callback matched a live launch session, the portal is redirected to
+`/smart-import?smart_error=authorization_failed&smart_error_detail=<text>` and
+shows the text after "Sandbox response:". The text is sanitized: plain
+characters only, long opaque values replaced with `[redacted]`, and at most 200
+characters. A callback whose state is invalid or expired logs the provider error
+but shows only the generic failure.
+
 ## Standards references
 
 - [SMART App Launch](https://www.hl7.org/fhir/smart-app-launch/app-launch.html)

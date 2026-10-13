@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { RiskBadge } from "@/components/features/risk-badge";
-import { Card, DataTable } from "@/components/ui";
+import { DataTable, Skeleton } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
+import { useFlip } from "@/components/ui/motion";
+import { CompactField, compactSelectClass } from "@/components/ui/toolbar";
 import { loadDashboard } from "@/store/slices/dashboard-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import type { PatientRiskData } from "@/services/clinicians";
@@ -57,61 +60,80 @@ export default function PatientsPage() {
         });
     }, [filter, patients, sortBy]);
 
+    const flip = useFlip<HTMLButtonElement>(visiblePatients.map((patient) => patient.patient_id).join(","));
+    const columns = "minmax(200px,1.4fr) 120px minmax(150px,1fr) 110px minmax(150px,1fr) 110px";
+
     return (
-        <Card className="space-y-4" padding="lg">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="ma-page space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Patient roster</h2>
-                    <p className="text-sm text-gray-500">Sort by risk, adherence, or recent activity.</p>
+                    <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Patient roster</h1>
+                    <p className="mt-1 text-sm text-muted">Sort by risk, adherence, or recent activity.</p>
                 </div>
-                <div className="flex gap-2">
-                    <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" onChange={(event) => setFilter(event.target.value as typeof filter)} value={filter}>
-                        <option value="all">All risks</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                    <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" onChange={(event) => setSortBy(event.target.value as typeof sortBy)} value={sortBy}>
-                        <option value="risk">Sort by risk</option>
-                        <option value="adherence">Sort by adherence</option>
-                        <option value="activity">Sort by last activity</option>
-                    </select>
+                <div className="flex flex-wrap items-center gap-2">
+                    <CompactField label="Risk">
+                        <select aria-label="Filter patients by risk" className={compactSelectClass} onChange={(event) => setFilter(event.target.value as typeof filter)} value={filter}>
+                            <option value="all">All risks</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                            <option value="unknown">Unknown</option>
+                        </select>
+                    </CompactField>
+                    <CompactField label="Sort">
+                        <select aria-label="Sort patients" className={compactSelectClass} onChange={(event) => setSortBy(event.target.value as typeof sortBy)} value={sortBy}>
+                            <option value="risk">Sort by risk</option>
+                            <option value="adherence">Sort by adherence</option>
+                            <option value="activity">Sort by last activity</option>
+                        </select>
+                    </CompactField>
                 </div>
             </div>
             {error && (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-                    <span>Could not load assigned patients. {error}</span>
-                    <button className="font-medium underline" onClick={reloadPatients} type="button">Retry</button>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink" role="alert">
+                    <span className="inline-flex items-center gap-2"><Icon name="alert" className="h-4 w-4 shrink-0" />Could not load assigned patients. {error}</span>
+                    <button className="ma-press h-8 rounded-lg border border-risk-line bg-surface px-3 text-xs font-semibold hover:bg-risk-tint" onClick={reloadPatients} type="button">Retry</button>
                 </div>
             )}
             {loading && patients.length === 0 ? (
-                <div aria-label="Loading assigned patients" className="space-y-3">
-                    {Array.from({ length: 5 }).map((_, index) => <div className="h-14 animate-pulse rounded-lg bg-gray-100" key={index} />)}
+                <div aria-label="Loading assigned patients" className="space-y-px overflow-hidden rounded-2xl border border-line bg-surface">
+                    {Array.from({ length: 5 }).map((_, index) => <div className="flex h-[66px] items-center gap-3 px-[22px]" key={index}><Skeleton className="h-[34px] w-[34px]" variant="circle" /><Skeleton className="h-4 w-48" variant="text" /></div>)}
                 </div>
             ) : (
-                <DataTable headers={["Patient", "Risk level", "Adherence", "Active meds", "Last activity", "ADR alerts"]}>
-                    {visiblePatients.map((patient) => (
+                <DataTable columns={columns} headers={["Patient", "Risk level", "Adherence", "Active meds", "Last activity", "ADR alerts"]}>
+                    {visiblePatients.map((patient) => {
+                        const adherence = Math.round(patient.adherence_score * 100);
+                        return (
                     <button
-                        className="grid w-full grid-cols-6 gap-4 border-b border-gray-200 bg-white px-4 py-4 text-left hover:bg-gray-50"
+                        className="grid w-full items-center gap-4 bg-surface px-[22px] py-4 text-left transition-colors duration-[160ms] hover:bg-[rgba(100,116,139,.05)]"
                         key={patient.patient_id}
                         onClick={() => router.push(`/patients/${patient.patient_id}`)}
+                        ref={flip(patient.patient_id)}
+                        style={{ gridTemplateColumns: columns }}
                         type="button"
                     >
-                        <span className="font-medium text-gray-900">
-                            {patient.first_name} {patient.last_name}
+                        <span className="flex min-w-0 items-center gap-3">
+                            <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{`${patient.first_name.charAt(0)}${patient.last_name.charAt(0)}`.toUpperCase()}</span>
+                            <span className="min-w-0 break-words text-[15px] font-semibold text-ink">
+                                {patient.first_name} {patient.last_name}
+                            </span>
                         </span>
-                        <RiskBadge level={patient.risk_level} />
-                        <span className="text-gray-600">{Math.round(patient.adherence_score * 100)}%</span>
-                        <span className="text-gray-600">{patient.active_med_count}</span>
-                        <span className="text-gray-600">{patient.last_activity}</span>
-                        <span className="text-gray-600">{patient.open_adr_count}</span>
+                        <span><RiskBadge level={patient.risk_level} /></span>
+                        {patient.risk_level === "unknown" ? <span className="text-[13px] text-muted">Not enough data</span> : <span className="flex items-center gap-2.5">
+                            <span aria-hidden="true" className="h-1.5 w-full max-w-[96px] overflow-hidden rounded-[3px] bg-track"><span className={`block h-full rounded-[3px] ${adherence < 60 ? "bg-risk" : "bg-primary"}`} style={{ width: `${adherence}%` }} /></span>
+                            <span className="font-mono text-[13px] font-medium text-ink">{adherence}%</span>
+                        </span>}
+                        <span className="font-mono text-[13px] text-ink-2">{patient.active_med_count}</span>
+                        <span className="text-[13px] text-ink-2">{patient.last_activity}</span>
+                        <span className={`font-mono text-[13px] ${patient.open_adr_count > 0 ? "font-medium text-risk-ink" : "text-muted"}`}>{patient.open_adr_count}</span>
                     </button>
-                    ))}
+                        );
+                    })}
                     {visiblePatients.length === 0 && (
-                        <p className="px-4 py-8 text-center text-sm text-gray-500">No assigned patients match these filters.</p>
+                        <p className="px-4 py-10 text-center text-sm text-muted">{error ? "The roster is unavailable. Retry to check assigned patients." : patients.length ? "No assigned patients match these filters." : "No patients assigned yet."}</p>
                     )}
                 </DataTable>
             )}
-        </Card>
+        </div>
     );
 }

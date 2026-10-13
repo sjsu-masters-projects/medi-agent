@@ -72,6 +72,13 @@ class ExternalServiceError(MediAgentError):
         )
 
 
+class ServiceUnavailableError(MediAgentError):
+    """A feature whose dependency is not set up yet or is briefly unavailable (HTTP 503)."""
+
+    def __init__(self, message: str, *, code: str = "SERVICE_UNAVAILABLE"):
+        super().__init__(message=message, code=code)
+
+
 class DocumentParseError(MediAgentError):
     """AI failed to extract structured data from a document."""
 

@@ -39,7 +39,7 @@ describe("chat bridge helpers", () => {
                 preferredLanguage: Language.EN,
                 provider: "Care team",
             }),
-        ).toContain("Help me understand");
+        ).toBe('Explain my lab report "Result.pdf" in simple words, and what I should ask my care team.');
         expect(
             buildSuggestedDocumentQuestion({
                 documentName: "Resultado.pdf",
@@ -47,7 +47,14 @@ describe("chat bridge helpers", () => {
                 preferredLanguage: Language.ES,
                 provider: "Care team",
             }),
-        ).toContain("Ayúdame a entender");
+        ).not.toMatch(/\bfrom\b|Care team/);
+        expect(
+            buildSuggestedDocumentQuestion({
+                documentName: "Resultado.pdf",
+                documentType: "lab_report",
+                preferredLanguage: Language.ES,
+            }),
+        ).toContain("Explícame con palabras sencillas");
     });
 
     it("rejects invalid stored document types", () => {

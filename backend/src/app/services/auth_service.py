@@ -15,18 +15,26 @@ Design decisions:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
+from uuid import UUID
 
 from jwt import PyJWTError as JWTError
 from supabase import Client
 
 from app.clients.supabase import create_anon_client
+from app.config import settings
 from app.core.exceptions import AuthenticationError, ExternalServiceError, ValidationError
 from app.core.jwt_utils import decode_unverified_claims
 from app.db.repositories import ClinicianRepository, ClinicRepository
+from app.middleware.rate_limit import (
+    password_reset_client_limiter,
+    password_reset_email_limiter,
+)
 from app.models.enums import ClinicianRole, coerce_locale
 from app.services.clinic_service import ClinicService
+from app.services.email_invitation_service import EmailInvitationService
 
 logger = logging.getLogger(__name__)
 _SUPPORTED_ROLES = {"patient", "clinician"}
@@ -105,14 +113,27 @@ class AuthService:
         first_name: str,
         last_name: str,
         specialty: str,
-        clinic_code: str,
+        clinic_code: str | None,
         type1_npi: str | None = None,
         role: str = ClinicianRole.PROVIDER,
         *,
         allow_admin_role: bool = False,
+        invitation_token: str | None = None,
     ) -> Any:
-        """Create a clinician account: auth user + profile row."""
+        """Create a clinician account: auth user + profile row.
+
+        With an invitation, the invitation decides clinic and role, and membership is
+        claimed in the same request. If that claim fails the account is kept (signed
+        in, ``invitation_status="pending"``) and can retry with Sign in to accept.
+        """
         role_value = role.value if isinstance(role, ClinicianRole) else str(role)
+        invitations = EmailInvitationService(self.db)
+        if invitation_token:
+            invitation = await invitations.preview(invitation_token)
+            if str(invitation["email"]).strip().lower() != email.strip().lower():
+                raise ValidationError("Use the email address this invitation was sent to.")
+            role_value = str(invitation["role"])
+            allow_admin_role = role_value == ClinicianRole.ADMIN.value
 
         allowed_roles = {
             ClinicianRole.PROVIDER.value,
@@ -124,7 +145,7 @@ class AuthService:
         if role_value not in allowed_roles:
             raise ValidationError("Invalid clinician role")
 
-        clinic = self._resolve_active_clinic(clinic_code)
+        clinic = None if invitation_token else self._resolve_active_clinic(clinic_code or "")
         auth_response = self._create_auth_user(email=email, password=password)
 
         if not auth_response.user:
@@ -144,10 +165,10 @@ class AuthService:
                     "first_name": first_name,
                     "last_name": last_name,
                     "specialty": specialty,
-                    "clinic_id": clinic["id"],
-                    "clinic_name": clinic["display_name"],
+                    "clinic_id": clinic["id"] if clinic else None,
+                    "clinic_name": clinic["display_name"] if clinic else None,
                     "type1_npi": type1_npi,
-                    "role": role_value,
+                    "role": role_value if clinic else ClinicianRole.PROVIDER.value,
                 }
             ).execute()
         except Exception as e:
@@ -156,7 +177,7 @@ class AuthService:
             raise ValidationError(f"Profile creation failed: {e}") from e
 
         try:
-            return self._sign_in_and_format(
+            result = self._sign_in_and_format(
                 email=email,
                 password=password,
                 expected_role="clinician",
@@ -165,6 +186,40 @@ class AuthService:
             logger.error("Failed to finalize clinician signup for %s: %s", user_id, e)
             self._cleanup_signup("clinicians", user_id)
             raise
+
+        if invitation_token:
+            try:
+                accepted = await invitations.accept(
+                    UUID(str(user_id)), invitation_token, address=email
+                )
+                result["invitation_status"] = "accepted"
+                result["clinic"] = accepted["clinic"]
+            except Exception as e:
+                # The account stays; deleting it would lose a valid signup on a retryable error.
+                logger.warning("Invitation claim after signup deferred (%s)", type(e).__name__)
+                result["invitation_status"] = "pending"
+        return result
+
+    async def accept_invitation_with_password(
+        self, *, email: str, password: str, invitation_token: str
+    ) -> dict[str, Any]:
+        """Claim an invitation for an existing clinician account without a portal session.
+
+        Works for an unassigned account that cannot pass the normal clinic login yet.
+        The temporary session is ended; the clinician then signs in normally, MFA included.
+        """
+        session = self._sign_in_and_format(
+            email=email, password=password, expected_role="clinician"
+        )
+        try:
+            return await EmailInvitationService(self.db).accept(
+                UUID(str(session["user"]["id"])), invitation_token
+            )
+        finally:
+            try:
+                self.auth_client.auth.sign_out({"scope": "local"})
+            except Exception:
+                logger.warning("Temporary invitation session cleanup failed")
 
     async def signup_clinic_admin(
         self,
@@ -257,12 +312,41 @@ class AuthService:
 
     # ── Password Reset ──────────────────────────────────────
 
-    async def request_password_reset(self, email: str) -> None:
-        """Send a password reset email via Supabase."""
+    async def request_password_reset(
+        self,
+        email: str,
+        *,
+        portal: str = "patient",
+        locale: str = "en-US",
+        client: str | None = None,
+    ) -> None:
+        """Send a password reset email via Supabase.
+
+        Callers always receive the same neutral response; over the per-address or
+        per-client limit the provider request is skipped.
+        """
+        address_key = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+        if (
+            client is not None
+            and not (await password_reset_client_limiter.check(f"reset-client:{client}")).allowed
+        ):
+            logger.warning("Password recovery request rate limited (client)")
+            return
+        if not (await password_reset_email_limiter.check(f"reset-email:{address_key}")).allowed:
+            logger.warning("Password recovery request rate limited (address)")
+            return
         try:
-            self.auth_client.auth.reset_password_email(email)
-        except Exception as e:
-            logger.info("Password reset requested for %s: %s", email, e)
+            base_url = (
+                settings.clinician_portal_url
+                if portal == "clinician"
+                else settings.patient_portal_url
+            )
+            language = "en-US" if portal == "clinician" else coerce_locale(locale).value
+            redirect_url = base_url.rstrip("/") + "/reset-password?lang=" + language
+            self.auth_client.auth.reset_password_email(email, {"redirect_to": redirect_url})
+        except Exception:
+            # Neither provider diagnostics nor the address belongs in recovery logs.
+            logger.warning("Password recovery delivery request failed")
 
     # ── Helpers ─────────────────────────────────────────────
 
@@ -375,6 +459,13 @@ class AuthService:
             )
         clinic_id = profile.get("clinic_id")
         clinic_name = profile.get("clinic_name")
+        if not clinic_id and not clinic_name:
+            # Created from an invitation whose claim did not finish.
+            raise AuthenticationError(
+                "Finish joining your clinic: open your invitation email and choose "
+                "Sign in to accept.",
+                code="INVITATION_ACCEPTANCE_REQUIRED",
+            )
 
         if clinic_id and str(clinic_id) == str(clinic["id"]):
             return

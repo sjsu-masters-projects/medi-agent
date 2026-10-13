@@ -8,6 +8,16 @@ from deepgram import AsyncDeepgramClient, DeepgramClient
 from app.config import settings
 from app.models.enums import Language, coerce_locale
 
+STT_LANGUAGE = "multi"
+"""Speech is transcribed in nova-3's multilingual mode. A patient may speak English or
+Spanish whatever the app is set to, and with the language pinned to English a Spanish
+recording came back as an empty transcript (measured October 11). The transcript's
+language is detected from its text afterwards."""
+
+
+def _stt_language(language: str) -> str:
+    return STT_LANGUAGE if language == STT_LANGUAGE else coerce_locale(language).value
+
 
 def get_deepgram_client() -> DeepgramClient:
     """Get sync Deepgram client. Uses DEEPGRAM_API_KEY from env."""
@@ -39,7 +49,7 @@ def transcribe_audio_file(
     response = client.listen.v1.media.transcribe_file(
         request=audio_data,
         model=model,
-        language=coerce_locale(language).value,
+        language=_stt_language(language),
         smart_format=smart_format,
     )
 
@@ -76,7 +86,7 @@ async def transcribe_audio_file_async(
     response = await client.listen.v1.media.transcribe_file(
         request=audio_data,
         model=model,
-        language=coerce_locale(language).value,
+        language=_stt_language(language),
         smart_format=smart_format,
     )
 

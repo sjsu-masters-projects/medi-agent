@@ -10,7 +10,7 @@ import { buildLoginRedirectUrl } from "../../../../../packages/shared/src/utils/
 
 function LoadingSkeleton() {
     return (
-        <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="flex h-screen items-center justify-center bg-surface-2">
             <div className="w-96 space-y-4">
                 <Skeleton className="h-8 w-48" variant="text" />
                 <Skeleton className="h-32 w-full" variant="rect" />
@@ -35,7 +35,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (mounted && !loading && !isAuthenticated) {
-            const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
+            const returnPath = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}${window.location.hash}`;
             router.replace(
                 buildLoginRedirectUrl({
                     loginPath: "/login",

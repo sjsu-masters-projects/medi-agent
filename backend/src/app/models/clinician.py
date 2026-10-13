@@ -33,7 +33,7 @@ class ClinicianRead(BaseModel):
     first_name: str
     last_name: str
     specialty: str
-    clinic_name: str
+    clinic_name: str | None
     type1_npi: str | None = None
     role: ClinicianRole = ClinicianRole.PROVIDER
     avatar_url: str | None = None

@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { BottomNav } from "@/components/layouts/bottom-nav";
 
 describe("BottomNav", () => {
+    it("keeps a nested record screen associated with its destination", () => {
+        render(<BottomNav currentPath="/records/example" />);
+        expect(screen.getByRole("link", { name: /records/i })).toHaveAttribute("aria-current", "page");
+    });
     it("marks the active destination and keeps chat accessible", () => {
         render(<BottomNav currentPath="/records" />);
 

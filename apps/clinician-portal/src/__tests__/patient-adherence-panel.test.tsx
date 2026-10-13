@@ -8,6 +8,14 @@ vi.mock("@/components/features/adherence-chart", () => ({
 }));
 
 describe("PatientAdherencePanel", () => {
+  it("opens and focuses the exact activity, and explains a missing target", () => {
+    const view = render(<PatientAdherencePanel patient={adherencePatient} activityId="med-1" />);
+    const activity = document.getElementById("activity-med-1")!;
+    expect(activity).toHaveFocus();
+    expect(activity.closest("details")).toHaveAttribute("open");
+    view.rerender(<PatientAdherencePanel patient={adherencePatient} activityId="missing" />);
+    expect(screen.getByText(/linked activity is not in the returned reports/)).toBeInTheDocument();
+  });
   it.each([
     ["side_effects", "Side effects"],
     ["cost", "Cost"],

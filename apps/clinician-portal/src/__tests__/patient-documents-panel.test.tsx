@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
 import {
@@ -31,6 +31,29 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("PatientDocumentsPanel", () => {
+    it("focuses the exact document fragment and explains an unavailable document", () => {
+        window.history.replaceState(null, "", "#document-linked");
+        const view = render(<PatientDocumentsPanel documents={[{ id: "linked", fileName: "synthetic.pdf", documentType: "other", parseStatus: "completed", uploadedByRole: "clinician", createdAt: "2026-10-11T12:00:00Z" }]} patientId="synthetic" onRefresh={vi.fn()} />);
+        expect(document.getElementById("document-linked")).toHaveFocus();
+        act(() => { window.history.replaceState(null, "", "#document-missing"); window.dispatchEvent(new Event("hashchange")); });
+        expect(screen.getByText(/linked document is unavailable/)).toBeInTheDocument();
+        window.history.replaceState(null, "", window.location.pathname);
+        view.unmount();
+    });
+    it("explains skipped duplicates without promising facts or an explanation retry", () => {
+        render(<PatientDocumentsPanel documents={[{
+            id: "duplicate-doc", fileName: "duplicate.pdf", documentType: "other",
+            parseStatus: "duplicate", summaryStatus: "not_required",
+            createdAt: "2026-10-10T18:00:00Z", uploadedByRole: "patient", reviewStatus: "pending",
+        }]} onRefresh={vi.fn()} patientId="synthetic-patient" />);
+        expect(screen.getByText("Duplicate upload — extraction skipped")).toBeInTheDocument();
+        expect(screen.getByText(/created no new extracted facts or care-plan proposals/)).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Review extracted facts" })).not.toBeInTheDocument();
+        expect(screen.queryByText(/No extracted information in this document/)).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Open source document" })).toBeInTheDocument();
+    });
+
     beforeEach(() => {
         vi.mocked(approveDocumentReview).mockReset();
         vi.mocked(fetchExtractedDocumentFacts).mockReset();

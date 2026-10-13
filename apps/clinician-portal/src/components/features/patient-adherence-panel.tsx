@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PatientDeepDive } from "@/services/clinicians";
+import { Icon } from "@/components/ui/icons";
 import { AdherenceChart } from "./adherence-chart";
 
 const BARRIER_LABELS: Record<string, string> = {
@@ -73,49 +74,58 @@ function Summary({ patient }: { patient: PatientDeepDive }) {
       {metrics.map(([label, value, detail]) => (
         <div
           key={label}
-          className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+          className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-[var(--shadow-card)]"
         >
-          <p className="text-xs font-medium text-gray-500">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
-          <p className="mt-1 text-xs text-gray-500">{detail}</p>
+          <p className="text-[13px] text-muted">{label}</p>
+          <p className="mt-1.5 font-mono text-[28px] font-medium leading-none tracking-[-0.01em] text-ink">{value}</p>
+          <p className="mt-2 text-xs text-muted">{detail}</p>
         </div>
       ))}
     </div>
   );
 }
 
-function Barriers({ patient }: { patient: PatientDeepDive }) {
+const CARD = "rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]";
+const CARD_HEADER = "flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4";
+const CARD_TITLE = "text-[15px] font-semibold text-ink";
+
+function Barriers({ patient, activityId }: { patient: PatientDeepDive; activityId?: string | null }) {
   const barriers = patient.adherence_barriers ?? [];
   return (
-    <section className="rounded-xl border border-gray-200 p-4">
-      <h3 className="text-base font-semibold text-gray-900">
-        Patient-reported barriers{" "}
-        <span className="text-sm font-normal text-gray-500">
-          ({barriers.length})
-        </span>
-      </h3>
-      <p className="mt-1 text-xs text-gray-500">
-        Latest 20 reports, including earlier plan versions. Patient statements,
-        not reviewed ADR findings.
-      </p>
+    <section className={CARD}>
+      <div className="border-b border-line px-5 py-4">
+        <h3 className={CARD_TITLE}>
+          Patient-reported barriers{" "}
+          <span className="font-mono text-[13px] font-normal text-muted">
+            ({barriers.length})
+          </span>
+        </h3>
+        <p className="mt-0.5 text-[13px] text-muted">
+          Latest 20 reports, including earlier plan versions. Patient statements,
+          not reviewed ADR findings.
+        </p>
+      </div>
       {barriers.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="px-5 py-5 text-sm text-muted">
           No patient-reported barriers returned. This does not establish that
           all tasks were completed.
         </p>
       ) : (
-        <ul className="mt-4 space-y-3">
+        <ul>
           {barriers.map((barrier, index) => (
             <li
               key={`${barrier.target_id}-${barrier.logged_at}-${index}`}
-              className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+              id={`barrier-${barrier.target_id}-${index}`}
+              tabIndex={barrier.target_id === activityId ? -1 : undefined}
+              className={`scroll-mt-6 border-b border-line px-5 py-4 last:border-b-0 hover:bg-[rgba(100,116,139,.05)] ${barrier.target_id === activityId ? "ring-2 ring-inset ring-primary" : ""}`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+                <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-warn-tint px-2 py-1 text-xs font-medium text-warn-ink">
+                  <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-warn" />
                   {BARRIER_LABELS[barrier.barrier_code] ?? "Reported barrier"}
                 </span>
                 <time
-                  className="text-xs text-gray-500"
+                  className="font-mono text-xs text-muted"
                   dateTime={barrier.logged_at}
                 >
                   {new Date(barrier.logged_at).toLocaleString("en-US", {
@@ -123,21 +133,21 @@ function Barriers({ patient }: { patient: PatientDeepDive }) {
                   })}
                 </time>
               </div>
-              <p className="mt-2 text-sm font-semibold text-gray-900">
+              <p className="mt-2 text-sm font-semibold text-ink">
                 {barrierTarget(patient, barrier)}
               </p>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-0.5 text-xs text-muted">
                 {barrier.target_type === "medication"
                   ? "Medication"
                   : "Care activity"}{" "}
                 · Report time in {patient.timezone ?? "America/Los_Angeles"}
               </p>
               {barrier.notes ? (
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-gray-700">
+                <p className="mt-2 max-w-[80ch] whitespace-pre-wrap break-words rounded-[10px] bg-surface-2 px-3 py-2 text-sm text-ink-2">
                   {barrier.notes}
                 </p>
               ) : (
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-muted">
                   No additional note provided.
                 </p>
               )}
@@ -155,28 +165,29 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
     .reverse()
     .filter((day) => showUnknown || day.expected > 0);
   return (
-    <section className="rounded-xl border border-gray-200 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-base font-semibold text-gray-900">
+    <section className={CARD}>
+      <div className={CARD_HEADER}>
+        <h3 className={CARD_TITLE}>
           Daily response detail
         </h3>
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex min-h-8 cursor-pointer items-center gap-2 text-[13px] text-ink-2">
           <input
             type="checkbox"
+            className="h-4 w-4 accent-[var(--color-primary)]"
             checked={showUnknown}
             onChange={(event) => setShowUnknown(event.target.checked)}
           />
           Show days without responses
         </label>
       </div>
-      <div className="mt-4 overflow-x-auto">
+      <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <caption className="mb-3 text-left text-xs text-gray-500">
+          <caption className="px-5 pb-3 pt-3 text-left text-xs text-muted">
             Dates use UTC, matching the existing reporting API. Non-completed
             responses may include barriers; they are not automatically missed
             doses.
           </caption>
-          <thead className="border-y border-gray-200 bg-gray-50 text-xs text-gray-500">
+          <thead className="border-y border-line">
             <tr>
               {[
                 "Date (UTC)",
@@ -185,7 +196,7 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
                 "Total recorded",
                 "Completion",
               ].map((label) => (
-                <th className="px-3 py-2 font-semibold" scope="col" key={label}>
+                <th className="px-5 py-3 font-mono text-[11px] font-normal uppercase tracking-[0.06em] text-muted" scope="col" key={label}>
                   {label}
                 </th>
               ))}
@@ -193,17 +204,17 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
           </thead>
           <tbody>
             {rows.map((day) => (
-              <tr className="border-b border-gray-100" key={day.date}>
+              <tr className="border-b border-line last:border-b-0 hover:bg-[rgba(100,116,139,.05)]" key={day.date}>
                 <th
-                  className="whitespace-nowrap px-3 py-3 font-medium"
+                  className="whitespace-nowrap px-5 py-3 font-medium text-ink"
                   scope="row"
                 >
                   {formatDay(day.date)}
                 </th>
-                <td className="px-3 py-3">{day.completed}</td>
-                <td className="px-3 py-3">{day.expected - day.completed}</td>
-                <td className="px-3 py-3">{day.expected}</td>
-                <td className="px-3 py-3">
+                <td className="px-5 py-3 font-mono text-[13px] text-ink-2">{day.completed}</td>
+                <td className="px-5 py-3 font-mono text-[13px] text-ink-2">{day.expected - day.completed}</td>
+                <td className="px-5 py-3 font-mono text-[13px] text-ink-2">{day.expected}</td>
+                <td className={`px-5 py-3 text-[13px] ${day.expected ? `font-mono ${day.score < 0.6 ? "text-risk-ink" : "text-ink"}` : "text-muted"}`}>
                   {day.expected
                     ? `${Math.round(day.score * 100)}%`
                     : "No response"}
@@ -214,7 +225,7 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
         </table>
       </div>
       {rows.length === 0 && (
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="px-5 pb-5 pt-2 text-sm text-muted">
           No recorded responses in this reporting window.
         </p>
       )}
@@ -222,7 +233,7 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
   );
 }
 
-function CurrentActivities({ patient }: { patient: PatientDeepDive }) {
+function CurrentActivities({ patient, activityId }: { patient: PatientDeepDive; activityId?: string | null }) {
   const rows = [
     ...patient.medications
       .filter((med) => med.isActive)
@@ -242,26 +253,26 @@ function CurrentActivities({ patient }: { patient: PatientDeepDive }) {
       })),
   ];
   return (
-    <details className="rounded-xl border border-gray-200 p-4">
-      <summary className="cursor-pointer text-sm font-semibold text-gray-900">
+    <details open={activityId && rows.some((row) => row.id === activityId) ? true : undefined} className={`ma-disclosure ${CARD} px-5 py-2`}>
+      <summary className="min-h-9 py-1.5 text-[13px] font-medium text-ink">
         Current medication & activity context ({rows.length})
       </summary>
-      <p className="mt-2 text-xs text-gray-500">
+      <p className="mt-1 text-xs text-muted">
         Current records only; these are not a historical task list or evidence
         of missed doses.
       </p>
-      <ul className="mt-3 divide-y divide-gray-100">
+      <ul className="mt-2 pb-2">
         {rows.map((row) => (
-          <li className="py-3" key={`${row.kind}-${row.id}`}>
-            <p className="text-sm font-medium text-gray-900">{row.name}</p>
-            <p className="mt-1 text-xs text-gray-500">
+          <li id={`activity-${row.id}`} tabIndex={row.id === activityId ? -1 : undefined} className={`flex scroll-mt-6 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line py-3 last:border-b-0 ${row.id === activityId ? "ring-2 ring-primary" : ""}`} key={`${row.kind}-${row.id}`}>
+            <p className="text-sm font-medium text-ink">{row.name}</p>
+            <p className="text-xs text-muted">
               {row.kind} · {row.detail}
             </p>
           </li>
         ))}
       </ul>
       {rows.length === 0 && (
-        <p className="mt-3 text-sm text-gray-500">
+        <p className="pb-3 text-sm text-muted">
           No active records returned.
         </p>
       )}
@@ -271,44 +282,62 @@ function CurrentActivities({ patient }: { patient: PatientDeepDive }) {
 
 export function PatientAdherencePanel({
   patient,
+  activityId,
 }: {
   patient: PatientDeepDive;
+  activityId?: string | null;
 }) {
+  const barrierIndex = patient.adherence_barriers?.findIndex((barrier) => barrier.target_id === activityId) ?? -1;
+  const currentActivity = patient.medications.some((med) => med.id === activityId && med.isActive) || patient.obligations?.some((item) => item.id === activityId && item.is_active);
+  useEffect(() => {
+    if (!activityId) return;
+    const target = document.getElementById(barrierIndex >= 0 ? `barrier-${activityId}-${barrierIndex}` : `activity-${activityId}`);
+    target?.scrollIntoView?.({ block: "center" });
+    target?.focus({ preventScroll: true });
+  }, [activityId, barrierIndex, patient]);
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {activityId && barrierIndex < 0 && !currentActivity && <p role="status" className="text-sm text-muted">The linked activity is not in the returned reports or current records. Earlier barriers may fall outside the latest 20 reports.</p>}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
           Adherence & patient follow-up
         </h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted">
           Review recorded responses, practical barriers, and current care
           context.
         </p>
       </div>
       <Summary patient={patient} />
-      <section className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-        <h3 className="text-sm font-semibold text-gray-900">
-          How to read these numbers
-        </h3>
-        <p className="mt-1 text-sm text-gray-700">
-          Completion is calculated from recorded responses, not all scheduled
-          doses or activities. Unrecorded days are unknown, not 0% adherence.
-          This view does not determine medication safety or an ADR.
-        </p>
+      <section className="flex items-start gap-2.5 rounded-xl border border-primary-line bg-primary-tint px-4 py-3 text-sm">
+        <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div>
+          <h3 className="text-[13px] font-semibold text-ink">
+            How to read these numbers
+          </h3>
+          <p className="mt-0.5 max-w-[80ch] text-sm text-ink-2">
+            Completion is calculated from recorded responses, not all scheduled
+            doses or activities. Unrecorded days are unknown, not 0% adherence.
+            This view does not determine medication safety or an ADR.
+          </p>
+        </div>
       </section>
-      <section>
-        <h3 className="mb-1 text-base font-semibold text-gray-900">
-          30-day recorded completion trend
-        </h3>
-        <p className="mb-4 text-xs text-gray-500">
-          UTC daily buckets · gaps mean no responses · dots show days with
-          records
-        </p>
-        <AdherenceChart data={patient.adherence_series} />
+      <section className={CARD}>
+        <div className="border-b border-line px-5 py-4">
+          <h3 className={CARD_TITLE}>
+            30-day recorded completion trend
+          </h3>
+          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+            UTC daily buckets · gaps mean no responses · dots show days with
+            records
+          </p>
+        </div>
+        <div className="px-3 pb-4 pt-4 sm:px-5">
+          <AdherenceChart data={patient.adherence_series} />
+        </div>
       </section>
-      <Barriers patient={patient} />
+      <Barriers patient={patient} activityId={activityId} />
       <DailyResponses patient={patient} />
-      <CurrentActivities patient={patient} />
+      <CurrentActivities patient={patient} activityId={activityId} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
@@ -12,7 +13,13 @@ from supabase import Client
 
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
-from app.models.care_plan import CarePlanCategory, CarePlanDraftUpdate, CarePlanItemUpdate
+from app.models.care_plan import (
+    PATIENT_LOCALES,
+    CarePlanCategory,
+    CarePlanDraftUpdate,
+    CarePlanItemUpdate,
+    PatientLocale,
+)
 from app.models.clinical_fact import (
     ClinicalFactCreate,
     ConfidenceBand,
@@ -25,7 +32,9 @@ from app.services.care_plan_classification import (
     CarePlanClassificationError,
     classify_facts,
 )
+from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_reconciliation import overlaps
+from app.services.care_plan_translation import draft_translations
 from app.services.clinical_fact_service import ClinicalFactService
 
 logger = logging.getLogger(__name__)
@@ -35,6 +44,7 @@ _SOURCE_TITLE_REVIEW = (
     "Source title exceeds the draft limit; replace it after reviewing the full evidence."
 )
 _RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15), timedelta(hours=1))
+_WORDING_FIELDS = ("title", "instructions", "frequency")
 _TRANSIENT_PROVIDER_FAILURES = frozenset(
     {
         GenerationErrorCode.RATE_LIMITED,
@@ -145,16 +155,19 @@ class CarePlanService:
         known = {str(row["id"]): row for row in self._items(UUID(str(plan["id"])))}
         if set(str(item.id) for item in update.items) != set(known):
             raise ValidationError("The draft changed; reload before saving your review")
-        locale = self._patient_locale(patient_id)
         medications = self._active_medications(patient_id)
         validated: list[tuple[UUID, dict[str, Any]]] = []
         for item in update.items:
             original = known[str(item.id)]
             medication_error = None
-            if item.language_verified and item.verified_locale != locale:
-                raise ValidationError(
-                    "Patient language changed; reload before verifying this draft"
-                )
+            wording_fields = self._reviewed_wording(original, item)
+            if wording_fields["source_locale"]:
+                # The source-language copy is what reconciliation and continuity compare.
+                source = wording_fields["wording"].get(wording_fields["source_locale"])
+                if source:
+                    item = item.model_copy(
+                        update={field: source[field] for field in _WORDING_FIELDS}
+                    )
             if original["category"] == "medication" and not item.is_removed:
                 try:
                     self._validate_medication_decision(item.medication, medications)
@@ -202,9 +215,12 @@ class CarePlanService:
                             if warning != _SOURCE_TITLE_REVIEW
                             or item.title.strip() == str(original["title"]).strip()
                         ],
-                        "reviewed_locale": locale
-                        if item.language_verified and not item.is_removed
-                        else None,
+                        **wording_fields,
+                        "wording_verified": bool(
+                            item.wording_verified
+                            and not item.is_removed
+                            and self._wording_complete({**item.model_dump(), **wording_fields})
+                        ),
                     },
                 )
             )
@@ -236,6 +252,142 @@ class CarePlanService:
             },
         )
         return self._hydrate_plan(self._plan(plan_id, patient_id))
+
+    @staticmethod
+    def _reviewed_wording(original: dict[str, Any], item: CarePlanItemUpdate) -> dict[str, Any]:
+        """Merge submitted wording; any changed language is marked as clinician edited."""
+        before = cast(dict[str, dict[str, str]], original.get("wording") or {})
+        origin = dict(cast(dict[str, str], original.get("wording_origin") or {}))
+        source_locale = original.get("source_locale") or item.source_locale
+        wording = dict(before)
+        for locale, text in item.wording.items():
+            stripped = {field: getattr(text, field).strip() for field in _WORDING_FIELDS}
+            if before.get(locale) != stripped:
+                unchanged_source = locale == source_locale and all(
+                    stripped[field] == str(original.get(field) or "").strip()
+                    for field in _WORDING_FIELDS
+                )
+                origin[locale] = "source" if unchanged_source else "clinician_edited"
+            wording[locale] = stripped
+        if source_locale and source_locale in wording:
+            origin.setdefault(source_locale, "source")
+        return {"source_locale": source_locale, "wording": wording, "wording_origin": origin}
+
+    @staticmethod
+    def _wording_complete(item: dict[str, Any]) -> bool:
+        """Mirror of private.care_plan_wording_is_complete for a clear preflight error."""
+        wording = cast(dict[str, dict[str, str]], item.get("wording") or {})
+        source_locale = item.get("source_locale")
+        if source_locale not in PATIENT_LOCALES:
+            return False
+        if any(
+            not str((wording.get(locale) or {}).get(field) or "").strip()
+            for locale in PATIENT_LOCALES
+            for field in _WORDING_FIELDS
+        ):
+            return False
+        return all(
+            str(wording[source_locale][field]).strip() == str(item.get(field) or "").strip()
+            for field in _WORDING_FIELDS
+        )
+
+    async def retranslate_item(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        plan_id: UUID,
+        item_id: UUID,
+        from_locale: PatientLocale,
+    ) -> dict[str, Any]:
+        """Redraft the other language from the reviewed source wording of one item."""
+        self._require_assignment(clinician_id, patient_id)
+        self._draft(plan_id, patient_id)
+        item = next((row for row in self._items(plan_id) if str(row["id"]) == str(item_id)), None)
+        if item is None or item.get("is_removed"):
+            raise NotFoundError("Care plan item", str(item_id))
+        source_locale = item.get("source_locale")
+        if source_locale and source_locale != from_locale:
+            raise ValidationError(
+                "Translations are drafted from the source wording; edit the source language first"
+            )
+        try:
+            drafts, diagnostics = await draft_translations([{**item, "source_locale": from_locale}])
+        except GenerationProviderError:
+            raise ValidationError(
+                "Translation is unavailable right now. Try again, or write it yourself."
+            ) from None
+        draft = drafts.get(str(item_id))
+        if draft is None:
+            self._log_translation_outcome(plan_id, diagnostics)
+            raise ValidationError(
+                "The translation changed a number or medication name, so it was discarded. "
+                "Try again, or write it yourself."
+            )
+        self._store_translation(
+            item, draft.source_locale, draft.target_locale, draft.wording.model_dump()
+        )
+        self._audit(
+            plan_id,
+            clinician_id,
+            "translation_drafted",
+            {"item_id": str(item_id), "target_locale": draft.target_locale},
+        )
+        return self._hydrate_plan(self._plan(plan_id, patient_id))
+
+    def _store_translation(
+        self,
+        item: dict[str, Any],
+        source_locale: str,
+        target_locale: str,
+        translated: dict[str, str],
+    ) -> None:
+        wording = dict(cast(dict[str, dict[str, str]], item.get("wording") or {}))
+        origin = dict(cast(dict[str, str], item.get("wording_origin") or {}))
+        wording[source_locale] = {
+            field: str(item.get(field) or "").strip() for field in _WORDING_FIELDS
+        }
+        wording[target_locale] = translated
+        origin.setdefault(source_locale, "source")
+        origin[target_locale] = "ai_draft"
+        self.db.table("care_plan_items").update(
+            {
+                "source_locale": source_locale,
+                "wording": wording,
+                "wording_origin": origin,
+                "wording_verified": False,
+            }
+        ).eq("id", str(item["id"])).eq("plan_version_id", str(item["plan_version_id"])).execute()
+
+    async def _draft_missing_translations(self, plan_id: UUID) -> dict[str, int]:
+        """Fill the second language for draft items that lack one; never fails generation."""
+        pending = [
+            item
+            for item in self._items(plan_id)
+            if not item.get("is_removed")
+            and any(
+                not (cast(dict[str, Any], item.get("wording") or {}).get(locale))
+                for locale in PATIENT_LOCALES
+            )
+        ]
+        if not pending:
+            return {}
+        drafts, diagnostics = await draft_translations(pending)
+        for item in pending:
+            draft = drafts.get(str(item["id"]))
+            if draft is not None:
+                self._store_translation(
+                    item, draft.source_locale, draft.target_locale, draft.wording.model_dump()
+                )
+        return diagnostics
+
+    @staticmethod
+    def _log_translation_outcome(plan_id: UUID, diagnostics: Mapping[str, int | str]) -> None:
+        event: dict[str, int | str] = {
+            "event": "care_plan_translation_outcome",
+            "plan_version_id": str(plan_id),
+            **diagnostics,
+        }
+        logger.info("%s", json.dumps(event, sort_keys=True, separators=(",", ":")))
 
     @staticmethod
     def _retains_confirmation(original: dict[str, Any], item: CarePlanItemUpdate) -> bool:
@@ -274,14 +426,19 @@ class CarePlanService:
         self._require_assignment(clinician_id, patient_id)
         plan = self._draft(plan_id, patient_id)
         self._require_generation_complete(clinician_id, patient_id)
-        locale = self._patient_locale(patient_id)
         medications = self._active_medications(patient_id)
         items = self._items(plan_id)
         for item in items:
             if item.get("is_removed"):
                 continue
-            if item.get("reviewed_locale") != locale:
-                raise ValidationError("Verify every patient-facing item in the patient's language")
+            if not self._wording_complete(item):
+                raise ValidationError(
+                    "Add English and Spanish wording for every patient-facing item"
+                )
+            if not item.get("wording_verified"):
+                raise ValidationError(
+                    "Check the English and Spanish wording of every patient-facing item"
+                )
             if item["category"] == "medication":
                 self._validate_medication_decision(item.get("medication") or {}, medications)
                 if (
@@ -289,18 +446,35 @@ class CarePlanService:
                     != str((item.get("medication") or {}).get("frequency") or "").strip()
                 ):
                     raise ValidationError("Medication frequency must match the patient-facing item")
-        fact_ids = [str(item["source_fact_id"]) for item in items if item.get("source_fact_id")]
+        fact_ids = [
+            str(item["source_fact_id"])
+            for item in items
+            if not item.get("is_removed") and item.get("source_fact_id")
+        ]
+        if any(
+            not item.get("source_fact_id") for item in items if not item.get("is_removed")
+        ) or set(fact_ids) - eligible_fact_ids(self.db, patient_id, fact_ids):
+            raise ValidationError(
+                "Review and approve patient-uploaded source documents before preview or publication; "
+                "rejected, missing or withdrawn sources must be removed from the draft"
+            )
         facts: list[dict[str, Any]] = []
         if fact_ids:
             facts = cast(
                 list[dict[str, Any]],
                 self.db.table("clinical_facts")
                 .select("id, fact_type, value")
+                .eq("patient_id", str(patient_id))
                 .in_("id", fact_ids)
+                .in_("review_state", ["pending_review", "approved"])
                 .execute()
                 .data
                 or [],
             )
+            if set(fact_ids) - {str(fact["id"]) for fact in facts}:
+                raise ValidationError(
+                    "Remove missing or rejected source facts before preview or publication"
+                )
         if overlaps(items, facts):
             raise ValidationError("Resolve overlapping plan items before publication")
         return plan, items
@@ -482,6 +656,19 @@ class CarePlanService:
                 "p_items": proposed,
             },
         ).execute()
+        # Outside the generation transaction: an unavailable translation leaves the item
+        # untranslated for the clinician to retry, and never fails or rolls back the draft.
+        try:
+            diagnostics: dict[str, int | str] = dict(
+                await self._draft_missing_translations(plan_id)
+            )
+        except GenerationProviderError as error:
+            diagnostics = {"translation_provider_error": error.code.value}
+        except Exception:  # noqa: BLE001 - the draft is already durable and reviewable
+            logger.exception("Care-plan translation failed after generation")
+            diagnostics = {"translation_internal_error": 1}
+        if diagnostics:
+            self._log_translation_outcome(plan_id, diagnostics)
 
     def _plan_facts(self, patient_id: UUID) -> list[dict[str, Any]]:
         result = (
@@ -496,25 +683,7 @@ class CarePlanService:
         facts = cast(list[dict[str, Any]], result.data or [])
         if not facts:
             return []
-        citations = cast(
-            list[dict[str, Any]],
-            self.db.table("evidence_citations")
-            .select("fact_id, source_provenances!inner(artifact_type, document_id, withdrawn_at)")
-            .in_("fact_id", [str(fact["id"]) for fact in facts])
-            .execute()
-            .data
-            or [],
-        )
-        eligible = {
-            str(row["fact_id"])
-            for row in citations
-            if (source := row.get("source_provenances"))
-            and not source.get("withdrawn_at")
-            and (
-                source.get("artifact_type") == "clinician_entry"
-                or (source.get("artifact_type") == "document" and source.get("document_id"))
-            )
-        }
+        eligible = eligible_fact_ids(self.db, patient_id, [str(fact["id"]) for fact in facts])
         # SMART/FHIR candidates stay in External records. Importing a resource is
         # not an instruction to propose that historical therapy in today's plan.
         return [fact for fact in facts if str(fact["id"]) in eligible]
@@ -653,8 +822,9 @@ class CarePlanService:
         approved = next((plan for plan in latest if plan.get("status") == "approved"), None)
         if approved:
             for item in self._items(UUID(str(approved["id"]))):
-                if item.get("is_removed"):
-                    continue
+                # Preserve exclusions for these exact source facts. Otherwise a
+                # new document makes generation resurrect already-rejected
+                # proposals; genuinely new facts still need fresh review.
                 payload = {
                     key: value
                     for key, value in item.items()
@@ -672,9 +842,16 @@ class CarePlanService:
                         "conflict",
                         "blocker_reason",
                         "is_removed",
+                        "source_locale",
+                        "wording",
+                        "wording_origin",
                     }
                 }
-                if item.get("projection_type") == "medication" and item.get("projection_id"):
+                if (
+                    not item.get("is_removed")
+                    and item.get("projection_type") == "medication"
+                    and item.get("projection_id")
+                ):
                     payload["medication"] = {
                         **(item.get("medication") or {}),
                         "decision": "update",
@@ -909,7 +1086,7 @@ class CarePlanService:
                 cast(
                     list[dict[str, Any]],
                     self.db.table("documents")
-                    .select("id, file_name")
+                    .select("id, file_name, uploaded_by_role, review_status")
                     .in_("id", document_ids)
                     .execute()
                     .data
@@ -919,6 +1096,7 @@ class CarePlanService:
                 else []
             )
             document_names = {str(row["id"]): row["file_name"] for row in documents}
+            document_reviews = {str(row["id"]): row for row in documents}
             seen_citations: set[tuple[str, str, str, str]] = set()
             for citation in citations:
                 source = by_provenance.get(str(citation.get("provenance_id")))
@@ -942,6 +1120,15 @@ class CarePlanService:
                         {
                             "document_id": document_id,
                             "file_name": document_names.get(str(document_id)),
+                            "upload_review_status": (
+                                document_reviews.get(str(document_id), {}).get("review_status")
+                                or "pending"
+                                if document_reviews.get(str(document_id), {}).get(
+                                    "uploaded_by_role"
+                                )
+                                == "patient"
+                                else None
+                            ),
                             "excerpt": excerpt,
                             "location": location,
                         }

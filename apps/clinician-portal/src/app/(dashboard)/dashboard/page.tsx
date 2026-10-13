@@ -1,16 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import {
-    HiOutlineClipboardDocumentList,
-    HiOutlineExclamationTriangle,
-    HiOutlineMagnifyingGlass,
-    HiOutlineUsers,
-    HiOutlineArrowPath,
-} from "react-icons/hi2";
 import { useDispatch, useSelector } from "react-redux";
-import { Card } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
+import { useFlip } from "@/components/ui/motion";
+import { CompactField, SegmentedControl, compactSelectClass } from "@/components/ui/toolbar";
+import { readStoredClinicContext } from "@/services/clinic-context";
 import { RiskBadge } from "@/components/features/risk-badge";
 import { fetchPatientRiskSnapshot } from "@/services/clinicians";
 import { subscribeDashboardRealtime } from "@/services/dashboard-realtime";
@@ -26,28 +23,28 @@ import type {
 
 const riskConfig = {
     high: {
-        accent: "bg-red-100 text-red-700",
-        progressBar: "bg-red-500",
+        accent: "bg-risk-tint text-risk-ink",
+        progressBar: "bg-risk",
         action: "Review",
-        actionClass: "border border-red-200 text-red-600 hover:bg-red-50",
+        actionClass: "border border-risk-line text-risk-ink hover:bg-risk-soft",
     },
     medium: {
-        accent: "bg-yellow-100 text-yellow-700",
-        progressBar: "bg-amber-500",
+        accent: "bg-warn-tint text-warn-ink",
+        progressBar: "bg-primary",
         action: "View Profile",
-        actionClass: "text-slate-500 hover:bg-slate-50 border border-slate-200",
+        actionClass: "text-muted hover:bg-surface-2 border border-line",
     },
     low: {
-        accent: "bg-green-100 text-green-700",
-        progressBar: "bg-green-500",
+        accent: "bg-ok-tint text-ok-ink",
+        progressBar: "bg-primary",
         action: "View Profile",
-        actionClass: "text-slate-500 hover:bg-slate-50 border border-slate-200",
+        actionClass: "text-muted hover:bg-surface-2 border border-line",
     },
     unknown: {
-        accent: "bg-slate-100 text-slate-700",
-        progressBar: "bg-slate-400",
+        accent: "bg-sunken text-ink-2",
+        progressBar: "bg-primary",
         action: "Review",
-        actionClass: "text-slate-500 hover:bg-slate-50 border border-slate-200",
+        actionClass: "text-muted hover:bg-surface-2 border border-line",
     },
 } satisfies Record<PatientRiskData["risk_level"], {
     accent: string;
@@ -102,6 +99,18 @@ function comparePatients(
         default:
             return (riskRank[left.risk_level] - riskRank[right.risk_level]) * direction;
     }
+}
+
+function noopSubscribe() {
+    return () => undefined;
+}
+
+function storedClinicName() {
+    try { return readStoredClinicContext()?.clinicName ?? null; } catch { return null; }
+}
+
+function todayLabel() {
+    return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -211,17 +220,23 @@ export default function DashboardPage() {
             .sort((left, right) => comparePatients(left, right, sortBy, sortOrder));
     }, [minMedCount, patients, query, riskFilter, sortBy, sortOrder]);
 
+    const flip = useFlip(visiblePatients.map((patient) => patient.patient_id).join(","));
+    const clinicName = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
+    const today = useSyncExternalStore(noopSubscribe, todayLabel, () => "");
+    const statTone = (label: string) => label.includes("Critical") ? "text-risk" : label.includes("ADR") || label.includes("MedWatch") ? "text-warn-ink" : "text-ink";
+    const columns = "grid-cols-[minmax(200px,1.3fr)_112px_minmax(170px,1fr)_minmax(200px,1.4fr)_minmax(150px,1fr)_112px]";
+
     return (
-        <div className="mx-auto max-w-7xl space-y-8">
+        <div className="ma-page flex flex-col gap-[22px]">
             {/* Error banner */}
             {error && (
                 <div
-                    className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-risk-line bg-risk-soft px-5 py-3.5 text-sm text-risk-ink"
                     role="alert"
                 >
-                    <span>⚠ {error}{patients.length > 0 ? " — showing cached data" : ""}</span>
+                    <span className="inline-flex items-center gap-2"><Icon name="alert" className="h-4 w-4 shrink-0" />{error}{patients.length > 0 ? " — showing cached data" : ""}</span>
                     <button
-                        className="rounded px-3 py-1 text-xs font-medium hover:bg-red-100"
+                        className="ma-press h-8 rounded-lg border border-risk-line bg-surface px-3 text-xs font-semibold hover:bg-risk-tint"
                         onClick={reloadDashboard}
                         type="button"
                     >
@@ -230,150 +245,117 @@ export default function DashboardPage() {
                 </div>
             )}
 
-            {/* Stats cards */}
-            <section aria-label="Dashboard statistics" className="grid gap-5 xl:grid-cols-3">
-                {loading && stats.length === 0
-                    ? Array.from({ length: 3 }).map((_, i) => (
-                          <div className="h-24 animate-pulse rounded-2xl bg-slate-100" key={i} />
-                      ))
-                    : stats.map((stat) => {
-                          const emphasis =
-                              stat.label.includes("Critical")
-                                  ? "bg-red-50 text-red-600"
-                                  : stat.label.includes("MedWatch")
-                                    ? "bg-amber-100 text-amber-600"
-                                    : "bg-slate-100 text-slate-600";
-                          const valueColor = stat.label.includes("Critical")
-                              ? "text-red-600"
-                              : stat.label.includes("MedWatch")
-                                ? "text-amber-600"
-                                : "text-slate-900";
-
-                          return (
-                              <Card
-                                  className="flex items-center gap-4 px-6 py-5"
-                                  key={stat.label}
-                                  padding="sm"
-                              >
-                                  <div
-                                      className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${emphasis}`}
-                                  >
-                                      {stat.label.includes("Monitored") ? (
-                                          <HiOutlineUsers className="h-7 w-7" />
-                                      ) : stat.label.includes("Critical") ? (
-                                          <HiOutlineExclamationTriangle className="h-7 w-7" />
-                                      ) : (
-                                          <HiOutlineClipboardDocumentList className="h-7 w-7" />
-                                      )}
-                                  </div>
-                                  <div>
-                                      <p className="text-sm font-medium text-slate-500">
-                                          {stat.label}
-                                      </p>
-                                      <p className={`text-3xl font-bold ${valueColor}`}>
-                                          {stat.value}
-                                      </p>
-                                  </div>
-                              </Card>
-                          );
-                      })}
+            {/* Header band: same three metrics, laid over a static perspective floor */}
+            <section aria-label="Dashboard statistics" className="relative flex flex-wrap items-end justify-between gap-x-10 gap-y-6 overflow-hidden rounded-[20px] border border-line bg-surface px-7 py-[26px] shadow-[var(--shadow-card)]">
+                <div className="radar-floor" aria-hidden="true" />
+                <div className="radar-glow" aria-hidden="true" />
+                <div className="relative flex min-w-0 flex-col gap-1.5">
+                    <p className="text-sm text-muted">{today}{clinicName ? ` · ${clinicName}` : ""}</p>
+                    <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em] text-ink">Risk Radar</h1>
+                    <p className="text-[15px] text-ink-2">Assigned patient overview</p>
+                </div>
+                <dl className="relative flex flex-wrap gap-x-9 gap-y-4">
+                    {loading && stats.length === 0
+                        ? Array.from({ length: 3 }).map((_, i) => (
+                              <div className="flex flex-col gap-2" key={i}>
+                                  <Skeleton className="h-8 w-14" />
+                                  <Skeleton className="h-3.5 w-28" variant="text" />
+                              </div>
+                          ))
+                        : stats.map((stat) => (
+                              <div className="flex flex-col-reverse gap-0.5" key={stat.label}>
+                                  <dt className="text-[13px] text-muted">
+                                      {stat.label.replace(/\s+Pending$/i, "")}
+                                  </dt>
+                                  <dd className={`font-mono text-[28px] font-medium leading-tight ${statTone(stat.label)}`}>
+                                      {String(stat.value).replace(/\s+Pending$/i, "")}
+                                  </dd>
+                              </div>
+                          ))}
+                </dl>
             </section>
 
-            {/* Patient alerts table */}
-            <Card className="overflow-hidden px-0 py-0" padding="sm">
-                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-bold text-slate-900">
-                            Active Patient Alerts
-                        </h2>
-                        {loading && (
-                            <HiOutlineArrowPath
-                                aria-hidden="true"
-                                className="h-4 w-4 animate-spin text-slate-400"
+            {/* Patient table */}
+            <section aria-labelledby="dashboard-overview-title" className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+                <h2 id="dashboard-overview-title" className="sr-only">Assigned patient overview</h2>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-[22px] py-3.5">
+                    <SegmentedControl
+                        label="Risk filter"
+                        onChange={(value) => setRiskFilter(value)}
+                        options={[
+                            { value: "all", label: "All" },
+                            { value: "high", label: "High" },
+                            { value: "medium", label: "Medium" },
+                            { value: "low", label: "Low" },
+                            { value: "unknown", label: "Unknown" },
+                        ]}
+                        value={riskFilter}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <CompactField label="Sort">
+                            <select
+                                aria-label="Sort by"
+                                className={compactSelectClass}
+                                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                                value={sortBy}
+                            >
+                                <option value="risk">Risk</option>
+                                <option value="last_activity">Last Activity</option>
+                                <option value="adherence">Adherence</option>
+                                <option value="med_count">Medication Count</option>
+                            </select>
+                        </CompactField>
+                        <CompactField label="Order">
+                            <select
+                                aria-label="Sort order"
+                                className={compactSelectClass}
+                                onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
+                                value={sortOrder}
+                            >
+                                <option value="desc">Descending</option>
+                                <option value="asc">Ascending</option>
+                            </select>
+                        </CompactField>
+                        <CompactField label="Min. meds" className="pr-1">
+                            <input
+                                aria-label="Minimum medications"
+                                className="h-full w-12 bg-transparent font-mono font-medium text-ink outline-none"
+                                min={0}
+                                onChange={(e) => setMinMedCount(e.target.value)}
+                                type="number"
+                                value={minMedCount}
                             />
-                        )}
-                    </div>
-
-                    <div className="flex items-center gap-3">
+                        </CompactField>
                         <label className="sr-only" htmlFor="dashboard-patient-search">
                             Search patients
                         </label>
                         <div className="relative">
-                            <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-muted" />
                             <input
-                                className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                className={`h-[34px] rounded-[9px] border border-line-strong bg-surface pl-8 pr-3 text-[13px] text-ink outline-none transition-[width,box-shadow,border-color] duration-[240ms] placeholder:text-[#94A3B8] focus:w-[240px] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)] ${query ? "w-[240px]" : "w-[160px]"}`}
                                 id="dashboard-patient-search"
                                 onChange={(e) => setQuery(e.target.value)}
                                 placeholder="Search patients…"
                                 value={query}
                             />
                         </div>
-
                         <button
                             aria-label="Refresh dashboard"
-                            className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+                            disabled={loading}
+                            className="ma-press flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-line-strong text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-60"
                             id="dashboard-refresh-btn"
                             onClick={reloadDashboard}
                             type="button"
                         >
-                            <HiOutlineArrowPath aria-hidden="true" className="h-4 w-4" />
+                            <Icon name="refresh" className={`h-[15px] w-[15px] ${loading ? "animate-spin" : ""}`} />
                         </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-6 py-3 md:grid-cols-4">
-                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Risk Filter
-                        <select
-                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
-                            onChange={(e) => setRiskFilter(e.target.value as typeof riskFilter)}
-                            value={riskFilter}
-                        >
-                            <option value="all">All</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                            <option value="unknown">Unknown</option>
-                        </select>
-                    </label>
-                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Sort By
-                        <select
-                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
-                            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                            value={sortBy}
-                        >
-                            <option value="risk">Risk</option>
-                            <option value="last_activity">Last Activity</option>
-                            <option value="adherence">Adherence</option>
-                            <option value="med_count">Medication Count</option>
-                        </select>
-                    </label>
-                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Sort Order
-                        <select
-                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
-                            onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
-                            value={sortOrder}
-                        >
-                            <option value="desc">Descending</option>
-                            <option value="asc">Ascending</option>
-                        </select>
-                    </label>
-                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Min Med Count
-                        <input
-                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700"
-                            min={0}
-                            onChange={(e) => setMinMedCount(e.target.value)}
-                            type="number"
-                            value={minMedCount}
-                        />
-                    </label>
-                </div>
-
+                <div role="region" aria-label="Scrollable patient overview" tabIndex={0} className="overflow-x-auto">
+                <div className="min-w-[960px]">
                 {/* Table header */}
-                <div className="grid grid-cols-[1.25fr_0.7fr_1fr_1.4fr_1.4fr_0.8fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <div className={`grid ${columns} gap-4 border-b border-line px-[22px] py-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted`}>
                     <span>Patient</span>
                     <span>Risk</span>
                     <span>Adherence</span>
@@ -384,90 +366,92 @@ export default function DashboardPage() {
 
                 {/* Rows */}
                 {loading && patients.length === 0 ? (
-                    <div className="space-y-px">
+                    <div>
                         {Array.from({ length: 4 }).map((_, i) => (
-                            <div
-                                className="h-16 animate-pulse border-b border-slate-100 bg-slate-50"
-                                key={i}
-                            />
+                            <div className={`grid ${columns} items-center gap-4 border-b border-line px-[22px] py-4`} key={i}>
+                                <div className="flex items-center gap-3"><Skeleton className="h-[34px] w-[34px]" variant="circle" /><Skeleton className="h-4 w-32" variant="text" /></div>
+                                <Skeleton className="h-6 w-16" />
+                                <Skeleton className="h-2 w-28" />
+                                <Skeleton className="h-6 w-40" />
+                                <Skeleton className="h-4 w-24" variant="text" />
+                                <Skeleton className="ml-auto h-[34px] w-20" />
+                            </div>
                         ))}
                     </div>
                 ) : visiblePatients.length === 0 ? (
-                    <div className="flex h-40 items-center justify-center text-sm text-slate-400">
-                        {patients.length === 0 ? "No patients assigned yet" : "No results found"}
+                    <div className="flex h-44 flex-col items-center justify-center gap-2 text-sm text-muted">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sunken"><Icon name={query ? "search" : "users"} className="h-5 w-5" /></span>
+                        {error && patients.length === 0 ? "Patient overview is unavailable. Retry to check assigned patients." : patients.length === 0 ? "No patients assigned yet" : "No results found"}
                     </div>
                 ) : (
-                    visiblePatients.map((patient, index) => {
+                    visiblePatients.map((patient) => {
                         const config = riskConfig[patient.risk_level];
                         const adherencePct = Math.round(patient.adherence_score * 100);
+                        const strong = patient.risk_level === "high" || patient.open_adr_count > 0;
+                        const initials = `${patient.first_name.charAt(0)}${patient.last_name.charAt(0)}`.toUpperCase();
 
                         return (
                             <div
-                                className={`grid grid-cols-[1.25fr_0.7fr_1fr_1.4fr_1.4fr_0.8fr] items-center gap-4 px-6 py-5 ${
-                                    index > 0 ? "border-t border-slate-100" : ""
-                                } hover:bg-slate-50/60 transition-colors`}
+                                className={`grid ${columns} items-center gap-4 border-b border-line px-[22px] py-4 transition-colors duration-[160ms] last:border-b-0 hover:bg-[rgba(100,116,139,.05)]`}
                                 key={patient.patient_id}
+                                ref={flip(patient.patient_id)}
                             >
                                 {/* Name */}
-                                <div>
-                                    <p className="text-sm font-bold text-slate-900">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{initials}</span>
+                                    <p className="min-w-0 break-words text-[15px] font-semibold text-ink">
                                         {patient.first_name} {patient.last_name}
-                                    </p>
-                                    <p className="text-xs text-slate-400">
-                                        ID: {patient.patient_id.slice(0, 8)}
                                     </p>
                                 </div>
 
                                 {/* Risk badge */}
-                                <RiskBadge level={patient.risk_level} />
+                                <div><RiskBadge level={patient.risk_level} /></div>
 
                                 {/* Adherence bar */}
-                                <div className="flex items-center gap-2">
-                                    <div className="h-2 w-16 rounded-full bg-slate-200">
+                                {patient.risk_level === "unknown" ? <span className="text-[13px] text-muted">Not enough data</span> : <div className="flex items-center gap-2.5">
+                                    <div className="h-1.5 w-full max-w-[120px] overflow-hidden rounded-[3px] bg-track">
                                         <div
-                                            className={`h-2 rounded-full ${config.progressBar}`}
+                                            className={`h-full rounded-[3px] ${adherencePct < 60 ? "bg-risk" : config.progressBar}`}
                                             style={{ width: `${adherencePct}%` }}
                                         />
                                     </div>
-                                    <span className="text-sm font-semibold text-slate-700">
+                                    <span className="font-mono text-[13px] font-medium text-ink">
                                         {adherencePct}%
                                     </span>
-                                </div>
+                                </div>}
 
                                 {/* Recent flag */}
-                                <div>
+                                <div className="flex min-w-0 flex-col items-start gap-1">
                                     <span
-                                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${config.accent}`}
+                                        className={`inline-flex max-w-full items-center rounded-md px-2 py-[3px] text-xs font-medium ${patient.recent_symptom_severity > 0 ? config.accent : "bg-[rgba(100,116,139,.1)] text-ink-2"}`}
                                     >
                                         {patient.recent_symptom_severity > 0
                                             ? `Symptom severity ${patient.recent_symptom_severity}/10`
-                                            : patient.risk_level === "low"
-                                              ? "On Track"
-                                              : "Missed Doses"}
+                                            : "No recent symptom report"}
                                     </span>
-                                    <p className="mt-1.5 truncate text-xs text-slate-400">
+                                    <p className="max-w-full truncate text-xs text-muted">
                                         {patient.last_activity}
                                     </p>
                                 </div>
 
                                 {/* ADR / Meds */}
-                                <div className="flex items-center gap-4 text-sm text-slate-600">
+                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px]">
                                     {patient.open_adr_count > 0 ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                                            ⚠ {patient.open_adr_count} ADR
+                                        <span className="inline-flex items-center gap-1 font-medium text-risk-ink">
+                                            <Icon name="alert" className="h-[13px] w-[13px]" />{patient.open_adr_count} ADR
                                         </span>
                                     ) : (
-                                        <span className="text-xs text-slate-400">No ADRs</span>
+                                        <span className="text-muted">No open ADR flags</span>
                                     )}
-                                    <span className="text-xs text-slate-400">
+                                    <span className="text-muted">
                                         {patient.active_med_count} meds
                                     </span>
                                 </div>
 
                                 {/* Action button */}
-                                <div className="text-right">
+                                <div className="flex justify-end">
                                     <button
-                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${config.actionClass}`}
+                                        className={`ma-press h-[34px] rounded-[9px] px-4 text-[13px] font-semibold ${strong ? "bg-primary text-white shadow-[0_1px_2px_rgba(37,99,235,.25)] hover:bg-primary-hover" : "border border-line-strong bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink"}`}
                                         id={`patient-action-btn-${patient.patient_id}`}
                                         onClick={() =>
                                             router.push(`/patients/${patient.patient_id}`)
@@ -481,7 +465,13 @@ export default function DashboardPage() {
                         );
                     })
                 )}
-            </Card>
+                </div>
+                </div>
+                <details className="ma-disclosure border-t border-line px-[22px] text-[13px] text-muted">
+                    <summary className="min-h-11 py-2 font-medium hover:text-ink">How to read these metrics</summary>
+                    <p className="max-w-[80ch] pb-4 pl-[22px] leading-relaxed text-ink-2">Adherence is the share of recorded responses marked taken or completed in the last 30 days. It does not measure all expected doses. Unknown risk means there is not enough information to classify risk; an absent response does not establish a missed dose. ADR flags need clinician review.</p>
+                </details>
+            </section>
         </div>
     );
 }

@@ -4,11 +4,11 @@ interface SkeletonProps {
 }
 
 const variantClasses: Record<NonNullable<SkeletonProps["variant"]>, string> = {
-    text: "h-4 rounded",
+    text: "h-4 rounded-md",
     circle: "rounded-full",
-    rect: "rounded-[24px]",
+    rect: "rounded-[22px]",
 };
 
 export function Skeleton({ className = "", variant = "rect" }: SkeletonProps) {
-    return <div className={`animate-pulse bg-[#e7ddd2] ${variantClasses[variant]} ${className}`} />;
+    return <div aria-hidden="true" className={`ma-skeleton ${variantClasses[variant]} ${className}`} />;
 }

@@ -21,6 +21,7 @@ import { ProtectedRoute } from "@/components/layouts/protected-route";
 describe("ProtectedRoute", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        window.history.replaceState({}, "", "/");
     });
 
     it.each([true, false])("hydrates without a mismatch when restored authentication is %s", async (isAuthenticated) => {
@@ -116,5 +117,14 @@ describe("ProtectedRoute", () => {
 
         const calledWith = mockReplace.mock.calls[0]?.[0] as string;
         expect(calledWith).toContain("return_path=%2Fdashboard%3Ftab%3Drisk");
+    });
+
+    it("preserves the source-document fragment through sign-in", async () => {
+        window.history.replaceState({}, "", "/patients/morgan?tab=documents#document-source-1");
+        mockUseSelector.mockReturnValue({ isAuthenticated: false, loading: false });
+        render(<ProtectedRoute><p>Document review</p></ProtectedRoute>);
+        await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+        const target = new URL(mockReplace.mock.calls[0][0], window.location.origin);
+        expect(target.searchParams.get("return_path")).toBe("/dashboard?tab=risk#document-source-1");
     });
 });

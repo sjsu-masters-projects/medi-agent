@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from supabase import Client
 
 from app.core.exceptions import ValidationError
+from app.services.patient_wording import patient_text
 from app.services.reminder_schedule_service import (
     ReminderScheduleService,
     infer_frequency_guidance,
@@ -35,6 +36,8 @@ class FeedSnapshot:
     plan_items: dict[str, dict[str, Any]]
     reminders: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
     adherence: list[dict[str, Any]] = field(default_factory=list)
+    # The patient's saved language picks approved wording; switching needs no re-review.
+    locale: str = "en-US"
 
 
 class FeedService:
@@ -51,11 +54,12 @@ class FeedService:
     ) -> dict[str, Any]:
         """Get today's feed for a patient."""
         reminder_map: dict[tuple[str, str], dict[str, Any]] = {}
+        patient_row = await self._get_patient(patient_id)
+        locale = str(patient_row.get("preferred_language") or "en-US")
         if timezone is not None:
             # Keep explicit query timezone override behavior lightweight/legacy-friendly.
             effective_timezone = validate_timezone_name(timezone)
         else:
-            patient_row = await self._get_patient(patient_id)
             effective_timezone = validate_timezone_name(str(patient_row.get("timezone") or "UTC"))
             reminder_map = await self._get_reminder_schedule_map(patient_id)
         timezone_info = ZoneInfo(effective_timezone)
@@ -78,6 +82,7 @@ class FeedService:
                 plan_items,
                 reminder_map,
                 adherence_logs,
+                locale,
             )
         )
 
@@ -119,8 +124,14 @@ class FeedService:
             )
         )
 
+        targets = {("medication", str(row["id"])): row for row in medications} | {
+            ("obligation", str(row["id"])): row for row in obligations
+        }
         for index, task in enumerate(tasks):
             task["_order"] = index
+            target = targets.get((str(task["type"]), str(task["target_id"])))
+            if target is not None:
+                task.update(patient_text(str(task["type"]), target, snapshot.locale))
 
         # Sort by scheduled time
         tasks.sort(
@@ -153,7 +164,7 @@ class FeedService:
     async def _get_patient(self, patient_id: UUID, *, strict: bool = False) -> dict[str, Any]:
         result = (
             self.db.table("patients")
-            .select("id, timezone")
+            .select("id, timezone, preferred_language")
             .eq("id", str(patient_id))
             .single()
             .execute()
@@ -190,6 +201,7 @@ class FeedService:
                     frequency,
                     instructions,
                     care_plan_item_id,
+                    patient_wording,
                     prescribed_by_care_team_id,
                     care_teams!prescribed_by_care_team_id(
                         id,
@@ -229,6 +241,7 @@ class FeedService:
                     frequency,
                     obligation_type,
                     care_plan_item_id,
+                    patient_wording,
                     set_by_care_team_id,
                     care_teams!set_by_care_team_id(
                         id,
@@ -455,6 +468,10 @@ class FeedService:
 
         tasks: list[dict[str, Any]] = []
         for med in medications:
+            guidance = infer_frequency_guidance(str(med.get("frequency") or ""))
+            required_days = guidance.get("required_days_of_week")
+            if required_days and target_date.strftime("%A").lower() not in required_days:
+                continue
             schedule = effective_reminder_map.get(("medication", str(med["id"])))
             if schedule and schedule_matches_frequency(schedule, str(med.get("frequency") or "")):
                 tasks.extend(
@@ -522,6 +539,10 @@ class FeedService:
 
         tasks: list[dict[str, Any]] = []
         for obl in obligations:
+            guidance = infer_frequency_guidance(str(obl.get("frequency") or ""))
+            required_days = guidance.get("required_days_of_week")
+            if required_days and target_date.strftime("%A").lower() not in required_days:
+                continue
             schedule = effective_reminder_map.get(("obligation", str(obl["id"])))
             if schedule and schedule_matches_frequency(schedule, str(obl.get("frequency") or "")):
                 tasks.extend(

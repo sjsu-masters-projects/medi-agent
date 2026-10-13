@@ -26,7 +26,7 @@ from app.services.explanation_service import normalize_patient_summary
 
 logger = logging.getLogger(__name__)
 
-SUMMARY_PROMPT_VERSION = "patient-explanation/2"
+SUMMARY_PROMPT_VERSION = "patient-explanation/4"
 MAX_SUMMARY_ATTEMPTS = 3
 SUMMARY_RETRY_DELAYS = {
     1: timedelta(minutes=2),
@@ -137,10 +137,11 @@ class DocumentSummaryService:
             response = await get_router().generate_text(
                 TaskType.PATIENT_EXPLANATION,
                 prompt=GENERATE_SUMMARY_USER.format(
-                    medications=json.dumps(sources["medications"], default=str),
-                    conditions=json.dumps(sources["conditions"], default=str),
+                    # ensure_ascii=False: the model reads "vía oral", not "v\u00eda oral".
+                    medications=json.dumps(sources["medications"], default=str, ensure_ascii=False),
+                    conditions=json.dumps(sources["conditions"], default=str, ensure_ascii=False),
                     follow_up_instructions=json.dumps(
-                        sources["follow_up_instructions"], default=str
+                        sources["follow_up_instructions"], default=str, ensure_ascii=False
                     ),
                 ),
                 system_instruction=GENERATE_SUMMARY_SYSTEM,

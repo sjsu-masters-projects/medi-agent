@@ -4,10 +4,12 @@ Next.js app for clinician and clinic-admin workflows in MediAgent.
 
 ## Local Development
 
-Install dependencies from the repo root, then run the portal:
+From `apps/clinician-portal`, install dependencies and run the portal on port 3001
+(the patient portal uses the default 3000):
 
 ```bash
-npm run dev
+npm ci
+npm run dev -- --port 3001
 ```
 
 Default local URLs:
@@ -15,11 +17,12 @@ Default local URLs:
 - portal: `http://127.0.0.1:3001`
 - backend API: `http://127.0.0.1:8000`
 
-Typecheck and tests:
+Lint, typecheck and tests:
 
 ```bash
-./node_modules/.bin/tsc --noEmit
-./node_modules/.bin/vitest run
+npm run lint
+npm run typecheck
+npm run test
 ```
 
 ## Current Auth Workflow
@@ -70,7 +73,7 @@ Invite history is intentionally role-sensitive:
 - clinician API client: `src/services/clinicians.ts`
 - stored clinic context: `src/services/clinic-context.ts`
 
-## Phase 6 Review Workflow
+## Document review workflow
 
 - Patient-uploaded documents enter a shared clinician review queue.
 - Review actions are surfaced in both the dedicated review queue and the patient deep dive documents tab.
@@ -103,17 +106,16 @@ proposed projections and retained activity responses. New activity IDs are previ
 new/changed activities do not inherit reminder times or completion. Edits and saves clear the
 preview. Refresh it if records or reminders change: it is not a transaction reservation or a
 guarantee of later publication. Errors discard the snapshot, not display an empty success.
-The backend must be deployed before the preview UI; no new migration is required.
-Save draft edits before approval. Clinical review of medication matching
-and locale wording, plus a live version-supersession proof, remain PAT-005 acceptance work.
+Save draft edits before approval. PAT-005 is accepted, including live version
+supersession; see [the final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
 
 Care Plan review makes each proposed medication an explicit create-or-update
 decision against the assigned patient's active medication list. It shows one source action per
 document and collapses redundant same-page excerpts in the review display without deleting
-stored evidence. The clinician must edit patient-facing wording into the patient's preferred
-language and attest to reviewing the final text; the checkbox is not a translation service.
-The backend and publication transaction both reject missing locale or medication decisions.
-Apply migration `042_care_plan_publication_review_guards.sql` before deploying this contract.
+stored evidence. Under LOC-001, patient-facing wording is drafted and approved in en-US and
+es-MX together: the review shows both side by side and one check per item records that the
+clinician read both. The backend and publication transaction both reject missing locale
+wording or medication decisions.
 
 Overlap review groups flag identical source facts/instructions and same-name medications;
 they do not establish clinical equivalence. “Keep this proposal; remove its overlaps” stages
@@ -122,6 +124,50 @@ Historical imported proposals can be excluded together; approved carried items a
 from that bulk action. Removed rows and their evidence remain available under “Show removed
 items.” Migration 044 adds the atomic overlap publication guard. Existing completed drafts
 need review, not a generation retry; no automatic translation or medication choice is implied.
+
+## Conversations and operational alerts
+
+Interface controls remain English regardless of patient preference. Care-plan
+review shows both languages side by side and preserves source and reviewed wording. Expand supporting evidence for filenames/page references;
+extraction confidence is not medical certainty. Review blockers and explicit
+publication decisions remain visible and enforced. Clinical text containing numbers
+is not formatted as a date unless its field is explicitly a date field.
+UI review evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
+
+**Messages** opens an assignment-scoped conversation inbox. Choose one linked
+patient to start or resume a thread, or select an existing conversation to reply.
+Sender and clinic names come from the server. An explicit send is the clinician's
+approval; no AI transcript composer or automatic clinical send is provided.
+The patient AI transcript links to Messages.
+
+**Alerts** separates current authorized work from notification history. Documents,
+care-plan drafts, appointments and follow-up/safety items open their exact existing
+workflow; reading does not approve care. Only supported barrier/safety items offer
+an audited acknowledgement, meaning seen for follow-up, not clinically resolved.
+Messages holds private human conversations, followed by a collapsed **Earlier
+messages** section: one-way messages and saved escalation notices from before
+conversations, shown as history only (old urgency labels create no active work).
+
+The shared notification cache polls `/api/v1/notification-centre` once a minute
+while visible and refreshes on focus. Signed per-page cutoffs protect bulk reads
+against new arrivals; "Mark all loaded read" skips items that are no longer
+available and says how many; assignment revocation removes access. Counts
+unavailable is not zero. See [NOT-001](../../.agent/specs/not-001-notification-centre.md) for
+the contract.
+
+The conversation API is `/api/v1/care-conversations`. Pages contain at most 50
+messages; older pages use the server cursor. The visible inbox and selected thread
+poll every 15 seconds. Inbox refresh updates recipients and removes revoked choices
+while preserving selection and drafts; unread counts
+come from the server, including after marking read through the last displayed ID. Unconfirmed sends
+retain their text and UUID for manual retry, including thread/view switches;
+pending text is locked until retry resolves. Drafts are in memory and clear on
+reload or account change. Saved sends followed by failed refresh have distinct copy.
+Definitive validation rejection preserves text for editing. Idempotency mismatch
+requires explicit confirmation to prepare a new send key and warns that the previous
+message may already exist. Preparation does not send it.
+
+Conversations shipped in #139 (COM-001-B) with live bilingual persistence verified.
 
 ## Notes
 
@@ -139,7 +185,7 @@ Unrecorded days are gaps, not missed doses. Current activity counts are not the 
 scheduled-dose denominator, and patient-reported side effects are not clinician-reviewed ADRs.
 
 - A browser extension such as Grammarly can inject attributes into the document body and trigger a dev-only hydration warning. That warning is not a portal auth bug.
-- QA account expectations are documented in [docs/qa-auth-accounts.md](../../docs/qa-auth-accounts.md).
+- QA account expectations are documented in [Auth-account QA](../../docs/demo-environment.md#auth-account-qa).
 
 
 ## Appointments workflow
@@ -155,9 +201,8 @@ or request for alternatives while preserving prior history. Time conversion reje
 DST gaps and repeated hours rather than guessing. Failed writes preserve the draft;
 refresh to check whether an uncertain request saved before retrying.
 
-Slice 4 needs appointment migrations 038–041. Slice 5 adds response deadlines,
-Expired history, and re-proposal after all choices expire; it requires migrations
-042 then 043 and the updated backend. Confirmed/scheduled patient visits cannot
+Response deadlines, Expired history, and re-proposal after all choices expire are
+supported. Confirmed/scheduled patient visits cannot
 overlap; pending offers reserve no time. Slice 6 adds **Add to calendar** to each
 confirmed/scheduled history row, including the chosen row of an offer. Each download
 rechecks active patient assignment and current appointment status. The one-time `.ics`

@@ -35,6 +35,12 @@ def mock_supabase_db():
     for method in ["select", "eq", "single", "insert", "order", "delete", "in_"]:
         getattr(table, method).return_value = table
 
+    runs = MagicMock()
+    for method in ["select", "in_", "order"]:
+        getattr(runs, method).return_value = runs
+    runs.execute.return_value = MagicMock(data=[])
+    db.table.side_effect = lambda name=None: runs if name == "document_ingestion_runs" else table
+
     # Mock storage
     storage = MagicMock()
     bucket = MagicMock()
@@ -448,6 +454,33 @@ class TestDeleteDocument:
 
 class TestExplainDocument:
     """POST /api/v1/documents/{document_id}/explain - Explain a document."""
+
+    @pytest.mark.parametrize(
+        ("language", "message"),
+        [("en-US", "These exact file contents"), ("es-MX", "Este mismo archivo")],
+    )
+    def test_duplicate_explanation_does_not_use_cache_or_model(
+        self, client, override_auth, language, message
+    ):
+        document_id = uuid4()
+        with (
+            patch(
+                "app.services.document_service.DocumentService.get_document",
+                new=AsyncMock(return_value={"parse_status": "duplicate", "ai_summary": "stale"}),
+            ),
+            patch(
+                "app.routers.documents.ExplanationService.translate", new=AsyncMock()
+            ) as translate,
+        ):
+            response = client.post(
+                f"/api/v1/documents/{document_id}/explain", json={"language": language}
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["summary_status"] == "duplicate"
+        assert response.json()["available"] is False
+        assert response.json()["summary"] is None
+        assert message in response.json()["message"]
+        translate.assert_not_awaited()
 
     def test_returns_cached_english_summary(
         self, client, override_auth, override_db, mock_supabase_db, patient_id

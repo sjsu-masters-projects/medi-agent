@@ -27,6 +27,9 @@ from app.services.reminder_schedule_service import validate_timezone_name
 
 logger = logging.getLogger(__name__)
 
+# Optional profile fields a patient may clear by sending an explicit null.
+CLEARABLE_PROFILE_FIELDS: frozenset[str] = frozenset({"gender"})
+
 
 class PatientService:
     """Patient-scoped operations. All methods require the patient's user ID."""
@@ -44,9 +47,14 @@ class PatientService:
         return result.data
 
     async def update_profile(self, patient_id: UUID, updates: dict[str, Any]) -> Any:
-        """Partial update — only non-None fields are sent."""
-        # Filter out None values so we don't overwrite with nulls
-        clean = {k: v for k, v in updates.items() if v is not None}
+        """Partial update of the fields the caller explicitly sent.
+
+        ``None`` is ignored for every field except the optional ones in
+        ``CLEARABLE_PROFILE_FIELDS``, where an explicit ``None`` clears the
+        stored value. Required fields such as names and preferred language
+        can therefore never be nulled through this path.
+        """
+        clean = {k: v for k, v in updates.items() if v is not None or k in CLEARABLE_PROFILE_FIELDS}
         if not clean:
             return await self.get_profile(patient_id)
 

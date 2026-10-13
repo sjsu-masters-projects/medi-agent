@@ -16,9 +16,9 @@ no longer true.
 `.agent/TASKS.md` is authoritative for status, but individual rows go stale between
 updates. Two examples found on 2026-09-09, both of which had been repeated as fact:
 
-- The MCP/A2A row said "A2A implementation files are empty". The task service and retry
-  worker were 545 lines and the worker started with the application. What is genuinely
-  missing is `/.well-known/agent-card.json` and the delegation flow.
+- An internal delegation row incorrectly said the implementation was empty. The
+  task service and retry worker existed and the worker started with the application.
+  Inspect the actual service and callers before treating a capability as absent.
 - A finding circulated that the committed env templates pointed at a deleted Supabase
   project. The reference had already been removed; the templates carry empty placeholders,
   which is the normal convention.
@@ -44,7 +44,7 @@ Egress is policy-controlled and varies between environments. Verify rather than 
 the previous handoff recorded Supabase over HTTPS as working, and in a later session the
 proxy refused it.
 
-| Operation | Observed 2026-09-09 |
+| Operation | Observed 2026-09-09 (one hosted environment) |
 |---|---|
 | `git clone` / `fetch` / `pull` / `push` | works once the repository is authorized for the session |
 | npm, PyPI, crates, Go proxy | works |
@@ -75,6 +75,9 @@ handled deliberately:
   specifically to avoid a new column and the window that comes with it.
 
 Prefer one of those shapes over adding a column that the write path immediately requires.
+When a migration is unavoidable before deploy, say so in the PR and apply it first: NORA-002's
+`051_health_knowledge_and_chat_sessions.sql` added `chat_messages.session_id`, which the chat
+write path needs.
 
 ## Traps found the hard way
 
@@ -88,6 +91,22 @@ Prefer one of those shapes over adding a column that the write path immediately 
   A CLI that imports it at module scope cannot even print `--help` without credentials.
 - **Reading the CodeQL alert:** the code-scanning API returns 403 for this repository, but
   the check-run annotations endpoint is readable and names the exact file and line.
+- **Absolute deadlines under uvicorn.** The server runs on uvloop, whose clock differs from
+  `time.monotonic()`. `asyncio.timeout_at(time.monotonic() + t)` therefore cancelled every
+  model call at once in production, while scripts on the default loop passed. Use
+  relative `asyncio.timeout(t)`.
+- **Mocked RPC tests cannot see SQL bugs.** The notification centre's Python tests passed
+  while every RPC failed in PostgreSQL (an ambiguous PL/pgSQL variable). Run the opt-in
+  Docker PostgreSQL contract suites (`*_TEST_POSTGRES_DOCKER=1`) for any migration with
+  functions or triggers.
+- **Turbopack refuses a symlinked `node_modules`** that points outside the worktree. In a
+  new worktree, run `npm ci` in each app instead of linking another checkout's packages.
+- **Speech-to-text pinned to English returns nothing for Spanish speech.** Transcription
+  uses nova-3's `multi` mode; the transcript's language is detected afterwards.
+- **CI checks read pull request state when a run starts.** The PR Policy Check reads the
+  live body, so tick the checklist before pushing (or push again). The secret scan reads
+  every commit in the range, so a credential-shaped placeholder in an earlier commit keeps
+  failing until that commit is rewritten.
 
 ## Never put patient or clinician identifiers in logs
 
@@ -105,19 +124,18 @@ stash an id somewhere, and they are the ones a scanner catches.
 |---|---|---|
 | A clinic admin can obtain a patient invite code, and a patient redeeming it makes the admin an active care-team member recorded as `provider`. `SYN-NEG-004` expects admins denied on role grounds first. | Changes authorization semantics on a live product | Clinician authorization |
 | Three fixture actions have no endpoint that owns them: `list_patient_documents`, `view_medication_timeline`, `view_document_metadata`. Their negative-access cases are reported as unverified rather than pointed at an unrelated route. | Needs a product decision on which route owns each action | Product + clinician portal |
-| Triage safety rules need clinical sign-off on wording and coverage in both locales. | Not an engineering step | Safety owner + clinical reviewer |
-| Pharmacovigilance (`PV-001`, `PV-002`) has no owner in `TEAM.md`. | The whole R4 milestone is unassigned | Team allocation |
+| Triage safety rules need peer safety review of wording and coverage in both locales under `SAFE-002`; professional sign-off is optional. | Not an engineering step | Safety owner + peer reviewer |
 
 ## Long-lead items that cannot be compressed
 
-`EVA-001` needs clinician or pharmacist adjudication of 40 high-risk cases, and `PAT-003`
-needs clinical review of high-risk bilingual content. The review schedule is still
-unassigned. Neither can start in the final weeks before the 2026-12-04 freeze.
+`EVA-001`'s professional adjudication of 40 high-risk cases is an optional research
+extension, not an expo gate. `PAT-003` still needs review of high-risk bilingual content;
+schedule it well before the 2026-12-04 freeze.
 
 ## Credentials
 
 Never in this repository, and never pasted into a tool that keeps a transcript. Obtain
-them from the team out-of-band. `docs/qa-auth-accounts.md` covers the fixture accounts;
+them from the team out-of-band. [Auth-account QA](../docs/demo-environment.md#auth-account-qa) covers the fixture accounts;
 `DEMO_ACCOUNT_PASSWORD` gates them.
 
 Secret scanning runs in CI and cannot see a chat window.

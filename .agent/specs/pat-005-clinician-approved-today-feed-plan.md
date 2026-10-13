@@ -1,5 +1,12 @@
 # PAT-005 — Clinician-Approved Care Plan to Today Feed
 
+**Current acceptance:** The synthetic controlled-care core journey is verified,
+including Spanish publication, revision continuity and five-document consolidation.
+Use [TASKS.md](../TASKS.md) for current issue state and
+[acceptance evidence](../../docs/pat-005-final-acceptance-2026-10-10.md) for verification
+boundaries. Earlier staged rollout/pending notes below describe implementation
+history, not instructions to reopen accepted checks or reapply migrations.
+
 ## Outcome
 
 PAT-005 closes MediAgent's first controlled-care loop:
@@ -10,8 +17,9 @@ synthetic documents → grounded facts → automatic AI draft → clinician revi
 ```
 
 The model drafts. It never publishes a patient-facing clinical instruction. An assigned
-clinician approves the complete plan version. The first complete scenario is `en-US`; `es-MX`
-parity is a follow-up task.
+clinician approves the complete plan version. The first complete scenario was `en-US`;
+`es-MX` publication was later accepted (PAT-005-S), and care-plan wording is now drafted
+and approved in both languages together under LOC-001.
 
 ## Product contract
 
@@ -125,7 +133,8 @@ eight-hour intervals are enforced by the backend, independently of UI validation
 Rollout: apply `044_care_plan_overlap_publication_guard.sql` with the existing migration
 runner before deploying. Reload the existing draft, explicitly exclude imported proposals,
 review overlap groups, save, then verify publication/Today and historical adherence. Do not
-retry completed generation to clean up an existing draft. Full PAT-005 live proof remains open.
+retry completed generation to clean up an existing draft. Full PAT-005 live proof is closed —
+see [final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
 
 When new documents register grounded facts, the approved version remains active while a newer
 draft is prepared. The assigned clinician needs both snapshots in one review: the current
@@ -137,15 +146,17 @@ medications can alter the final feed.
 
 Before live revision approval is considered complete, add explicit matching decisions for each
 medication against active canonical records, prevent duplicate projections, verify patient-facing
-wording in the patient's preferred locale, and test the v1-approved → new document → v2-draft →
+wording in English and Spanish (LOC-001), and test the v1-approved → new document → v2-draft →
 v2-approved path with unchanged adherence history. The current comparison surface is a review
 aid, not a substitute for those publication safeguards or clinician judgment.
 
-Publication review records the clinician-verified locale on each active draft item and an
-explicit create/update decision on each proposed medication. The API validates those decisions
+Publication review records the clinician's check of each active draft item's English and
+Spanish wording ([LOC-001](loc-001-bilingual-approved-wording.md)) and an explicit
+create/update decision on each proposed medication. The API validates those decisions
 against current patient and medication state; the atomic database publication operation checks
 again before any recommendation, supersession, or projection write. Verification is human
-attestation against the source, not automatic translation or a claim of clinical correctness.
+attestation against the source; the second language may be an AI draft, which the clinician
+checks or rewrites. It is not a claim of clinical correctness.
 An absent match decision or a same-name active medication blocks creation. The exact Today
 preview and live supersession proof remain separate acceptance gates.
 
@@ -198,18 +209,18 @@ publication linkage and subsequent responses for V1. Intermediate edit wording
 snapshots are not retained. V2 continuity, the full live barrier matrix and the
 initial unconfirmed-save cause remain acceptance work, not completed items.
 
-- [ ] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
+- [x] A fresh synthetic `en-US` scenario produces evidence-backed candidates from clinician and
       patient uploads.
-- [ ] Several completed documents inside the quiet window create one draft.
-- [ ] The clinician can inspect a candidate and plan item beside its protected source preview.
-- [ ] A blocker prevents approval until it is resolved.
-- [ ] Approval atomically creates or updates medications and publishes non-medication items.
-- [ ] Only approved effective items appear in the correct patient-local Today feed.
-- [ ] Completion and each barrier category become clinician-visible.
-- [ ] Unassigned users cannot read, draft, approve, preview, or report against the plan.
-- [ ] Plan version, citations, approval, projections, and adherence outcome are reconstructable
+- [x] Several completed documents inside the quiet window create one draft.
+- [x] The clinician can inspect a candidate and plan item beside its protected source preview.
+- [x] A blocker prevents approval until it is resolved.
+- [x] Approval atomically creates or updates medications and publishes non-medication items.
+- [x] Only approved effective items appear in the correct patient-local Today feed.
+- [x] Completion and each barrier category become clinician-visible.
+- [x] Unassigned users cannot read, draft, approve, preview, or report against the plan (requester-confirmed closure, plus recorded denial/regression evidence).
+- [x] Plan version, citations, approval, projections, and adherence outcome are reconstructable
       from audit records.
-- [ ] A clinician can compare active and proposed versions, identify all contributing documents,
+- [x] A clinician can compare active and proposed versions, identify all contributing documents,
       reconcile overlapping medications, and verify localized wording before v2 publication.
 
 ## October 7 acceptance and October 8 hardening
@@ -235,9 +246,9 @@ recovery retries GET/HEAD once with 100–249 ms jitter, respects cancellation, 
 retries HTTP errors or writes. An unconfirmed response is not marked saved; refresh
 before manual retry. This is mitigation, not a verified transport root-cause fix.
 New deployed UI/chat/policy checks, full bilingual plan publication and live five-document
-worker timing remain open.
+worker timing are closed — see [final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
 
 ## Explicitly deferred
 
-- Spanish parity, appointment booking, external notifications, production capacity alerts,
+- Appointment booking, external notifications, production capacity alerts,
   generic wellness advice, autonomous medication changes, and production-readiness claims.

@@ -54,7 +54,7 @@ async def list_staff(
     "/invite",
     status_code=status.HTTP_201_CREATED,
     summary="Invite a clinician to the clinic",
-    description="Requires admin role. Adds an existing clinician or creates a pending invite.",
+    description="Requires admin role. Queues an addressed invitation; membership changes only on acceptance.",
 )
 async def invite_member(
     body: StaffInviteRequest,

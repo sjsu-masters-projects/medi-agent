@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { HiOutlineClipboardDocument, HiOutlineMagnifyingGlass } from "react-icons/hi2";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSelector } from "react-redux";
 import { Badge, Button, Card, Input } from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icons";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 import { ClinicianRole } from "@/types";
+import { EmailPreferences } from "@/components/features/email-preferences";
+import { EmailInvitations } from "@/components/features/email-invitations";
 
 const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Interoperability"] as const;
 type SettingsTab = (typeof settingsTabs)[number];
@@ -83,12 +85,65 @@ function getInitials(first: string, last: string) {
 function getRoleTone(role: ClinicianRole) {
     switch (role) {
         case ClinicianRole.ADMIN:
-            return "bg-slate-800 text-white";
+            return "bg-primary-tint text-primary";
         case ClinicianRole.NURSE:
-            return "bg-purple-100 text-purple-700";
+            return "bg-sunken text-ink-2";
         default:
-            return "bg-green-100 text-blue-700";
+            return "bg-[rgba(100,116,139,.1)] text-ink-2";
     }
+}
+
+const GENERAL_SECTIONS = [
+    { id: "clinic-profile", label: "Clinic Profile" },
+    { id: "my-profile", label: "My Profile" },
+    { id: "security", label: "Security" },
+] as const;
+type GeneralSectionId = (typeof GENERAL_SECTIONS)[number]["id"];
+
+const primaryButtonClass =
+    "ma-press inline-flex h-[34px] items-center justify-center gap-2 rounded-[9px] bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]";
+const secondaryButtonClass =
+    "ma-press inline-flex h-[34px] items-center justify-center gap-2 rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]";
+const selectClass =
+    "h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
+const cardFooterClass =
+    "flex flex-wrap items-center justify-end gap-3 rounded-b-2xl border-t border-line bg-surface-2 px-5 py-3";
+
+function IconTile({ name }: { name: IconName }) {
+    return (
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sunken text-ink-2">
+            <Icon name={name} className="h-4 w-4" />
+        </span>
+    );
+}
+
+function CardHeader({ action, children, icon, sub }: { action?: ReactNode; children: ReactNode; icon: IconName; sub?: ReactNode }) {
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+                <IconTile name={icon} />
+                <div className="min-w-0">
+                    {children}
+                    {sub ? <p className="mt-0.5 text-[13px] text-muted">{sub}</p> : null}
+                </div>
+            </div>
+            {action}
+        </div>
+    );
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div>
+            <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
+                {label}
+                <Icon aria-hidden="true" name="shield" className="h-3.5 w-3.5 text-muted" />
+            </p>
+            <p className="flex min-h-[42px] cursor-default items-center break-words rounded-[10px] border border-line bg-surface-2 px-3.5 py-2 text-sm text-muted">
+                {value}
+            </p>
+        </div>
+    );
 }
 
 function getRoleLabel(role: ClinicianRole) {
@@ -144,6 +199,8 @@ export default function SettingsPage() {
     const [inviteCodeLoading, setInviteCodeLoading] = useState(false);
     const [inviteRecords, setInviteRecords] = useState<InviteCodeRecord[]>([]);
     const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
+    // Presentational only: highlights the section navigator entry the user last chose.
+    const [activeSection, setActiveSection] = useState<GeneralSectionId>("clinic-profile");
 
     const loadStaff = useCallback(async () => {
         if (!token) {
@@ -270,11 +327,11 @@ export default function SettingsPage() {
                 { email: inviteEmail, role: inviteRole },
                 { token },
             );
-            if (result.email_sent) {
-                setInviteStatus(result.status === "added" ? "Added to clinic and invitation email sent" : "Invitation email sent");
-            } else {
-                setInviteStatus(result.status === "added" ? "Added to clinic (email not sent)" : "Invitation pending (email not sent)");
-            }
+            setInviteStatus(result.status === "already_pending"
+                ? "An invitation is already pending. Sending does not change clinic membership."
+                : result.email_sent
+                  ? "Invitation email handed to the provider; inbox delivery is not confirmed yet. Clinic access changes only after acceptance."
+                  : "Invitation queued for email delivery. Clinic access changes only after acceptance.");
             setInviteEmail("");
             void loadStaff();
         } catch (e) {
@@ -419,183 +476,224 @@ export default function SettingsPage() {
     );
 
     return (
-        <div className="mx-auto max-w-7xl space-y-8">
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+        <div className="ma-page space-y-5">
+            <div>
+                <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Clinic settings</h1>
+                {clinicName ? <p className="mt-1 text-sm text-muted">{clinicName}</p> : null}
+            </div>
+
+            <div role="group" aria-label="Settings views" className="flex h-11 max-w-full gap-6 overflow-x-auto border-b border-line-strong">
                 {settingsTabs.map((tab) => (
                     <button
-                        className={`rounded-lg px-5 py-2.5 text-sm ${tab === activeTab ? "bg-white font-semibold text-slate-900 shadow-sm" : "font-medium text-slate-600"}`}
+                        aria-pressed={tab === activeTab}
+                        className={`relative h-11 shrink-0 whitespace-nowrap text-sm transition-colors ${tab === activeTab ? "font-medium text-ink" : "text-muted hover:text-ink-2"}`}
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         type="button"
                     >
                         {tab}
+                        {tab === activeTab ? (
+                            <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
+                        ) : null}
                     </button>
                 ))}
             </div>
 
-            {error ? <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-            {inviteStatus ? <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{inviteStatus}</p> : null}
+            {error ? (
+                <p role="alert" className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink">
+                    <Icon aria-hidden="true" name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                </p>
+            ) : null}
+            {inviteStatus ? (
+                <p role="status" className="flex items-start gap-2.5 rounded-xl border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">
+                    <Icon aria-hidden="true" name="info" className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{inviteStatus}</span>
+                </p>
+            ) : null}
 
             {activeTab === "General Profile" ? (
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <Card className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-900">Clinic Profile</h3>
-                        </div>
-                        <div className="space-y-4 text-sm">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Clinic Name</p>
-                                <p className="mt-1 font-medium text-slate-900">{clinicName || "—"}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Clinic Code</p>
-                                <div className="mt-1 flex items-center gap-3">
-                                    <p className="font-mono text-base font-semibold tracking-[0.08em] text-slate-900">
-                                        {clinicCode || "Unavailable"}
-                                    </p>
-                                    <Button
-                                        className="px-3 py-1.5 text-xs"
-                                        onClick={() => void handleCopyClinicCode()}
-                                        size="sm"
-                                        variant="secondary"
+                <div className="ma-enter grid gap-6 xl:grid-cols-[200px_minmax(0,1fr)]">
+                    <nav aria-label="Settings sections" className="hidden xl:block">
+                        <ul className="sticky top-24 space-y-1">
+                            {GENERAL_SECTIONS.map((section) => (
+                                <li key={section.id}>
+                                    <a
+                                        aria-current={activeSection === section.id ? "true" : undefined}
+                                        className={`flex h-9 items-center rounded-lg px-3 text-sm transition-colors ${activeSection === section.id ? "bg-sunken font-medium text-ink" : "text-muted hover:bg-surface-2 hover:text-ink-2"}`}
+                                        href={`#${section.id}`}
+                                        onClick={() => setActiveSection(section.id)}
                                     >
-                                        Copy
+                                        {section.label}
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </nav>
+
+                    <div className="min-w-0 space-y-5">
+                        <Card padding="none">
+                            <div className="scroll-mt-24" id="clinic-profile">
+                                <CardHeader icon="building">
+                                    <h3 className="text-[15px] font-semibold text-ink">Clinic Profile</h3>
+                                </CardHeader>
+                                <div className="divide-y divide-line">
+                                    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-4">
+                                        <p className="text-[13px] text-muted">Clinic Name</p>
+                                        <p className="text-sm font-medium text-ink">{clinicName || "—"}</p>
+                                    </div>
+                                    <div className="space-y-2 px-5 py-4">
+                                        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                                            <p className="text-[13px] text-muted">Clinic Code</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="rounded-[10px] border border-line-strong bg-surface-2 px-3 py-1.5 font-mono text-lg tracking-[0.08em] text-ink">
+                                                    {clinicCode || "Unavailable"}
+                                                </p>
+                                                <Button
+                                                    onClick={() => void handleCopyClinicCode()}
+                                                    size="sm"
+                                                    variant="secondary"
+                                                >
+                                                    Copy
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <p className="text-[13px] text-muted">
+                                            New clinicians can join with this clinic code. Sending an invite is optional.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card padding="none">
+                            <div className="scroll-mt-24" id="my-profile">
+                                <CardHeader icon="user">
+                                    <h3 className="text-[15px] font-semibold text-ink">My Profile</h3>
+                                </CardHeader>
+                                <div className="grid gap-4 px-5 py-5 md:grid-cols-2">
+                                    <Input
+                                        label="First Name"
+                                        onChange={(event) => setFirstName(event.target.value)}
+                                        placeholder="First name"
+                                        value={firstName}
+                                    />
+                                    <Input
+                                        label="Last Name"
+                                        onChange={(event) => setLastName(event.target.value)}
+                                        placeholder="Last name"
+                                        value={lastName}
+                                    />
+                                    <Input
+                                        label="Specialty"
+                                        onChange={(event) => setSpecialty(event.target.value)}
+                                        placeholder="Family Medicine"
+                                        value={specialty}
+                                    />
+                                    <ReadOnlyField
+                                        label="Role"
+                                        value={profile ? getRoleLabel(profile.role) : "Loading profile…"}
+                                    />
+                                    <ReadOnlyField label="Email" value={profile?.email || "—"} />
+                                </div>
+                                <div className={cardFooterClass}>
+                                    <Button onClick={() => setActiveTab("Team & Roles")} variant="secondary">
+                                        Manage team
                                     </Button>
+                                    <Button disabled={profileSaving || !profile} onClick={() => void handleSaveProfile()}>{profileSaving ? "Saving…" : "Save Profile"}</Button>
                                 </div>
-                                <p className="mt-1 text-xs text-slate-500">
-                                    New clinicians can join with this clinic code. Sending an invite is optional.
-                                </p>
                             </div>
-                        </div>
-                    </Card>
+                        </Card>
 
-                    <Card className="space-y-4">
-                        <h3 className="text-xl font-bold text-slate-900">My Profile</h3>
-                        <div className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <Input
-                                    label="First Name"
-                                    onChange={(event) => setFirstName(event.target.value)}
-                                    placeholder="First name"
-                                    value={firstName}
-                                />
-                                <Input
-                                    label="Last Name"
-                                    onChange={(event) => setLastName(event.target.value)}
-                                    placeholder="Last name"
-                                    value={lastName}
-                                />
-                            </div>
-                            <Input
-                                label="Specialty"
-                                onChange={(event) => setSpecialty(event.target.value)}
-                                placeholder="Family Medicine"
-                                value={specialty}
-                            />
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                                <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Role</p>
-                                    <p className="mt-1 font-semibold text-slate-900">
-                                        {getRoleLabel(profile?.role || ClinicianRole.PROVIDER)}
-                                    </p>
-                                </div>
-                                <div className="mt-3">
-                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Email</p>
-                                    <p className="mt-1 font-medium text-slate-800">{profile?.email || "—"}</p>
+                        <Card padding="none">
+                            <div className="scroll-mt-24" id="security">
+                                <CardHeader icon="shield">
+                                    <h3 className="text-[15px] font-semibold text-ink">Security</h3>
+                                </CardHeader>
+                                <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+                                    <div>
+                                        <p className="text-sm font-medium text-ink">Multi-Factor Authentication</p>
+                                        <p className="mt-0.5 text-[13px] text-muted">Protect your account with a TOTP authenticator app.</p>
+                                    </div>
+                                    <Link className={primaryButtonClass} href="/settings/mfa">
+                                        Configure
+                                    </Link>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <Button onClick={() => void handleSaveProfile()}>{profileSaving ? "Saving…" : "Save Profile"}</Button>
-                                <Button onClick={() => setActiveTab("Team & Roles")} variant="secondary">
-                                    Register a doctor now
-                                </Button>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card className="space-y-4 lg:col-span-2">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-900">Security</h3>
-                        </div>
-                        <div className="space-y-3 text-sm">
-                            <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
-                                <div>
-                                    <p className="font-medium text-slate-900">Multi-Factor Authentication</p>
-                                    <p className="text-xs text-slate-500">Protect your account with a TOTP authenticator app.</p>
-                                </div>
-                                <Link
-                                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-                                    href="/settings/mfa"
-                                >
-                                    Configure
-                                </Link>
-                            </div>
-                        </div>
-                    </Card>
+                        </Card>
+                        {token ? <EmailPreferences token={token} /> : null}
+                    </div>
                 </div>
             ) : null}
 
             {activeTab === "Team & Roles" ? (
-                <div className="space-y-8">
-                    <Card className="space-y-6">
-                        <div>
-                            <h2 className="text-2xl font-bold text-slate-900">Invite Team Member</h2>
-                            <p className="mt-1 text-sm text-slate-500">Send an email invitation to add staff to your MediAgent workspace.</p>
+                <div className="ma-enter space-y-5">
+                    {token && profile?.role === ClinicianRole.ADMIN ? <EmailInvitations token={token} revision={inviteStatus} /> : null}
+                    <Card padding="none">
+                        <CardHeader icon="users" sub="Send an email invitation to add staff to your MediAgent workspace.">
+                            <h2 className="text-[15px] font-semibold text-ink">Invite Team Member</h2>
+                        </CardHeader>
+                        <div className="space-y-3 px-5 py-5">
+                            <div className="grid gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_auto] md:items-end">
+                                <Input
+                                    label="Email Address"
+                                    onChange={(event) => setInviteEmail(event.target.value)}
+                                    placeholder="colleague@clinic.org"
+                                    value={inviteEmail}
+                                />
+                                <label className="block">
+                                    <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Role Access</span>
+                                    <select
+                                        className={selectClass}
+                                        onChange={(event) => setInviteRole(event.target.value as ClinicianRole)}
+                                        value={inviteRole}
+                                    >
+                                        {ROLE_OPTIONS.map((option) => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <Button onClick={handleInvite} size="lg">
+                                    Send Invite
+                                </Button>
+                            </div>
+                            <p className="text-[13px] text-muted">Clinic code for self-registration is available under General Profile.</p>
                         </div>
-                        <div className="grid gap-4 md:grid-cols-[1.3fr_0.8fr_auto] md:items-end">
-                            <Input
-                                label="Email Address"
-                                onChange={(event) => setInviteEmail(event.target.value)}
-                                placeholder="colleague@clinic.org"
-                                value={inviteEmail}
-                            />
-                            <label className="block">
-                                <span className="mb-1 block text-sm font-bold uppercase tracking-[0.12em] text-slate-700">Role Access</span>
-                                <select
-                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                    onChange={(event) => setInviteRole(event.target.value as ClinicianRole)}
-                                    value={inviteRole}
-                                >
-                                    {ROLE_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                            <Button className="h-[42px] px-6 font-semibold" onClick={handleInvite}>
-                                Send Invite
-                            </Button>
-                        </div>
-                        <p className="text-xs text-slate-500">Clinic code for self-registration is available under General Profile.</p>
                     </Card>
 
-                    <Card className="overflow-visible px-0 py-0" padding="sm">
-                        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-5">
-                            <h3 className="text-xl font-bold text-slate-900">
-                                {loading ? "Loading staff..." : `Active Staff (${staffList.length})`}
-                            </h3>
+                    <Card className="overflow-visible" padding="none">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
                             <div className="flex items-center gap-3">
-                                <Button
-                                    className="px-3 py-2 text-xs"
-                                    onClick={() => void loadStaff()}
-                                    size="sm"
-                                    variant="secondary"
-                                >
-                                    Refresh
-                                </Button>
+                                <IconTile name="users" />
+                                <h3 className="text-[15px] font-semibold text-ink">
+                                    {loading ? "Loading staff..." : `Active Staff (${staffList.length})`}
+                                </h3>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
                                 <label className="relative block">
-                                    <HiOutlineMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                    <Icon aria-hidden="true" name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
-                                        className="w-64 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        aria-label="Search team"
+                                        className="h-[34px] w-64 max-w-full rounded-[9px] border border-line-strong bg-surface pl-9 pr-3 text-[13px] text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]"
                                         onChange={(event) => setStaffQuery(event.target.value)}
                                         placeholder="Search team..."
                                         value={staffQuery}
                                     />
                                 </label>
+                                <button
+                                    className={secondaryButtonClass}
+                                    disabled={loading}
+                                    onClick={() => void loadStaff()}
+                                    type="button"
+                                >
+                                    <Icon aria-hidden="true" name="refresh" className="h-4 w-4" />
+                                    Refresh
+                                </button>
                             </div>
                         </div>
-                        <div className="grid grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        <div className="hidden gap-4 border-b border-line px-[22px] py-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_96px]">
                             <span>Name &amp; Email</span>
                             <span>Role</span>
                             <span>Status</span>
@@ -603,44 +701,49 @@ export default function SettingsPage() {
                         </div>
                         {filteredStaffList.map((member, index) => (
                             <div
-                                className={`grid grid-cols-[1.6fr_1fr_1fr_0.5fr] gap-4 px-6 py-4 ${index > 0 ? "border-t border-slate-100" : ""}`}
+                                className={`grid grid-cols-2 items-center gap-4 px-[22px] py-4 transition-colors hover:bg-[rgba(100,116,139,.05)] md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_96px] ${index > 0 ? "border-t border-line" : ""}`}
                                 key={member.id}
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${getRoleTone(member.role)}`}>
+                                <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
+                                    <div aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">
                                         {getInitials(member.first_name, member.last_name)}
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-slate-900">
+                                    <div className="min-w-0 break-words">
+                                        <p className="text-sm font-semibold text-ink">
                                             {member.first_name} {member.last_name}
                                         </p>
-                                        <p className="text-xs text-slate-500">{member.email}</p>
+                                        <p className="text-[13px] text-muted">{member.email}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center text-sm font-medium text-slate-700">
-                                    {getRoleLabel(member.role)}
+                                <div className="flex items-center">
+                                    <span className={`inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-xs font-medium ${getRoleTone(member.role)}`}>
+                                        {member.role === ClinicianRole.ADMIN ? <Icon aria-hidden="true" name="shield" className="h-3.5 w-3.5" /> : null}
+                                        {getRoleLabel(member.role)}
+                                    </span>
                                 </div>
                                 <div className="flex items-center">
                                     <Badge variant="success">Active</Badge>
                                 </div>
-                                <div className="relative flex items-center justify-end">
+                                <div className="relative col-span-2 flex items-center justify-end gap-2 md:col-span-1">
                                     {profile?.id && member.id === profile.id ? (
-                                        <span className="text-xs font-medium text-slate-400">You</span>
+                                        <span className="text-xs font-medium text-muted">You</span>
                                     ) : null}
                                     <button
-                                        className="rounded-md px-2 py-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                                        aria-label={`Actions for ${member.first_name} ${member.last_name}`}
+                                        aria-expanded={actionMenuId === member.id}
+                                        className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-transparent"
                                         disabled={Boolean(profile?.id && member.id === profile.id)}
                                         onClick={() => setActionMenuId(actionMenuId === member.id ? null : member.id)}
                                         title={profile?.id && member.id === profile.id ? "No actions available for your own account" : "Open actions"}
                                         type="button"
                                     >
-                                        &#x22EE;
+                                        <Icon aria-hidden="true" name="more" className="h-4 w-4" />
                                     </button>
                                     {actionMenuId === member.id ? (
-                                        <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                                        <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-[var(--shadow-pop)]">
                                             {ROLE_OPTIONS.filter((r) => r.value !== member.role).map((option) => (
                                                 <button
-                                                    className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                                    className="block w-full rounded-lg px-3 py-2 text-left text-[13px] text-ink-2 hover:bg-surface-2 hover:text-ink"
                                                     key={option.value}
                                                     onClick={() => handleRoleChange(member.id, option.value)}
                                                     type="button"
@@ -648,9 +751,9 @@ export default function SettingsPage() {
                                                     Change to {option.label}
                                                 </button>
                                             ))}
-                                            <hr className="my-1 border-slate-100" />
+                                            <hr className="my-1 border-line" />
                                             <button
-                                                className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                                className="block w-full rounded-lg px-3 py-2 text-left text-[13px] text-risk-ink hover:bg-risk-soft"
                                                 onClick={() => handleRemove(member.id)}
                                                 type="button"
                                             >
@@ -662,87 +765,92 @@ export default function SettingsPage() {
                             </div>
                         ))}
                         {!loading && filteredStaffList.length === 0 ? (
-                            <p className="px-6 py-8 text-center text-sm text-slate-400">No staff members yet.</p>
+                            <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+                                <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-muted">
+                                    <Icon name="users" className="h-5 w-5" />
+                                </span>
+                                <p className="text-sm text-muted">No staff members yet.</p>
+                            </div>
                         ) : null}
                     </Card>
                 </div>
             ) : null}
 
             {activeTab === "Patient Invites" ? (
-                <div className="max-w-5xl space-y-6">
-                    <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-800 to-slate-950 p-6 text-white shadow-lg">
-                        <h3 className="text-2xl font-bold">Patient Invite Codes</h3>
-                        <p className="mt-2 max-w-xl text-sm text-slate-300">
-                            Generate single-use codes for patient onboarding. New codes remain active until claimed, revoked, or expired.
-                        </p>
-                        <p className="mt-1 max-w-xl text-xs text-slate-400">
-                            Invite history shows codes created by your account.
-                        </p>
-                        <div className="mt-6 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-5">
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Latest Active Code</p>
-                                <span className="mt-1 block text-3xl font-bold tracking-[0.14em]">
-                                    {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
-                                </span>
+                <div className="ma-enter space-y-5">
+                    <Card padding="none">
+                        <CardHeader icon="link" sub="Invite history shows codes created by your account.">
+                            <h3 className="text-[15px] font-semibold text-ink">Patient Invite Codes</h3>
+                        </CardHeader>
+                        <div className="space-y-4 px-5 py-5">
+                            <p className="max-w-[72ch] text-sm text-ink-2">
+                                Generate single-use codes for patient onboarding. New codes remain active until claimed, revoked, or expired.
+                            </p>
+                            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-sunken px-5 py-4">
+                                <div>
+                                    <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Latest Active Code</p>
+                                    <span className="mt-1 block font-mono text-[28px] font-medium tracking-[0.14em] text-ink">
+                                        {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
+                                    </span>
+                                </div>
+                                <button
+                                    aria-label="Copy latest invite code"
+                                    className="ma-press flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-line-strong bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink"
+                                    onClick={() => void handleCopyInviteCode()}
+                                    type="button"
+                                >
+                                    <Icon aria-hidden="true" name="file" className="h-4 w-4" />
+                                </button>
                             </div>
+                        </div>
+                        <div className={cardFooterClass}>
                             <button
-                                className="rounded-md bg-slate-800 px-3 py-2 text-slate-300"
-                                onClick={() => void handleCopyInviteCode()}
+                                className={primaryButtonClass}
+                                disabled={inviteCodeLoading}
+                                onClick={() => void handleGenerateInviteCode()}
                                 type="button"
                             >
-                                <HiOutlineClipboardDocument className="h-5 w-5" />
+                                <Icon aria-hidden="true" name="plus" className="h-4 w-4" />
+                                {inviteCodeLoading ? "Generating…" : "Generate New Invite Code"}
                             </button>
                         </div>
-                        <button
-                            className="mt-3 w-full rounded-lg border border-white/25 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={inviteCodeLoading}
-                            onClick={() => void handleGenerateInviteCode()}
-                            type="button"
-                        >
-                            {inviteCodeLoading ? "Generating…" : "Generate New Invite Code"}
-                        </button>
-                    </div>
+                    </Card>
 
-                    <Card className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-lg font-bold text-slate-900">Active Codes ({activeInvites.length})</h4>
-                            <p className="text-xs text-slate-500">Share these with new patients</p>
-                        </div>
+                    <Card padding="none">
+                        <CardHeader icon="check" action={<p className="text-[13px] text-muted">Share these with new patients</p>}>
+                            <h4 className="text-[15px] font-semibold text-ink">Active Codes ({activeInvites.length})</h4>
+                        </CardHeader>
                         {activeInvites.length === 0 ? (
-                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <p className="px-5 py-8 text-center text-sm text-muted">
                                 No active invite codes yet.
                             </p>
                         ) : (
-                            <div className="space-y-3">
+                            <div className="divide-y divide-line">
                                 {activeInvites.map((record) => (
-                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
-                                        <div className="flex flex-wrap items-center justify-between gap-3">
-                                            <div>
-                                                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Invite Code</p>
-                                                <p className="font-mono text-lg font-semibold text-slate-900">{record.invite_code || "—"}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    className="px-3 py-1.5 text-xs"
-                                                    onClick={() => void handleCopyInviteCode(record.invite_code)}
-                                                    size="sm"
-                                                    variant="secondary"
-                                                >
-                                                    Copy
-                                                </Button>
-                                                <Button
-                                                    className="px-3 py-1.5 text-xs"
-                                                    onClick={() => void handleRevokeInviteCode(record.care_team_id)}
-                                                    size="sm"
-                                                    variant="secondary"
-                                                >
-                                                    {revokingInviteId === record.care_team_id ? "Revoking…" : "Revoke"}
-                                                </Button>
+                                    <div className="flex flex-wrap items-center justify-between gap-4 px-[22px] py-4 transition-colors hover:bg-[rgba(100,116,139,.05)]" key={record.care_team_id}>
+                                        <div className="min-w-0 space-y-2">
+                                            <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Invite Code</p>
+                                            <p className="inline-block rounded-[10px] border border-line-strong bg-surface-2 px-3 py-1.5 font-mono text-lg text-ink">{record.invite_code || "—"}</p>
+                                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-ink-2">
+                                                <p>Created: {formatDateTime(record.created_at)}</p>
+                                                <p>Expires: {formatDateTime(record.invite_expires_at)}</p>
                                             </div>
                                         </div>
-                                        <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
-                                            <p>Created: {formatDateTime(record.created_at)}</p>
-                                            <p>Expires: {formatDateTime(record.invite_expires_at)}</p>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                onClick={() => void handleCopyInviteCode(record.invite_code)}
+                                                size="sm"
+                                                variant="secondary"
+                                            >
+                                                Copy
+                                            </Button>
+                                            <Button
+                                                onClick={() => void handleRevokeInviteCode(record.care_team_id)}
+                                                size="sm"
+                                                variant="danger"
+                                            >
+                                                {revokingInviteId === record.care_team_id ? "Revoking…" : "Revoke"}
+                                            </Button>
                                         </div>
                                     </div>
                                 ))}
@@ -750,78 +858,79 @@ export default function SettingsPage() {
                         )}
                     </Card>
 
-                    <Card className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-lg font-bold text-slate-900">Claimed Codes ({claimedInvites.length})</h4>
-                            <p className="text-xs text-slate-500">Successfully linked patients</p>
-                        </div>
-                        {claimedInvites.length === 0 ? (
-                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                                No claimed invite codes yet.
-                            </p>
-                        ) : (
-                            <div className="space-y-3">
-                                {claimedInvites.map((record) => (
-                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
-                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
-                                            <p>
-                                                <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
+                    <div className="grid gap-5 xl:grid-cols-2">
+                        <Card padding="none">
+                            <CardHeader icon="user" action={<p className="text-[13px] text-muted">Successfully linked patients</p>}>
+                                <h4 className="text-[15px] font-semibold text-ink">Claimed Codes ({claimedInvites.length})</h4>
+                            </CardHeader>
+                            {claimedInvites.length === 0 ? (
+                                <p className="px-5 py-8 text-center text-sm text-muted">
+                                    No claimed invite codes yet.
+                                </p>
+                            ) : (
+                                <div className="divide-y divide-line">
+                                    {claimedInvites.map((record) => (
+                                        <div className="grid gap-2 px-[22px] py-4 text-sm text-ink-2 md:grid-cols-3" key={record.care_team_id}>
+                                            <p className="min-w-0 break-words">
+                                                <span className="text-[13px] text-muted">Code:</span> <span className="font-mono text-ink">{record.invite_code || "—"}</span>
                                             </p>
-                                            <p>
-                                                <span className="font-semibold text-slate-900">Patient:</span> {getPatientLabel(record)}
+                                            <p className="min-w-0 break-words">
+                                                <span className="text-[13px] text-muted">Patient:</span> <span className="text-ink">{getPatientLabel(record)}</span>
                                             </p>
-                                            <p>
-                                                <span className="font-semibold text-slate-900">Claimed:</span> {formatDateTime(record.invite_claimed_at)}
+                                            <p className="min-w-0 break-words">
+                                                <span className="text-[13px] text-muted">Claimed:</span> {formatDateTime(record.invite_claimed_at)}
                                             </p>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </Card>
 
-                    <Card className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-lg font-bold text-slate-900">Inactive Codes ({inactiveInvites.length})</h4>
-                            <p className="text-xs text-slate-500">Revoked or expired history</p>
-                        </div>
-                        {inactiveInvites.length === 0 ? (
-                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                                No inactive codes.
-                            </p>
-                        ) : (
-                            <div className="space-y-3">
-                                {inactiveInvites.map((record) => (
-                                    <div className="rounded-lg border border-slate-200 p-4" key={record.care_team_id}>
-                                        <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
-                                            <p>
-                                                <span className="font-semibold text-slate-900">Code:</span> {record.invite_code || "—"}
+                        <Card padding="none">
+                            <CardHeader icon="history" action={<p className="text-[13px] text-muted">Revoked or expired history</p>}>
+                                <h4 className="text-[15px] font-semibold text-ink">Inactive Codes ({inactiveInvites.length})</h4>
+                            </CardHeader>
+                            {inactiveInvites.length === 0 ? (
+                                <p className="px-5 py-8 text-center text-sm text-muted">
+                                    No inactive codes.
+                                </p>
+                            ) : (
+                                <div className="divide-y divide-line">
+                                    {inactiveInvites.map((record) => (
+                                        <div className="grid gap-2 px-[22px] py-4 text-sm text-ink-2 md:grid-cols-3" key={record.care_team_id}>
+                                            <p className="min-w-0 break-words">
+                                                <span className="text-[13px] text-muted">Code:</span> <span className="font-mono text-ink">{record.invite_code || "—"}</span>
                                             </p>
-                                            <p>
-                                                <span className="font-semibold text-slate-900">Created:</span> {formatDateTime(record.created_at)}
+                                            <p className="min-w-0 break-words">
+                                                <span className="text-[13px] text-muted">Created:</span> {formatDateTime(record.created_at)}
                                             </p>
-                                            <p>
-                                                <span className="font-semibold text-slate-900">Expired:</span> {record.is_expired ? "Yes" : "No"}
+                                            <p className="min-w-0 break-words">
+                                                <span className="text-[13px] text-muted">Expired:</span> {record.is_expired ? "Yes" : "No"}
                                             </p>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </Card>
+                    </div>
                 </div>
             ) : null}
 
             {activeTab === "Interoperability" ? (
-                <div className="max-w-3xl">
-                    <Card className="space-y-4">
-                        <h3 className="text-xl font-bold text-slate-900">SMART on FHIR</h3>
-                        <p className="text-sm text-slate-600">
-                            Import synthetic sandbox records into the clinician review queue with source-level lineage.
-                        </p>
-                        <Link className="inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800" href="/smart-import">
-                            Open SMART import
-                        </Link>
+                <div className="ma-enter">
+                    <Card padding="none">
+                        <CardHeader icon="globe">
+                            <h3 className="text-[15px] font-semibold text-ink">SMART on FHIR</h3>
+                        </CardHeader>
+                        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+                            <p className="max-w-[72ch] text-sm text-ink-2">
+                                Import synthetic sandbox records into the clinician review queue with source-level lineage.
+                            </p>
+                            <Link className={secondaryButtonClass} href="/smart-import">
+                                Open SMART import
+                                <Icon aria-hidden="true" name="arrow" className="h-4 w-4" />
+                            </Link>
+                        </div>
                     </Card>
                 </div>
             ) : null}

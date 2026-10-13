@@ -175,16 +175,39 @@ async def test_save_symptom_report_returns_none_when_payload_invalid(mock_db):
 
 @pytest.mark.asyncio
 async def test_notify_assigned_clinicians_creates_in_app_messages(mock_db):
+    patient_id = str(uuid4())
     assignments = [{"clinician_id": str(uuid4())}, {"clinician_id": str(uuid4())}]
     mock_db.table().execute.side_effect = [_response(assignments), _response([])]
 
     service = ChatService(mock_db)
     created_count = await service.notify_assigned_clinicians(
-        patient_id=str(uuid4()),
+        patient_id=patient_id,
         payload={"urgency": "urgent", "intent": "symptom", "message_excerpt": "Severe dizziness"},
     )
 
     assert created_count == 2
+    rows = mock_db.table().insert.call_args.args[0]
+    assert all(row["patient_id"] == patient_id for row in rows)
+    assert all(patient_id not in row["body"] for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_patient_messages_exclude_internal_alerts_but_preserve_real_replies(mock_db):
+    internal = {
+        "id": "internal",
+        "subject": "Urgent patient chat escalation",
+        "body": "Chat escalation flagged (urgent/general) for patient private-id.",
+    }
+    reply = {"id": "reply", "subject": "Visit prep", "body": "Bring your medication list."}
+    urgent_reply = {
+        "id": "urgent-reply",
+        "subject": "Urgent patient chat escalation",
+        "body": "Please contact the clinic today.",
+    }
+    mock_db.table().execute.return_value = _response([internal, urgent_reply, reply])
+    result = await ChatService(mock_db).get_recent_clinician_messages("synthetic-patient")
+    assert result == [reply, urgent_reply]
+    mock_db.table().select().eq.assert_called_once_with("patient_id", "synthetic-patient")
 
 
 @pytest.mark.asyncio
@@ -265,3 +288,63 @@ async def test_update_conversation_state_raises_conflict_on_stale_updated_at(moc
             },
             expected_updated_at="2026-04-17T00:00:00Z",
         )
+
+
+@pytest.mark.asyncio
+async def test_history_is_the_newest_messages_in_order_for_one_conversation(mock_db):
+    newest_first = [{"id": "3"}, {"id": "2"}, {"id": "1"}]
+    query = mock_db.table().select().eq().order().limit()
+    query.eq().execute.return_value = _response(newest_first)
+
+    history = await ChatService(mock_db).get_history(
+        patient_id=str(uuid4()), limit=3, session_id="day-2026-10-10"
+    )
+
+    assert [row["id"] for row in history] == ["1", "2", "3"]
+    mock_db.table().select().eq().order.assert_any_call("created_at", desc=True)
+    query.eq.assert_any_call("session_id", "day-2026-10-10")
+
+
+@pytest.mark.asyncio
+async def test_messages_are_saved_into_their_conversation(mock_db):
+    mock_db.table().insert().execute.return_value = _response([{"id": "m1"}])
+
+    await ChatService(mock_db).save_message(
+        str(uuid4()), {"content": "hola", "role": "user", "session_id": "chat-abc"}
+    )
+
+    payload = mock_db.table().insert.call_args.args[0]
+    assert payload["session_id"] == "chat-abc"
+
+
+@pytest.mark.asyncio
+async def test_set_document_context_clears_only_the_patients_own_conversation(mock_db):
+    mock_db.table().execute.return_value = _response([])
+
+    await ChatService(mock_db).set_document_context("synthetic-patient", "chat-abc", None)
+
+    mock_db.table.assert_called_with("chat_conversation_states")
+    mock_db.table().update.assert_called_with({"document_context": None})
+    mock_db.table().update().eq.assert_any_call("patient_id", "synthetic-patient")
+    mock_db.table().update().eq.assert_any_call("session_id", "chat-abc")
+
+
+@pytest.mark.asyncio
+async def test_a_turn_update_leaves_the_document_focus_alone(mock_db):
+    mock_db.table().execute.side_effect = [_response([{"id": "row"}])]
+
+    await ChatService(mock_db).update_conversation_state(
+        patient_id=str(uuid4()),
+        updates={"session_id": "s-1", "summary": "latest", "turn_count": 2},
+    )
+
+    payload = mock_db.table().update.call_args.args[0]
+    assert "document_context" not in payload
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_document_id_names_no_document_without_a_query(mock_db):
+    result = await ChatService(mock_db).get_document_context("synthetic-patient", "not-a-uuid")
+
+    assert result is None
+    mock_db.table().execute.assert_not_called()

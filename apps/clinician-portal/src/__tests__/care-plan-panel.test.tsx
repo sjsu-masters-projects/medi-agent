@@ -6,6 +6,7 @@ import {
     fetchClinicianCarePlanGeneration,
     fetchClinicianDocumentSource,
     retryClinicianCarePlanGeneration,
+    translateClinicianCarePlanItem,
     updateClinicianCarePlan,
 } from "@/services/clinicians";
 
@@ -15,14 +16,54 @@ vi.mock("@/services/clinicians", () => ({
     fetchClinicianCarePlanGeneration: vi.fn(),
     fetchClinicianDocumentSource: vi.fn(),
     retryClinicianCarePlanGeneration: vi.fn(),
+    translateClinicianCarePlanItem: vi.fn(),
     updateClinicianCarePlan: vi.fn(),
 }));
+
+/** Synthetic item wording checked in both languages, with English as the source. */
+const verified = (title: string, instructions: string, frequency: string) => ({
+    title, instructions, frequency,
+    source_locale: "en-US" as const,
+    wording: {
+        "en-US": { title, instructions, frequency },
+        "es-MX": { title: `${title} (es)`, instructions: `${instructions} (es)`, frequency: `${frequency} (es)` },
+    },
+    wording_origin: { "en-US": "source" as const, "es-MX": "ai_draft" as const },
+    wording_verified: true,
+});
 
 vi.mock("@/components/features/document-source-viewer", () => ({
     DocumentSourceViewer: ({ fileName, initialPage }: { fileName: string; initialPage?: number }) => <p>Preview: {fileName} (page {initialPage})</p>,
 }));
 
 describe("CarePlanPanel", () => {
+    it("asks for both languages when a draft item has wording in one language only", async () => {
+        const instruction = "Caminar durante veinte minutos";
+        const item = { id: "item", category: "movement", title: instruction, instructions: instruction,
+            frequency: "diariamente", schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false,
+            confidence_score: 1, source: { document_id: "internal-document-id", excerpt: instruction } };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
+            id: "plan", patient_id: "p", version_number: 1, status: "draft", items: [item],
+        }, active: null, patient_locale: "es-MX", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        render(<CarePlanPanel patientId="p" />);
+        expect(await screen.findByText(/Patient reads Español \(México\)/)).toBeInTheDocument();
+        expect(screen.getByText(/wording in one language only/)).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Español \(México\) · draft English \(US\)/ })).toBeEnabled();
+        expect(screen.getByRole("checkbox", { name: /I checked the title/ })).toBeDisabled();
+        expect(screen.getByRole("textbox", { name: "Instructions" })).toHaveValue(instruction);
+        expect(screen.getByRole("textbox", { name: "Instructions" }).tagName).toBe("TEXTAREA");
+        expect(screen.getByText("100% extraction confidence")).toBeInTheDocument();
+        expect(screen.getByText(/not medical certainty/)).toBeInTheDocument();
+        expect(screen.queryByText(/internal-document-id/)).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Review source: Uploaded document" })).toHaveTextContent("Review source");
+        expect(screen.getByRole("button", { name: "Approve and publish plan" })).toBeDisabled();
+        expect(screen.getByRole("region", { name: "Publication requirements" })).toHaveTextContent("1 item needs wording in both English and Spanish");
+        const retained = screen.getByText("Review retained instructions (1)").closest("details");
+        expect(retained).not.toHaveAttribute("open");
+        expect(retained?.querySelector("li")).toHaveTextContent(`${instruction} · diariamente`);
+        expect(retained?.querySelector("li")?.textContent?.split(instruction)).toHaveLength(2);
+    });
     it("does not ask for a medication publication decision on an approved plan", async () => {
         const plan = { id: "approved", patient_id: "p", version_number: 1, status: "approved" as const, items: [{
             id: "med", category: "medication", title: "Metformin", instructions: "With dinner", frequency: "daily",
@@ -31,7 +72,7 @@ describe("CarePlanPanel", () => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: plan, active: plan, patient_locale: "en-US", active_medications: [] });
         vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
         render(<CarePlanPanel patientId="p" />);
-        await screen.findByText("Metformin");
+        expect((await screen.findAllByText("Metformin")).length).toBeGreaterThan(0);
         expect(screen.queryByText(/Choose whether each medication/)).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Approve and publish plan" })).not.toBeInTheDocument();
     });
@@ -157,7 +198,7 @@ describe("CarePlanPanel", () => {
         }
     });
 
-    it("opens an item source with the existing protected document route", async () => {
+    it("visibly associates multiple source excerpts with filenames, pages, and the selected preview", async () => {
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
             id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft", items: [{
                 id: "item-1", source_fact_id: "fact-1", category: "movement", title: "Walk", instructions: "Walk for 20 minutes.", frequency: "3x per week", schedule: {}, medication: {}, confidence_score: 0.9, uncertainty: [], conflict: {}, is_removed: false,
@@ -171,18 +212,32 @@ describe("CarePlanPanel", () => {
             }],
         }, active: null, patient_locale: "en-US", active_medications: [] });
         vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
-        vi.mocked(fetchClinicianDocumentSource).mockResolvedValue({
+        vi.mocked(fetchClinicianDocumentSource).mockResolvedValueOnce({
             file_name: "source.pdf", file_url: "https://signed.test/original", mime_type: "application/pdf", preview_status: "ready", preview_url: "https://signed.test/preview", preview_mime_type: "application/pdf",
+        }).mockResolvedValueOnce({
+            file_name: "follow-up.pdf", file_url: "https://signed.test/follow-up", mime_type: "application/pdf",
         });
 
         render(<CarePlanPanel patientId="patient-1" />);
 
         expect(await screen.findAllByRole("button", { name: "Review source: source.pdf" })).toHaveLength(1);
+        fireEvent.click(screen.getByText("Source excerpts and confidence (2)"));
+        expect(screen.getByText("source.pdf · page 2")).toBeVisible();
+        expect(screen.getByText("follow-up.pdf · page 1")).toBeVisible();
+        expect(screen.getByText("“Walk for 20 minutes.”")).toBeVisible();
+        expect(screen.getByText("“Continue walking.”")).toBeVisible();
+        expect(screen.getByRole("button", { name: "Review source: source.pdf" })).toHaveTextContent(/^Review source 1$/);
+        expect(screen.getByRole("button", { name: "Review source: follow-up.pdf" })).toHaveTextContent(/^Review source 2$/);
         fireEvent.click(await screen.findByRole("button", { name: "Review source: source.pdf" }));
         await waitFor(() => expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-1", "document-1"));
         expect(await screen.findByText("Preview: source.pdf (page 2)")).toBeInTheDocument();
+        expect(screen.getByText("Selected source: source.pdf")).toBeVisible();
         fireEvent.click(screen.getByRole("button", { name: "Review source: follow-up.pdf" }));
         await waitFor(() => expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-1", "document-2"));
+        expect(await screen.findByText("Preview: follow-up.pdf (page 1)")).toBeInTheDocument();
+        expect(screen.getByText("Selected source: follow-up.pdf")).toBeVisible();
+        expect(screen.queryByText("Selected source: source.pdf")).not.toBeInTheDocument();
+        expect(updateClinicianCarePlan).not.toHaveBeenCalled();
     });
 
     it("retries a failed protected source request without reloading the plan", async () => {
@@ -242,9 +297,9 @@ describe("CarePlanPanel", () => {
             latest: {
                 id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft",
                 items: [{
-                    id: "item-1", source_fact_id: "fact-1", category: "movement", title: "Walk",
-                    instructions: "Walk 20 minutes", frequency: "daily", schedule: {}, medication: {},
-                    uncertainty: [], conflict: {}, is_removed: false, reviewed_locale: "en-US",
+                    id: "item-1", source_fact_id: "fact-1", category: "movement",
+                    schedule: {}, medication: {}, ...verified("Walk", "Walk 20 minutes", "daily"),
+                    uncertainty: [], conflict: {}, is_removed: false,
                 }],
             },
         });
@@ -294,12 +349,43 @@ describe("CarePlanPanel", () => {
         expect(screen.queryByRole("textbox", { name: "Medication dosage" })).not.toBeInTheDocument();
         fireEvent.change(screen.getByPlaceholderText("Record the basis for your approval."), { target: { value: "Reviewed" } });
         expect(approve).toBeDisabled();
-        expect(screen.getByText(/final patient-facing wording/)).toBeInTheDocument();
+        expect(screen.getByText(/need wording in both English and Spanish|needs wording in both English and Spanish/)).toBeInTheDocument();
         expect(screen.getByText(/Choose whether each medication/)).toBeInTheDocument();
         expect(screen.getByRole("option", { name: /Update Metformin/ })).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText("Publication decision"), { target: { value: "update:med-1" } });
-        fireEvent.click(screen.getByRole("checkbox", { name: /I checked this final title/ }));
+        expect(screen.getByRole("checkbox", { name: /I checked the title/ })).toBeDisabled();
         expect(approve).toBeDisabled();
         expect(screen.getByText(/Save your edits before approving/)).toBeInTheDocument();
+    });
+
+    it("reviews English and Spanish side by side and re-checks both after an edit", async () => {
+        const item = { id: "item-1", source_fact_id: "fact-1", category: "movement", schedule: {}, medication: {},
+            uncertainty: [], conflict: {}, is_removed: false,
+            ...verified("Walk", "Walk 20 minutes", "daily"), wording_verified: false };
+        const plan = { id: "plan-1", patient_id: "patient-1", version_number: 2, status: "draft" as const, items: [item] };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: plan, active: null, patient_locale: "es-MX", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(updateClinicianCarePlan).mockImplementation(async (_patient, _plan, items) => ({ ...plan, items: [{ ...item, ...items[0], wording_origin: { "en-US": "source", "es-MX": "clinician_edited" } }] }));
+        vi.mocked(translateClinicianCarePlanItem).mockResolvedValue(plan);
+        render(<CarePlanPanel patientId="patient-1" />);
+
+        expect(await screen.findByText("From source")).toBeInTheDocument();
+        expect(screen.getByText(/AI translation · check it/)).toBeInTheDocument();
+        expect(screen.getByText("Patient's language")).toBeInTheDocument();
+        const check = screen.getByRole("checkbox", { name: /I checked the title/ });
+        fireEvent.click(check);
+        expect(check).toBeChecked();
+        fireEvent.change(screen.getByDisplayValue("Walk 20 minutes (es)"), { target: { value: "Camine 20 minutos" } });
+        expect(check).not.toBeChecked();
+        expect(screen.getByRole("button", { name: /Re-translate from English/ })).toBeDisabled();
+        fireEvent.click(check);
+        fireEvent.click(screen.getByRole("button", { name: "Save review" }));
+        await waitFor(() => expect(updateClinicianCarePlan).toHaveBeenCalledWith("patient-1", "plan-1", [expect.objectContaining({
+            title: "Walk", wording_verified: true, source_locale: "en-US",
+            wording: expect.objectContaining({ "es-MX": expect.objectContaining({ instructions: "Camine 20 minutos" }) }),
+        })]));
+        expect(await screen.findByText("Edited by clinician")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /Re-translate from English/ }));
+        await waitFor(() => expect(translateClinicianCarePlanItem).toHaveBeenCalledWith("patient-1", "plan-1", "item-1", "en-US"));
     });
 });

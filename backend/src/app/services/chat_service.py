@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
+from uuid import UUID
 
 from supabase import Client
 
@@ -12,6 +14,34 @@ from app.models.enums import ChatRole, coerce_locale
 from app.services.explanation_service import normalize_patient_summary
 
 DEFAULT_CHAT_SESSION_ID = "default"
+# Conversation ids are chosen by the patient app ("day-2026-10-10", "chat-<random>"), so
+# they are validated rather than trusted; anything else falls back to the default.
+_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+TITLE_CHARS = 80
+
+
+def normalize_session_id(value: Any) -> str:
+    raw = str(value or "").strip()
+    return raw if _SESSION_ID.fullmatch(raw) else DEFAULT_CHAT_SESSION_ID
+
+
+def conversation_title(first_message: str) -> str:
+    """A list label from the patient's first message: one line, word-boundary cut."""
+    text = " ".join(str(first_message or "").split())
+    if len(text) <= TITLE_CHARS:
+        return text
+    return text[:TITLE_CHARS].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+
+
+def is_internal_chat_alert(message: dict[str, Any]) -> bool:
+    """Recognize reserved operational notices, including existing stored alerts.
+
+    Keep clinician-authored messages intact; a generic urgent subject alone is not
+    enough to identify an automated notice. Do not delete the underlying alert.
+    """
+    return message.get("subject") == "Urgent patient chat escalation" and str(
+        message.get("body") or ""
+    ).startswith("Chat escalation flagged (")
 
 
 class ConversationStateConflictError(Exception):
@@ -32,6 +62,7 @@ class ChatService:
             "language": self._coerce_language(data.get("language")),
             "audio_url": data.get("audio_url"),
             "intent": data.get("intent"),
+            "session_id": normalize_session_id(data.get("session_id")),
         }
 
         result = await self._execute(self.db.table("chat_messages").insert(payload))
@@ -46,19 +77,52 @@ class ChatService:
         patient_id: str,
         limit: int = 50,
         before: str | None = None,
+        session_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """The newest ``limit`` messages, oldest first, optionally for one conversation."""
         query = (
             self.db.table("chat_messages")
-            .select("id, patient_id, content, role, intent, language, audio_url, created_at")
+            .select(
+                "id, patient_id, session_id, content, role, intent, language, audio_url, created_at"
+            )
             .eq("patient_id", patient_id)
-            .order("created_at")
+            # Newest first, then reversed: ascending with a limit returned the oldest
+            # messages, so a long conversation never showed its latest turns.
+            .order("created_at", desc=True)
             .limit(limit)
         )
+        if session_id is not None:
+            query = query.eq("session_id", normalize_session_id(session_id))
         if before:
             query = query.lt("created_at", before)
 
         result = await self._execute(query)
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        return list(reversed(rows))
+
+    async def list_conversations(self, patient_id: str, limit: int = 30) -> list[dict[str, Any]]:
+        """This patient's conversations, most recent first, for the conversation list."""
+        result = await self._execute(
+            self.db.table("chat_conversation_states")
+            .select("session_id, title, turn_count, language, created_at, updated_at")
+            .eq("patient_id", patient_id)
+            .gt("turn_count", 0)
+            .order("updated_at", desc=True)
+            .limit(limit)
+        )
         return [row for row in (result.data or []) if isinstance(row, dict)]
+
+    async def set_conversation_title(self, patient_id: str, session_id: str, title: str) -> None:
+        """Label a conversation once, from its first message; an existing title stays."""
+        if not title:
+            return
+        await self._execute(
+            self.db.table("chat_conversation_states")
+            .update({"title": title[:120]})
+            .eq("patient_id", patient_id)
+            .eq("session_id", normalize_session_id(session_id))
+            .eq("title", "")
+        )
 
     async def get_recent_clinician_messages(
         self,
@@ -73,7 +137,8 @@ class ChatService:
             .limit(limit)
         )
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
-        return list(reversed(rows))
+        # These rows include clinician inbox alerts, not only clinician replies.
+        return list(reversed([row for row in rows if not is_internal_chat_alert(row)]))
 
     async def get_context(
         self,
@@ -164,9 +229,13 @@ class ChatService:
             "last_route": str(updates.get("last_route") or "triage"),
             "summary": str(updates.get("summary") or ""),
             "state_json": updates.get("state_json") or {},
-            "document_context": updates.get("document_context"),
             "status": str(updates.get("status") or "active"),
         }
+        # The document a conversation is focused on changes only when it is attached,
+        # dismissed or found unavailable (see `set_document_context`). Writing it on every
+        # turn let a turn resurrect a document the patient had already dismissed.
+        if "document_context" in updates:
+            payload["document_context"] = updates.get("document_context")
 
         update_query = (
             self.db.table("chat_conversation_states")
@@ -201,6 +270,32 @@ class ChatService:
                 **payload,
             },
         )
+
+    async def set_document_context(
+        self,
+        patient_id: str,
+        session_id: str,
+        document_context: dict[str, Any] | None,
+    ) -> None:
+        """Attach a document to one conversation, or clear it with ``None``.
+
+        Scoped to the patient's own conversation row; the document itself must already
+        have been read through `get_document_context` for the same patient.
+        """
+        await self._execute(
+            self.db.table("chat_conversation_states")
+            .update({"document_context": document_context})
+            .eq("patient_id", patient_id)
+            .eq("session_id", normalize_session_id(session_id))
+        )
+
+    async def get_document_context(
+        self,
+        patient_id: str,
+        document_id: str,
+    ) -> dict[str, Any] | None:
+        """The patient's own document as chat context, or None if it is not available."""
+        return await self._fetch_document_context(patient_id, document_id)
 
     async def save_symptom_report(
         self,
@@ -256,10 +351,7 @@ class ChatService:
         urgency = str(payload.get("urgency", "urgent"))
         intent = str(payload.get("intent", "general"))
         excerpt = str(payload.get("message_excerpt", "")).strip()[:280]
-        body = (
-            f"Chat escalation flagged ({urgency}/{intent}) for patient {patient_id}. "
-            f"Latest message: {excerpt or 'n/a'}"
-        )
+        body = f"Chat escalation flagged ({urgency}/{intent}). Latest message: {excerpt or 'n/a'}"
         rows = [
             {
                 "clinician_id": clinician_id,
@@ -321,9 +413,15 @@ class ChatService:
         patient_id: str,
         document_id: str,
     ) -> dict[str, Any] | None:
+        # The id arrives from the connection URL or a saved conversation; a malformed one
+        # names no document rather than failing the whole connection in the database.
+        try:
+            document_id = str(UUID(str(document_id)))
+        except ValueError:
+            return None
         result = await self._execute(
             self.db.table("documents")
-            .select("id, file_name, document_type, ai_summary, notes, parse_status")
+            .select("id, file_name, display_title, document_type, ai_summary, notes, parse_status")
             .eq("id", document_id)
             .eq("patient_id", patient_id)
             .limit(1)
@@ -336,6 +434,8 @@ class ChatService:
         return {
             "id": row.get("id"),
             "file_name": row.get("file_name"),
+            # The LOC-001 record titles, so an answer can cite the document as Records names it.
+            "display_title": row.get("display_title") or {},
             "document_type": row.get("document_type"),
             "summary": normalize_patient_summary(
                 str(row.get("ai_summary") or row.get("notes") or "")
@@ -348,8 +448,7 @@ class ChatService:
 
     @staticmethod
     def _normalize_session_id(value: Any) -> str:
-        raw = str(value or DEFAULT_CHAT_SESSION_ID).strip()
-        return raw or DEFAULT_CHAT_SESSION_ID
+        return normalize_session_id(value)
 
     @staticmethod
     def _coerce_role(value: Any) -> str:

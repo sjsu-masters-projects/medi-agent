@@ -52,6 +52,30 @@ const reviewResponse = {
 };
 
 describe("SMART import review panel", () => {
+  it.each([
+    ["condition", "Diabetes mellitus tipo 2"],
+    ["medication", "Metformin 500"],
+    ["condition", "2026-10-10T10:00:00Z"],
+  ])("preserves %s names verbatim even when numbers resemble dates", async (factType, name) => {
+    get.mockResolvedValue({ ...reviewResponse, facts: [{ ...reviewResponse.facts[0],
+      fact_type: factType, value: { name, onset: "since age 2", dosage: "500 mg daily" },
+    }] });
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    expect(await screen.findByText(name)).toBeInTheDocument();
+    expect(screen.queryByText(/Feb 1, 2001/)).not.toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    if (factType === "condition") expect(screen.getByText("since age 2")).toBeInTheDocument();
+    else expect(screen.getByText("500 mg daily")).toBeInTheDocument();
+  });
+
+  it("keeps source identifiers in expandable audit details while source review stays available", async () => {
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    const metadata = await screen.findByText("MedicationRequest · med-1 · version 2");
+    expect(metadata.closest("details")).not.toHaveAttribute("open");
+    expect(metadata).not.toBeVisible();
+    expect(screen.getByRole("button", { name: /source/i })).toBeEnabled();
+    expect(post).not.toHaveBeenCalled();
+  });
   afterEach(() => {
     cleanup();
   });

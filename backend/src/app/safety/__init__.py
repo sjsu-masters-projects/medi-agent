@@ -3,7 +3,9 @@
 Everything here decides authority or safety, so it is code rather than a prompt, and it
 is kept out of the agent packages on purpose: the runtime can be replaced without the
 safety rules moving. See `.agent/ARCHITECTURE.md` — deterministic rules run before
-probabilistic routing for emergencies, self-harm, allergy conflicts and duplicate therapy.
+probabilistic routing for emergencies and self-harm. There is no deterministic allergy-
+conflict, duplicate-therapy or drug-interaction checker yet (MED-001); Nora can only quote
+a label's interaction section as general information.
 """
 
 from __future__ import annotations

@@ -176,6 +176,116 @@ class TestUpdateMyProfile:
         assert response.status_code == 422
 
 
+def _profile_row(patient_id, **overrides):
+    row = {
+        "id": str(patient_id),
+        "email": "patient@test.com",
+        "first_name": "Morgan",
+        "last_name": "Lee",
+        "date_of_birth": "1958-03-02",
+        "gender": "female",
+        "preferred_language": "en-US",
+        "phone": None,
+        "avatar_url": None,
+        "created_at": "2025-01-01T00:00:00Z",
+        "updated_at": "2025-01-15T00:00:00Z",
+    }
+    row.update(overrides)
+    return row
+
+
+class TestUpdateMyProfileGender:
+    """PUT /api/v1/patients/me - optional gender can be set and cleared."""
+
+    @pytest.fixture
+    def table(self, mock_supabase_db):
+        table = MagicMock()
+        mock_supabase_db.table.return_value = table
+        for method in ["select", "eq", "single", "update"]:
+            getattr(table, method).return_value = table
+        return table
+
+    def test_explicit_null_clears_gender(
+        self, client, override_auth, override_db, table, patient_id
+    ):
+        table.execute.return_value = MagicMock(data=[_profile_row(patient_id, gender=None)])
+
+        response = client.put(
+            "/api/v1/patients/me",
+            json={
+                "first_name": "Morgan",
+                "last_name": "Lee",
+                "preferred_language": "en-US",
+                "gender": None,
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        table.update.assert_called_once_with(
+            {
+                "first_name": "Morgan",
+                "last_name": "Lee",
+                "preferred_language": "en-US",
+                "gender": None,
+            }
+        )
+        assert response.json()["gender"] is None
+
+    def test_omitted_gender_is_left_unchanged(
+        self, client, override_auth, override_db, table, patient_id
+    ):
+        table.execute.return_value = MagicMock(data=[_profile_row(patient_id)])
+
+        response = client.put("/api/v1/patients/me", json={"first_name": "Morgan"})
+
+        assert response.status_code == status.HTTP_200_OK
+        table.update.assert_called_once_with({"first_name": "Morgan"})
+        assert response.json()["gender"] == "female"
+
+    def test_prefer_not_to_say_persists(
+        self, client, override_auth, override_db, table, patient_id
+    ):
+        table.execute.return_value = MagicMock(
+            data=[_profile_row(patient_id, gender="prefer_not_to_say")]
+        )
+
+        response = client.put("/api/v1/patients/me", json={"gender": "prefer_not_to_say"})
+
+        assert response.status_code == status.HTTP_200_OK
+        table.update.assert_called_once_with({"gender": "prefer_not_to_say"})
+        assert response.json()["gender"] == "prefer_not_to_say"
+
+    def test_null_required_fields_are_still_ignored(
+        self, client, override_auth, override_db, table, patient_id
+    ):
+        table.execute.return_value = MagicMock(data=[_profile_row(patient_id, gender=None)])
+
+        response = client.put(
+            "/api/v1/patients/me",
+            json={
+                "first_name": None,
+                "last_name": None,
+                "preferred_language": None,
+                "gender": None,
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        table.update.assert_called_once_with({"gender": None})
+        assert response.json()["first_name"] == "Morgan"
+
+    def test_only_null_required_fields_is_a_no_op(
+        self, client, override_auth, override_db, table, patient_id
+    ):
+        table.execute.return_value = MagicMock(data=_profile_row(patient_id))
+
+        response = client.put("/api/v1/patients/me", json={"first_name": None})
+
+        assert response.status_code == status.HTTP_200_OK
+        table.update.assert_not_called()
+        assert response.json()["first_name"] == "Morgan"
+
+
 class TestGetMyCareTeam:
     """GET /api/v1/patients/me/care-team - List care team."""
 

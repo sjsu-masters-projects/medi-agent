@@ -19,6 +19,7 @@ vi.mock("react-redux", () => ({
     selector({ auth: { accessToken: "synthetic-session" } }),
 }));
 vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ back: vi.fn() }),
 }));
 vi.mock("@/hooks/use-patient-profile", () => ({

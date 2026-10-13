@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import json
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -11,9 +14,16 @@ from uuid import uuid4
 import pytest
 from cryptography.fernet import Fernet
 
-from app.config import settings
-from app.core.exceptions import ExternalServiceError, ValidationError
-from app.services.smart_launch_service import SmartLaunchService
+from app.config import Settings, settings
+from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
+from app.services.smart_launch_service import (
+    SmartLaunchService,
+    SmartProviderAuthorizationError,
+    sanitize_provider_error,
+)
+
+SANDBOX_SIM_CODE = "WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0"
+SANDBOX_STANDALONE_ISSUER = f"https://launch.smarthealthit.org/v/r4/sim/{SANDBOX_SIM_CODE}/fhir"
 
 
 def test_code_challenge_is_s256_and_state_digest_is_not_reversible() -> None:
@@ -117,6 +127,7 @@ def test_ehr_launch_encrypts_opaque_context_and_uses_ehr_scope(monkeypatch) -> N
     assert payload["requested_scopes"] == "launch patient/Patient.read patient/Condition.read"
     query = parse_qs(urlparse(result["authorization_url"]).query)
     assert query["launch"] == ["opaque-ehr-launch-handle"]
+    assert query["aud"] == ["https://sandbox.example/fhir"]
     assert query["scope"] == ["launch patient/Patient.read patient/Condition.read"]
     assert "launch/patient" not in query["scope"][0]
 
@@ -153,3 +164,140 @@ def test_provider_error_consumes_the_bound_launch_state(monkeypatch) -> None:
     db.table.assert_called_with("smart_launch_sessions")
     update_payload = db.table.return_value.update.call_args.args[0]
     assert isinstance(update_payload["consumed_at"], str)
+
+
+def _configure_launch(monkeypatch, *, standalone_issuer: str = SANDBOX_STANDALONE_ISSUER) -> None:
+    monkeypatch.setattr(settings, "smart_client_id", "sandbox-client")
+    monkeypatch.setattr(settings, "smart_state_encryption_key", Fernet.generate_key().decode())
+    monkeypatch.setattr(settings, "smart_redirect_uri", "https://api.example/smart/callback")
+    monkeypatch.setattr(
+        settings, "smart_allowed_issuers", "https://launch.smarthealthit.org/v/r4/fhir"
+    )
+    monkeypatch.setattr(settings, "smart_standalone_issuer", standalone_issuer)
+    monkeypatch.setattr(settings, "smart_scopes", "patient/Patient.read patient/Condition.read")
+
+
+def test_default_standalone_issuer_encodes_a_patient_standalone_sandbox_launch() -> None:
+    issuer = Settings.model_fields["smart_standalone_issuer"].default
+    assert issuer == SANDBOX_STANDALONE_ISSUER
+    segment = issuer.split("/sim/", 1)[1].split("/", 1)[0]
+    options = json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
+    # The sandbox launcher expects a positional array; index 0 is the launch type
+    # (3 = patient-standalone), 14 the client type (0 = public), 15 PKCE (1 = auto).
+    assert isinstance(options, list)
+    assert options[0] == 3
+    assert options[14] == 0
+    assert options[15] == 1
+
+
+def test_standalone_launch_uses_configured_sim_issuer_without_launch_handle(monkeypatch) -> None:
+    _configure_launch(monkeypatch)
+    db = MagicMock()
+    db.table.return_value.insert.return_value.execute.return_value = SimpleNamespace(
+        data=[{"id": str(uuid4())}]
+    )
+    http = MagicMock()
+    sim_base = SANDBOX_STANDALONE_ISSUER.removesuffix("/fhir")
+    http.get.return_value.json.return_value = {
+        "authorization_endpoint": f"{sim_base}/auth/authorize",
+        "token_endpoint": f"{sim_base}/auth/token",
+    }
+    service = SmartLaunchService(db, http_client=http)
+    monkeypatch.setattr(service, "_require_assignment", lambda *_: None)
+
+    result = service.start_launch(clinician_id=uuid4(), patient_id=uuid4(), issuer=None)
+
+    http.get.assert_called_once_with(f"{SANDBOX_STANDALONE_ISSUER}/.well-known/smart-configuration")
+    authorization_url = urlparse(result["authorization_url"])
+    assert authorization_url.path == f"/v/r4/sim/{SANDBOX_SIM_CODE}/auth/authorize"
+    query = parse_qs(authorization_url.query)
+    assert "launch" not in query
+    assert query["aud"] == [SANDBOX_STANDALONE_ISSUER]
+    assert query["client_id"] == ["sandbox-client"]
+    assert query["code_challenge_method"] == ["S256"]
+    assert query["scope"][0].split()[:2] == ["launch/patient", "launch/encounter"]
+    payload = db.table.return_value.insert.call_args.args[0]
+    assert payload["issuer"] == SANDBOX_STANDALONE_ISSUER
+    assert payload["launch_context"] is None
+
+
+def test_standalone_launch_without_issuer_requires_configuration(monkeypatch) -> None:
+    _configure_launch(monkeypatch, standalone_issuer="  ")
+    service = SmartLaunchService(MagicMock(), http_client=MagicMock())
+    monkeypatch.setattr(service, "_require_assignment", lambda *_: None)
+
+    with pytest.raises(ValidationError, match="standalone launch is not configured"):
+        service.start_launch(clinician_id=uuid4(), patient_id=uuid4(), issuer=None)
+
+
+def test_ehr_launch_without_issuer_is_rejected(monkeypatch) -> None:
+    _configure_launch(monkeypatch)
+    service = SmartLaunchService(MagicMock(), http_client=MagicMock())
+    monkeypatch.setattr(service, "_require_assignment", lambda *_: None)
+
+    with pytest.raises(ValidationError, match="requires the EHR issuer"):
+        service.start_launch(
+            clinician_id=uuid4(), patient_id=uuid4(), issuer=None, launch_context="opaque"
+        )
+
+
+def test_provider_error_description_is_logged_and_surfaced_sanitized(monkeypatch, caplog) -> None:
+    db = MagicMock()
+    service = SmartLaunchService(db)
+    monkeypatch.setattr(service, "_load_active_session", lambda _: {"id": str(uuid4())})
+
+    with (
+        caplog.at_level(logging.WARNING, logger="app.services.smart_launch_service"),
+        pytest.raises(SmartProviderAuthorizationError) as raised,
+    ):
+        service.handle_callback(
+            state="state",
+            code=None,
+            error="invalid_request",
+            error_description="Invalid launch options: SyntaxError: Unexpected end of JSON input",
+        )
+
+    expected = "invalid_request: Invalid launch options: SyntaxError: Unexpected end of JSON input"
+    assert raised.value.provider_detail == expected
+    assert isinstance(raised.value, ValidationError)
+    record = next(r for r in caplog.records if "authorization server returned" in r.message)
+    assert record.levelno == logging.WARNING
+    assert expected in record.getMessage()
+    assert record.smart_provider_error == expected
+    update_payload = db.table.return_value.update.call_args.args[0]
+    assert isinstance(update_payload["consumed_at"], str)
+
+
+def test_provider_error_is_logged_even_when_state_is_not_live(monkeypatch, caplog) -> None:
+    service = SmartLaunchService(MagicMock())
+
+    def reject(_: str) -> dict[str, str]:
+        raise AuthorizationError("SMART launch state is invalid or expired")
+
+    monkeypatch.setattr(service, "_load_active_session", reject)
+
+    with (
+        caplog.at_level(logging.WARNING, logger="app.services.smart_launch_service"),
+        pytest.raises(AuthorizationError),
+    ):
+        service.handle_callback(
+            state="state", code=None, error="access_denied", error_description="User denied"
+        )
+
+    assert any("access_denied: User denied" in r.getMessage() for r in caplog.records)
+
+
+def test_provider_error_sanitizer_strips_markup_opaque_values_and_length() -> None:
+    opaque = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturepart"
+    detail = sanitize_provider_error(
+        "invalid_request<script>",
+        f"Bad <b>request</b>\r\n code={opaque} {'x ' * 200}",
+    )
+
+    assert detail.startswith("invalid_requestscript: Bad b request /b code [redacted]")
+    assert "<" not in detail and ">" not in detail and "\n" not in detail
+    assert opaque not in detail
+    assert len(detail) <= 200
+    assert detail.endswith("...")
+    assert sanitize_provider_error(None, None) == "unspecified"
+    assert sanitize_provider_error("access_denied", None) == "access_denied"

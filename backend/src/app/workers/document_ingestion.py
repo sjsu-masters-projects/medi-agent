@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
 from typing import Any, cast
 from uuid import UUID
 
@@ -13,8 +11,10 @@ from supabase import Client
 
 from app.clients.supabase import get_admin_client
 from app.config import settings
+from app.core.job_logging import JobRunLog
 from app.services.care_plan_service import CarePlanService
 from app.services.document_summary_service import DocumentSummaryService
+from app.services.document_title_service import DocumentTitleService
 from app.services.ingestion_service import IngestionService
 
 logger = logging.getLogger(__name__)
@@ -30,17 +30,6 @@ def _configure_worker_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def _log_execution(event: str, **fields: int | str) -> None:
-    """Write one non-PHI, machine-readable Cloud Run execution event."""
-    payload: dict[str, int | str] = {
-        "event": event,
-        "execution": os.getenv("CLOUD_RUN_EXECUTION", "local"),
-        "task_index": os.getenv("CLOUD_RUN_TASK_INDEX", "0"),
-        **fields,
-    }
-    logger.info("%s", json.dumps(payload, sort_keys=True, separators=(",", ":")))
-
-
 class DocumentIngestionWorker:
     """Claim a bounded batch atomically, then process each claim independently."""
 
@@ -49,6 +38,7 @@ class DocumentIngestionWorker:
         self._batch_size = max(1, min(batch_size, 100))
         self._service = IngestionService(db)
         self._summaries = DocumentSummaryService(db)
+        self._titles = DocumentTitleService(db)
         self._care_plans = CarePlanService(db)
 
     async def process_batch(self) -> dict[str, int]:
@@ -78,8 +68,17 @@ class DocumentIngestionWorker:
             else:
                 summary["failed"] += 1
         summary.update(await self.process_pending_summaries())
+        summary.update(await self.process_pending_titles())
         summary.update(await self._care_plans.process_pending(limit=self._batch_size))
         return summary
+
+    async def process_pending_titles(self) -> dict[str, int]:
+        """Draft record titles after summaries; a failure only leaves the file name."""
+        try:
+            return await self._titles.fill_missing(limit=self._batch_size)
+        except Exception:  # noqa: BLE001 - a list title never fails the Job
+            logger.exception("Document title drafting failed")
+            return {"titles_unhandled_failures": 1}
 
     async def process_pending_summaries(self) -> dict[str, int]:
         """Generate owed patient explanations from candidates that already exist.
@@ -124,14 +123,26 @@ class DocumentIngestionWorker:
 
 
 async def main() -> int:
+    """Run one batch; exit non-zero when a document failed or the batch could not run.
+
+    Document ingestion keeps its run state on each document, not in ``cron_job_runs``, so
+    the two structured log lines are this Job's run record.
+    """
     _configure_worker_logging()
-    _log_execution("document_ingestion_started", batch_size=settings.document_ingestion_batch_size)
-    worker = DocumentIngestionWorker(
-        get_admin_client(), batch_size=settings.document_ingestion_batch_size
-    )
-    summary = await worker.process_batch()
-    _log_execution("document_ingestion_finished", **summary)
-    return 1 if summary["failed"] else 0
+    batch_size = settings.document_ingestion_batch_size
+    log = JobRunLog("document_ingestion")
+    log.started(parameters={"batch_size": batch_size})
+    try:
+        worker = DocumentIngestionWorker(get_admin_client(), batch_size=batch_size)
+        summary = await worker.process_batch()
+    except Exception as exc:  # noqa: BLE001 - reported as one sanitized line, then exit 1
+        log.finished("failed", {}, error=exc)
+        return 1
+    if summary["failed"]:
+        log.finished("failed", summary, reason="documents_failed")
+        return 1
+    log.finished("success", summary)
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised by Cloud Run Job

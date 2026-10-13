@@ -43,8 +43,8 @@ Validate:
 | Variable | Purpose |
 |----------|---------|
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` | Supabase DB, Auth, RLS |
-| `GOOGLE_PROJECT_ID` | Vertex AI model and embedding paths |
-| `VERTEX_AI_LOCATION` | MaaS endpoint location; production uses `global` for GPT OSS shared capacity |
+| `GOOGLE_PROJECT_ID` | Vertex AI model calls |
+| `VERTEX_AI_LOCATION` | MaaS endpoint location for the evaluation harness's open-weight models; no live route uses GPT OSS |
 | `GEMINI_VERTEX_AI_LOCATION` | Gemini Vertex endpoint location; Gemini 3.8 Flash uses `global` |
 | `GEMINI_FLASH_MODEL` | Gemini Flash model ID used by the agent runtime |
 | `GEMINI_TRIAGE_MODEL` | Native Gemini classifier; separate from patient prose |
@@ -52,10 +52,13 @@ Validate:
 | `GEMINI_PRO_MODEL` | Pro compatibility/evaluation model, outside the interactive routing path |
 | `CHAT_TURN_TIMEOUT_SECONDS` | Hard ceiling for the complete coordinator-and-responder chat turn |
 | `MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS` | How long MaaS is bypassed after a timeout or retriable provider failure |
+| `MODEL_MAX_CONCURRENCY`, `MODEL_MIN_START_INTERVAL_SECONDS` | Per-process model-call concurrency and start spacing |
+| `CRON_AUTH_TOKEN` | Shared token for Cloud Scheduler calls to the backend cron endpoints |
 | `DEEPGRAM_API_KEY` | Voice STT/TTS |
-| `RESEND_API_KEY` | Transactional email (clinician invites; extend for other mail later) |
+| `RESEND_API_KEY` | Backend transactional email (addressed invitations, contact verification and opted-in event notices); Supabase Auth SMTP is configured separately |
 | `RESEND_CLINICIAN_ONBOARDING_FROM_EMAIL` | From address for clinician invite mail (use a verified-domain sender in production) |
-| `RESEND_FROM_EMAIL` | Optional fallback “From” when the clinician onboarding sender is unset (see `config.py`) |
+| `RESEND_FROM_EMAIL` | Verified-domain sender for contact verification and opted-in notices; no default testing sender |
+| `EMAIL_CODE_HMAC_SECRET` | Optional dedicated key for hashing email verification codes; falls back to `SUPABASE_JWT_SECRET` |
 | `BACKEND_URL`, `PATIENT_PORTAL_URL`, `CLINICIAN_PORTAL_URL` | App URLs (email links, CORS) |
 | `*_SENTRY_*` | Error monitoring (optional in dev) |
 
@@ -89,29 +92,17 @@ Clinician app often uses port 3001: `npm run dev -- --port 3001`.
 
 Full procedure, RLS, and Auth hooks: **[docs/supabase_setup_guide.md](docs/supabase_setup_guide.md)**.
 
-SQL migrations live in `backend/src/app/db/migrations/`. Apply **in numeric/filename order** against your Supabase Postgres (or local DB). Example:
+SQL migrations live in `backend/src/app/db/migrations/`. Apply them with the ledger
+script, which runs every not-yet-applied file in filename order, records a checksum per
+file in `public.schema_migrations`, and refuses to re-run a file whose contents changed:
 
 ```bash
-export DB_URL="postgresql://postgres:YOUR_PASSWORD@YOUR_HOST:5432/postgres"
-
-psql "$DB_URL" -f backend/src/app/db/migrations/001_initial_schema.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/002_rls_policies.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/003_storage_and_auth.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/004_jwt_claims_hook.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/005_document_parse_tracking.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/006_care_team_invite_compat.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/007_clinic_identity_foundation.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/008_soap_notes.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/009_jwt_claims_hook_hardening.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/010_chat_state_and_a2a_tasks.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/011_enable_dashboard_realtime_publication.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/011_locale_contract_upgrade.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/012_document_review_queue.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/013_cron_scheduler_foundation.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/014_patient_timezones_and_reminder_schedules.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/015_drug_knowledge_rag.sql
-psql "$DB_URL" -f backend/src/app/db/migrations/016_obligation_source_document.sql
+export MEDIAGENT_DB_URL="<Postgres connection string for the environment you may change>"
+./scripts/apply-supabase-migrations.sh
 ```
+
+Run it from the checkout whose migrations you mean to apply, and only against an
+environment you are authorized to change.
 
 After migrations, configure the JWT claims hook in Supabase Dashboard → Auth → Hooks per the setup guide.
 
@@ -132,11 +123,10 @@ See [TEAM.md](.agent/TEAM.md) for sprint and review expectations.
 
 1. Pick or create a task in [TASKS.md](.agent/TASKS.md) or a GitHub issue.
 2. Branch: `feature/short-description`, `fix/...`, or `hotfix/...`.
-3. Follow [.agent/workflows/create-pr.md](.agent/workflows/create-pr.md) when a PR workflow is needed.
-4. Implement per [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md).
-5. Add or update tests.
-6. Run checks below.
-7. Open a PR using the repo template.
+3. Implement per [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md).
+4. Add or update tests.
+5. Run checks below.
+6. Open a PR using the [repo template](.github/pull_request_template.md).
 
 ### Adding a product worker
 
@@ -144,9 +134,9 @@ Follow [.agent/workflows/new-agent.md](.agent/workflows/new-agent.md). New model
 belongs under `backend/src/app/adk/`; retain `backend/src/app/agents/` only for legacy
 compatibility while it is still referenced.
 
-- `agents/<name>/agent.py` — ADK agent entry
-- `agents/<name>/prompts.py` — prompt templates
-- `registry.py` — reviewed model route, fallback, budget, and kill switch
+- `adk/agents/<name>/agent.py` — ADK agent entry
+- `adk/agents/<name>/prompts.py` — prompt templates
+- `adk/registry.py` — reviewed model route, fallback, budget, and kill switch
 
 ### Commit messages
 
@@ -239,12 +229,12 @@ Request → Router → Service → DB / external client / Agent → Response
 | `services/` | Domain logic |
 | `adk/` | Current agent runtime and plugins |
 | `agents/` | Legacy compatibility paths |
-| `tools/` | Reusable agent tools |
-| `mcp/` | MCP server adapters |
-| `a2a/` | Agent-to-agent protocol pieces |
+| `tools/` | FHIR builder and medication normalizer |
 | `clients/` | External APIs |
-| `db/` | Migrations / DB access |
-| `middleware/` | CORS, logging, etc. |
+| `db/` | Migrations, repositories, seed data |
+| `workers/` | Cloud Run Job entry points (document ingestion, health-knowledge refresh) |
+| `safety/` | Deterministic triage floor and escalation |
+| `middleware/` | Rate limiting |
 
 ---
 
@@ -305,7 +295,7 @@ The GitHub PR template and CI policy check reinforce required checklist items.
 
 ## Repository enforcement
 
-- CI: lint, typecheck, tests, portal builds (see `.github/workflows/ci.yml`)  
+- CI: backend lint, typecheck, sharded tests and coverage, migration validation, secret scan, and portal lint/build (see `.github/workflows/ci.yml`); `.github/workflows/frontend.yml` also lints and builds the portals when `apps/**` or `packages/**` change  
 - PR policy job: required checklist items in PR body  
 - Husky + lint-staged: pre-commit on staged files  
 
@@ -315,10 +305,13 @@ The GitHub PR template and CI policy check reinforce required checklist items.
 
 ## Code review checklist
 
-Before requesting review, walk through [.agent/workflows/ai-code-review.md](.agent/workflows/ai-code-review.md) and confirm:
+Before requesting review, confirm:
 
 - [ ] Matches [CODING_STANDARDS.md](.agent/CODING_STANDARDS.md)  
 - [ ] No secrets or credentials in code or commits  
+- [ ] No hardcoded URLs, keys or configuration values; settings come from `config.py`  
+- [ ] Every import is a real dependency or local module, and table/column names match the migrations  
+- [ ] New tables or queries consider RLS and least-privilege access  
 - [ ] Pydantic models validate inputs appropriately  
 - [ ] Services do not import FastAPI  
 - [ ] Errors use `core/exceptions` patterns where applicable  

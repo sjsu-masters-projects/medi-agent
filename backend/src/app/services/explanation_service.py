@@ -27,6 +27,18 @@ FALLBACK_MESSAGE = (
 # cannot tell "this document had nothing to explain" from "the service is down", and the
 # second one is the case where asking the care team is the right next step.
 SUMMARY_UNAVAILABLE_MESSAGES: dict[str, dict[str, str]] = {
+    "duplicate": {
+        Language.EN.value: (
+            "These exact file contents were already processed. This upload was kept, "
+            "but extraction was skipped to avoid duplicate information. "
+            "You can still open the original document or ask your care team about it."
+        ),
+        Language.ES.value: (
+            "Este mismo archivo ya se procesó. Se conservó esta carga, "
+            "pero no se volvió a extraer información para evitar duplicados. "
+            "Puede abrir el documento original o preguntarle a su equipo de atención."
+        ),
+    },
     "not_required": {
         Language.EN.value: (
             "There is no extracted information in this document to explain. "
@@ -125,16 +137,22 @@ class ExplanationService:
             ]
 
         prompt = GENERATE_SUMMARY_USER.format(
-            medications=json.dumps(document_data.get("medications", []), default=str),
-            conditions=json.dumps(document_data.get("conditions", []), default=str),
-            follow_up_instructions=json.dumps(follow_up_instructions, default=str),
+            medications=json.dumps(
+                document_data.get("medications", []), default=str, ensure_ascii=False
+            ),
+            conditions=json.dumps(
+                document_data.get("conditions", []), default=str, ensure_ascii=False
+            ),
+            follow_up_instructions=json.dumps(
+                follow_up_instructions, default=str, ensure_ascii=False
+            ),
         )
         response = await router.generate_text(
             TaskType.PATIENT_EXPLANATION,
             prompt=prompt,
             system_instruction=GENERATE_SUMMARY_SYSTEM,
             temperature=0.4,
-            max_tokens=512,
+            max_tokens=1024,
         )
         return normalize_patient_summary(response) or FALLBACK_MESSAGE
 
@@ -161,6 +179,6 @@ class ExplanationService:
             ),
             system_instruction=TRANSLATE_SUMMARY_SYSTEM.format(target_language=language_name),
             temperature=0.2,
-            max_tokens=512,
+            max_tokens=1024,
         )
         return normalize_patient_summary(response) or FALLBACK_MESSAGE

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
@@ -18,6 +18,7 @@ from app.routers.smart import (
     _fhir_import_review_service,
     _service,
 )
+from app.services.smart_launch_service import SmartProviderAuthorizationError
 
 
 @pytest.fixture
@@ -133,6 +134,62 @@ def test_callback_returns_a_safe_portal_error_for_provider_failure(client, smart
     assert response.status_code == 303
     assert response.headers["location"].endswith("/smart-import?smart_error=authorization_failed")
     assert "invalid_request" not in response.headers["location"]
+
+
+def test_standalone_launch_may_omit_issuer_for_server_configuration(
+    client, smart_service, clinician
+) -> None:
+    patient_id = uuid4()
+    smart_service.start_launch.return_value = {
+        "authorization_url": "https://sandbox.example/authorize?state=opaque",
+        "expires_at": datetime.now(UTC) + timedelta(minutes=10),
+    }
+
+    response = client.post("/api/v1/smart/launch", json={"patient_id": str(patient_id)})
+
+    assert response.status_code == 200
+    smart_service.start_launch.assert_called_once_with(
+        clinician_id=clinician.id, patient_id=patient_id, issuer=None, launch_context=None
+    )
+
+
+def test_ehr_launch_context_without_issuer_is_rejected(client, smart_service, clinician) -> None:
+    response = client.post(
+        "/api/v1/smart/launch",
+        json={"patient_id": str(uuid4()), "launch_context": "opaque-ehr-handle"},
+    )
+
+    assert response.status_code == 422
+    smart_service.start_launch.assert_not_called()
+
+
+def test_callback_surfaces_sanitized_provider_error_detail(client, smart_service) -> None:
+    detail = "invalid_request: Invalid launch options: SyntaxError: Unexpected end of JSON input"
+    smart_service.handle_callback.side_effect = SmartProviderAuthorizationError(detail)
+
+    response = client.get(
+        "/api/v1/smart/callback",
+        params={
+            "state": "s" * 32,
+            "error": "invalid_request",
+            "error_description": "Invalid launch options: SyntaxError: Unexpected end of JSON input",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    location = urlparse(response.headers["location"])
+    assert location.path == "/smart-import"
+    assert parse_qs(location.query) == {
+        "smart_error": ["authorization_failed"],
+        "smart_error_detail": [detail],
+    }
+    smart_service.handle_callback.assert_called_once_with(
+        state="s" * 32,
+        code=None,
+        error="invalid_request",
+        error_description="Invalid launch options: SyntaxError: Unexpected end of JSON input",
+    )
 
 
 def test_fact_fhir_audit_requires_assignment_and_returns_generated_resources(

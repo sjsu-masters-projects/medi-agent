@@ -40,7 +40,9 @@ def _chain(mock_db, *, data):
 # ── _require_admin ──────────────────────────────────────────
 
 
-def test_lookup_clinic_code_falls_back_to_canonical_name_when_clinic_id_is_stale(raw_service, mock_db):
+def test_lookup_clinic_code_falls_back_to_canonical_name_when_clinic_id_is_stale(
+    raw_service, mock_db
+):
     stale_id_chain = MagicMock()
     for method in ("select", "eq", "single"):
         getattr(stale_id_chain, method).return_value = stale_id_chain
@@ -58,7 +60,9 @@ def test_lookup_clinic_code_falls_back_to_canonical_name_when_clinic_id_is_stale
     assert code == "0901CA82DC"
 
 
-def test_lookup_clinic_code_uses_peer_clinician_clinic_id_when_name_queries_miss(raw_service, mock_db):
+def test_lookup_clinic_code_uses_peer_clinician_clinic_id_when_name_queries_miss(
+    raw_service, mock_db
+):
     stale_id_chain = MagicMock()
     for method in ("select", "eq", "single"):
         getattr(stale_id_chain, method).return_value = stale_id_chain
@@ -114,7 +118,9 @@ def test_lookup_code_by_clinic_id_retries_transient_failures(raw_service, mock_d
     assert clinic_chain.execute.call_count == 2
 
 
-def test_lookup_clinic_code_returns_none_after_transient_failures_on_all_paths(raw_service, mock_db):
+def test_lookup_clinic_code_returns_none_after_transient_failures_on_all_paths(
+    raw_service, mock_db
+):
     failing_id_chain = MagicMock()
     for method in ("select", "eq", "single"):
         getattr(failing_id_chain, method).return_value = failing_id_chain
@@ -343,9 +349,7 @@ async def test_update_role_success(service, mock_db):
         getattr(chain_admin, m).return_value = chain_admin
 
     chain_target = MagicMock()
-    chain_target.execute.return_value = Mock(
-        data={"id": str(target_id), "clinic_name": "Clinic A"}
-    )
+    chain_target.execute.return_value = Mock(data={"id": str(target_id), "clinic_name": "Clinic A"})
     for m in ("select", "eq", "single"):
         getattr(chain_target, m).return_value = chain_target
 
@@ -383,9 +387,7 @@ async def test_remove_member_success(service, mock_db):
         getattr(chain_admin, m).return_value = chain_admin
 
     chain_target = MagicMock()
-    chain_target.execute.return_value = Mock(
-        data={"id": str(target_id), "clinic_name": "Clinic A"}
-    )
+    chain_target.execute.return_value = Mock(data={"id": str(target_id), "clinic_name": "Clinic A"})
     for m in ("select", "eq", "single"):
         getattr(chain_target, m).return_value = chain_target
 
@@ -449,11 +451,9 @@ async def test_invite_existing_different_clinic(service, mock_db):
 
     mock_db.table.side_effect = [chain_admin, chain_existing, chain_update]
 
-    service.resend_client.send_clinician_invite = MagicMock(return_value=True)  # type: ignore[method-assign]
-
-    result = await service.invite_member(admin_id, "other@test.com", "nurse")
-    assert result["status"] == "added"
-    assert result["email_sent"] is True
+    with pytest.raises(ValidationError, match="cannot move"):
+        await service.invite_member(admin_id, "other@test.com", "nurse")
+    chain_update.update.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -472,8 +472,9 @@ async def test_invite_new_email_pending(service, mock_db):
 
     mock_db.table.side_effect = [chain_admin, chain_existing]
 
-    service.resend_client.send_clinician_invite = MagicMock(return_value=False)  # type: ignore[method-assign]
-
+    mock_db.rpc.return_value.execute.return_value = Mock(
+        data={"status": "queued", "email_sent": False}
+    )
     result = await service.invite_member(admin_id, "new@test.com", "provider")
-    assert result["status"] == "pending"
+    assert result["status"] == "queued"
     assert result["email_sent"] is False

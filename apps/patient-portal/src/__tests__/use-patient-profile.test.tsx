@@ -32,6 +32,46 @@ beforeEach(() => {
   get.mockReset();
 });
 describe("patient profile state", () => {
+  it("keeps a saved preference when the refreshed GET arrives after the save", async () => {
+    get.mockResolvedValueOnce(raw);
+    const refresh = deferred<typeof raw>();
+    get.mockReturnValueOnce(refresh.promise);
+    const { result } = renderHook(usePatientProfileState);
+    await waitFor(() => expect(result.current.profile).not.toBeNull());
+    const saveBeforeRefresh = result.current.updateProfile;
+    act(() => result.current.refresh());
+    act(() => saveBeforeRefresh((current) => ({ ...current, preferredLanguage: "en-US" })));
+    expect(result.current.loading).toBe(false);
+    await act(async () => refresh.resolve(raw));
+    expect(result.current.profile?.preferredLanguage).toBe("en-US");
+    expect(result.current.loading).toBe(false);
+  });
+  it("binds a retained save callback to the current retry and preserves newer profile fields", async () => {
+    get.mockResolvedValueOnce(raw);
+    const refresh = deferred<typeof raw>();
+    get.mockReturnValueOnce(refresh.promise);
+    const { result } = renderHook(usePatientProfileState);
+    await waitFor(() => expect(result.current.profile).not.toBeNull());
+    const saveBeforeRefresh = result.current.updateProfile;
+    act(() => result.current.refresh());
+    await act(async () => refresh.resolve({ ...raw, first_name: "Updated" }));
+    act(() => saveBeforeRefresh((current) => ({ ...current, preferredLanguage: "en-US" })));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.profile?.firstName).toBe("Updated");
+    expect(result.current.profile?.preferredLanguage).toBe("en-US");
+  });
+  it("ignores a retained profile save callback after the session changes", async () => {
+    get.mockResolvedValue(raw);
+    const { result, rerender } = renderHook(usePatientProfileState);
+    await waitFor(() => expect(result.current.profile).not.toBeNull());
+    const oldSave = result.current.updateProfile;
+    token = "session-b";
+    get.mockResolvedValue({ ...raw, id: "other" });
+    rerender();
+    await waitFor(() => expect(result.current.profile?.id).toBe("other"));
+    act(() => oldSave((current) => ({ ...current, preferredLanguage: "en-US" })));
+    expect(result.current.profile?.preferredLanguage).toBe("es-MX");
+  });
   it("loads and normalizes the profile while preserving the old hook interface", async () => {
     get.mockResolvedValue(raw);
     const { result } = renderHook(() => usePatientProfile());

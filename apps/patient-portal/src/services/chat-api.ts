@@ -56,6 +56,12 @@ export interface ChatContextLoadedEvent {
     document: ChatDocumentContextApi;
 }
 
+/** The conversation's document could not be read: deleted, or not the patient's. */
+export interface ChatContextUnavailableEvent {
+    type: "chat_context_unavailable";
+    context_type: "document";
+}
+
 export interface UserMessageSavedEvent {
     type: "user_message_saved";
     message: ChatMessageApi;
@@ -120,6 +126,7 @@ export type ChatSocketEvent =
     | AssistantCompleteEvent
     | AssistantStartEvent
     | ChatContextLoadedEvent
+    | ChatContextUnavailableEvent
     | ChatErrorEvent
     | ChatHistoryEvent
     | ClinicianMessageEvent
@@ -140,6 +147,11 @@ export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
     };
 }
 
+export function isInternalChatAlert(message: ClinicianMessageApi): boolean {
+    return message.subject === "Urgent patient chat escalation"
+        && message.body.startsWith("Chat escalation flagged (");
+}
+
 export function mapClinicianMessageFromApi(message: ClinicianMessageApi): ChatMessage {
     const subject = typeof message.subject === "string" && message.subject.trim()
         ? `${message.subject.trim()}\n\n`
@@ -154,16 +166,68 @@ export function mapClinicianMessageFromApi(message: ClinicianMessageApi): ChatMe
     };
 }
 
-export async function fetchChatHistory(patientId: string, token: string): Promise<ChatMessage[]> {
-    const response = await api.get<ChatMessageApi[]>(`/api/v1/chat/history/${patientId}`, {
+export async function fetchChatHistory(
+    patientId: string,
+    token: string,
+    sessionId?: string,
+): Promise<ChatMessage[]> {
+    const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+    const response = await api.get<ChatMessageApi[]>(`/api/v1/chat/history/${patientId}${query}`, {
         token,
     });
 
     return response.map(mapChatMessageFromApi);
 }
 
+export interface ChatConversationApi {
+    session_id: string;
+    title: string;
+    turn_count: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ChatConversationSummary {
+    sessionId: string;
+    title: string;
+    updatedAt: string;
+}
+
+/** The patient's conversations with Nora, most recent first. */
+export async function fetchChatConversations(
+    patientId: string,
+    token: string,
+): Promise<ChatConversationSummary[]> {
+    const response = await api.get<ChatConversationApi[]>(
+        `/api/v1/chat/conversations/${patientId}`,
+        { token },
+    );
+    return response.map((row) => ({
+        sessionId: row.session_id,
+        title: row.title,
+        updatedAt: row.updated_at,
+    }));
+}
+
+/** Each day starts a new conversation with Nora, named after the local date. */
+export function todayConversationId(now: Date = new Date()): string {
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `day-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/**
+ * A conversation started with "New chat", or from a document in Records. The id is
+ * unguessable (a random UUID), although the server also scopes every conversation to
+ * the signed-in patient.
+ */
+export function newConversationId(): string {
+    return `chat-${crypto.randomUUID()}`;
+}
+
 export interface ChatWebSocketOptions {
     documentId?: string | null;
+    /** The patient dismissed this conversation's document; the server clears it. */
+    documentDismissed?: boolean;
     sessionId?: string | null;
 }
 
@@ -186,6 +250,8 @@ export function buildChatWebSocketUrl(
     const documentId = options.documentId?.trim();
     if (documentId) {
         parsed.searchParams.set("context", `doc:${documentId}`);
+    } else if (options.documentDismissed) {
+        parsed.searchParams.set("context", "none");
     }
 
     const sessionId = options.sessionId?.trim();
