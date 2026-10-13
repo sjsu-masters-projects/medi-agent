@@ -141,7 +141,7 @@ describe("TodayPage", () => {
         await act(async () => fireEvent.click(screen.getByRole("button", { name: "Marcar como completada" })));
         expect(markComplete).toHaveBeenCalledWith(task);
         fireEvent.click(screen.getByRole("button", { name: "Detalles del plan de atención" }));
-        expect(screen.getByText(/Versión 3 del plan aprobado/)).toBeInTheDocument();
+        expect(screen.getByText("Seguimiento · Versión 3")).toBeInTheDocument();
     });
 
     it.each([
@@ -183,7 +183,9 @@ describe("TodayPage", () => {
         mockFeedData({ tasks: [{ id: "synthetic", name: "Source activity", type: FeedTaskType.OBLIGATION, status: FeedTaskStatus.PENDING, carePlan: { category, versionNumber: 1 } } as FeedTask] });
         render(<TodayPage />);
         fireEvent.click(screen.getByRole("button", { name: "Detalles del plan de atención" }));
-        expect(screen.getByText(`Aprobado por tu equipo de atención • ${label}`)).toBeInTheDocument();
+        const sheet = screen.getByRole("dialog");
+        expect(within(sheet).getAllByText("Aprobado por tu equipo de atención")).toHaveLength(1);
+        expect(within(sheet).getByText(`${label.charAt(0).toUpperCase()}${label.slice(1)} · Versión 1`)).toBeInTheDocument();
     });
 
     it("localizes due-now clock and saving copy while keeping controls disabled during submission", () => {
@@ -284,7 +286,9 @@ describe("TodayPage", () => {
         await act(async () => fireEvent.click(screen.getByRole("button", { name: /mark as taken/i })));
         expect(markComplete).toHaveBeenCalledWith(task);
         fireEvent.click(screen.getByRole("button", { name: "Care plan details" }));
-        expect(screen.getByText(/Approved plan version 2/)).toBeInTheDocument();
+        expect(screen.getByText(/ · Version 2$/)).toBeInTheDocument();
+        // One approval line per card, not three.
+        expect(screen.queryByText(/This activity is part of your approved care plan/)).not.toBeInTheDocument();
     });
 
     it("keeps a future scheduled dose upcoming instead of due now", () => {
