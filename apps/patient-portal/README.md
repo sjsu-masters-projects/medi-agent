@@ -122,3 +122,17 @@ lists after network failure. Unavailable counts are not shown as zero. Each load
 page retains a server-signed viewing cutoff; marking displayed items read excludes
 concurrent arrivals. No new email, SMS or push delivery is introduced. See
 [NOT-001](../../.agent/specs/not-001-notification-centre.md) for the contract and tests.
+
+## ADR care-team follow-up
+
+The chat page also hosts structured follow-up requests for an existing draft ADR assessment.
+The patient may answer only retrospective questions about a prior clinician-directed dose change,
+a prior restart, or a similar prior reaction. The form explicitly says not to restart, stop, or
+change a medicine to answer, requires a description for known yes/no answers, and requires a final
+confirmation before sending.
+
+- `GET /api/v1/patients/me/adr-information-requests` loads pending patient-safe requests.
+- `POST /api/v1/patients/me/adr-information-requests/{request_id}/respond` saves the confirmed
+  answers and returns the deterministic Naranjo rescore.
+- The browser never writes ADR assessment or audit tables directly; the backend owns the atomic
+  response, reassessment, notification, and audit transaction.

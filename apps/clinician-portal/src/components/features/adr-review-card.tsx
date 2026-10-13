@@ -170,12 +170,53 @@ export function ADRReviewCard({
                     ) : null}
 
                     {item.lastReviewAction === "request_information" ? (
-                        <section className="flex items-start gap-2.5 rounded-xl border border-primary-line bg-primary-tint px-4 py-3">
-                            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" name="info" />
+                        <section
+                            className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${
+                                item.informationRequestStatus === "answered"
+                                    ? "border-ok-line bg-ok-soft"
+                                    : "border-primary-line bg-primary-tint"
+                            }`}
+                        >
+                            <Icon
+                                className={`mt-0.5 h-4 w-4 shrink-0 ${
+                                    item.informationRequestStatus === "answered"
+                                        ? "text-ok-ink"
+                                        : "text-primary"
+                                }`}
+                                name="info"
+                            />
                             <div className="min-w-0">
-                                <h3 className="text-sm font-semibold text-ink">Information requested</h3>
+                                <h3 className="text-sm font-semibold text-ink">
+                                    {item.informationRequestStatus === "answered"
+                                        ? "Patient answered"
+                                        : "Information requested"}
+                                </h3>
                                 {item.reviewNote ? (
                                     <p className="mt-1 text-sm text-ink-2">{item.reviewNote}</p>
+                                ) : null}
+                                {item.informationRequestStatus === "answered" ? (
+                                    <div className="mt-3 space-y-2">
+                                        {item.patientResponses.map((response) => (
+                                            <div
+                                                className="rounded-lg border border-ok-line bg-surface p-3"
+                                                key={response.question}
+                                            >
+                                                <p className="text-sm font-medium text-ink">
+                                                    {questionLabel(response.question)}:{" "}
+                                                    {response.answer.replaceAll("_", " ")}
+                                                </p>
+                                                {response.evidence ? (
+                                                    <p className="mt-1 text-sm text-ink-2">
+                                                        “{response.evidence}”
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                        ))}
+                                        <p className="text-xs text-ok-ink">
+                                            The deterministic score above includes these confirmed
+                                            answers. Clinician judgment is still required.
+                                        </p>
+                                    </div>
                                 ) : null}
                             </div>
                         </section>

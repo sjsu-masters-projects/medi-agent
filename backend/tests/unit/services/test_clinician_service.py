@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 from uuid import uuid4
 
 import pytest
@@ -11,6 +11,7 @@ from app.core.exceptions import AuthorizationError, NotFoundError, ValidationErr
 from app.models.adr import ADRReviewAction, ADRReviewDecisionRequest
 from app.models.dashboard import PatientRiskData
 from app.models.enums import DocumentReviewStatus
+from app.pharmacovigilance import NaranjoQuestion
 from app.services.clinician_service import ClinicianService
 
 
@@ -191,37 +192,57 @@ async def test_list_adr_review_queue_returns_patient_grounded_evidence(service, 
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
     service._execute = AsyncMock(  # type: ignore[method-assign]
-        return_value=_response(
-            data=[
-                {
-                    "id": str(assessment_id),
-                    "patient_id": str(patient_id),
-                    "symptom_report_id": str(symptom_report_id),
-                    "suspect_medication_id": str(medication_id),
-                    "suspect_medication_name": "lisinopril",
-                    "naranjo_score": 3,
-                    "causality": "Possible",
-                    "naranjo_answers": {"event_after_drug": "yes"},
-                    "naranjo_assessment": {"missing_questions": ["alternative_causes"]},
-                    "evidence": [
-                        {
-                            "question": "event_after_drug",
-                            "answer": "yes",
-                            "evidence": "Cough began after the first dose.",
-                        }
-                    ],
-                    "status": "draft",
-                    "created_at": "2026-10-02T10:00:00Z",
-                    "patients": {"first_name": "Maya", "last_name": "Patel"},
-                    "symptom_reports": {
-                        "symptom": "dry cough",
-                        "severity": 2,
-                        "onset": "after first dose",
-                        "created_at": "2026-10-02T09:59:00Z",
-                    },
-                }
-            ]
-        )
+        side_effect=[
+            _response(
+                data=[
+                    {
+                        "id": str(assessment_id),
+                        "patient_id": str(patient_id),
+                        "symptom_report_id": str(symptom_report_id),
+                        "suspect_medication_id": str(medication_id),
+                        "suspect_medication_name": "lisinopril",
+                        "naranjo_score": 3,
+                        "causality": "Possible",
+                        "naranjo_answers": {"event_after_drug": "yes"},
+                        "naranjo_assessment": {"missing_questions": ["alternative_causes"]},
+                        "evidence": [
+                            {
+                                "question": "event_after_drug",
+                                "answer": "yes",
+                                "evidence": "Cough began after the first dose.",
+                            }
+                        ],
+                        "status": "draft",
+                        "created_at": "2026-10-02T10:00:00Z",
+                        "patients": {"first_name": "Maya", "last_name": "Patel"},
+                        "symptom_reports": {
+                            "symptom": "dry cough",
+                            "severity": 2,
+                            "onset": "after first dose",
+                            "created_at": "2026-10-02T09:59:00Z",
+                        },
+                    }
+                ]
+            ),
+            _response(
+                data=[
+                    {
+                        "id": str(uuid4()),
+                        "adr_assessment_id": str(assessment_id),
+                        "status": "answered",
+                        "responses": [
+                            {
+                                "question": "dose_response",
+                                "answer": "yes",
+                                "evidence": "It improved after my clinician lowered the dose.",
+                            }
+                        ],
+                        "responded_at": "2026-10-03T10:00:00Z",
+                        "created_at": "2026-10-02T11:00:00Z",
+                    }
+                ]
+            ),
+        ]
     )
 
     result = await service.list_adr_review_queue(uuid4())
@@ -229,9 +250,19 @@ async def test_list_adr_review_queue_returns_patient_grounded_evidence(service, 
     assert result["total"] == 1
     assert result["items"][0]["patient_first_name"] == "Maya"
     assert result["items"][0]["symptom"] == "dry cough"
+    assert result["items"][0]["information_request_status"] == "answered"
+    assert result["items"][0]["patient_responses"][0]["question"] == "dose_response"
     assert "patients" not in result["items"][0]
-    mock_db.table.assert_called_once_with("adr_assessments")
-    chain.in_.assert_called_once_with("patient_id", [str(patient_id)])
+    assert mock_db.table.call_args_list == [
+        call("adr_assessments"),
+        call("adr_information_requests"),
+    ]
+    chain.in_.assert_has_calls(
+        [
+            call("patient_id", [str(patient_id)]),
+            call("adr_assessment_id", [str(assessment_id)]),
+        ]
+    )
     chain.eq.assert_called_once_with("status", "draft")
 
 
@@ -258,6 +289,7 @@ async def test_review_adr_assessment_calls_atomic_assignment_scoped_rpc(service,
                     "id": str(assessment_id),
                     "patient_id": str(patient_id),
                     "status": "draft",
+                    "naranjo_assessment": {"missing_questions": ["dose_response"]},
                 }
             ),
             _response(
@@ -348,7 +380,60 @@ async def test_review_adr_assessment_denies_an_unassigned_clinician(service, moc
 
 def test_request_information_requires_a_note() -> None:
     with pytest.raises(ValueError, match="review note is required"):
-        ADRReviewDecisionRequest(action=ADRReviewAction.REQUEST_INFORMATION)
+        ADRReviewDecisionRequest(
+            action=ADRReviewAction.REQUEST_INFORMATION,
+            requested_information=[NaranjoQuestion.DOSE_RESPONSE],
+        )
+
+
+@pytest.mark.asyncio
+async def test_request_information_accepts_only_missing_patient_question(service, mock_db):
+    clinician_id = uuid4()
+    patient_id = uuid4()
+    assessment_id = uuid4()
+    service._assert_patient_assignment = AsyncMock()  # type: ignore[method-assign]
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _response(
+                data={
+                    "id": str(assessment_id),
+                    "patient_id": str(patient_id),
+                    "status": "draft",
+                    "naranjo_assessment": {"missing_questions": ["dose_response"]},
+                }
+            ),
+            _response(
+                data=[
+                    {
+                        "id": str(assessment_id),
+                        "patient_id": str(patient_id),
+                        "status": "draft",
+                    }
+                ]
+            ),
+        ]
+    )
+
+    await service.review_adr_assessment(
+        clinician_id,
+        assessment_id,
+        ADRReviewDecisionRequest(
+            action=ADRReviewAction.REQUEST_INFORMATION,
+            note="Describe what happened after the prior dose change.",
+            requested_information=[NaranjoQuestion.DOSE_RESPONSE],
+        ),
+    )
+
+    mock_db.rpc.assert_called_once_with(
+        "review_adr_assessment",
+        {
+            "p_assessment_id": str(assessment_id),
+            "p_actor_id": str(clinician_id),
+            "p_action": "request_information",
+            "p_note": "Describe what happened after the prior dose change.",
+            "p_requested_information": ["dose_response"],
+        },
+    )
 
 
 @pytest.mark.asyncio

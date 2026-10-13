@@ -86,12 +86,16 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 66 SQL migration files, prefixes `001`–`056`. Some prefixes are
-shared by independent files (`011`, `038`–`043`, `048`, `051`) that came from parallel
+The checkout contains 69 SQL migration files, prefixes `001`–`058`. Some prefixes are
+shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
 branches; they coexist because the ledger identifies migrations by full filename and
 checksum, not by prefix. Preserve applied names and bytes. The ledger in
 `public.schema_migrations` is authoritative: a local file count does not establish remote
 application or authorize applying unrelated migrations.
+
+Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
+request, deterministic reassessment, notification closure, and patient-actor audit transaction.
+It does not create a MedWatch draft or external submission.
 
 ### Appointment booking guards (042/043)
 

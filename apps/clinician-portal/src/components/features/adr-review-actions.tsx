@@ -19,6 +19,12 @@ function humanizeQuestion(value: string) {
     return value.replaceAll("_", " ");
 }
 
+const PATIENT_ANSWERABLE_QUESTIONS = new Set([
+    "reappeared_on_rechallenge",
+    "dose_response",
+    "similar_previous_reaction",
+]);
+
 export function ADRReviewActions({
     item,
     onSubmit,
@@ -28,7 +34,9 @@ export function ADRReviewActions({
     onSubmit: (input: ADRReviewDecisionInput) => Promise<void>;
     submitting: boolean;
 }) {
-    const missingQuestions = item.naranjoAssessment.missing_questions ?? [];
+    const missingQuestions = (item.naranjoAssessment.missing_questions ?? []).filter(
+        (question) => PATIENT_ANSWERABLE_QUESTIONS.has(question),
+    );
     const [action, setAction] = useState<ADRReviewAction | null>(null);
     const [note, setNote] = useState("");
     const [questions, setQuestions] = useState<string[]>([]);
@@ -84,13 +92,15 @@ export function ADRReviewActions({
                 className="flex flex-wrap gap-2 border-t border-line pt-4"
                 aria-label="ADR review actions"
             >
-                <Button
-                    disabled={submitting}
-                    onClick={() => begin("request_information")}
-                    variant="secondary"
-                >
-                    Request information
-                </Button>
+                {missingQuestions.length > 0 ? (
+                    <Button
+                        disabled={submitting}
+                        onClick={() => begin("request_information")}
+                        variant="secondary"
+                    >
+                        Request information
+                    </Button>
+                ) : null}
                 <Button
                     disabled={submitting}
                     onClick={() => begin("dismiss")}
@@ -120,7 +130,7 @@ export function ADRReviewActions({
             {action === "request_information" && missingQuestions.length > 0 ? (
                 <fieldset>
                     <legend className="mb-1.5 text-[13px] font-medium text-ink-2">
-                        Information needed
+                        Patient-answerable information needed
                     </legend>
                     <div className="flex flex-wrap gap-2">
                         {missingQuestions.map((question) => (
@@ -150,7 +160,7 @@ export function ADRReviewActions({
                     onChange={(event) => setNote(event.target.value)}
                     placeholder={
                         action === "request_information"
-                            ? "Describe what the patient or care team should clarify."
+                            ? "Add patient-facing context. Do not instruct a medication change or restart."
                             : "Record the clinical basis for this action."
                     }
                     value={note}

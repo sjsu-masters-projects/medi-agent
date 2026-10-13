@@ -1,6 +1,7 @@
 """Deterministic adverse-drug-reaction assessment primitives."""
 
 from app.pharmacovigilance.models import (
+    PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
     NaranjoAnswer,
     NaranjoAssessment,
     NaranjoItemScore,
@@ -13,5 +14,6 @@ __all__ = [
     "NaranjoAssessment",
     "NaranjoItemScore",
     "NaranjoQuestion",
+    "PATIENT_ANSWERABLE_NARANJO_QUESTIONS",
     "score_naranjo",
 ]

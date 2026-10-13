@@ -73,6 +73,10 @@ vi.mock("@/services/browser-voice", () => ({
     stopAssistantVoicePlayback: vi.fn(),
 }));
 
+vi.mock("@/components/features/adr-follow-up-panel", () => ({
+    ADRFollowUpPanel: () => null,
+}));
+
 class MockWebSocket {
     static CLOSED = 3;
     static CONNECTING = 0;

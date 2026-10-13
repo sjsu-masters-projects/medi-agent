@@ -7,6 +7,7 @@ import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
+import { ADRFollowUpPanel } from "@/components/features/adr-follow-up-panel";
 import { todayConversationId } from "@/services/chat-api";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
@@ -132,6 +133,7 @@ export default function ChatPage() {
         </div>}
         {assistantThread && <>
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
+            <ADRFollowUpPanel />
             {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
                 <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
