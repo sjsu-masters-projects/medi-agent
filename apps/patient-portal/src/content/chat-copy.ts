@@ -124,3 +124,40 @@ export function getChatControlsCopy(locale: Locale) {
     profileRequired: "Your preferred language needs to load before sending. If this takes too long, reopen Chat.",
   };
 }
+
+/** Interface copy for a results card under a Nora reply. Names and values stay as printed. */
+export function getChatResultsCopy(locale: Locale) {
+  return locale === "es-MX" ? {
+    eyebrow: "Resultados de este reporte",
+    fallbackTitle: "Tu reporte",
+    criticalContact: "Comunícate hoy con tu equipo de atención.",
+    criticalEmergency: "Llama al 911 si tienes dolor de pecho, palpitaciones o dificultad para respirar.",
+    outOfRange: "Fuera del rango del reporte",
+    allWithinRange: "Todos los resultados están dentro de los rangos del reporte.",
+    showInRange: (count: number) => count === 1 ? "Mostrar 1 resultado dentro del rango" : `Mostrar ${count} resultados dentro del rango`,
+    hideInRange: "Ocultar resultados dentro del rango",
+    showMeasurements: (count: number) => count === 1 ? "Mostrar 1 medición" : `Mostrar ${count} mediciones`,
+    hideMeasurements: "Ocultar mediciones",
+    inRange: "Dentro del rango",
+    measurements: "Mediciones",
+    notReviewed: "Leído automáticamente · aún no revisado por tu equipo de atención",
+    reviewed: "Revisado por tu equipo de atención",
+    seeInRecords: "Ver en Registros",
+  } : {
+    eyebrow: "Results from this report",
+    fallbackTitle: "Your report",
+    criticalContact: "Contact your care team today.",
+    criticalEmergency: "Call 911 if you have chest pain, palpitations or trouble breathing.",
+    outOfRange: "Outside the report's range",
+    allWithinRange: "All results are within the report's ranges.",
+    showInRange: (count: number) => count === 1 ? "Show 1 result in range" : `Show ${count} results in range`,
+    hideInRange: "Hide results in range",
+    showMeasurements: (count: number) => count === 1 ? "Show 1 measurement" : `Show ${count} measurements`,
+    hideMeasurements: "Hide measurements",
+    inRange: "In range",
+    measurements: "Measurements",
+    notReviewed: "Read automatically · not yet reviewed by your care team",
+    reviewed: "Reviewed by your care team",
+    seeInRecords: "See in Records",
+  };
+}

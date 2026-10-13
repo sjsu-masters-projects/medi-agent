@@ -20,6 +20,14 @@ env:
 permissions:
   contents: read
 
+# One deploy at a time, in push order. Two merges a few seconds apart once ran in
+# parallel: the older build finished last, took the traffic and deleted the newer image.
+# A queued run waits rather than cancelling the one in progress; when several are queued,
+# only the newest runs, and it builds the latest main.
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Build & Deploy

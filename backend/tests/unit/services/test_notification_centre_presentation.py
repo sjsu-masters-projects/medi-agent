@@ -406,3 +406,14 @@ def test_property_2_patient_request_link_stays_inside_the_allowlist(source_id, e
             assert assessment in (None, str(UUID(str(source_id).strip("{}")))), context
         else:
             assert assessment == expected, f"{link!r} for {context}"
+
+
+def test_critical_result_alert_opens_the_exact_document_without_health_detail():
+    raw = item(event_type="critical_result", category="safety")
+    shown = present_item(raw, "clinician", "en-US")
+    assert shown.title == "Critical test result reported"
+    link, label, _ = destination(raw, "clinician")
+    assert link == f"/patients/{raw['patient_id']}?tab=documents#document-{raw['source_id']}"
+    assert label == "Open document"
+    # No test name, value or patient identifier in the copy itself.
+    assert "Potassium" not in shown.body and raw["patient_id"] not in shown.body

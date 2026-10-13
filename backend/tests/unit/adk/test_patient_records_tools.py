@@ -179,3 +179,55 @@ def test_conversation_titles_are_one_line_and_cut_at_a_word() -> None:
     assert conversation_title("  What is\nmetformin for? ") == "What is metformin for?"
     long = conversation_title("word " * 40)
     assert long.endswith("…") and len(long) <= 81 and "  " not in long
+
+
+def test_result_details_keep_the_reports_range_and_flag() -> None:
+    from app.adk.tools.patient_records import _fact_entry
+
+    entry = _fact_entry(
+        {
+            "fact_type": "lab_result",
+            "review_state": "pending_review",
+            "value": {
+                "test_name": "Hemoglobin A1c",
+                "value": "7.8",
+                "unit": "%",
+                "reference_range": "4.0 - 5.6",
+                "flag": "H",
+                "flag_meaning": "high",
+                "range_status": "above",
+                "consistency": "reviewer-only note",
+            },
+        },
+        [{"excerpt": "Hemoglobin A1c | 7.8 | H", "location": {"page": 1}}],
+    )
+    assert entry["details"] == {
+        "test_name": "Hemoglobin A1c",
+        "value": "7.8",
+        "unit": "%",
+        "reference_range": "4.0 - 5.6",
+        "flag": "H",
+        "flag_meaning": "high",
+        "range_status": "above",
+    }
+    assert entry["review_status"] == "not yet reviewed by the care team"
+    assert entry["page"] == 1
+
+
+def test_stopped_medication_is_labelled_for_the_assistant() -> None:
+    from app.adk.tools.patient_records import _fact_entry
+
+    entry = _fact_entry(
+        {
+            "fact_type": "medication",
+            "review_state": "approved",
+            "value": {
+                "name": "Glipizide",
+                "dosage": "5 mg",
+                "status": "STOP",
+                "medication_action": "stopped",
+            },
+        },
+        [],
+    )
+    assert entry["details"]["medication_action"] == "stopped"

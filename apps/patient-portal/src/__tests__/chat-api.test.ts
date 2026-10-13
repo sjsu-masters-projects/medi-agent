@@ -1,10 +1,46 @@
 import {
     buildChatWebSocketUrl,
+    fetchChatHistory,
     mapChatMessageFromApi,
     mapClinicianMessageFromApi,
 } from "@/services/chat-api";
 import { Locale } from "@/types";
 import { describe, expect, it, vi } from "vitest";
+
+const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock("@/services/api", () => ({ api: { get } }));
+
+const RESULT_ROW = {
+    kind: "lab_result",
+    name: "Potassium",
+    value: "6.9",
+    unit: "mmol/L",
+    reference_range: "3.5-5.1",
+    flag: "HH",
+    flag_meaning: "critical",
+    range_status: "above",
+    panel: "Basic metabolic panel",
+    observed_at: "10/01/2026",
+    page: 1,
+    reviewed: false,
+};
+
+const RESULTS_ATTACHMENT = {
+    type: "document_results",
+    document_id: "doc-1",
+    file_name: "labs.pdf",
+    title: { "en-US": "Lab report", "es-MX": "Reporte de laboratorio" },
+    results: [RESULT_ROW],
+};
+
+const ASSISTANT_ROW = {
+    content: "Your potassium was printed as critical.",
+    created_at: "2026-10-13T10:00:00Z",
+    id: "msg-2",
+    language: Locale.EN_US,
+    patient_id: "patient-1",
+    role: "assistant" as const,
+};
 
 describe("chat API helpers", () => {
     it("maps snake_case chat rows to shared camelCase contract", () => {
@@ -29,6 +65,68 @@ describe("chat API helpers", () => {
             patientId: "patient-1",
             role: "assistant",
         });
+    });
+
+    it("maps a server-built results card and leaves messages without one unchanged", () => {
+        expect(mapChatMessageFromApi({ ...ASSISTANT_ROW, attachments: [RESULTS_ATTACHMENT] }).attachments).toEqual([
+            {
+                type: "document_results",
+                documentId: "doc-1",
+                fileName: "labs.pdf",
+                title: { "en-US": "Lab report", "es-MX": "Reporte de laboratorio" },
+                results: [RESULT_ROW],
+            },
+        ]);
+        for (const attachments of [undefined, null, []]) {
+            const mapped = mapChatMessageFromApi({ ...ASSISTANT_ROW, attachments });
+            expect(mapped).toStrictEqual(mapChatMessageFromApi(ASSISTANT_ROW));
+            expect("attachments" in mapped).toBe(false);
+        }
+    });
+
+    it("drops malformed rows, malformed cards and unknown attachment types", () => {
+        const mapped = mapChatMessageFromApi({
+            ...ASSISTANT_ROW,
+            attachments: [
+                null,
+                "document_results",
+                { type: "medication_card", document_id: "doc-1", results: [RESULT_ROW] },
+                { ...RESULTS_ATTACHMENT, document_id: "" },
+                { ...RESULTS_ATTACHMENT, results: "Potassium 6.9" },
+                { ...RESULTS_ATTACHMENT, results: [{ ...RESULT_ROW, value: "" }, { kind: "diagnosis", name: "x", value: "y" }] },
+                {
+                    ...RESULTS_ATTACHMENT,
+                    document_id: "doc-2",
+                    file_name: 42,
+                    title: { "en-US": "  ", "es-MX": 7, fr: "Rapport" },
+                    results: [{ name: "Missing kind", value: "1" }, { ...RESULT_ROW, flag_meaning: "dangerous", reviewed: "yes" }],
+                },
+            ],
+        });
+        expect(mapped.attachments).toEqual([
+            {
+                type: "document_results",
+                documentId: "doc-2",
+                fileName: null,
+                title: {},
+                results: [{ ...RESULT_ROW, flag_meaning: null, reviewed: false }],
+            },
+        ]);
+        expect("attachments" in mapChatMessageFromApi({
+            ...ASSISTANT_ROW,
+            attachments: [{ type: "unknown" }, { ...RESULTS_ATTACHMENT, results: [] }],
+        })).toBe(false);
+    });
+
+    it("keeps results cards on REST chat history", async () => {
+        get.mockResolvedValueOnce([
+            { ...ASSISTANT_ROW, id: "msg-1", attachments: null },
+            { ...ASSISTANT_ROW, attachments: [RESULTS_ATTACHMENT] },
+        ]);
+        const history = await fetchChatHistory("patient-1", "token", "chat-1");
+        expect(get).toHaveBeenCalledWith("/api/v1/chat/history/patient-1?session_id=chat-1", { token: "token" });
+        expect(history[0].attachments).toBeUndefined();
+        expect(history[1].attachments?.[0]).toMatchObject({ documentId: "doc-1", results: [RESULT_ROW] });
     });
 
     it("builds websocket URL using backend origin, without the token", () => {

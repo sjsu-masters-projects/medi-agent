@@ -20,13 +20,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from app.adk.agents.care_coordinator.prompts import CARE_COORDINATOR_INSTRUCTION
 from app.agents.ingestion.prompts import (
     EXTRACT_CONTENT_SYSTEM,
     GENERATE_SUMMARY_SYSTEM,
-    GENERATE_SUMMARY_USER,
     extraction_prompt,
+    summary_prompt,
 )
 from app.followup.models import SymptomExtractionResult
 from app.followup.prompts import (
@@ -47,7 +48,6 @@ from app.models.generation import GenerationErrorCode, GenerationRequest, Provid
 from app.safety import IntentType, UrgencyType, deterministic_safety_floor
 from app.services.eval_statistics import bootstrap_mean_interval
 from app.services.triage_prompts import (
-    TRIAGE_CLASSIFICATION_SYSTEM_INSTRUCTION,
     build_triage_classification_prompt,
 )
 
@@ -130,6 +130,24 @@ class EvalFollowUp(BaseModel):
     provider: str | None = None
 
 
+class EvalLabResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    test_name: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+    unit: str | None = None
+    reference_range: str | None = None
+    flag: str | None = None
+    evidence: Evidence = None
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def _printed_text(cls, value: object) -> object:
+        return (
+            str(value) if isinstance(value, int | float) and not isinstance(value, bool) else value
+        )
+
+
 class DocumentExtractionOutput(BaseModel):
     """The ingestion prompt's contract, typed. Unknown sections are ignored."""
 
@@ -139,6 +157,7 @@ class DocumentExtractionOutput(BaseModel):
     conditions: list[EvalExtractedCondition] = Field(default_factory=list)
     allergies: list[EvalExtractedAllergy] = Field(default_factory=list)
     follow_up_instructions: list[EvalFollowUp] = Field(default_factory=list)
+    lab_results: list[EvalLabResult] = Field(default_factory=list)
 
 
 class DiscrepancyType(StrEnum):
@@ -458,7 +477,18 @@ def build_request(
     return builders[scenario.workload](scenario, variant)
 
 
+# The production coordinator reports its decision with `submit_triage_decision` after
+# reading the record through tools. A single scored generation has no tools, so the record
+# those tools would return is given in the prompt and the tool's arguments are the answer.
+PRODUCTION_TRIAGE_EVAL_ADDENDUM = """
+For this evaluation you cannot call tools and you do not write working notes. The record
+context the tools would return is included in the message below. Instead of calling
+`submit_triage_decision`, return exactly its arguments as one JSON object with the keys
+"reason", "intent" and "urgency", and nothing else."""
+
+
 def _build_triage_request(scenario: EvalScenario, _variant: PromptVariant) -> GenerationRequest:
+    """Score the instruction production runs: the Care Coordinator's, not a stand-in."""
     inputs = scenario.inputs
     prompt = build_triage_classification_prompt(
         message=str(inputs["message"]),
@@ -470,7 +500,7 @@ def _build_triage_request(scenario: EvalScenario, _variant: PromptVariant) -> Ge
     )
     return GenerationRequest(
         prompt=prompt,
-        system_instruction=TRIAGE_CLASSIFICATION_SYSTEM_INSTRUCTION,
+        system_instruction=f"{CARE_COORDINATOR_INSTRUCTION}\n{PRODUCTION_TRIAGE_EVAL_ADDENDUM}",
         temperature=0.1,
         max_tokens=1024,
         task=scenario.workload.value,
@@ -486,8 +516,10 @@ def _build_document_request(scenario: EvalScenario, variant: PromptVariant) -> G
     return GenerationRequest(
         prompt=extraction_prompt(str(scenario.inputs["document_text"])),
         system_instruction=system,
-        temperature=0.3,
-        max_tokens=4096,
+        # Production settings (ingestion_service._extract_structured), so the eval measures
+        # what ships.
+        temperature=0.1,
+        max_tokens=8192,
         task=scenario.workload.value,
         response_schema=json_schema_for(DocumentExtractionOutput),
     )
@@ -547,13 +579,7 @@ def _build_explanation_request(
     scenario: EvalScenario, _variant: PromptVariant
 ) -> GenerationRequest:
     inputs = scenario.inputs
-    prompt = GENERATE_SUMMARY_USER.format(
-        medications=json.dumps(inputs.get("medications", []), ensure_ascii=False, default=str),
-        conditions=json.dumps(inputs.get("conditions", []), ensure_ascii=False, default=str),
-        follow_up_instructions=json.dumps(
-            inputs.get("follow_up_instructions", []), ensure_ascii=False, default=str
-        ),
-    )
+    prompt = summary_prompt(inputs)
     system = GENERATE_SUMMARY_SYSTEM
     if scenario.locale == "es-MX":
         # Production generates English and translates in a second call. Generating in the
@@ -769,6 +795,17 @@ def _score_document(scenario: EvalScenario, text: str, base: ScenarioScore) -> S
         fields_total += 1
         allergen = str(expected_allergy.get("substance") or expected_allergy.get("allergen") or "")
         if allergen and _find_match(allergen, [a.substance for a in parsed.allergies]) is not None:
+            fields_correct += 1
+
+    for expected_result in expected.get("lab_results", []):
+        # A result counts only with its exact printed value: 8.4 and 8.5 are different.
+        fields_total += 1
+        index = _find_match(
+            str(expected_result["test_name"]), [r.test_name for r in parsed.lab_results]
+        )
+        if index is not None and parsed.lab_results[index].value.strip() == str(
+            expected_result["value"]
+        ):
             fields_correct += 1
 
     # A medication the document mentions as stopped may reasonably be listed; it is not a

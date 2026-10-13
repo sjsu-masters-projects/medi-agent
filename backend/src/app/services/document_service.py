@@ -16,10 +16,20 @@ from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.enums import DocumentReviewStatus, UploaderRole
+from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_processing_status import attach_duplicate_status
 from app.services.document_summary_service import is_missing_summary_column_error
 
 logger = logging.getLogger(__name__)
+
+_RESULT_FACT_TYPES = frozenset({"lab_result", "vital_sign"})
+
+
+def _source_order(fact: dict[str, Any]) -> tuple[int, str]:
+    """Printed order: candidate keys end in the item's index within the document."""
+    key = str(fact.get("external_source_key") or "")
+    tail = key.rsplit("/", 1)[-1]
+    return (int(tail) if tail.isdigit() else 1_000_000, str(fact.get("created_at") or ""))
 
 
 def _is_missing_source_document_column_error(error: APIError, table_name: str) -> bool:
@@ -148,6 +158,80 @@ class DocumentService:
         # Refresh the signed URL
         self._attach_view_urls(data)
         return data
+
+    def list_document_results(self, document_id: UUID, patient_id: UUID) -> list[dict[str, Any]]:
+        """The patient's own test results and measurements from one document, as printed.
+
+        Ownership is checked first. Rejected and deleted candidates are left out; pending
+        ones are returned marked as not yet reviewed, never as confirmed.
+        """
+        self._get_document_row(document_id, patient_id)
+        facts = [
+            fact
+            for fact in ClinicalFactService(self.db).list_facts_for_document(
+                document_id, patient_id
+            )
+            if fact.get("fact_type") in _RESULT_FACT_TYPES
+            and fact.get("review_state") in ("pending_review", "approved")
+        ]
+        facts.sort(key=_source_order)
+        pages = self._fact_pages(document_id, [str(fact["id"]) for fact in facts])
+        results: list[dict[str, Any]] = []
+        for fact in facts:
+            value = cast(dict[str, Any], fact.get("value") or {})
+            lab = fact.get("fact_type") == "lab_result"
+            name = value.get("test_name") if lab else value.get("name")
+            if not name or not value.get("value"):
+                continue
+            results.append(
+                {
+                    "kind": fact["fact_type"],
+                    "name": str(name),
+                    "value": str(value["value"]),
+                    "unit": value.get("unit"),
+                    "reference_range": value.get("reference_range") if lab else None,
+                    "flag": value.get("flag") if lab else None,
+                    "flag_meaning": value.get("flag_meaning") if lab else None,
+                    "range_status": value.get("range_status") if lab else None,
+                    "panel": value.get("panel") if lab else None,
+                    "observed_at": value.get("collected_at" if lab else "measured_at"),
+                    "page": pages.get(str(fact["id"])),
+                    "reviewed": fact.get("review_state") == "approved",
+                }
+            )
+        return results
+
+    def _fact_pages(self, document_id: UUID, fact_ids: list[str]) -> dict[str, int]:
+        """The page each fact was read on, from this document's own citations."""
+        if not fact_ids:
+            return {}
+        provenance = cast(
+            list[dict[str, Any]],
+            self.db.table("source_provenances")
+            .select("id")
+            .eq("document_id", str(document_id))
+            .execute()
+            .data
+            or [],
+        )
+        if not provenance:
+            return {}
+        rows = cast(
+            list[dict[str, Any]],
+            self.db.table("evidence_citations")
+            .select("fact_id, location")
+            .in_("fact_id", fact_ids)
+            .in_("provenance_id", [str(row["id"]) for row in provenance])
+            .execute()
+            .data
+            or [],
+        )
+        pages: dict[str, int] = {}
+        for row in rows:
+            page = (row.get("location") or {}).get("page")
+            if isinstance(page, int):
+                pages.setdefault(str(row["fact_id"]), page)
+        return pages
 
     def _get_document_row(self, document_id: UUID, patient_id: UUID) -> dict[str, Any]:
         """Fetch a patient-owned document row without mutating signed URLs."""

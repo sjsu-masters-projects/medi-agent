@@ -4,6 +4,9 @@
 > Requirements 1 to 14 (PR 1, PR 2) were approved by the requester on 2026-10-12; requirements 15 to 24 (PR 3) were
 > added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`, tasks in
 > `tasks.md`.
+> **Migration numbers:** 059 and 060 in this spec were working names. `origin/main` has since taken 059 to 061
+> (critical-result alerts), so the PR 2 and PR 3 migrations take the next free numbers and are found by name in the
+> contract-test fixture (`*_adr_information_loop_lifecycle.sql`).
 > **Worktree / branch:** `.worktrees/adr-loop-gaps`, `fix/adr-information-loop-gaps`, based on `origin/main` `87a466d`
 > (drafted at `62a1945`; the only later commit is the #157 email-branding change, re-checked: no ADR copy, category
 > or link impact; `email_service.py` keeps the `adr_information_requested` titles and links every notice to

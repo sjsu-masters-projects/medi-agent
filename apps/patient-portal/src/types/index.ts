@@ -6,6 +6,9 @@
  * these re-exports make migration a one-line change.
  */
 
+import type { ChatMessage as SharedChatMessage } from "../../../../packages/shared/src/types";
+import type { ChatAttachment } from "./chat-attachments";
+
 export type {
     LocaleMetadata,
     LocaleResourceMap,
@@ -13,7 +16,6 @@ export type {
     Medication,
     Obligation,
     Document,
-    ChatMessage,
     ChatAppointmentProposal,
     Notification,
     Appointment,
@@ -36,6 +38,14 @@ export type {
     ApiErrorResponse,
     PaginatedResponse,
 } from "../../../../packages/shared/src/types";
+
+export type { ChatAttachment, ChatDocumentResultsAttachment } from "./chat-attachments";
+
+/** A chat message as the patient portal shows it, with any server-built cards under it. */
+export interface ChatMessage extends SharedChatMessage {
+    /** Absent for messages that carry no card, including every older message. */
+    attachments?: ChatAttachment[];
+}
 
 export {
     Locale,

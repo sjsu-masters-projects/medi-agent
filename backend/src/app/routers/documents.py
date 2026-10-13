@@ -20,7 +20,7 @@ from supabase import Client
 from app.core.security import get_current_user, require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
-from app.models.document import DocumentRead
+from app.models.document import DocumentRead, DocumentResultRead
 from app.models.enums import DocumentType, Language, coerce_locale
 from app.services.document_service import DocumentService
 from app.services.explanation_service import (
@@ -225,6 +225,19 @@ async def get_document(
     service: DocumentService = Depends(_get_service),
 ) -> Any:
     return await service.get_document(document_id, user.id)
+
+
+@router.get(
+    "/{document_id}/results",
+    response_model=list[DocumentResultRead],
+    summary="Test results and measurements read from one of my documents",
+)
+async def get_document_results(
+    document_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+    service: DocumentService = Depends(_get_service),
+) -> Any:
+    return service.list_document_results(document_id, user.id)
 
 
 @router.delete(

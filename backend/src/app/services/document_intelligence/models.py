@@ -140,6 +140,9 @@ class PageExtraction(BaseModel):
     height: float
     source_rotation: int = 0
     rotation_applied: int = 0
+    # Counter-clockwise straightening applied before OCR; when non-zero, coordinates
+    # and ``width``/``height`` describe the straightened frame, as with rotation.
+    deskew_degrees: float = 0.0
     render_dpi: int | None = None
     languages: list[str] = Field(default_factory=list)
     words: list[WordBox] = Field(default_factory=list)
@@ -154,6 +157,50 @@ class PageExtraction(BaseModel):
     @property
     def has_words(self) -> bool:
         return bool(self.words)
+
+    def model_header(self) -> str:
+        """Page delimiter for model input that also says how the text was read.
+
+        OCR misreads digits (a dropped decimal turns 4.0 into 40), so the extraction
+        model is told which pages were recognized from an image and which of those were
+        read with low confidence. Embedded text keeps the bare ``[[page N]]`` form.
+        """
+        if self.method is not ExtractionMethod.OCR:
+            return f"[[page {self.page_number}]]"
+        if self.quality is PageQuality.LOW:
+            return f"[[page {self.page_number} — OCR, low confidence: verify numbers]]"
+        return f"[[page {self.page_number} — OCR]]"
+
+    def layout_text(self) -> str:
+        """The page as visual rows: lines that share a baseline, left to right.
+
+        PDF text layers and OCR both emit a table cell as its own line, so a lab row
+        reaches a model as "Hemoglobin A1c", "7.8", "H", "%" on separate lines, and a flag
+        printed on only some rows is easy to attach to the wrong test. Rows keep each
+        result with its value, unit, flag and range. ``text`` is unchanged for anchoring.
+        """
+        if not self.lines:
+            return self.text
+        rows: list[list[TextLine]] = []
+        for line in sorted(self.lines, key=lambda item: (item.bbox.y0, item.bbox.x0)):
+            row = rows[-1] if rows else None
+            if row is not None and _same_row(row, line):
+                row.append(line)
+            else:
+                rows.append([line])
+        return "\n".join(
+            " | ".join(line.text for line in sorted(row, key=lambda item: item.bbox.x0))
+            for row in rows
+        )
+
+
+def _same_row(row: list[TextLine], line: TextLine) -> bool:
+    """A line joins a row when most of the shorter one's height overlaps the row band."""
+    top = min(item.bbox.y0 for item in row)
+    bottom = max(item.bbox.y1 for item in row)
+    overlap = min(bottom, line.bbox.y1) - max(top, line.bbox.y0)
+    shorter = min(bottom - top, line.bbox.y1 - line.bbox.y0)
+    return shorter > 0 and overlap >= 0.5 * shorter
 
 
 class DocumentExtraction(BaseModel):
@@ -194,7 +241,7 @@ class DocumentExtraction(BaseModel):
         included: garbled OCR is the input most likely to make a model invent a dose.
         """
         return "\n\n".join(
-            f"[[page {page.page_number}]]\n{page.text}" for page in self.model_input_pages()
+            f"{page.model_header()}\n{page.layout_text()}" for page in self.model_input_pages()
         )
 
     def page(self, page_number: int) -> PageExtraction | None:

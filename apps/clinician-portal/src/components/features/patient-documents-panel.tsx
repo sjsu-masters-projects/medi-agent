@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/icons";
 import { ProcessingDots } from "@/components/ui/motion";
 import { DocumentSummary } from "@/components/features/document-summary";
 import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
+import { ExtractedFactCandidates } from "@/components/features/extracted-fact-candidates";
 import {
     DocumentTypeTile,
     ParseStatusBadge,
@@ -28,6 +29,7 @@ import {
     getDocumentTypeLabel,
 } from "@/types";
 import type { ClinicianDocumentSource, ExtractedDocumentFact } from "@/services/clinicians";
+import { formatClinicianDate, formatClinicianDateTime } from "@/utils/dates";
 
 const compactSecondary =
     "ma-press inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]";
@@ -42,34 +44,6 @@ interface PatientDocumentsPanelProps {
     documents: ClinicianPatientDocument[];
     patientId: string;
     onRefresh: () => void;
-}
-
-const FACT_FIELD_LABELS: Record<string, string> = {
-    dosage: "Dose",
-    frequency: "Frequency",
-    instructions: "Instructions",
-    name: "Medication",
-    route: "Route",
-};
-
-function formatFactField(value: unknown): string {
-    if (typeof value === "string" || typeof value === "number") {
-        return String(value);
-    }
-    return JSON.stringify(value) ?? "Not supplied";
-}
-
-function factFields(fact: ExtractedDocumentFact): Array<[string, string]> {
-    return Object.entries(fact.value).map(([key, value]) => [
-        FACT_FIELD_LABELS[key] ?? key.replaceAll("_", " "),
-        formatFactField(value),
-    ]);
-}
-
-function candidateState(fact: ExtractedDocumentFact): string {
-    return fact.review_state === "pending_review"
-        ? "Pending clinician review"
-        : fact.review_state.replaceAll("_", " ");
 }
 
 function formatReviewerName(
@@ -326,7 +300,7 @@ export function PatientDocumentsPanel({
                                         <div className="flex min-w-0 items-start gap-1.5"><SourceFileIcon className="mt-0.5" name={doc.fileName} /><div className="min-w-0">{doc.displayTitle?.["en-US"] ? <p className="break-words text-sm font-semibold text-ink">{doc.displayTitle["en-US"]}</p> : null}<p className={doc.displayTitle?.["en-US"] ? "break-all font-mono text-[11px] text-muted" : "break-words text-sm font-semibold text-ink"}>{doc.fileName}</p></div></div>
                                         <p className="mt-0.5 text-xs text-muted">
                                             <span className="capitalize">{getDocumentTypeLabel(doc.documentType)}</span> ·{" "}
-                                            <time className="font-mono" dateTime={doc.createdAt}>{new Date(doc.createdAt).toLocaleDateString()}</time> ·
+                                            <time className="font-mono" dateTime={doc.createdAt}>{formatClinicianDate(doc.createdAt)}</time> ·
                                             uploaded by {doc.uploadedByRole}
                                         </p>
                                         {doc.uploadedByRole === UploaderRole.PATIENT &&
@@ -339,7 +313,7 @@ export function PatientDocumentsPanel({
                                                         ? "Approved"
                                                         : "Rejected"}
                                                     {doc.reviewedAt
-                                                        ? ` on ${new Date(doc.reviewedAt).toLocaleString()}`
+                                                        ? ` on ${formatClinicianDateTime(doc.reviewedAt)}`
                                                         : ""}
                                                     {formatReviewerName(doc.reviewer)
                                                         ? ` by ${formatReviewerName(doc.reviewer)}`
@@ -562,36 +536,7 @@ export function PatientDocumentsPanel({
                         <div className="grid gap-4 lg:grid-cols-2">
                             <div className="space-y-2.5">
                                 <AiChip>AI-extracted candidates</AiChip>
-                                <div className="space-y-2.5" role="list" aria-label="Extracted fact candidates">
-                                    {facts.map((fact) => (
-                                        <button
-                                            aria-pressed={selectedFactId === fact.id}
-                                            className={`ma-press w-full rounded-xl border p-3.5 text-left ${selectedFactId === fact.id ? "border-primary bg-primary-tint" : "border-line bg-surface hover:bg-surface-2"}`}
-                                            key={fact.id}
-                                            onClick={() => setSelectedFactId(fact.id)}
-                                            type="button"
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <p className="text-sm font-semibold capitalize text-ink">{fact.fact_type}</p>
-                                                    <p className="mt-1 text-xs font-medium text-warn-ink">{candidateState(fact)}</p>
-                                                </div>
-                                                <span className="whitespace-nowrap rounded-[7px] bg-warn-soft px-2 py-1 text-xs font-medium text-warn-ink">
-                                                    {fact.confidence_score === null || fact.confidence_score === undefined ? "Confidence unavailable" : <><span className="font-mono">{Math.round(fact.confidence_score * 100)}%</span> confidence</>}
-                                                </span>
-                                            </div>
-                                            <dl className="mt-3 space-y-1 text-sm text-ink-2">
-                                                {factFields(fact).map(([label, value]) => (
-                                                    <div className="grid grid-cols-[7rem_1fr] gap-2" key={label}>
-                                                        <dt className="text-[13px] font-medium capitalize text-muted">{label}</dt>
-                                                        <dd className="break-words">{value}</dd>
-                                                    </div>
-                                                ))}
-                                            </dl>
-                                            {fact.citations?.[0]?.excerpt ? <p className="mt-3 border-l-2 border-line-strong pl-3 text-xs text-ink-2">“{fact.citations[0].excerpt}”{fact.citations[0].location?.page ? ` · page ${fact.citations[0].location.page}` : ""}</p> : null}
-                                        </button>
-                                    ))}
-                                </div>
+                                <ExtractedFactCandidates facts={facts} onSelect={setSelectedFactId} selectedFactId={selectedFactId} />
                             </div>
                             <div className="min-h-80 space-y-3">
                                 <p className="text-sm font-semibold text-ink">Protected source preview</p>
