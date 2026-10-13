@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.enums import ADRStatus, MedWatchStatus, NaranjoCausality
 from app.pharmacovigilance import (
@@ -186,6 +186,61 @@ class ADRInformationRequestRead(BaseModel):
     current_causality: NaranjoCausality
     status: ADRInformationRequestStatus
     created_at: str
+
+
+ADR_FOLLOW_UP_RECENT_LIMIT = 5
+
+
+def _patient_answerable_questions(value: object) -> list[str]:
+    """Keep allowlisted Question_Keys only, in first-seen order without duplicates."""
+    if not isinstance(value, list | tuple):
+        return []
+    allowed = {question.value for question in PATIENT_ANSWERABLE_NARANJO_QUESTIONS}
+    return list(dict.fromkeys(item for item in value if isinstance(item, str) and item in allowed))
+
+
+class ADRFollowUpResponseItem(BaseModel):
+    """One answer the patient already confirmed and sent for a follow-up request."""
+
+    question: NaranjoQuestion
+    answer: NaranjoAnswer
+    evidence: str | None = None
+
+
+class ADRFollowUpRequestRead(BaseModel):
+    """Patient-visible follow-up request in any lifecycle state.
+
+    This intentionally carries no Naranjo score or causality. The patient sees the
+    care team's questions, their own answers and the request's status only.
+    """
+
+    id: UUID
+    adr_assessment_id: UUID
+    status: ADRInformationRequestStatus
+    symptom: str
+    suspect_medication_name: str
+    requested_information: list[NaranjoQuestion] = Field(default_factory=list)
+    patient_message: str
+    created_at: str
+    responded_at: str | None = None
+    closed_at: str | None = None
+    responses: list[ADRFollowUpResponseItem] = Field(default_factory=list)
+    replacement_request_id: UUID | None = None
+
+    @field_validator("requested_information", mode="before")
+    @classmethod
+    def keep_patient_answerable_questions(cls, value: object) -> list[str]:
+        return _patient_answerable_questions(value)
+
+
+class ADRFollowUpOverviewRead(BaseModel):
+    """Selected request, pending requests and bounded recent history for the patient."""
+
+    selected: ADRFollowUpRequestRead | None = None
+    pending: list[ADRFollowUpRequestRead] = Field(default_factory=list)
+    recent: list[ADRFollowUpRequestRead] = Field(
+        default_factory=list, max_length=ADR_FOLLOW_UP_RECENT_LIMIT
+    )
 
 
 class ADRInformationResponseRead(BaseModel):
