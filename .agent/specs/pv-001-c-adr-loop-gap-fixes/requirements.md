@@ -4,9 +4,10 @@
 > Requirements 1 to 14 (PR 1, PR 2) were approved by the requester on 2026-10-12; requirements 15 to 24 (PR 3) were
 > added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`, tasks in
 > `tasks.md`.
-> **Migration numbers:** 059 and 060 in this spec were working names. `origin/main` has since taken 059 to 061
-> (critical-result alerts), so the PR 2 and PR 3 migrations take the next free numbers and are found by name in the
-> contract-test fixture (`*_adr_information_loop_lifecycle.sql`).
+> **Migration numbers:** the drafts used the working names 059 and 060. `origin/main` has since taken 059 to 062
+> (critical-result alerts and chat attachments), so PR 2 is `063_adr_information_loop_lifecycle.sql` and PR 3 is
+> `064_medwatch_form_3500.sql`. The contract-test fixture finds the PR 2 file by name
+> (`*_adr_information_loop_lifecycle.sql`).
 > **Worktree / branch:** `.worktrees/adr-loop-gaps`, `fix/adr-information-loop-gaps`, based on `origin/main` `87a466d`
 > (drafted at `62a1945`; the only later commit is the #157 email-branding change, re-checked: no ADR copy, category
 > or link impact; `email_service.py` keeps the `adr_information_requested` titles and links every notice to
@@ -29,8 +30,8 @@ bilingual wording, NORA-002 daily conversations and the account-deletion work (0
 `62a1945`, re-checked at `87a466d`, shows ten gaps (G1 to G10). This spec fixes them in two deliverables:
 
 - **PR 1, patient and clinician surfaces (no migration):** G1 to G5.
-- **PR 2, notification lifecycle and data deletion (one new migration, 059, written but not applied):** G6 to G10.
-- **PR 3, MedWatch Form 3500 fidelity, preview and export (one new migration, 060, written but not applied; owner
+- **PR 2, notification lifecycle and data deletion (one new migration, 063, written but not applied):** G6 to G10.
+- **PR 3, MedWatch Form 3500 fidelity, preview and export (one new migration, 064, written but not applied; owner
   Rajeev):** the draft becomes a structured, non-identifying Form FDA 3500 (not 3500A) with a read-only preview, an
   official-PDF download, a clinician-recorded external submission and discard/reopen (D8, now in scope). The app
   still never submits to the FDA (PROJECT.md: MedWatch "Draft only"; submitting a regulatory report "Prohibited").
@@ -74,7 +75,7 @@ No change to who may request information.
 - **Presentation_Layer**: `backend/src/app/services/notification_centre_presentation.py`, which builds titles,
   bodies, links and action labels from allowlisted copy.
 - **Capture_Trigger**: `private.capture_notification_source()` (latest definition: 055) and its source-table triggers.
-- **Actionable**: the result of `private.notification_actionable()` (latest definition: 054). An actionable item is
+- **Actionable**: the result of `private.notification_actionable()` (latest definition: `059_critical_result_alerts.sql`). An actionable item is
   an open task. A non-actionable item is History.
 - **Legacy_Notification_Row**: the English-only `public.notifications` row (`adr_alert`, "Your care team has
   follow-up questions", `action_url` `/chat`, `dedupe_key` `adr-information-request:<id>`) inserted by 047.
@@ -85,7 +86,7 @@ No change to who may request information.
 - **MedWatch_Draft**: a row in `public.medwatch_drafts` (`draft`, `reviewed`, `submitted`; the app never sets `submitted`
   today; after PR 3, a submitted state is reachable only by a clinician recording an External_Submission_Record).
 - **UI_Standard**: Requirement 1.
-- **Migration_059**: the single new migration, `backend/src/app/db/migrations/059_*.sql`, written but not applied.
+- **Migration_063**: the single new migration, `backend/src/app/db/migrations/063_*.sql`, written but not applied.
 - **Contract_Test**: the opt-in Docker `postgres:16` test (pattern: `backend/tests/integration/test_notification_centre_postgres.py`).
 - **ADR_Database**: the ADR and MedWatch tables, RPCs and triggers in PostgreSQL.
 - **ADR_API**: the backend ADR endpoints and services (`routers/patients.py`, `patient_service.py`, `clinician_service.py`).
@@ -99,7 +100,7 @@ No change to who may request information.
 - **External_Submission_Record**: a clinician's attested record that they submitted an approved MedWatch_Draft to the
   FDA themselves, outside MediAgent. It holds the date, method, optional FDA reference and the recording clinician.
   Creating it sends nothing anywhere.
-- **Migration_060**: the single PR 3 migration, `backend/src/app/db/migrations/060_*.sql`, written but not applied.
+- **Migration_064**: the single PR 3 migration, `backend/src/app/db/migrations/064_*.sql`, written but not applied.
 
 ## Requirements
 
@@ -201,7 +202,7 @@ approve rollout without ambiguity.
 #### Acceptance Criteria
 
 1. THE PR 1 changeset SHALL contain no SQL migration file, and THE PR 2 changeset SHALL contain exactly one new
-   migration file, numbered 059. *Evidence: Design.*
+   migration file, numbered 063. *Evidence: Design.*
 2. THE changes SHALL keep MedWatch draft and export only, with no code path that submits a report to the FDA.
    *Evidence: Observed. `medwatch_drafts_not_submitted_by_app` and the page copy "Not submitted to FDA".*
 3. THE changes SHALL keep the three Question_Key values, the Naranjo scoring and the set of clinicians allowed to
@@ -210,7 +211,7 @@ approve rollout without ambiguity.
    (`private.email_preference` in 057).*
 5. WHEN implementation starts, THE contributor SHALL first add a scoped task entry to `.agent/TASKS.md` and SHALL
    update the PV-001, PV-001-B, PV-002 and NOT-003 rows, the "Synthetic database schema" row (048 MedWatch applied
-   by the requester to `mediagent-staging` on 2026-10-12, ledger synchronized through 058; 059 written and not
+   by the requester to `mediagent-staging` on 2026-10-12, ledger synchronized through 058; 063 written and not
    applied anywhere), the NOT-001 specification and the ADR section of `apps/patient-portal/README.md` when
    behaviour changes. *Evidence: Observed. TASKS.md still describes 048 MedWatch as unapplied and lists applied
    migrations only through 056; the applied date and ledger state are requester-supplied facts.*
@@ -430,7 +431,7 @@ Only real defects are listed. Everything else reviewed is recorded under "Out of
    Requirement 1.17. *Evidence: Observed.*
 10. THE Clinician_Portal SHALL satisfy Requirement 1 for the two draft components and the page states. *Evidence: Design.*
 
-## PR 2 - Notification lifecycle and data deletion (migration 059, not applied)
+## PR 2 - Notification lifecycle and data deletion (migration 063, not applied)
 
 ### Requirement 9: Answering resolves the patient's action item (G6)
 
@@ -549,14 +550,14 @@ cover these tables.
    `medwatch_draft_audit_events`: no role among `anon`, `authenticated` and `service_role` SHALL hold DELETE or
    TRUNCATE on them, so the cascade is the only removal path. *Evidence: Observed. 053 revokes and verifies this for
    conversation history; 048 grants `ALL` on `medwatch_draft_audit_events` to `service_role`, and no backend code
-   deletes from either table, so Migration_059 revokes DELETE and TRUNCATE (as 053 did).*
+   deletes from either table, so Migration_063 revokes DELETE and TRUNCATE (as 053 did).*
 5. THE clinician side (deleting a clinician who requested information, authored or approved a draft) SHALL remain as
    today until decision D1 is made, and THE spec SHALL not introduce a policy for it. *Evidence: Observed. 046, 047
    and 048 reference `clinicians(id)` `ON DELETE RESTRICT`: `adr_information_requests.requested_by`,
    `adr_assessment_audit_events.actor_id`, `medwatch_drafts.created_by` / `approved_by`,
    `medwatch_draft_audit_events.actor_id`; TASKS.md NOT-003 records the open decision.*
 6. IF the Contract_Test does not reproduce criterion 1, THEN no foreign-key change SHALL ship for it and the
-   Migration_059 verification block SHALL omit the foreign-key check (Requirement 14.9). *Evidence: Design.*
+   Migration_063 verification block SHALL omit the foreign-key check (Requirement 14.9). *Evidence: Design.*
 
 ### Requirement 13: End state of cancelled and superseded requests (G10)
 
@@ -578,7 +579,7 @@ A later clinician action on the same assessment cancels pending rows (047 `revie
    requests. However 054 `notification_row` already asks for action only on the newest receipt per
    (`source_type`, `source_id`, `event_type`), and both events share the assessment as source, so the older item is
    likely already History on main. If the reproduction passes, Requirement 14.9 applies and the test stays as a
-   regression guard; Migration_059 is still needed for Requirement 9 and keeps this result once each request is its
+   regression guard; Migration_063 is still needed for Requirement 9 and keeps this result once each request is its
    own source.*
 3. WHILE a patient has an older cancelled request's notification in History, THE Notification_Centre SHALL keep its
    unread state unchanged (read is not resolution) and keep its link, which opens the closed state. *Evidence:
@@ -588,31 +589,34 @@ A later clinician action on the same assessment cancels pending rows (047 `revie
 5. WHEN a request becomes cancelled, THE Patient_Portal pending-request entry rows (Requirement 4.4) SHALL disappear on
    the next load. *Evidence: Observed (list endpoint filters `status = 'pending'`).*
 
-### Requirement 14: Migration 059 safety and contract-test coverage
+### Requirement 14: Migration 063 safety and contract-test coverage
 
 **User Story:** As the requester, I want PR 2 reviewed and verified without touching a remote environment, so that I
 decide when to apply it.
 
 #### Acceptance Criteria
 
-1. THE Migration_059 SHALL be a single new file named `059_<snake_case_name>.sql` that passes
+1. THE Migration_063 SHALL be a single new file named `063_<snake_case_name>.sql` that passes
    `backend/scripts/validate_migrations.py`, and SHALL not edit any existing migration (the ledger refuses a changed
-   file). *Evidence: Observed (CONTRIBUTING.md; 058 is the latest).*
-2. THE Migration_059 SHALL be written but not applied to any remote environment, and applying it SHALL require the
+   file). *Evidence: Observed (CONTRIBUTING.md; 062 is the latest on `main`).*
+2. THE Migration_063 SHALL be written but not applied to any remote environment, and applying it SHALL require the
    requester's explicit authorization naming that action. *Evidence: Design (AGENTS.md).*
-3. THE Migration_059 SHALL redefine changed functions with `CREATE OR REPLACE`, copying the latest definitions (051
-   `notification_source`, 054 `notification_actionable`, 055 `capture_notification_source`, 047
-   `review_adr_assessment` and `respond_to_adr_information_request`) so that no behaviour of 051 to 058 regresses.
-   *Evidence: Observed at `87a466d`: none of these is redefined in 052 to 058. `create_medwatch_draft` (048) and
-   `email_preference` (057; 058 only calls it) need no change: the former already cancels pending requests and the
-   latter returns NULL, meaning no email, for an unmapped event type.*
-4. THE Migration_059 SHALL extend the `notification_events` event-type and source-type allowlists
+3. THE Migration_063 SHALL redefine changed functions with `CREATE OR REPLACE`, copying the latest definitions (051
+   `notification_source`, `059_critical_result_alerts.sql` `notification_actionable`, 055
+   `capture_notification_source`, 047 `review_adr_assessment` and `respond_to_adr_information_request`) so that no
+   behaviour of 051 to 062 regresses, including the `critical_result` branches of 059 to 061. *Evidence: Observed at
+   `87a466d`: none of these was redefined in 052 to 058; re-checked after the merge of `origin/main`: 059 redefines
+   `notification_actionable` (and `email_preference`), 060 `notification_open_work`, 061 `notification_row` and
+   `notification_centre_operation`, none of which 063 needs to change. `create_medwatch_draft` (048) and
+   `email_preference` (latest 059) need no change: the former already cancels pending requests and the latter returns
+   NULL, meaning no email, for an unmapped event type.*
+4. THE Migration_063 SHALL extend the `notification_events` event-type and source-type allowlists
    (`notification_events_event_type_check`, `notification_events_source_type_check`, inline CHECKs in 051, never
    altered since), keep the append-only trigger, grant RPC execution to `service_role` only, add no DELETE privilege,
    and end with a fail-closed verification block (as 053 does) that raises if a patient-owned ADR or MedWatch
    reference still blocks deletion or a listed role can delete ADR or MedWatch audit rows. *Evidence: Observed (051
    constraints, 053 pattern).*
-5. THE PR 2 description SHALL state whether the backend is safe before 059 is applied or requires 059 first, because a
+5. THE PR 2 description SHALL state whether the backend is safe before 063 is applied or requires 063 first, because a
    merge deploys the backend. *Evidence: Observed (TASKS.md: "merge auto-deploys the backend").*
 6. THE Contract_Test fixture SHALL apply the ADR-related migrations in ledger (lexicographic) order, including
    `042_auditable_adr_assessments.sql` (before 046), `047_adr_patient_information_loop.sql`,
@@ -631,10 +635,10 @@ decide when to apply it.
 9. THE Contract_Test for every NEEDS REPRO criterion SHALL fail against unmodified main behaviour before the fix and
    pass after it. IF a criterion does not reproduce, THEN the corresponding schema change SHALL not ship and the test
    SHALL remain as a regression guard. *Evidence: Design (requester instruction; AGENTS.md "do not add schema solely...").*
-10. THE unit tests for Migration_059 SHALL assert its key guarantees at text level (pattern:
+10. THE unit tests for Migration_063 SHALL assert its key guarantees at text level (pattern:
     `test_adr_patient_information_loop_migration.py`). *Evidence: Observed pattern.*
 
-## PR 3 - MedWatch Form 3500 fidelity, preview and export (migration 060, not applied)
+## PR 3 - MedWatch Form 3500 fidelity, preview and export (migration 064, not applied)
 
 Owner: Rajeev. The requester added this work to the spec on 2026-10-12 and overrode TEAM.md's PV-002 assignment to
 Jeevan for it. MediAgent prepares, previews and downloads a Form_3500. The clinician submits it. MediAgent never
@@ -905,7 +909,7 @@ draft shows it was filed and cannot be changed afterwards.
 5. WHILE a draft has an External_Submission_Record, THE MedWatch_API SHALL reject edit, approval and discard, and THE
    Clinician_Portal SHALL show it read-only with "Submitted by <clinician> outside MediAgent on <date>". *Evidence:
    Observed. `list_drafts` returns only `draft` and `reviewed`, so a submitted row would vanish from the queue today.*
-6. THE Migration_060 SHALL replace `medwatch_drafts_not_submitted_by_app` with a constraint that allows the submitted
+6. THE Migration_064 SHALL replace `medwatch_drafts_not_submitted_by_app` with a constraint that allows the submitted
    state only when the row has approval and a complete External_Submission_Record. *Evidence: Observed. The 048 CHECK
    is `status = 'submitted' OR submitted_at IS NULL`; it ties `submitted_at` to the status but does not stop a
    `submitted` status, and `service_role` holds ALL on the table.*
@@ -937,13 +941,13 @@ that I can review it again or prepare a correct draft.
    email. *Evidence: Inferred. 055 captures `adr_review` when the old status is not `draft`; 054 treats `adr_review` as
    actionable while the status is `draft`; the patient predicate needs `last_review_action = 'request_information'`;
    057 maps no email category to `adr_review`. Confirm in the Contract_Test.*
-7. THE discarded state SHALL not reuse `submitted`. THE Migration_060 SHALL account for the PostgreSQL rule that an enum
+7. THE discarded state SHALL not reuse `submitted`. THE Migration_064 SHALL account for the PostgreSQL rule that an enum
    value added by `ALTER TYPE ... ADD VALUE` cannot be used in the transaction that adds it. *Evidence: Observed
    (`medwatch_status_enum` is `draft`, `reviewed`, `submitted` in 001).*
 8. THE MedWatch_API SHALL apply `expected_revision` to discard, and THE Clinician_Portal SHALL list discarded drafts
    read-only, apart from the active queue. *Evidence: Observed (all 048 write RPCs use optimistic revision).*
 
-### Requirement 24: Authorization, deletion, Migration 060 safety and delivery
+### Requirement 24: Authorization, deletion, Migration 064 safety and delivery
 
 **User Story:** As the requester, I want PR 3 to keep access, deletion and migration safety at the PR 2 standard, so
 that I can approve it without touching a remote environment.
@@ -955,15 +959,15 @@ that I can approve it without touching a remote environment.
    404 for a missing draft. *Evidence: Observed (`_get_authorized_draft` raises `AuthorizationError` for an
    unassigned clinician). Inferred: a missing draft ID likely returns 500 today, because `.single()` raises an unmapped
    PostgREST error (as in Requirement 6.3).*
-2. THE Migration_060 SHALL make every new table or column holding patient data cascade on patient deletion, as
+2. THE Migration_064 SHALL make every new table or column holding patient data cascade on patient deletion, as
    Requirement 12 does, and SHALL reference clinicians (recorder, amender, discarder) with `ON DELETE RESTRICT` until D1
    is decided, with the new references added to NOT-003. *Evidence: Observed (048 clinician references are RESTRICT;
    NOT-003).*
-3. THE Migration_060 SHALL be one file named `060_<snake_case_name>.sql` that passes
-   `backend/scripts/validate_migrations.py`, is ordered after 059 and states in its header that it requires 059. It
+3. THE Migration_064 SHALL be one file named `064_<snake_case_name>.sql` that passes
+   `backend/scripts/validate_migrations.py`, is ordered after 063 and states in its header that it requires 063. It
    SHALL be written but not applied, and applying it SHALL require the requester's explicit authorization naming that
-   action. *Evidence: Design (060 relies on 059's patient cascade and revoked audit DELETE).*
-4. THE Migration_060 SHALL grant RPC execution to `service_role` only, re-check the active assignment inside each RPC
+   action. *Evidence: Design (064 relies on 063's patient cascade and revoked audit DELETE).*
+4. THE Migration_064 SHALL grant RPC execution to `service_role` only, re-check the active assignment inside each RPC
    as 048 does, extend the MedWatch audit event types, keep audit tables append-only with no DELETE or TRUNCATE for
    `anon`, `authenticated` or `service_role`, and end with a fail-closed verification block. *Evidence: Observed (048
    RPCs check `status = 'active'` assignments; 053 verification pattern).*
@@ -971,22 +975,22 @@ that I can approve it without touching a remote environment.
    `requirements.txt` and `requirements-dev.txt` with the CI `uv pip compile` commands so that the lock check and
    `pip-audit` pass. *Evidence: Observed (`.github/workflows/ci.yml` recompiles and runs `git diff --exit-code`;
    the Dockerfile installs `requirements.txt`). pypdf is BSD-licensed and pure Python.*
-6. THE PR 3 description SHALL state whether the backend is safe before 060 is applied or requires 060 first.
+6. THE PR 3 description SHALL state whether the backend is safe before 064 is applied or requires 064 first.
    *Evidence: Observed (TASKS.md: a merge auto-deploys the backend).*
 7. THE Contract_Test SHALL cover discard and return to review, one active draft, the submitted-state constraint, the
    External_Submission_Record and amendment audit, patient deletion with PR 3 data, and append-only audit. *Evidence:
    Design.*
 8. WHEN PR 3 implementation starts, THE contributor SHALL update `.agent/TASKS.md` (PV-001-C and PV-002 rows, schema
-   row with 060 not applied) to record Rajeev as PR 3 owner and the requester's 2026-10-12 override of TEAM.md's
+   row with 064 not applied) to record Rajeev as PR 3 owner and the requester's 2026-10-12 override of TEAM.md's
    PV-002 assignment to Jeevan. *Evidence: Observed (TEAM.md: Jeevan owns PV-002; TASKS.md PV-002 owner "Ganesh (#150);
    Jeevan review").*
-9. THE PR 3 changeset SHALL contain exactly one new migration, numbered 060. *Evidence: Design.*
+9. THE PR 3 changeset SHALL contain exactly one new migration, numbered 064. *Evidence: Design.*
 
 ## Out of scope and adjacent observations (not requirements)
 
 Recorded so reviewers do not read them as hidden scope.
 
-- **Discarding a MedWatch draft:** moved into PR 3 (Requirement 23; D8 now decided in scope). It is not part of 059.
+- **Discarding a MedWatch draft:** moved into PR 3 (Requirement 23; D8 now decided in scope). It is not part of 063.
 - **PyMuPDF licence (adjacent):** the backend already pins `pymupdf==1.28.2` (AGPL) for document ingestion and preview
   (`document_preview_service.py`, `document_intelligence/pipeline.py`, `agents/ingestion/graph.py`). PR 3 does not use
   it (Requirement 21.8). Reviewing the existing dependency's licence is outside this spec.
@@ -1063,7 +1067,7 @@ cd apps/clinician-portal && npm ci
 | V3a | Full backend suite with coverage (CI `backend-coverage` job, without the Docker opt-ins) | `cd backend && SUPABASE_URL=https://test.supabase.co SUPABASE_ANON_KEY=test-anon-key SUPABASE_SERVICE_ROLE_KEY=test-service-role-key SUPABASE_JWT_SECRET=test-jwt-secret-for-ci .venv/bin/pytest tests/ -v -rs --tb=short` (`--cov-fail-under=80` comes from `pyproject.toml`). CI also sets `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` and `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` and requires non-skipped Docker cases; a run without them reports those suites as skipped, and the Docker suites are recorded separately (V6). Local PostgreSQL binaries (`initdb`) are needed for `test_appointment_offer_transactions.py`; macOS can exhaust SysV shared-memory IDs (`shmget` "No space left on device"), which fails its 31 tests at setup until leaked segments are removed. | 1, 2, 3 | Run output with totals and coverage |
 | V4 | Migration validator | `cd backend && .venv/bin/python scripts/validate_migrations.py` (CI runs it on every PR). PR 1 also shows it adds no migration: `git status --short \| grep -i '\.sql'` prints nothing. Do not use `git diff --name-only origin/main` for this once `origin/main` has moved: it lists migrations merged to `main` after the branch point; use `git merge-base HEAD origin/main` as the base | 1, 2, 3 | Run output |
 | V5 | Migration text tests | `cd backend && PYTHONPATH=src .venv/bin/pytest tests/unit/db/test_adr_loop_gap_fixes_migration.py --no-cov -q` | 2 | Run output |
-| V6 | PostgreSQL contract tests (R9 to R13) | Baseline (unmodified behaviour, no 059): `cd backend && NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 ADR_LOOP_GAP_BASELINE=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_adr_loop_postgres.py --no-cov -v`. Fixed: the same command without `ADR_LOOP_GAP_BASELINE=1`. Regression: `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_notification_centre_postgres.py --no-cov -q` and `EMAIL_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_email_postgres.py --no-cov -q`. Opt-in; cached `postgres:16`, `--network=none`; fixture extended per R14.6. **The baseline run comes first and its failures for G6, G7, G9 and the superseded case of G10 are recorded.** | 2 | Run output, including the baseline result |
+| V6 | PostgreSQL contract tests (R9 to R13) | Baseline (unmodified behaviour, no 063): `cd backend && NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 ADR_LOOP_GAP_BASELINE=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_adr_loop_postgres.py --no-cov -v`. Fixed: the same command without `ADR_LOOP_GAP_BASELINE=1`. Regression: `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_notification_centre_postgres.py --no-cov -q` and `EMAIL_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_email_postgres.py --no-cov -q`. Opt-in; cached `postgres:16`, `--network=none`; fixture extended per R14.6. **The baseline run comes first and its failures for G6, G7, G9 and the superseded case of G10 are recorded.** | 2 | Run output, including the baseline result |
 | V7 | Patient portal | `cd apps/patient-portal && npm run lint && npm run typecheck && npm run test && npm run build` | 1 | Run output |
 | V8 | Clinician portal | `cd apps/clinician-portal && npm run lint && npm run typecheck && npm run test && npm run build` | 1 | Run output |
 | V9 | Token and palette check | The two V9 commands below the table print nothing | 1 | Run output |
@@ -1071,17 +1075,17 @@ cd apps/clinician-portal && npm ci
 | V11 | Contrast record | Computed ratio for each text / background token pair on changed surfaces (script or devtools) | 1 | Recorded table |
 | V12 | Authenticated manual checks, synthetic accounts | Patient in `en-US` and `es-MX` at 320, 360 and 430 px: notification to form, chat-inbox and Today rows, answer, review, send, answered and closed states, keyboard-only pass including hidden radios, 200% zoom, reduced motion, safe areas. Clinician at 1024, 1280 and 1536 px: ADR card provenance (AI, patient, mixed), MedWatch prepare, edit, refresh with unsaved edits, approve, export, answered alert from the bell. | 1, 2 | **Requester** (screenshots per R1.19) |
 | V13 | Spanish copy review | Fluent reviewer signs off es-MX question, caution, confirmation and notification wording | 1 | **Requester** |
-| V14 | Apply 059 to a remote environment | Not done by this work; needs explicit authorization naming the action | 2 | **Requester** |
-| V15 | Tracker and docs | TASKS.md rows, NOT-001 spec, patient-portal README updated as in R2.5, recording 048 MedWatch applied to `mediagent-staging` on 2026-10-12 (ledger synchronized through 058) and 059 not applied anywhere | 1, 2 | Diff review |
+| V14 | Apply 063 to a remote environment | Not done by this work; needs explicit authorization naming the action | 2 | **Requester** |
+| V15 | Tracker and docs | TASKS.md rows, NOT-001 spec, patient-portal README updated as in R2.5, recording 048 MedWatch applied to `mediagent-staging` on 2026-10-12 (ledger synchronized through 058) and 063 not applied anywhere | 1, 2 | Diff review |
 | V16 | Dependency lock and audit | After adding `pypdf==6.20.1` to `requirements.in`: `cd backend && uv pip compile requirements.in --universal --python-version 3.12 --output-file requirements.txt && uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt && git diff --stat -- requirements.txt requirements-dev.txt`, then `uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt` (as CI; `uv` 0.9.24 as pinned in CI). CI runs `git diff --exit-code` after recompiling, which is meaningful only once the lockfiles are committed; before that, copy both files first and `cmp` them with the recompiled output | 1, 3 | Run output |
 | V17 | Python style, types and focused tests | V1 and V2, plus `cd backend && PYTHONPATH=src .venv/bin/pytest tests/unit/services/test_medwatch_service.py tests/unit/services/test_medwatch_form_3500.py tests/integration/routers/test_clinician_api.py --no-cov -q` (file names fixed in design; state the run is focused) | 3 | Run output |
 | V18 | Template pin and PDF read-back | Template checksum, revision record and field-inventory test (R15.7); fill then read-back of every mapped AcroForm field and XFA `datasets` element over generated drafts (R21.7); 048-shape load and round trip (R16.8) | 3 | Run output |
-| V19 | Migration 060 validator and text tests | V4, plus `cd backend && PYTHONPATH=src .venv/bin/pytest tests/unit/db/test_medwatch_form_3500_migration.py --no-cov -q` (name fixed in design) | 3 | Run output |
-| V20 | PostgreSQL contract tests (R22 to R24) | V6 commands with 059 and 060 applied in ledger order, covering R24.7 | 3 | Run output |
+| V19 | Migration 064 validator and text tests | V4, plus `cd backend && PYTHONPATH=src .venv/bin/pytest tests/unit/db/test_medwatch_form_3500_migration.py --no-cov -q` (name fixed in design) | 3 | Run output |
+| V20 | PostgreSQL contract tests (R22 to R24) | V6 commands with 063 and 064 applied in ledger order, covering R24.7 | 3 | Run output |
 | V21 | Clinician portal | V8 commands; component tests for the preview, missing-item list, approval attestation, PDF download notice, submission record, amendment and discard | 3 | Run output |
 | V22 | Manual PDF check, synthetic draft | Requester opens a downloaded PDF in Adobe Acrobat Reader and macOS Preview, confirms values show in both, the form stays fillable and printable, and no official field carries added text | 3 | **Requester** |
 | V23 | Template provenance | Contributor confirms the Official_Template carries no copyright notice and records the source URL, download date and SHA-256 (R15.3, R15.6) | 3 | Recorded note |
-| V24 | Apply 060 to a remote environment | Not done by this work; needs explicit authorization naming the action | 3 | **Requester** |
+| V24 | Apply 064 to a remote environment | Not done by this work; needs explicit authorization naming the action | 3 | **Requester** |
 
 V9 commands, from the repository root. The MedWatch page keeps its two known `text-[#94A3B8]` disabled-text values
 (see Out of scope), so it is checked for palette classes only.

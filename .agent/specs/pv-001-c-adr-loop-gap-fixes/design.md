@@ -12,11 +12,11 @@ Two pull requests close gaps G1 to G10, and a third makes the MedWatch draft a r
   the chat inbox and on Today, complete answered / closed / not-found states backed by one new bounded patient read
   endpoint, localized error classes, fixed bilingual notification wording, per-entry evidence provenance on the
   clinician ADR card, and the MedWatch draft defects.
-- **PR 2 (migration 059, written, not applied):** each information request becomes its own notification source, so
+- **PR 2 (migration 063, written, not applied):** each information request becomes its own notification source, so
   the patient's item follows the request's status. The legacy English notification stops, the clinician gets one
   History-only "patient answered" alert, answering marks the receipt read, and patient deletion cascades through
   ADR audit.
-- **PR 3 (migration 060, written, not applied):** Form 3500 (not 3500A) data model, read-only preview, official
+- **PR 3 (migration 064, written, not applied):** Form 3500 (not 3500A) data model, read-only preview, official
   fillable PDF download, discard, and a record of a submission the clinician made outside MediAgent. See
   [PR 3: MedWatch Form 3500](#pr-3-medwatch-form-3500).
 
@@ -28,8 +28,8 @@ Key decisions (PR 3 decisions K-P1 to K-P8 are in the PR 3 section):
 | K2 | One new read endpoint, `GET /me/adr-information-requests/overview`, returning the selected request, pending requests and the bounded recent history | One round trip per view; the existing pending list keeps its contract for entry rows. |
 | K3 | Stable error codes from the backend, mapped to four client classes | The form never shows server text (R3.7); "closed" switches state instead of retrying (R6.4). |
 | K4 | PR 2 captures patient request events from `adr_information_requests` (new `source_type`), not from `adr_assessments` with a request ID in metadata | See [Choice of notification source](#choice-of-notification-source-requirement-97). |
-| K5 | 059 redefines `review_adr_assessment` without the legacy `public.notifications` insert | Stops G7 going forward and leaves existing rows and events untouched (R10.2, R10.4). |
-| K6 | Merge PR 2 before applying 059 | PR 2's backend works on both schemas; the PR 1 backend misroutes request-sourced links. See [Deploy order](#deploy-order). |
+| K5 | 063 redefines `review_adr_assessment` without the legacy `public.notifications` insert | Stops G7 going forward and leaves existing rows and events untouched (R10.2, R10.4). |
+| K6 | Merge PR 2 before applying 063 | PR 2's backend works on both schemas; the PR 1 backend misroutes request-sourced links. See [Deploy order](#deploy-order). |
 
 ## Architecture
 
@@ -47,7 +47,7 @@ flowchart LR
     P[Presentation: fixed wording, link, label]
     C[Clinician ADR card provenance<br/>MedWatch card, prepare action]
   end
-  subgraph PR2["PR 2 - migration 059"]
+  subgraph PR2["PR 2 - migration 063"]
     Q[(adr_information_requests)] -->|capture trigger| E[(notification_events<br/>source_type = adr_information_requests)]
     E --> P2[Presentation: request= link,<br/>adr_information_answered copy]
   end
@@ -56,8 +56,8 @@ flowchart LR
 | PR | Backend | Patient portal | Clinician portal | Docs / tracker |
 | --- | --- | --- | --- | --- |
 | 1 | `models/adr.py`, `services/patient_service.py`, `routers/patients.py`, `services/notification_centre_presentation.py` | `content/adr-follow-up-copy.ts`, `services/adr-follow-up.ts`, `hooks/use-pending-adr-follow-ups.ts`, `components/features/adr-follow-up-{form,view,entry-row}.tsx`, `app/(app)/chat/page.tsx`, `app/(app)/today/page.tsx`; `adr-follow-up-panel.tsx` removed and its tests migrated | `services/clinicians.ts`, `components/features/adr-review-card.tsx`, `medwatch-draft-card.tsx`, `medwatch-preparation-action.tsx`, `app/(dashboard)/medwatch/page.tsx`, shared review-time formatter | `.agent/TASKS.md`, `apps/patient-portal/README.md` |
-| 2 | `db/migrations/059_adr_information_loop_lifecycle.sql`, presentation additions, tests | none | none | TASKS.md, NOT-001 spec |
-| 3 | `db/migrations/060_medwatch_form_3500.sql`, `models/medwatch_form_3500.py`, `services/medwatch_service.py`, `services/medwatch_form_3500/{template,field_map,pdf,identifier,gate,upgrade,dates}.py`, `assets/fda/form-3500-2025-09.pdf` + `TEMPLATE.json` + `README.md`, `routers/clinicians.py`, `requirements.in` (`pypdf==6.20.1`) and both lockfiles | none | `services/clinicians.ts`, `components/features/form-3500-preview.tsx`, `medwatch-draft-card.tsx`, `medwatch-{download,submission,discard}-dialog.tsx`, `app/(dashboard)/medwatch/page.tsx`, print CSS | TASKS.md (PV-001-C, PV-002, schema row), NOT-003 (new clinician references), backend README |
+| 2 | `db/migrations/063_adr_information_loop_lifecycle.sql`, presentation additions, tests | none | none | TASKS.md, NOT-001 spec |
+| 3 | `db/migrations/064_medwatch_form_3500.sql`, `models/medwatch_form_3500.py`, `services/medwatch_service.py`, `services/medwatch_form_3500/{template,field_map,pdf,identifier,gate,upgrade,dates}.py`, `assets/fda/form-3500-2025-09.pdf` + `TEMPLATE.json` + `README.md`, `routers/clinicians.py`, `requirements.in` (`pypdf==6.20.1`) and both lockfiles | none | `services/clinicians.ts`, `components/features/form-3500-preview.tsx`, `medwatch-draft-card.tsx`, `medwatch-{download,submission,discard}-dialog.tsx`, `app/(dashboard)/medwatch/page.tsx`, print CSS | TASKS.md (PV-001-C, PV-002, schema row), NOT-003 (new clinician references), backend README |
 
 ## Components and Interfaces
 
@@ -232,7 +232,7 @@ sobre:". With nothing left, it returns "".
 
 Titles are unchanged (R5.6). History items keep the link with the label "View" / "Ver".
 
-## PR 2: migration 059 and presentation
+## PR 2: migration 063 and presentation
 
 ### Choice of notification source (Requirement 9.7)
 
@@ -247,17 +247,17 @@ rewritten: old `adr_assessments`-sourced events stay, and only their computed ac
 The source row also holds `responses` and `patient_message`. `notification_source` is internal and never returned by
 the API (051 comment), and authorization only reads `patient_id`.
 
-### 059 contents, in order (`059_adr_information_loop_lifecycle.sql`)
+### 063 contents, in order (`063_adr_information_loop_lifecycle.sql`)
 
 1. **Allowlists.** Drop and re-add `notification_events_event_type_check` with `adr_information_answered` added, and
    `notification_events_source_type_check` with `adr_information_requests` added. Both are supersets, so existing
    rows validate, and no UPDATE runs, so the append-only trigger is not involved.
 2. **`private.notification_source`** (copy of 051): add `adr_information_requests` to the allowlist.
-3. **`private.notification_actionable`** (copy of 054; no later redefinition). Only these branches change:
+3. **`private.notification_actionable`** (copy of `059_critical_result_alerts.sql`, which carried 054 forward and added `critical_result`; that branch is kept). Only these branches change:
    - `adr_information_requested`, request-sourced: `s->>'status' = 'pending'`.
    - `adr_information_requested`, assessment-sourced (legacy, **rule L**): the 054 condition **and**
      `EXISTS(pending request r for e.source_id with r.created_at <= e.created_at)`. Answered gives no pending request,
-     so History. A later request (before or after 059) has `created_at` later than the event, so History. Duplicates
+     so History. A later request (before or after 063) has `created_at` later than the event, so History. Duplicates
      of a still-pending request remain one item through 054's newest-receipt rule.
    - `adr_information_answered`: `RETURN false` (D3).
 4. **`private.capture_notification_source`** (copy of 055; no later redefinition):
@@ -317,7 +317,7 @@ NULL, meaning no email (R11.8), and the draft path already cancels pending reque
 
 ## Data models
 
-| Event (after 059) | `source_type` / `source_id` | Audience | Category | Key | Email |
+| Event (after 063) | `source_type` / `source_id` | Audience | Category | Key | Email |
 | --- | --- | --- | --- | --- | --- |
 | `adr_information_requested` | `adr_information_requests` / request | patient | safety | `adr_information_requests:<id>:requested` | `records` (057, unchanged) |
 | `adr_information_answered` | `adr_information_requests` / request | shared (assigned clinicians, D7) | safety | `adr_information_requests:<id>:answered` | none |
@@ -326,7 +326,7 @@ NULL, meaning no email (R11.8), and the draft path already cancels pending reque
 
 **Request status x actionability (patient item)**
 
-| Request status | How reached | Request-sourced item (059) | Legacy assessment-sourced item | Follow_Up_Form | Clinician alert |
+| Request status | How reached | Request-sourced item (063) | Legacy assessment-sourced item | Follow_Up_Form | Clinician alert |
 | --- | --- | --- | --- | --- | --- |
 | `pending` | `review_adr_assessment('request_information')` | Actionable; unread until read | Actionable only under rule L | Answer form | none |
 | `answered` | `respond_to_adr_information_request` | History; receipt marked read | History | Read-only summary | One event, History, unread |
@@ -416,7 +416,7 @@ instead of 100 random runs, because every case costs a database round trip.
 | Database or transport failure | `execute_async`, other `APIError` | 502 `EXTERNAL_SERVICE_ERROR` with no PostgREST detail; `unavailable` class; retry |
 | Both `request_id` and `assessment_id` | Overview | 422 |
 | Overview load fails | View | `ErrorState` with retry; entry rows hide silently |
-| Capture or read-audit failure inside respond (059) | PostgreSQL | The whole answer rolls back (same transaction); client sees `unavailable` |
+| Capture or read-audit failure inside respond (063) | PostgreSQL | The whole answer rolls back (same transaction); client sees `unavailable` |
 | MedWatch prepare fails | Preparation action | Inline `role="alert"`; rationale kept; no unhandled rejection |
 | MedWatch refresh during edits | Draft card | Edits kept; "Unsaved changes"; a stale save returns the existing revision conflict |
 | Unknown `event_type` on an older backend | Presentation | Falls back to the generic "Update available" copy (`event_type` is `str`), so nothing crashes |
@@ -440,7 +440,7 @@ instead of 100 random runs, because every case costs a database round trip.
 - Clinician portal:
   - a new `adr-review-card.test.tsx` (P6; all-AI, all-patient and mixed);
   - MedWatch card unsaved-edit and seal tests, the prepare inline error, the formatter, and the `Suspense` fallback.
-- Migration text tests (PR 2): `tests/unit/db/test_adr_loop_gap_fixes_migration.py` asserts each item of the 059
+- Migration text tests (PR 2): `tests/unit/db/test_adr_loop_gap_fixes_migration.py` asserts each item of the 063
   order list at text level (pattern: `test_adr_patient_information_loop_migration.py`).
 
 **PostgreSQL contract tests (PR 2), reproduction first.**
@@ -451,13 +451,13 @@ The base `sql` fixture in `test_notification_centre_postgres.py` is extended:
 - add `047_adr_patient_information_loop.sql`, `047_care_plan_private_rls_helpers.sql`,
   `048_care_team_conversations.sql` and `048_medwatch_draft_lifecycle.sql` in ledger order;
 - move the 057, auth-revoke and 058 steps from `email_sql` into it (`email_sql` then returns `sql`);
-- apply 059 last unless `ADR_LOOP_GAP_BASELINE=1`.
+- apply 063 last unless `ADR_LOOP_GAP_BASELINE=1`.
 
-The existing notification and email suites therefore also prove that 059 regresses nothing (R14.3). New tests live in
-`tests/integration/test_adr_loop_postgres.py`. **The baseline run (`ADR_LOOP_GAP_BASELINE=1`) comes first, before 059
+The existing notification and email suites therefore also prove that 063 regresses nothing (R14.3). New tests live in
+`tests/integration/test_adr_loop_postgres.py`. **The baseline run (`ADR_LOOP_GAP_BASELINE=1`) comes first, before 063
 exists, and its outcome is recorded in the PR.**
 
-| NEEDS REPRO | Test | Expected baseline (main behaviour) | After 059 |
+| NEEDS REPRO | Test | Expected baseline (main behaviour) | After 063 |
 | --- | --- | --- | --- |
 | R9.1 | `test_answer_creates_no_new_patient_request_event` | Fails: a second `adr_information_requested` event appears | Passes |
 | R9.2 | `test_answered_request_item_is_history` | Fails: the re-captured item is actionable and unread | Passes |
@@ -486,16 +486,16 @@ Also covered (not NEEDS REPRO):
 
 Merging deploys the backend; migrations apply only with explicit authorization (V14).
 
-1. **PR 1** needs no migration. The overview reads 047 tables and columns, which are applied in staging. Before 059 the
+1. **PR 1** needs no migration. The overview reads 047 tables and columns, which are applied in staging. Before 063 the
    patient may still see G6's re-captured item, but its link opens the overview by assessment, which shows the
    answered state, so PR 1 already turns the visible defect into a correct screen.
-2. **PR 2 backend before 059 is safe.** The presentation handles both source types. `adr_information_answered` copy
-   and the metadata-preferring `_safety_link` are unused until 059 emits them. The respond RPC signature is unchanged,
-   and no backend code depends on 059 objects. No gate is needed.
-3. **059 before the PR 2 backend is degraded, not broken.** A PR 1 backend would link request-sourced items to
+2. **PR 2 backend before 063 is safe.** The presentation handles both source types. `adr_information_answered` copy
+   and the metadata-preferring `_safety_link` are unused until 063 emits them. The respond RPC signature is unchanged,
+   and no backend code depends on 063 objects. No gate is needed.
+3. **063 before the PR 2 backend is degraded, not broken.** A PR 1 backend would link request-sourced items to
    `assessment=<request id>`, producing the not-found state, and would render the answered alert with the generic
    copy and a `/medwatch` link that shows "no longer awaiting review".
-4. **Recommendation:** merge PR 1, merge PR 2 (backend deploys), then apply 059 on the requester's explicit
+4. **Recommendation:** merge PR 1, merge PR 2 (backend deploys), then apply 063 on the requester's explicit
    authorization. PR 2's description states this (R14.5).
 
 ## PR 3: MedWatch Form 3500
@@ -511,7 +511,7 @@ confirms the copyright notice).
 | K-P1 | Discard is three columns on `medwatch_drafts` (`discarded_at`, `discarded_by` RESTRICT, `discard_reason`), not an enum value. `idx_medwatch_one_draft_per_assessment` becomes a partial unique index `WHERE discarded_at IS NULL`. | `ALTER TYPE ... ADD VALUE` cannot be used in the transaction that adds it (R23.7); columns also keep the approval state a discarded draft had. |
 | K-P2 | New append-only table `medwatch_external_submissions`; the newest row per draft is current; amendments are new rows (D17). The record RPC sets `status = 'submitted'` and `submitted_at`; a trigger allows `submitted` only with approval and a submission row. | History is never rewritten. A CHECK cannot see another table, so the cross-table rule is a trigger (R22.6). |
 | K-P3 | Audit types gain `discarded`, `submission_recorded`, `submission_amended`. `exported` gains `format` and, for PDF, `template_revision`, `template_sha256`, via `record_medwatch_draft_export(uuid, uuid, text, text, text)`; the 2-argument function delegates with `'json'`. | One audit trail per draft (R21.6); old callers keep working during rollout. |
-| K-P4 | The PR 3 backend requires 060 before merge (the EMAIL-001 / 058 pattern). | New routes call 060 RPCs; 048 routes are unchanged. See [PR 3 deploy](#pr-3-deploy). |
+| K-P4 | The PR 3 backend requires 064 before merge (the EMAIL-001 / 058 pattern). | New routes call 064 RPCs; 048 routes are unchanged. See [PR 3 deploy](#pr-3-deploy). |
 | K-P5 | pypdf 6.20.1 fills a vendored, checksummed template; AcroForm and XFA `datasets` both written; re-encrypted with the template's own permissions; not flattened. | Pure Python, BSD; PyMuPDF is AGPL (R21.8). The fill test showed viewers disagree when only one layer is written. |
 | K-P6 | `MedWatchFormData` v2 (`form_version: "fda-3500-2025-09"`) with a separate `mediagent_review`; `upgrade_legacy_form` runs on read. | Backward compatible with 048 rows without a data migration (R16.5). |
 | K-P7 | Default A1 code `<first initial><last initial>-<4 chars>`, the 4 chars from base32 SHA-256 of the draft ID; no new secret; stored on the draft. | Non-reversible to patient data and stable for the draft's life (D16, R17.2). |
@@ -587,7 +587,7 @@ the approval date (America/Los_Angeles) when blank. G health professional and oc
 
 - `default_code(first, last, draft_id)`: NFKD accent-stripped, upper-cased initials (`X` if missing) plus the first 4
   characters of `base32(sha256(draft_id.bytes))`, or the next window if that fails `identifier_violations`. The
-  service generates the draft UUID and passes it to the 060 `create_medwatch_draft` overload, which stores
+  service generates the draft UUID and passes it to the 064 `create_medwatch_draft` overload, which stores
   `patient_reference` (CHECK `^[A-Z]{2}-[A-Z2-7]{4}$`) and the same A1 value in one insert.
 - `identifier_violations(value, patient)`: casefolded, accent-stripped, tokenised on non-alphanumerics; rejects the
   full name, a first or last name token, the email or its local part, and the DOB as ISO, `MM/DD/YYYY`, `DD-Mon-YYYY`
@@ -604,7 +604,7 @@ the approval date (America/Los_Angeles) when blank. G health professional and oc
 `non_serious_attested` and `acknowledged_warnings`. The service loads the stored row, returns the existing revision
 conflict on a stale `expected_revision`, runs the gate on the stored form (R19.4) and returns 422
 `MEDWATCH_APPROVAL_INCOMPLETE` with the issues unless none remain. The D12 issue clears only when no B2 outcome is set
-and `non_serious_attested` is true; acknowledged warnings must equal the current set. 060's
+and `non_serious_attested` is true; acknowledged warnings must equal the current set. 064's
 `approve_medwatch_draft(uuid, uuid, text, integer, jsonb)` writes these three values into the `approved` event (R17.5,
 R19.3, R19.6). The attestation text is one backend constant returned with the draft, so the UI shows that version.
 
@@ -690,7 +690,7 @@ clinician still gets `AuthorizationError` (403) (R24.1). RPC errors map as in PR
 422 or 409 for revision conflicts, `22023` 422, anything else 502 with no PostgREST detail. `PUT` rejects edits to
 submitted or discarded drafts (R22.5).
 
-### Migration 060 (`060_medwatch_form_3500.sql`, requires 059)
+### Migration 064 (`064_medwatch_form_3500.sql`, requires 063)
 
 1. `medwatch_drafts`: add the K-P1 columns (`discard_reason` 1 to 2000 characters, all three null or all set, never
    with `submitted`) and `patient_reference`. Default `export_version` to `'fda-3500-2025-09'`, relabel
@@ -722,7 +722,7 @@ submitted or discarded drafts (R22.5).
    execute a MedWatch RPC, any role holds UPDATE, DELETE or TRUNCATE on the submission table, a new patient FK is not
    `CASCADE`, or the 2-argument export does not call the 5-argument one.
 
-**Discard notifications (R23.6).** After 059, the `adr_assessments` capture branch emits only `adr_review`, on a
+**Discard notifications (R23.6).** After 063, the `adr_assessments` capture branch emits only `adr_review`, on a
 change to `draft` from another status, and 054 makes `adr_review` actionable while the live status is `draft`. The
 clinician therefore gets one actionable item: a new event, or the original becoming actionable again if 055's
 idempotency key de-duplicates; the contract test pins which. No patient item becomes actionable: request-sourced items
@@ -821,8 +821,8 @@ guard trigger blocks direct writes. Audit insert failure: 502 with no bytes. Fil
 - **Template and unit:** checksum, `TEMPLATE.json`, inventory hash and `FIELD_MAP` names (R15.7); a mismatch fixture
   gives 503 with no audit call (R15.4); P8 to P13 (P10 marked slow); prefill sources and attribution (R18); name
   warnings; router codes, headers, filename, `.limit(1)` 404 and audit-before-bytes.
-- **Migration text:** `tests/unit/db/test_medwatch_form_3500_migration.py` asserts each 060 step (059 pattern).
-- **PostgreSQL contract** (`tests/integration/test_medwatch_3500_postgres.py`, 048 to 060 in ledger order, R24.7):
+- **Migration text:** `tests/unit/db/test_medwatch_form_3500_migration.py` asserts each 064 step (063 pattern).
+- **PostgreSQL contract** (`tests/integration/test_medwatch_3500_postgres.py`, 048 to 064 in ledger order, R24.7):
   discard to `draft` with one clinician `adr_review` item and no patient item or email (R23.6); one active draft,
   another after discard; the guard rejects `submitted` without a submission row, also as `service_role`; submission
   UPDATE fails; amendment keeps the original; patient deletion; append-only audit; 2-argument export delegation.
@@ -833,8 +833,8 @@ guard trigger blocks direct writes. Audit insert failure: 502 with no bytes. Fil
 
 ### PR 3 deploy
 
-060 is written and validated locally, and applied only on the requester's explicit authorization (V24). Order:
-merge PR 1, merge PR 2, apply 059, **apply 060, then merge PR 3**. The PR 3 backend is not safe before 060: create,
-approve, discard, submission and the 5-argument export call 060 RPCs and columns. The 048 routes and RPCs keep working
-with 060 applied, so applying 060 before the merge is safe for the deployed PR 2 backend. The PR 3 description states
+064 is written and validated locally, and applied only on the requester's explicit authorization (V24). Order:
+merge PR 1, merge PR 2, apply 063, **apply 064, then merge PR 3**. The PR 3 backend is not safe before 064: create,
+approve, discard, submission and the 5-argument export call 064 RPCs and columns. The 048 routes and RPCs keep working
+with 064 applied, so applying 064 before the merge is safe for the deployed PR 2 backend. The PR 3 description states
 this (R24.6).

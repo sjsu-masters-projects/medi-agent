@@ -100,6 +100,15 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Responde en la app unas preguntas sobre un síntoma que ya reportaste. "
         "Describe solo lo que ya pasó.",
     ),
+    # Clinician-only; the patient's answers stay in the assessment. No clinical content.
+    "adr_information_answered": (
+        "Patient answered medication-safety follow-up",
+        "A patient sent answers to follow-up questions. Review the updated evidence; "
+        "this is not a clinical decision.",
+        "El paciente respondió el seguimiento de seguridad",
+        "Un paciente envió respuestas a preguntas de seguimiento. Revisa la evidencia "
+        "actualizada; esto no es una decisión clínica.",
+    ),
     "critical_result": (
         "Critical test result reported",
         "A patient's document reports a result the laboratory marked critical. Open the document to review it.",
@@ -216,7 +225,9 @@ def _safety_link(row: dict[str, Any], role: str) -> Destination:
     if row["event_type"] == "safety_flag":
         link = f"/patients/{patient}?tab=chat" if patient else None
     else:
-        link = f"/medwatch?assessment={source}" if source else None
+        # A request-sourced alert names its assessment; otherwise the source is one.
+        assessment = _identifier(_metadata(row).get("adr_assessment_id")) or source
+        link = f"/medwatch?assessment={assessment}" if assessment else None
     return (link, "Review source", "Revisar fuente")
 
 
@@ -239,13 +250,13 @@ _LINKS: dict[str, Callable[[dict[str, Any], str], Destination]] = {
 
 def destination(row: dict[str, Any], role: str) -> Destination:
     if row["event_type"] == "adr_information_requested" and role == "patient":
-        # The event's source is the assessment; the follow-up view resolves it.
-        assessment = _identifier(row.get("source_id"))
-        link = (
-            f"/chat?view=follow-up&assessment={assessment}"
-            if assessment
-            else "/chat?view=follow-up"
+        # Since 063 the source is the request itself; earlier items name the assessment.
+        # The follow-up view resolves either.
+        source = _identifier(row.get("source_id"))
+        parameter = (
+            "request" if row.get("source_type") == "adr_information_requests" else "assessment"
         )
+        link = f"/chat?view=follow-up&{parameter}={source}" if source else "/chat?view=follow-up"
         return (link, "Answer questions", "Responder preguntas")
     return _LINKS.get(str(row["category"]), _follow_up_link)(row, role)
 

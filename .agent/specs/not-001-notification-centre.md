@@ -80,6 +80,32 @@ Appointment responses in Needs attention (requester decision, October 11):
   answer is also one notification in History and one unread; responses captured before 055
   keep one History row per slot (append only).
 
+ADR follow-up requests (PV-001-C, migration 063; written, not yet applied anywhere):
+- Each `adr_information_requests` row is its own source. The patient's
+  `adr_information_requested` item is captured once, when the request is inserted
+  (key `adr_information_requests:<id>:requested`), and is actionable exactly while that
+  request is `pending`. Answering, a newer request, marking the assessment reviewed or
+  dismissed, and preparing a MedWatch draft each make it History; a closed item keeps its
+  unread state and its link to the follow-up view (`/chat?view=follow-up&request=<id>`).
+- The `adr_assessments` source now emits only the clinician `adr_review` item. A rescore,
+  evidence change or `updated_at` touch notifies nobody, and no English-only
+  `public.notifications` row is written for a request.
+- Rule L, for request items captured from the assessment before 063: such an item is
+  actionable only while a request that already existed when it was captured is still
+  pending, so an answered or replaced request never asks again. These events are kept.
+- Answering marks the patient's receipt for that request read, with a read-audit row,
+  delivering it first if the patient never loaded the centre. This is in the answer's
+  transaction, so a capture or audit failure rolls the answer back.
+- Answering also captures one `adr_information_answered` item (key
+  `adr_information_requests:<id>:answered`), shared with the clinicians assigned now, like
+  `adr_review`. It is History-only: unread in the bell, never in Needs attention, never
+  acknowledgeable, and mapped to no email category. Its copy has no clinical content and
+  links to `/medwatch?assessment=<assessment id>` ("Review source"). Patients and
+  unassigned clinicians cannot see it; it disappears when the assignment ends.
+- Deleting a patient removes their ADR requests, ADR audit and MedWatch drafts and
+  audit (063 makes the patient reference on the ADR audit cascade). No role may delete
+  ADR or MedWatch audit directly. Clinician references stay `RESTRICT` (NOT-003, D1).
+
 "Mark all read" marks every item in the signed snapshot that the reader may still see. It
 skips the rest and returns `{"updated_count", "skipped_count"}`; both portals show how
 many were skipped, so a revoked item no longer fails the batch.
@@ -130,8 +156,10 @@ deployed acceptance. Record exact checks and remaining boundaries before review.
 
 ### Rollout dependency
 
-Applied: `051_notification_centre.sql`, then 052–056 (October 11); none pending. Its
-full filename is distinct from Nora's `051_health_knowledge_and_chat_sessions.sql`; the
+Applied: `051_notification_centre.sql`, then 052–056 (October 11). Written and not
+applied: `063_adr_information_loop_lifecycle.sql` (PV-001-C); merge its backend first,
+then the requester applies it on explicit authorization. The 051
+file's full name is distinct from Nora's `051_health_knowledge_and_chat_sessions.sql`; the
 ledger keys on full filenames, and the two touch no shared objects. When the database is
 unavailable, the UI shows unavailable/retry rather than fabricated counts. Existing
 patient notification endpoints remain compatible.

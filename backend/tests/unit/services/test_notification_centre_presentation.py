@@ -417,3 +417,130 @@ def test_critical_result_alert_opens_the_exact_document_without_health_detail():
     assert label == "Open document"
     # No test name, value or patient identifier in the copy itself.
     assert "Potassium" not in shown.body and raw["patient_id"] not in shown.body
+
+
+def answered_item(**changes: Any) -> dict[str, Any]:
+    return item(
+        event_type="adr_information_answered",
+        category="safety",
+        source_type="adr_information_requests",
+        actionable=False,
+        **changes,
+    )
+
+
+def test_answered_alert_copy_is_english_free_of_clinical_content_and_links_the_assessment():
+    assessment = str(uuid4())
+    raw = answered_item(
+        metadata={"adr_assessment_id": assessment, "information_request_id": str(uuid4())}
+    )
+    shown = present_item(raw, "clinician", "es-MX")
+    assert shown.title == "Patient answered medication-safety follow-up"
+    assert shown.body == (
+        "A patient sent answers to follow-up questions. Review the updated evidence; "
+        "this is not a clinical decision."
+    )
+    assert shown.category == "safety"
+    assert shown.action_url == f"/medwatch?assessment={assessment}"
+    # History-only: the link stays, the call to act does not.
+    assert not shown.actionable and not shown.can_acknowledge and shown.action_label == "View"
+    assert destination(raw, "clinician")[1] == "Review source"
+    for clinical in ("Synthetic", "Naranjo", "Doubtful", "dose", raw["source_id"], assessment):
+        assert clinical not in shown.title and clinical not in shown.body
+
+
+def test_answered_alert_without_an_assessment_falls_back_to_its_source():
+    raw = answered_item(metadata={"adr_assessment_id": "//evil.invalid"})
+    assert present_item(raw, "clinician", "en-US").action_url == (
+        f"/medwatch?assessment={raw['source_id']}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("locale", "label"), [("en-US", "Answer questions"), ("es-MX", "Responder preguntas")]
+)
+def test_request_sourced_item_opens_that_request(locale, label):
+    raw = request_item(source_type="adr_information_requests")
+    result = present_item(raw, "patient", locale)
+    assert result.action_url == f"/chat?view=follow-up&request={raw['source_id']}"
+    assert result.action_label == label
+
+
+@pytest.mark.parametrize(("locale", "label"), [("en-US", "View"), ("es-MX", "Ver")])
+def test_request_sourced_item_in_history_keeps_its_link(locale, label):
+    raw = request_item(source_type="adr_information_requests", actionable=False)
+    result = present_item(raw, "patient", locale)
+    assert result.action_url == f"/chat?view=follow-up&request={raw['source_id']}"
+    assert result.action_label == label and not result.actionable
+
+
+# Feature: adr-loop-gap-fixes, Property 2 (full): Notification links stay inside the allowlist
+SOURCE_TYPES: tuple[Any, ...] = (
+    None,
+    "adr_assessments",
+    "adr_information_requests",
+    "notifications",
+    "ADR_INFORMATION_REQUESTS",
+    "",
+    7,
+)
+ANY_FOLLOW_UP_LINK = re.compile(
+    r"/chat\?view=follow-up(?:&(?:assessment|request)=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?"
+)
+MEDWATCH_LINK = re.compile(
+    r"/medwatch\?assessment=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
+
+
+@pytest.mark.parametrize(
+    ("source_id", "expected"),
+    [pytest.param(value, expected, id=name) for name, value, expected in SOURCE_ID_CASES],
+)
+def test_property_2_full_patient_request_link_by_source_type(source_id, expected):
+    """**Validates: Requirements 4.2**"""
+    for source_type, metadata, locale in itertools.product(SOURCE_TYPES, LINK_METADATA, LOCALES):
+        raw = request_item(source_id=source_id, source_type=source_type, metadata=metadata)
+        link = present_item(raw, "patient", locale).action_url
+        context = f"source_id={source_id!r} source_type={source_type!r} metadata={metadata!r}"
+        assert link is not None and ANY_FOLLOW_UP_LINK.fullmatch(link), f"{link!r} for {context}"
+        assert patient_destination_allows(link), f"{link!r} rejected for {context}"
+        parameter = "request" if source_type == "adr_information_requests" else "assessment"
+        value = link.partition(f"&{parameter}=")[2] or None
+        assert "&" not in (value or "") and link.count("&") <= 1, context
+        if expected is EITHER:
+            assert value in (None, str(UUID(str(source_id).strip("{}")))), context
+        else:
+            assert value == expected, f"{link!r} for {context}"
+
+
+@pytest.mark.parametrize("kind", ["adr_information_answered", "adr_review"])
+@pytest.mark.parametrize(
+    ("source_id", "expected"),
+    [pytest.param(value, expected, id=name) for name, value, expected in SOURCE_ID_CASES],
+)
+def test_property_2_full_clinician_safety_links_are_none_or_a_canonical_assessment(
+    kind, source_id, expected
+):
+    """**Validates: Requirements 11.2**"""
+    assessments = (None, CANONICAL, CANONICAL.upper(), "//evil.invalid", "", 12345)
+    for source_type, assessment, extra in itertools.product(
+        SOURCE_TYPES, assessments, LINK_METADATA
+    ):
+        metadata = dict(extra) if isinstance(extra, dict) else {}
+        if assessment is not None:
+            metadata["adr_assessment_id"] = assessment
+        raw = item(
+            event_type=kind,
+            category="safety",
+            source_id=source_id,
+            source_type=source_type,
+            metadata=metadata,
+        )
+        link = present_item(raw, "clinician", "en-US").action_url
+        context = f"{kind} source_id={source_id!r} metadata={metadata!r}"
+        assert link is None or MEDWATCH_LINK.fullmatch(link), f"{link!r} for {context}"
+        named = str(UUID(str(assessment))) if assessment in (CANONICAL, CANONICAL.upper()) else None
+        if named:
+            assert link == f"/medwatch?assessment={named}", context
+        elif expected is None:
+            assert link is None, context

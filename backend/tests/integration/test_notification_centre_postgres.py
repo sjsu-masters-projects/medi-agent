@@ -598,7 +598,8 @@ def test_adr_reviewed_questions_only_and_current_status(sql):
     assert "PRIVATE" not in json.dumps(row)
     sql(f"SELECT review_adr_assessment('{adr}','{CLINICIAN}','mark_reviewed');")
     assert clinician(sql, "action_items")["items"] == []
-    assert not next(r for r in call(sql)["items"] if r["source_id"] == adr)["actionable"]
+    # The same patient item, whichever source captured it (the request after 063).
+    assert not next(r for r in call(sql)["items"] if r["id"] == row["id"])["actionable"]
 
 
 def test_invalid_bounds_and_role_actions(sql):

@@ -2,7 +2,7 @@
 
 ## Overview
 
-PR 1 (no migration) and then PR 2 (migration 059, written and not applied), on branch
+PR 1 (no migration) and then PR 2 (migration 063, written and not applied), on branch
 `fix/adr-information-loop-gaps` in `.worktrees/adr-loop-gaps`. Languages are Python 3.12 (FastAPI, pytest),
 TypeScript (Next.js, Vitest) and PostgreSQL 16 SQL. Each task names the requirements it satisfies. Verification
 commands are V1 to V11 in requirements.md.
@@ -17,9 +17,9 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
 - [x] 1. Scope the work in the tracker
   - [x] 1.1 Add the `PV-001-C` row and correct stale rows in `.agent/TASKS.md`
     - Add a scoped `PV-001-C — ADR loop gap fixes` row (P1, In progress) that links this spec and lists PR 1 (G1 to
-      G5) and PR 2 (G6 to G10, 059 written, not applied).
+      G5) and PR 2 (G6 to G10, 063 written, not applied).
     - Update the "Synthetic database schema" row: 048 MedWatch was applied by the requester to `mediagent-staging`
-      on 2026-10-12, and the ledger is synchronized through 058. 059 is not applied anywhere. Drop "adds an unapplied
+      on 2026-10-12, and the ledger is synchronized through 058. 063 is not applied anywhere. Drop "adds an unapplied
       `048_medwatch_draft_lifecycle.sql`".
     - Update the PV-001, PV-001-B, PV-002 and NOT-003 rows to reference PV-001-C. NOT-003 keeps D1 open.
     - _Requirements: 2.5, 2.7_
@@ -219,9 +219,9 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
   - Ensure all tests pass, ask the user if questions arise.
   - _Requirements: 1.8, 2.1, 2.6, 14.1_
 
-### PR 2: notification lifecycle and data deletion (migration 059, not applied)
+### PR 2: notification lifecycle and data deletion (migration 063, not applied)
 
-- [ ] 11. Contract-test fixture and reproductions against unmodified behaviour (first)
+- [x] 11. Contract-test fixture and reproductions against unmodified behaviour (first)
   - [x] 11.1 Extend the PostgreSQL fixture in `backend/tests/integration/test_notification_centre_postgres.py`
     - In the base `sql` fixture:
       - add `042_auditable_adr_assessments.sql` before 046;
@@ -229,13 +229,13 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
         `048_care_team_conversations.sql` and `048_medwatch_draft_lifecycle.sql` in ledger order;
       - after 056, move in the `057_email_delivery.sql`, auth-privilege revoke and `058_email_delivery_fixes.sql` steps
         from `email_sql`;
-      - finally apply `059_*.sql` only when the file exists and `ADR_LOOP_GAP_BASELINE` is not `1`.
+      - finally apply `063_*.sql` only when the file exists and `ADR_LOOP_GAP_BASELINE` is not `1`.
     - Make `email_sql` in `test_email_postgres.py` return `sql`.
     - Migrate `test_adr_reviewed_questions_only_and_current_status` to `["dose_response"]`.
     - Run the notification and email suites (V6 regression commands) on this baseline. They must pass, which shows
       047 ADR and 048 MedWatch apply on a fresh database.
     - _Requirements: 14.6, 14.7_
-  - [ ] 11.2 Write the reproduction tests in `backend/tests/integration/test_adr_loop_postgres.py` and run the baseline
+  - [x] 11.2 Write the reproduction tests in `backend/tests/integration/test_adr_loop_postgres.py` and run the baseline
     - Use the same opt-in skip (`NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER`) and `pytest_plugins` reuse as the email
       suite, with helpers for assessment, request, answer (valid RPC payload) and MedWatch draft set-up on synthetic
       IDs.
@@ -246,12 +246,12 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       - `test_patient_deletion_after_answer_with_medwatch_draft` (R12.1, R12.2; also asserts another patient and the
         clinician are untouched);
       - `test_superseded_request_is_history` (R13.2).
-    - Run V6 baseline (`ADR_LOOP_GAP_BASELINE=1`, before any 059 file exists) and record in the `PV-001-C` evidence
+    - Run V6 baseline (`ADR_LOOP_GAP_BASELINE=1`, before any 063 file exists) and record in the `PV-001-C` evidence
       which tests fail and the exact error, especially whether G9 fails with an FK violation.
     - _Requirements: 9.1, 9.2, 10.1, 12.1, 12.2, 12.3, 13.2, 14.8, 14.9_
 
-- [ ] 12. Migration 059
-  - [ ] 12.1 Write `backend/src/app/db/migrations/059_adr_information_loop_lifecycle.sql` (design order, steps 1 to 7
+- [x] 12. Migration 063
+  - [x] 12.1 Write `backend/src/app/db/migrations/063_adr_information_loop_lifecycle.sql` (design order, steps 1 to 7
     and 9 to 11)
     - Steps:
       - extend `notification_events_event_type_check` and `notification_events_source_type_check`;
@@ -268,13 +268,13 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       - add the fail-closed `DO $$` block with checks (b) to (e).
     - Do not edit any existing migration.
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.6, 9.7, 10.2, 10.4, 10.5, 11.1, 11.3, 11.4, 11.5, 11.7, 11.8, 11.9, 12.4, 12.5, 14.1, 14.3, 14.4_
-  - [ ] 12.2 Add the patient-deletion foreign-key change only if 11.2 reproduced G9
+  - [x] 12.2 Add the patient-deletion foreign-key change only if 11.2 reproduced G9
     - If the baseline failed: recreate `adr_assessment_audit_events_patient_actor_id_fkey` with `ON DELETE CASCADE`
       and add verification check (a). If it passed: leave the FK and check (a) out, and record the reason in
       `PV-001-C`.
     - Clinician-side `RESTRICT` references stay unchanged.
     - _Requirements: 12.1, 12.2, 12.5, 12.6, 14.9_
-  - [ ] 12.3 Write `backend/tests/unit/db/test_adr_loop_gap_fixes_migration.py`
+  - [x] 12.3 Write `backend/tests/unit/db/test_adr_loop_gap_fixes_migration.py`
     - Assert at text level:
       - both CHECK extensions and the source allowlist;
       - the request-sourced actionability, rule L and the answered branch;
@@ -287,12 +287,12 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - Run V4 and V5.
     - _Requirements: 10.2, 12.4, 12.5, 14.1, 14.3, 14.4, 14.10_
 
-- [ ] 13. Make the reproductions pass and complete contract coverage
-  - [ ] 13.1 Apply 059 in the fixture and rerun the reproductions
-    - Change the fixture so 059 always applies unless `ADR_LOOP_GAP_BASELINE=1`.
-    - Run V6 (fixed). Every reproduction test from 11.2 passes; fix 059 (not the tests) until they do.
+- [x] 13. Make the reproductions pass and complete contract coverage
+  - [x] 13.1 Apply 063 in the fixture and rerun the reproductions
+    - Change the fixture so 063 always applies unless `ADR_LOOP_GAP_BASELINE=1`.
+    - Run V6 (fixed). Every reproduction test from 11.2 passes; fix 063 (not the tests) until they do.
     - _Requirements: 9.1, 9.2, 10.1, 12.1, 12.2, 13.2, 14.9_
-  - [ ] 13.2 Add the remaining contract tests to `test_adr_loop_postgres.py`
+  - [x] 13.2 Add the remaining contract tests to `test_adr_loop_postgres.py`
     - R9: the receipt is read with a read audit row (including an undelivered item); an assessment `updated_at`
       touch creates no patient event; no repeated `email_outbox` row after an answer with a verified, consenting
       contact; earlier events are unchanged; the event metadata carries `information_request_id`.
@@ -308,49 +308,49 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - **Property 7: At most one actionable patient request item, and it belongs to the pending request.** About 12
       enumerated operation sequences.
     - _Requirements: 9.3, 9.4, 9.5, 9.6, 9.7, 10.2, 10.4, 10.5, 11.1, 11.3, 11.4, 11.5, 11.7, 11.8, 11.9, 12.3, 12.4, 12.5, 13.1, 13.3, 13.4, 14.8_
-  - [ ] 13.3 Run the regression suites on the 059 schema
-    - Run the V6 regression commands (notification centre and email suites). Both pass with 059 applied and in the
+  - [x] 13.3 Run the regression suites on the 063 schema
+    - Run the V6 regression commands (notification centre and email suites). Both pass with 063 applied and in the
       baseline.
     - _Requirements: 14.3_
 
-- [ ] 14. Presentation for request-sourced events and the clinician alert
-  - [ ] 14.1 Update `backend/src/app/services/notification_centre_presentation.py`
+- [x] 14. Presentation for request-sourced events and the clinician alert
+  - [x] 14.1 Update `backend/src/app/services/notification_centre_presentation.py`
     - Request-sourced patient items link to `/chat?view=follow-up&request=<source_id>`; assessment-sourced items keep
       the PR 1 link.
     - Add `_COPY["adr_information_answered"]` with the design wording, which carries no clinical content and states
       that it is not a clinical decision.
     - Make `_safety_link` prefer a valid `metadata.adr_assessment_id`.
     - _Requirements: 4.2, 11.2, 11.6, 11.10_
-  - [ ] 14.2 Extend the presentation tests
+  - [x] 14.2 Extend the presentation tests
     - Cover the answered-alert title, body, category, link and label, the request-sourced link, and History labels.
     - **Property 2 (full): Notification links stay inside the allowlist.** Extend the table to `source_type` values
       and `adr_information_answered` / `adr_review` clinician links.
     - _Requirements: 4.2, 11.2, 11.6_
 
-- [ ] 15. Tracker and NOT-001 documentation for PR 2
-  - [ ] 15.1 Update `.agent/TASKS.md` and the NOT-001 specification
-    - `PV-001-C` and "Synthetic database schema": 059 written, not applied, plus the baseline and fixed evidence and
-      the deploy-order conclusion (merge PR 2, then apply 059 on explicit authorization).
+- [x] 15. Tracker and NOT-001 documentation for PR 2
+  - [x] 15.1 Update `.agent/TASKS.md` and the NOT-001 specification
+    - `PV-001-C` and "Synthetic database schema": 063 written, not applied, plus the baseline and fixed evidence and
+      the deploy-order conclusion (merge PR 2, then apply 063 on explicit authorization).
     - NOT-001 spec: the `adr_information_requests` source, the `adr_information_answered` type (History-only, no
       email), rule L and answer-marks-read.
     - _Requirements: 2.5, 2.6, 14.2, 14.5_
 
-- [ ] 16. Checkpoint: PR 2 verification
+- [x] 16. Checkpoint: PR 2 verification
   - Re-check the commands against `backend/README.md`, `CONTRIBUTING.md` and CI as in task 10.
   - Run V1, V2, V3, V4, V5 and V6: the baseline (expected failures as recorded in 11.2), the fixed run and the
     regression commands.
-  - Confirm `git diff --name-only <PR 1 head>` adds exactly one migration, `059_adr_information_loop_lifecycle.sql`,
+  - Confirm `git diff --name-only <PR 1 head>` adds exactly one migration, `063_adr_information_loop_lifecycle.sql`,
     and edits no existing migration. Record every command and outcome in `PV-001-C`.
   - Ensure all tests pass, ask the user if questions arise.
   - _Requirements: 2.1, 2.6, 14.1, 14.2, 14.9_
 
-### PR 3: MedWatch Form 3500 (migration 060, not applied)
+### PR 3: MedWatch Form 3500 (migration 064, not applied)
 
 - [ ] 17. Tracker for PR 3
   - [ ] 17.1 Update `.agent/TASKS.md` when PR 3 implementation starts
     - `PV-002`: owner override to Rajeev, per the requester on 2026-10-12.
     - `PV-001-C`: add PR 3 scope (R15 to R24, D12 to D17 decided) and an evidence placeholder for task 33.
-    - "Synthetic database schema": add a 060 row, `060_medwatch_form_3500.sql` written, not applied anywhere.
+    - "Synthetic database schema": add a 064 row, `064_medwatch_form_3500.sql` written, not applied anywhere.
     - Do not touch PR 1 or PR 2 rows beyond these additions.
     - _Requirements: 24.8_
 
@@ -494,8 +494,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       least once; marked slow).
     - _Requirements: 15.4, 16.2, 21.1, 21.2, 21.3, 21.4, 21.5, 21.7, 21.8_
 
-- [ ] 25. Migration 060
-  - [ ] 25.1 Write `backend/src/app/db/migrations/060_medwatch_form_3500.sql` (design steps 1 to 9)
+- [ ] 25. Migration 064
+  - [ ] 25.1 Write `backend/src/app/db/migrations/064_medwatch_form_3500.sql` (design steps 1 to 9)
     - Steps: discard columns and `patient_reference`, `export_version` default and legacy relabel, 001 comment fix;
       partial unique index `WHERE discarded_at IS NULL`; append-only `medwatch_external_submissions` with CHECKs,
       index, RLS, grants and the `BEFORE UPDATE` trigger; the replacement status CHECK and
@@ -511,20 +511,20 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - Run V4 (`cd backend && .venv/bin/python scripts/validate_migrations.py`) and V19.
     - _Requirements: 22.4, 22.6, 23.2, 23.3, 23.4, 23.7, 24.2, 24.3, 24.4, 24.9_
 
-- [ ] 26. PostgreSQL contract tests for 060
+- [ ] 26. PostgreSQL contract tests for 064
   - [ ] 26.1 Write `backend/tests/integration/test_medwatch_3500_postgres.py`
-    - Reuse the notification-centre fixture (`pytest_plugins`, opt-in Docker skip) with 048 to 060 in ledger order.
+    - Reuse the notification-centre fixture (`pytest_plugins`, opt-in Docker skip) with 048 to 064 in ledger order.
     - Cover: discard returns the assessment to `draft` with one actionable clinician `adr_review` item, no
       actionable patient item and no email (pin new event versus re-activated original); one active draft, another
       allowed after discard; the guard rejects `submitted` without a submission row, also as `service_role`;
       submission UPDATE fails and no role can DELETE / TRUNCATE it; amendment keeps the original; patient deletion
       cascades; audit tables stay append-only; the 2-argument export delegates.
-    - Run V20 (V6 commands with 059 and 060 applied).
+    - Run V20 (V6 commands with 063 and 064 applied).
     - _Requirements: 22.4, 22.5, 22.6, 22.7, 23.2, 23.3, 23.4, 23.6, 24.2, 24.7_
 
 - [ ] 27. MedWatch service and routes
   - [ ] 27.1 Extend `backend/src/app/services/medwatch_service.py` with its tests
-    - Upgrade on read; create with a service-generated UUID, `default_code` and the 060 create overload; approve
+    - Upgrade on read; create with a service-generated UUID, `default_code` and the 064 create overload; approve
       with stale-revision conflict, gate on the stored form, 422 `MEDWATCH_APPROVAL_INCOMPLETE` and the three
       approval values; `PUT` rejects submitted or discarded drafts.
     - List with `state` filter (`active` default, `submitted`, `discarded`) and `missing_for_approval`,
@@ -535,7 +535,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       422 `MEDWATCH_LEGACY_DRAFT_INCOMPLETE`; render, record the 5-argument `exported` event, return bytes only after
       it succeeds; `TemplateMismatchError` 503 with no audit; render failure 502 `FORM_3500_RENDER_FAILED`. JSON
       export relabelled `artifact_type: "fda_3500_draft"` with `form_version`, recording `'json'`.
-    - Discard, record submission and amend via the 060 RPCs; `_get_authorized_draft` / `_get_assessment` use
+    - Discard, record submission and amend via the 064 RPCs; `_get_authorized_draft` / `_get_assessment` use
       `.limit(1)` (404 on zero rows, 403 unassigned); RPC error mapping `P0002` 404, `42501` 403, `23514` 422 / 409,
       `22023` 422, else 502 without PostgREST detail. No call to any FDA system; form values never logged.
     - Tests in `backend/tests/unit/services/test_medwatch_service.py`, including audit-before-bytes, no audit on
@@ -613,9 +613,9 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
 
 - [ ] 32. Documentation for PR 3
   - [ ] 32.1 Update `backend/README.md` and `docs/supabase_setup_guide.md`
-    - New routes and codes, the vendored template and re-pin steps, `pypdf` pin, migration 060 (written, not
-      applied), and the PR 3 deploy order: merge PR 1, merge PR 2, apply 059, apply 060, then merge PR 3; the PR 3
-      backend is not safe before 060.
+    - New routes and codes, the vendored template and re-pin steps, `pypdf` pin, migration 064 (written, not
+      applied), and the PR 3 deploy order: merge PR 1, merge PR 2, apply 063, apply 064, then merge PR 3; the PR 3
+      backend is not safe before 064.
     - _Requirements: 24.6_
   - [ ] 32.2 Update the clinician portal `README.md`
     - Preview, print, PDF download notice, submission record, amendment, discard and the state switch.
@@ -634,7 +634,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - PDF smoke: a temporary script outside the repository builds a synthetic approved v2 draft, calls
       `render_form_3500`, re-reads the bytes with pypdf (field count, a few `/V` values, XFA present, `/P`, empty user
       password opens), then the script and its output are deleted.
-    - Confirm `git diff --name-only <PR 2 head>` adds exactly one migration, `060_medwatch_form_3500.sql`, and edits
+    - Confirm `git diff --name-only <PR 2 head>` adds exactly one migration, `064_medwatch_form_3500.sql`, and edits
       no existing migration. No remote apply, deploy, push, PR or merge.
     - Record every command and outcome in `PV-001-C`. Ensure all tests pass, ask the user if questions arise.
     - _Requirements: 21.7, 24.3, 24.5, 24.8, 24.9_
@@ -645,7 +645,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
   - V12: authenticated manual checks with synthetic accounts and screenshots per R1.19 (patient en-US / es-MX at 320,
     360 and 430 px; clinician at 1024, 1280 and 1536 px; keyboard, 200% zoom, reduced motion, safe areas).
   - V13 / D9: Spanish-fluent sign-off of the es-MX question, caution, confirmation and notification wording.
-  - V14: applying 059 to any remote environment, which needs explicit authorization naming that action.
+  - V14: applying 063 to any remote environment, which needs explicit authorization naming that action.
   - D1, the clinician-deletion policy, stays open.
 - No new dependencies. The properties run as exhaustive or table-driven tests, because neither Hypothesis nor
   fast-check is installed.
@@ -655,8 +655,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     in both, including weight units, checkboxes and dates, the form stays fillable and printable, and no official
     field carries added text.
   - V23: confirm the copyright position if task 19.1 left it unsettled.
-  - V24: apply 060 to any remote environment only with explicit authorization naming that action.
-- Deploy order: merge PR 1, merge PR 2, apply 059, apply 060, then merge PR 3.
+  - V24: apply 064 to any remote environment only with explicit authorization naming that action.
+- Deploy order: merge PR 1, merge PR 2, apply 063, apply 064, then merge PR 3.
 
 ## Task Dependency Graph
 
