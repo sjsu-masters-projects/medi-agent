@@ -188,6 +188,17 @@ class IngestionService:
                 text_chars=text_chars,
                 extraction_method=method,
             )
+        if registered.unanchored:
+            # Counted, never silent: a result the model read but no page could confirm.
+            logger.warning(
+                "Document candidates without a source anchor were not registered",
+                extra={"unanchored_count": registered.unanchored},
+            )
+            if registered.created:
+                warnings.append(
+                    f"{registered.unanchored} proposed item(s) could not be located on a page "
+                    "and were not registered; review the original document."
+                )
         if items and not registered.created:
             warnings.append("No proposed value had a verifiable source anchor.")
             self._set_document(

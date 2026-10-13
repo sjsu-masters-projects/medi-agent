@@ -54,6 +54,34 @@ def anchor_value(
     return best
 
 
+def anchor_occurrences(
+    extraction: DocumentExtraction,
+    value: str,
+    *,
+    policy: DocumentIntelligencePolicy,
+    limit: int = 10,
+) -> list[EvidenceAnchor]:
+    """Every place ``value`` is printed, best match first and in page order within a score.
+
+    A test name is often printed twice: in a section heading ("LIPID PANEL AND HEMOGLOBIN
+    A1C") and on its own result row. The caller picks the copy that carries the item's
+    other values; the single best match alone is whichever comes first on the page.
+    """
+    target = normalize_for_match(value).split()
+    if not target:
+        return []
+    found: list[EvidenceAnchor] = []
+    for page in extraction.model_input_pages():
+        if not page.words:
+            continue
+        tokens = [(index, normalize_for_match(word.text)) for index, word in enumerate(page.words)]
+        tokens = [(index, token) for index, token in tokens if token]
+        for score, word_indexes in _all_windows(tokens, target, policy.anchor_min_similarity):
+            found.append(_build_anchor(page, word_indexes, score, policy))
+    found.sort(key=lambda anchor: -anchor.match_score)
+    return found[:limit]
+
+
 def anchor_on_page(
     page: PageExtraction, value: str, *, policy: DocumentIntelligencePolicy
 ) -> EvidenceAnchor | None:
@@ -94,6 +122,29 @@ def _best_window(
             if score >= minimum and (best is None or score > best[0]):
                 best = (score, sorted({index for index, _ in window}))
     return best
+
+
+def _all_windows(
+    tokens: list[tuple[int, str]], target: list[str], minimum: float
+) -> list[tuple[float, list[int]]]:
+    """Every exact window, or the best near-match when nothing is exact, without overlaps."""
+    flat: list[tuple[int, str]] = []
+    for index, token in tokens:
+        flat.extend((index, piece) for piece in token.split())
+    target_text = " ".join(target)
+    size = len(target)
+    exact: list[tuple[float, list[int]]] = []
+    used: set[int] = set()
+    for start in range(0, max(0, len(flat) - size + 1)):
+        window = flat[start : start + size]
+        indexes = sorted({index for index, _ in window})
+        if " ".join(piece for _, piece in window) == target_text and not used & set(indexes):
+            exact.append((1.0, indexes))
+            used.update(indexes)
+    if exact:
+        return exact
+    best = _best_window(tokens, target, minimum)
+    return [best] if best is not None else []
 
 
 def _build_anchor(

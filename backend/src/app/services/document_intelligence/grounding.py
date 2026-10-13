@@ -28,6 +28,7 @@ from app.models.clinical_fact import (
 )
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_intelligence.anchoring import (
+    anchor_occurrences,
     anchor_on_page,
     anchor_value,
     normalize_for_match,
@@ -337,6 +338,8 @@ def _anchor_attributes(
                 if primary is not None
                 else None
             )
+        elif field == fields[0] and row_fields:
+            anchor = _row_primary(extraction, fields, row_fields, value, text, policy)
         else:
             anchor = anchor_value(extraction, text, policy=policy)
         if anchor is not None and field in EXACT_FIELDS and anchor.match_score < 1.0:
@@ -402,6 +405,41 @@ def _source_backed_value(
         stored.pop(field, None)
         dropped.append(field)
     return stored, dropped
+
+
+def _row_primary(
+    extraction: DocumentExtraction,
+    fields: tuple[str, ...],
+    row_fields: frozenset[str],
+    value: dict[str, Any],
+    text: str,
+    policy: DocumentIntelligencePolicy,
+) -> EvidenceAnchor | None:
+    """The printed copy of a result's name whose row also carries its value and unit.
+
+    "Hemoglobin A1c" in the heading "LIPID PANEL AND HEMOGLOBIN A1C" is an exact match too,
+    and it comes first; anchoring there found no 8.1 on that line and dropped the result.
+    """
+    occurrences = anchor_occurrences(extraction, text, policy=policy)
+    if len(occurrences) < 2:
+        return occurrences[0] if occurrences else None
+
+    def found_on_row(candidate: EvidenceAnchor) -> int:
+        count = 0
+        for field in fields[1:]:
+            if field not in row_fields:
+                continue
+            raw = value.get(field)
+            wanted = str(raw).strip() if raw is not None else ""
+            if wanted.casefold() in _PLACEHOLDER_VALUES:
+                continue
+            anchor = _anchor_on_row(extraction, candidate, wanted, policy=policy)
+            if anchor is not None and (field not in EXACT_FIELDS or anchor.match_score >= 1.0):
+                count += 1
+        return count
+
+    # Ties keep the earlier, better-matching copy, which is the previous behaviour.
+    return max(occurrences, key=lambda candidate: (found_on_row(candidate), candidate.match_score))
 
 
 def _anchor_on_row(
