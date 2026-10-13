@@ -1,18 +1,14 @@
 # Symptom question review package
 
-The requester reports that Ganesh reviewed and approved `candidate-1.json`.
-The actual review date/reference are still needed for activation metadata; no
-independently observed reviewer signature or formal PR approval is asserted.
-Use [the paired-locale worksheet](candidate-1-review.md) to read the questions,
-record the real decisions and see the subsequent activation steps. The worksheet
-labels the requester-reported provenance and pending metadata explicitly.
-It cannot be selected by the runtime manifest. The safety owner must review the
-paired wording, question order, applicability, required fields, budget and any
-symptom-specific branches/positive red-flag mappings before activation. The
-current proposal has no symptom-specific branch or structured positive mapping;
-these remain review decisions, not generated medical rules.
+The requester reports that Ganesh Thampi reviewed and approved `candidate-1.json`
+on October 12, 2026. The [paired-locale worksheet](candidate-1-review.md)
+records that report and its unchanged canonical hash. The runtime manifest pins
+that approval record and selects the bundle. No independently observed reviewer
+signature, itemized findings or formal PR approval is asserted. The package has
+no symptom-specific branch or structured positive red-flag mapping; those fields
+are recorded as reviewed package contents, not generated medical rules.
 
-After genuine review, retain the actual reference, reviewer identity/role/date,
+Retain the actual reference, reviewer identity/role/date,
 immutable bundle version and canonical SHA-256 in `manifest.json`. Rejected or
 revoked bundles cannot progress or confirm. A changed bundle requires a new
 version; never alter a pinned approved resource. Database eligibility must be

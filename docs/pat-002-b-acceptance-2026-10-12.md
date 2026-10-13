@@ -1,9 +1,12 @@
 # PAT-002-B implementation and local acceptance — October 12, 2026
 
 Implementation is on `feature/confirmed-symptom-intake`. B1–B11 code is implemented;
-local automated evidence is below. Product activation/acceptance is still pending
-actual question-library review and an authorized target rollout plus authenticated
-manual verification. No approval, peer review, merge or deployed acceptance is claimed.
+local automated evidence is below. On October 12 the requester reported Ganesh's
+same-day approval of the unchanged paired-language candidate. The pinned manifest,
+matching database eligibility and local backend flag were activated, then the
+authenticated synthetic patient and assigned-clinician path was exercised below.
+This is local functional evidence, not a recorded GitHub peer approval, merge,
+deployment or deployed acceptance.
 The requester authorized continuing all slices on October 12 without interim pauses.
 
 ## Behavior and boundary
@@ -14,8 +17,8 @@ messages; the initial Nora message retains its existing transcript visibility.
 The questions come from a pinned, paired-locale library, with a twelve-question ceiling.
 Unknown/declined are explicit values, including null severity. Product details are
 patient-supplied, not inferred from the chart. Optional model suggestions are not used.
-The present candidate has no approved symptom-specific branch or positive red-flag
-mapping; those require genuine review, not model-generated criteria.
+The approved candidate has no symptom-specific branch or positive red-flag mapping;
+none was generated from model output.
 
 ```mermaid
 flowchart LR
@@ -146,19 +149,21 @@ Existing SDK/Sentry/Vite deprecation warnings remain. Whole-tests Ruff/format ha
 pre-existing failures in B2; scoped changed Python checks pass. No dependency installation,
 remote migration, remote seed/reset, deployment or merge occurred.
 
-## Remaining prerequisites and authenticated manual journey
+## Activation and authenticated manual journey
 
-1. Obtain actual designated safety/backend review of both locales, question ordering,
-   applicability, red-flag mappings and any symptom-specific branch. Record the real
-   reference/reviewer identity/role/date and immutable version/hash. The current manifest
-   has `active_version: null` and `pending_review`; do not label fixtures as approval.
-2. Review migration 060 and perform an explicitly authorized rollout of 059/060 with
-   checksums and least-privilege verification. Drain/retire old direct symptom writers
-   first. Historical rows are not retroactively confirmed. Do not revert to automatic
-   report writes during rollback; leave intake disabled and preserve confirmed reports.
-3. Through that authorized rollout, install matching genuine database eligibility and
-   publish the reviewed immutable packaged bundle. Set `SYMPTOM_INTAKE_ENABLED=true`
-   only after all three gates agree. Review lockfile reproducibility and CI checks.
+1. **Library gate completed for the local synthetic check:** the requester reported
+   Ganesh Thampi approved the opened `candidate-1` package on October 12. The
+   [approval record](../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+   names its unchanged canonical hash and distinguishes that report from a reviewer
+   signature or PR approval. `manifest.json` selects that exact version/hash.
+2. **Target schema checked:** the requester applied 059/060. Read-only ledger checks
+   matched their versioned checksums, the confirmation column was available and the
+   unknown-patient intake RPC denied access. Old direct writers still need release
+   coordination before any production rollout; historical rows remain unconfirmed.
+3. **Local activation completed:** matching approval metadata were published via
+   `set_symptom_question_eligibility`; the backend was restarted with
+   `SYMPTOM_INTAKE_ENABLED=true` for local verification. This does not set a deployed
+   service flag. Lockfile reproducibility and the final PR/CI review remain open.
 4. Sign in as a fictional patient in an approved synthetic environment. Open Nora;
    send a new non-emergency symptom message (or choose **Start a symptom draft** after
    a saved turn). Historic unbound turns cannot start a draft. Select severity or choose
@@ -178,9 +183,10 @@ remote migration, remote seed/reset, deployment or merge occurred.
    same report/identity and honest pending/delivery states. Try existing bilingual reviewed
    emergency phrases; observe direction before ordinary work and required alert retry.
 
-Steps 4–7 and visual narrow-screen/touch verification have **not** been performed in
-an authenticated deployed browser. They are explicit remaining acceptance checks, not
-invented evidence. No real patient data should be used.
+Steps 4–5 and the assigned-clinician summary in step 6 were performed locally on
+October 12; exact observations are recorded in the latest section below. Live
+reassignment denial, authenticated touch/voice and outage injection in steps 6–7
+remain open. No authenticated deployed acceptance is claimed. Use only synthetic data.
 
 ## PAT-002-C and ADR handoff
 
@@ -429,3 +435,62 @@ approvals never alter the runtime manifest or authorize publication.
 From `backend`, `PYTHONPATH=src .venv/bin/pytest tests/unit/intake/test_library.py tests/unit/intake/test_service.py tests/integration/routers/test_symptom_intake_api.py -q --no-cov`
 passed **36 tests**. Ruff check/format for `tests/unit/intake/test_library.py` and
 scoped `git diff --check` passed. No production logic or question wording changed.
+
+## Approved-library local acceptance — October 12
+
+The requester clarified that Ganesh Thampi reviewed and approved the opened
+`candidate-1` package **on October 12, 2026**. Commit `7390a002df936126f622648a85be01bd787219f9`
+records this as requester-reported approval of canonical SHA-256
+`a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab`.
+There is no independently observed reviewer signature, itemized finding or human
+GitHub review. `manifest.json` now selects this unchanged paired-locale bundle and
+links to that stable record. The runtime loader returned `candidate-1`, the same hash
+and twelve questions. The deployment-only eligibility RPC accepted the exact same
+version/hash/approval metadata. The local backend restarted with
+`SYMPTOM_INTAKE_ENABLED=true`, without editing an environment file; patient and
+clinician development servers stayed on localhost ports 3000 and 3001.
+
+Authenticated browser steps and observed results, using only the fictional Maya
+Patel / assigned Elena Park demo accounts:
+
+1. In patient **Chat → Nora**, send a new ordinary symptom turn. The headache turn
+   opened **Draft — not submitted** with the first approved question. Save one answer,
+   refresh, reopen Nora and check the same draft resumes at the next question.
+2. Complete applicable questions. The tested patient chose **I don’t know** for
+   severity, **Prefer not to answer** for history and **No** for a product concern.
+   The concomitant-products question was shown as not applicable, so progress ended
+   at 11 resolved of 12 possible questions. Expand **What you reported**, edit the
+   description and confirm the correction persists.
+3. Click **Review before sharing**. The preview showed patient answers, unknown
+   severity, declined history, the corrected description and **No relevant record
+   context was used**. Consent started unchecked; checking it enabled **Confirm and
+   share with my care team**. One click saved report
+   `f924690d-5720-44aa-bbf7-0e67519569df`. Refreshing and reopening the same
+   conversation recovered that exact report ID.
+4. In clinician **Risk Radar → Maya Patel → Symptoms**, Elena saw the new row marked
+   **Patient-confirmed**, severity **Unknown / not provided**, and a chart note that
+   unknown ratings are not plotted. **Confirmed patient summary** expanded to the
+   corrected testimony. Historical rows remained marked as unconfirmed.
+5. In a separate Nora conversation, save one nausea answer and choose **Cancel
+   draft**. The panel said the draft was cancelled and retained chat history; no
+   confirmation control or new report appeared in that conversation.
+6. In patient **Profile → Preferred language**, select **Español**. A new Spanish
+   symptom turn opened **Borrador — no enviado** and the approved first question
+   “Describe el síntoma o evento con tus propias palabras,” with **No sé** and
+   **Prefiero no responder** options. Cancel that draft; restore **English (US)**.
+
+The local patient and clinician verification tabs remain open. Local screenshots
+are in `output/verification/pat-002-b-confirmed-2026-10-12.png` and
+`output/verification/pat-002-b-clinician-summary-2026-10-12.png`; these local
+synthetic screenshots are not part of the PR. After manifest activation, the focused
+backend command
+`PYTHONPATH=src .venv/bin/pytest tests/unit/intake/test_library.py tests/unit/intake/test_service.py tests/integration/routers/test_symptom_intake_api.py -q --no-cov`
+passed **36 tests**. Earlier broad backend/portal/SQL checks remain recorded above.
+
+Remaining verification: live reassignment/unassigned denial, real browser
+disconnect/lost-response and safety-alert outage exercises, and authenticated
+320/375-pixel touch/voice checks. Their owner-level SQL/API/UI regressions passed,
+but those scenarios were not newly performed end to end here. PR peer/safety review,
+required CI and clean locked install evidence, merge, deployed configuration and
+deployed acceptance remain separate. No additional remote migration, reset/seed,
+deployment or merge was performed.

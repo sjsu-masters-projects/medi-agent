@@ -1,10 +1,16 @@
 {
-  "active_version": null,
+  "active_version": "candidate-1",
   "bundles": {
     "candidate-1": {
       "file": "candidate-1.json",
-      "status": "pending_review",
-      "approval": null
+      "status": "approved",
+      "sha256": "a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab",
+      "approval": {
+        "reference": "https://github.com/sjsu-masters-projects/medi-agent/blob/7390a002df936126f622648a85be01bd787219f9/backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval",
+        "reviewer_identity": "Ganesh Thampi",
+        "reviewer_role": "Designated safety/backend reviewer",
+        "date": "2026-10-12"
+      }
     }
   }
 }

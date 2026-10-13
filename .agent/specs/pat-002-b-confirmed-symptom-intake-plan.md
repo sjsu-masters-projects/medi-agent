@@ -2,7 +2,7 @@
 
 **Prepared:** October 10, 2026
 
-**State:** In progress — B1 audit documented; B2 implemented and locally verified; B3 awaits requester checkpoint; no rollout
+**State:** B1–B11 implemented; requester-reported question approval, matching eligibility and authenticated local synthetic acceptance recorded October 12. PR #159 remains in review; no deploy or merge.
 
 **Task:** PAT-002-B in [TASKS.md](../TASKS.md)
 
@@ -1101,3 +1101,28 @@ Local browser checks now show Connected; intake recovery is still unavailable un
 authorized rollout. The [connection acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-12.md#nora-connection-follow-up--october-12)
 records 86 backend/532 patient tests, lint/type/build checks and manual steps.
 No migration, clinical report, library approval or broader turn-recovery task is included.
+
+## 24. Approved library and local authenticated acceptance — October 12
+
+The requester reported that Ganesh Thampi reviewed and approved the unchanged
+paired-locale `candidate-1` package on October 12. The
+[versioned approval record](../../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+states the provenance and exact canonical hash without asserting a separate reviewer
+signature, itemized findings or GitHub PR approval. The manifest now selects that
+version; matching eligibility was published through the deployment-only RPC after
+059/060 ledger verification. The local backend was restarted with
+`SYMPTOM_INTAKE_ENABLED=true`; no deployed service configuration was changed.
+
+The authenticated fictional patient Maya described a headache to Nora, recovered
+the private draft after refresh, chose unknown severity and declined history, edited
+the description, reviewed the exact preview, checked consent and confirmed once.
+The same report ID recovered after refresh. Her assigned clinician Elena saw the
+patient-confirmed summary and an unknown severity label; a separate draft was
+cancelled. The Mexican Spanish portal showed the approved Spanish question wording
+and cancel flow; the patient's original English preference was restored. See the
+[acceptance record](../../docs/pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12)
+for exact observations and remaining denial/outage/touch/deployed checks.
+
+This checkpoint supersedes the historical pending-library and missing-migration
+statements above. The scope remains PAT-002-B: no PAT-002-C timeline or PR #136
+ADR follow-up implementation was added.

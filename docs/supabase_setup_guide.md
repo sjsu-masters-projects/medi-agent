@@ -242,21 +242,25 @@ reads, and browser write/publication-RPC denial. Local tests do not prove remote
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.
 
-## PAT-002-B confirmation rollout (activation pending)
+## PAT-002-B confirmation rollout (local verification active)
 
-Migrations 059/060 are local implementation artifacts. Applying them, publishing
-question eligibility and changing remote configuration each require explicit requester
-authorization. No bundle is seeded or approved by migration 060. Obtain genuine
-paired-locale review evidence first; the packaged candidate is currently pending review.
+Migrations 059/060 are versioned implementation artifacts. Applying them, publishing
+question eligibility and changing deployed configuration are distinct rollout
+actions. No bundle is seeded or approved by migration 060. On October 12 the requester
+reported Ganesh approved the unchanged paired-locale candidate; the
+[approval record](../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+states its provenance, date and canonical hash. This is not a formal PR approval.
 
 October 12 requester rollout recheck: the requester reported applying the migrations.
 Read-only `schema_migrations` queries confirmed both 059/060 ledger entries match the
 versioned file checksums below. The confirmation column is available and the intake
-RPC rejects an unknown patient with `42501`. This verifies those checks, not complete
-activation or authenticated confirmation acceptance. The library manifest remains
-pending and local configuration resolves intake off. Use the
-[paired-locale review worksheet](../backend/src/app/intake/question_library/candidate-1-review.md)
-to obtain and record the actual review before publishing eligibility and enabling intake.
+RPC rejects an unknown patient with `42501`. After the dated approval report, the
+manifest selected `candidate-1`, matching eligibility metadata were published via
+`set_symptom_question_eligibility`, and the local backend was restarted with
+`SYMPTOM_INTAKE_ENABLED=true`. An authenticated fictional patient confirmation and
+assigned-clinician summary then passed locally, as recorded in the
+[acceptance evidence](pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
+The deployed backend setting and deployed acceptance remain separate.
 
 | Migration | SHA-256 |
 | --- | --- |
