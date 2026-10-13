@@ -49,6 +49,7 @@ def test_template_escapes_data_and_has_plaintext():
     assert "Clinic <b>unsafe</b>" in content.text
     assert "#F3EEE6" in content.html and "#147465" in content.html
     assert "#2563EB" not in content.html and "MediAgent Pro" not in content.text
+    assert "MediAgent prototype · fictional demo data." in content.text
 
 
 CLINICIAN_BLUE = "#2563EB"  # clinician-portal --color-primary
@@ -68,7 +69,8 @@ def test_clinician_email_uses_clinician_brand():
     assert 'MediAgent <span class="accent" style="color:#2563EB">Pro</span>' in content.html
     assert f'bgcolor="{CLINICIAN_BLUE}"' in content.html and 'lang="en-US"' in content.html
     assert "#147465" not in content.html and "#F3EEE6" not in content.html
-    assert "MediAgent Pro is a master's-project prototype" in content.text
+    assert "MediAgent Pro prototype · fictional demo data." in content.text
+    assert "Replies aren't monitored." in content.text
     assert "Button not working" in content.html
 
 
@@ -98,6 +100,7 @@ def test_spanish_verification_does_not_enable_notices():
     )
     assert 'lang="es-MX"' in content.html and "123456" in content.text
     assert "no activa" in content.text and "Caduca en 10 minutos" in content.text
+    assert "Prototipo de MediAgent · datos ficticios." in content.text
     assert "#147465" in content.html and "#2563EB" not in content.html
 
 

@@ -57,10 +57,14 @@ The backend builds these from `PATIENT_PORTAL_URL` / `CLINICIAN_PORTAL_URL` plus
 `/reset-password?lang=…`; if either portal URL changes, update the template's
 comparison strings and the Supabase Redirect URLs allowlist together.
 
-Each variant states "This link expires in 1 hour and works once." (es-MX: "Este
-enlace vence en 1 hora y solo funciona una vez."). One hour is Supabase's default
-email link lifetime; if Supabase → Authentication → Email "OTP expiry" is changed,
-change this copy in all three variants to match.
+Every variant uses the same short structure: label, heading, one sentence with
+the link lifetime ("Use the button within 1 hour to choose a new password. The
+link works once." / "Usa el botón en menos de 1 hora para elegir una nueva
+contraseña. El enlace funciona una sola vez."), the button, one note, and a small
+footer with the fallback link, the no-reply/password notice and the prototype
+line. One hour is Supabase's default email link lifetime; if Supabase →
+Authentication → Email "OTP expiry" is changed, change this copy in all three
+variants to match. Application emails share the same footer structure.
 
 The button and fallback link are scanner-safe: they point to the portal reset
 page itself, `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery`, not
