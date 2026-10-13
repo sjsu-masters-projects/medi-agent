@@ -16,6 +16,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.auth import CurrentUser
+from app.services.email_invitation_service import EmailInvitationService
 from app.services.email_service import (
     PROVIDER_STATUS,
     EmailDeliveryService,
@@ -41,11 +42,43 @@ def test_template_escapes_data_and_has_plaintext():
         ["Clinic <b>unsafe</b>"],
         action_url="https://app.example.com/profile?a=1&b=2",
         action_label="Open",
+        audience="patient",
     )
     assert "<script>" not in content.html and "&lt;b&gt;" in content.html
     assert "a=1&amp;b=2" in content.html
     assert "Clinic <b>unsafe</b>" in content.text
     assert "#F3EEE6" in content.html and "#147465" in content.html
+    assert "#2563EB" not in content.html and "MediAgent Pro" not in content.text
+
+
+CLINICIAN_BLUE = "#2563EB"  # clinician-portal --color-primary
+
+
+def test_clinician_email_uses_clinician_brand():
+    content = render_email(
+        "Review work available",
+        ["Open the portal."],
+        action_url="https://clinic.example.com/alerts",
+        action_label="Open alerts",
+        audience="clinician",
+        locale="es-MX",  # clinicians always receive English
+        note="You can change optional notices in Email preferences.",
+    )
+    assert CLINICIAN_BLUE in content.html and "#1E293B" in content.html
+    assert 'MediAgent <span class="accent" style="color:#2563EB">Pro</span>' in content.html
+    assert f'bgcolor="{CLINICIAN_BLUE}"' in content.html and 'lang="en-US"' in content.html
+    assert "#147465" not in content.html and "#F3EEE6" not in content.html
+    assert "MediAgent Pro is a master's-project prototype" in content.text
+    assert "Button not working" in content.html
+
+
+def test_clinician_verification_code_is_clinician_branded():
+    content = verification_email(
+        "654321", "https://clinic.example.com/settings", "en-US", audience="clinician"
+    )
+    assert CLINICIAN_BLUE in content.html and "#147465" not in content.html
+    assert "654321" in content.text and "expires in 10 minutes" in content.text
+    assert "MediAgent Pro" in content.text
 
 
 # A link carrying credentials must be rejected; built at runtime so no literal
@@ -56,13 +89,16 @@ CREDENTIAL_URL = "https://" + ":".join(["user", "example-only"]) + "@app.example
 @pytest.mark.parametrize("url", ["javascript:alert(1)", CREDENTIAL_URL, "http://app.example.com"])
 def test_template_rejects_unsafe_urls(url):
     with pytest.raises(ValueError):
-        render_email("Update", [], action_url=url, action_label="Open")
+        render_email("Update", [], action_url=url, action_label="Open", audience="patient")
 
 
 def test_spanish_verification_does_not_enable_notices():
-    content = verification_email("123456", "https://app.example.com/profile", "es-MX")
+    content = verification_email(
+        "123456", "https://app.example.com/profile", "es-MX", audience="patient"
+    )
     assert 'lang="es-MX"' in content.html and "123456" in content.text
-    assert "no activa" in content.text
+    assert "no activa" in content.text and "Caduca en 10 minutos" in content.text
+    assert "#147465" in content.html and "#2563EB" not in content.html
 
 
 def test_transport_requires_provider_id_and_redacts_errors(caplog):
@@ -416,6 +452,45 @@ async def test_challenge_sends_only_this_accounts_new_row():
     # The address comes from Auth and every account call carries it.
     params = db.rpc.call_args_list[-1].args[1]
     assert params["p_payload"]["account_email"] == "owner@example.com"
+    content = transport.return_value.payload.call_args.args[0]
+    assert "#147465" in content.html and "Caduca en 10 minutos" in content.text
+
+
+@pytest.mark.asyncio
+async def test_clinician_challenge_uses_clinician_brand():
+    db = FakeDB({})
+    db.rpc = MagicMock()  # type: ignore[method-assign]
+    responses = [
+        {"email": "dr@example.com", "verified": False, "synthetic": False, "preferences": {}},
+        {"status": "queued", "outbox_id": str(uuid4())},
+    ]
+    db.rpc.return_value.execute.side_effect = [SimpleNamespace(data=r) for r in responses]
+    actor = CurrentUser(id=uuid4(), email="dr@example.com", role="clinician")
+    with (
+        patch("app.services.email_service.ResendClient") as transport,
+        patch("app.services.email_service.EmailDeliveryService") as delivery,
+    ):
+        transport.return_value.enabled = True
+        transport.return_value.default_from_email = "n@example.com"
+        transport.return_value.payload.return_value = {"to": ["dr@example.com"]}
+        delivery.return_value.send_now = AsyncMock(return_value=True)
+        await EmailService(db, actor).challenge()  # type: ignore[arg-type]
+    content = transport.return_value.payload.call_args.args[0]
+    assert CLINICIAN_BLUE in content.html and "#147465" not in content.html
+    assert "MediAgent Pro" in content.text and "/settings" in content.text
+
+
+@pytest.mark.asyncio
+async def test_clinician_invitation_uses_clinician_brand():
+    service = EmailInvitationService(MagicMock())
+    service.operation = AsyncMock(return_value={"status": "pending"})  # type: ignore[method-assign]
+    with patch("app.services.email_invitation_service.ResendClient") as transport:
+        transport.return_value.deliverable.return_value = True
+        transport.return_value.payload.return_value = {}
+        await service.create(uuid4(), "dr@example.com", "clinician", "Demo Clinic")
+    content = transport.return_value.payload.call_args.args[0]
+    assert CLINICIAN_BLUE in content.html and "#147465" not in content.html
+    assert "MediAgent Pro" in content.text and "expires in seven days" in content.text
 
 
 def test_notice_links_carry_no_identifiers():
@@ -440,6 +515,10 @@ def test_notice_links_carry_no_identifiers():
             )
         assert conversation not in payload["html"] and conversation not in payload["text"]
         assert f"example.com{path}" in payload["text"]
+        clinician = role == "clinician"
+        assert (CLINICIAN_BLUE in payload["html"]) is clinician
+        assert ("#147465" in payload["html"]) is not clinician
+        assert ("MediAgent Pro" in payload["text"]) is clinician
 
 
 def test_dedicated_code_secret_is_preferred():
