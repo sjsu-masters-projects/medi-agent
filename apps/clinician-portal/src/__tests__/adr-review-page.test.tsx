@@ -4,9 +4,11 @@ import {
     render,
     screen,
     waitFor,
+    within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MedWatchPage from "@/app/(dashboard)/medwatch/page";
+import { ATTESTATION_TEXT, makeDraft } from "./fixtures/medwatch";
 
 const {
     approveMedWatchDraftMock,
@@ -28,7 +30,8 @@ const {
 const query = vi.hoisted(() => ({ value: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(query.value) }));
 
-vi.mock("@/services/clinicians", () => ({
+vi.mock("@/services/clinicians", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/services/clinicians")>()),
     approveMedWatchDraft: approveMedWatchDraftMock,
     createMedWatchDraft: createMedWatchDraftMock,
     exportMedWatchDraft: exportMedWatchDraftMock,
@@ -75,65 +78,16 @@ const assessment = {
     createdAt: "2026-10-02T09:53:00Z",
 };
 
-const medwatchDraft = {
+const medwatchDraft = makeDraft({
     id: "draft-1",
-    adrAssessmentId: "adr-1",
-    patientId: "patient-1",
     formData: {
-        patient: {
-            patient_identifier: "Maya Patel",
-            date_of_birth: "1988-04-03",
-            sex: "female",
-        },
-        event: {
-            description: "dizziness (patient-reported severity 2/10)",
-            onset_date_or_time: "a few hours after starting the inhaler",
-            outcome: "",
-            seriousness: "",
-        },
-        suspect_product: {
-            name: "fluticasone/salmeterol inhaler",
-            dose: "1 puff",
-            frequency: "twice daily",
-            route: "inhaled",
-            therapy_start_date: "2026-09-28",
-            therapy_end_date: "",
-        },
-        concomitant_products: { products: "albuterol" },
-        tests_and_history: { relevant_tests: "", other_relevant_history: "" },
-        reporter: {
-            name: "Elena Park",
-            email: "elena@example.com",
-            specialty: "Internal medicine",
-            clinic_name: "MediAgent Clinic",
-        },
-        clinical_review: {
-            naranjo_score: 3,
-            causality: "Possible",
-            reportability_rationale: "Clinically significant new event.",
+        ...makeDraft().formData,
+        section_b: {
+            ...makeDraft().formData.section_b,
+            outcomes: ["hospitalization"],
         },
     },
-    sourceEvidence: [
-        {
-            field_paths: ["event.description"],
-            source_type: "patient_symptom_report",
-            source_id: "symptom-1",
-            attribution: "Patient-reported symptom",
-            excerpt: "I became dizzy after starting the inhaler.",
-            citation: "symptom_reports/symptom-1",
-        },
-    ],
-    clinicianEditedFields: [],
-    status: "draft",
-    createdBy: "clinician-1",
-    approvedBy: null,
-    approvedAt: null,
-    approvalNote: null,
-    revision: 1,
-    exportVersion: "medwatch-3500a-draft-v1",
-    createdAt: "2026-10-09T10:00:00Z",
-    updatedAt: "2026-10-09T10:00:00Z",
-} as const;
+});
 
 describe("ADR review queue", () => {
     it("focuses the exact assessment and explains an unavailable target", async () => {
@@ -597,7 +551,7 @@ describe("ADR review queue", () => {
             ),
         );
         expect(
-            await screen.findByText("MedWatch-compatible draft"),
+            await screen.findByText("MedWatch Form 3500 draft"),
         ).toBeInTheDocument();
         expect(
             screen.getAllByText("Not submitted to FDA").length,
@@ -691,36 +645,43 @@ describe("ADR review queue", () => {
 
         render(<MedWatchPage />);
 
-        fireEvent.change(await screen.findByLabelText(/outcome/i), {
-            target: { value: "Recovering" },
-        });
+        const narrative = await screen.findByLabelText(
+            "B5 Describe event, problem or product use/medication error",
+        );
+        expect(fetchMedWatchDraftsMock).toHaveBeenCalledWith("active");
+        fireEvent.change(narrative, { target: { value: "Recovering" } });
         fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
         await waitFor(() =>
             expect(updateMedWatchDraftMock).toHaveBeenCalledWith(
                 "draft-1",
                 expect.objectContaining({
-                    event: expect.objectContaining({ outcome: "Recovering" }),
+                    section_b: expect.objectContaining({ narrative: "Recovering" }),
                 }),
                 1,
             ),
         );
+        expect(await screen.findByText("MedWatch draft changes saved and audited.")).toBeInTheDocument();
 
-        const approve = screen.getByRole("button", { name: "Approve for export" });
-        expect(approve).toBeDisabled();
-        fireEvent.change(screen.getByLabelText("Approval note"), {
+        fireEvent.click(screen.getByRole("button", { name: "Approve for export" }));
+        const dialog = screen.getByRole("dialog", { name: "Approve Form 3500 draft" });
+        const confirm = within(dialog).getByRole("button", { name: "Confirm approval" });
+        expect(confirm).toBeDisabled();
+        fireEvent.change(within(dialog).getByLabelText("Approval note"), {
             target: { value: "Evidence and form reviewed." },
         });
         fireEvent.click(
-            screen.getByRole("checkbox", { name: /I reviewed the draft/i }),
+            within(dialog).getByRole("checkbox", { name: ATTESTATION_TEXT }),
         );
-        fireEvent.click(approve);
+        fireEvent.click(confirm);
 
         await waitFor(() =>
-            expect(approveMedWatchDraftMock).toHaveBeenCalledWith(
-                "draft-1",
-                "Evidence and form reviewed.",
-                2,
-            ),
+            expect(approveMedWatchDraftMock).toHaveBeenCalledWith("draft-1", {
+                approvalNote: "Evidence and form reviewed.",
+                expectedRevision: 2,
+                attestationVersion: "medwatch-3500-approval-v1",
+                nonSeriousAttested: false,
+                acknowledgedWarnings: [],
+            }),
         );
         expect(await screen.findByText("Approved for export")).toBeInTheDocument();
     });
