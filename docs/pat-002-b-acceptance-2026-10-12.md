@@ -341,3 +341,26 @@ Earlier Offline observations above are historical. Draft recovery still reports
 unavailable because the intake schema is absent. No remote migration/data change,
 new clinical message, symptom confirmation or genuine question approval was performed.
 Full intake activation and patient/clinician acceptance remain pending.
+
+## Headache intake availability recheck — October 12
+
+The requester reported “Guided symptom intake is unavailable. No symptom report was
+saved.” after describing a headache. The symptom route attempts `start`, which checks
+the runtime enablement and approved packaged library before ordinary draft creation.
+A fresh local backend configuration check resolves `symptom_intake_enabled=false`;
+the manifest still has `active_version=null`, `pending_review` and no approval.
+`load_library()` returns `INTAKE_LIBRARY_UNAVAILABLE`. These are confirmed activation
+blockers, not a headache-specific question failure. This check reads the configuration
+through the application and emits only the boolean, not credential/configuration contents.
+
+The target's schema state has changed since the earlier missing-column observation:
+a zero-row read of `symptom_reports.confirmation_state` now succeeds. A direct
+zero-row read of `symptom_intakes.id` returns `42501`, consistent with migration 060's
+intentional service-role table-access revocation and RPC-only draft access. That denial
+does not establish a missing table. The complete migration ledger/checksums, database
+eligibility and running process overrides were not verified in this recheck.
+
+No migration, eligibility publication, feature activation or approval was performed.
+Actual paired-locale review and a matching approved bundle/manifest/database eligibility
+remain necessary before enabling intake and restarting the backend. The ordinary chat
+message and an explicitly confirmed symptom report remain separate artifacts.
