@@ -1,13 +1,18 @@
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PasswordRecoveryForm } from "@/components/features/password-recovery-form";
-import { readRecoveryTokens } from "../../../../packages/shared/src/utils/password-recovery";
+import {
+    readRecoveryTokenHash,
+    readRecoveryTokens,
+    withoutRecoveryQuery,
+} from "../../../../packages/shared/src/utils/password-recovery";
 
 const mocks = vi.hoisted(() => ({
     post: vi.fn(),
     create: vi.fn(),
     setSession: vi.fn(),
     getUser: vi.fn(),
+    verifyOtp: vi.fn(),
     updateUser: vi.fn(),
     signOut: vi.fn(),
 }));
@@ -20,6 +25,7 @@ beforeEach(() => {
     mocks.create.mockReturnValue({ auth: mocks });
     mocks.setSession.mockResolvedValue({ data: { session: {} }, error: null });
     mocks.getUser.mockResolvedValue({ data: { user: {} }, error: null });
+    mocks.verifyOtp.mockResolvedValue({ data: { session: {}, user: {} }, error: null });
     mocks.updateUser.mockResolvedValue({ error: null });
     mocks.signOut.mockResolvedValue({ error: null });
     mocks.post.mockResolvedValue(undefined);
@@ -98,6 +104,56 @@ describe("password recovery", () => {
         expect(mocks.updateUser).toHaveBeenCalledWith({ password: "SyntheticTest123!" });
         await waitFor(() => expect(mocks.signOut).toHaveBeenCalledWith({ scope: "global" }));
         expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
+    });
+    it("reads scanner-safe query tokens only for recovery and keeps the language", () => {
+        expect(readRecoveryTokenHash("?lang=es-MX&token_hash=abc&type=recovery")).toBe("abc");
+        expect(readRecoveryTokenHash("?token_hash=abc&type=signup")).toBeNull();
+        expect(readRecoveryTokenHash("?type=recovery")).toBeNull();
+        expect(withoutRecoveryQuery("?lang=es-MX&token_hash=abc&type=recovery")).toBe("?lang=es-MX");
+        expect(withoutRecoveryQuery("?token_hash=abc&type=recovery")).toBe("");
+    });
+    it("redeems a query token only after an explicit click, once", async () => {
+        window.history.replaceState(null, "", "/reset-password?lang=en-US&token_hash=hash-1&type=recovery");
+        render(<PasswordRecoveryForm mode="reset" portal="patient" />);
+        const proceed = await screen.findByRole("button", { name: "Continue to choose a new password" });
+        // Opening the page (as a mail scanner would) removes the secret and calls nothing.
+        expect(window.location.search).toBe("?lang=en-US");
+        expect(mocks.create).not.toHaveBeenCalled();
+        expect(mocks.verifyOtp).not.toHaveBeenCalled();
+        expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
+        fireEvent.click(proceed);
+        fireEvent.click(proceed);
+        await screen.findByLabelText("New password");
+        expect(mocks.verifyOtp).toHaveBeenCalledTimes(1);
+        expect(mocks.verifyOtp).toHaveBeenCalledWith({ token_hash: "hash-1", type: "recovery" });
+        expect(mocks.setSession).not.toHaveBeenCalled();
+        fireEvent.change(screen.getByLabelText("New password"), { target: { value: "SyntheticTest123!" } });
+        fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "SyntheticTest123!" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save password" }));
+        await screen.findByText(/Your password was updated/);
+        expect(mocks.updateUser).toHaveBeenCalledWith({ password: "SyntheticTest123!" });
+    });
+    it("removes query secrets from history before any network call", async () => {
+        window.history.replaceState(null, "", "/reset-password?lang=es-MX&token_hash=hash-2&type=recovery");
+        mocks.create.mockImplementation(() => {
+            expect(window.location.search).toBe("?lang=es-MX");
+            return { auth: mocks };
+        });
+        render(<PasswordRecoveryForm mode="reset" portal="patient" locale="es-MX" />);
+        expect(window.location.href).not.toContain("hash-2");
+        fireEvent.click(await screen.findByRole("button", { name: "Continuar para elegir una nueva contraseña" }));
+        await screen.findByLabelText("Nueva contraseña");
+        expect(mocks.create).toHaveBeenCalledTimes(1);
+    });
+    it("shows an invalid link when a query token is rejected", async () => {
+        window.history.replaceState(null, "", "/reset-password?lang=en-US&token_hash=used&type=recovery");
+        mocks.verifyOtp.mockResolvedValue({ data: { session: null, user: null }, error: { message: "expired" } });
+        render(<PasswordRecoveryForm mode="reset" portal="patient" />);
+        fireEvent.click(await screen.findByRole("button", { name: "Continue to choose a new password" }));
+        await screen.findByText(/This link is unavailable/);
+        expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
+        expect(screen.queryByText("expired")).not.toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Request another link" })).toBeInTheDocument();
     });
     it("shows an invalid link when the Auth server rejects its session", async () => {
         window.history.replaceState(null, "", "/reset-password#type=recovery&access_token=a&refresh_token=b");

@@ -62,10 +62,22 @@ enlace vence en 1 hora y solo funciona una vez."). One hour is Supabase's defaul
 email link lifetime; if Supabase → Authentication → Email "OTP expiry" is changed,
 change this copy in all three variants to match.
 
+The button and fallback link are scanner-safe: they point to the portal reset
+page itself, `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery`, not
+to Supabase's single-use `{{ .ConfirmationURL }}` verify endpoint, which
+institutional link scanners consume before the person clicks. Opening the page
+redeems nothing; the page removes `token_hash`/`type` from history and calls
+`verifyOtp` only when the person selects **Continue to choose a new password**.
+Links sent with the older `#access_token` fragment still work. Because
+`.RedirectTo` already contains `?lang=…`, the template appends with `&`; the
+Supabase Redirect URLs allowlist must still contain exactly the three reset URLs
+above (unchanged). A redirect missing from the allowlist falls back to the Site
+URL, which has no query string, and would produce a broken link.
+
 Install it in Supabase → Authentication → Emails → **Reset password** only, with
 separate authorization, and **re-install it after every change to this file**.
 Suggested shared subject: `MediAgent — Password reset / Restablecer contraseña`.
-Keep `{{ .ConfirmationURL }}` intact. Do not activate signup confirmation.
+Do not activate signup confirmation.
 Supabase controls Auth MIME delivery; the backend plaintext renderer does not
 prove Auth plaintext or actual inbox rendering.
 
