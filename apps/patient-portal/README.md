@@ -145,7 +145,11 @@ conversation is open. Reconnects retain the visible conversation while history
 recovers. Streaming follows the latest reply without animated scrolling only
 when the reader is near the bottom; scrolling up pauses following, and returning
 to the bottom resumes it. Sending a typed message or selecting another conversation
-resumes following. Initial draft-read failures
+resumes following. Short-lived reconnects retain their retry count; the count resets
+only after a socket stays open for five seconds, so repeated initialization failures
+stop after five retries. A database without migration 060 omits saved symptom context
+and marks it unavailable to Nora's record tool; it never falls back to unconfirmed
+reports. This does not activate guided intake. Initial draft-read failures
 offer reload feedback; only an uncertain mutation uses the action/save recovery
 message. Loading a draft does not imply that a report was submitted.
 

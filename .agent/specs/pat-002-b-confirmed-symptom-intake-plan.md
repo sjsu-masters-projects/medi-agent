@@ -1089,3 +1089,15 @@ The [October 12 acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-12.
 records 530 patient tests, lint/type/build results, exact manual steps and observed
 stable desktop/mobile scroll position. Offline chat and unavailable draft recovery
 remain target limitations; no successful live confirmation is claimed.
+
+## 23. Nora connection follow-up
+
+The missing confirmation column in the connected target caused context initialization
+to close each accepted socket; resetting the retry counter on every open then made
+the retries unbounded. Nora now omits unavailable symptom context with an explicit
+availability field for the record tool, preserves the confirmed-only boundary,
+and limits short-lived reconnection cycles. Generic initialization errors close safely.
+Local browser checks now show Connected; intake recovery is still unavailable until
+authorized rollout. The [connection acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-12.md#nora-connection-follow-up--october-12)
+records 86 backend/532 patient tests, lint/type/build checks and manual steps.
+No migration, clinical report, library approval or broader turn-recovery task is included.

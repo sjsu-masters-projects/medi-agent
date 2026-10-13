@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from starlette.websockets import WebSocketState
+from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.db.connection import get_db
@@ -142,6 +142,34 @@ def _patch_chat_runtime(monkeypatch, patient_id):
 
 
 class TestChatWebSocketStability:
+    def test_initialization_failure_sends_safe_error_and_closes(
+        self,
+        client,
+        override_db,
+        patient_id,
+        monkeypatch,
+    ):
+        _patch_chat_runtime(monkeypatch, patient_id)
+
+        async def unavailable_context(_self, **_kwargs):
+            raise RuntimeError("private backend detail")
+
+        monkeypatch.setattr("app.routers.chat.ChatService.get_context", unavailable_context)
+        with client.websocket_connect(
+            f"/ws/chat/{patient_id}",
+            subprotocols=["bearer", "test-token"],
+        ) as socket:
+            assert socket.receive_json()["type"] == "chat_history"
+            error = socket.receive_json()
+            assert error == {
+                "type": "error",
+                "code": "chat_initialization_failed",
+                "message": "Chat is temporarily unavailable. Please try again later.",
+            }
+            with pytest.raises(WebSocketDisconnect) as closed:
+                socket.receive_json()
+            assert closed.value.code == 1011
+
     def test_websocket_handles_high_message_volume_without_disconnect(
         self,
         client,

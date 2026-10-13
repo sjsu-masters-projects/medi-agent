@@ -786,6 +786,37 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/^Connected$/)).toBeInTheDocument();
     });
 
+    it("stops retrying sockets that repeatedly open and immediately close", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        vi.useFakeTimers();
+        for (const delay of [800, 1600, 3200, 6400, 8000]) {
+            const socket = MockWebSocket.instances.at(-1)!;
+            await act(async () => { socket.emitOpen(); socket.close(); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(delay); });
+        }
+        expect(MockWebSocket.instances).toHaveLength(6);
+        await act(async () => {
+            const socket = MockWebSocket.instances.at(-1)!;
+            socket.emitOpen(); socket.close();
+            await vi.advanceTimersByTimeAsync(30000);
+        });
+        expect(MockWebSocket.instances).toHaveLength(6);
+        expect(store.getState().chat.connectionStatus).toBe("disconnected");
+        expect(store.getState().chat.error).toBe("Live chat is offline. Refresh the page to reconnect.");
+    });
+
+    it("restores the retry budget after a connection remains healthy", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        vi.useFakeTimers();
+        await act(async () => { MockWebSocket.instances[0].emitOpen(); MockWebSocket.instances[0].close(); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+        await act(async () => { MockWebSocket.instances[1].emitOpen(); await vi.advanceTimersByTimeAsync(5000); });
+        await act(async () => { MockWebSocket.instances[1].close(); await vi.advanceTimersByTimeAsync(800); });
+        expect(MockWebSocket.instances).toHaveLength(3);
+    });
+
     it("keeps history and the reader's position while reconnecting and rehydrating", async () => {
         const history = [{ id: "earlier-reply", patientId: "patient-1", role: ChatRole.ASSISTANT,
             content: "Earlier conversation stays visible", language: Language.EN, createdAt: "2026-10-12T12:00:00Z" }];

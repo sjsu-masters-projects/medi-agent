@@ -78,6 +78,7 @@ function composeDictatedInput(prefix: string, transcript: string): string {
 const MAX_CHAT_RECONNECT_ATTEMPTS = 5;
 const BASE_CHAT_RECONNECT_DELAY_MS = 800;
 const MAX_CHAT_RECONNECT_DELAY_MS = 8_000;
+const CHAT_CONNECTION_STABLE_MS = 5_000;
 
 function buildWelcomeMessage(patientId: string, language: ChatLocale): ChatMessage {
     return {
@@ -245,9 +246,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const reconnectRef = useRef<{
         attempts: number;
         timer: ReturnType<typeof setTimeout> | null;
+        stabilityTimer: ReturnType<typeof setTimeout> | null;
     }>({
         attempts: 0,
         timer: null,
+        stabilityTimer: null,
     });
 
     const canPlayAssistantAudio = Boolean(accessToken && user) || voiceCapabilities.synthesis;
@@ -530,6 +533,13 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         }
     }
 
+    function clearChatStabilityTimer(): void {
+        if (reconnectRef.current.stabilityTimer) {
+            clearTimeout(reconnectRef.current.stabilityTimer);
+            reconnectRef.current.stabilityTimer = null;
+        }
+    }
+
     function scheduleChatReconnect(): void {
         if (reconnectRef.current.timer) {
             return;
@@ -626,6 +636,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         // Reconnecting the same conversation must not collapse its history or
         // reset the reader's scroll position while REST/WebSocket recover.
         if (changingConversation) {
+            clearChatReconnectTimer();
+            reconnectRef.current.attempts = 0;
             dispatch(clearChatState());
             dispatch(setLoading(true));
         }
@@ -679,7 +691,15 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             clearChatReconnectTimer();
-            reconnectRef.current.attempts = 0;
+            clearChatStabilityTimer();
+            // Accepting the socket does not prove initialization succeeded.
+            // Repeated short-lived opens must still exhaust the retry budget.
+            reconnectRef.current.stabilityTimer = setTimeout(() => {
+                reconnectRef.current.stabilityTimer = null;
+                if (isMounted && socket.readyState === WebSocket.OPEN) {
+                    reconnectRef.current.attempts = 0;
+                }
+            }, CHAT_CONNECTION_STABLE_MS);
             dispatch(setConnectionStatus("connected"));
             window.dispatchEvent(new Event("symptom-intake-updated"));
             dispatch(setChatError(null));
@@ -852,6 +872,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 return;
             }
 
+            clearChatStabilityTimer();
             resetAssistantDraft();
             dispatch(setConnectionStatus("error"));
             dispatch(setTyping(false));
@@ -865,6 +886,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 return;
             }
 
+            clearChatStabilityTimer();
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setTyping(false));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
@@ -877,6 +899,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         return () => {
             isMounted = false;
+            clearChatStabilityTimer();
             stopSpeechRecognition();
             stopAssistantPlayback();
             closeVoiceSocket();

@@ -72,6 +72,14 @@ See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing d
 
 ## Runtime configuration ownership
 
+Nora connection initialization tolerates only the specifically missing
+`symptom_reports.confirmation_state` column during confirmed-intake rollout: it omits
+symptom reports and exposes `recent_symptoms_available=false` to the patient-context
+tool. It never reads legacy reports as a substitute. Other initialization errors
+produce a generic `chat_initialization_failed` event and close with 1011; internal
+error details are not sent to the patient. This compatibility path does not replace
+authorized migration 060 rollout or enable intake.
+
 `app/config.py` supplies defaults; real process environment variables override
 those defaults. Local startup may also load the repository-root `.env` (or CWD
 `.env` if that file is absent). Never copy credentials into documentation or test

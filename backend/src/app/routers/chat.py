@@ -695,6 +695,19 @@ async def chat_websocket_endpoint(
     except WebSocketDisconnect:
         logger.info("Chat websocket disconnected during initialization")
         return
+    except Exception as exc:
+        logger.error("Chat initialization failed (%s)", type(exc).__name__)
+        sent = await _send_terminal_event(
+            websocket,
+            {
+                "type": "error",
+                "code": "chat_initialization_failed",
+                "message": "Chat is temporarily unavailable. Please try again later.",
+            },
+        )
+        if sent and websocket.application_state is WebSocketState.CONNECTED:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
 
     try:
         while True:

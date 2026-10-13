@@ -299,3 +299,45 @@ To see the fix:
    Repeat at a narrow width; the composer should remain visible.
 
 Step 3 is covered by socket-driven tests, not a successful live message in this target.
+
+## Nora connection follow-up — October 12
+
+The requester reported continuous Connected/Offline toggling. A read-only schema
+probe returning zero rows confirmed SQL code `42703` for
+`symptom_reports.confirmation_state`, and `PGRST205` for `symptom_intakes`: migration
+060 is absent from this target. The confirmed-only context query ran during socket
+initialization after acceptance and history delivery, terminating the connection.
+The client reset its retry counter on every open, allowing repeated short-lived
+connections to retry indefinitely.
+
+The context reader now handles only the missing confirmation column by omitting
+symptom reports, retaining other readable context, and exposing
+`recent_symptoms_available=false` to the model's record tool. This explicitly means
+unavailable rather than no symptoms; legacy/unconfirmed rows are never substituted.
+Unrelated database errors remain errors. Other initialization failures emit a safe
+generic error and close with 1011. The client resets its retry budget only after
+five seconds of sustained connection, with cleanup on close/error/session change;
+repeated immediate open/close cycles stop after five retries.
+
+Verification commands and outcomes:
+
+- From `backend`: `PYTHONPATH=src .venv/bin/pytest tests/unit/services/test_chat_service.py tests/unit/adk/test_tools.py tests/integration/routers/test_chat_api.py tests/integration/routers/test_chat_websocket_stability.py tests/integration/routers/test_chat_document_focus.py tests/integration/routers/test_chat_emergency_copy.py -q --no-cov`: **86 passed**.
+- `.venv/bin/ruff check src/ tests/unit/services/test_chat_service.py tests/unit/adk/test_tools.py tests/integration/routers/test_chat_websocket_stability.py` and the same paths with `.venv/bin/ruff format --check`: passed (248 formatted files).
+  `.venv/bin/mypy src/app/services/chat_service.py src/app/adk/tools/patient_context.py src/app/routers/chat.py --ignore-missing-imports`: passed.
+- From `apps/patient-portal`: `npm run test`: **532 passed in 59 files**, including
+  42 chat tests and bounded retry/healthy recovery regressions. `npm run lint`,
+  `npm run typecheck`, `npm run build -- --webpack`: passed.
+- The running local backend reloaded the changes. The authenticated synthetic
+  browser showed Connected on subsequent checks separated by test execution;
+  `output/verification/nora-connected-2026-10-12.jpg` is local screenshot evidence.
+
+To see it: reopen **Chat → Conversation Oct 6**, then leave it idle for at least
+a minute. The connection should stay Connected and the existing history should
+remain readable. A deliberately unavailable backend should eventually stop retrying
+and remain Offline rather than keep cycling. The latter case is tested with mock
+sockets; the shared backend was not deliberately stopped for manual testing.
+
+Earlier Offline observations above are historical. Draft recovery still reports
+unavailable because the intake schema is absent. No remote migration/data change,
+new clinical message, symptom confirmation or genuine question approval was performed.
+Full intake activation and patient/clinician acceptance remain pending.

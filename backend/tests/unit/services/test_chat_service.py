@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from postgrest.exceptions import APIError
 
 from app.core.exceptions import ExternalServiceError
 from app.models.enums import ChatRole, Language
@@ -141,9 +142,54 @@ async def test_get_context_returns_patient_and_document_context(mock_db):
     assert context["medications"] == med_rows
     assert context["conditions"] == condition_rows
     assert context["recent_symptoms"] == symptom_rows
+    assert context["recent_symptoms_available"] is True
     assert context["care_teams"] == care_team_rows
     assert context["document"] is not None
     assert context["document"]["id"] == document_id
+
+
+@pytest.mark.asyncio
+async def test_context_before_confirmation_migration_omits_symptoms_without_legacy_read(mock_db):
+    missing_confirmation = APIError(
+        {
+            "code": "42703",
+            "message": "column symptom_reports.confirmation_state does not exist",
+            "details": None,
+            "hint": None,
+        }
+    )
+    mock_db.table().execute.side_effect = [
+        _response([{"name": "Synthetic medication"}]),
+        _response([]),
+        missing_confirmation,
+        _response([]),
+    ]
+    context = await ChatService(mock_db).get_context(str(uuid4()))
+    assert context["medications"] == [{"name": "Synthetic medication"}]
+    assert context["recent_symptoms"] == []
+    assert context["recent_symptoms_available"] is False
+    assert [call.args[0] for call in mock_db.table.call_args_list if call.args] == [
+        "medications",
+        "conditions",
+        "symptom_reports",
+        "care_teams",
+    ]
+    mock_db.table().eq.assert_any_call("confirmation_state", "patient_confirmed")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "code,message",
+    [
+        ("42703", "column symptom_reports.patient_id does not exist"),
+        ("42501", "permission denied"),
+    ],
+)
+async def test_context_does_not_mask_unrelated_database_errors(mock_db, code, message):
+    error = APIError({"code": code, "message": message, "details": None, "hint": None})
+    mock_db.table().execute.side_effect = [_response([]), _response([]), error]
+    with pytest.raises(APIError):
+        await ChatService(mock_db).get_context(str(uuid4()))
 
 
 @pytest.mark.asyncio

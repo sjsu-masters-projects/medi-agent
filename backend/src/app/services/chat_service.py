@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import Any
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError
@@ -18,6 +20,7 @@ DEFAULT_CHAT_SESSION_ID = "default"
 # they are validated rather than trusted; anything else falls back to the default.
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 TITLE_CHARS = 80
+logger = logging.getLogger(__name__)
 
 
 def normalize_session_id(value: Any) -> str:
@@ -147,7 +150,19 @@ class ChatService:
     ) -> dict[str, Any]:
         medications = await self._fetch_active_medications(patient_id)
         conditions = await self._fetch_active_conditions(patient_id)
-        recent_symptoms = await self._fetch_recent_symptoms(patient_id)
+        recent_symptoms_available = True
+        try:
+            recent_symptoms = await self._fetch_recent_symptoms(patient_id)
+        except APIError as exc:
+            # During migration-first rollout, never substitute legacy reports
+            # when the confirmation boundary cannot be queried.
+            if exc.code != "42703" or "confirmation_state" not in (exc.message or ""):
+                raise
+            recent_symptoms = []
+            recent_symptoms_available = False
+            logger.warning(
+                "Confirmed symptom context unavailable: confirmation schema not installed"
+            )
         care_teams = await self._fetch_active_care_teams(patient_id)
 
         document_context = None
@@ -158,6 +173,7 @@ class ChatService:
             "medications": medications,
             "conditions": conditions,
             "recent_symptoms": recent_symptoms,
+            "recent_symptoms_available": recent_symptoms_available,
             "care_teams": care_teams,
             "document": document_context,
         }
