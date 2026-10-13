@@ -253,3 +253,7 @@ rollout, a compatible running backend and the full patient/clinician confirmatio
 journey remain prerequisites. Existing SDK/Sentry/Vite and workspace-root warnings
 remain. The earlier dependency drift is historical; Acquit is now 0.3.0 and both
 portal environments were freshly installed from current main's locks.
+
+Draft review: [PR #159](https://github.com/sjsu-masters-projects/medi-agent/pull/159).
+Source/verification commit: `9982311` on base `62a1945`; later review-link updates
+are documentation only. Local results above are not a claim that remote CI passed.

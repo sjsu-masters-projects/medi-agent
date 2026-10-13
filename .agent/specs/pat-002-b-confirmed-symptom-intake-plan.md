@@ -1065,10 +1065,14 @@ or PR #136 ADR follow-up implementation is included.
 
 ## 21. October 12 main integration
 
-The feature was first committed as `2d768c0` and is being rebased onto `62a1945`.
+The feature was first committed as `2d768c0` and was rebased onto `62a1945`.
 Upstream Nora conversations, citations, portal presentation and merged ADR follow-up
 are retained. Intake uses the selected Nora session rather than always `default`.
 Unpublished 049/050 files are renumbered to 059/060 after main's migration 058, and
 reuse the canonical session column introduced in 051. Earlier section evidence is
 historical; final post-rebase verification is recorded in the October 12 acceptance
 document. Question-library approval and remote rollout remain prerequisites.
+
+[Draft PR #159](https://github.com/sjsu-masters-projects/medi-agent/pull/159)
+contains the rebased implementation and post-rebase evidence. Safety/peer review,
+required CI, question approval and authorized rollout remain pending.
