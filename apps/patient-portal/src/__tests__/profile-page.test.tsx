@@ -625,7 +625,11 @@ describe("Patient profile page", () => {
                     }),
                 ).toBeInTheDocument();
                 fireEvent.keyDown(document, { key: "Escape" });
-                expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+                await waitFor(() =>
+                    expect(
+                        screen.queryByRole("dialog"),
+                    ).not.toBeInTheDocument(),
+                );
             } else {
                 expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
             }
