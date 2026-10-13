@@ -109,6 +109,11 @@ review/publication gates or describe local tests as deployed acceptance.
 - **Contacts and preferences:** server-only `email_contacts` (057/058). A code proves
   mailbox ownership; verification does not opt in. Consent is stamped only when notices go
   from off to on. Patient controls are bilingual. Five codes per contact per day.
+- **Preferences presentation (#158):** patient Profile shows an **EMAIL NOTICES /
+  AVISOS POR CORREO** grouped card like the other Profile sections: address with a
+  Verified / Not verified / Email unavailable chip, then Send code, code + Verify, or the
+  notice checkboxes and Save, and one footnote. Demo addresses get one muted line and no
+  controls. Clinician Settings shows the same states in a standard Settings card.
 - **Event notices:** saved notification receipts enqueue opted-in email in
   `email_outbox`. Dispatch rechecks access, consent, the address and unread/current
   work, groups private messages (15 minutes) and shared reviews (1 hour), freezes retry
@@ -158,5 +163,5 @@ opt-out, neutral reset request, clinician reset email and Continue. Open:
 
 Pull requests: [#152](https://github.com/sjsu-masters-projects/medi-agent/pull/152),
 [#156](https://github.com/sjsu-masters-projects/medi-agent/pull/156),
-[#157](https://github.com/sjsu-masters-projects/medi-agent/pull/157); email preferences
-card redesign [#158](https://github.com/sjsu-masters-projects/medi-agent/pull/158).
+[#157](https://github.com/sjsu-masters-projects/medi-agent/pull/157),
+[#158](https://github.com/sjsu-masters-projects/medi-agent/pull/158) (email preferences presentation).

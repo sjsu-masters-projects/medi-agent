@@ -517,11 +517,13 @@ describe("Patient profile page", () => {
             expect(screen.getByTestId("shared-preference")).toHaveTextContent(
                 nextLocale,
             );
-            expect(screen.getByRole("status")).toHaveTextContent(
-                nextLocale === "es-MX"
-                    ? "Tu perfil se actualizó correctamente."
-                    : "Profile updated successfully.",
-            );
+            expect(
+                screen.getByText(
+                    nextLocale === "es-MX"
+                        ? "Tu perfil se actualizó correctamente."
+                        : "Profile updated successfully.",
+                ),
+            ).toHaveAttribute("role", "status");
             expect(screen.getByText(/1985/)).toHaveAttribute("dateTime", "1985-03-15");
             expect(screen.getByTitle("America/Los_Angeles")).toHaveTextContent("Los Angeles");
         },
@@ -623,7 +625,11 @@ describe("Patient profile page", () => {
                     }),
                 ).toBeInTheDocument();
                 fireEvent.keyDown(document, { key: "Escape" });
-                expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+                await waitFor(() =>
+                    expect(
+                        screen.queryByRole("dialog"),
+                    ).not.toBeInTheDocument(),
+                );
             } else {
                 expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
             }

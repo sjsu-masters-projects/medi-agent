@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSelector } from "react-redux";
 import { Badge, Button, Card, CopyButton, Input } from "@/components/ui";
-import { Icon, type IconName } from "@/components/ui/icons";
+import { Icon } from "@/components/ui/icons";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 import { ClinicianRole } from "@/types";
 import { EmailPreferences } from "@/components/features/email-preferences";
 import { EmailInvitations } from "@/components/features/email-invitations";
+import { CardHeader, IconTile, cardFooterClass } from "@/components/features/settings-card";
 
 const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Interoperability"] as const;
 type SettingsTab = (typeof settingsTabs)[number];
@@ -97,6 +98,7 @@ const GENERAL_SECTIONS = [
     { id: "clinic-profile", label: "Clinic Profile" },
     { id: "my-profile", label: "My Profile" },
     { id: "security", label: "Security" },
+    { id: "email-notices", label: "Email notices" },
 ] as const;
 type GeneralSectionId = (typeof GENERAL_SECTIONS)[number]["id"];
 
@@ -106,31 +108,6 @@ const secondaryButtonClass =
     "ma-press inline-flex h-[34px] items-center justify-center gap-2 rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]";
 const selectClass =
     "h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
-const cardFooterClass =
-    "flex flex-wrap items-center justify-end gap-3 rounded-b-2xl border-t border-line bg-surface-2 px-5 py-3";
-
-function IconTile({ name }: { name: IconName }) {
-    return (
-        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sunken text-ink-2">
-            <Icon name={name} className="h-4 w-4" />
-        </span>
-    );
-}
-
-function CardHeader({ action, children, icon, sub }: { action?: ReactNode; children: ReactNode; icon: IconName; sub?: ReactNode }) {
-    return (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-                <IconTile name={icon} />
-                <div className="min-w-0">
-                    {children}
-                    {sub ? <p className="mt-0.5 text-[13px] text-muted">{sub}</p> : null}
-                </div>
-            </div>
-            {action}
-        </div>
-    );
-}
 
 function ReadOnlyField({ label, value }: { label: string; value: ReactNode }) {
     return (
