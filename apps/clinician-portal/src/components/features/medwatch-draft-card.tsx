@@ -1,11 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Badge, Button, Card } from "@/components/ui";
+import { useRef, useState } from "react";
+import { Badge, Button, Card, Input } from "@/components/ui";
+import { fieldClass } from "@/components/ui/input";
+import { ApprovalSeal } from "@/components/ui/approval-seal";
+import { Icon } from "@/components/ui/icons";
+import { formatReviewTimestamp } from "@/components/features/review-time";
 import type { MedWatchDraft, MedWatchFormData } from "@/services/clinicians";
 
-const inputClass =
-  "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100";
+const fieldsetClass = "min-w-0 space-y-3 rounded-xl border border-line p-4";
+const legendClass = "px-1 text-[13px] font-semibold text-ink";
+const wrapClass = "break-words [overflow-wrap:anywhere]";
+
+/** Structural equality for the plain JSON form payload; key order does not matter. */
+function sameValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (
+    typeof left !== "object" ||
+    typeof right !== "object" ||
+    left === null ||
+    right === null
+  ) {
+    return false;
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  if (leftKeys.length !== Object.keys(rightRecord).length) return false;
+  return leftKeys.every(
+    (key) =>
+      Object.prototype.hasOwnProperty.call(rightRecord, key) &&
+      sameValue(leftRecord[key], rightRecord[key]),
+  );
+}
 
 function TextField({
   label,
@@ -20,26 +47,34 @@ function TextField({
   multiline?: boolean;
   onChange: (value: string) => void;
 }) {
+  if (!multiline) {
+    return (
+      <Input
+        disabled={disabled}
+        label={label}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    );
+  }
   return (
-    <label className="block text-sm font-medium text-gray-700">
-      {label}
-      {multiline ? (
-        <textarea
-          className={`${inputClass} min-h-20`}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          value={value}
-        />
-      ) : (
-        <input
-          className={inputClass}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          value={value}
-        />
-      )}
+    <label className="block">
+      <span className="mb-1.5 block text-[13px] font-medium text-ink-2">
+        {label}
+      </span>
+      <textarea
+        className={`${fieldClass} min-h-24 py-2.5 leading-relaxed`}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
     </label>
   );
+}
+
+interface SyncedDraft {
+  revision: number;
+  formData: MedWatchFormData;
 }
 
 export function MedWatchDraftCard({
@@ -60,13 +95,39 @@ export function MedWatchDraftCard({
   onExport: (draftId: string) => Promise<void>;
 }) {
   const [form, setForm] = useState(draft.formData);
+  // The server revision and values the form was last synced from.
+  const [baseline, setBaseline] = useState<SyncedDraft>({
+    revision: draft.revision,
+    formData: draft.formData,
+  });
   const [approvalNote, setApprovalNote] = useState("");
   const [attested, setAttested] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const editable = draft.status === "draft";
 
-  useEffect(() => setForm(draft.formData), [draft.formData]);
+  // Adjust state when the draft prop changes. A queue refresh replaces the draft object;
+  // the form follows it only when it holds no unsaved edits (or already matches the
+  // server, as after a successful save). Dirty edits keep their original baseline so a
+  // save still sends that revision and a stale save surfaces the revision conflict.
+  if (
+    draft.revision !== baseline.revision ||
+    draft.formData !== baseline.formData
+  ) {
+    if (
+      !editable ||
+      sameValue(form, baseline.formData) ||
+      sameValue(form, draft.formData)
+    ) {
+      setBaseline({ revision: draft.revision, formData: draft.formData });
+      setForm(draft.formData);
+    } else if (draft.revision === baseline.revision) {
+      setBaseline({ revision: draft.revision, formData: draft.formData });
+    }
+  }
+
+  const unsaved = editable && !sameValue(form, baseline.formData);
+  const fieldsDisabled = !editable || busy;
 
   function setField(
     section: keyof MedWatchFormData,
@@ -95,268 +156,279 @@ export function MedWatchDraftCard({
   }
 
   return (
-    <Card className="space-y-5" padding="lg">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-        <div>
+    <Card className="ma-enter min-w-0" padding="none">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-6 py-4">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
               MedWatch-compatible draft
             </h2>
-            <Badge variant={editable ? "warning" : "success"}>
-              {editable ? "Needs approval" : "Approved for export"}
-            </Badge>
+            {editable ? (
+              <Badge variant="neutral">Needs approval</Badge>
+            ) : (
+              <ApprovalSeal pill>Approved for export</ApprovalSeal>
+            )}
+            <span aria-live="polite" className="inline-flex">
+              {unsaved ? (
+                <Badge variant="warning">Unsaved changes</Badge>
+              ) : null}
+            </span>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Revision {draft.revision} · Draft ID {draft.id}
+          <p className="mt-1 text-xs text-muted">
+            Revision <span className="font-mono">{baseline.revision}</span> ·
+            Draft ID <span className="font-mono break-all">{draft.id}</span>
           </p>
         </div>
-        <p className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
-          Not submitted to FDA
-        </p>
-      </div>
+        <Badge variant="warning">Not submitted to FDA</Badge>
+      </header>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-900">
-            Patient
-          </legend>
-          <TextField
-            disabled={!editable || busy}
-            label="Patient identifier"
-            onChange={(value) =>
-              setField("patient", "patient_identifier", value)
-            }
-            value={form.patient.patient_identifier}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Date of birth"
-            onChange={(value) => setField("patient", "date_of_birth", value)}
-            value={form.patient.date_of_birth}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Sex"
-            onChange={(value) => setField("patient", "sex", value)}
-            value={form.patient.sex}
-          />
-        </fieldset>
-
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-900">
-            Adverse event
-          </legend>
-          <TextField
-            disabled={!editable || busy}
-            label="Description"
-            multiline
-            onChange={(value) => setField("event", "description", value)}
-            value={form.event.description}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Onset date or time"
-            onChange={(value) => setField("event", "onset_date_or_time", value)}
-            value={form.event.onset_date_or_time}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Outcome (leave empty if unknown)"
-            onChange={(value) => setField("event", "outcome", value)}
-            value={form.event.outcome}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Seriousness (leave empty if unknown)"
-            onChange={(value) => setField("event", "seriousness", value)}
-            value={form.event.seriousness}
-          />
-        </fieldset>
-
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-900">
-            Suspect product
-          </legend>
-          <TextField
-            disabled={!editable || busy}
-            label="Product name"
-            onChange={(value) => setField("suspect_product", "name", value)}
-            value={form.suspect_product.name}
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-5 p-6">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <fieldset className={fieldsetClass}>
+            <legend className={legendClass}>Patient</legend>
             <TextField
-              disabled={!editable || busy}
-              label="Dose"
-              onChange={(value) => setField("suspect_product", "dose", value)}
-              value={form.suspect_product.dose}
-            />
-            <TextField
-              disabled={!editable || busy}
-              label="Frequency"
+              disabled={fieldsDisabled}
+              label="Patient identifier"
               onChange={(value) =>
-                setField("suspect_product", "frequency", value)
+                setField("patient", "patient_identifier", value)
               }
-              value={form.suspect_product.frequency}
+              value={form.patient.patient_identifier}
             />
             <TextField
-              disabled={!editable || busy}
-              label="Route"
-              onChange={(value) => setField("suspect_product", "route", value)}
-              value={form.suspect_product.route}
+              disabled={fieldsDisabled}
+              label="Date of birth"
+              onChange={(value) => setField("patient", "date_of_birth", value)}
+              value={form.patient.date_of_birth}
             />
             <TextField
-              disabled={!editable || busy}
-              label="Therapy start"
+              disabled={fieldsDisabled}
+              label="Sex"
+              onChange={(value) => setField("patient", "sex", value)}
+              value={form.patient.sex}
+            />
+          </fieldset>
+
+          <fieldset className={fieldsetClass}>
+            <legend className={legendClass}>Adverse event</legend>
+            <TextField
+              disabled={fieldsDisabled}
+              label="Description"
+              multiline
+              onChange={(value) => setField("event", "description", value)}
+              value={form.event.description}
+            />
+            <TextField
+              disabled={fieldsDisabled}
+              label="Onset date or time"
               onChange={(value) =>
-                setField("suspect_product", "therapy_start_date", value)
+                setField("event", "onset_date_or_time", value)
               }
-              value={form.suspect_product.therapy_start_date}
+              value={form.event.onset_date_or_time}
             />
             <TextField
-              disabled={!editable || busy}
-              label="Therapy end"
-              onChange={(value) =>
-                setField("suspect_product", "therapy_end_date", value)
-              }
-              value={form.suspect_product.therapy_end_date}
+              disabled={fieldsDisabled}
+              label="Outcome (leave empty if unknown)"
+              onChange={(value) => setField("event", "outcome", value)}
+              value={form.event.outcome}
             />
-          </div>
-        </fieldset>
+            <TextField
+              disabled={fieldsDisabled}
+              label="Seriousness (leave empty if unknown)"
+              onChange={(value) => setField("event", "seriousness", value)}
+              value={form.event.seriousness}
+            />
+          </fieldset>
 
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-900">
-            Other clinical details
-          </legend>
-          <TextField
-            disabled={!editable || busy}
-            label="Concomitant products"
-            multiline
-            onChange={(value) =>
-              setField("concomitant_products", "products", value)
-            }
-            value={form.concomitant_products.products}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Relevant tests"
-            multiline
-            onChange={(value) =>
-              setField("tests_and_history", "relevant_tests", value)
-            }
-            value={form.tests_and_history.relevant_tests}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Other relevant history"
-            multiline
-            onChange={(value) =>
-              setField("tests_and_history", "other_relevant_history", value)
-            }
-            value={form.tests_and_history.other_relevant_history}
-          />
-        </fieldset>
+          <fieldset className={fieldsetClass}>
+            <legend className={legendClass}>Suspect product</legend>
+            <TextField
+              disabled={fieldsDisabled}
+              label="Product name"
+              onChange={(value) => setField("suspect_product", "name", value)}
+              value={form.suspect_product.name}
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField
+                disabled={fieldsDisabled}
+                label="Dose"
+                onChange={(value) => setField("suspect_product", "dose", value)}
+                value={form.suspect_product.dose}
+              />
+              <TextField
+                disabled={fieldsDisabled}
+                label="Frequency"
+                onChange={(value) =>
+                  setField("suspect_product", "frequency", value)
+                }
+                value={form.suspect_product.frequency}
+              />
+              <TextField
+                disabled={fieldsDisabled}
+                label="Route"
+                onChange={(value) =>
+                  setField("suspect_product", "route", value)
+                }
+                value={form.suspect_product.route}
+              />
+              <TextField
+                disabled={fieldsDisabled}
+                label="Therapy start"
+                onChange={(value) =>
+                  setField("suspect_product", "therapy_start_date", value)
+                }
+                value={form.suspect_product.therapy_start_date}
+              />
+              <TextField
+                disabled={fieldsDisabled}
+                label="Therapy end"
+                onChange={(value) =>
+                  setField("suspect_product", "therapy_end_date", value)
+                }
+                value={form.suspect_product.therapy_end_date}
+              />
+            </div>
+          </fieldset>
 
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-900">
-            Reporter
-          </legend>
-          <TextField
-            disabled={!editable || busy}
-            label="Name"
-            onChange={(value) => setField("reporter", "name", value)}
-            value={form.reporter.name}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Email"
-            onChange={(value) => setField("reporter", "email", value)}
-            value={form.reporter.email}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Specialty"
-            onChange={(value) => setField("reporter", "specialty", value)}
-            value={form.reporter.specialty}
-          />
-          <TextField
-            disabled={!editable || busy}
-            label="Clinic"
-            onChange={(value) => setField("reporter", "clinic_name", value)}
-            value={form.reporter.clinic_name}
-          />
-        </fieldset>
+          <fieldset className={fieldsetClass}>
+            <legend className={legendClass}>Other clinical details</legend>
+            <TextField
+              disabled={fieldsDisabled}
+              label="Concomitant products"
+              multiline
+              onChange={(value) =>
+                setField("concomitant_products", "products", value)
+              }
+              value={form.concomitant_products.products}
+            />
+            <TextField
+              disabled={fieldsDisabled}
+              label="Relevant tests"
+              multiline
+              onChange={(value) =>
+                setField("tests_and_history", "relevant_tests", value)
+              }
+              value={form.tests_and_history.relevant_tests}
+            />
+            <TextField
+              disabled={fieldsDisabled}
+              label="Other relevant history"
+              multiline
+              onChange={(value) =>
+                setField("tests_and_history", "other_relevant_history", value)
+              }
+              value={form.tests_and_history.other_relevant_history}
+            />
+          </fieldset>
 
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-900">
-            Clinical review
-          </legend>
-          <p className="text-sm text-gray-700">
-            Deterministic Naranjo score:{" "}
-            <strong>{form.clinical_review.naranjo_score}</strong> ·{" "}
-            {form.clinical_review.causality}
-          </p>
-          <TextField
-            disabled={!editable || busy}
-            label="Reportability rationale"
-            multiline
-            onChange={(value) =>
-              setField("clinical_review", "reportability_rationale", value)
-            }
-            value={form.clinical_review.reportability_rationale}
-          />
-        </fieldset>
-      </div>
+          <fieldset className={fieldsetClass}>
+            <legend className={legendClass}>Reporter</legend>
+            <TextField
+              disabled={fieldsDisabled}
+              label="Name"
+              onChange={(value) => setField("reporter", "name", value)}
+              value={form.reporter.name}
+            />
+            <TextField
+              disabled={fieldsDisabled}
+              label="Email"
+              onChange={(value) => setField("reporter", "email", value)}
+              value={form.reporter.email}
+            />
+            <TextField
+              disabled={fieldsDisabled}
+              label="Specialty"
+              onChange={(value) => setField("reporter", "specialty", value)}
+              value={form.reporter.specialty}
+            />
+            <TextField
+              disabled={fieldsDisabled}
+              label="Clinic"
+              onChange={(value) => setField("reporter", "clinic_name", value)}
+              value={form.reporter.clinic_name}
+            />
+          </fieldset>
 
-      <details className="rounded-lg border border-gray-200 p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-gray-900">
-          Source evidence and attribution ({draft.sourceEvidence.length})
-        </summary>
-        <ul className="mt-3 space-y-2">
-          {draft.sourceEvidence.map((source, index) => (
-            <li
-              className="rounded-lg bg-gray-50 p-3 text-sm"
-              key={`${source.source_type}-${index}`}
-            >
-              <p className="font-medium text-gray-900">{source.attribution}</p>
-              <p className="mt-1 text-xs text-gray-500">
-                {source.field_paths.join(", ")}
-              </p>
-              {source.excerpt ? (
-                <p className="mt-2 text-gray-700">“{source.excerpt}”</p>
-              ) : null}
-              {source.citation ? (
-                <p className="mt-1 text-xs text-blue-700">
-                  Source: {source.citation}
+          <fieldset className={fieldsetClass}>
+            <legend className={legendClass}>Clinical review</legend>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-sm text-ink-2">
+              <span>
+                Deterministic Naranjo score:{" "}
+                <strong className="font-mono font-medium text-ink">
+                  {form.clinical_review.naranjo_score}
+                </strong>
+              </span>
+              <Badge variant="warning">{form.clinical_review.causality}</Badge>
+            </div>
+            <TextField
+              disabled={fieldsDisabled}
+              label="Reportability rationale"
+              multiline
+              onChange={(value) =>
+                setField("clinical_review", "reportability_rationale", value)
+              }
+              value={form.clinical_review.reportability_rationale}
+            />
+          </fieldset>
+        </div>
+
+        <details className="ma-disclosure rounded-xl border border-line bg-surface">
+          <summary className="min-h-10 px-4 py-2 text-[13px] font-semibold text-ink">
+            Source evidence and attribution (
+            <span className="font-mono">{draft.sourceEvidence.length}</span>)
+          </summary>
+          <ul className="divide-y divide-line border-t border-line">
+            {draft.sourceEvidence.map((source, index) => (
+              <li
+                className="min-w-0 space-y-1.5 px-4 py-3 text-sm"
+                key={`${source.source_type}-${index}`}
+              >
+                <p className={`font-medium text-ink ${wrapClass}`}>
+                  {source.attribution}
                 </p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </details>
+                <p className={`text-xs text-muted ${wrapClass}`}>
+                  {source.field_paths.join(", ")}
+                </p>
+                {source.excerpt ? (
+                  <blockquote
+                    className={`max-w-[72ch] border-l-2 border-line-strong pl-3 leading-relaxed text-ink-2 ${wrapClass}`}
+                  >
+                    “{source.excerpt}”
+                  </blockquote>
+                ) : null}
+                {source.citation ? (
+                  <p className={`text-xs text-primary ${wrapClass}`}>
+                    Source: {source.citation}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
 
-      {error ? (
-        <p
-          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
+        {error ? (
+          <p
+            className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
+            role="alert"
+          >
+            <Icon className="mt-0.5 h-4 w-4 shrink-0" name="alert" />
+            <span>{error}</span>
+          </p>
+        ) : null}
+      </div>
 
       {editable ? (
-        <div className="space-y-4 border-t border-gray-200 pt-4">
+        <div className="space-y-4 border-t border-line px-6 py-5">
           <Button
             disabled={busy}
             onClick={() =>
-              void perform(() => onSave(draft.id, form, draft.revision))
+              void perform(() => onSave(draft.id, form, baseline.revision))
             }
-            size="sm"
             variant="secondary"
           >
             Save draft
           </Button>
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-            <h3 className="text-sm font-semibold text-green-950">
+          <section className="space-y-3 rounded-xl border border-ok-line bg-ok-soft p-4">
+            <h3 className="text-sm font-semibold text-ink">
               Clinician approval
             </h3>
             <TextField
@@ -366,45 +438,52 @@ export function MedWatchDraftCard({
               onChange={setApprovalNote}
               value={approvalNote}
             />
-            <label className="mt-3 flex items-start gap-2 text-sm text-green-950">
+            <label className="flex min-h-8 cursor-pointer items-start gap-3 rounded-lg border border-ok-line bg-surface p-3 text-[13px] leading-relaxed text-ink-2 has-[:disabled]:cursor-not-allowed has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary">
               <input
                 checked={attested}
-                className="mt-1"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]"
                 disabled={busy}
                 onChange={(event) => setAttested(event.target.checked)}
                 type="checkbox"
               />
-              I reviewed the draft and its source evidence. I understand
-              approval makes it exportable but does not submit it to the FDA.
+              <span>
+                I reviewed the draft and its source evidence. I understand
+                approval makes it exportable but does not submit it to the FDA.
+              </span>
             </label>
             <Button
-              className="mt-3"
               disabled={busy || !attested || !approvalNote.trim()}
               onClick={() =>
                 void perform(() =>
-                  onApprove(draft.id, approvalNote.trim(), draft.revision),
+                  onApprove(draft.id, approvalNote.trim(), baseline.revision),
                 )
               }
-              size="sm"
+              variant="approve"
             >
               Approve for export
             </Button>
-          </div>
+          </section>
         </div>
       ) : (
-        <div className="flex flex-col justify-between gap-3 border-t border-gray-200 pt-4 md:flex-row md:items-center">
-          <p className="text-sm text-gray-700">
-            Approved{" "}
-            {draft.approvedAt
-              ? new Date(draft.approvedAt).toLocaleString()
-              : ""}
+        <div className="flex flex-col justify-between gap-3 border-t border-line px-6 py-4 md:flex-row md:items-center">
+          <p className="max-w-[80ch] text-sm text-ink-2">
+            Approved
+            {draft.approvedAt ? (
+              <>
+                {" "}
+                <time className="font-mono" dateTime={draft.approvedAt}>
+                  {formatReviewTimestamp(draft.approvedAt)}
+                </time>
+              </>
+            ) : null}
             . Exporting records an audit event; it does not submit the draft.
           </p>
           <Button
+            className="shrink-0"
             disabled={busy}
             onClick={() => void perform(() => onExport(draft.id))}
-            size="sm"
           >
+            <Icon className="h-4 w-4" name="download" />
             Export approved JSON
           </Button>
         </div>

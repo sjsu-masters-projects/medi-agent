@@ -605,6 +605,72 @@ describe("ADR review queue", () => {
         expect(screen.getByText("Patient-reported symptom")).toBeInTheDocument();
     });
 
+    it("announces the initial load with the skeleton queue", async () => {
+        let resolveQueue!: (items: unknown[]) => void;
+        fetchADRReviewQueueMock.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    resolveQueue = resolve;
+                }),
+        );
+
+        render(<MedWatchPage />);
+
+        expect(
+            screen.getByRole("status", { name: "Loading ADR reviews" }),
+        ).toBeInTheDocument();
+        await act(async () => resolveQueue([assessment]));
+        expect(await screen.findByText("Maya Patel")).toBeInTheDocument();
+        expect(
+            screen.queryByRole("status", { name: "Loading ADR reviews" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.getByRole("region", { name: "ADR assessments awaiting review" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("region", { name: "ADR review summary" }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
+    });
+
+    it("shows a failed preparation once, inline, and keeps the rationale", async () => {
+        fetchADRReviewQueueMock.mockResolvedValue([assessment]);
+        createMedWatchDraftMock.mockRejectedValueOnce(
+            new Error("private provider diagnostic"),
+        );
+
+        render(<MedWatchPage />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Prepare MedWatch draft" }),
+        );
+        fireEvent.change(screen.getByLabelText(/clinical rationale/i), {
+            target: { value: "Clinically significant new event." },
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Create editable draft" }),
+        );
+
+        const alert = await screen.findByRole("alert");
+        expect(alert).toHaveTextContent(
+            "Unable to prepare the MedWatch draft. Your rationale is retained. Try again.",
+        );
+        expect(screen.getAllByRole("alert")).toHaveLength(1);
+        expect(
+            screen.getByRole("form", { name: "Record reportability decision" }),
+        ).toContainElement(alert);
+        expect(screen.getAllByText(/Unable to prepare the MedWatch draft/)).toHaveLength(1);
+        expect(screen.queryByText("Unable to load ADR reviews")).not.toBeInTheDocument();
+        expect(screen.queryByText("private provider diagnostic")).not.toBeInTheDocument();
+        expect(screen.getByLabelText(/clinical rationale/i)).toHaveValue(
+            "Clinically significant new event.",
+        );
+        expect(screen.getByText("Maya Patel")).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Create editable draft" }),
+        ).toBeEnabled();
+    });
+
     it("saves edits and requires attestation before approval", async () => {
         fetchADRReviewQueueMock.mockResolvedValue([]);
         fetchMedWatchDraftsMock.mockResolvedValue([medwatchDraft]);

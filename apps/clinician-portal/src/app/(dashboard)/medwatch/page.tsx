@@ -23,7 +23,7 @@ import {
 
 function LoadingQueue() {
     return (
-        <div className="space-y-5" aria-label="Loading ADR reviews">
+        <div className="space-y-5" role="status" aria-label="Loading ADR reviews">
             {Array.from({ length: 2 }).map((_, index) => (
                 <div
                     className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]"
@@ -155,10 +155,10 @@ function MedWatchContent() {
                     "Editable MedWatch draft created. Nothing was submitted to the FDA.",
                 );
             } catch {
-                const message =
-                    "Unable to prepare the MedWatch draft. Try again.";
-                setReviewError(message);
-                throw new Error(message);
+                // Rethrow only: the preparation form renders this failure inline, once.
+                throw new Error(
+                    "Unable to prepare the MedWatch draft. Try again.",
+                );
             } finally {
                 reviewPending.current = false;
                 setSubmittingId(null);
@@ -307,7 +307,7 @@ function MedWatchContent() {
                     {notice}
                 </p>
             ) : null}
-            {assessmentId && !loading && !error && !items.some((item) => item.id === assessmentId) && <p role="status" className="text-sm text-muted">The linked assessment is no longer awaiting review or is unavailable to you.</p>}
+            {assessmentId && !loading && !error && !items.some((item) => item.id === assessmentId) && <p role="status" className="text-sm text-ink-2">The linked assessment is no longer awaiting review or is unavailable to you.</p>}
 
             {reviewError ? (
                 <p
@@ -321,7 +321,7 @@ function MedWatchContent() {
             {initialLoad ? <LoadingQueue /> : null}
             {loading && (items.length > 0 || drafts.length > 0) ? (
                 <p
-                    className="flex items-center gap-2.5 text-[13px] text-muted"
+                    className="flex items-center gap-2.5 text-[13px] text-ink-2"
                     role="status"
                 >
                     <ProcessingDots />
@@ -386,7 +386,7 @@ function MedWatchContent() {
                         <h2 className="text-xl font-semibold text-ink">
                             MedWatch drafts
                         </h2>
-                        <p className="mt-1 text-sm text-muted">
+                        <p className="mt-1 text-sm text-ink-2">
                             Edit, approve, and export evidence-backed artifacts.
                             This workflow never submits to the FDA.
                         </p>
@@ -412,5 +412,9 @@ function MedWatchContent() {
 }
 
 export default function MedWatchPage() {
-    return <Suspense fallback={<p role="status">Loading ADR reviews…</p>}><MedWatchContent /></Suspense>;
+    return (
+        <Suspense fallback={<LoadingQueue />}>
+            <MedWatchContent />
+        </Suspense>
+    );
 }

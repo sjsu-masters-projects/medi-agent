@@ -101,6 +101,10 @@ export interface DashboardResponse {
 export interface ADRReviewEvidence {
     answer: string;
     evidence?: string | null;
+    /** Absent for AI extraction; `patient_follow_up` for a patient-confirmed answer. */
+    source?: string | null;
+    /** The information request a patient-confirmed answer responded to. */
+    information_request_id?: string | null;
     question: string;
 }
 
