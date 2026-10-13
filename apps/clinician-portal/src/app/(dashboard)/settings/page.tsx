@@ -201,6 +201,8 @@ export default function SettingsPage() {
     const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
     // Presentational only: highlights the section navigator entry the user last chose.
     const [activeSection, setActiveSection] = useState<GeneralSectionId>("clinic-profile");
+    // Staff invitations are admin-only on the server; the loaded profile carries the role.
+    const isClinicAdmin = profile?.role === ClinicianRole.ADMIN;
 
     const loadStaff = useCallback(async () => {
         if (!token) {
@@ -628,8 +630,13 @@ export default function SettingsPage() {
 
             {activeTab === "Team & Roles" ? (
                 <div className="ma-enter space-y-5">
-                    {token && profile?.role === ClinicianRole.ADMIN ? <EmailInvitations token={token} revision={inviteStatus} /> : null}
-                    <Card padding="none">
+                    {token && isClinicAdmin ? <EmailInvitations token={token} revision={inviteStatus} /> : null}
+                    {profile && !isClinicAdmin ? (
+                        <p role="note" className="rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
+                            Only clinic admins can invite team members.
+                        </p>
+                    ) : null}
+                    {isClinicAdmin ? <Card padding="none">
                         <CardHeader icon="users" sub="Send an email invitation to add staff to your MediAgent workspace.">
                             <h2 className="text-[15px] font-semibold text-ink">Invite Team Member</h2>
                         </CardHeader>
@@ -661,7 +668,7 @@ export default function SettingsPage() {
                             </div>
                             <p className="text-[13px] text-muted">Clinic code for self-registration is available under General Profile.</p>
                         </div>
-                    </Card>
+                    </Card> : null}
 
                     <Card className="overflow-visible" padding="none">
                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
