@@ -23,7 +23,7 @@ from app.core.exceptions import (
 )
 from app.models.auth import CurrentUser
 from app.models.email_preferences import EmailPreferences, EmailPreferencesRead
-from app.services.email_templates import render_email, verification_email
+from app.services.email_templates import Audience, render_email, verification_email
 
 _COPY = {
     "message_received": ("New care-team messages", "Nuevos mensajes del equipo de atención"),
@@ -241,8 +241,10 @@ class EmailService:
             else settings.clinician_portal_url
         )
         path = "/profile" if self.actor.role == "patient" else "/settings"
+        audience: Audience = "patient" if self.actor.role == "patient" else "clinician"
         payload = transport.payload(
-            verification_email(code, root.rstrip("/") + path, locale), account.email
+            verification_email(code, root.rstrip("/") + path, locale, audience=audience),
+            account.email,
         )
         result = await self._call(
             "challenge", {"hash": self._hash(code), "key": f"verify/{uuid4()}", "payload": payload}
@@ -315,6 +317,7 @@ class EmailDeliveryService:
             ],
             action_url=root.rstrip("/") + path,
             action_label=label,
+            audience="patient" if role == "patient" else "clinician",
             locale="es-MX" if spanish else "en-US",
             note=(
                 "Puedes cambiar los avisos opcionales en Preferencias de correo."
