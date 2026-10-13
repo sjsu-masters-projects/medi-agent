@@ -83,6 +83,12 @@ function ClinicianSignupPageContent() {
     const [signInPassword, setSignInPassword] = useState("");
     const [accepted, setAccepted] = useState(false);
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
+    const existingAccountPanelRef = useRef<HTMLDivElement>(null);
+    const existingAccountToggleRef = useRef<HTMLButtonElement>(null);
+    const pendingFocus = useRef<"panel" | "toggle" | null>(null);
+    // Creating an account is the primary invitation path; an existing account is opt-in.
+    const canChooseExistingAccount = Boolean(invitationToken) && !accepted && Boolean(invitation || accessToken);
+    const existingAccountOpen = canChooseExistingAccount && signInOpen;
     const [formData, setFormData] = useState({
         confirmPassword: "",
         email: "",
@@ -97,6 +103,22 @@ function ClinicianSignupPageContent() {
     const updateField = useCallback((field: keyof typeof formData, value: string) => {
         setFormData((current) => ({ ...current, [field]: value }));
     }, []);
+
+    const chooseExistingAccount = useCallback((open: boolean) => {
+        pendingFocus.current = open ? "panel" : "toggle";
+        setError("");
+        setSignInOpen(open);
+    }, []);
+
+    useEffect(() => {
+        const target = pendingFocus.current;
+        pendingFocus.current = null;
+        if (target === "panel") {
+            existingAccountPanelRef.current?.querySelector<HTMLElement>("input, button")?.focus();
+        } else if (target === "toggle") {
+            existingAccountToggleRef.current?.focus();
+        }
+    }, [signInOpen]);
 
     useEffect(() => {
         const stored = readStoredClinicContext();
@@ -230,6 +252,8 @@ function ClinicianSignupPageContent() {
             // The server claims membership in the same request. If that did not finish,
             // the account is kept and this signed-in session can retry the claim.
             if (invitationToken && response.invitation_status !== "accepted") {
+                // The new account is signed in now, so the retry lives on the existing-account path.
+                pendingFocus.current = "panel"; setSignInOpen(true);
                 setError("Your account was created, but joining the clinic could not be confirmed yet. Use Accept invitation to try again.");
                 setSubmitting(false);
                 return;
@@ -274,44 +298,53 @@ function ClinicianSignupPageContent() {
                         </div>
                     )}
 
-                    {invitationToken && accessToken && !accepted ? <Button disabled={submitting || inviteLoading} onClick={() => {
-                        setSubmitting(true); setError("");
-                        void api.post<InvitationAcceptResponse>("/api/v1/email/invitations/accept", { token: invitationToken }, { token: accessToken })
-                            .then((result) => {
-                                writeStoredClinicContext(mapClinicContext(result.clinic));
-                                router.replace("/dashboard");
-                            })
-                            .catch((acceptError) => setError((acceptError as Error).message || "This invitation cannot be accepted by the signed-in account."))
-                            .finally(() => setSubmitting(false));
-                    }}>Accept invitation</Button> : null}
-                    {invitation && !accessToken ? (
-                        accepted ? (
-                            <div role="status" className="space-y-2 rounded-xl bg-surface-2 p-4 text-sm text-ink-2">
-                                <p>Invitation accepted. Sign in to continue to {invitation.clinic_name}.</p>
-                                <Link className="font-medium text-primary hover:underline" href="/login">Continue to sign in</Link>
-                            </div>
-                        ) : signInOpen ? (
-                            <form aria-label="Sign in to accept" className="space-y-3 rounded-xl border border-line p-4" onSubmit={(event) => {
-                                event.preventDefault();
-                                setSubmitting(true); setError("");
-                                void api.post<InvitationAcceptResponse>("/api/v1/auth/invitations/accept", {
-                                    email: invitation.email, password: signInPassword, invitation_token: invitationToken,
-                                }).then((result) => {
-                                    const context = mapClinicContext(result.clinic);
-                                    writeStoredClinicContext(context); setClinicContext(context);
-                                    setSignInPassword(""); setAccepted(true);
-                                }).catch((acceptError) => setError((acceptError as Error).message || "This invitation could not be accepted."))
-                                  .finally(() => setSubmitting(false));
-                            }}>
-                                <p className="text-sm text-muted">Use your existing clinician account for {invitation.email}. You will sign in normally afterwards, including MFA.</p>
-                                <Input label="Existing account password" autoComplete="current-password" type="password" value={signInPassword} onChange={(event) => setSignInPassword(event.target.value)} />
-                                <Button disabled={submitting || !signInPassword} type="submit">{submitting ? "Accepting..." : "Sign in to accept"}</Button>
-                            </form>
-                        ) : (
-                            <Button variant="secondary" onClick={() => setSignInOpen(true)}>Already have an account? Sign in to accept</Button>
-                        )
+                    {invitation && accepted ? (
+                        <div role="status" className="space-y-2 rounded-xl bg-surface-2 p-4 text-sm text-ink-2">
+                            <p>Invitation accepted. Sign in to continue to {invitation.clinic_name}.</p>
+                            <Link className="font-medium text-primary hover:underline" href="/login">Continue to sign in</Link>
+                        </div>
                     ) : null}
-                    {accepted ? null : <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
+                    {existingAccountOpen ? (
+                        <div ref={existingAccountPanelRef} className="space-y-3 rounded-xl border border-line p-4">
+                            {accessToken ? (
+                                <>
+                                    <p className="text-sm text-muted">You are signed in. Accept this invitation with your current clinician account.</p>
+                                    <Button disabled={submitting || inviteLoading} onClick={() => {
+                                        setSubmitting(true); setError("");
+                                        void api.post<InvitationAcceptResponse>("/api/v1/email/invitations/accept", { token: invitationToken }, { token: accessToken })
+                                            .then((result) => {
+                                                writeStoredClinicContext(mapClinicContext(result.clinic));
+                                                router.replace("/dashboard");
+                                            })
+                                            .catch((acceptError) => setError((acceptError as Error).message || "This invitation cannot be accepted by the signed-in account."))
+                                            .finally(() => setSubmitting(false));
+                                    }}>Accept invitation</Button>
+                                </>
+                            ) : invitation ? (
+                                <form aria-label="Sign in to accept" className="space-y-3" onSubmit={(event) => {
+                                    event.preventDefault();
+                                    setSubmitting(true); setError("");
+                                    void api.post<InvitationAcceptResponse>("/api/v1/auth/invitations/accept", {
+                                        email: invitation.email, password: signInPassword, invitation_token: invitationToken,
+                                    }).then((result) => {
+                                        const context = mapClinicContext(result.clinic);
+                                        writeStoredClinicContext(context); setClinicContext(context);
+                                        setSignInPassword(""); setAccepted(true);
+                                    }).catch((acceptError) => setError((acceptError as Error).message || "This invitation could not be accepted."))
+                                      .finally(() => setSubmitting(false));
+                                }}>
+                                    <p className="text-sm text-muted">Use your existing clinician account for {invitation.email}. You will sign in normally afterwards, including MFA.</p>
+                                    <Input label="Existing account password" autoComplete="current-password" type="password" value={signInPassword} onChange={(event) => setSignInPassword(event.target.value)} />
+                                    <Button disabled={submitting || !signInPassword} type="submit">{submitting ? "Accepting..." : "Sign in to accept"}</Button>
+                                </form>
+                            ) : null}
+                            {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}
+                            <button className="text-sm font-medium text-primary hover:underline" type="button" onClick={() => chooseExistingAccount(false)}>
+                                Create a new account instead
+                            </button>
+                        </div>
+                    ) : null}
+                    {accepted || existingAccountOpen ? null : <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
                         <Input label="First name" onChange={(event) => updateField("firstName", event.target.value)} value={formData.firstName} />
                         <Input label="Last name" onChange={(event) => updateField("lastName", event.target.value)} value={formData.lastName} />
                         <Input label="Email" readOnly={Boolean(invitationToken)} onChange={(event) => updateField("email", event.target.value)} type="email" value={formData.email} />
@@ -354,12 +387,19 @@ function ClinicianSignupPageContent() {
                             </Button>
                         </div>
                     </form>}
-                    <div className="text-sm text-muted">
-                        Already have a clinician account?{" "}
-                        <Link className="font-medium text-primary hover:underline" href="/login">
-                            Sign in
-                        </Link>
-                    </div>
+                    {canChooseExistingAccount && !existingAccountOpen ? (
+                        <button ref={existingAccountToggleRef} className="text-left text-sm font-medium text-primary hover:underline" type="button" onClick={() => chooseExistingAccount(true)}>
+                            Already have a MediAgent clinician account? Sign in to accept
+                        </button>
+                    ) : null}
+                    {invitationToken ? null : (
+                        <div className="text-sm text-muted">
+                            Already have a clinician account?{" "}
+                            <Link className="font-medium text-primary hover:underline" href="/login">
+                                Sign in
+                            </Link>
+                        </div>
+                    )}
                     <div className="text-sm text-muted">
                         Need to onboard a brand-new clinic?{" "}
                         <Link className="font-medium text-primary hover:underline" href="/signup/admin">

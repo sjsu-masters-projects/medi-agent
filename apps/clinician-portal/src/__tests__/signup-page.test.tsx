@@ -167,6 +167,50 @@ describe("Clinician signup page", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent(/account was created/);
         expect(writeStoredSession).toHaveBeenCalled();
         expect(replace).not.toHaveBeenCalled();
+        // The retry moves to the existing-account path instead of offering a second signup.
+        expect(screen.queryByRole("button", { name: /create clinician account/i })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Create a new account instead" })).toBeInTheDocument();
+    });
+
+    it("makes account creation the single primary action for an invitation", async () => {
+        readStoredClinicContext.mockReturnValue(null);
+        window.history.replaceState(null, "", `/signup#invitation=${"w".repeat(43)}`);
+        post.mockResolvedValueOnce({ clinic_name: "City Health", email: "existing@example.com", role: "provider" });
+        render(<ClinicianSignupPage />);
+        await screen.findByText("Invitation to join City Health");
+
+        const primaryButtons = screen.getAllByRole("button").filter((button) => button.className.includes("bg-primary"));
+        expect(primaryButtons).toHaveLength(1);
+        expect(primaryButtons[0]).toHaveAccessibleName("Create clinician account");
+        expect(screen.getByRole("button", {
+            name: "Already have a MediAgent clinician account? Sign in to accept",
+        })).toBeInTheDocument();
+        expect(screen.queryByRole("form", { name: "Sign in to accept" })).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/existing account password/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /^accept invitation$/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
+    });
+
+    it("reveals sign-in-to-accept only when chosen and offers a way back", async () => {
+        readStoredClinicContext.mockReturnValue(null);
+        window.history.replaceState(null, "", `/signup#invitation=${"v".repeat(43)}`);
+        post.mockResolvedValueOnce({ clinic_name: "City Health", email: "existing@example.com", role: "provider" });
+        render(<ClinicianSignupPage />);
+
+        fireEvent.click(await screen.findByRole("button", {
+            name: "Already have a MediAgent clinician account? Sign in to accept",
+        }));
+        expect(screen.getByRole("form", { name: "Sign in to accept" })).toBeInTheDocument();
+        expect(screen.getByLabelText(/existing account password/i)).toHaveFocus();
+        expect(screen.getByRole("button", { name: /^sign in to accept$/i })).toBeDisabled();
+        expect(screen.queryByRole("button", { name: /create clinician account/i })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Create a new account instead" }));
+        expect(screen.queryByRole("form", { name: "Sign in to accept" })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /create clinician account/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", {
+            name: "Already have a MediAgent clinician account? Sign in to accept",
+        })).toHaveFocus();
     });
 
     it("lets an existing account sign in to accept without a portal session", async () => {
