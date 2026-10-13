@@ -364,3 +364,46 @@ No migration, eligibility publication, feature activation or approval was perfor
 Actual paired-locale review and a matching approved bundle/manifest/database eligibility
 remain necessary before enabling intake and restarting the backend. The ordinary chat
 message and an explicitly confirmed symptom report remain separate artifacts.
+
+## Requester migration rollout recheck — October 12
+
+The requester reported running the migration. Read-only ledger queries now confirm
+`059_chat_safety_alerts.sql` and `060_confirmed_symptom_intake.sql` are both recorded
+with checksums matching the local versioned files. Zero-row confirmation-column reads
+succeed. Calling the intake RPC's read-only `active` action for the nil/unknown patient
+returns `42501`, demonstrating the expected unknown-patient denial without creating
+an account, draft or report. No migration was applied during this recheck.
+
+The packaged `candidate-1` parses with twelve questions, budget twelve, complete
+en-US/es-MX wording and canonical SHA-256
+`a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab`.
+That is content/structure evidence, not approval. The manifest still has no approved
+active version and a fresh local configuration check resolves intake off.
+The [review worksheet](../backend/src/app/intake/question_library/candidate-1-review.md)
+presents both locales and explicit branch/red-flag review decisions. It records no
+reviewer approval. The requester was asked for the actual decision/reference.
+
+At the start of this recheck no process listened on 8000, 3000 or 3001. Local apps
+were started using these commands from the respective app directories:
+
+```bash
+# backend — background retry disabled during verification
+A2A_RETRY_WORKER_ENABLED=false PYTHONPATH=src .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-level info
+# apps/patient-portal
+npm run dev -- --hostname 127.0.0.1 --port 3000
+# apps/clinician-portal
+npm run dev -- --hostname 127.0.0.1 --port 3001
+```
+
+All three reached ready/startup-complete. No credential configuration file was read
+directly, edited, printed or uploaded. Backend configuration was loaded through the
+application and diagnostics emitted only non-secret gate/check outcomes.
+Intake remains disabled until real approval and matching database eligibility exist;
+no fully working live confirmation journey is claimed from migration checks alone.
+
+Authenticated local browser recovery after startup: opening Nora showed Connected.
+The private draft region completed its owned read without the earlier recovery error
+and displayed **Start a symptom draft**. That button was disabled with only a welcome
+message in this selected conversation, consistent with the saved-user-turn prerequisite.
+No synthetic message, draft or report was submitted during this check. Screenshot:
+`output/verification/intake-rollout-awaiting-review-2026-10-12.jpg` (local, not committed).

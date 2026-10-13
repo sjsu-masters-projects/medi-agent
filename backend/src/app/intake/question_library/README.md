@@ -1,6 +1,9 @@
 # Symptom question review package
 
 `candidate-1.json` is proposed wording only. No reviewer or approval is claimed.
+Use [the paired-locale worksheet](candidate-1-review.md) to read the questions,
+record the real decisions and see the subsequent activation steps. It is pending,
+not an approval record.
 It cannot be selected by the runtime manifest. The safety owner must review the
 paired wording, question order, applicability, required fields, budget and any
 symptom-specific branches/positive red-flag mappings before activation. The

@@ -242,12 +242,21 @@ reads, and browser write/publication-RPC denial. Local tests do not prove remote
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.
 
-## PAT-002-B confirmation rollout (not applied remotely)
+## PAT-002-B confirmation rollout (activation pending)
 
 Migrations 059/060 are local implementation artifacts. Applying them, publishing
 question eligibility and changing remote configuration each require explicit requester
 authorization. No bundle is seeded or approved by migration 060. Obtain genuine
 paired-locale review evidence first; the packaged candidate is currently pending review.
+
+October 12 requester rollout recheck: the requester reported applying the migrations.
+Read-only `schema_migrations` queries confirmed both 059/060 ledger entries match the
+versioned file checksums below. The confirmation column is available and the intake
+RPC rejects an unknown patient with `42501`. This verifies those checks, not complete
+activation or authenticated confirmation acceptance. The library manifest remains
+pending and local configuration resolves intake off. Use the
+[paired-locale review worksheet](../backend/src/app/intake/question_library/candidate-1-review.md)
+to obtain and record the actual review before publishing eligibility and enabling intake.
 
 | Migration | SHA-256 |
 | --- | --- |
