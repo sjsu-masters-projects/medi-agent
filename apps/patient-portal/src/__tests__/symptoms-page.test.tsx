@@ -46,7 +46,7 @@ describe("SymptomsPage", () => {
         screen
           .getByText(
             spanish
-              ? "Qué incluir en su reporte"
+              ? "Qué incluir en tu reporte"
               : "What to include in your report",
           )
           .closest("details"),

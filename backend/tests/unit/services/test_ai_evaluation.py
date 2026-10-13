@@ -117,7 +117,10 @@ def test_triage_request_uses_the_production_prompt_and_asks_for_a_schema() -> No
 
     assert "<PATIENT_MESSAGE>" in request.prompt
     assert "Patient language: es-MX" in request.prompt
-    assert request.system_instruction and "clinical triage classifier" in request.system_instruction
+    assert request.system_instruction and request.system_instruction.startswith(
+        "You are the Care Coordinator for MediAgent"
+    )
+    assert "submit_triage_decision" in request.system_instruction
     assert request.response_schema is not None
     assert request.task == "triage_classification"
 

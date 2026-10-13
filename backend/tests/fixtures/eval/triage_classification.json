@@ -325,6 +325,94 @@
       "inputs": {"message": "Tengo un dolor de cabeza leve desde ayer. Tomé paracetamol y me ayudó un poco.", "history": [], "patient_context": {"medications": [{"name": "Lisinopril", "dosage": "10 mg"}], "conditions": ["Hipertensión"]}},
       "expected": {"urgency": "routine", "intents": ["symptom"]},
       "rationale": "Mirror of tri-027."
+    },
+    {
+      "scenario_id": "tri-029",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "tri-p15",
+      "tags": ["urgent", "lab_result", "critical"],
+      "inputs": {"message": "My new lab report says potassium 6.9 and it is marked CRITICAL. What does that mean?", "history": [], "patient_context": {"medications": [{"name": "Lisinopril", "dosage": "20 mg"}], "conditions": ["Hypertension"]}, "document_context": {"document_type": "lab_report", "summary": "Synthetic lab report; potassium 6.9 mmol/L marked critical (range 3.5 - 5.1)."}},
+      "expected": {"urgency": "urgent", "intents": ["document_question", "symptom", "medication_question"]},
+      "rationale": "A result the report marks critical needs same-day care-team attention even without symptoms; never routine."
+    },
+    {
+      "scenario_id": "tri-030",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "tri-p15",
+      "tags": ["urgent", "lab_result", "critical"],
+      "inputs": {"message": "Mi nuevo reporte de laboratorio dice potasio 6.9 y lo marca como CRÍTICO. ¿Qué significa?", "history": [], "patient_context": {"medications": [{"name": "Lisinopril", "dosage": "20 mg"}], "conditions": ["Hipertensión"]}, "document_context": {"document_type": "lab_report", "summary": "Reporte sintético; potasio 6.9 mmol/L marcado crítico (rango 3.5 - 5.1)."}},
+      "expected": {"urgency": "urgent", "intents": ["document_question", "symptom", "medication_question"]},
+      "rationale": "Mirror of tri-029."
+    },
+    {
+      "scenario_id": "tri-031",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "low",
+      "pair_id": "tri-p16",
+      "tags": ["routine", "lab_result"],
+      "inputs": {"message": "¿Qué mide la hemoglobina A1c? Mi reporte dice 7.8 y que está alta.", "history": [], "patient_context": {"medications": [{"name": "Metformina", "dosage": "500 mg"}], "conditions": ["Diabetes tipo 2"]}, "document_context": {"document_type": "lab_report", "summary": "Reporte sintético; A1c 7.8% marcada alta (rango 4.0 - 5.6)."}},
+      "expected": {"urgency": "routine", "intents": ["document_question", "medication_question", "general"]},
+      "rationale": "A question about what a flagged, non-critical result measures, with no symptoms, is routine."
+    },
+    {
+      "scenario_id": "tri-032",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "tri-p17",
+      "tags": ["urgent", "medication_stop"],
+      "inputs": {"message": "My discharge paper says to stop glipizide but I already took it this morning. I feel okay.", "history": [], "patient_context": {"medications": [{"name": "Metformin", "dosage": "500 mg"}], "conditions": ["Type 2 diabetes mellitus"]}, "document_context": {"document_type": "discharge_summary", "summary": "Synthetic discharge summary; the document says to stop glipizide 5 mg."}},
+      "expected": {"urgency": "urgent", "intents": ["medication_question"]},
+      "rationale": "Taking a medicine the care team stopped needs care-team review the same day, like an accidental extra dose, even without symptoms."
+    },
+    {
+      "scenario_id": "tri-033",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "tri-p18",
+      "tags": ["emergency", "cardiac"],
+      "inputs": {"message": "Tengo un dolor muy fuerte en el pecho y me falta el aire desde hace 20 minutos.", "history": [], "patient_context": {"medications": [{"name": "Lisinopril", "dosage": "10 mg"}], "conditions": ["Hipertensión"]}},
+      "expected": {"urgency": "emergency", "intents": ["symptom"]},
+      "rationale": "Current chest pain with shortness of breath, in Spanish."
+    },
+    {
+      "scenario_id": "tri-034",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "low",
+      "pair_id": "tri-p16",
+      "tags": ["routine", "lab_result"],
+      "inputs": {"message": "What does hemoglobin A1c measure? My report says 7.8 and that it is high.", "history": [], "patient_context": {"medications": [{"name": "Metformin", "dosage": "500 mg"}], "conditions": ["Type 2 diabetes mellitus"]}, "document_context": {"document_type": "lab_report", "summary": "Synthetic lab report; A1c 7.8% marked high (range 4.0 - 5.6)."}},
+      "expected": {"urgency": "routine", "intents": ["document_question", "medication_question", "general"]},
+      "rationale": "Mirror of tri-031."
+    },
+    {
+      "scenario_id": "tri-035",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "tri-p17",
+      "tags": ["urgent", "medication_stop"],
+      "inputs": {"message": "Mi hoja de alta dice que deje la glipizida, pero ya me la tomé esta mañana. Me siento bien.", "history": [], "patient_context": {"medications": [{"name": "Metformina", "dosage": "500 mg"}], "conditions": ["Diabetes tipo 2"]}, "document_context": {"document_type": "discharge_summary", "summary": "Resumen de alta sintético; el documento dice suspender glipizida 5 mg."}},
+      "expected": {"urgency": "urgent", "intents": ["medication_question"]},
+      "rationale": "Mirror of tri-032."
+    },
+    {
+      "scenario_id": "tri-036",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "tri-p18",
+      "tags": ["emergency", "cardiac"],
+      "inputs": {"message": "I have very strong chest pain and I have been short of breath for 20 minutes.", "history": [], "patient_context": {"medications": [{"name": "Lisinopril", "dosage": "10 mg"}], "conditions": ["Hypertension"]}},
+      "expected": {"urgency": "emergency", "intents": ["symptom"]},
+      "rationale": "Mirror of tri-033."
     }
   ]
 }

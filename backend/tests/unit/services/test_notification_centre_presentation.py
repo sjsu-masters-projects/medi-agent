@@ -146,3 +146,14 @@ def test_appointment_response_acknowledgement_flows_only_while_actionable(
         can_acknowledge=True,
     )
     assert present_item(raw, role, "en-US").can_acknowledge is expected
+
+
+def test_critical_result_alert_opens_the_exact_document_without_health_detail():
+    raw = item(event_type="critical_result", category="safety")
+    shown = present_item(raw, "clinician", "en-US")
+    assert shown.title == "Critical test result reported"
+    link, label, _ = destination(raw, "clinician")
+    assert link == f"/patients/{raw['patient_id']}?tab=documents#document-{raw['source_id']}"
+    assert label == "Open document"
+    # No test name, value or patient identifier in the copy itself.
+    assert "Potassium" not in shown.body and raw["patient_id"] not in shown.body

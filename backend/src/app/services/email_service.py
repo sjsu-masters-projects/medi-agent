@@ -38,6 +38,8 @@ _COPY = {
     ),
     "document_review": ("Review work available", "Revisión pendiente"),
     "care_plan_draft": ("Review work available", "Revisión pendiente"),
+    # Clinician-only; like every notice it carries no health detail, only urgency.
+    "critical_result": ("Urgent review work available", "Revisión urgente pendiente"),
 }
 
 # Provider ``last_event`` values. Opens and clicks imply delivery. A complaint is

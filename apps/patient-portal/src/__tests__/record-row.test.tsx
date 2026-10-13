@@ -114,7 +114,7 @@ describe("Records presentation", () => {
         document={{ ...document, parseStatus: DocumentParseStatus.DUPLICATE }}
         locale="es-MX"
         typeLabel="resumen de alta"
-        provider="Documento subido por usted"
+        provider="Documento que subiste"
         date="2 oct"
         statusLabel="Archivo duplicado"
         onOpen={() => {}}

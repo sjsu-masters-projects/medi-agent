@@ -140,6 +140,9 @@ class PageExtraction(BaseModel):
     height: float
     source_rotation: int = 0
     rotation_applied: int = 0
+    # Counter-clockwise straightening applied before OCR; when non-zero, coordinates
+    # and ``width``/``height`` describe the straightened frame, as with rotation.
+    deskew_degrees: float = 0.0
     render_dpi: int | None = None
     languages: list[str] = Field(default_factory=list)
     words: list[WordBox] = Field(default_factory=list)
@@ -154,6 +157,19 @@ class PageExtraction(BaseModel):
     @property
     def has_words(self) -> bool:
         return bool(self.words)
+
+    def model_header(self) -> str:
+        """Page delimiter for model input that also says how the text was read.
+
+        OCR misreads digits (a dropped decimal turns 4.0 into 40), so the extraction
+        model is told which pages were recognized from an image and which of those were
+        read with low confidence. Embedded text keeps the bare ``[[page N]]`` form.
+        """
+        if self.method is not ExtractionMethod.OCR:
+            return f"[[page {self.page_number}]]"
+        if self.quality is PageQuality.LOW:
+            return f"[[page {self.page_number} — OCR, low confidence: verify numbers]]"
+        return f"[[page {self.page_number} — OCR]]"
 
     def layout_text(self) -> str:
         """The page as visual rows: lines that share a baseline, left to right.
@@ -225,8 +241,7 @@ class DocumentExtraction(BaseModel):
         included: garbled OCR is the input most likely to make a model invent a dose.
         """
         return "\n\n".join(
-            f"[[page {page.page_number}]]\n{page.layout_text()}"
-            for page in self.model_input_pages()
+            f"{page.model_header()}\n{page.layout_text()}" for page in self.model_input_pages()
         )
 
     def page(self, page_number: int) -> PageExtraction | None:

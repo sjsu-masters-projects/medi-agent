@@ -98,6 +98,12 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Tu equipo de atención solicita información",
         "Contacta al profesional que hizo la solicitud en Mensajes del equipo de atención.",
     ),
+    "critical_result": (
+        "Critical test result reported",
+        "A patient's document reports a result the laboratory marked critical. Open the document to review it.",
+        "Resultado crítico reportado",
+        "Un documento informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo.",
+    ),
     "safety_flag": (
         "Patient safety flag needs review",
         "An automated flag was saved. Review the original conversation; this is not a clinical decision.",
@@ -182,6 +188,11 @@ def _reminder_link(row: dict[str, Any], role: str) -> Destination:
 
 def _safety_link(row: dict[str, Any], role: str) -> Destination:
     patient, source = _identifier(row.get("patient_id")), _identifier(row.get("source_id"))
+    if row["event_type"] == "critical_result":
+        link = (
+            f"/patients/{patient}?tab=documents#document-{source}" if patient and source else None
+        )
+        return (link, "Open document", "Abrir documento")
     if row["event_type"] == "safety_flag":
         link = f"/patients/{patient}?tab=chat" if patient else None
     else:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import math
 import time
 from typing import Any
 
@@ -43,6 +44,7 @@ from app.services.document_intelligence.ocr import (
     OcrResult,
     TesseractOcrEngine,
 )
+from app.services.document_intelligence.raster_preprocessing import prepare_raster
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,9 @@ _POINTS_PER_INCH = 72.0
 _DARK_PIXEL_THRESHOLD = 200
 _ROTATION_CANDIDATES = (90, 180, 270)
 _OSD_SCORE_TOLERANCE = 0.05
+_SIDEWAYS_MIN_WORD_CHARS = 3
+_SIDEWAYS_MIN_WORDS = 3
+_SIDEWAYS_SHARE = 0.6
 _MAX_PARSER_WARNINGS = 3
 _ENGINE_MISSING = "OCR engine is unavailable in this environment."
 
@@ -342,15 +347,18 @@ class DocumentIntelligenceService:
                     "latency_ms": _elapsed_ms(started),
                 }
             )
-        prepared, prep_scale, prep_warnings = _prepare_raster(image, self.policy)
+        # An embedded region keeps its page offset, so only whole pages are straightened.
+        prepared = prepare_raster(image, self.policy, deskew=allow_rotation)
         if allow_rotation:
-            rotation, result, rotation_warnings = self._recognize_upright(engine, prepared)
+            rotation, result, rotation_warnings = self._recognize_upright(engine, prepared.image)
         else:
-            rotation, result, rotation_warnings = 0, self._recognize(engine, prepared), []
-        page_width, page_height = base.width, base.height
+            rotation, result, rotation_warnings = 0, self._recognize(engine, prepared.image), []
+        page_width, page_height = _straightened_size(
+            base.width, base.height, prepared.deskew_degrees
+        )
         if rotation in (90, 270):
             page_width, page_height = page_height, page_width
-        words, lines = _words_and_lines(result, scale / prep_scale, origin)
+        words, lines = _words_and_lines(result, scale / prepared.scale, origin)
         confidence = _mean_confidence(words)
         return base.model_copy(
             update={
@@ -358,13 +366,19 @@ class DocumentIntelligenceService:
                 "width": page_width,
                 "height": page_height,
                 "rotation_applied": rotation,
+                "deskew_degrees": prepared.deskew_degrees,
                 "languages": result.languages,
                 "words": words,
                 "lines": lines,
                 "text": "\n".join(line.text for line in lines),
                 "confidence": confidence,
                 "quality": self.policy.page_quality(confidence, has_words=bool(words)),
-                "warnings": [*base.warnings, *prep_warnings, *rotation_warnings, *result.warnings],
+                "warnings": [
+                    *base.warnings,
+                    *prepared.warnings,
+                    *rotation_warnings,
+                    *result.warnings,
+                ],
                 "latency_ms": _elapsed_ms(started),
             }
         )
@@ -374,31 +388,28 @@ class DocumentIntelligenceService:
 
         Orientation detection is cheap but misfires on short labels, so its suggestion is
         verified against the unrotated pass. A brute-force search over the remaining
-        rotations runs only when the best result is still poor, so an upright page never
-        pays for four OCR passes.
+        rotations runs only when the best result is still poor or reads sideways, so an
+        upright page never pays for four OCR passes.
         """
         warnings: list[str] = []
         best_rotation, best_result = 0, self._recognize(engine, image)
-        best_score = _mean_confidence_of_result(best_result)
         tried = {0}
         suggested = engine.orientation_degrees(image) or 0
         if suggested:
             tried.add(suggested)
             result = self._recognize(engine, image.rotate(-suggested, expand=True))
-            score = _mean_confidence_of_result(result)
-            # Some engines stay confident on sideways text, so the detector's suggestion
-            # wins unless the upright pass is clearly better or reads more characters.
-            if score >= best_score - _OSD_SCORE_TOLERANCE and _chars(result) >= _chars(best_result):
-                best_rotation, best_result, best_score = suggested, result, score
+            if _osd_suggestion_wins(result, best_result):
+                best_rotation, best_result = suggested, result
                 warnings.append(f"Page orientation corrected by {suggested} degrees (OSD).")
-        if best_score < self.policy.rotation_search_below:
+        if _mean_confidence_of_result(
+            best_result
+        ) < self.policy.rotation_search_below or _reads_sideways(best_result):
             for degrees in _ROTATION_CANDIDATES:
                 if degrees in tried:
                     continue
                 result = self._recognize(engine, image.rotate(-degrees, expand=True))
-                score = _mean_confidence_of_result(result)
-                if score > best_score:
-                    best_rotation, best_result, best_score = degrees, result, score
+                if _orientation_key(result) > _orientation_key(best_result):
+                    best_rotation, best_result = degrees, result
             if best_rotation not in (0, suggested):
                 warnings.append(
                     f"Page orientation corrected by {best_rotation} degrees (confidence search)."
@@ -505,22 +516,13 @@ def _ink_ratio_of(grayscale: Any) -> float:
     return float(sum(histogram[:_DARK_PIXEL_THRESHOLD]) / total)
 
 
-def _prepare_raster(image: Any, policy: DocumentIntelligencePolicy) -> tuple[Any, float, list[str]]:
-    """Grayscale, contrast-stretch, and upscale small rasters before OCR."""
-    from PIL import Image, ImageOps
-
-    prepared = ImageOps.autocontrast(image.convert("L"))
-    scale = 1.0
-    warnings: list[str] = []
-    shortest = min(prepared.width, prepared.height)
-    if shortest < policy.min_raster_side_px:
-        scale = float(max(2, -(-policy.min_raster_side_px // max(1, shortest))))
-        prepared = prepared.resize(
-            (int(prepared.width * scale), int(prepared.height * scale)),
-            Image.Resampling.LANCZOS,
-        )
-        warnings.append(f"Low-resolution raster upscaled {scale:.0f}x before OCR.")
-    return prepared, scale, warnings
+def _straightened_size(width: float, height: float, degrees: float) -> tuple[float, float]:
+    """Bounding size of a page after rotation by ``degrees`` on a growing canvas."""
+    if not degrees:
+        return width, height
+    radians = math.radians(abs(degrees))
+    cos, sin = math.cos(radians), math.sin(radians)
+    return width * cos + height * sin, width * sin + height * cos
 
 
 def _words_and_lines(
@@ -582,6 +584,35 @@ def _mean_confidence_of_result(result: OcrResult) -> float:
     if not total:
         return 0.0
     return sum(len(word.text) * word.confidence for word in result.words) / total
+
+
+def _reads_sideways(result: OcrResult) -> bool:
+    """True when most multi-letter words are taller than wide: the text runs vertically.
+
+    Tesseract can read a page lying on its side with high confidence, one printed
+    column at a time, so confidence alone cannot tell a sideways read from an upright
+    one. Word geometry can, and does not depend on the engine.
+    """
+    words = [word for word in result.words if len(word.text) >= _SIDEWAYS_MIN_WORD_CHARS]
+    if len(words) < _SIDEWAYS_MIN_WORDS:
+        return False
+    total = sum(len(word.text) for word in words)
+    tall = sum(len(word.text) for word in words if word.height > word.width)
+    return tall / total >= _SIDEWAYS_SHARE
+
+
+def _orientation_key(result: OcrResult) -> tuple[bool, float]:
+    """Rank readings: horizontal text first, then confidence."""
+    return (not _reads_sideways(result), _mean_confidence_of_result(result))
+
+
+def _osd_suggestion_wins(rotated: OcrResult, current: OcrResult) -> bool:
+    if _reads_sideways(rotated) != _reads_sideways(current):
+        return _reads_sideways(current)
+    # Some engines stay confident on sideways text, so the detector's suggestion wins
+    # unless the upright pass is clearly better or reads more characters.
+    score, current_score = _mean_confidence_of_result(rotated), _mean_confidence_of_result(current)
+    return score >= current_score - _OSD_SCORE_TOLERANCE and _chars(rotated) >= _chars(current)
 
 
 def _merge_mixed(

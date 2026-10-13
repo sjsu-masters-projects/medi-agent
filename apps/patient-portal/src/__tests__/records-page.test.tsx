@@ -652,12 +652,67 @@ describe("RecordsPage", () => {
     render(<RecordsPage />);
     expect(
       await screen.findByText(
-        "No pudimos cargar sus documentos. Inténtelo de nuevo.",
+        "No pudimos cargar tus documentos. Inténtalo de nuevo.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Intentar de nuevo" }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/internal_schema/)).not.toBeInTheDocument();
+  });
+
+  it("loads test results only for the document a patient opens", async () => {
+    const record = (id: string, fileName: string, parseStatus: string = DocumentParseStatus.COMPLETED) => ({
+      id,
+      patient_id: "patient-1",
+      uploaded_by: "patient-1",
+      uploaded_by_role: "patient",
+      document_type: DocumentType.LAB_REPORT,
+      file_name: fileName,
+      file_url: `https://example.test/${id}.pdf`,
+      file_size_bytes: 1024,
+      mime_type: "application/pdf",
+      parsed: parseStatus === DocumentParseStatus.COMPLETED,
+      parse_status: parseStatus,
+      ai_summary: "Summary",
+      source_clinic: "City Health",
+      visibility: "shared",
+      created_at: "2026-10-10T12:00:00Z",
+    });
+    get.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/documents/") {
+        return [
+          record("lab-a", "Lab A.pdf"),
+          record("lab-b", "Lab B.pdf"),
+          record("lab-c", "Lab C.pdf", DocumentParseStatus.PROCESSING),
+        ];
+      }
+      if (url === "/api/v1/documents/lab-b/results") {
+        return [
+          { kind: "lab_result", name: "Potassium", value: "6.9", unit: "mmol/L", reference_range: "3.5-5.1", flag: "HH", flag_meaning: "critical", range_status: "above", panel: null, observed_at: null, page: 1, reviewed: false },
+        ];
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+    const resultCalls = () => get.mock.calls.filter(([url]) => String(url).endsWith("/results"));
+
+    render(<RecordsPage />);
+    await screen.findByRole("button", { name: /Lab A\.pdf/ });
+    expect(resultCalls()).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /Lab C\.pdf/ }));
+    await screen.findByRole("dialog");
+    // A document still being read has no results yet, so nothing is requested.
+    expect(resultCalls()).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Close modal" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Lab B\.pdf/ }));
+    const section = await screen.findByRole("region", { name: "Test results" });
+    expect(resultCalls()).toEqual([
+      ["/api/v1/documents/lab-b/results", expect.objectContaining({ token: "access-token" })],
+    ]);
+    expect(section).toHaveTextContent("Potassium");
+    expect(section).toHaveTextContent("Contact your care team today.");
+    expect(section).toHaveTextContent("Not yet reviewed by your care team");
   });
 });

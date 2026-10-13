@@ -18,7 +18,7 @@ export default function SymptomsPage() {
         title={spanish ? "Reportar un síntoma" : "Report a symptom"}
         subtitle={
           spanish
-            ? "Comparta cómo se siente y cuándo empezó."
+            ? "Comparte cómo te sientes y cuándo empezó."
             : "Share how you feel and when it started."
         }
       />
@@ -39,7 +39,7 @@ export default function SymptomsPage() {
           </div>
           <p className="text-[15px] leading-6 text-ink-2">
             {spanish
-              ? "Nora es una asistente de atención con IA. En el chat, describa lo que siente, cuándo empezó y qué tan intenso es. Revise las preguntas y confirme los detalles cuando se le solicite."
+              ? "Nora es una asistente de atención con IA. En el chat, describe lo que sientes, cuándo empezó y qué tan intenso es. Revisa las preguntas y confirma los detalles cuando se te solicite."
               : "Nora is an AI care assistant. In chat, describe what you feel, when it started, and how strong it is. Review the questions and confirm details when asked."}
           </p>
           <Link
@@ -56,12 +56,12 @@ export default function SymptomsPage() {
           <details className="ma-disclosure border-t border-line pt-2">
             <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ink-2">
               {spanish
-                ? "Qué incluir en su reporte"
+                ? "Qué incluir en tu reporte"
                 : "What to include in your report"}
             </summary>
             <p className="text-sm leading-6 text-ink-2">
               {spanish
-                ? "Incluya cuándo empezó, con qué frecuencia ocurre y cómo afecta sus actividades. Abrir el chat no guarda un reporte ni notifica a su equipo de atención."
+                ? "Incluye cuándo empezó, con qué frecuencia ocurre y cómo afecta tus actividades. Abrir el chat no guarda un reporte ni notifica a tu equipo de atención."
                 : "Include when it started, how often it happens, and how it affects your activities. Opening chat does not save a report or notify your care team."}
             </p>
           </details>
@@ -72,7 +72,7 @@ export default function SymptomsPage() {
         >
           <Icon name="alert" className="mt-0.5 h-[18px] w-[18px] shrink-0" />
           {spanish
-            ? "Este chat no se monitorea continuamente. En una emergencia, llame al 911."
+            ? "Este chat no se monitorea continuamente. En una emergencia, llama al 911."
             : "This chat is not continuously monitored. In an emergency, call 911."}
         </p>
         <details className="ma-disclosure rounded-[22px] bg-surface px-[14px]">
@@ -83,7 +83,7 @@ export default function SymptomsPage() {
           </summary>
           <p className="pb-4 text-sm leading-6 text-muted">
             {spanish
-              ? "Esta pantalla aún no está conectada a sus reportes guardados. Puede usar el chat para reportar un síntoma o consultar a su equipo de atención."
+              ? "Esta pantalla aún no está conectada a tus reportes guardados. Puedes usar el chat para reportar un síntoma o consultar a tu equipo de atención."
               : "This screen is not yet connected to your saved reports. You can use chat to report a symptom or ask your care team."}
           </p>
         </details>
