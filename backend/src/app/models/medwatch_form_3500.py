@@ -630,3 +630,118 @@ class MedWatchGateIssue(BaseModel):
 
     path: str
     code: GateIssueCode
+
+
+MedWatchListState = Literal["active", "submitted", "discarded"]
+SubmissionMethod = Literal["medwatch_online", "fax", "mail", "other"]
+SUBMISSION_METHOD_LABELS: Mapping[str, str] = {
+    "medwatch_online": "MedWatch Online",
+    "fax": "Fax",
+    "mail": "Mail",
+    "other": "Other",
+}
+
+
+class MedWatchExternalSubmissionRead(BaseModel):
+    """A clinician's record of a Form 3500 submission made outside MediAgent."""
+
+    id: str
+    submitted_on: str
+    method: SubmissionMethod
+    method_detail: str | None = None
+    fda_reference: str | None = None
+    recorded_by: str
+    recorded_by_name: str | None = None
+    amends_id: str | None = None
+    amend_reason: str | None = None
+    created_at: str
+
+
+ProvenanceKind = Literal["record", "ai_extracted", "patient_confirmed", "clinician_edited"]
+
+
+class Form3500Provenance(BaseModel):
+    """Where one preview item's value came from."""
+
+    kind: ProvenanceKind
+    source_type: str | None = None
+    attribution: str | None = None
+    citation: str | None = None
+
+
+class Form3500PreviewItem(BaseModel):
+    """One Form 3500 item as it reads on the form; ``value`` is ``None`` when blank."""
+
+    item: str
+    label: str
+    path: str
+    value: str | None = None
+    provenance: list[Form3500Provenance] = Field(default_factory=list)
+    missing_for_approval: list[GateIssueCode] = Field(default_factory=list)
+
+
+class Form3500PreviewSection(BaseModel):
+    """One Form 3500 section, in form order. C and E are never completed by MediAgent."""
+
+    section: Literal["A", "B", "C", "D", "E", "F", "G"]
+    title: str
+    completion: Literal["mediagent", "not_completed_by_mediagent"]
+    items: list[Form3500PreviewItem] = Field(default_factory=list)
+
+
+class Form3500TemplateRead(BaseModel):
+    """The vendored official form revision the draft is laid out on."""
+
+    title: str
+    revision: str
+    omb_number: str
+    expires: str
+    may_be_superseded: bool
+
+
+class Form3500PreviewRead(BaseModel):
+    """Read-only Form 3500 layout of a draft in any status."""
+
+    draft_id: str
+    status: str
+    revision: int
+    export_version: str
+    discarded: bool
+    sections: list[Form3500PreviewSection]
+    missing_for_approval: list[MedWatchGateIssue] = Field(default_factory=list)
+    name_warnings: list[MedWatchNameWarning] = Field(default_factory=list)
+    mediagent_review: MediAgentReview
+    legacy: dict[str, str] = Field(default_factory=dict)
+    template: Form3500TemplateRead
+    current_submission: MedWatchExternalSubmissionRead | None = None
+    not_submitted_to_fda: Literal[True] = True
+
+
+class Form3500Option(BaseModel):
+    """One allowed value of an enumerated item and its form text."""
+
+    value: str
+    label: str
+
+
+class Form3500OptionsRead(BaseModel):
+    """Every option list the edit form offers, taken from the model and the template."""
+
+    form_version: Literal["fda-3500-2025-09"] = "fda-3500-2025-09"
+    sex: list[Form3500Option]
+    age_unit: list[Form3500Option]
+    weight_unit: list[Form3500Option]
+    race: list[Form3500Option]
+    report_types: list[Form3500Option]
+    outcomes: list[Form3500Option]
+    yes_no: list[Form3500Option]
+    yes_no_not_applicable: list[Form3500Option]
+    product_types: list[Form3500Option]
+    dose_units: list[Form3500Option]
+    frequencies: list[Form3500Option]
+    routes: list[Form3500Option]
+    duration_units: list[Form3500Option]
+    occupations: list[Form3500Option]
+    also_reported_to: list[Form3500Option]
+    countries: list[Form3500Option]
+    submission_methods: list[Form3500Option]

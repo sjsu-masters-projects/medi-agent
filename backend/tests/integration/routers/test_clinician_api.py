@@ -9,13 +9,21 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 
-from app.core.exceptions import AuthorizationError
+from app.core.exceptions import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
 from app.middleware.rate_limit import RateLimitResult
 from app.models.auth import CurrentUser
 from app.routers.clinicians import _clinician_dep, _get_medwatch_service, _get_service
+from app.services.medwatch_3500.pdf import Form3500RenderError
+from app.services.medwatch_3500.template import TemplateMismatchError
+from app.services.medwatch_service import MedWatchService
 
 
 @pytest.fixture
@@ -1094,37 +1102,11 @@ def _medwatch_draft_payload(
         "adr_assessment_id": str(assessment_id),
         "patient_id": str(patient_id),
         "form_data": {
-            "patient": {
-                "patient_identifier": "Maya Patel",
-                "date_of_birth": "1988-04-03",
-                "sex": "female",
-            },
-            "event": {
-                "description": "Dizziness",
-                "onset_date_or_time": "2026-10-01",
-                "outcome": "",
-                "seriousness": "",
-            },
-            "suspect_product": {
-                "name": "Fluticasone/salmeterol",
-                "dose": "1 puff",
-                "frequency": "twice daily",
-                "route": "inhaled",
-                "therapy_start_date": "2026-09-28",
-                "therapy_end_date": "",
-            },
-            "concomitant_products": {"products": "Albuterol"},
-            "tests_and_history": {
-                "relevant_tests": "",
-                "other_relevant_history": "",
-            },
-            "reporter": {
-                "name": "Elena Park",
-                "email": "elena@example.com",
-                "specialty": "Internal medicine",
-                "clinic_name": "MediAgent Clinic",
-            },
-            "clinical_review": {
+            "form_version": "fda-3500-2025-09",
+            "section_a": {"identifier": "XX-ABCD"},
+            "section_b": {"report_types": ["adverse_event"], "narrative": "Dizziness"},
+            "section_d": {"product_1": {"name": "Synthetic product"}},
+            "mediagent_review": {
                 "naranjo_score": 6,
                 "causality": "Probable",
                 "reportability_rationale": "Clinically significant new event.",
@@ -1134,15 +1116,25 @@ def _medwatch_draft_payload(
         "clinician_edited_fields": [],
         "de_identified": False,
         "status": "draft",
+        "patient_reference": "XX-ABCD",
         "created_by": str(clinician_id),
         "approved_by": None,
         "approved_at": None,
         "approval_note": None,
         "revision": 1,
-        "export_version": "medwatch-3500a-draft-v1",
+        "export_version": "fda-3500-2025-09",
         "created_at": "2026-10-09T10:00:00Z",
         "updated_at": "2026-10-09T10:00:00Z",
+        "missing_for_approval": [{"path": "section_g.occupation", "code": "occupation_missing"}],
+        "name_warnings": [],
+        "pdf_available": False,
+        "current_submission": None,
+        "submission_history": [],
+        "attestation": {"version": "medwatch-3500-approval-v1", "text": "Synthetic text"},
     }
+
+
+_DRAFTS = "/api/v1/clinicians/me/medwatch-drafts"
 
 
 class TestMedWatchDraftRoutes:
@@ -1162,44 +1154,345 @@ class TestMedWatchDraftRoutes:
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["status"] == "draft"
+        body = response.json()
+        assert body["status"] == "draft"
+        assert body["form_data"]["form_version"] == "fda-3500-2025-09"
+        assert body["missing_for_approval"] == payload["missing_for_approval"]
+        assert body["attestation"]["version"] == "medwatch-3500-approval-v1"
         request = override_medwatch_service.create_draft.await_args.args[2]
         assert request.decision.value == "prepare_draft"
         assert request.reportability_rationale == "Clinically significant new event."
 
-    def test_approval_requires_attestation(self, client, override_auth, override_medwatch_service):
-        response = client.post(
-            f"/api/v1/clinicians/me/medwatch-drafts/{uuid4()}/approve",
-            json={
-                "approval_note": "Reviewed source evidence.",
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {
+                "approval_note": "Reviewed.",
                 "expected_revision": 1,
                 "attested": False,
+                "attestation_version": "medwatch-3500-approval-v1",
             },
-        )
+            {"approval_note": "Reviewed.", "expected_revision": 1, "attested": True},
+            {
+                "approval_note": "Reviewed.",
+                "expected_revision": 1,
+                "attested": True,
+                "attestation_version": "medwatch-3500-approval-v0",
+            },
+        ],
+    )
+    def test_approval_requires_attestation_and_its_version(
+        self, client, override_auth, override_medwatch_service, body
+    ):
+        response = client.post(f"{_DRAFTS}/{uuid4()}/approve", json=body)
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         override_medwatch_service.approve_draft.assert_not_called()
 
-    def test_export_returns_artifact_marked_not_submitted(
+    @pytest.mark.parametrize("state", ["active", "submitted", "discarded"])
+    def test_list_passes_the_state(self, client, override_auth, override_medwatch_service, state):
+        override_medwatch_service.list_drafts = AsyncMock(
+            return_value={"items": [_medwatch_draft_payload()], "total": 1}
+        )
+
+        response = client.get(_DRAFTS, params={"state": state})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["total"] == 1
+        assert override_medwatch_service.list_drafts.await_args.args[1] == state
+
+    def test_list_defaults_to_active_and_rejects_an_unknown_state(
+        self, client, override_auth, override_medwatch_service
+    ):
+        override_medwatch_service.list_drafts = AsyncMock(return_value={"items": [], "total": 0})
+
+        assert client.get(_DRAFTS).status_code == status.HTTP_200_OK
+        assert override_medwatch_service.list_drafts.await_args.args[1] == "active"
+        response = client.get(_DRAFTS, params={"state": "deleted"})
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_form_options_come_from_the_template(self, client, override_auth, override_db):
+        response = client.get(f"{_DRAFTS}/form-3500-options")
+
+        assert response.status_code == status.HTTP_200_OK
+        body = response.json()
+        assert {"value": "Oral", "label": "Oral"} in body["routes"]
+        assert {"value": "medwatch_online", "label": "MedWatch Online"} in body[
+            "submission_methods"
+        ]
+        assert len(body["countries"]) > 100
+
+    def test_preview_route(self, client, override_auth, override_medwatch_service):
+        draft_id = uuid4()
+        override_medwatch_service.get_preview = AsyncMock(
+            return_value={
+                "draft_id": str(draft_id),
+                "status": "draft",
+                "revision": 1,
+                "export_version": "fda-3500-2025-09",
+                "discarded": False,
+                "sections": [
+                    {
+                        "section": "C",
+                        "title": "Product availability",
+                        "completion": "not_completed_by_mediagent",
+                        "items": [],
+                    }
+                ],
+                "mediagent_review": {"naranjo_score": 6},
+                "template": {
+                    "title": "FORM FDA 3500",
+                    "revision": "09/2025",
+                    "omb_number": "0910-0291",
+                    "expires": "2027-09-30",
+                    "may_be_superseded": False,
+                },
+            }
+        )
+
+        response = client.get(f"{_DRAFTS}/{draft_id}/preview")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["not_submitted_to_fda"] is True
+        assert override_medwatch_service.get_preview.await_args.args[1] == draft_id
+
+    def test_json_export_is_marked_not_submitted(
         self, client, override_auth, override_medwatch_service
     ):
         draft_id = uuid4()
         override_medwatch_service.export_draft = AsyncMock(
             return_value={
-                "filename": f"medwatch-draft-{draft_id}.json",
+                "filename": f"fda-3500-{str(draft_id)[:8]}-not-submitted.json",
                 "media_type": "application/json",
-                "content": {
-                    "artifact_type": "medwatch_3500a_draft",
-                    "not_submitted_to_fda": True,
-                },
+                "content": {"artifact_type": "fda_3500_draft", "not_submitted_to_fda": True},
             }
         )
 
-        response = client.get(f"/api/v1/clinicians/me/medwatch-drafts/{draft_id}/export")
+        response = client.get(f"{_DRAFTS}/{draft_id}/export")
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["content"]["not_submitted_to_fda"] is True
+        assert response.json()["content"]["artifact_type"] == "fda_3500_draft"
         override_medwatch_service.export_draft.assert_awaited_once()
+
+    def test_pdf_download_headers_and_filename(
+        self, client, override_auth, override_medwatch_service
+    ):
+        draft_id = uuid4()
+        filename = f"fda-3500-{str(draft_id)[:8]}-not-submitted.pdf"
+        override_medwatch_service.export_pdf = AsyncMock(
+            return_value={
+                "filename": filename,
+                "media_type": "application/pdf",
+                "content": b"%PDF-synthetic",
+            }
+        )
+
+        response = client.get(f"{_DRAFTS}/{draft_id}/export.pdf")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.headers["content-disposition"] == f'attachment; filename="{filename}"'
+        assert response.headers["cache-control"] == "no-store"
+        assert response.content == b"%PDF-synthetic"
+
+    @pytest.mark.parametrize(
+        ("error", "expected_status", "code"),
+        [
+            (lambda: NotFoundError("MedWatch draft", "x"), 404, "NOT_FOUND"),
+            (lambda: AuthorizationError("Not assigned"), 403, "AUTHORIZATION_ERROR"),
+            (
+                lambda: ConflictError("Changed", code="MEDWATCH_REVISION_CONFLICT"),
+                409,
+                "MEDWATCH_REVISION_CONFLICT",
+            ),
+            (
+                lambda: ValidationError("Not approved", code="MEDWATCH_NOT_APPROVED"),
+                422,
+                "MEDWATCH_NOT_APPROVED",
+            ),
+            (
+                lambda: ValidationError("Legacy", code="MEDWATCH_LEGACY_DRAFT_INCOMPLETE"),
+                422,
+                "MEDWATCH_LEGACY_DRAFT_INCOMPLETE",
+            ),
+            (lambda: TemplateMismatchError("synthetic"), 503, "FORM_3500_TEMPLATE_MISMATCH"),
+            (lambda: Form3500RenderError(uuid4()), 502, "FORM_3500_RENDER_FAILED"),
+        ],
+    )
+    def test_pdf_error_codes(
+        self, client, override_auth, override_medwatch_service, error, expected_status, code
+    ):
+        override_medwatch_service.export_pdf = AsyncMock(side_effect=error())
+
+        response = client.get(f"{_DRAFTS}/{uuid4()}/export.pdf")
+
+        assert response.status_code == expected_status
+        assert response.json()["error"]["code"] == code
+        assert response.headers["content-type"].startswith("application/json")
+
+    def test_incomplete_approval_returns_the_missing_items(
+        self, client, override_auth, override_medwatch_service
+    ):
+        missing = [{"path": "section_g.occupation", "code": "occupation_missing"}]
+        override_medwatch_service.approve_draft = AsyncMock(
+            side_effect=ValidationError(
+                "Incomplete",
+                code="MEDWATCH_APPROVAL_INCOMPLETE",
+                details={"missing_for_approval": missing},
+            )
+        )
+
+        response = client.post(
+            f"{_DRAFTS}/{uuid4()}/approve",
+            json={
+                "approval_note": "Reviewed.",
+                "expected_revision": 1,
+                "attested": True,
+                "attestation_version": "medwatch-3500-approval-v1",
+                "non_serious_attested": True,
+                "acknowledged_warnings": [{"path": "section_b.narrative", "kind": "patient_name"}],
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        assert response.json()["error"] == {
+            "code": "MEDWATCH_APPROVAL_INCOMPLETE",
+            "message": "Incomplete",
+            "details": {"missing_for_approval": missing},
+        }
+        request = override_medwatch_service.approve_draft.await_args.args[2]
+        assert request.non_serious_attested is True
+
+    def test_discard_submission_and_amend_routes(
+        self, client, override_auth, override_medwatch_service
+    ):
+        draft_id = uuid4()
+        payload = _medwatch_draft_payload(draft_id=draft_id)
+        for name in ("discard_draft", "record_submission", "amend_submission"):
+            setattr(override_medwatch_service, name, AsyncMock(return_value=payload))
+
+        discard = client.post(
+            f"{_DRAFTS}/{draft_id}/discard", json={"reason": "Wrong drug", "expected_revision": 2}
+        )
+        record = client.post(
+            f"{_DRAFTS}/{draft_id}/submission",
+            json={
+                "submitted_on": "2026-10-12",
+                "method": "fax",
+                "method_detail": None,
+                "fda_reference": None,
+                "attested": True,
+                "expected_revision": 3,
+            },
+        )
+        amend = client.post(
+            f"{_DRAFTS}/{draft_id}/submission/amend",
+            json={
+                "amends_id": str(uuid4()),
+                "submitted_on": "2026-10-12",
+                "method": "other",
+                "method_detail": "Synthetic courier",
+                "fda_reference": None,
+                "reason": "Wrong method",
+            },
+        )
+
+        assert [r.status_code for r in (discard, record, amend)] == [200, 200, 200]
+        assert override_medwatch_service.discard_draft.await_args.args[2].reason == "Wrong drug"
+        assert override_medwatch_service.record_submission.await_args.args[2].method == "fax"
+        assert override_medwatch_service.amend_submission.await_args.args[2].reason == (
+            "Wrong method"
+        )
+
+    @pytest.mark.parametrize(
+        ("path", "body"),
+        [
+            ("discard", {"reason": "   ", "expected_revision": 1}),
+            ("discard", {"reason": "x" * 2001, "expected_revision": 1}),
+            (
+                "submission",
+                {
+                    "submitted_on": "2026-10-12",
+                    "method": "fax",
+                    "attested": False,
+                    "expected_revision": 1,
+                },
+            ),
+            (
+                "submission",
+                {
+                    "submitted_on": "2999-01-01",
+                    "method": "fax",
+                    "attested": True,
+                    "expected_revision": 1,
+                },
+            ),
+            (
+                "submission",
+                {
+                    "submitted_on": "2026-10-12",
+                    "method": "other",
+                    "attested": True,
+                    "expected_revision": 1,
+                },
+            ),
+            (
+                "submission",
+                {
+                    "submitted_on": "2026-10-12",
+                    "method": "pigeon",
+                    "attested": True,
+                    "expected_revision": 1,
+                },
+            ),
+            (
+                "submission/amend",
+                {
+                    "amends_id": str(uuid4()),
+                    "submitted_on": "2026-10-12",
+                    "method": "fax",
+                    "reason": " ",
+                },
+            ),
+        ],
+    )
+    def test_invalid_record_requests_are_422(
+        self, client, override_auth, override_medwatch_service, path, body
+    ):
+        response = client.post(f"{_DRAFTS}/{uuid4()}/{path}", json=body)
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        assert override_medwatch_service.method_calls == []
+
+    def test_no_pdf_bytes_when_the_export_audit_fails(self, client, override_auth, clinician_id):
+        from tests.unit.services.medwatch_fake_db import api_error, seeded
+
+        draft_id = str(uuid4())
+        db = seeded()
+        for team in db.tables["care_teams"]:
+            team["clinician_id"] = str(clinician_id)
+        db.tables["medwatch_drafts"] = [
+            {
+                **_medwatch_draft_payload(
+                    draft_id=draft_id, patient_id=db.tables["patients"][0]["id"]
+                ),
+                "status": "reviewed",
+                "approved_by": str(clinician_id),
+                "approved_at": "2026-10-12T18:00:00+00:00",
+                "discarded_at": None,
+            }
+        ]
+        db.errors["record_medwatch_draft_export"] = api_error("XX000")
+        app.dependency_overrides[_get_medwatch_service] = lambda: MedWatchService(db)
+
+        response = client.get(f"{_DRAFTS}/{draft_id}/export.pdf")
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+        assert response.headers["content-type"].startswith("application/json")
+        assert b"%PDF" not in response.content
+        assert "SECRET" not in response.text
+        assert [name for name, _ in db.rpc_calls] == ["record_medwatch_draft_export"]
 
 
 class TestAuthorization:

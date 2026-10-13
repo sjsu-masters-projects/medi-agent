@@ -956,7 +956,7 @@ class ClinicianService:
         return result.count or 0
 
     async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:
-        """Count actual draft MedWatch records across all assigned patients."""
+        """Count unapproved, non-discarded MedWatch drafts across all assigned patients."""
         if not patient_ids:
             return 0
         result = await self._execute(
@@ -964,6 +964,7 @@ class ClinicianService:
             .select("id", count="exact")  # type: ignore[arg-type]
             .in_("patient_id", [str(pid) for pid in patient_ids])
             .in_("status", ["draft"])
+            .is_("discarded_at", "null")
         )
         return result.count or 0
 

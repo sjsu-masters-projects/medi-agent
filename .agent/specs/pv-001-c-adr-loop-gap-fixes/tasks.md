@@ -346,8 +346,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
 
 ### PR 3: MedWatch Form 3500 (migration 064, not applied)
 
-- [ ] 17. Tracker for PR 3
-  - [ ] 17.1 Update `.agent/TASKS.md` when PR 3 implementation starts
+- [x] 17. Tracker for PR 3
+  - [x] 17.1 Update `.agent/TASKS.md` when PR 3 implementation starts
     - `PV-002`: owner override to Rajeev, per the requester on 2026-10-12.
     - `PV-001-C`: add PR 3 scope (R15 to R24, D12 to D17 decided) and an evidence placeholder for task 33.
     - "Synthetic database schema": add a 064 row, `064_medwatch_form_3500.sql` written, not applied anywhere.
@@ -368,8 +368,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       modules to it without file conflicts.
     - _Requirements: 21.8, 24.5_
 
-- [ ] 19. Official Form 3500 template asset
-  - [ ] 19.1 Re-download, verify and vendor the template with its records
+- [x] 19. Official Form 3500 template asset
+  - [x] 19.1 Re-download, verify and vendor the template with its records
     - `mkdir -p /tmp/fda3500 && curl -sSL -o /tmp/fda3500/fresh.pdf https://www.fda.gov/media/76299/download`.
     - Compare `shasum -a 256` with the pinned
       `1147d7c86bb002cba7fb9352ca8e3402524d8fa0236916b7bf7e5dcdcf88bf9c` and the size with 921,232 bytes. If either
@@ -382,13 +382,13 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       `encrypt_p` -1084, source URL, download date, SHA-256), generated from the file with pypdf, not typed by hand.
     - Write `README.md` (provenance, V23 result, re-pin steps). Delete `/tmp/fda3500` afterwards.
     - _Requirements: 15.2, 15.3, 15.6_
-  - [ ] 19.2 Ship the asset with the backend package
+  - [x] 19.2 Ship the asset with the backend package
     - Add the `assets/fda/*` files to package data in `backend/pyproject.toml` and confirm `backend/Dockerfile`
       copies `src/` so the asset reaches the image; change the Dockerfile only if it does not.
     - Add `backend/tests/unit/services/test_medwatch_form_3500_packaging.py` asserting at text level that the
       package-data glob and the Docker copy cover `app/assets/fda/`.
     - _Requirements: 15.2_
-  - [ ] 19.3 Write `backend/src/app/services/medwatch_3500/template.py` and its pin tests
+  - [x] 19.3 Write `backend/src/app/services/medwatch_3500/template.py` and its pin tests
     - Load the PDF and `TEMPLATE.json` once per process via `importlib.resources` (no network); check SHA-256, page
       count, field counts, inventory hash and an optional set of required field names (the `FIELD_MAP` names, wired
       in 24.2).
@@ -398,8 +398,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       raise; no network call is made.
     - _Requirements: 15.2, 15.4, 15.7_
 
-- [ ] 20. Form 3500 data model v2
-  - [ ] 20.1 Write the v2 model, date encoding and validators with their tests
+- [x] 20. Form 3500 data model v2
+  - [x] 20.1 Write the v2 model, date encoding and validators with their tests
     - `backend/src/app/services/medwatch_3500/dates.py`: `fda_date` / `parse_fda_date` (`03-Oct-2026`, `Oct-2026`)
       from a fixed English month tuple, not `strftime`.
     - `backend/src/app/models/medwatch_form_3500.py`: `MedWatchFormDataV2` with sections A, B, D, F, G,
@@ -415,7 +415,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - **Property 13: Date encoding round-trips and rejects bad dates** (1900 to 2100, full and month-and-year, under
       a non-English process locale).
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.7, 16.8, 21.3_
-  - [ ] 20.2 Write `upgrade_legacy_form` and its tests
+  - [x] 20.2 Write `upgrade_legacy_form` and its tests
     - `backend/src/app/services/medwatch_3500/legacy.py`: pure and idempotent; v2 input returned unchanged;
       applies the design's 048-to-v2 table (identifier replaced by `default_code` when it fails
       `identifier_violations`; sex and date parsing; frequency / route option match or `Other`; dose split only on
@@ -425,8 +425,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - **Property 8: Legacy upgrade is idempotent and lossless** (empty, valid, unparseable and accented payloads).
     - _Requirements: 16.5, 16.8, 17.3_
 
-- [ ] 21. Non-identifying identifier and name warnings
-  - [ ] 21.1 Write `backend/src/app/services/medwatch_3500/identifier.py` with its tests
+- [x] 21. Non-identifying identifier and name warnings
+  - [x] 21.1 Write `backend/src/app/services/medwatch_3500/identifier.py` with its tests
     - `default_code(first, last, draft_id)`: NFKD accent-stripped upper-case initials (`X` when missing), `-`, and
       the first base32 SHA-256 window of `draft_id.bytes` that passes `identifier_violations`.
     - `identifier_violations(value, patient)`: casefold, accent-strip, tokenise; reject full name, a name token,
@@ -438,8 +438,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       single-letter names and a name equal to a base32 window).
     - _Requirements: 17.1, 17.2, 17.3, 17.4_
 
-- [ ] 22. Prefill with provenance
-  - [ ] 22.1 Replace `_build_form_data` with `build_form_3500` in `backend/src/app/services/medwatch_service.py`
+- [x] 22. Prefill with provenance
+  - [x] 22.1 Replace `_build_form_data` with `build_form_3500` in `backend/src/app/services/medwatch_service.py`
     - Return `(form, source_evidence)` with one evidence entry per filled path and its source.
     - Fixed attribution: assessment evidence keeps its own `source`; nothing is labelled AI-extracted unless its
       source is.
@@ -452,8 +452,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       blank, the attribution fix, and B6 left blank for observation facts.
     - _Requirements: 17.6, 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8_
 
-- [ ] 23. Approval gate
-  - [ ] 23.1 Write `backend/src/app/services/medwatch_3500/gate.py` with its tests
+- [x] 23. Approval gate
+  - [x] 23.1 Write `backend/src/app/services/medwatch_3500/gate.py` with its tests
     - `approval_issues(form, ctx) -> list[GateIssue(path, code)]`: one code per R19.1 item plus
       `identifier_identifies`, `death_date_missing` and `non_serious_attestation_required` (cleared only when no B2
       outcome is set and `non_serious_attested` is true).
@@ -461,7 +461,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - **Property 12: The approval gate is total and shared** (reference model over every presence / absence
       combination, each B2 outcome, death date and D12 attestation).
     - _Requirements: 17.3, 19.1, 19.2, 19.3, 19.4, 19.5_
-  - [ ] 23.2 Extend the approval request model and the attestation constant
+  - [x] 23.2 Extend the approval request model and the attestation constant
     - In `backend/src/app/models/adr.py`, add `attestation_version: Literal["medwatch-3500-approval-v1"]`,
       `non_serious_attested` and `acknowledged_warnings` to `MedWatchDraftApprovalRequest`.
     - Add the single backend attestation text constant keyed by that version (returned with the draft in 27.1).
@@ -469,8 +469,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       a valid payload.
     - _Requirements: 17.5, 19.3, 19.6_
 
-- [ ] 24. Field map and PDF fill
-  - [ ] 24.1 Write `backend/src/app/services/medwatch_3500/field_map.py` and `map_form` with tests
+- [x] 24. Field map and PDF fill
+  - [x] 24.1 Write `backend/src/app/services/medwatch_3500/field_map.py` and `map_form` with tests
     - One explicit entry per mapped field (AcroForm name, XFA `datasets` path, model path, kind), following the
       design table and quirks (root-level `Prod1Name` / `Prod1Dose` / `Prod1Diagnosis`, irregular B6 and F nesting,
       `WeightKG` / `WeightLB` by printed label, `pdt2CosmProf` casing).
@@ -480,7 +480,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       every model `Literal` equals the `TEMPLATE.json` option list, no C, E, Header or Advice field is mapped,
       `mediagent_review` is never mapped.
     - _Requirements: 16.2, 16.3, 21.2, 21.3_
-  - [ ] 24.2 Write `backend/src/app/services/medwatch_3500/pdf.py` `render_form_3500` with its tests
+  - [x] 24.2 Write `backend/src/app/services/medwatch_3500/pdf.py` `render_form_3500` with its tests
     - Load via `template.py` with the `FIELD_MAP` names required; decrypt with `""`, `PdfWriter(clone_from=...)`,
       fill each page with `auto_regenerate=False`, set `/NeedAppearances true`.
     - Write the XFA `datasets` stream with `xml.etree.ElementTree` (exactly one element per path).
@@ -494,8 +494,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       least once; marked slow).
     - _Requirements: 15.4, 16.2, 21.1, 21.2, 21.3, 21.4, 21.5, 21.7, 21.8_
 
-- [ ] 25. Migration 064
-  - [ ] 25.1 Write `backend/src/app/db/migrations/064_medwatch_form_3500.sql` (design steps 1 to 9)
+- [x] 25. Migration 064
+  - [x] 25.1 Write `backend/src/app/db/migrations/064_medwatch_form_3500.sql` (design steps 1 to 9)
     - Steps: discard columns and `patient_reference`, `export_version` default and legacy relabel, 001 comment fix;
       partial unique index `WHERE discarded_at IS NULL`; append-only `medwatch_external_submissions` with CHECKs,
       index, RLS, grants and the `BEFORE UPDATE` trigger; the replacement status CHECK and
@@ -505,14 +505,14 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       `DO $$` block.
     - Every new patient FK is `ON DELETE CASCADE`; no enum value is added. Do not edit any existing migration.
     - _Requirements: 15.1, 21.6, 22.4, 22.6, 23.2, 23.3, 23.4, 23.7, 24.2, 24.3, 24.4, 24.9_
-  - [ ] 25.2 Write `backend/tests/unit/db/test_medwatch_form_3500_migration.py` and run the validator
+  - [x] 25.2 Write `backend/tests/unit/db/test_medwatch_form_3500_migration.py` and run the validator
     - Assert at text level each of steps 1 to 9, the CASCADE patient FKs, `service_role`-only grants, no
       `ALTER TYPE ... ADD VALUE`, and the 2-argument export calling the 5-argument one.
     - Run V4 (`cd backend && .venv/bin/python scripts/validate_migrations.py`) and V19.
     - _Requirements: 22.4, 22.6, 23.2, 23.3, 23.4, 23.7, 24.2, 24.3, 24.4, 24.9_
 
-- [ ] 26. PostgreSQL contract tests for 064
-  - [ ] 26.1 Write `backend/tests/integration/test_medwatch_3500_postgres.py`
+- [x] 26. PostgreSQL contract tests for 064
+  - [x] 26.1 Write `backend/tests/integration/test_medwatch_3500_postgres.py`
     - Reuse the notification-centre fixture (`pytest_plugins`, opt-in Docker skip) with 048 to 064 in ledger order.
     - Cover: discard returns the assessment to `draft` with one actionable clinician `adr_review` item, no
       actionable patient item and no email (pin new event versus re-activated original); one active draft, another
@@ -522,8 +522,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - Run V20 (V6 commands with 063 and 064 applied).
     - _Requirements: 22.4, 22.5, 22.6, 22.7, 23.2, 23.3, 23.4, 23.6, 24.2, 24.7_
 
-- [ ] 27. MedWatch service and routes
-  - [ ] 27.1 Extend `backend/src/app/services/medwatch_service.py` with its tests
+- [x] 27. MedWatch service and routes
+  - [x] 27.1 Extend `backend/src/app/services/medwatch_service.py` with its tests
     - Upgrade on read; create with a service-generated UUID, `default_code` and the 064 create overload; approve
       with stale-revision conflict, gate on the stored form, 422 `MEDWATCH_APPROVAL_INCOMPLETE` and the three
       approval values; `PUT` rejects submitted or discarded drafts.
@@ -541,7 +541,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - Tests in `backend/tests/unit/services/test_medwatch_service.py`, including audit-before-bytes, no audit on
       mismatch, and **Property 9** service part (save then load through the fake client returns equal `form_data`).
     - _Requirements: 15.4, 15.5, 16.5, 16.6, 19.4, 19.5, 20.1, 20.2, 20.3, 21.1, 21.6, 21.9, 22.1, 22.2, 22.3, 22.5, 22.7, 23.1, 23.5, 23.8, 24.1_
-  - [ ] 27.2 Add the routes to the clinician MedWatch router with router tests
+  - [x] 27.2 Add the routes to the clinician MedWatch router with router tests
     - Under `/api/v1/clinicians/me/medwatch-drafts`, thin, `require_role("clinician")`: `GET ?state=`,
       `GET /{id}/preview`, `GET /{id}/export.pdf`, `GET /{id}/export` (relabelled), `POST /{id}/discard`,
       `POST /{id}/submission`, `POST /{id}/submission/amend`.
@@ -551,8 +551,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       filename, invalid `state`, no bytes when the audit call fails.
     - _Requirements: 15.4, 20.1, 21.1, 21.6, 21.9, 22.1, 22.2, 22.7, 23.1, 23.5, 23.8, 24.1_
 
-- [ ] 28. Clinician portal types and services
-  - [ ] 28.1 Extend `apps/clinician-portal/src/services/clinicians.ts` with its tests
+- [x] 28. Clinician portal types and services
+  - [x] 28.1 Extend `apps/clinician-portal/src/services/clinicians.ts` with its tests
     - Types for the v2 form, `missing_for_approval`, `name_warnings`, `current_submission`, attestation, preview,
       list `state`, discard, submission and amendment payloads.
     - Functions: list by state, get preview, download PDF as a blob with the server filename, discard, record and
@@ -560,8 +560,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - Tests in `apps/clinician-portal/src/__tests__/clinicians-medwatch-3500.test.ts`.
     - _Requirements: 19.5, 20.1, 21.1, 22.1, 22.7, 23.1, 23.8_
 
-- [ ] 29. Read-only Form 3500 preview
-  - [ ] 29.1 Write `apps/clinician-portal/src/components/features/form-3500-preview.tsx` with its tests
+- [x] 29. Read-only Form 3500 preview
+  - [x] 29.1 Write `apps/clinician-portal/src/components/features/form-3500-preview.tsx` with its tests
     - One `section` per Form 3500 section with an `h3` and a `dl` (mono item number, label, wrapped value or "Not
       provided" in `text-muted`), provenance chips (`AiChip` only for AI-extracted), "Missing for approval" warning
       `Badge` with `Icon` while `draft`, C and E "Not completed by MediAgent", a separate "MediAgent review (not
@@ -570,40 +570,40 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - Tests in `apps/clinician-portal/src/__tests__/form-3500-preview.test.tsx`: section order, "Not provided",
       missing labels, no inputs, review panel, superseded warning.
     - _Requirements: 1.1, 1.2, 1.4, 1.8, 1.15, 15.5, 20.1, 20.2, 20.3, 20.4, 20.5, 20.7_
-  - [ ] 29.2 Add the print stylesheet with its test
+  - [x] 29.2 Add the print stylesheet with its test
     - `@media print` rules in the clinician portal global stylesheet: `@page { size: Letter; margin: 0.5in }`,
       navigation and actions hidden, `break-inside: avoid` per section, fixed bottom footer.
     - Test in `apps/clinician-portal/src/__tests__/form-3500-print.test.ts` asserting those rules at text level.
     - _Requirements: 20.6, 1.2_
 
-- [ ] 30. Edit card for v2 and the approval dialog
-  - [ ] 30.1 Extend `apps/clinician-portal/src/components/features/medwatch-draft-card.tsx` for v2 sections
+- [x] 30. Edit card for v2 and the approval dialog
+  - [x] 30.1 Extend `apps/clinician-portal/src/components/features/medwatch-draft-card.tsx` for v2 sections
     - A, B, D, F and G with the 8.1 patterns (`fieldset` / `legend` groups, selects from API options, B3 "Best
       estimate, confirm", up to 10 F rows, optional product 2) and name warnings beside fields; keep existing
       handlers, `aria-*` and selectors.
     - Extend `apps/clinician-portal/src/__tests__/medwatch-draft-card.test.tsx`.
     - _Requirements: 1.1, 1.2, 1.6, 1.17, 16.1, 17.4, 18.8_
-  - [ ] 30.2 Add the approval dialog and wire it into the card
+  - [x] 30.2 Add the approval dialog and wire it into the card
     - `apps/clinician-portal/src/components/features/medwatch-approval-dialog.tsx` on the shared `Modal`: missing
       item list, warnings to acknowledge, the D12 checkbox, and the attestation text from the API; sends
       `attestation_version`, `non_serious_attested` and `acknowledged_warnings`; inline `role="alert"` errors.
     - Tests in `apps/clinician-portal/src/__tests__/medwatch-approval-dialog.test.tsx`.
     - _Requirements: 1.16, 17.5, 19.1, 19.3, 19.5, 19.6_
 
-- [ ] 31. Download, submission, amendment, discard and states
-  - [ ] 31.1 Write the download confirmation modal with its tests
+- [x] 31. Download, submission, amendment, discard and states
+  - [x] 31.1 Write the download confirmation modal with its tests
     - `apps/clinician-portal/src/components/features/form-3500-download-dialog.tsx` on `Modal`: "MediAgent did not
       submit this report. You submit it to FDA.", then saves the blob under the server filename; JSON stays a
       secondary action.
     - Tests in `apps/clinician-portal/src/__tests__/form-3500-download-dialog.test.tsx`.
     - _Requirements: 1.16, 21.5, 21.9_
-  - [ ] 31.2 Write the submission, amendment and discard dialogs with their tests
+  - [x] 31.2 Write the submission, amendment and discard dialogs with their tests
     - `apps/clinician-portal/src/components/features/medwatch-record-dialogs.tsx` on `Modal`: date (max today),
       method, detail for Other, optional reference, attestation; amendment adds a reason; discard asks for a reason
       and says the assessment returns to review; inline `role="alert"` errors; `expected_revision` sent.
     - Tests in `apps/clinician-portal/src/__tests__/medwatch-record-dialogs.test.tsx`.
     - _Requirements: 1.16, 22.1, 22.2, 22.7, 23.1, 23.8_
-  - [ ] 31.3 Add the Active / Submitted / Discarded switch and read-only states
+  - [x] 31.3 Add the Active / Submitted / Discarded switch and read-only states
     - In the `apps/clinician-portal/src/app/(dashboard)/medwatch` page and the draft card: segmented control bound
       to `?state=`; submitted drafts read-only with "Submitted by <clinician> outside MediAgent on <date>",
       amendment history and "Amend record"; discarded drafts read-only with reason and date; wire 29.1, 31.1 and
@@ -611,16 +611,16 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - Tests in `apps/clinician-portal/src/__tests__/medwatch-states.test.tsx`.
     - _Requirements: 1.17, 22.5, 22.7, 23.1, 23.5, 23.8_
 
-- [ ] 32. Documentation for PR 3
-  - [ ] 32.1 Update `backend/README.md` and `docs/supabase_setup_guide.md`
+- [x] 32. Documentation for PR 3
+  - [x] 32.1 Update `backend/README.md` and `docs/supabase_setup_guide.md`
     - New routes and codes, the vendored template and re-pin steps, `pypdf` pin, migration 064 (written, not
-      applied), and the PR 3 deploy order: merge PR 1, merge PR 2, apply 063, apply 064, then merge PR 3; the PR 3
-      backend is not safe before 064.
+      applied), and the deploy order: the branch now ships as one pull request, so apply 063, then 064, before
+      it merges; its backend is not safe before 064.
     - _Requirements: 24.6_
-  - [ ] 32.2 Update the clinician portal `README.md`
+  - [x] 32.2 Update the clinician portal `README.md`
     - Preview, print, PDF download notice, submission record, amendment, discard and the state switch.
     - _Requirements: 24.6_
-  - [ ] 32.3 Update the NOT-001 and PV notes
+  - [x] 32.3 Update the NOT-001 and PV notes
     - NOT-001 specification: discard returns the assessment to review with one clinician `adr_review` item and no
       patient item or email. `.agent/TASKS.md` `PV-001-C` / `PV-002`: PR 3 scope, deploy order and open requester
       checks (V22 to V24).
@@ -656,7 +656,9 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     field carries added text.
   - V23: confirm the copyright position if task 19.1 left it unsettled.
   - V24: apply 064 to any remote environment only with explicit authorization naming that action.
-- Deploy order: merge PR 1, merge PR 2, apply 063, apply 064, then merge PR 3.
+- Deploy order: PR 1 to PR 3 ship as one pull request (decided 2026-10-13). Merging deploys the backend, and the
+  backend calls 063 and 064 objects, so the requester applies 063, then 064, on explicit authorization before the
+  pull request merges. The deployed backend keeps working on 064 (every 048 function keeps its signature).
 
 ## Task Dependency Graph
 

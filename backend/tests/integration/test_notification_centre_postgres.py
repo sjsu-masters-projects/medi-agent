@@ -90,8 +90,13 @@ def postgres():
         )
         yield command
     finally:
+        # --volumes also removes the image's anonymous data volume, which otherwise
+        # accumulates with every run and fills the Docker disk.
         subprocess.run(
-            [docker, "rm", "--force", container], check=True, capture_output=True, timeout=15
+            [docker, "rm", "--force", "--volumes", container],
+            check=True,
+            capture_output=True,
+            timeout=15,
         )
 
 
@@ -211,9 +216,12 @@ def sql(postgres):
     # The ADR information-loop lifecycle migration (PV-001-C, PR 2) applies on top of the ledger
     # once it exists. It is found by name, not number, because main keeps taking numbers.
     # ADR_LOOP_GAP_BASELINE=1 skips it to record unmodified behaviour.
+    # The Form 3500 migration (PR 3) requires it and follows it in ledger order, so the
+    # baseline run skips both.
     if os.environ.get("ADR_LOOP_GAP_BASELINE") != "1":
-        for path in sorted(MIGRATIONS.glob("*_adr_information_loop_lifecycle.sql")):
-            execute(path.read_text())
+        for pattern in ("*_adr_information_loop_lifecycle.sql", "*_medwatch_form_3500.sql"):
+            for path in sorted(MIGRATIONS.glob(pattern)):
+                execute(path.read_text())
     try:
         yield execute
     finally:

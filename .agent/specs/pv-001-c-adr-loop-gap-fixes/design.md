@@ -511,7 +511,7 @@ confirms the copyright notice).
 | K-P1 | Discard is three columns on `medwatch_drafts` (`discarded_at`, `discarded_by` RESTRICT, `discard_reason`), not an enum value. `idx_medwatch_one_draft_per_assessment` becomes a partial unique index `WHERE discarded_at IS NULL`. | `ALTER TYPE ... ADD VALUE` cannot be used in the transaction that adds it (R23.7); columns also keep the approval state a discarded draft had. |
 | K-P2 | New append-only table `medwatch_external_submissions`; the newest row per draft is current; amendments are new rows (D17). The record RPC sets `status = 'submitted'` and `submitted_at`; a trigger allows `submitted` only with approval and a submission row. | History is never rewritten. A CHECK cannot see another table, so the cross-table rule is a trigger (R22.6). |
 | K-P3 | Audit types gain `discarded`, `submission_recorded`, `submission_amended`. `exported` gains `format` and, for PDF, `template_revision`, `template_sha256`, via `record_medwatch_draft_export(uuid, uuid, text, text, text)`; the 2-argument function delegates with `'json'`. | One audit trail per draft (R21.6); old callers keep working during rollout. |
-| K-P4 | The PR 3 backend requires 064 before merge (the EMAIL-001 / 058 pattern). | New routes call 064 RPCs; 048 routes are unchanged. See [PR 3 deploy](#pr-3-deploy). |
+| K-P4 | The backend requires 064 before merge (the EMAIL-001 / 058 pattern). PR 1 to PR 3 now ship as one pull request, so 063 and 064 are both applied before it merges. | Create, approve, export, discard and submission call 064 RPCs; every 048 function keeps its signature. See [PR 3 deploy](#pr-3-deploy). |
 | K-P5 | pypdf 6.20.1 fills a vendored, checksummed template; AcroForm and XFA `datasets` both written; re-encrypted with the template's own permissions; not flattened. | Pure Python, BSD; PyMuPDF is AGPL (R21.8). The fill test showed viewers disagree when only one layer is written. |
 | K-P6 | `MedWatchFormData` v2 (`form_version: "fda-3500-2025-09"`) with a separate `mediagent_review`; `upgrade_legacy_form` runs on read. | Backward compatible with 048 rows without a data migration (R16.5). |
 | K-P7 | Default A1 code `<first initial><last initial>-<4 chars>`, the 4 chars from base32 SHA-256 of the draft ID; no new secret; stored on the draft. | Non-reversible to patient data and stable for the draft's life (D16, R17.2). |
@@ -833,8 +833,51 @@ guard trigger blocks direct writes. Audit insert failure: 502 with no bytes. Fil
 
 ### PR 3 deploy
 
-064 is written and validated locally, and applied only on the requester's explicit authorization (V24). Order:
-merge PR 1, merge PR 2, apply 063, **apply 064, then merge PR 3**. The PR 3 backend is not safe before 064: create,
-approve, discard, submission and the 5-argument export call 064 RPCs and columns. The 048 routes and RPCs keep working
-with 064 applied, so applying 064 before the merge is safe for the deployed PR 2 backend. The PR 3 description states
-this (R24.6).
+064 is written and validated locally, and applied only on the requester's explicit authorization (V24). **PR 1 to
+PR 3 now ship as one pull request** (decided 2026-10-13), which replaces the earlier multi-PR order. Merging deploys
+the backend, and code must not reach production before its schema: create, approve, discard, submission and every
+export call 064 RPCs and columns. Order: **apply 063, then 064, then merge the pull request.** The currently deployed
+(048-era) backend keeps working with 063 and 064 applied, because every 048 function keeps its signature (the
+2-argument export delegates to the 5-argument one with `'json'`); drafts it creates in that window keep the 048 shape,
+are labelled `fda-3500-legacy-048` by trigger, and are upgraded on read. The pull request description states this
+(R24.6).
+
+### Implementation notes and deviations (backend, 2026-10-13)
+
+Recorded so the clinician portal can be reconciled. Route paths, request bodies and the design's error codes are as
+specified above; these are additions or precise choices the design left open.
+
+- **Extra route:** `GET /api/v1/clinicians/me/medwatch-drafts/form-3500-options` returns every option list for the
+  editor as `{value, label}` arrays (`sex`, `age_unit`, `weight_unit`, `race`, `report_types`, `outcomes`, `yes_no`,
+  `yes_no_not_applicable`, `product_types`, `dose_units`, `frequencies`, `routes`, `duration_units`, `occupations`,
+  `also_reported_to`, `countries`, `submission_methods`), equal to the model and `TEMPLATE.json`.
+- **Draft read model** (list items and every write response): v2 `form_data`, `upgraded_from_legacy`,
+  `patient_reference`, `submitted_at`, `discarded_at`, `discarded_by`, `discard_reason`, `missing_for_approval[{path,
+  code}]` (only while `draft` and not discarded; computed with `non_serious_attested = false`), `name_warnings[{path,
+  kind}]`, `pdf_available`, `current_submission`, `submission_history` (newest first), `attestation{version, text}`,
+  `template{title, revision, omb_number, expires, may_be_superseded}`. A submission is `{id, submitted_on, method,
+  method_detail, fda_reference, recorded_by, recorded_by_name, amends_id, amend_reason, created_at}`.
+- **Preview** adds `draft_id`, `status`, `revision`, `export_version`, `discarded`, `name_warnings`,
+  `current_submission` and `not_submitted_to_fda: true`. B6 and F list the rows present (at least row 1); product 2
+  appears only when present. Each item's `value` is display text (`03-Oct-2026` for dates; checked labels joined by
+  `; `).
+- **Error envelope:** a 422 may carry `error.details`: `MEDWATCH_APPROVAL_INCOMPLETE` →
+  `details.missing_for_approval`; `MEDWATCH_WARNINGS_NOT_ACKNOWLEDGED` (new: `acknowledged_warnings` differ from the
+  current set) → `details.name_warnings`; `MEDWATCH_IDENTIFIER_IDENTIFIES` (new: R17.3 on save) →
+  `details.path`. Other new codes: 422 `MEDWATCH_NOT_APPROVED`, `MEDWATCH_NOT_SUBMITTED`, `MEDWATCH_DRAFT_DISCARDED`,
+  `MEDWATCH_DRAFT_SUBMITTED`, `MEDWATCH_DRAFT_NOT_EDITABLE`, `MEDWATCH_DRAFT_EXISTS`, `ADR_REVIEW_ALREADY_COMPLETED`,
+  `MEDWATCH_REVIEW_FIELDS_LOCKED`, `MEDWATCH_SUBMISSION_INVALID` (date before approval), `MEDWATCH_INVALID_STATE`
+  (RPC `23514`), `MEDWATCH_INVALID_REQUEST` (RPC `22023`); 409 `MEDWATCH_REVISION_CONFLICT` and
+  `MEDWATCH_SUBMISSION_CONFLICT` (stale `amends_id`). Request-body validation failures stay 422 `VALIDATION_ERROR`.
+- **Revision conflicts are SQLSTATE `40001`** (as in 048), mapped to 409; `23514` is always 422.
+- **Approval** checks `expected_revision` against the stored row before the gate (409), and the RPC writes B4 as the
+  approval date (America/Los_Angeles) when blank and records `report_date_set` in the `approved` event.
+- **JSON export** is named `fda-3500-<first 8 of id>-not-submitted.json`, returns the upgraded v2 `form_data`, and adds
+  `submission_recorded_outside_mediagent` (the current record or `null`).
+- **Amendments** carry forward the original record's attestation (`attested` stays true); the amend body has no
+  `attested` field, as designed.
+- **064 additions:** a trigger keeps `export_version` equal to the stored shape (`fda-3500-2025-09` or
+  `fda-3500-legacy-048`); partial unique indexes allow one original submission per draft and one amendment per
+  record; 048's 4-argument approve is left in place for the deployed backend (the guard trigger still freezes
+  discarded and submitted drafts).
+- **CORS** exposes `Content-Disposition` so the portal can read the PDF filename cross-origin.

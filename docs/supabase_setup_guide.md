@@ -86,7 +86,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 70 SQL migration files, prefixes `001`–`058`. Some prefixes are
+The checkout contains 76 SQL migration files, prefixes `001`–`064`. Some prefixes are
 shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
 branches; they coexist because the ledger identifies migrations by full filename and
 checksum, not by prefix. Preserve applied names and bytes. The ledger in
@@ -100,6 +100,32 @@ It does not create a MedWatch draft or external submission.
 Migration `048_medwatch_draft_lifecycle.sql` adds the assigned-clinician
 draft/edit/approval/export lifecycle with immutable audit events and optimistic revision control.
 It deliberately does not add an FDA submission operation.
+
+### ADR loop and Form 3500 (063/064, PV-001-C) — written, not applied
+
+`063_adr_information_loop_lifecycle.sql` makes each ADR information request its own
+notification source, adds the clinician "patient answered" alert and cascades ADR audit on
+patient deletion. `064_medwatch_form_3500.sql` requires 063 and adds Form FDA 3500 drafts: the
+discard columns and a partial unique index (one non-discarded draft per assessment), the
+non-identifying `patient_reference`, the append-only `medwatch_external_submissions` table
+(SELECT only for `authenticated` and `service_role`; no role may insert, update, delete or
+truncate it directly), the `medwatch_drafts_submission_guard` trigger (`submitted` only after
+approval and a submission record; submitted and discarded drafts frozen), the extended audit
+types, and service-role-only RPCs: `create_medwatch_draft(uuid, uuid, jsonb, jsonb, text,
+uuid)`, `approve_medwatch_draft(uuid, uuid, text, integer, jsonb)`,
+`record_medwatch_draft_export(uuid, uuid, text, text, text)` (the 048 2-argument export
+delegates with `'json'`), `discard_medwatch_draft`, `record_medwatch_external_submission` and
+`amend_medwatch_external_submission`. It ends with a fail-closed verification block. No
+function or table sends anything to FDA.
+
+Neither file is applied to any hosted project. Applying either needs the requester's explicit
+authorization naming that action. **Order:** apply 063, then 064, before the backend from
+`fix/adr-information-loop-gaps` deploys (the branch ships as one pull request and its backend
+calls 064 objects; merging deploys the backend, so apply first and merge after). Every 048
+function keeps its signature, so the currently deployed backend keeps working once 064 is
+applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
+are upgraded on read. After applying, verify with the ledger and with the read-only checks the
+fail-closed block already performs (it raises and rolls the migration back on any gap).
 
 ### Appointment booking guards (042/043)
 

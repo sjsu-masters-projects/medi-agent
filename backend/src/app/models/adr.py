@@ -1,5 +1,6 @@
 """ADR assessment, clinician review, and MedWatch draft schemas."""
 
+from datetime import date
 from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
@@ -7,12 +8,20 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.enums import ADRStatus, MedWatchStatus, NaranjoCausality
-from app.models.medwatch_form_3500 import MedWatchNameWarning
+from app.models.medwatch_form_3500 import (
+    Form3500TemplateRead,
+    MedWatchExternalSubmissionRead,
+    MedWatchFormDataV2,
+    MedWatchGateIssue,
+    MedWatchNameWarning,
+    SubmissionMethod,
+)
 from app.pharmacovigilance import (
     PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
     NaranjoAnswer,
     NaranjoQuestion,
 )
+from app.services.medwatch_3500.dates import clinic_today
 
 
 class ADRAssessmentRead(BaseModel):
@@ -311,7 +320,7 @@ class MedWatchClinicalReviewSection(BaseModel):
 
 
 class MedWatchFormData(BaseModel):
-    """Editable MedWatch-compatible fields. Empty strings explicitly mean unknown."""
+    """The 048 draft shape, kept to read rows stored before Form 3500 (upgraded on read)."""
 
     patient: MedWatchPatientSection
     event: MedWatchEventSection
@@ -341,7 +350,9 @@ class MedWatchDraftCreateRequest(BaseModel):
 
 
 class MedWatchDraftUpdateRequest(BaseModel):
-    form_data: MedWatchFormData
+    """A full Form 3500 draft; a 048-shape draft is saved as Form 3500 from now on."""
+
+    form_data: MedWatchFormDataV2
     expected_revision: int = Field(..., ge=1)
 
 
@@ -377,25 +388,46 @@ class MedWatchDraftApprovalRequest(BaseModel):
         return self
 
 
+class MedWatchAttestationRead(BaseModel):
+    """The approval attestation the clinician accepts, by version."""
+
+    version: str
+    text: str
+
+
 class MedWatchDraftRead(BaseModel):
-    """Editable draft with evidence attribution and reviewer state."""
+    """Form 3500 draft with evidence attribution, reviewer state and what approval needs."""
 
     id: UUID
     adr_assessment_id: UUID
     patient_id: UUID
-    form_data: MedWatchFormData
+    form_data: MedWatchFormDataV2
+    upgraded_from_legacy: bool = False
     source_evidence: list[MedWatchEvidenceReference] = Field(default_factory=list)
     clinician_edited_fields: list[str] = Field(default_factory=list)
     de_identified: bool = False
     status: MedWatchStatus = MedWatchStatus.DRAFT
+    patient_reference: str | None = None
     created_by: UUID | None = None
     approved_by: UUID | None = None
     approved_at: str | None = None
     approval_note: str | None = None
+    submitted_at: str | None = None
+    discarded_at: str | None = None
+    discarded_by: UUID | None = None
+    discard_reason: str | None = None
     revision: int = Field(..., ge=1)
     export_version: str
     created_at: str
     updated_at: str
+    missing_for_approval: list[MedWatchGateIssue] = Field(default_factory=list)
+    name_warnings: list[MedWatchNameWarning] = Field(default_factory=list)
+    pdf_available: bool = False
+    current_submission: MedWatchExternalSubmissionRead | None = None
+    # Newest first; the current record is the newest one no other record amends.
+    submission_history: list[MedWatchExternalSubmissionRead] = Field(default_factory=list)
+    attestation: MedWatchAttestationRead
+    template: Form3500TemplateRead | None = None
 
 
 class MedWatchDraftListResponse(BaseModel):
@@ -403,8 +435,72 @@ class MedWatchDraftListResponse(BaseModel):
     total: int = Field(..., ge=0)
 
 
+class MedWatchDraftDiscardRequest(BaseModel):
+    """Discard a draft and return its assessment to review."""
+
+    reason: str = Field(..., min_length=1, max_length=2000)
+    expected_revision: int = Field(..., ge=1)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("A discard reason is required")
+        return value
+
+
+def _optional_text(value: str | None) -> str | None:
+    return value.strip() or None if value is not None else None
+
+
+class _SubmissionDetails(BaseModel):
+    submitted_on: date
+    method: SubmissionMethod
+    method_detail: str | None = Field(default=None, max_length=500)
+    fda_reference: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_details(self) -> "_SubmissionDetails":
+        self.method_detail = _optional_text(self.method_detail)
+        self.fda_reference = _optional_text(self.fda_reference)
+        if self.submitted_on > clinic_today():
+            raise ValueError("The submission date cannot be in the future")
+        if self.method == "other" and not self.method_detail:
+            raise ValueError("Describe how the report was submitted")
+        return self
+
+
+class MedWatchSubmissionRecordRequest(_SubmissionDetails):
+    """The clinician's record that they submitted the approved form to FDA themselves."""
+
+    attested: bool
+    expected_revision: int = Field(..., ge=1)
+
+    @model_validator(mode="after")
+    def validate_attestation(self) -> "MedWatchSubmissionRecordRequest":
+        if not self.attested:
+            raise ValueError("Confirm that you submitted this report outside MediAgent")
+        return self
+
+
+class MedWatchSubmissionAmendRequest(_SubmissionDetails):
+    """A correction of the current submission record; the original is kept."""
+
+    amends_id: UUID
+    reason: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("An amendment reason is required")
+        return value
+
+
 class MedWatchDraftExportResponse(BaseModel):
-    """Approved export artifact. It is not proof of an FDA filing."""
+    """Approved Form 3500 JSON artifact. It is not proof of an FDA filing."""
 
     filename: str
     media_type: str = "application/json"

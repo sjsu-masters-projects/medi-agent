@@ -105,6 +105,14 @@ ADR follow-up requests (PV-001-C, migration 063; written, not yet applied anywhe
 - Deleting a patient removes their ADR requests, ADR audit and MedWatch drafts and
   audit (063 makes the patient reference on the ADR audit cascade). No role may delete
   ADR or MedWatch audit directly. Clinician references stay `RESTRICT` (NOT-003, D1).
+- Discarding a MedWatch draft (PV-001-C, migration 064; written, not yet applied anywhere)
+  returns its assessment to `draft` in the same transaction. The assessment's capture emits
+  one new clinician `adr_review` event for that transition, and only it is actionable (the
+  newest receipt per source and kind); the original item stays History. No patient item
+  becomes actionable again: requests cancelled when the draft was prepared stay cancelled,
+  and rule L needs `last_review_action = 'request_information'`, which discard clears. No
+  email is queued, because `adr_review` maps to no email category. Pinned by
+  `tests/integration/test_medwatch_3500_postgres.py`.
 
 "Mark all read" marks every item in the signed snapshot that the reader may still see. It
 skips the rest and returns `{"updated_count", "skipped_count"}`; both portals show how
@@ -157,8 +165,9 @@ deployed acceptance. Record exact checks and remaining boundaries before review.
 ### Rollout dependency
 
 Applied: `051_notification_centre.sql`, then 052–056 (October 11). Written and not
-applied: `063_adr_information_loop_lifecycle.sql` (PV-001-C); merge its backend first,
-then the requester applies it on explicit authorization. The 051
+applied: `063_adr_information_loop_lifecycle.sql` and `064_medwatch_form_3500.sql`
+(PV-001-C, one pull request). The requester applies 063 then 064 on explicit
+authorization before that pull request merges, because its backend calls 064 objects. The 051
 file's full name is distinct from Nora's `051_health_knowledge_and_chat_sessions.sql`; the
 ledger keys on full filenames, and the two touch no shared objects. When the database is
 unavailable, the UI shows unavailable/retry rather than fabricated counts. Existing
