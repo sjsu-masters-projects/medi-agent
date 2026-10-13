@@ -141,7 +141,11 @@ confirmation before sending.
 
 Nora keeps its composer visible while the conversation and intake content scroll
 within the available height. The current portal hides bottom navigation while a
-conversation is open. Initial draft-read failures
+conversation is open. Reconnects retain the visible conversation while history
+recovers. Streaming follows the latest reply without animated scrolling only
+when the reader is near the bottom; scrolling up pauses following, and returning
+to the bottom resumes it. Sending a typed message or selecting another conversation
+resumes following. Initial draft-read failures
 offer reload feedback; only an uncertain mutation uses the action/save recovery
 message. Loading a draft does not imply that a report was submitted.
 

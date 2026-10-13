@@ -240,6 +240,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         handsFreeMode: resolveInitialHandsFree(),
     });
     const socketRef = useRef<WebSocket | null>(null);
+    const historyScopeRef = useRef<string | null>(null);
     const voiceSocketRef = useRef<WebSocket | null>(null);
     const reconnectRef = useRef<{
         attempts: number;
@@ -614,12 +615,20 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
     useEffect(() => {
         if (!accessToken || !user) {
+            historyScopeRef.current = null;
             return;
         }
 
         let isMounted = true;
-        dispatch(clearChatState());
-        dispatch(setLoading(true));
+        const historyScope = JSON.stringify([user.id, sessionId]);
+        const changingConversation = historyScopeRef.current !== historyScope;
+        historyScopeRef.current = historyScope;
+        // Reconnecting the same conversation must not collapse its history or
+        // reset the reader's scroll position while REST/WebSocket recover.
+        if (changingConversation) {
+            dispatch(clearChatState());
+            dispatch(setLoading(true));
+        }
 
         fetchChatHistory(user.id, accessToken, sessionId)
             .then((history) => {
@@ -640,7 +649,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     return;
                 }
 
-                dispatch(setMessages([buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)]));
+                if (changingConversation) {
+                    dispatch(setMessages([buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)]));
+                }
                 dispatch(setChatError("Unable to load chat history. Live chat is still available."));
             })
             .finally(() => {
@@ -675,6 +686,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         };
 
         socket.onmessage = (event) => {
+            if (!isMounted) {
+                return;
+            }
             let payload: unknown;
 
             try {

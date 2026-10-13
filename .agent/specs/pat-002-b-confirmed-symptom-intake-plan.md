@@ -1076,3 +1076,16 @@ document. Question-library approval and remote rollout remain prerequisites.
 [Draft PR #159](https://github.com/sjsu-masters-projects/medi-agent/pull/159)
 contains the rebased implementation and post-rebase evidence. Safety/peer review,
 required CI, question approval and authorized rollout remain pending.
+
+## 22. Nora scrolling follow-up
+
+The requester reported repeated chat scrolling after main integration. Reconnects
+now retain visible history for the same patient/session; opening a different
+conversation still clears the old history and ignores its late socket events.
+Replies follow the bottom instantly, pause while reading older messages, and resume
+when returning to the bottom or sending a typed message. This is a bounded Nora
+regression fix within the existing PR, with no new clinical workflow or remote action.
+The [October 12 acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-12.md#nora-scrolling-follow-up--october-12)
+records 530 patient tests, lint/type/build results, exact manual steps and observed
+stable desktop/mobile scroll position. Offline chat and unavailable draft recovery
+remain target limitations; no successful live confirmation is claimed.

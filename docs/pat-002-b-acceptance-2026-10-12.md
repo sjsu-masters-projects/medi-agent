@@ -257,3 +257,45 @@ portal environments were freshly installed from current main's locks.
 Draft review: [PR #159](https://github.com/sjsu-masters-projects/medi-agent/pull/159).
 Source/verification commit: `9982311` on base `62a1945`; later review-link updates
 are documentation only. Local results above are not a claim that remote CI passed.
+
+## Nora scrolling follow-up — October 12
+
+The requester reported repeated scrolling after the bounded-height layout fix.
+The connection effect cleared messages on every retry, collapsing the long thread,
+and the page restarted smooth scrolling on every history replacement/stream chunk.
+The same patient/session now retains history during recovery, including REST failure;
+changing patient/session still clears it. Late events from a replaced socket are ignored.
+The page follows new content instantly when near the bottom, pauses when the reader
+scrolls up, resumes at the bottom or on typed send, and resets on conversation selection.
+It also avoids pulling focus away from controls inside the conversation.
+
+In `apps/patient-portal`:
+
+- `npm run test -- src/__tests__/chat-page.test.tsx`: initial three regression cases
+  passed with all 38 tests; the final expanded suite is included in the full run below.
+- `npm run test`: **530 passed in 59 files**, including 40 chat-page tests covering
+  bilingual streaming, pending/failed reconnect recovery and stale prior-session events.
+- `npm run lint`, `npm run typecheck`, `npm run build -- --webpack`: passed.
+
+Authenticated synthetic browser observation: the Oct 6 long conversation opened at
+the bottom. After scrolling up, its offset remained **7083 px** across subsequent
+reconnect activity. At 375×812 the offset stayed unchanged, the page remained
+375×812 and the composer ended at y=812. Desktop and mobile screenshots are local
+`output/verification/nora-scroll-stable-*-2026-10-12.jpg` artifacts, not uploaded or committed.
+The viewport override was reset. No clinical message or report was submitted.
+The target continued to show Offline and unavailable draft recovery; the cause of
+connection failure and full live confirmation acceptance remain unverified.
+
+To see the fix:
+
+1. Open the locally running patient portal, choose Chat, then **Conversation Oct 6**
+   (or another long synthetic Nora conversation).
+2. It should open at the latest message. Scroll up several screens and wait through
+   connection retries: history should remain visible and should not pull you down.
+3. In a functioning chat connection, send a synthetic message and observe the reply
+   following the bottom without repeated scroll animations. Scroll up during a reply:
+   the reading position should remain; return to the bottom to resume following.
+4. Select another Nora conversation or New chat: its latest content should be shown.
+   Repeat at a narrow width; the composer should remain visible.
+
+Step 3 is covered by socket-driven tests, not a successful live message in this target.
