@@ -340,3 +340,65 @@ def test_heading_never_rescues_a_value_that_is_not_printed(headed_extraction) ->
         _result(test_name="Hemoglobin A1c", value="9.1", unit="%", flag="H"),
     )
     assert item.confidence_score == 0
+
+
+def _medication_list() -> bytes:
+    """A discharge list: each medicine's dose line and action are printed below its name."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=612, height=792)
+    page.insert_text((40, 60), "SYNTHETIC TEST DOCUMENT - MEDICATION CHANGES", fontsize=10)
+    lines = [
+        "Metformin 500 mg tablet",
+        "1 tablet by mouth twice daily",
+        "Continue",
+        "Lisinopril 10 mg tablet",
+        "1 tablet by mouth daily",
+        "Continue",
+        "Atorvastatin 20 mg tablet",
+        "1 tablet by mouth at bedtime",
+        "New",
+    ]
+    for index, line in enumerate(lines):
+        page.insert_text((40, 90 + index * 16), line, fontsize=10)
+    content = doc.tobytes()
+    doc.close()
+    return content
+
+
+@pytest.fixture(scope="module")
+def medication_extraction():
+    return DocumentIntelligenceService().extract(_medication_list(), mime_type="application/pdf")
+
+
+def _medication_evidence(extraction, **value: str) -> dict[str, str]:
+    item = ground_item(extraction, "medication", _result(**value))
+    return {evidence.field: evidence.excerpt for evidence in item.evidence}
+
+
+def test_medication_attributes_cite_the_copy_below_their_own_name(
+    medication_extraction,
+) -> None:
+    atorvastatin = _medication_evidence(
+        medication_extraction,
+        name="Atorvastatin 20 mg tablet",
+        dosage="1 tablet",
+        instructions="1 tablet by mouth at bedtime",
+        status="New",
+    )
+    assert atorvastatin["dosage"] == "1 tablet by mouth at bedtime"
+    lisinopril = _medication_evidence(
+        medication_extraction,
+        name="Lisinopril 10 mg tablet",
+        dosage="1 tablet",
+        status="Continue",
+    )
+    assert lisinopril["dosage"] == "1 tablet by mouth daily"
+    # The second "Continue" on the page, not Metformin's.
+    item = ground_item(
+        medication_extraction,
+        "medication",
+        _result(name="Lisinopril 10 mg tablet", status="Continue"),
+    )
+    status = next(evidence for evidence in item.evidence if evidence.field == "status")
+    name = next(evidence for evidence in item.evidence if evidence.field == "name")
+    assert 0 < status.location["bbox"]["y0"] - name.location["bbox"]["y0"] < 40

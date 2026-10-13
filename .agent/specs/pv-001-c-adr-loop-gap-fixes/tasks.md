@@ -626,8 +626,8 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
       checks (V22 to V24).
     - _Requirements: 23.6, 24.6, 24.8_
 
-- [ ] 33. Checkpoint: PR 3 verification
-  - [ ] 33.1 Run the PR 3 verification and record outcomes in `PV-001-C`
+- [x] 33. Checkpoint: PR 3 verification
+  - [x] 33.1 Run the PR 3 verification and record outcomes in `PV-001-C`
     - Re-check commands against `backend/README.md`, `CONTRIBUTING.md` and CI. Run V1 to V11 (automatable parts;
       V11 as a computed contrast table) and V16 to V21, plus V23 as the recorded note: lock diff (`git diff --stat
       -- backend/requirements.txt backend/requirements-dev.txt`), `pip-audit` as CI, the V9 palette grep.

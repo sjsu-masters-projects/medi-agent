@@ -9,6 +9,11 @@ import type { TaskCardStatus } from "./task-card.types";
 import { FeedTaskType, type FeedTask } from "@/types";
 
 /** Long patient instructions step down from headline size so the card stays scannable on a phone. */
+/** Category labels are written for mid-sentence use; capitalize one that starts a line. */
+function sentenceStart(text: string) {
+    return text ? text.charAt(0).toLocaleUpperCase() + text.slice(1) : text;
+}
+
 function heroTitleSize(text: string) {
     return text.length > 72 ? "text-[19px]" : text.length > 40 ? "text-[20px]" : "text-[22px]";
 }
@@ -88,10 +93,10 @@ export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onCo
         </div>
         {task.carePlan ? <div className="space-y-2">
             {hero ? <ApprovalSeal>{task.provider?.name ? copy.approvedBy(task.provider.name) : copy.approved}</ApprovalSeal> : null}
-            {!hero ? <div className="space-y-2 rounded-2xl bg-surface-2/70 p-3.5">
-                <ApprovalSeal>{copy.approved} • {getCarePlanCategoryLabel(task.carePlan.category, copy)}</ApprovalSeal>
-                <p className="text-sm leading-relaxed text-ink-2">{copy.planDetail(task.carePlan.versionNumber)}</p>
-                {task.provider?.name ? <p className="text-sm font-medium text-brand-ink">{copy.approvedBy(task.provider.name)}</p> : null}
+            {/* One approval line: who approved it, then what kind of activity and which version. */}
+            {!hero ? <div className="space-y-1 rounded-2xl bg-surface-2/70 p-3.5">
+                <ApprovalSeal>{task.provider?.name ? copy.approvedBy(task.provider.name) : copy.approved}</ApprovalSeal>
+                <p className="text-[13px] text-muted">{sentenceStart(getCarePlanCategoryLabel(task.carePlan.category, copy))} · {copy.planVersion(task.carePlan.versionNumber)}</p>
             </div> : null}
         </div> : medication && task.provider?.name ? <p className="text-[13px] text-muted">{copy.prescribedBy(task.provider.name)}</p> : null}
         {task.requiresScheduleConfiguration ? <div className="ma-press relative flex items-start gap-3 rounded-2xl bg-brand-tint/60 p-3.5 text-sm transition-colors hover:bg-brand-tint">
