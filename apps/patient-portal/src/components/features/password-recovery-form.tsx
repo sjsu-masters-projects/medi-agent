@@ -4,10 +4,16 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/services/api";
 import { createRecoveryClient } from "@/services/password-recovery";
-import { readRecoveryTokens, recoveryCopy } from "../../../../../packages/shared/src/utils/password-recovery";
+import {
+    readRecoveryTokenHash,
+    readRecoveryTokens,
+    recoveryCopy,
+    withoutRecoveryQuery,
+} from "../../../../../packages/shared/src/utils/password-recovery";
 
 type Client = NonNullable<ReturnType<typeof createRecoveryClient>>;
-type State = "checking" | "ready" | "invalid" | "unavailable" | "success";
+type State = "checking" | "confirm" | "ready" | "invalid" | "unavailable" | "success";
+type Recovery = { client: Client | null; state: State };
 
 export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
     mode: "request" | "reset";
@@ -22,10 +28,13 @@ export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [state, setState] = useState<State>("checking");
-    const recovery = useRef<Promise<{ client: Client | null; state: State }> | null>(null);
+    const recovery = useRef<Promise<Recovery> | null>(null);
+    const tokenHash = useRef<string | null>(null);
+    const started = useRef(false);
     const client = useRef<Client | null>(null);
     const statusRef = useRef<HTMLParagraphElement | null>(null);
-    const statusVisible = (mode === "request" && sent) || (mode === "reset" && state !== "ready" && state !== "checking");
+    const statusVisible = (mode === "request" && sent) ||
+        (mode === "reset" && state !== "ready" && state !== "checking" && state !== "confirm");
 
     // The form is replaced by a status message; move focus there so it is announced
     // and keyboard users are not left on a removed control.
@@ -36,30 +45,54 @@ export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
     useEffect(() => {
         if (mode !== "reset") return;
         let active = true;
-        if (!recovery.current) {
+        if (!started.current) {
+            started.current = true;
             const tokens = readRecoveryTokens(window.location.hash);
+            tokenHash.current = readRecoveryTokenHash(window.location.search);
             // Do this before SDK/network work: secrets must not remain in browser history.
-            window.history.replaceState(null, "", window.location.pathname + window.location.search);
-            recovery.current = (async () => {
-                if (!tokens) return { client: null, state: "invalid" as const };
+            window.history.replaceState(null, "", window.location.pathname + withoutRecoveryQuery(window.location.search));
+            // A query token is redeemed only after an explicit click (see `redeem`), so a
+            // mail scanner opening the link cannot consume it. Older links use the fragment.
+            if (!tokenHash.current) recovery.current = (async (): Promise<Recovery> => {
+                if (!tokens) return { client: null, state: "invalid" };
                 const auth = createRecoveryClient();
-                if (!auth) return { client: null, state: "unavailable" as const };
+                if (!auth) return { client: null, state: "unavailable" };
                 try {
                     const session = await auth.auth.setSession(tokens);
-                    if (session.error || !session.data.session) return { client: null, state: "invalid" as const };
+                    if (session.error || !session.data.session) return { client: null, state: "invalid" };
                     const user = await auth.auth.getUser();
-                    if (user.error || !user.data.user) return { client: null, state: "invalid" as const };
-                    return { client: auth, state: "ready" as const };
+                    if (user.error || !user.data.user) return { client: null, state: "invalid" };
+                    return { client: auth, state: "ready" };
                 } catch {
-                    return { client: null, state: "invalid" as const };
+                    return { client: null, state: "invalid" };
                 }
             })();
         }
-        void recovery.current.then((result) => {
+        if (!recovery.current) setState("confirm");
+        else void recovery.current.then((result) => {
             if (active) { client.current = result.client; setState(result.state); }
         });
         return () => { active = false; };
     }, [mode]);
+
+    function redeem() {
+        const token_hash = tokenHash.current;
+        if (recovery.current || !token_hash) return;
+        tokenHash.current = null;
+        setState("checking");
+        recovery.current = (async (): Promise<Recovery> => {
+            const auth = createRecoveryClient();
+            if (!auth) return { client: null, state: "unavailable" };
+            try {
+                const result = await auth.auth.verifyOtp({ token_hash, type: "recovery" });
+                if (result.error || !result.data.session) return { client: null, state: "invalid" };
+                return { client: auth, state: "ready" };
+            } catch {
+                return { client: null, state: "invalid" };
+            }
+        })();
+        void recovery.current.then((result) => { client.current = result.client; setState(result.state); });
+    }
 
     async function submit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -102,7 +135,9 @@ export function PasswordRecoveryForm({ mode, locale = "en-US", portal }: {
             <p className="mt-2 text-sm leading-relaxed text-muted">{mode === "request" ? copy.intro : copy.resetIntro}</p>
         </header>
         {mode === "request" && sent ? <p ref={statusRef} tabIndex={-1} role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2 outline-none">{copy.sent}</p> : null}
-        {mode === "reset" && state !== "ready" ? <p ref={statusRef} tabIndex={-1} role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2 outline-none">{copy[state]}</p> : null}
+        {mode === "reset" && state === "confirm" ?
+            <button className={`min-h-12 w-full rounded-xl px-4 font-semibold text-white ${action}`} type="button" onClick={redeem}>{copy.continue}</button> : null}
+        {mode === "reset" && state !== "ready" && state !== "confirm" ? <p ref={statusRef} tabIndex={-1} role="status" className="rounded-xl bg-surface-2 p-4 text-ink-2 outline-none">{copy[state]}</p> : null}
         {(mode === "request" && !sent) || resetReady ? <form onSubmit={submit} className="space-y-5">
             {mode === "request" ? <label className="block text-sm font-medium text-ink-2">
                 {copy.email}<input autoComplete="email" aria-describedby={error ? errorId : undefined} aria-invalid={error ? true : undefined} className={input} type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
