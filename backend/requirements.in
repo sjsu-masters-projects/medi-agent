@@ -61,6 +61,8 @@ sentry-sdk
 
 # -- Document Processing --
 PyMuPDF
+# MedWatch Form 3500 fill path (BSD, pure Python); intentionally not PyMuPDF (AGPL).
+pypdf==6.20.1
 pytesseract
 Pillow
 

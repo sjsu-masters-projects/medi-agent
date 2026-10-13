@@ -15,7 +15,6 @@ import pytest
 
 from tests.integration.test_notification_centre_postgres import (
     CLINICIAN,
-    MIGRATIONS,
     PATIENT,
     document,
     finish,
@@ -37,11 +36,7 @@ ADDRESSES = {PATIENT: "patient@example.com", CLINICIAN: "clinician@example.com"}
 
 @pytest.fixture
 def email_sql(sql):
-    sql((MIGRATIONS / "057_email_delivery.sql").read_text())
-    sql(
-        "REVOKE ALL ON auth.users FROM service_role; REVOKE USAGE ON SCHEMA auth FROM service_role;"
-    )
-    sql((MIGRATIONS / "058_email_delivery_fixes.sql").read_text())
+    # The base ``sql`` fixture already applies 057, the auth-privilege revoke and 058.
     return sql
 
 

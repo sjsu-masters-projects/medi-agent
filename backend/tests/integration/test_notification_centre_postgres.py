@@ -157,6 +157,7 @@ def sql(postgres):
         "040_clinician_approved_care_plans.sql",
         "042_care_plan_publication_review_guards.sql",
         "043_incomplete_care_plan_drafts.sql",
+        "042_auditable_adr_assessments.sql",
         "046_adr_clinician_review_actions.sql",
     ):
         execute((MIGRATIONS / name).read_text())
@@ -170,7 +171,14 @@ def sql(postgres):
         "043_appointment_booking_guards.sql",
     ):
         execute((MIGRATIONS / name).read_text())
-    execute((MIGRATIONS / "048_care_team_conversations.sql").read_text())
+    # Remaining 047/048 ledger entries the ADR loop and the notification sources depend on.
+    for name in (
+        "047_adr_patient_information_loop.sql",
+        "047_care_plan_private_rls_helpers.sql",
+        "048_care_team_conversations.sql",
+        "048_medwatch_draft_lifecycle.sql",
+    ):
+        execute((MIGRATIONS / name).read_text())
     execute(Path(__file__).with_name("notification_centre_seed.sql").read_text())
     # Baseline old notices exist before capture installation; old safety rows
     # must never become new shared work. Reminder adapter preserves original rows.
@@ -186,8 +194,19 @@ def sql(postgres):
         "054_notification_page_proportional_reads.sql",
         "055_notification_one_response_per_offer.sql",
         "056_notification_prepare_waits.sql",
+        "057_email_delivery.sql",
     ):
         execute((MIGRATIONS / name).read_text())
+    # Hosted migrations cannot grant auth privileges to service_role; prove 058 needs none.
+    execute(
+        "REVOKE ALL ON auth.users FROM service_role; REVOKE USAGE ON SCHEMA auth FROM service_role;"
+    )
+    execute((MIGRATIONS / "058_email_delivery_fixes.sql").read_text())
+    # Later migrations apply on top of the 058 ledger. ADR_LOOP_GAP_BASELINE=1 skips them to
+    # record unmodified behaviour.
+    if os.environ.get("ADR_LOOP_GAP_BASELINE") != "1":
+        for path in sorted(MIGRATIONS.glob("059_*.sql")):
+            execute(path.read_text())
     try:
         yield execute
     finally:
@@ -564,10 +583,10 @@ def test_adr_reviewed_questions_only_and_current_status(sql):
       VALUES('{adr}','{PATIENT}','{symptom}','{med}','Synthetic medication',0,'Doubtful','PRIVATE MUST NOT LEAK');""")
     assert clinician(sql, "action_items")["items"][0]["event_type"] == "adr_review"
     sql(
-        f"SELECT review_adr_assessment('{adr}','{CLINICIAN}','request_information','Reviewed request','[\"¿Cuándo comenzó?\"]');"
+        f"SELECT review_adr_assessment('{adr}','{CLINICIAN}','request_information','Reviewed request','[\"dose_response\"]');"
     )
     row = next(r for r in call(sql)["items"] if r["event_type"] == "adr_information_requested")
-    assert row["metadata"]["requested_information"] == ["¿Cuándo comenzó?"]
+    assert row["metadata"]["requested_information"] == ["dose_response"]
     assert row["metadata"]["clinician_id"] == CLINICIAN
     assert "PRIVATE" not in json.dumps(row)
     sql(f"SELECT review_adr_assessment('{adr}','{CLINICIAN}','mark_reviewed');")
