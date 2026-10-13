@@ -28,7 +28,8 @@ from app.clients.supabase import get_admin_client
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.explanation_service import normalize_patient_summary
 
-MAX_FACTS = 15
+# A lab report alone is often 30+ results; fifteen cut most of them off.
+MAX_FACTS = 60
 EXCERPT_CHARS = 300
 SUMMARY_CHARS = 1200
 MAX_DOCUMENTS = 5
@@ -36,7 +37,40 @@ _REVIEW_STATUS = {
     "approved": "confirmed by the care team",
     "pending_review": "not yet reviewed by the care team",
 }
-_VALUE_FIELDS = ("name", "description", "dosage", "frequency", "route", "instructions", "value")
+_VALUE_FIELDS = (
+    # Medications, conditions, allergies, instructions
+    "name",
+    "description",
+    "dosage",
+    "frequency",
+    "route",
+    "instructions",
+    "status",
+    "medication_action",
+    "allergen",
+    "reaction",
+    "severity",
+    # Results and measurements, with the report's own flag and range
+    "test_name",
+    "value",
+    "unit",
+    "reference_range",
+    "flag",
+    "flag_meaning",
+    "range_status",
+    "panel",
+    "collected_at",
+    "measured_at",
+    # Immunizations, procedures and appointments
+    "vaccine",
+    "administered_at",
+    "dose_number",
+    "performed_at",
+    "result",
+    "scheduled_for",
+    "provider",
+    "location",
+)
 _SEARCH_WORD = re.compile(r"[^\W_]{3,}")
 
 

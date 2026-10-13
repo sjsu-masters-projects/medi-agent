@@ -155,6 +155,37 @@ class PageExtraction(BaseModel):
     def has_words(self) -> bool:
         return bool(self.words)
 
+    def layout_text(self) -> str:
+        """The page as visual rows: lines that share a baseline, left to right.
+
+        PDF text layers and OCR both emit a table cell as its own line, so a lab row
+        reaches a model as "Hemoglobin A1c", "7.8", "H", "%" on separate lines, and a flag
+        printed on only some rows is easy to attach to the wrong test. Rows keep each
+        result with its value, unit, flag and range. ``text`` is unchanged for anchoring.
+        """
+        if not self.lines:
+            return self.text
+        rows: list[list[TextLine]] = []
+        for line in sorted(self.lines, key=lambda item: (item.bbox.y0, item.bbox.x0)):
+            row = rows[-1] if rows else None
+            if row is not None and _same_row(row, line):
+                row.append(line)
+            else:
+                rows.append([line])
+        return "\n".join(
+            " | ".join(line.text for line in sorted(row, key=lambda item: item.bbox.x0))
+            for row in rows
+        )
+
+
+def _same_row(row: list[TextLine], line: TextLine) -> bool:
+    """A line joins a row when most of the shorter one's height overlaps the row band."""
+    top = min(item.bbox.y0 for item in row)
+    bottom = max(item.bbox.y1 for item in row)
+    overlap = min(bottom, line.bbox.y1) - max(top, line.bbox.y0)
+    shorter = min(bottom - top, line.bbox.y1 - line.bbox.y0)
+    return shorter > 0 and overlap >= 0.5 * shorter
+
 
 class DocumentExtraction(BaseModel):
     """The versioned, retained record of one extraction run over one source file."""
@@ -194,7 +225,8 @@ class DocumentExtraction(BaseModel):
         included: garbled OCR is the input most likely to make a model invent a dose.
         """
         return "\n\n".join(
-            f"[[page {page.page_number}]]\n{page.text}" for page in self.model_input_pages()
+            f"[[page {page.page_number}]]\n{page.layout_text()}"
+            for page in self.model_input_pages()
         )
 
     def page(self, page_number: int) -> PageExtraction | None:

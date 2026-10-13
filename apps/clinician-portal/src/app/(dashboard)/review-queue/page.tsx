@@ -19,6 +19,7 @@ import {
 } from "@/services/clinicians";
 import { loadPatientDeepDive } from "@/store/slices/patient-detail-slice";
 import type { AppDispatch, RootState } from "@/store/store";
+import { formatClinicianDateTime } from "@/utils/dates";
 import {
     DocumentReviewStatus,
     getDocumentTypeLabel,
@@ -248,7 +249,7 @@ export default function ReviewQueuePage() {
                                     <p className="text-[13px] text-ink-2">
                                         <span className="text-muted xl:sr-only">Uploaded </span>
                                         <time className="font-mono text-[12.5px]" dateTime={item.createdAt}>
-                                            {new Date(item.createdAt).toLocaleString()}
+                                            {formatClinicianDateTime(item.createdAt)}
                                         </time>
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">

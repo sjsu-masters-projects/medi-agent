@@ -22,7 +22,7 @@ from supabase import Client
 from app.agents.ingestion.prompts import EXTRACT_CONTENT_SYSTEM, extraction_prompt
 from app.clients.model_router import TaskType, get_router
 from app.core.exceptions import DocumentParseError
-from app.models.document_extraction import DocumentExtractionResult
+from app.models.document_extraction import DocumentExtractionResult, parse_model_extraction
 from app.services.document_intelligence.grounding import (
     DocumentEvidenceCandidateService,
     items_from_extraction_result,
@@ -135,7 +135,9 @@ class IngestionService:
             return self._outcome(terminal_status, error_code=failure_code)
 
         try:
-            extraction_result, model_version = await self._extract_structured(model_text)
+            extraction_result, model_version, invalid_items = await self._extract_structured(
+                model_text
+            )
         except (PydanticValidationError, json.JSONDecodeError, ValueError) as exc:
             logger.warning("Document model output needs review for %s: %s", document_id, exc)
             return self._finish_unvalidated_model_output(
@@ -159,6 +161,11 @@ class IngestionService:
                 extraction_method=method,
             )
 
+        if invalid_items:
+            warnings.append(
+                f"{invalid_items} proposed item(s) were malformed and were not registered; "
+                "review the original document."
+            )
         items = items_from_extraction_result(extraction_result)
         try:
             registered = DocumentEvidenceCandidateService(self.db).register(
@@ -200,6 +207,11 @@ class IngestionService:
             )
             return self._outcome("needs_evidence_review", error_code="evidence_not_grounded")
 
+        self._classify_document(
+            document_id,
+            current=str(claim.get("document_type") or document_type or ""),
+            proposed=extraction_result.document.document_type,
+        )
         # The patient explanation is deliberately not generated here. Ingestion owns the
         # clinical result; the explanation is an optional convenience built afterwards from
         # the candidates just registered. Handing it off means a provider outage is retried
@@ -219,9 +231,11 @@ class IngestionService:
             text_chars=text_chars,
             extraction_method=method,
         )
-        if registered.created:
+        if registered.informs_care_plan:
             # A generation request is durable and debounced by the worker.  The request
             # contains no source text; drafting later reads only the registered, grounded facts.
+            # Results, vital signs, conditions and allergies alone never change a plan, so a
+            # lab report does not open a draft a clinician would have to approve unchanged.
             from app.services.care_plan_service import CarePlanService
 
             CarePlanService(self.db).request_generation(patient_id, datetime.now(UTC))
@@ -233,16 +247,18 @@ class IngestionService:
 
     async def _extract_structured(
         self, model_text: str
-    ) -> tuple[DocumentExtractionResult, str | None]:
+    ) -> tuple[DocumentExtractionResult, str | None, int]:
         response, telemetry = await get_router().generate_text_with_telemetry(
             TaskType.DOCUMENT_PARSING,
             prompt=extraction_prompt(model_text),
             system_instruction=EXTRACT_CONTENT_SYSTEM,
             temperature=0.1,
-            # Matches the evaluated ceiling; 2048 truncated multi-medication documents.
-            max_tokens=4096,
+            # A full lab report is 30+ results, each with its evidence row; 4096 truncated
+            # them (2048 already truncated multi-medication documents).
+            max_tokens=8192,
         )
-        return DocumentExtractionResult.model_validate(self._parse_json(response)), telemetry.model
+        result, invalid_items = parse_model_extraction(self._parse_json(response))
+        return result, telemetry.model, invalid_items
 
     def _finish_unvalidated_model_output(
         self,
@@ -300,6 +316,24 @@ class IngestionService:
         )
         row = cast(dict[str, Any], result.data or {})
         return UUID(str(row.get("uploaded_by") or patient_id))
+
+    def _classify_document(self, document_id: UUID, *, current: str, proposed: str | None) -> None:
+        """Record what an "other" document turned out to be; a chosen type is never replaced.
+
+        The type labels the document in Records, steers its patient explanation and lets the
+        assistant find "my lab report". It is not clinical data, and a failure to save it
+        never fails ingestion.
+        """
+        if current not in ("", "other") or not proposed or proposed == "other":
+            return
+        try:
+            self.db.table("documents").update({"document_type": proposed}).eq(
+                "id", str(document_id)
+            ).eq("document_type", "other").execute()
+        except Exception as exc:  # noqa: BLE001 - a label must not strand ingestion
+            logger.warning(
+                "Could not record document type for %s: %s", document_id, type(exc).__name__
+            )
 
     def _set_document(
         self,

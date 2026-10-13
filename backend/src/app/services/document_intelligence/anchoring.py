@@ -23,6 +23,8 @@ _DIGIT_LETTER_BOUNDARY = re.compile(r"(?<=\d)(?=[a-z%])|(?<=[a-z])(?=\d)")
 _DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
 _NON_TOKEN = re.compile(r"[^a-z0-9./%-]+")
 _LETTER_DOTS = re.compile(r"(?<=[a-z])\.|\.(?=[a-z])")
+# "7-20" and "7 - 20" are the same printed range; split a dash between two numbers.
+_NUMBER_DASH = re.compile(r"(?<=\d)\s*[-–—]\s*(?=\d)")
 
 
 def normalize_for_match(text: str) -> str:
@@ -31,6 +33,7 @@ def normalize_for_match(text: str) -> str:
     folded = "".join(ch for ch in folded if not unicodedata.combining(ch))
     folded = folded.casefold().replace("µ", "u").replace("μ", "u")
     folded = _DECIMAL_COMMA.sub(".", folded)
+    folded = _NUMBER_DASH.sub(" - ", folded)
     folded = _LETTER_DOTS.sub("", folded)
     folded = _DIGIT_LETTER_BOUNDARY.sub(" ", folded)
     folded = _NON_TOKEN.sub(" ", folded)

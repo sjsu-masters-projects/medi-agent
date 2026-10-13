@@ -19,14 +19,14 @@ from uuid import UUID
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from app.agents.ingestion.prompts import GENERATE_SUMMARY_SYSTEM, GENERATE_SUMMARY_USER
+from app.agents.ingestion.prompts import GENERATE_SUMMARY_SYSTEM, summary_prompt
 from app.clients.model_router import TaskType, get_router
 from app.services.clinical_fact_service import ClinicalFactService
-from app.services.explanation_service import normalize_patient_summary
+from app.services.explanation_service import normalize_patient_summary, numbers_in
 
 logger = logging.getLogger(__name__)
 
-SUMMARY_PROMPT_VERSION = "patient-explanation/4"
+SUMMARY_PROMPT_VERSION = "patient-explanation/5"
 MAX_SUMMARY_ATTEMPTS = 3
 SUMMARY_RETRY_DELAYS = {
     1: timedelta(minutes=2),
@@ -51,8 +51,35 @@ _MISSING_FUNCTION_CODES = {"PGRST202", "42883"}
 _FACT_GROUPS = {
     "medication": "medications",
     "condition": "conditions",
+    "allergy": "allergies",
     "obligation": "follow_up_instructions",
+    "lab_result": "results",
+    "vital_sign": "vital_signs",
+    "immunization": "immunizations",
+    "procedure": "procedures",
+    "appointment": "appointments",
 }
+# Derived explanations of a fact that are not source text; never shown to the model as a
+# number source, and never needed to check one.
+_NON_SOURCE_KEYS = frozenset({"consistency"})
+
+
+def unsupported_numbers(summary: str, sources: dict[str, list[Any]]) -> set[str]:
+    """Numbers an explanation states that no supplied fact contains.
+
+    A patient explanation that invents "3 months" or turns 7.8 into 7.9 is a clinical
+    error, not a style problem, so it is checked deterministically before it is stored.
+    """
+    allowed = numbers_in(json.dumps(sources, default=str, ensure_ascii=False))
+    stated = numbers_in(summary)
+    # "4.0" in a fact supports "4" in prose and the other way round.
+    normalized = {token.rstrip("0").rstrip(".") if "." in token else token for token in allowed}
+    return {
+        token
+        for token in stated
+        if token not in allowed
+        and (token.rstrip("0").rstrip(".") if "." in token else token) not in normalized
+    }
 
 
 def _api_error_matches(error: APIError, codes: set[str], needles: tuple[str, ...]) -> bool:
@@ -133,39 +160,44 @@ class DocumentSummaryService:
         self, document_id: UUID, sources: dict[str, list[Any]], *, attempt: int
     ) -> SummaryOutcome:
         """Ask the model for the explanation and classify what came back."""
-        try:
-            response = await get_router().generate_text(
-                TaskType.PATIENT_EXPLANATION,
-                prompt=GENERATE_SUMMARY_USER.format(
-                    # ensure_ascii=False: the model reads "vía oral", not "v\u00eda oral".
-                    medications=json.dumps(sources["medications"], default=str, ensure_ascii=False),
-                    conditions=json.dumps(sources["conditions"], default=str, ensure_ascii=False),
-                    follow_up_instructions=json.dumps(
-                        sources["follow_up_instructions"], default=str, ensure_ascii=False
-                    ),
-                ),
-                system_instruction=GENERATE_SUMMARY_SYSTEM,
-                temperature=0.2,
-                # Gemini counts reasoning tokens against this ceiling; 1024 keeps the
-                # intentionally short (<180 word) explanation to a single request.
-                max_tokens=1024,
-            )
-        except Exception as exc:  # noqa: BLE001 - a provider outage is operational, not clinical
-            logger.warning(
-                "Patient explanation provider failed for document %s: %s",
-                document_id,
-                type(exc).__name__,
-            )
-            # Retry from persisted candidates only. A deliberate delay prevents an
-            # unavailable provider from monopolizing a small worker batch.
-            return self._retryable_outcome("provider_unavailable", attempt=attempt)
+        prompt = summary_prompt(sources)
+        summary = ""
+        for temperature in (0.2, 0.0):
+            try:
+                response = await get_router().generate_text(
+                    TaskType.PATIENT_EXPLANATION,
+                    prompt=prompt,
+                    system_instruction=GENERATE_SUMMARY_SYSTEM,
+                    temperature=temperature,
+                    # Gemini counts reasoning tokens against this ceiling; 1024 keeps the
+                    # intentionally short (<220 word) explanation to a single request.
+                    max_tokens=1024,
+                )
+            except Exception as exc:  # noqa: BLE001 - a provider outage is operational
+                logger.warning(
+                    "Patient explanation provider failed for document %s: %s",
+                    document_id,
+                    type(exc).__name__,
+                )
+                # Retry from persisted candidates only. A deliberate delay prevents an
+                # unavailable provider from monopolizing a small worker batch.
+                return self._retryable_outcome("provider_unavailable", attempt=attempt)
 
-        summary = normalize_patient_summary(str(response or ""))
-        if not summary:
-            # Repeating an identical prompt over identical candidates would reproduce
-            # this, so it waits for an explicit retry instead of burning attempts.
-            return SummaryOutcome("failed", failure_code="summary_empty")
-        return SummaryOutcome("ready", summary=summary)
+            summary = normalize_patient_summary(str(response or ""))
+            if not summary:
+                # Repeating an identical prompt over identical candidates would reproduce
+                # this, so it waits for an explicit retry instead of burning attempts.
+                return SummaryOutcome("failed", failure_code="summary_empty")
+            unsupported = unsupported_numbers(summary, sources)
+            if not unsupported:
+                return SummaryOutcome("ready", summary=summary)
+            logger.warning(
+                "Patient explanation for document %s stated %d unsupported number(s)",
+                document_id,
+                len(unsupported),
+            )
+        # Showing nothing is safer than showing a number the document does not contain.
+        return SummaryOutcome("failed", failure_code="summary_unverified")
 
     @staticmethod
     def _retryable_outcome(failure_code: str, *, attempt: int) -> SummaryOutcome:
@@ -180,18 +212,16 @@ class DocumentSummaryService:
 
     def _summary_sources(self, document_id: UUID, patient_id: UUID) -> dict[str, list[Any]]:
         """Group a document's non-deleted candidate facts into the prompt's sections."""
-        grouped: dict[str, list[Any]] = {
-            "medications": [],
-            "conditions": [],
-            "follow_up_instructions": [],
-        }
+        grouped: dict[str, list[Any]] = {section: [] for section in _FACT_GROUPS.values()}
         for fact in self._facts.list_facts_for_document(document_id, patient_id):
             section = _FACT_GROUPS.get(str(fact.get("fact_type") or ""))
             if section is None:
                 continue
             value = fact.get("value")
             if isinstance(value, dict) and value:
-                grouped[section].append(value)
+                grouped[section].append(
+                    {key: item for key, item in value.items() if key not in _NON_SOURCE_KEYS}
+                )
         return grouped
 
     def _record(self, document_id: UUID, outcome: SummaryOutcome) -> SummaryOutcome:

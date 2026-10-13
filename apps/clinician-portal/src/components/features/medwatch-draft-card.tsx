@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card } from "@/components/ui";
 import type { MedWatchDraft, MedWatchFormData } from "@/services/clinicians";
+import { formatClinicianDateTime } from "@/utils/dates";
 
 const inputClass =
   "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100";
@@ -396,7 +397,7 @@ export function MedWatchDraftCard({
           <p className="text-sm text-gray-700">
             Approved{" "}
             {draft.approvedAt
-              ? new Date(draft.approvedAt).toLocaleString()
+              ? formatClinicianDateTime(draft.approvedAt)
               : ""}
             . Exporting records an audit event; it does not submit the draft.
           </p>

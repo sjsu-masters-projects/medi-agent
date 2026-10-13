@@ -28,34 +28,73 @@ Evidence: [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#clinician
 | Evals | `services/ai_evaluation.py`, `tests/fixtures/eval/*` | Synthetic cases | Lab case doc-009 expects empty lists; golden lab fixture uses an outdated schema; extraction eval runs at temperature 0.3 vs 0.1 in production |
 | Spanish | care-plan translation (`usted`) vs explanation and Nora (`tú`) | | Inconsistent register |
 
-## Scope, in order
+## Documents and workflows covered
 
-1. **Results and document context in extraction.** Add `lab_results` (test, value, unit,
-   reference range, flag, collected date, specimen) and `vital_signs`, plus document
-   metadata (type, date, author, facility). Ground each value against page text like other
-   facts. They are review-only candidates: they never become care-plan items or Today tasks.
-   Store the extraction prompt version. Show them in the clinician facts dialog and make
-   them available to Nora's record tools.
-2. **Explanations from the document, not only facts.** Give the explainer the document type,
-   grounded text sections and all fact types. For results: plain-language names, which
-   values are outside the range, and "your care team will discuss these" — no diagnosis or
-   treatment advice. Every number in an explanation must appear in the source (automatic
-   check; fail closed to a shorter safe explanation). Lab-only documents get an explanation.
-3. **Evaluate what production runs.** Point the triage eval at the production coordinator
-   prompt and tool contract; add lab-related and Spanish cases. Run extraction and
-   explanation evals with production settings. Fix the golden lab fixture and doc-009.
-4. **OCR end to end.** Fixtures rendered from synthetic documents as scanned PDF, phone photo
-   (skew, glare) and Spanish print; assert recovered text and extracted values. Pass page OCR
-   quality to the model and the reviewer; confirm Tesseract eng+spa in the deployed image.
-5. **Consistency.** One Spanish register; SOAP generation through the model registry.
+| Document | What the agents must get right |
+| --- | --- |
+| Lab report | Every printed result with value, unit, range and flag on its own row; calculated values; critical flags; no interpretation |
+| Discharge / after-visit summary | Medication actions (continue, new, changed, stop, hold); diagnoses; allergies or "no known allergies"; vitals; procedures; vaccines; follow-up visits; patient instructions |
+| Prescription, medication list, pharmacy label | Name, dose, frequency, route and directions as printed; one item per line, never merged |
+| Imaging, pathology, ECG and other studies | Procedure, date and the printed impression verbatim |
+| Referral, clinic note | Problems, instructions, follow-up appointments |
+| Immunization record, home logs | Each vaccine dose; each reading |
+| Spanish documents | Same as above in Spanish ("Suspender", "Alto", "Sin alergias conocidas") |
+| Scanned or photographed copies | Same values through OCR, or clinician-only review with a reason |
+
+| Workflow | Rule |
+| --- | --- |
+| Clinician review | Every candidate is grounded on the page; results and vitals anchor on their own printed row and need an exact value; a flag that contradicts its range is low confidence |
+| Care-plan drafting | Only medications and patient obligations; a stopped or held medication is never publishable and blocks matching active items until a clinician decides; a changed medication needs the new dose confirmed; results-only documents do not open a draft |
+| Patient explanation | Built from grounded facts of every type; out-of-range and critical results named with their ranges, no advice; stopped medications described as stopped; every number must exist in the facts, and every number must survive translation, or nothing is shown |
+| Assistant (Nora) | Sees results with their flag and range and medication actions; never interprets a result or reminds a patient to take a stopped medication |
+
+## Delivered in the first slice
+
+Branch `feature/document-results-extraction`:
+
+- Model input keeps printed table rows (`PageExtraction.layout_text`), for embedded text
+  and OCR alike.
+- Extraction prompt `document-extraction/2` (version stored in each fact's provenance):
+  document type, medication `status`, lab results, vital signs, immunizations, procedures,
+  appointments, "no known allergies"; output validated item by item, so one malformed item
+  no longer discards the document; output ceiling 8192 tokens.
+- Grounding: row-scoped anchoring, exact values, deterministic `flag_meaning`,
+  `range_status`, flag/range contradiction check, critical flag note, `medication_action`.
+- An "other" upload records its classified document type; a chosen type is never replaced.
+- Care-plan safety: stop/hold, changed-dose blockers; drafts only for medication or
+  obligation facts.
+- Explanation `patient-explanation/5` with the number check and retry; translation keeps
+  numbers and uses no gendered clinician titles.
+- Nora: result and action fields, 60 facts per document, prompt rules for results and
+  stopped medications.
+- Clinician facts dialog per type (lab rows, flag and Critical badges, Stop/Hold badges);
+  clinician dates in en-US (UX-004).
+- Evaluation measures the production settings and scores lab results.
+
+Verified locally against the production model on synthetic documents: the October 12 lab
+report (20 of 20 results, flags and ranges correct), a discharge summary with continue,
+stop, increase and new medications, NKDA, vitals, an X-ray impression, a flu vaccine and a
+follow-up visit, and a Spanish visit summary with "Suspender". A 200-dpi scan of the lab
+report reads at OCR confidence 0.93; its one decimal loss ("4.0 - 5.6" read as "40-56") is
+caught by the contradiction check.
+
+## Remaining
+
+1. **Critical result alert to clinicians.** Needs a new notification event type, which is
+   a migration (`notification_events.event_type` check), so it waits for authorization.
+2. **Triage evaluation on the production coordinator prompt** with result and Spanish
+   cases; today it scores a proxy prompt.
+3. **OCR fixtures:** phone photos (skew, glare), handwriting routed to clinician-only review,
+   and OCR quality passed to the model.
+4. **Patient Records view** of results (today patients see the explanation only).
+5. **Consistency:** one Spanish register across care-plan wording ("usted") and the
+   explanation and assistant ("tú"); SOAP generation through the model registry.
 
 ## Acceptance
 
-- The October 12 lab report yields grounded result candidates for every row, flags matching
-  the document, and an explanation that names the out-of-range results in English and
-  Spanish without advice.
-- Scanned and photographed versions of the same report recover the same values within the
-  documented OCR tolerance, or are routed to clinician-only review with a reason.
-- Updated evals pass in CI with production settings; no regression on existing cases.
-- No change to the care-plan eligibility rule (medications and obligations only) and no
-  automatic publication. Synthetic data only.
+- Results, vitals and medication actions are extracted, grounded and shown to clinicians as
+  above; the October 12 lab report yields every result with its printed flag.
+- No stopped or held medication can be published as a Today activity.
+- Explanations state only numbers present in the facts, in English and Spanish.
+- No change to the care-plan eligibility rule and no automatic publication. Synthetic data
+  only.
