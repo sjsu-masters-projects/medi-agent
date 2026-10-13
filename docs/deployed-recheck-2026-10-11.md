@@ -158,3 +158,19 @@ changed. The requester typed every password and one-time code.
   `#2563EB` button, link to `clinician.mediagent.live/reset-password?lang=en-US` with
   `token_hash`. 22:47 PT, `+patient`: green `#147465`, English, `lang=en-US`. 22:48 PT,
   `+patient`: green, Spanish ("Restablece tu contraseña", "menos de 1 hora"), `lang=es-MX`.
+
+## Email preferences, Team & Roles and Copy (October 12, late)
+
+- **#158 email card:** Morgan's Profile shows an EMAIL NOTICES label over one grouped card:
+  truncated address, "Email unavailable" chip, "Demo accounts can't receive email. In-app
+  notifications stay on." and one footnote; no controls. Same at 375 px, with no
+  horizontal scrolling. Elena's Settings shows the same state in a standard Settings card
+  (mail icon, Email notices heading and badge, footer note).
+- **UX-003 as provider Elena:** Team & Roles shows "Only clinic admins can invite team
+  members." and no invite form; the per-member ⋯ menus are still shown (known). Clinic-code
+  Copy showed "Copied" with no uncaught error; earlier "Write permission denied" console
+  errors predate #156.
+- **Public key consumers:** after the key fix both portals' bundled key matches the
+  project's and Supabase accepts it. No upload was performed (the browser used here cannot
+  choose files). Clinician dashboard realtime is disabled in production
+  (`NEXT_PUBLIC_ENABLE_DASHBOARD_REALTIME` is not set), so it was not affected.
