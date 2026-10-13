@@ -142,4 +142,10 @@ changed. The requester typed every password and one-time code.
   character (the bundled value starts `yJhbGci`, the project's key `eyJhbGci`). Supabase's
   `/verify` route does not check the key, so Continue worked; the account update does.
   The same client configuration with the correct key, outside the browser, updated the
-  account without error. The patient en-US and es-MX resets were not run.
+  account without error.
+- **After the key fix:** the requester corrected `NEXT_PUBLIC_SUPABASE_ANON_KEY` in both
+  Vercel projects and redeployed. Both portals' bundled key then matched the project's key
+  and Supabase accepted it. A new clinician reset (requested 05:34 UTC) was opened from
+  the email, continued, saved, and the requester signed in again at 05:36 UTC, landing on
+  Risk Radar. Supabase cleared the recovery token. The account has no MFA factor, so MFA
+  after reset was not exercised. The patient en-US and es-MX resets were not run.

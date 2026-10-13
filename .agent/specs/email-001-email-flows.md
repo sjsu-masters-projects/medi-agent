@@ -80,10 +80,10 @@ Genuine verified mailboxes receive their own opted-in notices, never the demo si
 - [x] Verified sending domain and From values: `mail.mediagent.live`; SPF, DKIM and
   DMARC pass on delivered mail.
 - [x] Supabase SMTP configured by operator, with the exact three-URL redirect allowlist.
-- [ ] Forgot/reset password in both portals: neutral request, scanner-safe link and
-  Continue verified on production; **saving the password fails** until both portals are
-  rebuilt with the correct public Supabase key (see production status).
-- [ ] Inbox receipt, link, operator password reset and fresh login including MFA.
+- [ ] Forgot/reset password in both portals: clinician passed on production; patient
+  en-US/es-MX not yet run.
+- [ ] Inbox receipt, link, operator password reset and fresh login: passed for the
+  clinician; MFA after reset not exercised (the test account has no factor).
 - [x] Invitation delivery, acceptance permissions and invalid/expired handling.
 - [x] Consent, locale and verified contact eligibility; optional event integration
   (unread message, Spanish appointment notice, opt-out).
@@ -152,12 +152,12 @@ review/publication gates or describe local tests as deployed acceptance.
 
 Evidence: [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#email-001-on-production-october-12).
 Verified: invitation, verification code, unread-message and Spanish appointment notices,
-opt-out, neutral reset request, clinician reset email and Continue. Open:
+opt-out, neutral reset request and the clinician password reset (after both portals were
+rebuilt with the correct public Supabase key; the earlier builds had it missing its first
+character, so the save returned 401 "Invalid API key"). Open:
 
-1. Both portals were built with a public Supabase key missing its first character, so the
-   reset page's password save returns 401 "Invalid API key". Correct
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY` in both Vercel projects (Production) and redeploy, then
-   rerun the clinician reset and the patient en-US and es-MX resets.
+1. Run the patient en-US and es-MX resets, and recheck uploads and clinician dashboard
+   realtime, which use the same public key.
 2. Replace the sending-only Resend key with a full-access key so statuses reach delivered.
 3. The first invitation landed in Spam; watch placement as the sending domain ages.
 
