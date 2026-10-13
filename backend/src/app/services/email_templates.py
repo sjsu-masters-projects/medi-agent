@@ -45,11 +45,12 @@ _BRANDS: dict[Audience, _Brand] = {
         body="#33434E",
         muted="#5B6872",
         action="#147465",
-        link='style="color:#147465;word-break:break-all"',
+        link='class="accent" style="color:#147465;word-break:break-all"',
         note="background:#E3F0EC;color:#0F5C50",
         dark=(
             ".bg{background:#14191D!important}.card{background:#1D2428!important}"
             ".ink{color:#EEF2F1!important}.body{color:#C9D1D3!important}"
+            ".accent{color:#D8EEE5!important}"
             ".note{background:#1F3C35!important;color:#D8EEE5!important}"
         ),
     ),
@@ -107,14 +108,14 @@ def render_email(
         else "Button not working? Open this link:"
     )
     footer = (
-        "No respondas a este correo; no se supervisan las respuestas. Abre el portal para comunicarte con tu equipo."
+        "No se supervisan las respuestas. Abre el portal para comunicarte con tu equipo."
         if spanish
-        else "Do not reply to this email; replies are not monitored. Open the portal to contact your team."
+        else "Replies aren't monitored. Open the portal to contact your team."
     )
     prototype = (
-        f"{brand.product} es un prototipo de proyecto de maestría con datos ficticios."
+        f"Prototipo de {brand.product} · datos ficticios."
         if spanish
-        else f"{brand.product} is a master's-project prototype using fictional demonstration data."
+        else f"{brand.product} prototype · fictional demo data."
     )
     body = "".join(
         f'<p class="body" style="margin:0 0 16px;font-size:16px;line-height:24px;color:{brand.body}">{escape(p)}</p>'
@@ -139,13 +140,19 @@ def render_email(
 {brand.header}
 <tr><td class="card px" bgcolor="{brand.card}" style="padding:36px 40px 28px;background:{brand.card};border:1px solid {brand.border};border-radius:20px">
 <h1 class="h1 ink" style="margin:0 0 18px;color:{brand.ink};font-size:30px;line-height:36px">{escape(subject)}</h1>{body}{note_html}
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td bgcolor="{brand.action}" style="border-radius:12px;background:{brand.action}">
-<a href="{safe_url}" style="display:block;padding:15px 28px;font-size:16px;line-height:20px;font-weight:bold;color:#fff;text-decoration:none;border-radius:12px">{escape(action_label)}</a></td></tr></table>
-<p class="body" style="font-size:13px;line-height:20px;color:{brand.muted}">{fallback}<br><a href="{safe_url}" {brand.link}>{safe_url}</a></p></td></tr>
-<tr><td class="body" style="padding:22px 16px;color:{brand.muted};font-size:12px;line-height:18px">{footer}<br><br>{prototype}</td></tr></table>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 0"><tr><td bgcolor="{brand.action}" style="border-radius:12px;background:{brand.action}">
+<a href="{safe_url}" style="display:block;padding:15px 28px;font-size:16px;line-height:20px;font-weight:bold;color:#fff;text-decoration:none;border-radius:12px">{escape(action_label)}</a></td></tr></table></td></tr>
+<tr><td class="body" style="padding:22px 16px;color:{brand.muted};font-size:12px;line-height:18px">{fallback}<br><a href="{safe_url}" {brand.link}>{safe_url}</a><br><br>{footer}<br><br>{prototype}</td></tr></table>
 <!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>'''
     text = "\n\n".join(
-        [subject, *paragraphs, note, f"{action_label}: {action_url}", footer, prototype]
+        [
+            subject,
+            *paragraphs,
+            *([note] if note else []),
+            f"{action_label}: {action_url}",
+            footer,
+            prototype,
+        ]
     )
     return EmailContent(subject=" ".join(subject.split()), html=html, text=text)
 
