@@ -1,11 +1,11 @@
 # candidate-1 — paired-locale review worksheet
 
-**Status: pending review. This worksheet is not an approval or activation record.**
+**Status: requester reports Ganesh reviewed and approved candidate-1; actual review date/reference pending. Intake is not activated.**
 
 - Version: `candidate-1`
 - Canonical bundle SHA-256: `a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab`
 - Source: [candidate-1.json](candidate-1.json)
-- Review reference: [draft PR #159](https://github.com/sjsu-masters-projects/medi-agent/pull/159). No review decision is claimed.
+- Review location: [draft PR #159](https://github.com/sjsu-masters-projects/medi-agent/pull/159). A formal PR review is not asserted by this record.
 - Designated safety/backend reviewer: Ganesh, per the task tracker. Include a reviewer able to assess Mexican Spanish wording.
 
 ## Proposed questions
@@ -50,7 +50,15 @@ The reviewer can place the decision on PR #159, with these fields:
 | Findings / scope | Both locales, applicability and explicit branch/red-flag decisions |
 | Reference | Stable link to the actual decision/comment |
 
-No decision fields have been filled. This synthetic-demo team review does not claim professional clinical validation. Finalize any requested edits before approval. Approved content is immutable; later changes require a new version and review.
+On October 12, 2026, the requester stated: “Yes he reviewed it and approved it.”
+This records requester-reported approval by Ganesh of the opened candidate-1 review
+package, not an independently observed reviewer signature or GitHub approval.
+The candidate hash above remains unchanged. The actual review date and reference
+were requested; if the approval was verbal, record that provenance explicitly.
+The manifest stays inactive until those required metadata are complete.
+
+This synthetic-demo team review does not claim professional clinical validation.
+Approved content is immutable; later changes require a new version and review.
 
 ## Activation after a real approval
 

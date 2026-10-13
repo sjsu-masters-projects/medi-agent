@@ -407,3 +407,25 @@ and displayed **Start a symptom draft**. That button was disabled with only a we
 message in this selected conversation, consistent with the saved-user-turn prerequisite.
 No synthetic message, draft or report was submitted during this check. Screenshot:
 `output/verification/intake-rollout-awaiting-review-2026-10-12.jpg` (local, not committed).
+
+## Requester-reported question approval — October 12
+
+The requester stated Ganesh reviewed and approved the opened candidate-1 package.
+The canonical hash remains unchanged. This is recorded as requester-reported library
+approval, not as an independently observed reviewer signature or branch/PR approval.
+The actual review date and reference were requested; verbal approval can be recorded
+with its actual date and explicit requester-reported provenance. PR review metadata
+and human approval comments contain no matching recorded decision at this check.
+No date, review link or signature was invented. The manifest remains inactive until
+the required metadata are complete; database eligibility and runtime enablement
+were not changed.
+
+Activation preparation also corrected the pending-library test to use a temporary
+isolated manifest instead of assuming the live repository manifest must always stay
+pending. Additional isolated fixtures check approved/hash-pinned loading and rejection
+of revoked, mismatched-hash or incomplete metadata. These explicitly synthetic test
+approvals never alter the runtime manifest or authorize publication.
+
+From `backend`, `PYTHONPATH=src .venv/bin/pytest tests/unit/intake/test_library.py tests/unit/intake/test_service.py tests/integration/routers/test_symptom_intake_api.py -q --no-cov`
+passed **36 tests**. Ruff check/format for `tests/unit/intake/test_library.py` and
+scoped `git diff --check` passed. No production logic or question wording changed.
