@@ -62,4 +62,20 @@ describe("Settings team and roles", () => {
         // The role comes from the profile already loaded; no extra role lookup.
         expect(mocks.get.mock.calls.map(([path]) => path)).not.toContain("/api/v1/email/invitations");
     });
+
+    it("copies the clinic code and says so next to the button", async () => {
+        mockSignedInAs("provider");
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+        try {
+            render(<SettingsPage />);
+            const copy = await screen.findByRole("button", { name: "Copy clinic code" });
+            await screen.findByText("ABC123");
+            fireEvent.click(copy);
+            expect(await screen.findByText("Copied")).toHaveAttribute("role", "status");
+            expect(writeText).toHaveBeenCalledWith("ABC123");
+        } finally {
+            Reflect.deleteProperty(navigator, "clipboard");
+        }
+    });
 });

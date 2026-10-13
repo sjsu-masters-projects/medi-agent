@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSelector } from "react-redux";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import { Badge, Button, Card, CopyButton, Input } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
@@ -413,23 +413,6 @@ export default function SettingsPage() {
         }
     }
 
-    async function handleCopyInviteCode(code: string | null = inviteCode) {
-        if (!code || typeof navigator === "undefined" || !navigator.clipboard) {
-            return;
-        }
-
-        await navigator.clipboard.writeText(code);
-        setInviteStatus("Invite code copied");
-    }
-
-    async function handleCopyClinicCode() {
-        if (!clinicCode || typeof navigator === "undefined" || !navigator.clipboard) {
-            return;
-        }
-        await navigator.clipboard.writeText(clinicCode);
-        setInviteStatus("Clinic code copied");
-    }
-
     async function handleSaveProfile() {
         if (!token) {
             return;
@@ -551,13 +534,9 @@ export default function SettingsPage() {
                                                 <p className="rounded-[10px] border border-line-strong bg-surface-2 px-3 py-1.5 font-mono text-lg tracking-[0.08em] text-ink">
                                                     {clinicCode || "Unavailable"}
                                                 </p>
-                                                <Button
-                                                    onClick={() => void handleCopyClinicCode()}
-                                                    size="sm"
-                                                    variant="secondary"
-                                                >
+                                                <CopyButton aria-label="Copy clinic code" value={clinicCode}>
                                                     Copy
-                                                </Button>
+                                                </CopyButton>
                                             </div>
                                         </div>
                                         <p className="text-[13px] text-muted">
@@ -800,14 +779,13 @@ export default function SettingsPage() {
                                         {inviteCodeLoading ? "LOADING" : inviteCode || "—"}
                                     </span>
                                 </div>
-                                <button
+                                <CopyButton
                                     aria-label="Copy latest invite code"
-                                    className="ma-press flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-line-strong bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink"
-                                    onClick={() => void handleCopyInviteCode()}
-                                    type="button"
+                                    className="ma-press flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-line-strong bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]"
+                                    value={inviteCodeLoading ? "" : inviteCode}
                                 >
                                     <Icon aria-hidden="true" name="file" className="h-4 w-4" />
-                                </button>
+                                </CopyButton>
                             </div>
                         </div>
                         <div className={cardFooterClass}>
@@ -844,13 +822,9 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Button
-                                                onClick={() => void handleCopyInviteCode(record.invite_code)}
-                                                size="sm"
-                                                variant="secondary"
-                                            >
+                                            <CopyButton aria-label={`Copy invite code ${record.invite_code ?? ""}`.trim()} value={record.invite_code}>
                                                 Copy
-                                            </Button>
+                                            </CopyButton>
                                             <Button
                                                 onClick={() => void handleRevokeInviteCode(record.care_team_id)}
                                                 size="sm"
