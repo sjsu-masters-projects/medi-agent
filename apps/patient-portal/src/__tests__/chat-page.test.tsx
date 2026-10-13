@@ -9,6 +9,8 @@ import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
 import { getPatientChatCopy } from "@/content/chat-copy";
 
+vi.mock("@/services/symptom-intakes", () => ({ fetchActiveIntake: vi.fn().mockResolvedValue(null) }));
+
 const {
     buildChatWebSocketUrl,
     fetchChatConversations,
@@ -147,6 +149,7 @@ describe("Patient chat page", () => {
         MockWebSocket.reset();
         vi.stubGlobal("WebSocket", MockWebSocket);
         Element.prototype.scrollIntoView = vi.fn();
+        Element.prototype.scrollTo = vi.fn();
         window.sessionStorage.clear();
         window.localStorage.clear();
         window.history.replaceState({}, "", "/chat");
@@ -916,4 +919,47 @@ describe("Patient chat page", () => {
             "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
         ));
     });
+    it.each([
+        ["en-US", "pending"], ["en-US", "unavailable"], ["en-US", "no_recipients"],
+        ["es-MX", "pending"], ["es-MX", "unavailable"], ["es-MX", "no_recipients"],
+    ] as const)("preserves emergency direction and honest %s %s delivery status", async (locale, status) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(0));
+        const socket = MockWebSocket.instances[0];
+        const direction = locale === "es-MX"
+            ? "Esto podría ser una emergencia. Llama al 911 ahora."
+            : "This may be an emergency. Please call 911 now.";
+        const copy = getPatientChatCopy(locale);
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({
+                type: "assistant_start", urgency: "emergency", intent: "symptom",
+            });
+            socket.emitMessage({ type: "assistant_chunk", content: direction });
+            socket.emitMessage({
+                type: "assistant_complete", urgency: "emergency", escalation_required: true,
+                persistence_status: status === "unavailable" ? "uncertain" : "saved",
+                message: {
+                    id: "safety-reply", patient_id: "patient-1", content: direction,
+                    role: "assistant", language: locale, created_at: "2026-10-10T12:00:00Z",
+                },
+            });
+        });
+        const notice = screen.getByRole("alert");
+        expect(notice).toHaveTextContent(direction);
+        if (status === "unavailable") expect(notice).toHaveTextContent(copy.safetySaveUncertain);
+        await act(async () => {
+            socket.emitMessage({
+                type: "escalation_recommended", urgency: "emergency", message: direction,
+                delivery_state: status, clinicians_notified: 0,
+            });
+        });
+        expect(notice).toHaveTextContent(direction);
+        expect(notice).toHaveTextContent(status === "pending" ? copy.safetyAlertPending
+            : status === "unavailable" ? copy.safetySaveUncertain : copy.safetyAlertNoRecipients);
+        expect(notice).not.toHaveTextContent(copy.escalationNotice);
+        expect(screen.queryByText(/Nora is typing|Nora está escribiendo/)).not.toBeInTheDocument();
+    });
+
 });

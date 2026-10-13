@@ -169,8 +169,8 @@ async def test_get_document_catalog_returns_only_safe_document_metadata(mock_db)
 @pytest.mark.asyncio
 async def test_save_symptom_report_returns_none_when_payload_invalid(mock_db):
     service = ChatService(mock_db)
-    result = await service.save_symptom_report(str(uuid4()), {"symptom": "", "severity": 0})
-    assert result is None
+    with pytest.raises(ExternalServiceError):
+        await service.save_symptom_report(str(uuid4()), {"symptom": "", "severity": 0})
 
 
 @pytest.mark.asyncio

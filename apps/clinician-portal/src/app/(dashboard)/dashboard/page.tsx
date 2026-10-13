@@ -425,7 +425,7 @@ export default function DashboardPage() {
                                     <span
                                         className={`inline-flex max-w-full items-center rounded-md px-2 py-[3px] text-xs font-medium ${patient.recent_symptom_severity > 0 ? config.accent : "bg-[rgba(100,116,139,.1)] text-ink-2"}`}
                                     >
-                                        {patient.recent_symptom_severity > 0
+                                        {patient.recent_symptom_severity !== null && patient.recent_symptom_severity > 0
                                             ? `Symptom severity ${patient.recent_symptom_severity}/10`
                                             : "No recent symptom report"}
                                     </span>

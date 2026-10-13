@@ -59,6 +59,25 @@ authorized rollout steps. [Contract and handoff](specs/email-001-email-flows.md)
 
 ## Worker and service boundaries
 
+PAT-002-B's B1 source audit and adopted intake API/state contract are recorded in
+the [confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md#17-b1--source-audit-and-interface-contract-october-10-2026).
+The non-emergency chat path still inserts extracted reports before patient confirmation;
+no private-draft feature is delivered yet. B2 evaluates the shared deterministic
+safety gate before turn-specific document/drug retrieval and model/symptom work.
+Emergency direction is streamed without waiting for storage. Migration 049's
+server-only RPCs atomically retain the ordinary chat turn and independent safety
+alert; dispatch creates existing clinician operational alerts for currently active
+assignments. Pending delivery is retried by the existing retry worker, without a
+symptom report or ADR task. Storage uncertainty preserves direction but cannot
+guarantee durable capture; there is no claim an alert was sent. See the
+[B2 checkpoint](specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026).
+The implementation target uses
+separate patient-private intake storage, approved pinned questions and an atomic
+explicit-confirmation boundary before a shared report or ordinary ADR work. The
+initial ordinary chat utterance retains existing clinician transcript visibility.
+B1–B6 alone cannot activate the full feature; preview/confirmation, consumer
+compatibility, safety/peer review and integrated verification remain prerequisites.
+
 Only these four work boundaries are supported by the product direction:
 
 | Boundary | Current implementation anchor | Authority |
@@ -178,3 +197,36 @@ For a clean local setup and full validation use:
 The command creates the backend virtual environment, installs locked dependencies,
 installs both portal dependencies, and runs the local quality gates. It does not create
 credentials or contact a clinical system.
+
+## Confirmed symptom intake (PAT-002-B)
+
+Nora's routine symptom route opens an owned private draft; it does not extract and
+save a clinical report or start ordinary ADR work. Manual entry from a saved Nora
+turn remains available without model generation. The deterministic safety floor
+runs before ordinary work and on form answers, corrections, preview and confirmation.
+Safety alerts use independent durable outboxes and the existing retry worker.
+
+The paired `en-US`/`es-MX` question bundle is immutable and pinned by version/hash.
+Activation requires genuine review evidence in the packaged manifest and matching
+approved database eligibility, plus the disabled-by-default runtime flag. Drafts,
+answer mutations and audit are patient-private; form values never become chat rows.
+The original Nora message remains under existing transcript visibility rules.
+
+The server constructs a versioned preview separating patient answers, record context
+and a deterministic summary. Exact patient-named products permit bounded canonical
+medication and approved medication-fact retrieval. Only eligible cited clinician
+entries or completed, shareable, approved/trusted documents participate. Read checks
+mask stale context; confirmation rechecks it under database row locks. Browser
+column privileges exclude stored retrieval context; clinician/SOAP responses
+retain testimony without that cached context.
+
+A stable confirmation UUID, expected revision, exact preview hash and explicit consent
+commit one immutable patient-confirmed report with append-only audit. Unknown severity
+is null. New direct inserts fail closed; historical rows stay `legacy_unconfirmed`.
+Clinical consumers select confirmed reports; the existing clinician detail view labels
+legacy history and confirmed testimony separately. Delegated symptom tasks canonicalize
+report input at submission/working transitions. No new clinical verdict or automatic
+ADR follow-up is added. PAT-002-C's timeline remains separate.
+
+See [the contract and acceptance evidence](../docs/pat-002-b-acceptance-2026-10-12.md)
+for exact endpoints, recovery behavior and rollout prerequisites.

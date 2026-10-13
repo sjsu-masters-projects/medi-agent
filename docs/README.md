@@ -12,6 +12,7 @@ spring-2026 meeting records. Neither is current implementation guidance.
 | Detailed task acceptance (required before coding) | [Backlog requirements](../.agent/specs/project-backlog-acceptance.md), or the issue's dedicated spec below |
 | Care-plan generation, review, approval and Today contract | [PAT-005 specification](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md) and [patient-upload evidence gate](patient-upload-care-plan-review-gate.md) |
 | Scheduling and addressed human messaging | [Scheduling specification](../.agent/specs/sch-001-appointment-scheduling.md) and [conversation specification](../.agent/specs/com-001-two-way-conversations.md) |
+| Patient-confirmed symptom intake implementation | [PAT-002-B plan](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md) and [October 12 evidence](pat-002-b-acceptance-2026-10-12.md); PAT-002-C timeline and ADR follow-up remain separate |
 | Latest prototype acceptance and pending presentation checks | [Deployed recheck, October 11](deployed-recheck-2026-10-11.md), [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md), [portal UI/UX evidence](portal-ui-ux-review-2026-10-10.md) and [UX-002 overhaul verification](ux-002-overhaul-verification.md) |
 | Visual design and app icons | `../.agent/DESIGN_SYSTEM.md` and [app icons](brand-icons.md) |
 | Current implementation and delivery boundaries | `../.agent/ARCHITECTURE.md` |

@@ -302,32 +302,8 @@ class ChatService:
         patient_id: str,
         report: dict[str, Any],
     ) -> dict[str, Any] | None:
-        symptom = str(report.get("symptom", "")).strip()
-        severity_raw = report.get("severity")
-        try:
-            severity = int(severity_raw) if severity_raw is not None else 0
-        except (TypeError, ValueError):
-            return None
-        if not symptom or severity < 1 or severity > 10:
-            return None
-
-        payload: dict[str, Any] = {
-            "patient_id": patient_id,
-            "symptom": symptom,
-            "severity": severity,
-            "onset": report.get("onset"),
-            "duration": report.get("duration"),
-            "related_medication_id": report.get("related_medication_id"),
-            "related_medication_name": report.get("related_medication_name"),
-            "body_area": report.get("body_area"),
-            "ai_assessment": report.get("ai_assessment"),
-            "flagged_for_adr": bool(report.get("flagged_for_adr", False)),
-            "notes": report.get("notes"),
-        }
-
-        result = await self._execute(self.db.table("symptom_reports").insert(payload))
-        rows = [row for row in (result.data or []) if isinstance(row, dict)]
-        return rows[0] if rows else None
+        """Retired: every new report requires an owned, explicit confirmation RPC."""
+        raise ExternalServiceError("Symptom intake", "Explicit patient confirmation required")
 
     async def notify_assigned_clinicians(
         self,
@@ -390,6 +366,7 @@ class ChatService:
         result = await self._execute(
             self.db.table("symptom_reports")
             .select("id, symptom, severity, onset, duration, created_at")
+            .eq("confirmation_state", "patient_confirmed")
             .eq("patient_id", patient_id)
             .order("created_at", desc=True)
             .limit(6)

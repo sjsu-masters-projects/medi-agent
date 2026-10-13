@@ -1,0 +1,10 @@
+{
+  "active_version": null,
+  "bundles": {
+    "candidate-1": {
+      "file": "candidate-1.json",
+      "status": "pending_review",
+      "approval": null
+    }
+  }
+}

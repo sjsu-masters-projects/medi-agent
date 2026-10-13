@@ -2,7 +2,7 @@
 
 > **Active plan:** EMAIL-001 rollout ([#152](https://github.com/sjsu-masters-projects/medi-agent/pull/152)) and document citations (PAT-004); remaining deployed checks LOC-001, PAT-005-L and the INT-003-V standalone run · [accepted PAT-005 contract](specs/pat-005-clinician-approved-today-feed-plan.md)
 >
-> **Updated:** October 11, 2026 · **Feature freeze:** December 4, 2026
+> **Updated:** October 12, 2026 · **Feature freeze:** December 4, 2026
 >
 > **Target:** A working, polished university-expo master's project using fictional patient and clinician accounts. No real-patient or real-clinician recruitment, VC pitch, or production qualification is required.
 
@@ -54,13 +54,17 @@ This is prototype acceptance, not clinical/compliance/production certification.
 
 ## Current sprint
 
+PAT-002-B local implementation, activation prerequisites and verification are in
+[the plan](specs/pat-002-b-confirmed-symptom-intake-plan.md) and
+[October 12 evidence](../docs/pat-002-b-acceptance-2026-10-12.md).
+
 | Issue | Priority | Status | Owner | Next observable result |
 | --- | --- | --- | --- | --- |
 | EMAIL-001 — Account and selective notification emails | P1 | In review | Rajeev | [#152](https://github.com/sjsu-masters-projects/medi-agent/pull/152), with main #151 integrated; [contract and handoff](specs/email-001-email-flows.md). Both-portal recovery, verified opt-in preferences, expiring addressed clinician invitations with acceptance/revocation, and durable selective event email implemented locally. `057_email_delivery.sql` applied to staging October 11; review fixes (no auth-schema reads, lock order, one-request invitation signup with Sign in to accept, immediate isolated sends, status/complaint reconciliation, caps, generic links) are in unapplied `058_email_delivery_fixes.sql` plus backend/portal changes. Confirmation remains off; only the three approved exact recovery redirects, no genuine-email demo diversion. Next: apply 058 before merge (merge auto-deploys the backend), peer/CI review, template installation, deployment and actual inbox/link acceptance. |
 | LOC-001 — One language setting, bilingual approved wording | P1 | Verify deployed | Rajeev | [Spec](specs/loc-001-bilingual-approved-wording.md) · [#145](https://github.com/sjsu-masters-projects/medi-agent/pull/145) merged and deployed: care-plan wording drafted and approved in en-US and es-MX together; Today/Reminders follow `preferred_language`; bilingual record titles. Deployed Profile switch to Spanish changed Today to the approved Spanish wording with unchanged reminder times ([deployed recheck](../docs/deployed-recheck-2026-10-11.md)). Remaining: approve a new bilingual draft on the deployed clinician portal when one exists. Follow-ups are LOC-002. |
 | PAT-005-L — Presentation recheck | P1 | Verify deployed | Rajeev | Saved-locale Today controls verified on the deployed app ([deployed recheck](../docs/deployed-recheck-2026-10-11.md)). Remaining: duplicate-skipped explanation in both document surfaces, which needs a new byte-identical synthetic upload (the earlier duplicate no longer exists). |
 | PV-001-B — ADR patient answers | P1 | Verify deployed | Ganesh | #136 merged with current chat/language UI and local verification; record canonical rollout acceptance. |
-| PAT-002-B — Confirmed symptom intake | P1 | Ready | Unassigned; Tushar + Ganesh lanes | Inventory existing capture, then a reviewed question library, attributable draft, correct/confirm/cancel, bounded retrieval and ownership, with bilingual tests. |
+| PAT-002-B — Confirmed symptom intake | P1 | In progress — activation/acceptance pending | Tushar; Ganesh safety/backend review required | B1–B11 local implementation: private drafts, pinned paired-locale questions, safety/outbox, bounded attributed preview, atomic consent/hash/UUID confirmation, confirmed-only clinical consumers and minimal clinician summary. [Evidence and prerequisites](../docs/pat-002-b-acceptance-2026-10-12.md). Migrations 059/060 are local only; candidate library is pending review and feature defaults off. No library approval, authenticated browser acceptance, review, merge or deployment is claimed. PAT-002-C and PR #136's ADR follow-up remain separate. |
 | PAT-002-C — Real symptom timeline | P2 | Blocked | Unassigned; Tushar + Jeevan lanes | Confirmed-report contract from B, then actual saved reports and authorized clinician detail; no invented history. |
 | SCH-001-V — Canonical scheduling acceptance | P2 | Verify deployed | Tushar + Jeevan | Record deployed offer → patient response → persisted visit/calendar flow; distinguish earlier branch/staging proof. |
 | PAT-001-A — Terminal chat-turn recovery | P2 | Ready | Unassigned; Ganesh + patient lane | Persist bounded processing/completed/failed/interrupted outcomes; retry/reconnect without duplicate messages/actions. |

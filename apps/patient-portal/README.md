@@ -136,3 +136,24 @@ confirmation before sending.
   answers and returns the deterministic Naranjo rescore.
 - The browser never writes ADR assessment or audit tables directly; the backend owns the atomic
   response, reassessment, notification, and audit transaction.
+
+### Confirmed symptom draft panel
+
+Nora keeps its composer above the bottom navigation while the conversation and
+intake content scroll within the available height. Initial draft-read failures
+offer reload feedback; only an uncertain mutation uses the action/save recovery
+message. Loading a draft does not imply that a report was submitted.
+
+Nora mounts the private intake panel; human message threads do not. The panel recovers
+the latest owned state by REST on authentication/reconnect signals, asks paired-locale
+library questions, and supports unknown/declined, corrections, cancellation, review
+and consent-based confirmation. It stores pending action identities only in memory;
+clinical draft content is never written to browser storage or mirrored into chat.
+A lost write response retains its exact identity for reload/retry. Account switches
+abort pending reads and reject stale responses. Controls use localized labels,
+44-pixel button targets and focus the next unanswered field without stealing chat focus.
+
+A real approved library and authorized schema rollout are required to activate this
+screen. With the current pending-review manifest, start fails closed without saving a
+report. Follow [the synthetic journey and verification record](../../docs/pat-002-b-acceptance-2026-10-12.md).
+The saved patient symptom timeline remains PAT-002-C.

@@ -28,6 +28,7 @@ from uuid import UUID
 from app.clients.gemini import GeminiClient
 from app.config import settings
 from app.core.llm_failures import categorize_llm_failure
+from app.intake.preview import testimony_only
 from app.models.dashboard import SoapNote
 from app.services.soap_note_prompts import SOAP_SYSTEM_INSTRUCTION, build_soap_prompt
 
@@ -153,6 +154,7 @@ class SoapNoteService:
         symptoms = await _execute(
             self.db.table("symptom_reports")
             .select("*")
+            .eq("confirmation_state", "patient_confirmed")
             .eq("patient_id", patient_id)
             .gte("created_at", cutoff)
             .order("created_at", desc=True)
@@ -186,7 +188,9 @@ class SoapNoteService:
             "adherence_stats": calculate_adherence_stats(
                 cast(list[dict[str, Any]], logs.data or [])
             ),
-            "symptom_reports": cast(list[dict[str, Any]], symptoms.data or []),
+            "symptom_reports": [
+                testimony_only(row) for row in cast(list[dict[str, Any]], symptoms.data or [])
+            ],
             # Reversed so the prompt reads the conversation in the order it happened.
             "chat_messages": list(reversed(cast(list[dict[str, Any]], chats.data or []))),
             "conditions": cast(list[dict[str, Any]], conditions.data or []),

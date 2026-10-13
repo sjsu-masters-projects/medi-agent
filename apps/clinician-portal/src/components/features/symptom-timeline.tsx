@@ -18,7 +18,7 @@ interface SymptomTimelineProps {
 
 interface ChartPoint {
     date: string;
-    severity: number;
+    severity: number | null;
     symptom: string;
     flagged: boolean;
 }
@@ -49,13 +49,15 @@ function buildChartData(reports: SymptomReport[]): ChartPoint[] {
         }));
 }
 
-function severityColor(severity: number): string {
+function severityColor(severity: number | null): string {
+    if (severity === null) return "var(--color-muted)";
     if (severity >= 8) return "var(--color-risk)";
     if (severity >= 5) return "var(--color-warn)";
     return "var(--color-ok)";
 }
 
-function severityText(severity: number): string {
+function severityText(severity: number | null): string {
+    if (severity === null) return "text-muted";
     if (severity >= 8) return "text-risk-ink";
     if (severity >= 5) return "text-warn-ink";
     return "text-ok-ink";
@@ -65,7 +67,7 @@ const AXIS_TICK = { fontSize: 12, fill: "var(--color-muted)" };
 
 function SeverityDot(props: { cx?: number; cy?: number; payload?: ChartPoint; active?: boolean }) {
     const { cx, cy, payload, active = false } = props;
-    if (cx === undefined || cy === undefined || !payload) return null;
+    if (cx === undefined || cy === undefined || !payload || payload.severity === null) return null;
     return (
         <circle
             cx={cx}
@@ -94,7 +96,7 @@ function CustomTooltip({
             <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">{point.date}</p>
             <p className="text-sm font-semibold capitalize text-ink">{point.symptom}</p>
             <p className={`text-sm font-medium ${severityText(point.severity)}`}>
-                Severity: <span className="font-mono">{point.severity}/10</span>
+                Severity: <span className="font-mono">{point.severity === null ? "Unknown / not provided" : `${point.severity}/10`}</span>
             </p>
             {point.flagged && (
                 <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-[7px] bg-risk-tint px-2 py-1 text-xs font-medium text-risk-ink">
@@ -141,6 +143,7 @@ export function SymptomTimeline({ data }: SymptomTimelineProps) {
                     />
                     <Tooltip content={<CustomTooltip />} cursor={{ stroke: "var(--color-line-strong)", strokeWidth: 1 }} />
                     <Area
+                        connectNulls={false}
                         dataKey="severity"
                         fill="url(#symptomGradient)"
                         name="Severity"
@@ -154,6 +157,7 @@ export function SymptomTimeline({ data }: SymptomTimelineProps) {
                 </AreaChart>
             </ResponsiveContainer>
 
+            {data.some((report) => report.severity === null) && <p className="mt-2 text-xs text-muted">Unknown ratings are not plotted.</p>}
             {/* Legend */}
             <div className="mt-2 flex flex-wrap gap-2 pl-1 text-xs text-muted">
                 <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-surface-2 px-2 py-1">

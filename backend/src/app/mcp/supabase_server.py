@@ -228,9 +228,8 @@ class SupabaseServer(MCPServer):
             cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
             response = (
                 self.client.table("symptom_reports")
-                .select(
-                    "id, symptom, severity, onset_date, related_medication_id, notes, created_at"
-                )
+                .select("id, symptom, severity, onset, related_medication_id, notes, created_at")
+                .eq("confirmation_state", "patient_confirmed")
                 .eq("patient_id", patient_id)
                 .gte("created_at", cutoff)
                 .order("created_at", desc=True)

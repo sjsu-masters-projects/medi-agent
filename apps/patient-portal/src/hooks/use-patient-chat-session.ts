@@ -654,6 +654,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         const socket = new WebSocket(
             buildChatWebSocketUrl(user.id, {
+                sessionId: "default",
                 documentId: activeDocumentId,
                 sessionId,
                 ...(documentDismissed && !activeDocumentId ? { documentDismissed: true } : {}),
@@ -670,6 +671,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             clearChatReconnectTimer();
             reconnectRef.current.attempts = 0;
             dispatch(setConnectionStatus("connected"));
+            window.dispatchEvent(new Event("symptom-intake-updated"));
             dispatch(setChatError(null));
         };
 
@@ -698,6 +700,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     );
                     return;
                 }
+                case "symptom_intake_updated":
+                case "symptom_intake_interrupted":
+                case "symptom_intake_unavailable":
+                    window.dispatchEvent(new Event("symptom-intake-updated"));
+                    return;
                 case "chat_context_loaded": {
                     const loadedDocumentContext = mapLoadedDocumentContext(
                         payload.document,
@@ -788,15 +795,29 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     }
 
                     if (payload.escalation_required) {
+                        const copy = getPatientChatCopy(voiceRefs.current.selectedLanguage);
                         setSafetyNotice(
-                            getPatientChatCopy(voiceRefs.current.selectedLanguage).escalationNotice,
+                            payload.urgency === "emergency"
+                                ? `${assistantMessage.content}${payload.persistence_status === "uncertain" ? ` ${copy.safetySaveUncertain}` : ""}`
+                                : copy.escalationNotice,
                         );
                     }
                     return;
                 }
-                case "escalation_recommended":
-                    setSafetyNotice(getPatientChatCopy(voiceRefs.current.selectedLanguage).escalationNotice);
+                case "escalation_recommended": {
+                    const copy = getPatientChatCopy(voiceRefs.current.selectedLanguage);
+                    const status = payload.delivery_state === "pending"
+                        ? copy.safetyAlertPending
+                        : payload.delivery_state === "no_recipients"
+                            ? copy.safetyAlertNoRecipients
+                            : payload.delivery_state === "unavailable" ? copy.safetySaveUncertain : "";
+                    setSafetyNotice(
+                        payload.urgency === "emergency"
+                            ? `${payload.message}${status ? ` ${status}` : ""}`
+                            : copy.escalationNotice,
+                    );
                     return;
+                }
                 case "error":
                     resetAssistantDraft();
                     dispatch(setTyping(false));
