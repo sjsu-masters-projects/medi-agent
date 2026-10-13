@@ -34,8 +34,12 @@ Naranjo evidence and atomically mark a draft reviewed, dismiss it, or request in
 review action writes an immutable ADR audit event. A structured follow-up loop lets the patient
 answer only safe retrospective questions; the backend atomically records the response, appends
 attributed evidence, deterministically rescores the same draft, closes the notification, and writes
-a patient-actor audit event. Confirmed-report intake and MedWatch drafting remain delivery targets;
-the follow-up schema is not available in an environment until migration `047` is applied there.
+a patient-actor audit event. The MedWatch slice prepares an editable, source-attributed artifact
+only after an assigned clinician records a reportability rationale. Backend-only atomic functions
+enforce edit revisions, approval sign-off, and immutable create/edit/approve/export events. Export
+returns a local JSON artifact explicitly marked as not submitted; there is no external filing
+operation. Confirmed-report intake remains a delivery target. The follow-up schema requires
+migration `047`, and the draft lifecycle requires migration `048`, in each environment.
 
 ## Selective email (EMAIL-001, pending rollout)
 

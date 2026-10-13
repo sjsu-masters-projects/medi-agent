@@ -3,14 +3,22 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ADRReviewCard } from "@/components/features/adr-review-card";
+import { MedWatchDraftCard } from "@/components/features/medwatch-draft-card";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { ProcessingDots } from "@/components/ui/motion";
 import {
     fetchADRReviewQueue,
+    fetchMedWatchDrafts,
+    createMedWatchDraft,
+    updateMedWatchDraft,
+    approveMedWatchDraft,
+    exportMedWatchDraft,
     reviewADRAssessment,
     type ADRReviewDecisionInput,
     type ADRReviewQueueItem,
+    type MedWatchDraft,
+    type MedWatchFormData,
 } from "@/services/clinicians";
 
 function LoadingQueue() {
@@ -49,6 +57,7 @@ function LoadingQueue() {
 function MedWatchContent() {
     const assessmentId = useSearchParams().get("assessment");
     const [items, setItems] = useState<ADRReviewQueueItem[]>([]);
+    const [drafts, setDrafts] = useState<MedWatchDraft[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -69,7 +78,12 @@ function MedWatchContent() {
         setLoading(true);
         setError(null);
         try {
-            setItems(await fetchADRReviewQueue());
+            const [queue, medwatchDrafts] = await Promise.all([
+                fetchADRReviewQueue(),
+                fetchMedWatchDrafts(),
+            ]);
+            setItems(queue);
+            setDrafts(medwatchDrafts);
         } catch {
             setError(
                 "Unable to refresh ADR assessments. Try loading the queue again.",
@@ -122,7 +136,106 @@ function MedWatchContent() {
         [error, loadQueue],
     );
 
-    const initialLoad = loading && items.length === 0;
+    const prepareDraft = useCallback(
+        async (assessmentId: string, rationale: string) => {
+            if (reviewPending.current || queuePending.current || error) {
+                throw new Error("Refresh the queue before preparing a draft.");
+            }
+            reviewPending.current = true;
+            setSubmittingId(assessmentId);
+            setReviewError(null);
+            setNotice(null);
+            try {
+                const draft = await createMedWatchDraft(assessmentId, rationale);
+                setItems((current) =>
+                    current.filter((item) => item.id !== assessmentId),
+                );
+                setDrafts((current) => [draft, ...current]);
+                setNotice(
+                    "Editable MedWatch draft created. Nothing was submitted to the FDA.",
+                );
+            } catch {
+                const message =
+                    "Unable to prepare the MedWatch draft. Try again.";
+                setReviewError(message);
+                throw new Error(message);
+            } finally {
+                reviewPending.current = false;
+                setSubmittingId(null);
+            }
+        },
+        [error],
+    );
+
+    const replaceDraft = useCallback((updated: MedWatchDraft) => {
+        setDrafts((current) =>
+            current.map((draft) =>
+                draft.id === updated.id ? updated : draft,
+            ),
+        );
+    }, []);
+
+    const saveDraft = useCallback(
+        async (
+            draftId: string,
+            formData: MedWatchFormData,
+            revision: number,
+        ) => {
+            setSubmittingId(draftId);
+            setNotice(null);
+            try {
+                replaceDraft(
+                    await updateMedWatchDraft(draftId, formData, revision),
+                );
+                setNotice("MedWatch draft changes saved and audited.");
+            } finally {
+                setSubmittingId(null);
+            }
+        },
+        [replaceDraft],
+    );
+
+    const approveDraft = useCallback(
+        async (draftId: string, note: string, revision: number) => {
+            setSubmittingId(draftId);
+            setNotice(null);
+            try {
+                replaceDraft(
+                    await approveMedWatchDraft(draftId, note, revision),
+                );
+                setNotice(
+                    "MedWatch draft approved for export. It was not submitted to the FDA.",
+                );
+            } finally {
+                setSubmittingId(null);
+            }
+        },
+        [replaceDraft],
+    );
+
+    const exportDraft = useCallback(async (draftId: string) => {
+        setSubmittingId(draftId);
+        setNotice(null);
+        try {
+            const artifact = await exportMedWatchDraft(draftId);
+            const blob = new Blob([JSON.stringify(artifact.content, null, 2)], {
+                type: artifact.media_type,
+            });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = artifact.filename;
+            anchor.click();
+            URL.revokeObjectURL(url);
+            setNotice(
+                "Approved draft exported locally. No FDA submission was performed.",
+            );
+        } finally {
+            setSubmittingId(null);
+        }
+    }, []);
+
+    const initialLoad = loading && items.length === 0 && drafts.length === 0;
 
     return (
         <div className="ma-page space-y-5">
@@ -166,10 +279,10 @@ function MedWatchContent() {
                         </div>
                         <div className="flex flex-col-reverse gap-0.5">
                             <dt className="text-[13px] text-muted">
-                                MedWatch report
+                                MedWatch drafts
                             </dt>
-                            <dd className="flex min-h-[35px] items-end text-[15px] font-semibold leading-snug text-ink" title="Reviewing an ADR here does not file a MedWatch report.">
-                                Filed separately
+                            <dd className="flex min-h-[35px] items-end text-[15px] font-semibold leading-snug text-ink" title="Draft approval permits a local export; it does not submit a report to the FDA.">
+                                {drafts.filter((draft) => draft.status === "draft").length} awaiting approval
                             </dd>
                         </div>
                     </dl>
@@ -206,7 +319,7 @@ function MedWatchContent() {
                 </p>
             ) : null}
             {initialLoad ? <LoadingQueue /> : null}
-            {loading && items.length > 0 ? (
+            {loading && (items.length > 0 || drafts.length > 0) ? (
                 <p
                     className="flex items-center gap-2.5 text-[13px] text-muted"
                     role="status"
@@ -215,14 +328,14 @@ function MedWatchContent() {
                     Refreshing ADR reviews…
                 </p>
             ) : null}
-            {!loading && error && items.length === 0 ? (
+            {!loading && error && items.length === 0 && drafts.length === 0 ? (
                 <ErrorState
                     description={error}
                     onRetry={() => void loadQueue()}
                     title="Unable to load ADR reviews"
                 />
             ) : null}
-            {error && items.length > 0 ? (
+            {error && (items.length > 0 || drafts.length > 0) ? (
                 <div className="ma-enter flex flex-wrap items-center justify-between gap-3 rounded-xl border border-risk-line bg-risk-soft px-5 py-3.5 text-sm text-risk-ink">
                     <p className="flex items-start gap-2.5" role="alert">
                         <Icon className="mt-0.5 h-4 w-4 shrink-0" name="alert" />
@@ -238,7 +351,7 @@ function MedWatchContent() {
                     </button>
                 </div>
             ) : null}
-            {!loading && !error && items.length === 0 ? (
+            {!loading && !error && items.length === 0 && drafts.length === 0 ? (
                 <EmptyState
                     description="New patient-grounded ADR assessments will appear here for clinician review."
                     icon={<Icon name="inbox" />}
@@ -255,6 +368,7 @@ function MedWatchContent() {
                         <ADRReviewCard
                             item={item}
                             key={item.id}
+                            onPrepareDraft={prepareDraft}
                             onReview={reviewAssessment}
                             submitting={
                                 Boolean(submittingId) ||
@@ -263,6 +377,33 @@ function MedWatchContent() {
                             }
                         />
                         </div>
+                    ))}
+                </section>
+            ) : null}
+            {drafts.length > 0 ? (
+                <section className="space-y-5" aria-label="MedWatch drafts">
+                    <div>
+                        <h2 className="text-xl font-semibold text-ink">
+                            MedWatch drafts
+                        </h2>
+                        <p className="mt-1 text-sm text-muted">
+                            Edit, approve, and export evidence-backed artifacts.
+                            This workflow never submits to the FDA.
+                        </p>
+                    </div>
+                    {drafts.map((draft) => (
+                        <MedWatchDraftCard
+                            busy={
+                                Boolean(submittingId) ||
+                                loading ||
+                                Boolean(error)
+                            }
+                            draft={draft}
+                            key={draft.id}
+                            onApprove={approveDraft}
+                            onExport={exportDraft}
+                            onSave={saveDraft}
+                        />
                     ))}
                 </section>
             ) : null}

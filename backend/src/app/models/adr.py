@@ -199,14 +199,144 @@ class ADRInformationResponseRead(BaseModel):
     responded_at: str
 
 
-class MedWatchDraft(BaseModel):
-    """FDA 3500A form fields, auto-populated from patient data."""
+class MedWatchEvidenceReference(BaseModel):
+    """Attribution for one or more fields in an editable MedWatch draft."""
+
+    field_paths: list[str] = Field(..., min_length=1)
+    source_type: str
+    source_id: UUID | None = None
+    attribution: str
+    excerpt: str | None = None
+    citation: str | None = None
+
+
+class MedWatchPatientSection(BaseModel):
+    patient_identifier: str = ""
+    date_of_birth: str = ""
+    sex: str = ""
+
+
+class MedWatchEventSection(BaseModel):
+    description: str = ""
+    onset_date_or_time: str = ""
+    outcome: str = ""
+    seriousness: str = ""
+
+
+class MedWatchProductSection(BaseModel):
+    name: str = ""
+    dose: str = ""
+    frequency: str = ""
+    route: str = ""
+    therapy_start_date: str = ""
+    therapy_end_date: str = ""
+
+
+class MedWatchConcomitantProductsSection(BaseModel):
+    products: str = ""
+
+
+class MedWatchTestsHistorySection(BaseModel):
+    relevant_tests: str = ""
+    other_relevant_history: str = ""
+
+
+class MedWatchReporterSection(BaseModel):
+    name: str = ""
+    email: str = ""
+    specialty: str = ""
+    clinic_name: str = ""
+
+
+class MedWatchClinicalReviewSection(BaseModel):
+    naranjo_score: int = Field(..., ge=-4, le=13)
+    causality: NaranjoCausality
+    reportability_rationale: str = Field(..., min_length=1, max_length=2000)
+
+
+class MedWatchFormData(BaseModel):
+    """Editable MedWatch-compatible fields. Empty strings explicitly mean unknown."""
+
+    patient: MedWatchPatientSection
+    event: MedWatchEventSection
+    suspect_product: MedWatchProductSection
+    concomitant_products: MedWatchConcomitantProductsSection
+    tests_and_history: MedWatchTestsHistorySection
+    reporter: MedWatchReporterSection
+    clinical_review: MedWatchClinicalReviewSection
+
+
+class MedWatchPreparationDecision(StrEnum):
+    PREPARE_DRAFT = "prepare_draft"
+
+
+class MedWatchDraftCreateRequest(BaseModel):
+    """Explicit clinician decision to prepare, but not file, a MedWatch draft."""
+
+    decision: MedWatchPreparationDecision
+    reportability_rationale: str = Field(..., min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def strip_rationale(self) -> "MedWatchDraftCreateRequest":
+        self.reportability_rationale = self.reportability_rationale.strip()
+        if not self.reportability_rationale:
+            raise ValueError("A reportability rationale is required")
+        return self
+
+
+class MedWatchDraftUpdateRequest(BaseModel):
+    form_data: MedWatchFormData
+    expected_revision: int = Field(..., ge=1)
+
+
+class MedWatchDraftApprovalRequest(BaseModel):
+    approval_note: str = Field(..., min_length=1, max_length=2000)
+    expected_revision: int = Field(..., ge=1)
+    attested: bool
+
+    @model_validator(mode="after")
+    def validate_attestation(self) -> "MedWatchDraftApprovalRequest":
+        self.approval_note = self.approval_note.strip()
+        if not self.approval_note:
+            raise ValueError("An approval note is required")
+        if not self.attested:
+            raise ValueError("Clinician attestation is required")
+        return self
+
+
+class MedWatchDraftRead(BaseModel):
+    """Editable draft with evidence attribution and reviewer state."""
 
     id: UUID
     adr_assessment_id: UUID
     patient_id: UUID
-    form_data: dict[str, Any]  # 3500A field values
-    de_identified: bool = False  # PHI stripped?
+    form_data: MedWatchFormData
+    source_evidence: list[MedWatchEvidenceReference] = Field(default_factory=list)
+    clinician_edited_fields: list[str] = Field(default_factory=list)
+    de_identified: bool = False
     status: MedWatchStatus = MedWatchStatus.DRAFT
-    submitted_at: str | None = None
+    created_by: UUID | None = None
+    approved_by: UUID | None = None
+    approved_at: str | None = None
+    approval_note: str | None = None
+    revision: int = Field(..., ge=1)
+    export_version: str
     created_at: str
+    updated_at: str
+
+
+class MedWatchDraftListResponse(BaseModel):
+    items: list[MedWatchDraftRead]
+    total: int = Field(..., ge=0)
+
+
+class MedWatchDraftExportResponse(BaseModel):
+    """Approved export artifact. It is not proof of an FDA filing."""
+
+    filename: str
+    media_type: str = "application/json"
+    content: dict[str, Any]
+
+
+# Backward-compatible public model name used by app.models.
+MedWatchDraft = MedWatchDraftRead
