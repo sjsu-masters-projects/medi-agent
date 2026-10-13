@@ -107,6 +107,15 @@ write path needs.
   live body, so tick the checklist before pushing (or push again). The secret scan reads
   every commit in the range, so a credential-shaped placeholder in an earlier commit keeps
   failing until that commit is rewritten.
+- **A wrong public Supabase key can hide behind working pages.** Portal sign-in goes
+  through the backend, and Supabase's `/verify` route does not check the key, so both
+  portals ran with a `NEXT_PUBLIC_SUPABASE_ANON_KEY` missing its first character. Only
+  the reset-page password save ("Invalid API key"), direct storage and realtime use it.
+  After changing a Vercel variable, compare the first characters of the value bundled in
+  the `/_next/static` chunks with the project's key.
+- **Institutional mail scanners open links before people do.** A single-use Supabase
+  verify link in an email is used up by the scan; link to a portal page that redeems the
+  token only on an explicit click.
 
 ## Never put patient or clinician identifiers in logs
 

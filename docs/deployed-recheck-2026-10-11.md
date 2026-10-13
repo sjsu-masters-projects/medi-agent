@@ -1,9 +1,10 @@
-# Deployed portal recheck — October 11, 2026
+# Deployed portal recheck — October 11–12, 2026
 
 Synthetic Morgan Ellis (patient, `app.mediagent.live`) and Elena Park (clinician,
 `clinician.mediagent.live`) only, on main `8b93b48` (#149) as deployed. The requester
 signed in to both accounts; the checks below were run in a browser against the
-production deployment. This is prototype acceptance evidence, not a clinical,
+production deployment. Later sections record checks after later merges (#151–#157)
+and name their own accounts. This is prototype acceptance evidence, not a clinical,
 compliance or production-readiness certification.
 
 ## Screens and widths
@@ -94,3 +95,51 @@ compliance or production-readiness certification.
   rows were found, in English and Spanish where both exist, for example Osteoarthritis /
   Osteoartritis and Eczema / Eccema; the run logged `scheduled_job.finished` (success).
   Three subjects cached in one language were not seeded in the other (OPS-004).
+
+## After #154 deployed (night)
+
+- Document citations: as Morgan, Records → Metformin prescription → Ask about this
+  document. In English the answer ended "Source: Metformin prescription
+  (Morgan-Ellis_Metformin-Medication-Order_2026-10-02.pdf)"; in Spanish "Fuente: Receta
+  de metformina (…pdf)". Both answers matched the document (one tablet twice daily with
+  meals) and pointed to Elena for changes. No page number was shown because Nora answered
+  from the document summary; page numbers appear only when page-level details are read.
+
+## EMAIL-001 on production (October 12)
+
+After #152, #156 and #157 deployed, with migrations 057 and 058 applied. Mail went to
+requester-owned test accounts (`+clinician` and `+patient` addresses of one university
+mailbox) attached to synthetic profiles; Morgan and Elena's login addresses were not
+changed. The requester typed every password and one-time code.
+
+- **Clinician invitation:** delivered about one second after sending; SPF, DKIM and
+  DMARC passed. The first one landed in Spam (new sending domain). The link carries its
+  token after `#` and has no click-tracking redirect. Signup created the account and
+  joined Cedar Grove; a non-admin's invitation attempt was refused with a clear message.
+  After #156, only clinic admins see the invitation form.
+- **Patient verification code:** arrived in the Inbox. Verifying did not turn on any
+  notice; opt-in was a separate save.
+- **Notices:** an unread care-team message notice and, with the patient set to Spanish,
+  an appointment-offer notice ("Horarios de cita disponibles") both arrived in the Inbox.
+  Neither contained health details; both linked only to
+  `https://app.mediagent.live/notifications`.
+- **Opt-out:** with appointment notices turned off, a new appointment offer created the
+  in-app notification ("Propuesta de cita") and no outbox row. The setting and the
+  patient's English language were restored afterwards.
+- **Delivery status:** every send stays "accepted". The backend logs that status checks
+  need a full-access Resend key; the configured key can only send.
+- **Password reset:** the request page shows the same neutral message either way. The
+  first reset links (October 11 template) were reported "unavailable or expired" before
+  use, most likely consumed by the university's link scanner; #157 moved the link to the
+  portal page, which redeems it only after **Continue**. The new Reset password template
+  was installed and confirmed after a reload (6,876 bytes, matching the repository file).
+  The clinician reset email then arrived in the Inbox with the MediAgent Pro blue design,
+  "Use the button within 1 hour … The link works once" and a link carrying `token_hash`.
+  Opening it showed **Continue**, removed the token from the address bar, and Continue
+  verified the link. **Saving the new password failed twice ("We could not complete the
+  request"), with 401 "Invalid API key" from the account-update call.** Cause: both
+  deployed portals were built with a `NEXT_PUBLIC_SUPABASE_ANON_KEY` missing its first
+  character (the bundled value starts `yJhbGci`, the project's key `eyJhbGci`). Supabase's
+  `/verify` route does not check the key, so Continue worked; the account update does.
+  The same client configuration with the correct key, outside the browser, updated the
+  account without error. The patient en-US and es-MX resets were not run.
