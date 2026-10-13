@@ -14,8 +14,8 @@ from langgraph.graph.message import add_messages
 from app.agents.ingestion.prompts import (
     EXTRACT_CONTENT_SYSTEM,
     GENERATE_SUMMARY_SYSTEM,
-    GENERATE_SUMMARY_USER,
     extraction_prompt,
+    summary_prompt,
 )
 from app.clients.model_router import TaskType, get_router
 
@@ -188,13 +188,7 @@ async def generate_summary(state: IngestionState) -> IngestionState:
         source = state.get("validated_data") or state.get("extracted_data") or {}
         state["patient_summary"] = await get_router().generate_text(
             TaskType.PATIENT_EXPLANATION,
-            prompt=GENERATE_SUMMARY_USER.format(
-                medications=json.dumps(source.get("medications", []), default=str),
-                conditions=json.dumps(source.get("conditions", []), default=str),
-                follow_up_instructions=json.dumps(
-                    source.get("follow_up_instructions", []), default=str
-                ),
-            ),
+            prompt=summary_prompt(source),
             system_instruction=GENERATE_SUMMARY_SYSTEM,
             temperature=0.3,
             max_tokens=512,

@@ -9,6 +9,7 @@ import { api } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { RootState } from "@/store/store";
+import { formatClinicianDate } from "@/utils/dates";
 
 type MFAStep = "loading" | "already_enrolled" | "enroll" | "verify" | "success";
 
@@ -254,7 +255,7 @@ export default function MFASetupPage() {
                                         <div className="min-w-0">
                                             <p className="text-sm font-medium text-ink">{factor.friendly_name ?? "Authenticator"}</p>
                                             <p className="text-[13px] text-muted">
-                                                Added {factor.created_at ? new Date(factor.created_at).toLocaleDateString() : "—"}
+                                                Added {factor.created_at ? formatClinicianDate(factor.created_at) : "—"}
                                             </p>
                                         </div>
                                     </div>

@@ -10,6 +10,7 @@ import type { RootState } from "@/store/store";
 import { ClinicianRole } from "@/types";
 import { EmailPreferences } from "@/components/features/email-preferences";
 import { EmailInvitations } from "@/components/features/email-invitations";
+import { CLINICIAN_LOCALE } from "@/utils/dates";
 import { CardHeader, IconTile, cardFooterClass } from "@/components/features/settings-card";
 
 const settingsTabs = ["General Profile", "Team & Roles", "Patient Invites", "Interoperability"] as const;
@@ -137,7 +138,7 @@ function formatDateTime(value: string | null | undefined) {
         return "—";
     }
 
-    return parsed.toLocaleString(undefined, {
+    return parsed.toLocaleString(CLINICIAN_LOCALE, {
         dateStyle: "medium",
         timeStyle: "short",
     });

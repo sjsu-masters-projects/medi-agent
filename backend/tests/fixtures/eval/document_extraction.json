@@ -141,8 +141,18 @@
       "inputs": {
         "document_text": "LABORATORY REPORT (synthetic)\nCollected: 04/02/2026\n\nHemoglobin A1c: 8.4 % (ref 4.0-5.6)\nLDL cholesterol: 162 mg/dL (ref <100)\nCreatinine: 1.1 mg/dL (ref 0.6-1.2)\nPotassium: 4.3 mmol/L (ref 3.5-5.1)\n\nNo medications listed on this report.\n"
       },
-      "expected": {"medications": [], "conditions": [], "allergies": []},
-      "rationale": "Abnormal values are observations, not diagnoses or prescriptions. No medication may be invented from a lab result."
+      "expected": {
+        "medications": [],
+        "conditions": [],
+        "allergies": [],
+        "lab_results": [
+          {"test_name": "Hemoglobin A1c", "value": "8.4"},
+          {"test_name": "LDL cholesterol", "value": "162"},
+          {"test_name": "Creatinine", "value": "1.1"},
+          {"test_name": "Potassium", "value": "4.3"}
+        ]
+      },
+      "rationale": "Every printed result is extracted with its exact value. Abnormal values are observations, not diagnoses or prescriptions; no medication may be invented from a lab result."
     },
     {
       "scenario_id": "doc-010",
