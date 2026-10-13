@@ -172,6 +172,20 @@ def ground_item(
                     "it must not become an active care-plan item."
                 )
     evidence = [_grounded_evidence(field, anchor) for field, anchor in anchors.items()]
+    primary_field = ANCHOR_FIELDS.get(fact_type, ("name",))[0]
+    row_fields = ROW_FIELDS.get(fact_type)
+    if row_fields and primary_field in anchors:
+        # A result's evidence is its whole printed row ("Creatinine | 1.42 | H | mg/dL |
+        # 0.74 - 1.35"), not the one cell a value was found in; the reviewer reads the row.
+        row = _printed_row(extraction, anchors[primary_field])
+        if row:
+            evidence = [
+                item.model_copy(update={"excerpt": row})
+                if item.field == primary_field or item.field in row_fields
+                else item
+                for item in evidence
+            ]
+    evidence.sort(key=lambda item: item.field != primary_field)
     pages = sorted({item.page for item in evidence})
     return GroundedItem(
         fact_type=fact_type,
@@ -410,6 +424,21 @@ def _anchor_on_row(
 
     row_page = page.model_copy(update={"words": [word for word in page.words if on_row(word)]})
     return anchor_on_page(row_page, value, policy=policy)
+
+
+def _printed_row(extraction: DocumentExtraction, primary: EvidenceAnchor) -> str:
+    """The text of the printed row the primary value sits on, left to right."""
+    page = extraction.page(primary.page_number)
+    if page is None:
+        return ""
+    top, bottom = primary.bbox.y0, primary.bbox.y1
+    slack = 0.35 * max(bottom - top, 1.0)
+    cells = [
+        line
+        for line in page.lines
+        if top - slack <= (line.bbox.y0 + line.bbox.y1) / 2 <= bottom + slack
+    ]
+    return " | ".join(line.text for line in sorted(cells, key=lambda line: line.bbox.x0))[:2000]
 
 
 def _confidence_score(anchors: dict[str, EvidenceAnchor], required: Sequence[str]) -> float:

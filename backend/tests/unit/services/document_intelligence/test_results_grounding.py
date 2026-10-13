@@ -275,3 +275,18 @@ def test_unknown_document_type_is_not_recorded() -> None:
     assert result.document.document_type is None
     with pytest.raises(ValueError):
         parse_model_extraction(["not", "an", "object"])
+
+
+def test_result_evidence_quotes_the_whole_printed_row_first(extraction) -> None:
+    item = ground_item(
+        extraction,
+        "lab_result",
+        _result(
+            test_name="Hemoglobin A1c", value="7.8", unit="%", reference_range="4.0 - 5.6", flag="H"
+        ),
+    )
+    assert item.evidence[0].field == "test_name"
+    row = "Hemoglobin A1c | 7.8 | H | % | 4.0 - 5.6"
+    assert {evidence.excerpt for evidence in item.evidence if evidence.field != "collected_at"} == {
+        row
+    }
