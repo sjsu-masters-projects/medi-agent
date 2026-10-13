@@ -59,24 +59,12 @@ authorized rollout steps. [Contract and handoff](specs/email-001-email-flows.md)
 
 ## Worker and service boundaries
 
-PAT-002-B's B1 source audit and adopted intake API/state contract are recorded in
-the [confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md#17-b1--source-audit-and-interface-contract-october-10-2026).
-The non-emergency chat path still inserts extracted reports before patient confirmation;
-no private-draft feature is delivered yet. B2 evaluates the shared deterministic
-safety gate before turn-specific document/drug retrieval and model/symptom work.
-Emergency direction is streamed without waiting for storage. Migration 049's
-server-only RPCs atomically retain the ordinary chat turn and independent safety
-alert; dispatch creates existing clinician operational alerts for currently active
-assignments. Pending delivery is retried by the existing retry worker, without a
-symptom report or ADR task. Storage uncertainty preserves direction but cannot
-guarantee durable capture; there is no claim an alert was sent. See the
-[B2 checkpoint](specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026).
-The implementation target uses
-separate patient-private intake storage, approved pinned questions and an atomic
-explicit-confirmation boundary before a shared report or ordinary ADR work. The
-initial ordinary chat utterance retains existing clinician transcript visibility.
-B1–B6 alone cannot activate the full feature; preview/confirmation, consumer
-compatibility, safety/peer review and integrated verification remain prerequisites.
+PAT-002-B's source audit and confirmation contract are recorded in the
+[confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md).
+Current implementation and activation prerequisites are described below. The
+unpublished migrations are 059/060; they follow main's 058 and reuse the chat-session
+column owned by 051. The ordinary initial Nora utterance retains existing clinician
+transcript visibility; subsequent intake form answers are patient-private.
 
 Only these four work boundaries are supported by the product direction:
 

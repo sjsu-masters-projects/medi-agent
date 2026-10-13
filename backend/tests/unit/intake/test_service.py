@@ -154,7 +154,14 @@ async def test_explicit_start_safety_preserves_direction_and_required_alert(
     monkeypatch, locale, text
 ):
     svc = service()
-    svc._source = AsyncMock(return_value={"id": str(uuid4()), "content": text, "language": locale})
+    svc._source = AsyncMock(
+        return_value={
+            "id": str(uuid4()),
+            "content": text,
+            "language": locale,
+            "session_id": "default",
+        }
+    )
     svc.library = MagicMock(side_effect=AssertionError("ordinary intake must not run"))
     record = AsyncMock(return_value={"persistence_status": "saved"})
     monkeypatch.setattr("app.services.chat_safety_service.ChatSafetyService.record_safely", record)

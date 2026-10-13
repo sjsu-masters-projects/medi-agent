@@ -222,4 +222,34 @@ The unpublished migrations are now `059_chat_safety_alerts.sql` and
 chat session column; 060 reuses it. Both sides of a safety turn retain that same
 session. Historical 049/050 references in the plan and October 10 record identify
 the earlier local test files, not deployed migrations. No remote migration occurred.
-Post-rebase verification is in progress.
+Post-rebase verification passed with the following final commands/outcomes:
+
+| Scope | Command | Result |
+| --- | --- | --- |
+| Backend dependencies | `.venv/bin/pip install --disable-pip-version-check --no-input -r requirements-dev.txt`; `.venv/bin/pip check` | Pinned requirements synchronized; no broken requirements. This is an existing virtualenv, not a fresh-venv claim. |
+| Each portal dependencies | `npm ci --no-audit --no-fund` | Both clean locked installs passed; Next 16.3.8. No lockfiles changed. |
+| Backend tests | `PYTHONPATH=src .venv/bin/pytest tests/ -q` | 2,505 passed, 243 skipped; 88.15% coverage. Native PostgreSQL and opt-in/environment-dependent tests account for skips; they are not claimed as passes. |
+| Backend lint/format | `.venv/bin/ruff check src/ scripts/`; `.venv/bin/ruff format --check src/ scripts/` | Passed; 263 files formatted. All 32 changed Python files also pass scoped lint/format. |
+| Backend types | `.venv/bin/mypy src/ --ignore-missing-imports` | Passed; 245 source files. |
+| Migrations/placeholders | `.venv/bin/python scripts/validate_migrations.py`; `.venv/bin/python scripts/check_production_placeholders.py` | 72 migrations parsed; production placeholder check passed. |
+| Local intake/safety SQL | The opt-in two-file PostgreSQL command above | 25 passed, including non-default session identity and cross-session retry denial. Actual migration 051 now precedes 059/060 in the disposable fixtures. |
+| Patient portal | `npm run lint`; `npm run typecheck`; `NODE_OPTIONS=--no-experimental-webstorage npm run test` | Passed; 525 tests in 59 files. |
+| Clinician portal | Same portal commands | Passed; 341 tests in 46 files, including confirmed/legacy testimony and unknown severity. |
+| Both portal production builds | `npm run build -- --webpack` | Passed on Next 16.3.8. Initial sandbox runs could not resolve Google Fonts; network-enabled reruns passed without font mocks or source changes. |
+
+Local authenticated Chrome inspection opened an existing synthetic Nora conversation.
+At 1512×857, 375×812 and 320×640 the page matched the viewport height and width;
+the long conversation scrolled inside its 697-pixel desktop area and the composer
+remained fully visible. The 320-pixel textarea accepted keyboard focus and an unsent
+layout-check value, which was cleared without submitting. Screenshots are local
+artifacts in `output/verification/nora-rebase-*-2026-10-12.jpg`; they are not committed.
+The temporary viewport override was reset.
+
+The current target still reports draft recovery unavailable, and its chat connection
+was observed switching between Connected and Offline. No live symptom report was
+submitted or confirmed, and no diagnosis of that connection failure is claimed.
+This is layout/error-state evidence only. Question approval, authorized 059/060
+rollout, a compatible running backend and the full patient/clinician confirmation
+journey remain prerequisites. Existing SDK/Sentry/Vite and workspace-root warnings
+remain. The earlier dependency drift is historical; Acquit is now 0.3.0 and both
+portal environments were freshly installed from current main's locks.

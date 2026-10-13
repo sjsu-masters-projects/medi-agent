@@ -139,13 +139,14 @@ confirmation before sending.
 
 ### Confirmed symptom draft panel
 
-Nora keeps its composer above the bottom navigation while the conversation and
-intake content scroll within the available height. Initial draft-read failures
+Nora keeps its composer visible while the conversation and intake content scroll
+within the available height. The current portal hides bottom navigation while a
+conversation is open. Initial draft-read failures
 offer reload feedback; only an uncertain mutation uses the action/save recovery
 message. Loading a draft does not imply that a report was submitted.
 
 Nora mounts the private intake panel; human message threads do not. The panel recovers
-the latest owned state by REST on authentication/reconnect signals, asks paired-locale
+the latest owned state for the selected Nora conversation by REST on authentication/reconnect signals, asks paired-locale
 library questions, and supports unknown/declined, corrections, cancellation, review
 and consent-based confirmation. It stores pending action identities only in memory;
 clinical draft content is never written to browser storage or mirrored into chat.

@@ -13,7 +13,7 @@ const question = { id: "severity", answer_type: "rating" as const, wording: { "e
 const draft: SymptomIntake = { intake_id: "synthetic-intake", status: "collecting", revision: 0, locale: "en-US", timezone: "America/Los_Angeles", timezone_fallback: false,
     answers: {}, current_question: question, questions: [question], library_available: true, can_review: false, can_confirm: false };
 function login(id = "patient-A") { store.dispatch(hydrateSession({ accessToken: id, refreshToken: "synthetic", expiresAt: 9999999999, user: { id, email: `${id}@synthetic.invalid`, role: "patient" } })); }
-function panel(locale: "en-US" | "es-MX" = "en-US") { return <Provider store={store}><SymptomIntakePanel locale={locale} sourceMessageId="source-turn" /></Provider>; }
+function panel(locale: "en-US" | "es-MX" = "en-US", sessionId = "default") { return <Provider store={store}><SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId="source-turn" /></Provider>; }
 beforeEach(() => { vi.resetAllMocks(); login(); active.mockResolvedValue(structuredClone(draft)); });
 
 it("recovers the owned draft without writing or mirroring answers into chat", async () => {
@@ -70,6 +70,26 @@ it("discards late private content from another authenticated session", async () 
     act(() => { store.dispatch(logout()); login("patient-B"); });
     await act(async () => resolve(draft));
     expect(screen.queryByText("Choose your severity")).not.toBeInTheDocument();
+});
+
+it("binds recovery and manual start to the selected Nora conversation", async () => {
+    active.mockResolvedValue(null);
+    start.mockResolvedValue(draft);
+    render(panel("en-US", "nora-thread-A"));
+    fireEvent.click(await screen.findByText("Start a symptom draft"));
+    await waitFor(() => expect(start).toHaveBeenCalled());
+    expect(active.mock.calls[0][1]).toBe("nora-thread-A");
+    expect(start.mock.calls[0][2]).toBe("nora-thread-A");
+});
+
+it("discards late private content when switching Nora conversations", async () => {
+    let resolve: (result: SymptomIntake) => void = () => {};
+    active.mockImplementationOnce(() => new Promise<SymptomIntake>((done) => { resolve = done; })).mockResolvedValue(null);
+    const view = render(panel("en-US", "nora-thread-A"));
+    view.rerender(panel("en-US", "nora-thread-B"));
+    await act(async () => resolve(draft));
+    expect(screen.queryByText("Choose your severity")).not.toBeInTheDocument();
+    expect(active.mock.calls.at(-1)?.[1]).toBe("nora-thread-B");
 });
 
 it("cancels a private draft and retains an honest chat-history explanation", async () => {

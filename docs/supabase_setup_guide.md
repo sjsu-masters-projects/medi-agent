@@ -124,9 +124,9 @@ delivery uses current active care-team assignments and existing operational aler
 No-recipient dispatch records that outcome without claiming a recipient was notified.
 
 After separate authorization, the target must have the preceding schema and
-private schema, migration 049 must precede this backend version, and
+private schema, migration 059 must precede this backend version, and
 `A2A_RETRY_WORKER_ENABLED=true` is required for background redelivery. A backend
-without 049 still shows direction but cannot guarantee saved evidence/delivery;
+without 059 still shows direction but cannot guarantee saved evidence/delivery;
 that mismatch is not accepted rollout. Pending delivery notices are not pushed
 again when the worker later succeeds. Verify service-only RPC execution, browser
 denial, assignment changes, rollback/retry and operational alert deduplication
@@ -244,7 +244,7 @@ Use synthetic or deidentified sandbox records only. This project does not accept
 
 ## PAT-002-B confirmation rollout (not applied remotely)
 
-Migrations 049/050 are local implementation artifacts. Applying them, publishing
+Migrations 059/060 are local implementation artifacts. Applying them, publishing
 question eligibility and changing remote configuration each require explicit requester
 authorization. No bundle is seeded or approved by migration 060. Obtain genuine
 paired-locale review evidence first; the packaged candidate is currently pending review.
@@ -255,7 +255,7 @@ paired-locale review evidence first; the packaged candidate is currently pending
 | `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
 
 Before an authorized rollout, drain old direct symptom-report writers, including
-old demo/import tooling that inserts unconfirmed reports. Migration 050 removes direct
+old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct
 browser report writes and requires new reports through confirmation. Historical rows
 stay legacy and are not converted into fabricated patient consent. Deploy compatible
 nullable-severity consumers with the schema before enabling new confirmation behavior.

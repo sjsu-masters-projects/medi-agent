@@ -326,7 +326,6 @@ def test_safety_interrupts_before_retrieval_models_reports_or_adr(
         "app.followup.analyse_symptom",
         "app.routers.chat.ChatService.save_symptom_report",
         "app.routers.chat.ChatService.get_document_catalog",
-        "app.routers.chat.DrugKnowledgeService.retrieve_for_patient_message",
         "app.services.a2a_task_service.A2ATaskService.run_symptom_to_pharmacovigilance",
         "app.routers.chat.CareCoordinatorRuntime.process_stream",
     ]

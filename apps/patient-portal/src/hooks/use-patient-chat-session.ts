@@ -654,7 +654,6 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         const socket = new WebSocket(
             buildChatWebSocketUrl(user.id, {
-                sessionId: "default",
                 documentId: activeDocumentId,
                 sessionId,
                 ...(documentDismissed && !activeDocumentId ? { documentDismissed: true } : {}),

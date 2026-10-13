@@ -517,7 +517,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                 )}
                                                 <span
                                                     className={`min-w-[3.25rem] text-right font-mono text-sm font-medium ${
-                                                        s.severity !== null && s.severity >= 8
+                                                        s.severity === null ? "text-muted" : s.severity >= 8
                                                             ? "text-risk-ink"
                                                             : s.severity !== null && s.severity >= 5
                                                               ? "text-warn-ink"

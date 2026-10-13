@@ -210,6 +210,7 @@ def sql(postgres):
         "002_rls_policies.sql",
         "006_care_team_invite_compat.sql",
         "007_clinic_identity_foundation.sql",
+        "010_chat_state_and_a2a_tasks.sql",
         "051_health_knowledge_and_chat_sessions.sql",
         "059_chat_safety_alerts.sql",
     ):
@@ -237,6 +238,7 @@ def record_sql(*, patient=PATIENT, turn=TURN, content="Synthetic chest pain"):
     payload = json.dumps(
         {
             "content": content,
+            "session_id": "nora-safety-test",
             "language": "en-US",
             "safety_rule": "emergency_symptom_keyword",
             "rule_version": "triage-floor/1",
@@ -255,12 +257,15 @@ def test_record_atomic_retry_and_no_report_or_adr(sql):
     again = json.loads(sql(record_sql()))
     assert first == again
     assert first["user_message"]["id"] == TURN
+    assert first["user_message"]["session_id"] == "nora-safety-test"
+    assert first["assistant_message"]["session_id"] == "nora-safety-test"
     assert sql("SELECT count(*) FROM chat_messages;") == "2"
     assert sql("SELECT count(*) FROM chat_safety_alerts;") == "1"
     assert sql("SELECT count(*) FROM symptom_reports;") == "0"
     assert sql("SELECT count(*) FROM adr_assessments;") == "0"
     sql(record_sql(content="Different synthetic payload"), succeeds=False)
     sql(record_sql(patient=OTHER), succeeds=False)
+    sql(record_sql().replace("nora-safety-test", "another-conversation"), succeeds=False)
 
 
 def test_dispatch_failure_retains_pending_and_atomic_retry_deduplicates(sql):

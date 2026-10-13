@@ -158,14 +158,14 @@ limits do not coordinate across Cloud Run replicas or Jobs.
 
 PAT-002-B B2 checks the shared deterministic safety floor before turn-specific
 retrieval/model/symptom work. Emergency turns stream reviewed direction and retain
-an independent pending care-team alert through migration 049's service-only RPCs.
+an independent pending care-team alert through migration 059's service-only RPCs.
 The existing retry worker re-drives pending delivery; it must remain enabled
 (`A2A_RETRY_WORKER_ENABLED=true`). No symptom report or ADR task is created for
 these turns. Non-emergency reports still use the old flow; private intake APIs
 and confirmation are not implemented. See the
 [B2 walkthrough and exact local test steps](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026)
 and [checkpoint evidence and limitations](../docs/pat-002-b-acceptance-2026-10-10.md).
-Migration 049 requires separate authorization before any remote application.
+Migration 059 requires separate authorization before any remote application.
 
 ```
 src/app/
@@ -373,7 +373,7 @@ state for reconnect recovery. There is no staff draft endpoint. Writes require
 revision plus stable mutation identity; confirm requires preview hash and explicit
 consent. `GET /api/v1/patients/me/symptom-reports/{id}` reads an owned confirmed report.
 
-`SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 050 does not approve a library.
+`SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 060 does not approve a library.
 The packaged candidate is pending review; genuine paired-locale safety approval and
 matching immutable database eligibility are activation prerequisites. Unavailability
 never restores automatic report insertion. Source binding requires a new backend-saved
