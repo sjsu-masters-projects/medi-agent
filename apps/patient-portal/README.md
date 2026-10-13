@@ -147,3 +147,5 @@ confirmation before sending.
   answers and returns the deterministic Naranjo rescore.
 - The browser never writes ADR assessment or audit tables directly; the backend owns the atomic
   response, reassessment, notification, and audit transaction.
+
+Chat results card: an assistant message may carry `attachments` of type `document_results`, built by the server from the cited document's extracted results (never from the reply text). The chat shows them under the reply: critical results first with a contact-your-care-team line, out-of-range results with chips, the rest behind a toggle, and a link to the document in Records.

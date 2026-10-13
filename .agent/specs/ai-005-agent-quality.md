@@ -119,6 +119,19 @@ Branch `feature/agent-quality-followups` (stacked on the first slice):
 - **One Spanish register (tú):** care-plan translation, explanations, Nora and all patient
   UI copy (31 strings converted). Approved wording is unchanged until its next review.
 
+## Chat results card
+
+Branch `feature/chat-results-card` (migration `062_chat_message_attachments.sql`, requester
+applies): when Nora's reply cites one of the patient's documents that has extracted
+results, the server snapshots that document's results (the rows Records shows, from the
+source-checked facts, never parsed from the reply) onto the saved message as an
+attachment. The patient chat renders it as a card under the reply: "Contact your care team
+today" and the 911 line first when any result is critical, out-of-range results with their
+chips and printed ranges, the rest behind "Show N results in range", and a link to Records.
+Nora's instructions are unchanged except one line saying the values are shown in the card.
+Older messages keep no card. Before 062 is applied the reply is saved as text and the card
+still shows live.
+
 ## Remaining
 
 1. Over-triage calibration for mild symptoms and low mood (safe, but noisy for the care team).

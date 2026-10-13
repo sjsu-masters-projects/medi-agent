@@ -726,6 +726,7 @@ async def chat_websocket_endpoint(
                 continue
 
             assistant_content = ""
+            cited_documents: list[str] = []
             assistant_intent = "general"
             assistant_urgency = "routine"
             escalation_required = False
@@ -792,6 +793,9 @@ async def chat_websocket_endpoint(
                         streamed_response = True
                     elif ev_type == "complete":
                         assistant_content = str(event.get("response_text", "")).strip()
+                        cited_documents = [
+                            str(item) for item in event.get("cited_documents") or [] if item
+                        ]
             except Exception as exc:
                 fallback_reason = categorize_llm_failure(exc)
                 record_chat_fallback(layer="L3_outer", reason=fallback_reason)
@@ -947,6 +951,15 @@ async def chat_websocket_endpoint(
                 for chunk in _chunk_text(assistant_content):
                     await websocket.send_json({"type": "assistant_chunk", "content": chunk})
 
+            # Results of the documents the reply cited, as a card under it. Built from the
+            # patient's own source-checked facts, never from the reply's text.
+            attachments = (
+                await asyncio.to_thread(
+                    service.result_attachments, str(patient_id), cited_documents
+                )
+                if cited_documents
+                else []
+            )
             assistant_message = await service.save_message(
                 patient_id=str(patient_id),
                 data={
@@ -955,8 +968,12 @@ async def chat_websocket_endpoint(
                     "intent": assistant_intent,
                     "language": written_language(assistant_content, incoming.language),
                     "session_id": session_id,
+                    "attachments": attachments,
                 },
             )
+            if attachments and not assistant_message.get("attachments"):
+                # Saved as text only (migration 062 not applied); still show the card live.
+                assistant_message = {**assistant_message, "attachments": attachments}
             assistant_payload = _serialize_chat_message(assistant_message)
             conversation_history.append(assistant_payload)
             next_state = _build_conversation_state(

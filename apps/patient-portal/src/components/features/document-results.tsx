@@ -7,7 +7,7 @@ import { fetchDocumentResults, type DocumentResult } from "@/services/documents"
 import type { Locale } from "@/types";
 import { recordsCopy } from "./records-copy";
 
-type ResultChip = "critical" | "high" | "low" | "outside";
+export type ResultChip = "critical" | "high" | "low" | "outside";
 
 /**
  * The status chip restates the report's own flag, else its own printed range.
@@ -39,6 +39,20 @@ const CHIP_LABELS: Record<ResultChip, string> = {
   outside: "Outside range",
 };
 
+/** The status chip as text plus an icon, so it never relies on color alone. */
+export function ResultStatusChip({ chip, locale }: { chip: ResultChip; locale: Locale }) {
+  const copy = (text: string) => recordsCopy(locale, text);
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${chip === "critical" ? "bg-danger-ink text-white" : "bg-note-tint text-note-ink"}`}
+    >
+      <Icon name="alert" className="h-3.5 w-3.5 shrink-0" />
+      <span className="sr-only">{copy("Result status")}: </span>
+      {copy(CHIP_LABELS[chip])}
+    </span>
+  );
+}
+
 /** Lab results grouped by their printed panel, keeping the order they were printed in. */
 function groupByPanel(results: DocumentResult[]) {
   const groups: { panel: string | null; items: DocumentResult[] }[] = [];
@@ -50,7 +64,7 @@ function groupByPanel(results: DocumentResult[]) {
   return groups;
 }
 
-function printedValue(result: DocumentResult) {
+export function printedValue(result: DocumentResult) {
   return result.unit ? `${result.value} ${result.unit}` : result.value;
 }
 
@@ -75,8 +89,6 @@ export function DocumentResults({
   token?: string | null;
 }) {
   const copy = (text: string) => recordsCopy(locale, text);
-  const headingId = useId();
-  const measurementsId = useId();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -128,8 +140,16 @@ export function DocumentResults({
     );
   }
 
-  const labs = state.results.filter((result) => result.kind === "lab_result");
-  const vitals = state.results.filter((result) => result.kind === "vital_sign");
+  return <DocumentResultsView locale={locale} results={state.results} />;
+}
+
+/** The Records results section for rows already loaded; renders nothing when empty. */
+export function DocumentResultsView({ locale, results }: { locale: Locale; results: DocumentResult[] }) {
+  const copy = (text: string) => recordsCopy(locale, text);
+  const headingId = useId();
+  const measurementsId = useId();
+  const labs = results.filter((result) => result.kind === "lab_result");
+  const vitals = results.filter((result) => result.kind === "vital_sign");
   if (!labs.length && !vitals.length) return null;
   const panels = groupByPanel(labs);
   const namedPanels = panels.some((group) => group.panel);
@@ -235,13 +255,7 @@ function ResultGroup({
               ) : null}
               {chip ? (
                 <p className="mt-2">
-                  <span
-                    className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${chip === "critical" ? "bg-danger-ink text-white" : "bg-note-tint text-note-ink"}`}
-                  >
-                    <Icon name="alert" className="h-3.5 w-3.5 shrink-0" />
-                    <span className="sr-only">{copy("Result status")}: </span>
-                    {copy(CHIP_LABELS[chip])}
-                  </span>
+                  <ResultStatusChip chip={chip} locale={locale} />
                 </p>
               ) : null}
               {chip === "critical" ? (

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChatPage from "@/app/(app)/chat/page";
@@ -331,6 +331,103 @@ describe("Patient chat page", () => {
             expect(screen.queryByText(/Live response/i)).not.toBeInTheDocument();
         });
         expect(screen.getByText("Please stay hydrated and rest today.")).toBeInTheDocument();
+    });
+
+    describe("results cards", () => {
+        const resultsAttachment = {
+            type: "document_results",
+            document_id: "doc-7",
+            file_name: "labs-2026-10-01.pdf",
+            title: { "en-US": "Lab report, October 1", "es-MX": "Reporte de laboratorio, 1 de octubre" },
+            results: [
+                {
+                    kind: "lab_result", name: "Glucose", value: "98", unit: "mg/dL", reference_range: "70-99",
+                    flag: null, flag_meaning: null, range_status: "within", panel: null, observed_at: null, page: 1, reviewed: false,
+                },
+                {
+                    kind: "lab_result", name: "Potassium", value: "6.9", unit: "mmol/L", reference_range: "3.5-5.1",
+                    flag: "HH", flag_meaning: "critical", range_status: "above", panel: null, observed_at: null, page: 1, reviewed: false,
+                },
+            ],
+        };
+        const reply = (id: string, attachments?: unknown) => ({
+            audio_url: null,
+            content: "Your report prints potassium as critical.\n\nSource: labs-2026-10-01.pdf, page 1",
+            created_at: "2026-10-13T10:01:00Z",
+            id,
+            intent: "general",
+            language: "en-US",
+            patient_id: "patient-1",
+            role: "assistant",
+            ...(attachments === undefined ? {} : { attachments }),
+        });
+
+        it("renders the card on a live completed reply", async () => {
+            renderPage();
+            await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => {
+                socket.emitOpen();
+                socket.emitMessage({ type: "assistant_start" });
+                socket.emitMessage({ type: "assistant_chunk", content: "Your report prints potassium as critical." });
+            });
+            expect(screen.queryByTestId("chat-results-card")).not.toBeInTheDocument();
+            await act(async () => {
+                socket.emitMessage({ type: "assistant_complete", message: reply("assistant-live", [resultsAttachment]) });
+            });
+            const card = await screen.findByRole("region", { name: "Lab report, October 1" });
+            expect(within(card).getByText("Contact your care team today.")).toBeInTheDocument();
+            expect(within(within(card).getByRole("list", { name: "Outside the report's range" })).getByText("Potassium")).toBeInTheDocument();
+            expect(within(card).getByRole("button", { name: "Show 1 result in range" })).toHaveAttribute("aria-expanded", "false");
+            expect(within(card).getByRole("link", { name: "See in Records" })).toHaveAttribute("href", "/records?document=doc-7");
+            expect(screen.getByText(/Source: labs-2026-10-01\.pdf, page 1/)).toBeInTheDocument();
+        });
+
+        it("renders the card from chat history, in the app's Spanish, without changing older messages", async () => {
+            profile.preferredLanguage = Language.ES;
+            renderPage();
+            await screen.findByText(getPatientChatCopy(Language.ES).welcomeMessage);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => {
+                socket.emitOpen();
+                socket.emitMessage({
+                    type: "chat_history",
+                    messages: [
+                        { ...reply("older"), content: "An older reply without a card." },
+                        { ...reply("with-null"), content: "A reply with a null list.", attachments: null },
+                        reply("with-card", [resultsAttachment]),
+                    ],
+                });
+            });
+            expect(await screen.findByText("An older reply without a card.")).toBeInTheDocument();
+            expect(screen.getByText("A reply with a null list.")).toBeInTheDocument();
+            const cards = screen.getAllByTestId("chat-results-card");
+            expect(cards).toHaveLength(1);
+            expect(within(cards[0]).getByText("Resultados de este reporte")).toBeInTheDocument();
+            expect(within(cards[0]).getByText("Comunícate hoy con tu equipo de atención.")).toBeInTheDocument();
+            expect(within(cards[0]).getByRole("button", { name: "Mostrar 1 resultado dentro del rango" })).toBeInTheDocument();
+            // The title follows the message's own language; this reply was written in English.
+            expect(within(cards[0]).getByRole("heading", { name: "Lab report, October 1" })).toHaveAttribute("lang", "en-US");
+        });
+
+        it("ignores a malformed or unknown attachment and still shows the reply", async () => {
+            renderPage();
+            await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => {
+                socket.emitOpen();
+                socket.emitMessage({
+                    type: "assistant_complete",
+                    message: reply("assistant-bad", [
+                        { type: "medication_card", document_id: "doc-7" },
+                        { ...resultsAttachment, results: [{ kind: "lab_result", name: "Potassium" }] },
+                    ]),
+                });
+            });
+            expect(await screen.findByText(/Your report prints potassium as critical\./)).toBeInTheDocument();
+            expect(screen.queryByTestId("chat-results-card")).not.toBeInTheDocument();
+            expect(screen.queryByText("Results from this report")).not.toBeInTheDocument();
+        });
     });
 
     it("retains Enter-to-send while Shift+Enter and composition do not send", async () => {

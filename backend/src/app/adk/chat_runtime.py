@@ -68,6 +68,7 @@ from app.adk.tools import (
     REPLY_LANGUAGE_STATE_KEY,
     TRIAGE_DECISION_STATE_KEY,
 )
+from app.adk.tools.turn_sources import DOCUMENT_SOURCE
 from app.config import settings
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
@@ -291,8 +292,15 @@ class CareCoordinatorRuntime:
         # source line it wrote is removed whether or not a tool returned anything. The
         # patient's documents are cited the same way as reference pages, in one line.
         answer = plain_reply(without_source_lines(answer))
+        cited_documents: list[str] = []
         if sources:
-            line = source_line(cited_sources(sources, answer), language)
+            cited = cited_sources(sources, answer)
+            cited_documents = [
+                str(item["document_id"])
+                for item in cited
+                if item.get("source") == DOCUMENT_SOURCE and item.get("document_id")
+            ]
+            line = source_line(cited, language)
             if line:
                 if streamed:
                     yield {"type": "chunk", "content": f"\n\n{line}"}
@@ -305,7 +313,13 @@ class CareCoordinatorRuntime:
                 extra={"unsupported_dose_count": len(unsupported)},
             )
 
-        yield {"type": "complete", "response_text": answer, "fallback_used": False}
+        yield {
+            "type": "complete",
+            "response_text": answer,
+            "fallback_used": False,
+            # The server attaches these documents' results to the saved reply.
+            "cited_documents": cited_documents,
+        }
 
 
 _REFERENCE_TOOLS = frozenset({"get_medication_information", "get_condition_information"})

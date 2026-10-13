@@ -3,17 +3,34 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import Any
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError
 from app.models.enums import ChatRole, coerce_locale
 from app.services.explanation_service import normalize_patient_summary
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_CHAT_SESSION_ID = "default"
+MAX_ATTACHMENTS = 3
+MAX_CARD_RESULTS = 60
+_HISTORY_COLUMNS = (
+    "id, patient_id, session_id, content, role, intent, language, audio_url, created_at"
+)
+_MISSING_COLUMN_CODES = {"PGRST204", "42703"}
+
+
+def _missing_attachments_column(error: APIError) -> bool:
+    code = str(getattr(error, "code", "") or "")
+    return code in _MISSING_COLUMN_CODES and "attachments" in str(getattr(error, "message", error))
+
+
 # Conversation ids are chosen by the patient app ("day-2026-10-10", "chat-<random>"), so
 # they are validated rather than trusted; anything else falls back to the default.
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -65,12 +82,59 @@ class ChatService:
             "session_id": normalize_session_id(data.get("session_id")),
         }
 
-        result = await self._execute(self.db.table("chat_messages").insert(payload))
+        attachments = [item for item in data.get("attachments") or [] if isinstance(item, dict)]
+        if attachments:
+            payload["attachments"] = attachments[:MAX_ATTACHMENTS]
+        try:
+            result = await self._execute(self.db.table("chat_messages").insert(payload))
+        except APIError as exc:
+            if "attachments" not in payload or not _missing_attachments_column(exc):
+                raise
+            # The backend can deploy before migration 062; the reply is saved as text.
+            payload.pop("attachments")
+            result = await self._execute(self.db.table("chat_messages").insert(payload))
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         if not rows:
             raise ExternalServiceError("Supabase", "Failed to save chat message")
 
         return rows[0]
+
+    def result_attachments(self, patient_id: str, document_ids: list[str]) -> list[dict[str, Any]]:
+        """Results cards for the documents a reply cited, from this patient's own facts.
+
+        The values are the source-checked rows Records shows, never parsed from the reply.
+        Any failure leaves the reply without a card rather than failing the turn.
+        """
+        from app.services.document_service import DocumentService
+
+        documents = DocumentService(self.db)
+        cards: list[dict[str, Any]] = []
+        for document_id in list(dict.fromkeys(document_ids))[:MAX_ATTACHMENTS]:
+            try:
+                key = UUID(str(document_id))
+                results = documents.list_document_results(key, UUID(patient_id))
+                if not results:
+                    continue
+                row = documents._get_document_row(key, UUID(patient_id))
+            except Exception as exc:  # noqa: BLE001 - a card is optional; the reply is not
+                logger.warning("Results card skipped for a cited document: %s", type(exc).__name__)
+                continue
+            raw_titles = row.get("display_title")
+            titles: dict[str, Any] = raw_titles if isinstance(raw_titles, dict) else {}
+            cards.append(
+                {
+                    "type": "document_results",
+                    "document_id": str(key),
+                    "file_name": str(row.get("file_name") or ""),
+                    "title": {
+                        locale: str(titles[locale])
+                        for locale in ("en-US", "es-MX")
+                        if titles.get(locale)
+                    },
+                    "results": results[:MAX_CARD_RESULTS],
+                }
+            )
+        return cards
 
     async def get_history(
         self,
@@ -82,9 +146,7 @@ class ChatService:
         """The newest ``limit`` messages, oldest first, optionally for one conversation."""
         query = (
             self.db.table("chat_messages")
-            .select(
-                "id, patient_id, session_id, content, role, intent, language, audio_url, created_at"
-            )
+            .select(_HISTORY_COLUMNS + ", attachments")
             .eq("patient_id", patient_id)
             # Newest first, then reversed: ascending with a limit returned the oldest
             # messages, so a long conversation never showed its latest turns.
@@ -96,6 +158,32 @@ class ChatService:
         if before:
             query = query.lt("created_at", before)
 
+        try:
+            result = await self._execute(query)
+        except APIError as exc:
+            if not _missing_attachments_column(exc):
+                raise
+            # Before migration 062 there are no attachments to read.
+            return await self._history_without_attachments(
+                patient_id, limit=limit, before=before, session_id=session_id
+            )
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        return list(reversed(rows))
+
+    async def _history_without_attachments(
+        self, patient_id: str, *, limit: int, before: str | None, session_id: str | None
+    ) -> list[dict[str, Any]]:
+        query = (
+            self.db.table("chat_messages")
+            .select(_HISTORY_COLUMNS)
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        if session_id is not None:
+            query = query.eq("session_id", normalize_session_id(session_id))
+        if before:
+            query = query.lt("created_at", before)
         result = await self._execute(query)
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         return list(reversed(rows))
