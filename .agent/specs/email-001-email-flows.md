@@ -155,10 +155,8 @@ opt-out, neutral reset request and the clinician and patient password resets (af
 rebuilt with the correct public Supabase key; the earlier builds had it missing its first
 character, so the save returned 401 "Invalid API key"). Open:
 
-1. Run one real document upload, which also uses the public key (dashboard realtime is
-   disabled in production).
-2. Replace the sending-only Resend key with a full-access key so statuses reach delivered.
-3. The first invitation landed in Spam; watch placement as the sending domain ages.
+1. Replace the sending-only Resend key with a full-access key so statuses reach delivered.
+2. The first invitation landed in Spam; watch placement as the sending domain ages.
 
 Pull requests: [#152](https://github.com/sjsu-masters-projects/medi-agent/pull/152),
 [#156](https://github.com/sjsu-masters-projects/medi-agent/pull/156),

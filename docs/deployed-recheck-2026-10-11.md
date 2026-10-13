@@ -174,3 +174,14 @@ changed. The requester typed every password and one-time code.
   project's and Supabase accepts it. No upload was performed (the browser used here cannot
   choose files). Clinician dashboard realtime is disabled in production
   (`NEXT_PUBLIC_ENABLE_DASHBOARD_REALTIME` is not set), so it was not affected.
+- **Requester checks:** as clinic admin Carmen, Copy worked. A fresh invitation link
+  opened signed out showed one primary "Create clinician account" button, the invited
+  clinic/role/address, and "Already have a MediAgent clinician account? Sign in to accept"
+  as a text link.
+- **Upload after the key fix:** a synthetic one-page follow-up lab report for Morgan
+  (`Morgan-Ellis_Diabetes-Follow-Up-Lab-Report_2026-10-12.pdf`, 3,140 bytes; HbA1c, fasting
+  glucose, metabolic panel with eGFR, lipids, liver enzymes, urine albumin/creatinine and
+  B12, all consistent with her October 2 visit and Metformin order; every page marked
+  "SYNTHETIC TEST DOCUMENT ONLY") was sent through the patient Records upload. Storage
+  accepted it with the corrected key (200) and the backend registered it (201) as a
+  patient upload pending clinician review; the stored hash matches the file.
