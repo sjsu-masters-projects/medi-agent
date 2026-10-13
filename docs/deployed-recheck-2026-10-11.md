@@ -151,5 +151,6 @@ changed. The requester typed every password and one-time code.
   after reset was not exercised.
 - **Patient reset:** requested from `app.mediagent.live` at 05:47:11 UTC (neutral 204);
   the requester opened the email, saved a new password and signed in at 05:47:47 UTC;
-  Supabase cleared the recovery token. The email itself was checked by the requester,
-  not inspected here.
+  Supabase cleared the recovery token. The requester's screenshot of the email shows the
+  Spanish patient variant: green MediAgent tile, "SEGURIDAD DE LA CUENTA" and
+  "Restablece tu contraseña", addressed to the `+patient` account.

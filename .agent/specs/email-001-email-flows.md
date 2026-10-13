@@ -88,7 +88,7 @@ Genuine verified mailboxes receive their own opted-in notices, never the demo si
   (unread message, Spanish appointment notice, opt-out).
 - [x] Durable retries/deduplication and recipient revocation tests (PostgreSQL suite).
 - [x] Synthetic addresses are never sent to; genuine account and Auth email is never diverted.
-- [ ] EN/ES templates visually checked on mobile; patient Spanish reset email not yet received.
+- [ ] EN/ES templates visually checked on mobile; Spanish patient and English clinician reset emails received and checked on desktop.
 - [x] Focused backend/portal tests, lint/type/build and migration permission tests.
 - [ ] Provider delivery status (needs a full-access Resend key).
 - [x] Reviewed merge (#152, #156, #157), authorized rollout and deployed evidence recorded.
