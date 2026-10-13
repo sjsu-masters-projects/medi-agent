@@ -616,8 +616,12 @@ def test_changed_medication_needs_the_new_dose_confirmed() -> None:
             title="Lisinopril 20 mg",
             instructions="1 tablet by mouth daily",
             frequency="daily",
-            medication={"name": "Lisinopril", "dosage": "20 mg", "frequency": "daily",
-                        "route": "oral"},
+            medication={
+                "name": "Lisinopril",
+                "dosage": "20 mg",
+                "frequency": "daily",
+                "route": "oral",
+            },
             confidence=0.98,
             conflict=conflict,
             removed=False,
@@ -625,3 +629,22 @@ def test_changed_medication_needs_the_new_dose_confirmed() -> None:
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "name,dosage,title",
+    [
+        ("Atorvastatin 20 mg tablet", "1 tablet", "Atorvastatin 20 mg tablet"),
+        ("Metformin", "500 mg", "Metformin 500 mg"),
+        ("Insulin glargine 100 units/mL", "10 units", "Insulin glargine 100 units/mL"),
+        ("Hydrocortisone cream 1%", "thin layer", "Hydrocortisone cream 1%"),
+        ("Lisinopril", "", "Lisinopril"),
+    ],
+)
+def test_medication_title_does_not_repeat_the_dose_after_a_printed_strength(
+    name: str, dosage: str, title: str
+) -> None:
+    fact = deepcopy(_facts()[0])
+    fact["value"].update(name=name, dosage=dosage)
+    item = CarePlanService(MagicMock())._item_from_fact(fact, category="medication", conflict={})
+    assert item["title"] == title
