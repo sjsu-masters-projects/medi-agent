@@ -26,6 +26,8 @@ const spanish: Record<string, string> = {
     "Elige dos horas de recordatorio, por lo general una más temprano y otra más tarde.",
   "Choose the time you usually wind down for the night.":
     "Elige la hora a la que sueles prepararte para dormir.",
+  "Choose the time you usually start your morning.":
+    "Elige la hora a la que sueles empezar tu mañana.",
   "Choose one daily reminder time.": "Elige una hora de recordatorio diaria.",
   "Choose the exact days and times you want reminder nudges.":
     "Elige los días y las horas de tus recordatorios.",
