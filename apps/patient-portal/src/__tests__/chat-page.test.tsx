@@ -7,7 +7,7 @@ import { clearChatState, setMessages } from "@/store/slices/chat-slice";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
-import { getPatientChatCopy } from "@/content/chat-copy";
+import { getChatControlsCopy, getPatientChatCopy } from "@/content/chat-copy";
 
 const {
     buildChatWebSocketUrl,
@@ -18,6 +18,9 @@ const {
     replace,
     setConversationOpen,
     shell,
+    pending,
+    followUpView,
+    profileState,
 } = vi.hoisted(() => ({
     buildChatWebSocketUrl: vi.fn(),
     fetchChatConversations: vi.fn(),
@@ -27,6 +30,9 @@ const {
     replace: vi.fn(),
     setConversationOpen: vi.fn(),
     shell: { conversationOpen: false },
+    pending: { count: 0, loaded: true },
+    followUpView: vi.fn(),
+    profileState: { loaded: true },
 }));
 
 vi.mock("@/contexts/patient-shell-context", () => ({
@@ -40,7 +46,7 @@ vi.mock("@/services/care-conversations", () => ({
 let searchParamsValue = new URLSearchParams();
 const profile: { preferredLanguage: Locale } = { preferredLanguage: Language.EN };
 vi.mock("@/hooks/use-patient-profile", () => ({
-    usePatientProfile: () => profile,
+    usePatientProfile: () => (profileState.loaded ? profile : null),
 }));
 let renderedPage: ReturnType<typeof render>;
 function changePreferredLanguage(locale: Locale) {
@@ -73,8 +79,15 @@ vi.mock("@/services/browser-voice", () => ({
     stopAssistantVoicePlayback: vi.fn(),
 }));
 
-vi.mock("@/components/features/adr-follow-up-panel", () => ({
-    ADRFollowUpPanel: () => null,
+vi.mock("@/hooks/use-pending-adr-follow-ups", () => ({
+    usePendingADRFollowUps: () => ({ count: pending.count, loaded: pending.loaded }),
+}));
+// The view has its own tests; here it only records the props the host passes.
+vi.mock("@/components/features/adr-follow-up-view", () => ({
+    ADRFollowUpView: (props: { onBack?: () => void }) => {
+        followUpView(props);
+        return <section data-testid="follow-up-view">Follow-up view</section>;
+    },
 }));
 
 class MockWebSocket {
@@ -142,6 +155,10 @@ describe("Patient chat page", () => {
         replace.mockReset();
         setConversationOpen.mockReset();
         shell.conversationOpen = false;
+        pending.count = 0;
+        pending.loaded = true;
+        profileState.loaded = true;
+        followUpView.mockReset();
         vi.useRealTimers();
         searchParamsValue = new URLSearchParams();
         MockWebSocket.reset();
@@ -915,5 +932,105 @@ describe("Patient chat page", () => {
         await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
             "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
         ));
+    });
+    describe("ADR follow-up mode", () => {
+        const requestId = "11111111-1111-4111-8111-111111111111";
+        const assessmentId = "22222222-2222-4222-8222-222222222222";
+        const lastViewProps = () => followUpView.mock.calls.at(-1)?.[0];
+        function renderFollowUp(query: string) {
+            searchParamsValue = new URLSearchParams(query);
+            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+        }
+        it.each([
+            ["request", `view=follow-up&request=${requestId}&assessment=${assessmentId}`, requestId, null],
+            ["request only", `view=follow-up&request=${requestId}`, requestId, null],
+            ["assessment only", `view=follow-up&assessment=${assessmentId}`, null, assessmentId],
+            ["neither", "view=follow-up", null, null],
+        ])("renders the follow-up view without a thread (%s)", (_name, query, expectedRequest, expectedAssessment) => {
+            pending.count = 2;
+            renderFollowUp(query);
+            expect(screen.getByTestId("follow-up-view")).toBeInTheDocument();
+            expect(lastViewProps()).toMatchObject({ locale: "en-US", requestId: expectedRequest, assessmentId: expectedAssessment });
+            expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+            expect(screen.queryByRole("button", { name: /Nora ·/ })).not.toBeInTheDocument();
+            expect(screen.queryByRole("heading", { name: "Nora AI" })).not.toBeInTheDocument();
+            expect(screen.queryByRole("heading", { name: "Your care team" })).not.toBeInTheDocument();
+            expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
+        });
+        it.each([Language.EN, Language.ES])("shows the caution strip, localized back button and focused heading (%s)", (locale) => {
+            profile.preferredLanguage = locale;
+            renderFollowUp(`view=follow-up&request=${requestId}`);
+            const caution = getChatControlsCopy(locale).caution;
+            expect(screen.getByText(caution)).toBeInTheDocument();
+            expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
+            expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(locale === Language.ES ? "Preguntas de tu equipo de atención" : "Questions from your care team");
+            expect(lastViewProps()).toMatchObject({ locale });
+            fireEvent.click(screen.getByRole("button", { name: locale === Language.ES ? "Volver a mensajes" : "Back to messages" }));
+            expect(replace).toHaveBeenCalledWith("/chat");
+        });
+        it("keeps the bottom navigation hidden by marking the conversation open", () => {
+            renderFollowUp(`view=follow-up&request=${requestId}`);
+            expect(setConversationOpen).toHaveBeenLastCalledWith(true);
+            renderedPage.unmount();
+            expect(setConversationOpen).toHaveBeenLastCalledWith(false);
+        });
+        it("passes an undefined locale to the view until the profile has loaded", () => {
+            profileState.loaded = false;
+            renderFollowUp(`view=follow-up&assessment=${assessmentId}`);
+            expect(lastViewProps()).toMatchObject({ locale: undefined, timeZone: undefined });
+        });
+        it("leaves follow-up mode through the view's own back action", () => {
+            renderFollowUp("view=follow-up");
+            lastViewProps().onBack();
+            expect(replace).toHaveBeenCalledWith("/chat");
+        });
+        it("ignores request and assessment outside follow-up mode", () => {
+            renderFollowUp(`request=${requestId}&assessment=${assessmentId}`);
+            expect(screen.queryByTestId("follow-up-view")).not.toBeInTheDocument();
+            expect(followUpView).not.toHaveBeenCalled();
+        });
+    });
+    describe("ADR follow-up entry rows", () => {
+        const rowName = (locale: Locale) => locale === Language.ES ? /Preguntas de tu equipo de atención/ : /Questions from your care team/;
+        it("is absent from the inbox when nothing is pending", () => {
+            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+            expect(screen.getByRole("heading", { name: "Nora AI" })).toBeInTheDocument();
+            expect(screen.queryByRole("link", { name: rowName(Language.EN) })).not.toBeInTheDocument();
+        });
+        it("is absent while the pending count has not loaded", () => {
+            pending.count = 2;
+            pending.loaded = false;
+            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+            expect(screen.queryByRole("link", { name: rowName(Language.EN) })).not.toBeInTheDocument();
+        });
+        it.each([
+            [Language.EN, 1, "1 request is waiting for your answers"],
+            [Language.EN, 2, "2 requests are waiting for your answers"],
+            [Language.ES, 1, "1 solicitud espera tus respuestas"],
+            [Language.ES, 2, "2 solicitudes esperan tus respuestas"],
+        ])("shows the inbox row after the Nora card for %s with %i pending", (locale, count, text) => {
+            profile.preferredLanguage = locale;
+            pending.count = count;
+            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+            const row = screen.getByRole("link", { name: rowName(locale) });
+            expect(row).toHaveAttribute("href", "/chat?view=follow-up");
+            expect(row).toHaveTextContent(text);
+            expect(row).toHaveAttribute("lang", locale);
+            const nora = screen.getByRole("heading", { name: "Nora AI" });
+            expect(nora.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
+        it("shows the row in the open Nora thread only while a request is pending", () => {
+            pending.count = 1;
+            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+            fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
+            expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
+            expect(screen.getByRole("link", { name: rowName(Language.EN) })).toHaveAttribute("href", "/chat?view=follow-up");
+            renderedPage.unmount();
+            pending.count = 0;
+            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
+            fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
+            expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
+            expect(screen.queryByRole("link", { name: rowName(Language.EN) })).not.toBeInTheDocument();
+        });
     });
 });
