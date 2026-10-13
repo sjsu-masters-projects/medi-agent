@@ -135,7 +135,8 @@ Summary counts per job:
 - **Document ingestion:** `claimed`, `completed`, `needs_review`, `failed`,
   `summaries_*`, `titles_*` and the care-plan generation counts.
 - **Reference refresh:** `subjects_total`, `subjects_due`, `subjects_new_medications`,
-  `subjects_new_conditions`, `subjects_checked`, `subjects_updated`,
+  `subjects_new_conditions`, `subjects_new_locales` (cached conditions missing en-US or
+  es-MX), `subjects_checked`, `subjects_updated`,
   `subjects_unavailable`, `subjects_failed`, `subjects_deferred` (over the limit of 150),
   `next_due_at`, and `sources.<medlineplus|dailymed>.<updated|unchanged|not_found|unavailable>`.
 - **Email dispatch:** `claimed`, `accepted` (provider accepted, not inbox delivery),
