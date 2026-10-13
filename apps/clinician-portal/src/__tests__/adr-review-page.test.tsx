@@ -8,16 +8,34 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MedWatchPage from "@/app/(dashboard)/medwatch/page";
 
-const { fetchADRReviewQueueMock, reviewADRAssessmentMock } = vi.hoisted(() => ({
+const {
+    approveMedWatchDraftMock,
+    createMedWatchDraftMock,
+    exportMedWatchDraftMock,
+    fetchADRReviewQueueMock,
+    fetchMedWatchDraftsMock,
+    reviewADRAssessmentMock,
+    updateMedWatchDraftMock,
+} = vi.hoisted(() => ({
+    approveMedWatchDraftMock: vi.fn(),
+    createMedWatchDraftMock: vi.fn(),
+    exportMedWatchDraftMock: vi.fn(),
     fetchADRReviewQueueMock: vi.fn(),
+    fetchMedWatchDraftsMock: vi.fn(),
     reviewADRAssessmentMock: vi.fn(),
+    updateMedWatchDraftMock: vi.fn(),
 }));
 const query = vi.hoisted(() => ({ value: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(query.value) }));
 
 vi.mock("@/services/clinicians", () => ({
+    approveMedWatchDraft: approveMedWatchDraftMock,
+    createMedWatchDraft: createMedWatchDraftMock,
+    exportMedWatchDraft: exportMedWatchDraftMock,
     fetchADRReviewQueue: fetchADRReviewQueueMock,
+    fetchMedWatchDrafts: fetchMedWatchDraftsMock,
     reviewADRAssessment: reviewADRAssessmentMock,
+    updateMedWatchDraft: updateMedWatchDraftMock,
 }));
 
 const assessment = {
@@ -57,6 +75,66 @@ const assessment = {
     createdAt: "2026-10-02T09:53:00Z",
 };
 
+const medwatchDraft = {
+    id: "draft-1",
+    adrAssessmentId: "adr-1",
+    patientId: "patient-1",
+    formData: {
+        patient: {
+            patient_identifier: "Maya Patel",
+            date_of_birth: "1988-04-03",
+            sex: "female",
+        },
+        event: {
+            description: "dizziness (patient-reported severity 2/10)",
+            onset_date_or_time: "a few hours after starting the inhaler",
+            outcome: "",
+            seriousness: "",
+        },
+        suspect_product: {
+            name: "fluticasone/salmeterol inhaler",
+            dose: "1 puff",
+            frequency: "twice daily",
+            route: "inhaled",
+            therapy_start_date: "2026-09-28",
+            therapy_end_date: "",
+        },
+        concomitant_products: { products: "albuterol" },
+        tests_and_history: { relevant_tests: "", other_relevant_history: "" },
+        reporter: {
+            name: "Elena Park",
+            email: "elena@example.com",
+            specialty: "Internal medicine",
+            clinic_name: "MediAgent Clinic",
+        },
+        clinical_review: {
+            naranjo_score: 3,
+            causality: "Possible",
+            reportability_rationale: "Clinically significant new event.",
+        },
+    },
+    sourceEvidence: [
+        {
+            field_paths: ["event.description"],
+            source_type: "patient_symptom_report",
+            source_id: "symptom-1",
+            attribution: "Patient-reported symptom",
+            excerpt: "I became dizzy after starting the inhaler.",
+            citation: "symptom_reports/symptom-1",
+        },
+    ],
+    clinicianEditedFields: [],
+    status: "draft",
+    createdBy: "clinician-1",
+    approvedBy: null,
+    approvedAt: null,
+    approvalNote: null,
+    revision: 1,
+    exportVersion: "medwatch-3500a-draft-v1",
+    createdAt: "2026-10-09T10:00:00Z",
+    updatedAt: "2026-10-09T10:00:00Z",
+} as const;
+
 describe("ADR review queue", () => {
     it("focuses the exact assessment and explains an unavailable target", async () => {
         query.value = "assessment=adr-1";
@@ -68,8 +146,14 @@ describe("ADR review queue", () => {
         expect(screen.getByText(/linked assessment is no longer awaiting review/)).toBeInTheDocument();
     });
     beforeEach(() => {
+        approveMedWatchDraftMock.mockReset();
+        createMedWatchDraftMock.mockReset();
+        exportMedWatchDraftMock.mockReset();
         fetchADRReviewQueueMock.mockReset();
+        fetchMedWatchDraftsMock.mockReset();
+        fetchMedWatchDraftsMock.mockResolvedValue([]);
         reviewADRAssessmentMock.mockReset();
+        updateMedWatchDraftMock.mockReset();
         query.value = "";
     });
 
@@ -486,5 +570,92 @@ describe("ADR review queue", () => {
         ).toBeInTheDocument();
         expect(screen.getByText(/deterministic score above includes/i)).toBeInTheDocument();
         expect(screen.getByText("Naranjo 4")).toBeInTheDocument();
+    });
+
+    it("creates an evidence-backed draft only after a clinician rationale", async () => {
+        fetchADRReviewQueueMock.mockResolvedValue([assessment]);
+        createMedWatchDraftMock.mockResolvedValue(medwatchDraft);
+
+        render(<MedWatchPage />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Prepare MedWatch draft" }),
+        );
+        const submit = screen.getByRole("button", {
+            name: "Create editable draft",
+        });
+        expect(submit).toBeDisabled();
+        fireEvent.change(screen.getByLabelText(/clinical rationale/i), {
+            target: { value: "Clinically significant new event." },
+        });
+        fireEvent.click(submit);
+
+        await waitFor(() =>
+            expect(createMedWatchDraftMock).toHaveBeenCalledWith(
+                "adr-1",
+                "Clinically significant new event.",
+            ),
+        );
+        expect(
+            await screen.findByText("MedWatch-compatible draft"),
+        ).toBeInTheDocument();
+        expect(
+            screen.getAllByText("Not submitted to FDA").length,
+        ).toBeGreaterThan(0);
+        expect(screen.getByText("Patient-reported symptom")).toBeInTheDocument();
+    });
+
+    it("saves edits and requires attestation before approval", async () => {
+        fetchADRReviewQueueMock.mockResolvedValue([]);
+        fetchMedWatchDraftsMock.mockResolvedValue([medwatchDraft]);
+        updateMedWatchDraftMock.mockImplementation(async (_id, formData) => ({
+            ...medwatchDraft,
+            formData,
+            revision: 2,
+            clinicianEditedFields: ["event.outcome"],
+        }));
+        approveMedWatchDraftMock.mockResolvedValue({
+            ...medwatchDraft,
+            status: "reviewed",
+            revision: 3,
+            approvedBy: "clinician-1",
+            approvedAt: "2026-10-09T11:00:00Z",
+            approvalNote: "Evidence and form reviewed.",
+        });
+
+        render(<MedWatchPage />);
+
+        fireEvent.change(await screen.findByLabelText(/outcome/i), {
+            target: { value: "Recovering" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+        await waitFor(() =>
+            expect(updateMedWatchDraftMock).toHaveBeenCalledWith(
+                "draft-1",
+                expect.objectContaining({
+                    event: expect.objectContaining({ outcome: "Recovering" }),
+                }),
+                1,
+            ),
+        );
+
+        const approve = screen.getByRole("button", { name: "Approve for export" });
+        expect(approve).toBeDisabled();
+        fireEvent.change(screen.getByLabelText("Approval note"), {
+            target: { value: "Evidence and form reviewed." },
+        });
+        fireEvent.click(
+            screen.getByRole("checkbox", { name: /I reviewed the draft/i }),
+        );
+        fireEvent.click(approve);
+
+        await waitFor(() =>
+            expect(approveMedWatchDraftMock).toHaveBeenCalledWith(
+                "draft-1",
+                "Evidence and form reviewed.",
+                2,
+            ),
+        );
+        expect(await screen.findByText("Approved for export")).toBeInTheDocument();
     });
 });

@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui";
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
 import { ADRReviewActions } from "@/components/features/adr-review-actions";
+import { MedWatchPreparationAction } from "@/components/features/medwatch-preparation-action";
 import type { ADRReviewDecisionInput, ADRReviewQueueItem } from "@/services/clinicians";
 
 const QUESTION_LABELS: Record<string, string> = {
@@ -70,10 +71,12 @@ function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
 export function ADRReviewCard({
     item,
     onReview,
+    onPrepareDraft,
     submitting,
 }: {
     item: ADRReviewQueueItem;
     onReview: (assessmentId: string, input: ADRReviewDecisionInput) => Promise<void>;
+    onPrepareDraft: (assessmentId: string, rationale: string) => Promise<void>;
     submitting: boolean;
 }) {
     const missingQuestions = item.naranjoAssessment.missing_questions ?? [];
@@ -226,6 +229,10 @@ export function ADRReviewCard({
                         item={item}
                         onSubmit={(input) => onReview(item.id, input)}
                         submitting={submitting}
+                    />
+                    <MedWatchPreparationAction
+                        disabled={submitting}
+                        onPrepare={(rationale) => onPrepareDraft(item.id, rationale)}
                     />
                 </aside>
             </div>

@@ -360,7 +360,9 @@ class HealthKnowledgeService:
         Due: a cached subject whose oldest row was checked more than ``REFRESH_DUE_AFTER``
         ago. New: an active medication whose name is unresolved, a recorded miss due a
         retry, or an ingredient with no cached text; and an active documented condition
-        with no cached text, fetched in both supported languages.
+        with no cached text, fetched in both supported languages. New locales: an active
+        documented condition cached in only some supported languages gets the missing ones,
+        through the same lookup, which finds MedlinePlus's own twin page for the other one.
 
         Counts only; no names are returned or logged, because the seed list comes from
         patients' medication and condition rows. ``next_due_at`` says when the oldest
@@ -389,15 +391,22 @@ class HealthKnowledgeService:
         new_medications = await self._medication_names_to_seed(cached)
         for name in new_medications:
             candidates[("medication_name", name_key(name))] = (name, ())
-        new_conditions = await self._condition_names_to_seed(cached)
+        new_conditions, new_locales = await self._condition_names_to_seed(cached)
         for name in new_conditions:
             candidates[("condition", name_key(name))] = (name, REFRESH_LOCALES)
+        for name, missing in new_locales:
+            key = ("condition", name_key(name))
+            if key in candidates:  # Due anyway: re-check what is cached and add the rest.
+                candidates[key] = (candidates[key][0], REFRESH_LOCALES)
+            else:  # Not due: fetch only the missing languages.
+                candidates[key] = (name, missing)
 
         counts: dict[str, Any] = {
             "subjects_total": len(cached),
             "subjects_due": len(due),
             "subjects_new_medications": len(new_medications),
             "subjects_new_conditions": len(new_conditions),
+            "subjects_new_locales": len(new_locales),
             "subjects_checked": 0,
             "subjects_updated": 0,
             "subjects_unavailable": 0,
@@ -482,8 +491,12 @@ class HealthKnowledgeService:
 
     async def _condition_names_to_seed(
         self, cached: dict[tuple[str, str], dict[str, Any]]
-    ) -> list[str]:
-        """Active documented condition names with no cached reference text."""
+    ) -> tuple[list[str], list[tuple[str, tuple[str, ...]]]]:
+        """Active documented conditions with no cached text, and those missing a language.
+
+        A language counts as cached once it has a row, found or a recorded miss; a miss is
+        retried with the subject's other rows when due.
+        """
         result = await self._execute(
             self.db.table("conditions").select("name").eq("status", "active").limit(1000)
         )
@@ -491,9 +504,19 @@ class HealthKnowledgeService:
         for row in cast(list[dict[str, Any]], result.data or []):
             name = str(row.get("name") or "").strip()
             key = name_key(name)
-            if key and ("condition", key) not in cached:
+            if key:
                 names.setdefault(key, name)
-        return [names[key] for key in sorted(names)]
+        uncached: list[str] = []
+        missing_locales: list[tuple[str, tuple[str, ...]]] = []
+        for key in sorted(names):
+            entry = cached.get(("condition", key))
+            if entry is None:
+                uncached.append(names[key])
+                continue
+            missing = tuple(locale for locale in REFRESH_LOCALES if locale not in entry["locales"])
+            if missing:
+                missing_locales.append((names[key], missing))
+        return uncached, missing_locales
 
     def _updated_rows(self) -> int:
         return sum(

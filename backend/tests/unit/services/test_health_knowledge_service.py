@@ -269,6 +269,7 @@ async def test_the_weekly_refresh_seeds_uncached_patient_medications(
         "subjects_due": 0,
         "subjects_new_medications": 1,
         "subjects_new_conditions": 0,
+        "subjects_new_locales": 0,
         "subjects_checked": 1,
         "subjects_updated": 1,
         "subjects_unavailable": 0,
@@ -340,6 +341,109 @@ async def test_the_weekly_refresh_seeds_documented_conditions_in_both_languages(
     # Cached now: a second run the same day neither seeds nor re-checks it.
     again = await _service(db, clock).refresh_due(limit=10)
     assert again["subjects_new_conditions"] == 0 and again["subjects_checked"] == 0
+
+
+def _cached_condition(name: str, locale: str, checked_at: datetime) -> dict[str, Any]:
+    return {
+        "subject_type": "condition",
+        "subject_key": name_key(name),
+        "subject_name": name,
+        "source": "medlineplus",
+        "locale": locale,
+        "status": "found",
+        "title": name,
+        "url": "https://medlineplus.gov/diabetestype2.html",
+        "summary": "Topic.",
+        "sections": {},
+        "source_version": None,
+        "source_updated_on": None,
+        "content_hash": "cached",
+        "checked_at": checked_at.isoformat(),
+        "fetched_at": checked_at.isoformat(),
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_condition_cached_in_one_language_gets_the_other(
+    calls: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _condition_fetcher(monkeypatch)
+    db, clock = _Db(), _Clock()
+    yesterday = NOW - timedelta(days=1)
+    db.tables["conditions"] = [
+        {"name": "Type 2 diabetes", "status": "active"},
+        {"name": "Diabetes tipo 2", "status": "active"},
+    ]
+    db.tables["health_knowledge"] = [
+        _cached_condition("Type 2 diabetes", "en-US", yesterday),
+        _cached_condition("Diabetes tipo 2", "es-MX", yesterday),
+    ]
+    counts = await _service(db, clock).refresh_due(limit=10)
+    assert counts["subjects_new_locales"] == 2 and counts["subjects_new_conditions"] == 0
+    assert counts["subjects_due"] == 0 and counts["subjects_checked"] == 2
+    # Only the missing language is fetched; the cached one is not due and not re-checked.
+    assert sorted(asked) == [("Diabetes tipo 2", "en-US"), ("Type 2 diabetes", "es-MX")]
+    rows = {(row["subject_key"], row["locale"]): row for row in db.tables["health_knowledge"]}
+    assert set(rows) == {
+        ("type 2 diabetes", "en-US"),
+        ("type 2 diabetes", "es-MX"),
+        ("diabetes tipo 2", "es-MX"),
+        ("diabetes tipo 2", "en-US"),
+    }
+    assert rows[("type 2 diabetes", "en-US")]["checked_at"] == yesterday.isoformat()
+    again = await _service(db, clock).refresh_due(limit=10)
+    assert again["subjects_new_locales"] == 0 and again["subjects_checked"] == 0
+
+
+@pytest.mark.asyncio
+async def test_conditions_cached_in_both_languages_are_left_alone_until_due(
+    calls: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _condition_fetcher(monkeypatch)
+    db, clock = _Db(), _Clock()
+    yesterday = NOW - timedelta(days=1)
+    db.tables["conditions"] = [{"name": "High blood pressure", "status": "active"}]
+    db.tables["health_knowledge"] = [
+        _cached_condition("High blood pressure", "en-US", yesterday),
+        {**_cached_condition("High blood pressure", "es-MX", yesterday), "status": "not_found"},
+    ]
+    counts = await _service(db, clock).refresh_due(limit=10)
+    assert counts["subjects_new_locales"] == 0 and counts["subjects_checked"] == 0
+    assert asked == [] and db.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_a_due_condition_missing_a_language_is_checked_in_both(
+    calls: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _condition_fetcher(monkeypatch)
+    db, clock = _Db(), _Clock()
+    db.tables["conditions"] = [{"name": "Type 2 diabetes", "status": "active"}]
+    db.tables["health_knowledge"] = [
+        _cached_condition("Type 2 diabetes", "en-US", NOW - timedelta(days=8)),
+    ]
+    counts = await _service(db, clock).refresh_due(limit=10)
+    assert counts["subjects_due"] == 1 and counts["subjects_new_locales"] == 1
+    assert counts["subjects_checked"] == 1 and counts["subjects_deferred"] == 0
+    assert sorted(locale for _name, locale in asked) == ["en-US", "es-MX"]
+
+
+@pytest.mark.asyncio
+async def test_missing_languages_beyond_the_limit_are_deferred(
+    calls: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _condition_fetcher(monkeypatch)
+    db, clock = _Db(), _Clock()
+    yesterday = NOW - timedelta(days=1)
+    names = [f"Condition {index}" for index in range(3)]
+    db.tables["conditions"] = [{"name": name, "status": "active"} for name in names]
+    db.tables["health_knowledge"] = [_cached_condition(name, "en-US", yesterday) for name in names]
+    counts = await _service(db, clock).refresh_due(limit=2)
+    assert counts["subjects_new_locales"] == 3
+    assert counts["subjects_checked"] == 2 and counts["subjects_deferred"] == 1
+    assert len(asked) == 2
+    later = await _service(db, clock).refresh_due(limit=2)
+    assert later["subjects_new_locales"] == 1 and later["subjects_checked"] == 1
 
 
 @pytest.mark.asyncio

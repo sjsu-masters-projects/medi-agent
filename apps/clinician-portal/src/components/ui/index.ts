@@ -2,6 +2,7 @@ export { Accordion, AccordionItem } from "./accordion";
 export { Badge } from "./badge";
 export { Button } from "./button";
 export { Card } from "./card";
+export { CopyButton } from "./copy-button";
 export { DataTable } from "./data-table";
 export { EmptyState } from "./empty-state";
 export { ErrorState } from "./error-state";

@@ -191,6 +191,117 @@ interface ADRReviewQueueResponse {
     total: number;
 }
 
+export type MedWatchDraftStatus = "draft" | "reviewed";
+
+export interface MedWatchFormData {
+    patient: {
+        patient_identifier: string;
+        date_of_birth: string;
+        sex: string;
+    };
+    event: {
+        description: string;
+        onset_date_or_time: string;
+        outcome: string;
+        seriousness: string;
+    };
+    suspect_product: {
+        name: string;
+        dose: string;
+        frequency: string;
+        route: string;
+        therapy_start_date: string;
+        therapy_end_date: string;
+    };
+    concomitant_products: { products: string };
+    tests_and_history: {
+        relevant_tests: string;
+        other_relevant_history: string;
+    };
+    reporter: {
+        name: string;
+        email: string;
+        specialty: string;
+        clinic_name: string;
+    };
+    clinical_review: {
+        naranjo_score: number;
+        causality: NaranjoCausality;
+        reportability_rationale: string;
+    };
+}
+
+export interface MedWatchEvidenceReference {
+    field_paths: string[];
+    source_type: string;
+    source_id?: string | null;
+    attribution: string;
+    excerpt?: string | null;
+    citation?: string | null;
+}
+
+export interface MedWatchDraft {
+    id: string;
+    adrAssessmentId: string;
+    patientId: string;
+    formData: MedWatchFormData;
+    sourceEvidence: MedWatchEvidenceReference[];
+    clinicianEditedFields: string[];
+    status: MedWatchDraftStatus;
+    createdBy?: string | null;
+    approvedBy?: string | null;
+    approvedAt?: string | null;
+    approvalNote?: string | null;
+    revision: number;
+    exportVersion: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+interface MedWatchDraftResponse {
+    id: string;
+    adr_assessment_id: string;
+    patient_id: string;
+    form_data: MedWatchFormData;
+    source_evidence: MedWatchEvidenceReference[];
+    clinician_edited_fields: string[];
+    status: MedWatchDraftStatus;
+    created_by?: string | null;
+    approved_by?: string | null;
+    approved_at?: string | null;
+    approval_note?: string | null;
+    revision: number;
+    export_version: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface MedWatchDraftExport {
+    filename: string;
+    media_type: string;
+    content: Record<string, unknown>;
+}
+
+function mapMedWatchDraft(draft: MedWatchDraftResponse): MedWatchDraft {
+    return {
+        id: draft.id,
+        adrAssessmentId: draft.adr_assessment_id,
+        patientId: draft.patient_id,
+        formData: draft.form_data,
+        sourceEvidence: draft.source_evidence,
+        clinicianEditedFields: draft.clinician_edited_fields,
+        status: draft.status,
+        createdBy: draft.created_by,
+        approvedBy: draft.approved_by,
+        approvedAt: draft.approved_at,
+        approvalNote: draft.approval_note,
+        revision: draft.revision,
+        exportVersion: draft.export_version,
+        createdAt: draft.created_at,
+        updatedAt: draft.updated_at,
+    };
+}
+
 export interface SoapNote {
     subjective: string;
     objective: string;
@@ -713,6 +824,81 @@ export async function reviewADRAssessment(
         dismissReason: result.dismiss_reason,
         updatedAt: result.updated_at,
     };
+}
+
+/** Convert a reviewed ADR decision into an editable, never-submitted MedWatch draft. */
+export async function createMedWatchDraft(
+    assessmentId: string,
+    reportabilityRationale: string,
+): Promise<MedWatchDraft> {
+    const result = await apiFetch<MedWatchDraftResponse>(
+        `/api/v1/clinicians/me/adr-assessments/${assessmentId}/medwatch-draft`,
+        {
+            method: "POST",
+            body: JSON.stringify({
+                decision: "prepare_draft",
+                reportability_rationale: reportabilityRationale,
+            }),
+        },
+    );
+    return mapMedWatchDraft(result);
+}
+
+/** Fetch editable and approved drafts for assigned patients. */
+export async function fetchMedWatchDrafts(): Promise<MedWatchDraft[]> {
+    const result = await apiFetch<{
+        items: MedWatchDraftResponse[];
+        total: number;
+    }>("/api/v1/clinicians/me/medwatch-drafts");
+    return result.items.map(mapMedWatchDraft);
+}
+
+/** Save all editable fields using optimistic revision control. */
+export async function updateMedWatchDraft(
+    draftId: string,
+    formData: MedWatchFormData,
+    expectedRevision: number,
+): Promise<MedWatchDraft> {
+    const result = await apiFetch<MedWatchDraftResponse>(
+        `/api/v1/clinicians/me/medwatch-drafts/${draftId}`,
+        {
+            method: "PUT",
+            body: JSON.stringify({
+                form_data: formData,
+                expected_revision: expectedRevision,
+            }),
+        },
+    );
+    return mapMedWatchDraft(result);
+}
+
+/** Record explicit clinician sign-off. This does not file the draft externally. */
+export async function approveMedWatchDraft(
+    draftId: string,
+    approvalNote: string,
+    expectedRevision: number,
+): Promise<MedWatchDraft> {
+    const result = await apiFetch<MedWatchDraftResponse>(
+        `/api/v1/clinicians/me/medwatch-drafts/${draftId}/approve`,
+        {
+            method: "POST",
+            body: JSON.stringify({
+                approval_note: approvalNote,
+                expected_revision: expectedRevision,
+                attested: true,
+            }),
+        },
+    );
+    return mapMedWatchDraft(result);
+}
+
+/** Export an approved JSON artifact. The backend never submits it to the FDA. */
+export async function exportMedWatchDraft(
+    draftId: string,
+): Promise<MedWatchDraftExport> {
+    return apiFetch<MedWatchDraftExport>(
+        `/api/v1/clinicians/me/medwatch-drafts/${draftId}/export`,
+    );
 }
 
 /** Fetch one patient's latest risk radar snapshot. */

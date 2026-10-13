@@ -59,7 +59,9 @@ fetched and last checked it. Public reference text only; no patient data.
 - On a miss, a tool call fetches and caches with a short timeout. The weekly job re-checks
   every cached subject last checked more than six days ago and seeds active medications and
   documented conditions with no cached text (conditions in en-US and es-MX), refreshing
-  only what changed.
+  only what changed. Seeding is per subject and language (OPS-004): an active documented
+  condition cached in only one of en-US and es-MX gets the missing one through the same
+  twin-page lookup, within the run's subject limit, counted as `subjects_new_locales`.
 
 ### Retrieval pipeline and its checks
 
