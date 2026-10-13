@@ -310,6 +310,21 @@ Not verified here: applying 058 to staging, deployment, real inbox delivery,
 provider status with a full-access key, mobile email rendering and the live
 Sign in to accept and recovery journeys.
 
+### Profile and Settings presentation — October 12
+
+Requester feedback: the patient Profile card was wider than the other sections and
+text-heavy. Patient Profile now shows an **EMAIL NOTICES / AVISOS POR CORREO** label
+above one inset grouped card (same section label, 16px gutter and rows as the other
+Profile groups). Top row: mail tile, truncated account address (full value in
+`title` and in the Profile header) and a Verified / Not verified / Email unavailable
+chip. Demo addresses get one muted line and no controls; unverified shows Send code,
+then a single code + Verify row with Send a new code; verified shows checkbox rows,
+Save and a recovery-unaffected line. One footnote: no health details, replies unread.
+Clinician Settings uses the same states in a standard Settings card (icon header and
+badge, rows, footer with footnote/status/Save) and an Email notices section link.
+Presentation only: API calls, limits, setup-pending state, stale-response guards and
+`one-time-code` are unchanged; status messages use one persistent live region.
+
 The repository handoff is this section plus the rollout checklist above, reachable
 from TASKS.md, architecture, contributor and Supabase guides. The next contributor
 does not need chat history or access to any credential pasted into earlier chats.
