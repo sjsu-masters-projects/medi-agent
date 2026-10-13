@@ -185,3 +185,27 @@ changed. The requester typed every password and one-time code.
   "SYNTHETIC TEST DOCUMENT ONLY") was sent through the patient Records upload. Storage
   accepted it with the corrected key (200) and the backend registered it (201) as a
   patient upload pending clinician review; the stored hash matches the file.
+
+## Clinician flow for an uploaded lab report (October 12)
+
+The synthetic lab report above, uploaded by Morgan at 05:59 UTC:
+
+- **Ingestion** (06:03 run): parse completed; record title "Diabetes follow-up lab report" /
+  "Reporte de laboratorio de diabetes"; patient explanation ready. One candidate fact: the
+  condition "Type 2 diabetes mellitus" (high confidence, page 1 excerpt). None of the 20
+  results was extracted: the extraction prompt asks only for medications, conditions,
+  allergies and obligations (AI-005). The explanation said the record lists no follow-up
+  steps and suggested asking about tests.
+- **Review queue and Documents** (Elena): queue item, protected source preview of the full
+  page, facts dialog. Two display bugs (UX-004): dates show day-first (12/10/2026) from the
+  browser region, and the condition's name is labelled "Medication".
+- **Document approval** 06:05 UTC; the draft request queued at parse time completed in the
+  06:12 run as version 5: the same four active items as version 4 (Metformin 500 mg twice
+  daily, water with meals, walking Monday/Wednesday/Friday, daily fasting glucose), because a
+  condition cannot become a care-plan item.
+- **Plan approval:** each item's English wording checked against its Spanish source
+  (4/4), Metformin reconciled as an update of the existing record, approval note added,
+  review saved, Today preview checked, then approved 06:15:43 UTC; version 4 superseded.
+- **Patient:** Today shows the same five tasks credited to Dr. Elena Park; notifications
+  show "Document processing completed", "Document review updated" and "Your care plan was
+  updated".

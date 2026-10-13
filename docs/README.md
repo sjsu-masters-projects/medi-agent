@@ -15,7 +15,7 @@ spring-2026 meeting records. Neither is current implementation guidance.
 | Latest prototype acceptance and pending presentation checks | [Deployed recheck, October 11–12](deployed-recheck-2026-10-11.md), [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md), [portal UI/UX evidence](portal-ui-ux-review-2026-10-10.md) and [UX-002 overhaul verification](ux-002-overhaul-verification.md) |
 | Visual design and app icons | `../.agent/DESIGN_SYSTEM.md` and [app icons](brand-icons.md) |
 | Current implementation and delivery boundaries | `../.agent/ARCHITECTURE.md` |
-| Model routing, safety controls, and evaluation limits | [AI runtime decision](decisions/ai-runtime-2026-09.md) |
+| Model routing, safety controls, and evaluation limits | [AI runtime decision](decisions/ai-runtime-2026-09.md) and the [AI-005 agent quality plan](../.agent/specs/ai-005-agent-quality.md) |
 | Nora's reference knowledge, document answers and conversations | [NORA-002 specification](../.agent/specs/nora-002-grounded-answers.md) |
 | In-app notifications, clinician Alerts and their database contract | [NOT-001 specification](../.agent/specs/not-001-notification-centre.md) |
 | Account recovery, email preferences, invitations and event email | [EMAIL-001 specification](../.agent/specs/email-001-email-flows.md) and [email templates](email-templates/README.md) |
