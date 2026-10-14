@@ -1,6 +1,6 @@
 # CLN-003 — Clinicians who work at more than one clinic
 
-**Status:** Backlog; core decisions made October 13, two questions remain. Raised by the project advisor at the
+**Status:** Backlog; decisions made October 13, the shared clinical summary awaits confirmation. Raised by the project advisor at the
 October 13 checkpoint demo.
 
 ## Why
@@ -82,32 +82,36 @@ and keep one schedule across all of them. MediAgent models one clinic per clinic
    [PLAN-002](plan-002-care-plans-per-care-team.md).
 3. **No feature-freeze constraint:** design and build the complete version.
 
-## Recommended answers (pending confirmation)
+## Shared clinical summary (recommended October 13, pending confirmation)
 
-1. **Cross-clinic visibility: clinically shared core, everything else per clinic.**
-   - **Shared with every clinician on the patient's care teams, for treatment:** the
-     active medication list (each medication tagged with the care team and clinic that
-     prescribed it), allergies, active conditions and critical-result alerts. Polypharmacy
-     safety depends on one complete medication list; a cardiologist who cannot see the
-     ENT's prescription cannot catch an interaction or duplicate.
-   - **Visible only to the care team that owns it:** documents uploaded for another care
-     team, that team's care plan detail, chat and messages, SOAP notes, ADR reviews and
-     visit details. Another clinic sees only that a plan exists ("Cardiology plan,
-     Cedar Grove, approved Oct 13") and its medication items through the shared list.
-   - **Scheduling:** another clinic sees only "busy" blocks on a shared clinician's
-     calendar, never the patient or the reason.
-   - **Patient control:** the patient's Profile lists who can see the shared core. A
-     patient may hide it from one care team, and the clinician then sees a "medication
-     list hidden by the patient" notice instead of a partial list.
-2. **Default view:** "All clinics", remembering the last filter per page.
+Every clinician on a patient's care teams sees one **shared clinical summary**, so each
+has the overall picture needed to treat safely.
 
-## Remaining questions
+- **Always shared:**
+  - **Active medications and allergies**, each tagged with the care team and clinic that
+    recorded them. A hidden medication or allergy is how interactions and allergic
+    reactions get missed, so the patient cannot hide these.
+  - **Critical-result alerts.**
+  - **The patient's other care teams:** specialty, clinician and clinic, so a clinician
+    knows who else to coordinate with.
+- **Shared, but the patient can mark sensitive:** active conditions. A condition the
+  patient marks sensitive (for example mental health, HIV, reproductive or substance-use
+  care, which California treats as sensitive services) is visible only to the care team
+  that recorded it. Other clinicians see "Some conditions are kept private by the patient"
+  instead of a silently partial list. This is a product rule, not a legal opinion; it
+  should be confirmed before real use.
+- **Owned by one care team and not shared:** documents, that team's care-plan detail,
+  chat and messages, SOAP notes, ADR reviews and visit details. Other teams see only that
+  a plan exists (specialty, clinician, clinic, approval date) and its medications, through
+  the shared list.
+- **Scheduling:** other clinics see only "busy" blocks on a shared clinician's calendar.
+- **Default view:** "All clinics", remembering the last filter per page.
 
-- Can a patient hide the shared medication list from a care team, as recommended? Or is
-  the full list always shared for safety?
-- Does a clinician who belongs to a clinic, but has no link to a patient, ever see that
-  patient (for example covering for a colleague)? Recommendation: only through an
-  explicit, audited temporary care-team link.
+## Out of scope
+
+- **Covering for a colleague.** MediAgent has no coverage or delegation feature. The rule
+  stays that a clinician sees a patient only through their own care-team link. If coverage
+  is ever needed, it would be an explicit, time-limited, audited link and its own task.
 
 ## Suggested slices
 

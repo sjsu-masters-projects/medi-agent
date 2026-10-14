@@ -1,6 +1,6 @@
 # PLAN-002 — Care plans per care team
 
-**Status:** Backlog; direction decided by the requester on October 13. Part of CLN-003
+**Status:** Backlog; direction and conflict handling decided October 13. Part of CLN-003
 (slice H). It changes the PAT-005 contract, so read the
 [PAT-005 specification](pat-005-clinician-approved-today-feed-plan.md) first.
 
@@ -47,20 +47,61 @@ So a cardiology instruction and an ENT instruction share one plan and one approv
 
 ## Safety across plans
 
-The polypharmacy core of the product:
+The polypharmacy core of the product. When a draft is previewed or published, it is
+checked against the patient's other approved plans and the shared medication list.
 
-- **Cross-plan checks when a draft is reviewed and published.**
-  - Duplicate therapy: two plans with the same ingredient.
-  - Conflicting instructions for the same medication.
-  - A plan that stops a medication another plan keeps active.
-  - Overlapping schedules for the same medication.
-  - Interactions with the other plans' medications, through MED-001's checker.
-- **These block publication** until the reviewing clinician resolves or acknowledges them.
-  The other plan's care team is notified and gets a review item. The other plan is never
-  edited.
-- **Visibility of other plans.** Clinicians on other care teams see that a plan exists and
-  its medication items, through the shared list. They do not see its other items, sources
-  or notes, as CLN-003 recommends.
+**What is checked:**
+
+| Check | Example |
+| --- | --- |
+| Duplicate therapy | two plans with the same ingredient |
+| Conflicting instructions | different doses or schedules for the same medication |
+| Stop versus continue | this draft stops a medication that another plan keeps active, or the reverse |
+| Interactions | through MED-001's checker, with its severity |
+
+**How a blocker is handled (decided October 13: conflicts block publication):**
+
+1. **Shown where the clinician is working.** The draft shows a "Conflicts with other
+   plans" blocker on the item. It shows both instructions side by side, with the other
+   plan's specialty, clinician, clinic and approval date, and the shared-list entry they
+   overlap on.
+2. **The reviewing clinician chooses one of four resolutions.** The clinician changes only
+   their own plan; the other plan is never edited from here.
+   - **Change this item** (dose, schedule or wording) or **remove it**. The check runs
+     again, and the blocker clears if the conflict is gone.
+   - **Keep both, with a reason**, when the overlap is intended (for example two
+     prescribers agreed on a combination). A written reason is required. This
+     acknowledgement clears the blocker for that conflict and is audited.
+   - **Ask the other care team.** This sends a "Cross-plan conflict" review item and a
+     care-team message to the other plan's clinician. The item stays blocked until they
+     reply, or until this clinician resolves it in another way.
+   - **Publish without this item.** The rest of the plan publishes; the conflicting item
+     stays in the draft as pending.
+3. **By severity.**
+   - **Must be resolved or acknowledged with a reason:** stop versus continue, an exact
+     duplicate ingredient, and a major interaction.
+   - **Warning only, with acknowledgement optional:** minor interactions and schedule
+     overlaps.
+4. **The other care team is always told.** They get a review item ("The orthopaedic plan
+   by Dr. X conflicts with your cardiology plan: duplicate ibuprofen"), can adjust their
+   own plan, and see the reason if the conflict was acknowledged.
+5. **The patient is unaffected until it is resolved.** Their current approved activities
+   stay in Today unchanged. The patient never sees the conflict itself, only the result
+   once a plan is published.
+
+## When a care team ends
+
+Recommended October 13, pending confirmation:
+
+- **Approved activities stay in Today.** Medications must not stop because of an
+  administrative change; some, such as anticoagulants, are dangerous to stop suddenly.
+- **The plan becomes "unowned".** Its activities show "Prescribed by Dr. X, no longer on
+  your care team. Ask your care team before changing it." Reminders continue.
+- **Someone must adopt or retire it.** A review item goes to the patient's remaining care
+  teams and to the clinic admin. A clinician can adopt the plan (it becomes theirs) or
+  retire specific items. Nothing is removed automatically.
+- **If the patient has no other care team,** the patient is told to contact their clinic.
+  The clinic admin's review item stays open until it is handled.
 
 ## Migration from one plan per patient
 
@@ -70,13 +111,12 @@ The polypharmacy core of the product:
 - Any draft that cannot be assigned unambiguously goes to a review item. It is never
   guessed.
 
-## Decisions needed
+## Decisions
 
-1. Is a plan keyed by care-team link (recommended) or by specialty? Two providers in one
-   specialty at the same clinic would then share a plan.
-2. Do cross-plan conflicts block publication until acknowledged (recommended), or only
-   warn?
-3. How does a patient upload with "Not sure" get claimed: the first care team to claim it,
-   or a split per item?
-4. When a care team ends (the patient leaves that provider), are its approved activities
-   retired from Today immediately, or kept until another clinician reviews them?
+1. **Decided October 13:** a plan belongs to one care-team link (patient, clinician,
+   clinic), not to a specialty.
+2. **Decided October 13:** cross-plan conflicts block publication, resolved as described
+   in "How a blocker is handled".
+3. **Recommended:** activities stay in Today when a care team ends, as described above.
+4. **Open:** how a patient upload marked "Not sure" is claimed. Recommendation: any care
+   team can claim the whole document; once one claims it, it leaves the others' queues.
