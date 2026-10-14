@@ -1,6 +1,6 @@
 # LOC-003 — English-first clinician review of Spanish content
 
-**Status:** Backlog; design agreed in outline, translation timing decided, two questions remain. Raised at the October 13
+**Status:** Backlog; design and decisions agreed October 13. Raised at the October 13
 checkpoint demo.
 
 ## Principle
@@ -66,7 +66,7 @@ Both uses are labelled as such.
 | Review queue and document facts dialog | 4, 5 |
 | Care-plan source excerpts and protected source preview | 5 |
 | ADR evidence quoting patient answers | English gloss with the original |
-| Clinician chat tab (patient–Nora transcript) and care-team messages | Open decision 3 |
+| Clinician chat tab (patient–Nora transcript) and care-team messages | Decision 3 |
 
 ## Decisions
 
@@ -75,8 +75,24 @@ Both uses are labelled as such.
    doses and medication names must match, or the item keeps only its original text and is
    marked untranslated. They are stored with the fact and audited with it, so every viewer
    sees the same English.
-2. Is a bilingual reviewer optional or required for es-MX publication? The current rule
-   is a clinician attestation of both languages.
-3. Should clinicians get an English rendering of a Spanish-speaking patient's chat and
-   messages, and should their replies be translated back to Spanish? This is a separate
-   safety review, because a translated message is clinical communication.
+2. **Decided (requester, October 13): a bilingual reviewer is optional, never a blocker.**
+   The clinician checks the Spanish against its English back-translation and the guard
+   results (or any translation tool), then attests. A bilingual colleague's review can be
+   recorded but is not required to publish.
+3. **Decided October 13: chat and care-team messages get stored translations.**
+   - **Patient messages in Spanish:** the original stays the message of record. An English
+     translation is shown below it automatically, labelled "Translated from Spanish". An
+     info icon explains that it was translated automatically, by which model, and that it
+     may contain errors. This also applies to the patient–Nora transcript in the
+     clinician's Chat tab.
+   - **Clinician replies:** written in English. Before sending, the clinician sees the
+     Spanish the patient will receive, with an English back-translation, and confirms it.
+     The patient sees the Spanish with "Translated from English · show original".
+   - **Guard:** the LOC-001 guard applies. If numbers, doses or medication names differ,
+     no translation is used: the reply is delivered in English with a short Spanish note
+     that a translation was unavailable, and the clinician is told.
+   - **Storage:** each message is translated once, when it is sent or received, and stored
+     with it (message, target language, text, model, guard result, time).
+   - **Safety and records use only the original text.** Urgent-symptom checks and
+     escalation never depend on a translation, and a translation never becomes a clinical
+     fact.
