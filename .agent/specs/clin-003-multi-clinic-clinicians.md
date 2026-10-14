@@ -1,6 +1,6 @@
 # CLN-003 — Clinicians who work at more than one clinic
 
-**Status:** Backlog; decisions made October 13, the shared clinical summary awaits confirmation. Raised by the project advisor at the
+**Status:** Backlog; decisions made October 13. Raised by the project advisor at the
 October 13 checkpoint demo.
 
 ## Why
@@ -82,7 +82,7 @@ and keep one schedule across all of them. MediAgent models one clinic per clinic
    [PLAN-002](plan-002-care-plans-per-care-team.md).
 3. **No feature-freeze constraint:** design and build the complete version.
 
-## Shared clinical summary (recommended October 13, pending confirmation)
+## Shared clinical summary (decided October 13)
 
 Every clinician on a patient's care teams sees one **shared clinical summary**, so each
 has the overall picture needed to treat safely.

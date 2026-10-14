@@ -91,7 +91,7 @@ checked against the patient's other approved plans and the shared medication lis
 
 ## When a care team ends
 
-Recommended October 13, pending confirmation:
+Decided October 13:
 
 - **Approved activities stay in Today.** Medications must not stop because of an
   administrative change; some, such as anticoagulants, are dangerous to stop suddenly.
@@ -117,6 +117,6 @@ Recommended October 13, pending confirmation:
    clinic), not to a specialty.
 2. **Decided October 13:** cross-plan conflicts block publication, resolved as described
    in "How a blocker is handled".
-3. **Recommended:** activities stay in Today when a care team ends, as described above.
+3. **Decided October 13:** activities stay in Today when a care team ends, until a clinician adopts or retires them.
 4. **Open:** how a patient upload marked "Not sure" is claimed. Recommendation: any care
    team can claim the whole document; once one claims it, it leaves the others' queues.
