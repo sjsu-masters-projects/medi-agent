@@ -21,4 +21,11 @@ describe("patient notification contract", () => {
   it.each(["/records?document=synthetic", "/today?activity=synthetic", "/today?view=care-plan", "/chat?view=care-team&conversation=synthetic", "/chat?view=care-team&recipient=synthetic", "/visits?appointmentId=synthetic"])("preserves exact authorized target %s", (url) => {
     expect(notificationDestination(url)).toBe(url);
   });
+  const uuid = "123e4567-e89b-42d3-a456-426614174000";
+  it.each(["/chat?view=follow-up", `/chat?view=follow-up&assessment=${uuid}`, `/chat?view=follow-up&request=${uuid}`])("accepts the ADR follow-up link %s", (url) => {
+    expect(notificationDestination(url)).toBe(url);
+  });
+  it.each(["//evil.example/chat?view=follow-up", "https://evil.example/chat?view=follow-up", "/\\evil.example", "/admin?view=follow-up", "/chat/../login?view=follow-up", "/chat?view=follow-up\n"])("still rejects %s", (url) => {
+    expect(notificationDestination(url)).toBeNull();
+  });
 });

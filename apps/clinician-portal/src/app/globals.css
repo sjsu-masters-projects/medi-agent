@@ -232,3 +232,58 @@ details.ma-disclosure[open] > summary::before { transform: rotate(90deg); }
     100% { --fade-start: 32px; --fade-end: 0px; }
   }
 }
+
+/* ---------- Print: Form FDA 3500 preview ----------
+   US Letter, no navigation or actions. When a `.ma-print-root` is on the page (the
+   preview dialog), only it and its ancestors print; ancestors drop their fixed, clipped
+   or scrolling layout so every section reaches the paper. The not-submitted footer is
+   fixed to the page bottom, which browsers repeat on every printed page. */
+.ma-print-footer { break-inside: avoid; }
+
+@media print {
+  @page { size: Letter; margin: 0.5in; }
+
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: var(--color-surface) !important;
+  }
+
+  nav, aside, [data-print-hide] { display: none !important; }
+
+  body:has(.ma-print-root) *:not(.ma-print-root):not(:has(.ma-print-root)):not(.ma-print-root *) {
+    display: none !important;
+  }
+  *:has(.ma-print-root) {
+    position: static !important;
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    max-width: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    transform: none !important;
+    animation: none !important;
+  }
+
+  .ma-print-root { padding-bottom: 0.4in; }
+  .ma-print-section { break-inside: avoid; }
+
+  .ma-print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border: 0;
+    background: var(--color-surface);
+    padding-top: 4pt;
+    text-align: center;
+    justify-content: center;
+    font-size: 9pt;
+    color: var(--color-ink);
+  }
+}

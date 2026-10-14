@@ -18,6 +18,7 @@ import { usePatientShell } from "@/contexts/patient-shell-context";
 import { FeedTaskStatus, normalizeLocale, type Locale, type FeedTask } from "@/types";
 import { ApprovedPlanDetails } from "@/components/features/approved-plan-details";
 import { NotificationBell } from "@/components/features/notification-centre";
+import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
 
 function mapTaskStatus(task: FeedTask, now: number): TaskCardStatus {
     const status = task.status;
@@ -211,6 +212,7 @@ export default function TodayPage() {
             </section>
 
             <div className="space-y-5 pt-[18px]">
+                <div className="px-4 empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>
                 {activityId && !loading && !error && !exactActivity && matchingActivities.length === 0 && <p role="alert" className="mx-4 rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Esta actividad no está disponible hoy. Actualiza tus actividades." : "This activity is unavailable today. Refresh your activities."}</p>}
                 {remainingTasks.length === 0 ? <h2 className="sr-only">{copy.schedule}</h2> : null}
                 {actionError && !barrierTask ? <p role="alert" className="mx-4 flex items-start gap-2.5 rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink"><Icon name="alert" className="h-5 w-5 shrink-0" />{actionError}</p> : null}

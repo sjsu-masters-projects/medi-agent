@@ -1,0 +1,4995 @@
+{
+  "title": "FORM FDA 3500",
+  "revision": "09/2025",
+  "omb_number": "0910-0291",
+  "expires": "2027-09-30",
+  "source_url": "https://www.fda.gov/media/76299/download",
+  "downloaded_on": "2026-10-13",
+  "file": "form-3500-2025-09.pdf",
+  "generated_by": "backend/scripts/generate_form_3500_template_record.py",
+  "sha256": "1147d7c86bb002cba7fb9352ca8e3402524d8fa0236916b7bf7e5dcdcf88bf9c",
+  "size_bytes": 921232,
+  "page_count": 8,
+  "field_count": 239,
+  "field_type_counts": {
+    "button": 83,
+    "choice": 14,
+    "text": 142
+  },
+  "button_kinds": {
+    "checkbox": 77,
+    "pushbutton": 6
+  },
+  "field_inventory_sha256": "69de974ab0d9d9e7be66e5a317b0fec091257b0e2a18a3731c3c9742fa61516e",
+  "fields": {
+    "topmostSubform[0].Page1[0].Header[0].RecDate[0]": "text",
+    "topmostSubform[0].Page1[0].Header[0].TriageNum[0]": "text",
+    "topmostSubform[0].Page1[0].ResetForm[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].AgeDays[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].AgeMonths[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].AgeValue[0]": "text",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].AgeWeeks[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].AgeYears[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].Congenital[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].DateBirth[0]": "text",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].DeathDate[0]": "text",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].Death[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].Defects[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].DiffManu[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].Disability[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].EthnicLatino[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].EventDate[0]": "text",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].Hospital[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].LifeThreaten[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].OtherEvents[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].PatientIdentifier[0]": "text",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RaceAmInd[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RaceAsian[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RaceBlack[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RaceMiddleEastern[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RacePacific[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RaceWhite[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RepAdverse[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].RepError[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].ReportDate[0]": "text",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].ReqdInter[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].SexF[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].SexM[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].WeightKG[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].WeightLB[0]": "button",
+    "topmostSubform[0].Page1[0].SecA_Patient[0].WeightValue[0]": "text",
+    "topmostSubform[0].Page2[0].SecB_Adverse[0].CharCounter[0]": "text",
+    "topmostSubform[0].Page2[0].SecB_Adverse[0].DescEvent[0]": "text",
+    "topmostSubform[0].Page3[0].AdditionalComments[0]": "text",
+    "topmostSubform[0].Page3[0].CharCounter[0]": "text",
+    "topmostSubform[0].Page3[0].Sec6Data[0].CharCounter[0]": "text",
+    "topmostSubform[0].Page3[0].Sec6Data[0].OtherHistory[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].EvalNo[0]": "button",
+    "topmostSubform[0].Page3[0].TestDataTable[0].EvalRetd[0]": "button",
+    "topmostSubform[0].Page3[0].TestDataTable[0].EvalYes[0]": "button",
+    "topmostSubform[0].Page3[0].TestDataTable[0].ReturnDate[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row1[0].TDate1[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row1[0].THighRange1[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row1[0].TLowRange1[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row1[0].TestData1[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row2[0].TDate2[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row2[0].THighRange2[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row2[0].TLowRange2[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row2[0].TestData2[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row3[0].THighRange3[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row3[0].TLowRange3[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row3[0].TestData3[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row4[0].THighRange4[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row4[0].TLowRange4[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row4[0].TestData4[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row5[0].THighRange5[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row5[0].TLowRange5[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row5[0].TestData5[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row6[0].THighRange6[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row6[0].TLowRange6[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row6[0].TestData6[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row7[0].PicYes[0]": "button",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row7[0].TLowRange7[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row7[0].TestData7[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TDate3[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TDate4[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TDate5[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TDate6[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TDate7[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TDate8[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].THighRange7[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].THighRange8[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TLowRange8[0]": "text",
+    "topmostSubform[0].Page3[0].TestDataTable[0].Row8[0].TestData8[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1AbatedNA[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1AbatedNo[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1AbatedYes[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Address[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Brand[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Cannabi[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1City[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Compounded[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1CosRetail[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1CosmProf[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Country[0]": "choice",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Diagnosis[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1DoseUnit[0]": "choice",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Dose[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1ExpDate[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1FreqOther[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Freq[0]": "choice",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Generic[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1LotNum[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1ManuComp[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1NDC_ID[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Name[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1OTC[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1PdtOther[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1PlaceName[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1PurchaseDate[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1ReappearNA[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1ReappearNo[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1ReappearYes[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1RouteOther[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Route[0]": "choice",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1State[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1StrengthUnit[0]": "choice",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Strength[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyDurUnit[0]": "choice",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyDuration[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyOngoingNo[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyOngoingYes[0]": "button",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyReduceDate[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyStartDate[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyStopDate[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Website[0]": "text",
+    "topmostSubform[0].Page4[0].Prod1[0].ZipCode[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2Cannabi[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2City[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2CosRetail[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2Country[0]": "choice",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2PdtOther[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2PurchaseDate[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2State[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2Website[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2AbatedNA[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2AbatedNo[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2AbatedYes[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Address[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Brand[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Compounded[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Diagnosis[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2DoseUnit[0]": "choice",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Dose[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2ExpDate[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2FreqOther[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Freq[0]": "choice",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Generic[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2LotNum[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2ManuComp[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2NDC_ID[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Name[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2OTC[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2PlaceName[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2ReappearNA[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2ReappearNo[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2ReappearYes[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2RouteOther[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Route[0]": "choice",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2StrengthUnit[0]": "choice",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Strength[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyDurUnit[0]": "choice",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyDuration[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyOngoingNo[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyOngoingYes[0]": "button",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyReduceDate[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyStartDate[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyStopDate[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].ZipCode[0]": "text",
+    "topmostSubform[0].Page5[0].Prod2[0].pdt2CosmProf[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].BrandName[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].CatNum[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].CharCounter[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].CommName[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ExpDate[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ExplantDate[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].HealthPro[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ImplantDate[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].LotNum[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ManuName[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ModelNum[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].OperatorOther[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].PatientCons[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].Procode[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ReprocInfo[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ReuseNo[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ReuseYes[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].SerialNum[0]": "text",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ServiceUnk[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ServicedNo[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].ServicedYes[0]": "button",
+    "topmostSubform[0].Page6[0].SecE_Device[0].UDInum[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row10[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row10[0].Prod10[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row10[0].Start10[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row1[0].End1[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row1[0].Prod1[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row1[0].Start1[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row2[0].End2[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row2[0].Prod2[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row2[0].Start2[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row3[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row3[0].Prod3[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row3[0].Start3[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row4[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row4[0].Prod4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row4[0].Start4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row5[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row5[0].Prod5[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row5[0].Start5[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row6[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row6[0].Prod6[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row6[0].Start6[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row7[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row7[0].Prod7[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row7[0].Start7[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row8[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row8[0].Prod8[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row8[0].Start8[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row9[0].Cell4[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row9[0].Prod9[0]": "text",
+    "topmostSubform[0].Page6[0].SecF_Other[0].Table1[0].Row9[0].Start9[0]": "text",
+    "topmostSubform[0].Page7[0].Advice[0].AnimalDrug[0].T113[0]": "button",
+    "topmostSubform[0].Page7[0].Advice[0].AnimalDrug[0].T118[0]": "button",
+    "topmostSubform[0].Page7[0].Advice[0].AnimalDrug[0].T97[0]": "button",
+    "topmostSubform[0].Page7[0].Advice[0].AnimalDrug[0].WhereToSubmitList[0].Button1[0]": "button",
+    "topmostSubform[0].Page7[0].Advice[0].RepPhone[0].HowToSubmit[0].HowToSubmitList[0].T97[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].Address[0]": "text",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].City[0]": "text",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].Country[0]": "choice",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].DistImp[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].Email[0]": "text",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].FirstName[0]": "text",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].IdentityNo[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].LastName[0]": "text",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].ManuComp[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].Occupation[0]": "choice",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].Packer[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].PhoneNum[0]": "text",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].ProNo[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].ProYes[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].State[0]": "text",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].UserFac[0]": "button",
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].ZipCode[0]": "text"
+  },
+  "choice_options": {
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Country[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "UNITED STATES",
+        "UNITED STATES"
+      ],
+      [
+        "AFGHANISTAN",
+        "AFGHANISTAN"
+      ],
+      [
+        "AKROTIRI",
+        "AKROTIRI"
+      ],
+      [
+        "ALBANIA",
+        "ALBANIA"
+      ],
+      [
+        "ALGERIA",
+        "ALGERIA"
+      ],
+      [
+        "AMERICAN SAMOA",
+        "AMERICAN SAMOA"
+      ],
+      [
+        "ANDORRA",
+        "ANDORRA"
+      ],
+      [
+        "ANGOLA",
+        "ANGOLA"
+      ],
+      [
+        "ANGUILLA",
+        "ANGUILLA"
+      ],
+      [
+        "ANTARCTICA",
+        "ANTARCTICA"
+      ],
+      [
+        "ANTIGUA AND BARBUDA",
+        "ANTIGUA AND BARBUDA"
+      ],
+      [
+        "ARGENTINA",
+        "ARGENTINA"
+      ],
+      [
+        "ARMENIA",
+        "ARMENIA"
+      ],
+      [
+        "ARUBA",
+        "ARUBA"
+      ],
+      [
+        "ASHMORE AND CARTIER ISLANDS",
+        "ASHMORE AND CARTIER ISLANDS"
+      ],
+      [
+        "AUSTRALIA",
+        "AUSTRALIA"
+      ],
+      [
+        "AUSTRIA",
+        "AUSTRIA"
+      ],
+      [
+        "AZERBAIJAN",
+        "AZERBAIJAN"
+      ],
+      [
+        "BAHAMAS, THE",
+        "BAHAMAS, THE"
+      ],
+      [
+        "BAHRAIN",
+        "BAHRAIN"
+      ],
+      [
+        "BAKER ISLAND",
+        "BAKER ISLAND"
+      ],
+      [
+        "BANGLADESH",
+        "BANGLADESH"
+      ],
+      [
+        "BARBADOS",
+        "BARBADOS"
+      ],
+      [
+        "BASSAS DA INDIA",
+        "BASSAS DA INDIA"
+      ],
+      [
+        "BELARUS",
+        "BELARUS"
+      ],
+      [
+        "BELGIUM",
+        "BELGIUM"
+      ],
+      [
+        "BELIZE",
+        "BELIZE"
+      ],
+      [
+        "BENIN",
+        "BENIN"
+      ],
+      [
+        "BERMUDA",
+        "BERMUDA"
+      ],
+      [
+        "BHUTAN",
+        "BHUTAN"
+      ],
+      [
+        "BOLIVIA",
+        "BOLIVIA"
+      ],
+      [
+        "BONAIRE, SINT EUSTATIUS, AND SABA",
+        "BONAIRE, SINT EUSTATIUS, AND SABA"
+      ],
+      [
+        "BOSNIA AND HERZEGOVINA",
+        "BOSNIA AND HERZEGOVINA"
+      ],
+      [
+        "BOTSWANA",
+        "BOTSWANA"
+      ],
+      [
+        "BOUVET ISLAND",
+        "BOUVET ISLAND"
+      ],
+      [
+        "BRAZIL",
+        "BRAZIL"
+      ],
+      [
+        "BRITISH INDIAN OCEAN TERRITORY",
+        "BRITISH INDIAN OCEAN TERRITORY"
+      ],
+      [
+        "BRUNEI",
+        "BRUNEI"
+      ],
+      [
+        "BULGARIA",
+        "BULGARIA"
+      ],
+      [
+        "BURKINA FASO",
+        "BURKINA FASO"
+      ],
+      [
+        "BURMA",
+        "BURMA"
+      ],
+      [
+        "BURUNDI",
+        "BURUNDI"
+      ],
+      [
+        "CABO VERDE",
+        "CABO VERDE"
+      ],
+      [
+        "CAMBODIA",
+        "CAMBODIA"
+      ],
+      [
+        "CAMEROON",
+        "CAMEROON"
+      ],
+      [
+        "CANADA",
+        "CANADA"
+      ],
+      [
+        "CAYMAN ISLANDS",
+        "CAYMAN ISLANDS"
+      ],
+      [
+        "CENTRAL AFRICAN REPUBLIC",
+        "CENTRAL AFRICAN REPUBLIC"
+      ],
+      [
+        "CHAD",
+        "CHAD"
+      ],
+      [
+        "CHILE",
+        "CHILE"
+      ],
+      [
+        "CHINA",
+        "CHINA"
+      ],
+      [
+        "CHRISTMAS ISLAND",
+        "CHRISTMAS ISLAND"
+      ],
+      [
+        "CLIPPERTON ISLAND",
+        "CLIPPERTON ISLAND"
+      ],
+      [
+        "COCOS (KEELING) ISLANDS",
+        "COCOS (KEELING) ISLANDS"
+      ],
+      [
+        "COLOMBIA",
+        "COLOMBIA"
+      ],
+      [
+        "COMOROS",
+        "COMOROS"
+      ],
+      [
+        "CONGO (BRAZZAVILLE)",
+        "CONGO (BRAZZAVILLE)"
+      ],
+      [
+        "CONGO (KINSHASA)",
+        "CONGO (KINSHASA)"
+      ],
+      [
+        "COOK ISLANDS",
+        "COOK ISLANDS"
+      ],
+      [
+        "CORAL SEA ISLANDS",
+        "CORAL SEA ISLANDS"
+      ],
+      [
+        "COSTA RICA",
+        "COSTA RICA"
+      ],
+      [
+        "CROATIA",
+        "CROATIA"
+      ],
+      [
+        "CUBA",
+        "CUBA"
+      ],
+      [
+        "CURAÇAO",
+        "CURAÇAO"
+      ],
+      [
+        "CYPRUS",
+        "CYPRUS"
+      ],
+      [
+        "CZECH REPUBLIC",
+        "CZECH REPUBLIC"
+      ],
+      [
+        "CÔTE D’IVOIRE",
+        "CÔTE D’IVOIRE"
+      ],
+      [
+        "DENMARK",
+        "DENMARK"
+      ],
+      [
+        "DHEKELIA",
+        "DHEKELIA"
+      ],
+      [
+        "DIEGO GARCIA",
+        "DIEGO GARCIA"
+      ],
+      [
+        "DJIBOUTI",
+        "DJIBOUTI"
+      ],
+      [
+        "DOMINICA",
+        "DOMINICA"
+      ],
+      [
+        "DOMINICAN REPUBLIC",
+        "DOMINICAN REPUBLIC"
+      ],
+      [
+        "ECUADOR",
+        "ECUADOR"
+      ],
+      [
+        "EGYPT",
+        "EGYPT"
+      ],
+      [
+        "EL SALVADOR",
+        "EL SALVADOR"
+      ],
+      [
+        "EQUATORIAL GUINEA",
+        "EQUATORIAL GUINEA"
+      ],
+      [
+        "ERITREA",
+        "ERITREA"
+      ],
+      [
+        "ESTONIA",
+        "ESTONIA"
+      ],
+      [
+        "ETHIOPIA",
+        "ETHIOPIA"
+      ],
+      [
+        "EUROPA ISLAND",
+        "EUROPA ISLAND"
+      ],
+      [
+        "FALKLAND ISLANDS (ISLAS MALVINAS)",
+        "FALKLAND ISLANDS (ISLAS MALVINAS)"
+      ],
+      [
+        "FAROE ISLANDS",
+        "FAROE ISLANDS"
+      ],
+      [
+        "FIJI",
+        "FIJI"
+      ],
+      [
+        "FINLAND",
+        "FINLAND"
+      ],
+      [
+        "FRANCE",
+        "FRANCE"
+      ],
+      [
+        "FRENCH GUIANA",
+        "FRENCH GUIANA"
+      ],
+      [
+        "FRENCH POLYNESIA",
+        "FRENCH POLYNESIA"
+      ],
+      [
+        "FRENCH SOUTHERN AND ANTARCTIC LANDS",
+        "FRENCH SOUTHERN AND ANTARCTIC LANDS"
+      ],
+      [
+        "GABON",
+        "GABON"
+      ],
+      [
+        "GAMBIA, THE",
+        "GAMBIA, THE"
+      ],
+      [
+        "GAZA STRIP",
+        "GAZA STRIP"
+      ],
+      [
+        "GEORGIA",
+        "GEORGIA"
+      ],
+      [
+        "GERMANY",
+        "GERMANY"
+      ],
+      [
+        "GHANA",
+        "GHANA"
+      ],
+      [
+        "GIBRALTAR",
+        "GIBRALTAR"
+      ],
+      [
+        "GLORIOSO ISLANDS",
+        "GLORIOSO ISLANDS"
+      ],
+      [
+        "GREECE",
+        "GREECE"
+      ],
+      [
+        "GREENLAND",
+        "GREENLAND"
+      ],
+      [
+        "GRENADA",
+        "GRENADA"
+      ],
+      [
+        "GUADELOUPE",
+        "GUADELOUPE"
+      ],
+      [
+        "GUAM",
+        "GUAM"
+      ],
+      [
+        "GUANTANAMO BAY NAVAL BASE",
+        "GUANTANAMO BAY NAVAL BASE"
+      ],
+      [
+        "GUATEMALA",
+        "GUATEMALA"
+      ],
+      [
+        "GUERNSEY",
+        "GUERNSEY"
+      ],
+      [
+        "GUINEA",
+        "GUINEA"
+      ],
+      [
+        "GUINEA-BISSAU",
+        "GUINEA-BISSAU"
+      ],
+      [
+        "GUYANA",
+        "GUYANA"
+      ],
+      [
+        "HAITI",
+        "HAITI"
+      ],
+      [
+        "HEARD ISLAND AND MCDONALD ISLANDS",
+        "HEARD ISLAND AND MCDONALD ISLANDS"
+      ],
+      [
+        "HONDURAS",
+        "HONDURAS"
+      ],
+      [
+        "HONG KONG",
+        "HONG KONG"
+      ],
+      [
+        "HOWLAND ISLAND",
+        "HOWLAND ISLAND"
+      ],
+      [
+        "HUNGARY",
+        "HUNGARY"
+      ],
+      [
+        "ICELAND",
+        "ICELAND"
+      ],
+      [
+        "INDIA",
+        "INDIA"
+      ],
+      [
+        "INDONESIA",
+        "INDONESIA"
+      ],
+      [
+        "IRAN",
+        "IRAN"
+      ],
+      [
+        "IRAQ",
+        "IRAQ"
+      ],
+      [
+        "IRELAND",
+        "IRELAND"
+      ],
+      [
+        "ISLE OF MAN",
+        "ISLE OF MAN"
+      ],
+      [
+        "ISRAEL",
+        "ISRAEL"
+      ],
+      [
+        "ITALY",
+        "ITALY"
+      ],
+      [
+        "JAMAICA",
+        "JAMAICA"
+      ],
+      [
+        "JAN MAYEN",
+        "JAN MAYEN"
+      ],
+      [
+        "JAPAN",
+        "JAPAN"
+      ],
+      [
+        "JARVIS ISLAND",
+        "JARVIS ISLAND"
+      ],
+      [
+        "JERSEY",
+        "JERSEY"
+      ],
+      [
+        "JOHNSTON ATOLL",
+        "JOHNSTON ATOLL"
+      ],
+      [
+        "JORDAN",
+        "JORDAN"
+      ],
+      [
+        "JUAN DE NOVA ISLAND",
+        "JUAN DE NOVA ISLAND"
+      ],
+      [
+        "KAZAKHSTAN",
+        "KAZAKHSTAN"
+      ],
+      [
+        "KENYA",
+        "KENYA"
+      ],
+      [
+        "KINGMAN REEF",
+        "KINGMAN REEF"
+      ],
+      [
+        "KIRIBATI",
+        "KIRIBATI"
+      ],
+      [
+        "KOREA, NORTH",
+        "KOREA, NORTH"
+      ],
+      [
+        "KOREA, SOUTH",
+        "KOREA, SOUTH"
+      ],
+      [
+        "KOSOVO",
+        "KOSOVO"
+      ],
+      [
+        "KUWAIT",
+        "KUWAIT"
+      ],
+      [
+        "KYRGYZSTAN",
+        "KYRGYZSTAN"
+      ],
+      [
+        "LAOS",
+        "LAOS"
+      ],
+      [
+        "LATVIA",
+        "LATVIA"
+      ],
+      [
+        "LEBANON",
+        "LEBANON"
+      ],
+      [
+        "LESOTHO",
+        "LESOTHO"
+      ],
+      [
+        "LIBERIA",
+        "LIBERIA"
+      ],
+      [
+        "LIBYA",
+        "LIBYA"
+      ],
+      [
+        "LIECHTENSTEIN",
+        "LIECHTENSTEIN"
+      ],
+      [
+        "LITHUANIA",
+        "LITHUANIA"
+      ],
+      [
+        "LUXEMBOURG",
+        "LUXEMBOURG"
+      ],
+      [
+        "MACAU",
+        "MACAU"
+      ],
+      [
+        "MACEDONIA",
+        "MACEDONIA"
+      ],
+      [
+        "MADAGASCAR",
+        "MADAGASCAR"
+      ],
+      [
+        "MALAWI",
+        "MALAWI"
+      ],
+      [
+        "MALAYSIA",
+        "MALAYSIA"
+      ],
+      [
+        "MALDIVES",
+        "MALDIVES"
+      ],
+      [
+        "MALI",
+        "MALI"
+      ],
+      [
+        "MALTA",
+        "MALTA"
+      ],
+      [
+        "MARSHALL ISLANDS",
+        "MARSHALL ISLANDS"
+      ],
+      [
+        "MARTINIQUE",
+        "MARTINIQUE"
+      ],
+      [
+        "MAURITANIA",
+        "MAURITANIA"
+      ],
+      [
+        "MAURITIUS",
+        "MAURITIUS"
+      ],
+      [
+        "MAYOTTE",
+        "MAYOTTE"
+      ],
+      [
+        "MEXICO",
+        "MEXICO"
+      ],
+      [
+        "MICRONESIA, FEDERATED STATES OF",
+        "MICRONESIA, FEDERATED STATES OF"
+      ],
+      [
+        "MIDWAY ISLANDS",
+        "MIDWAY ISLANDS"
+      ],
+      [
+        "MOLDOVA",
+        "MOLDOVA"
+      ],
+      [
+        "MONACO",
+        "MONACO"
+      ],
+      [
+        "MONGOLIA",
+        "MONGOLIA"
+      ],
+      [
+        "MONTENEGRO",
+        "MONTENEGRO"
+      ],
+      [
+        "MONTSERRAT",
+        "MONTSERRAT"
+      ],
+      [
+        "MOROCCO",
+        "MOROCCO"
+      ],
+      [
+        "MOZAMBIQUE",
+        "MOZAMBIQUE"
+      ],
+      [
+        "NAMIBIA",
+        "NAMIBIA"
+      ],
+      [
+        "NAURU",
+        "NAURU"
+      ],
+      [
+        "NAVASSA ISLAND",
+        "NAVASSA ISLAND"
+      ],
+      [
+        "NEPAL",
+        "NEPAL"
+      ],
+      [
+        "NETHERLANDS",
+        "NETHERLANDS"
+      ],
+      [
+        "NEW CALEDONIA",
+        "NEW CALEDONIA"
+      ],
+      [
+        "NEW ZEALAND",
+        "NEW ZEALAND"
+      ],
+      [
+        "NICARAGUA",
+        "NICARAGUA"
+      ],
+      [
+        "NIGER",
+        "NIGER"
+      ],
+      [
+        "NIGERIA",
+        "NIGERIA"
+      ],
+      [
+        "NIUE",
+        "NIUE"
+      ],
+      [
+        "NORFOLK ISLAND",
+        "NORFOLK ISLAND"
+      ],
+      [
+        "NORTHERN MARIANA ISLANDS",
+        "NORTHERN MARIANA ISLANDS"
+      ],
+      [
+        "NORWAY",
+        "NORWAY"
+      ],
+      [
+        "OMAN",
+        "OMAN"
+      ],
+      [
+        "PAKISTAN",
+        "PAKISTAN"
+      ],
+      [
+        "PALAU",
+        "PALAU"
+      ],
+      [
+        "PALMYRA ATOLL",
+        "PALMYRA ATOLL"
+      ],
+      [
+        "PANAMA",
+        "PANAMA"
+      ],
+      [
+        "PAPUA NEW GUINEA",
+        "PAPUA NEW GUINEA"
+      ],
+      [
+        "PARACEL ISLANDS",
+        "PARACEL ISLANDS"
+      ],
+      [
+        "PARAGUAY",
+        "PARAGUAY"
+      ],
+      [
+        "PERU",
+        "PERU"
+      ],
+      [
+        "PHILIPPINES",
+        "PHILIPPINES"
+      ],
+      [
+        "PITCAIRN ISLANDS",
+        "PITCAIRN ISLANDS"
+      ],
+      [
+        "POLAND",
+        "POLAND"
+      ],
+      [
+        "PORTUGAL",
+        "PORTUGAL"
+      ],
+      [
+        "PUERTO RICO",
+        "PUERTO RICO"
+      ],
+      [
+        "QATAR",
+        "QATAR"
+      ],
+      [
+        "REUNION",
+        "REUNION"
+      ],
+      [
+        "ROMANIA",
+        "ROMANIA"
+      ],
+      [
+        "RUSSIA",
+        "RUSSIA"
+      ],
+      [
+        "RWANDA",
+        "RWANDA"
+      ],
+      [
+        "SAINT BARTHELEMY",
+        "SAINT BARTHELEMY"
+      ],
+      [
+        "SAINT HELENA, ASCENSION, AND TRISTAN DA CUNHA",
+        "SAINT HELENA, ASCENSION, AND TRISTAN DA CUNHA"
+      ],
+      [
+        "SAINT KITTS AND NEVIS",
+        "SAINT KITTS AND NEVIS"
+      ],
+      [
+        "SAINT LUCIA",
+        "SAINT LUCIA"
+      ],
+      [
+        "SAINT MARTIN",
+        "SAINT MARTIN"
+      ],
+      [
+        "SAINT PIERRE AND MIQUELON",
+        "SAINT PIERRE AND MIQUELON"
+      ],
+      [
+        "SAINT VINCENT AND THE GRENADINES",
+        "SAINT VINCENT AND THE GRENADINES"
+      ],
+      [
+        "SAMOA",
+        "SAMOA"
+      ],
+      [
+        "SAN MARINO",
+        "SAN MARINO"
+      ],
+      [
+        "SAO TOME AND PRINCIPE",
+        "SAO TOME AND PRINCIPE"
+      ],
+      [
+        "SAUDI ARABIA",
+        "SAUDI ARABIA"
+      ],
+      [
+        "SENEGAL",
+        "SENEGAL"
+      ],
+      [
+        "SERBIA",
+        "SERBIA"
+      ],
+      [
+        "SEYCHELLES",
+        "SEYCHELLES"
+      ],
+      [
+        "SIERRA LEONE",
+        "SIERRA LEONE"
+      ],
+      [
+        "SINGAPORE",
+        "SINGAPORE"
+      ],
+      [
+        "SINT MAARTEN",
+        "SINT MAARTEN"
+      ],
+      [
+        "SLOVAKIA",
+        "SLOVAKIA"
+      ],
+      [
+        "SLOVENIA",
+        "SLOVENIA"
+      ],
+      [
+        "SOLOMON ISLANDS",
+        "SOLOMON ISLANDS"
+      ],
+      [
+        "SOMALIA",
+        "SOMALIA"
+      ],
+      [
+        "SOUTH AFRICA",
+        "SOUTH AFRICA"
+      ],
+      [
+        "SOUTH GEORGIA AND SOUTH SANDWICH ISLANDS",
+        "SOUTH GEORGIA AND SOUTH SANDWICH ISLANDS"
+      ],
+      [
+        "SOUTH SUDAN",
+        "SOUTH SUDAN"
+      ],
+      [
+        "SPAIN",
+        "SPAIN"
+      ],
+      [
+        "SPRATLY ISLANDS",
+        "SPRATLY ISLANDS"
+      ],
+      [
+        "SRI LANKA",
+        "SRI LANKA"
+      ],
+      [
+        "SUDAN",
+        "SUDAN"
+      ],
+      [
+        "SURINAME",
+        "SURINAME"
+      ],
+      [
+        "SVALBARD",
+        "SVALBARD"
+      ],
+      [
+        "SWAZILAND",
+        "SWAZILAND"
+      ],
+      [
+        "SWEDEN",
+        "SWEDEN"
+      ],
+      [
+        "SWITZERLAND",
+        "SWITZERLAND"
+      ],
+      [
+        "SYRIA",
+        "SYRIA"
+      ],
+      [
+        "TAIWAN",
+        "TAIWAN"
+      ],
+      [
+        "TAJIKISTAN",
+        "TAJIKISTAN"
+      ],
+      [
+        "TANZANIA",
+        "TANZANIA"
+      ],
+      [
+        "THAILAND",
+        "THAILAND"
+      ],
+      [
+        "TIMOR-LESTE",
+        "TIMOR-LESTE"
+      ],
+      [
+        "TOGO",
+        "TOGO"
+      ],
+      [
+        "TOKELAU",
+        "TOKELAU"
+      ],
+      [
+        "TONGA",
+        "TONGA"
+      ],
+      [
+        "TRINIDAD AND TOBAGO",
+        "TRINIDAD AND TOBAGO"
+      ],
+      [
+        "TROMELIN ISLAND",
+        "TROMELIN ISLAND"
+      ],
+      [
+        "TUNISIA",
+        "TUNISIA"
+      ],
+      [
+        "TURKEY",
+        "TURKEY"
+      ],
+      [
+        "TURKMENISTAN",
+        "TURKMENISTAN"
+      ],
+      [
+        "TURKS AND CAICOS ISLANDS",
+        "TURKS AND CAICOS ISLANDS"
+      ],
+      [
+        "TUVALU",
+        "TUVALU"
+      ],
+      [
+        "UGANDA",
+        "UGANDA"
+      ],
+      [
+        "UKRAINE",
+        "UKRAINE"
+      ],
+      [
+        "UNITED ARAB EMIRATES",
+        "UNITED ARAB EMIRATES"
+      ],
+      [
+        "UNITED KINGDOM",
+        "UNITED KINGDOM"
+      ],
+      [
+        "UNKNOWN",
+        "UNKNOWN"
+      ],
+      [
+        "URUGUAY",
+        "URUGUAY"
+      ],
+      [
+        "UZBEKISTAN",
+        "UZBEKISTAN"
+      ],
+      [
+        "VANUATU",
+        "VANUATU"
+      ],
+      [
+        "VATICAN CITY",
+        "VATICAN CITY"
+      ],
+      [
+        "VENEZUELA",
+        "VENEZUELA"
+      ],
+      [
+        "VIETNAM",
+        "VIETNAM"
+      ],
+      [
+        "VIRGIN ISLANDS, BRITISH",
+        "VIRGIN ISLANDS, BRITISH"
+      ],
+      [
+        "VIRGIN ISLANDS, U.S.",
+        "VIRGIN ISLANDS, U.S."
+      ],
+      [
+        "WAKE ISLAND",
+        "WAKE ISLAND"
+      ],
+      [
+        "WALLIS AND FUTUNA",
+        "WALLIS AND FUTUNA"
+      ],
+      [
+        "WEST BANK",
+        "WEST BANK"
+      ],
+      [
+        "WESTERN SAHARA",
+        "WESTERN SAHARA"
+      ],
+      [
+        "YEMEN",
+        "YEMEN"
+      ],
+      [
+        "ZAMBIA",
+        "ZAMBIA"
+      ],
+      [
+        "ZIMBABWE",
+        "ZIMBABWE"
+      ]
+    ],
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1DoseUnit[0]": [
+      [
+        "40",
+        " "
+      ],
+      [
+        "INTERNATIONAL UNITS PER MILLILITRE - IU/ML",
+        "AS NECESSARY - AN"
+      ],
+      [
+        "0",
+        "BECQUEREL(S) - BQ"
+      ],
+      [
+        "1",
+        "CURIE(S) - CI"
+      ],
+      [
+        "2",
+        "CYCLICAL - CYC"
+      ],
+      [
+        "3",
+        "DOSAGE FORM - DF"
+      ],
+      [
+        "4",
+        "DROP(S) - GTT"
+      ],
+      [
+        "5",
+        "GIGABECQUEREL(S) - GBQ"
+      ],
+      [
+        "6",
+        "GRAM(S) - GM"
+      ],
+      [
+        "7",
+        "INTERNATIONAL UNIT(S) - IU"
+      ],
+      [
+        "8",
+        "IU(1,000,000S) - MIU"
+      ],
+      [
+        "9",
+        "IU(1000S) - KIU"
+      ],
+      [
+        "10",
+        "IU/KILOGRAM - IU/KG"
+      ],
+      [
+        "11",
+        "KILOBECQUEREL(S) - KBQ"
+      ],
+      [
+        "12",
+        "KILOGRAM(S) - KG"
+      ],
+      [
+        "13",
+        "LITRE(S) - L"
+      ],
+      [
+        "14",
+        "MEGABECQUEREL(S) - MBQ"
+      ],
+      [
+        "15",
+        "MICROCURIE(S) - UCI"
+      ],
+      [
+        "16",
+        "MICROGRAM(S) - UGM"
+      ],
+      [
+        "17",
+        "MICROGRAM(S)/KILOGRAM(S) -UGM/KG"
+      ],
+      [
+        "18",
+        "MICROGRAM(S)/MICROGRAM(S) - UGM/UGM"
+      ],
+      [
+        "19",
+        "MICROGRAM(S)/SQ. METERS - UGM/SQ M"
+      ],
+      [
+        "20",
+        "MICROGRAMS/HOUR - UGM/HR"
+      ],
+      [
+        "21",
+        "MICROLITRE(S) - UL"
+      ],
+      [
+        "22",
+        "MICROMOLE(S) - UMOLE"
+      ],
+      [
+        "23",
+        "MILLICURIE(S) - MCI"
+      ],
+      [
+        "24",
+        "MILLIEQUIVALENT(S) - MEQ"
+      ],
+      [
+        "25",
+        "MILLIGRAM(S) - MG"
+      ],
+      [
+        "26",
+        "MILLIGRAM(S)/KILOGRAM(S) - MG/KG"
+      ],
+      [
+        "27",
+        "MILLIGRAM(S)/SQ. METERS - MG/SQ M"
+      ],
+      [
+        "28",
+        "MILLIGRAMS/MILLIGRAMS - MG/MG"
+      ],
+      [
+        "29",
+        "MILLIGRAMS/MILLILITRES - MG/ML"
+      ],
+      [
+        "30",
+        "MILLILITRE(S) - ML"
+      ],
+      [
+        "31",
+        "MILLIMOLE(S) - MMOLE"
+      ],
+      [
+        "32",
+        "MOLE(S) - MOLE"
+      ],
+      [
+        "33",
+        "NANOCURIE(S) - NCI"
+      ],
+      [
+        "34",
+        "NANOGRAM(S) - NGM"
+      ],
+      [
+        "35",
+        "PERCENT - %"
+      ],
+      [
+        "36",
+        "PICOGRAM(S) - PGM"
+      ],
+      [
+        "37",
+        "TOTAL - TOT"
+      ],
+      [
+        "38",
+        "TRIMESTER - TRI"
+      ],
+      [
+        "39",
+        "UNKNOWN - UNK"
+      ]
+    ],
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Freq[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "BID",
+        "BID"
+      ],
+      [
+        "Daily",
+        "Daily"
+      ],
+      [
+        "HS",
+        "HS"
+      ],
+      [
+        "PRN",
+        "PRN"
+      ],
+      [
+        "QID",
+        "QID"
+      ],
+      [
+        "TID",
+        "TID"
+      ],
+      [
+        "Other",
+        "Other"
+      ]
+    ],
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1Route[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "Auricular (otic)",
+        "Auricular (otic)"
+      ],
+      [
+        "Buccal",
+        "Buccal"
+      ],
+      [
+        "Cutaneous",
+        "Cutaneous"
+      ],
+      [
+        "Dental",
+        "Dental"
+      ],
+      [
+        "Endocervical",
+        "Endocervical"
+      ],
+      [
+        "Endosinusial",
+        "Endosinusial"
+      ],
+      [
+        "Endotracheal",
+        "Endotracheal"
+      ],
+      [
+        "Epidural",
+        "Epidural"
+      ],
+      [
+        "Extra-amniotic",
+        "Extra-amniotic"
+      ],
+      [
+        "Hemodialysis",
+        "Hemodialysis"
+      ],
+      [
+        "Intra corpus cavernosum",
+        "Intra corpus cavernosum"
+      ],
+      [
+        "Intra-amniotic",
+        "Intra-amniotic"
+      ],
+      [
+        "Intra-arterial",
+        "Intra-arterial"
+      ],
+      [
+        "Intra-articular",
+        "Intra-articular"
+      ],
+      [
+        "Intra-uterine",
+        "Intra-uterine"
+      ],
+      [
+        "Intracardiac",
+        "Intracardiac"
+      ],
+      [
+        "Intracavernous",
+        "Intracavernous"
+      ],
+      [
+        "Intracerebral",
+        "Intracerebral"
+      ],
+      [
+        "Intracervical",
+        "Intracervical"
+      ],
+      [
+        "Intracisternal",
+        "Intracisternal"
+      ],
+      [
+        "Intracorneal",
+        "Intracorneal"
+      ],
+      [
+        "Intracoronary",
+        "Intracoronary"
+      ],
+      [
+        "Intradermal",
+        "Intradermal"
+      ],
+      [
+        "Intradiscal (intraspinal)",
+        "Intradiscal (intraspinal)"
+      ],
+      [
+        "Intrahepatic",
+        "Intrahepatic"
+      ],
+      [
+        "Intralesional",
+        "Intralesional"
+      ],
+      [
+        "Intralymphatic",
+        "Intralymphatic"
+      ],
+      [
+        "Intramedullar (bone marrow)",
+        "Intramedullar (bone marrow)"
+      ],
+      [
+        "Intrameningeal",
+        "Intrameningeal"
+      ],
+      [
+        "Intramuscular",
+        "Intramuscular"
+      ],
+      [
+        "Intraocular",
+        "Intraocular"
+      ],
+      [
+        "Intrapericardial",
+        "Intrapericardial"
+      ],
+      [
+        "Intraperitoneal",
+        "Intraperitoneal"
+      ],
+      [
+        "Intrapleural",
+        "Intrapleural"
+      ],
+      [
+        "Intrasynovial",
+        "Intrasynovial"
+      ],
+      [
+        "Intrathecal",
+        "Intrathecal"
+      ],
+      [
+        "Intrathoracic",
+        "Intrathoracic"
+      ],
+      [
+        "Intratracheal",
+        "Intratracheal"
+      ],
+      [
+        "Intratumor",
+        "Intratumor"
+      ],
+      [
+        "Intravenous (not otherwise specified)",
+        "Intravenous (not otherwise specified)"
+      ],
+      [
+        "Intravenous bolus",
+        "Intravenous bolus"
+      ],
+      [
+        "Intravenous drip",
+        "Intravenous drip"
+      ],
+      [
+        "Intravesical",
+        "Intravesical"
+      ],
+      [
+        "Iontophoresis",
+        "Iontophoresis"
+      ],
+      [
+        "Nasal",
+        "Nasal"
+      ],
+      [
+        "Occlusive dressing technique",
+        "Occlusive dressing technique"
+      ],
+      [
+        "Ophthalmic",
+        "Ophthalmic"
+      ],
+      [
+        "Oral",
+        "Oral"
+      ],
+      [
+        "Oropharingeal",
+        "Oropharingeal"
+      ],
+      [
+        "Parenteral",
+        "Parenteral"
+      ],
+      [
+        "Periarticular",
+        "Periarticular"
+      ],
+      [
+        "Perineural",
+        "Perineural"
+      ],
+      [
+        "Rectal",
+        "Rectal"
+      ],
+      [
+        "Respiratory (inhalation)",
+        "Respiratory (inhalation)"
+      ],
+      [
+        "Retrobulbar",
+        "Retrobulbar"
+      ],
+      [
+        "Subcutaneous",
+        "Subcutaneous"
+      ],
+      [
+        "Subdermal",
+        "Subdermal"
+      ],
+      [
+        "Sublingual",
+        "Sublingual"
+      ],
+      [
+        "Sunconjunctival",
+        "Sunconjunctival"
+      ],
+      [
+        "Topical",
+        "Topical"
+      ],
+      [
+        "Transdermal",
+        "Transdermal"
+      ],
+      [
+        "Transmammary",
+        "Transmammary"
+      ],
+      [
+        "Transplacental",
+        "Transplacental"
+      ],
+      [
+        "Unknown",
+        "Unknown"
+      ],
+      [
+        "Urethral",
+        "Urethral"
+      ],
+      [
+        "Vaginal",
+        "Vaginal"
+      ],
+      [
+        "Other",
+        "Other"
+      ]
+    ],
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1StrengthUnit[0]": [
+      [
+        "40",
+        " "
+      ],
+      [
+        "INTERNATIONAL UNITS PER MILLILITRE - IU/ML",
+        "AS NECESSARY - AN"
+      ],
+      [
+        "0",
+        "BECQUEREL(S) - BQ"
+      ],
+      [
+        "1",
+        "CURIE(S) - CI"
+      ],
+      [
+        "2",
+        "CYCLICAL - CYC"
+      ],
+      [
+        "3",
+        "DOSAGE FORM - DF"
+      ],
+      [
+        "4",
+        "DROP(S) - GTT"
+      ],
+      [
+        "5",
+        "GIGABECQUEREL(S) - GBQ"
+      ],
+      [
+        "6",
+        "GRAM(S) - GM"
+      ],
+      [
+        "7",
+        "INTERNATIONAL UNIT(S) - IU"
+      ],
+      [
+        "8",
+        "IU(1,000,000S) - MIU"
+      ],
+      [
+        "9",
+        "IU(1000S) - KIU"
+      ],
+      [
+        "10",
+        "IU/KILOGRAM - IU/KG"
+      ],
+      [
+        "11",
+        "KILOBECQUEREL(S) - KBQ"
+      ],
+      [
+        "12",
+        "KILOGRAM(S) - KG"
+      ],
+      [
+        "13",
+        "LITRE(S) - L"
+      ],
+      [
+        "14",
+        "MEGABECQUEREL(S) - MBQ"
+      ],
+      [
+        "15",
+        "MICROCURIE(S) - UCI"
+      ],
+      [
+        "16",
+        "MICROGRAM(S) - UGM"
+      ],
+      [
+        "17",
+        "MICROGRAM(S)/KILOGRAM(S) -UGM/KG"
+      ],
+      [
+        "18",
+        "MICROGRAM(S)/MICROGRAM(S) - UGM/UGM"
+      ],
+      [
+        "19",
+        "MICROGRAM(S)/SQ. METERS - UGM/SQ M"
+      ],
+      [
+        "20",
+        "MICROGRAMS/HOUR - UGM/HR"
+      ],
+      [
+        "21",
+        "MICROLITRE(S) - UL"
+      ],
+      [
+        "22",
+        "MICROMOLE(S) - UMOLE"
+      ],
+      [
+        "23",
+        "MILLICURIE(S) - MCI"
+      ],
+      [
+        "24",
+        "MILLIEQUIVALENT(S) - MEQ"
+      ],
+      [
+        "25",
+        "MILLIGRAM(S) - MG"
+      ],
+      [
+        "26",
+        "MILLIGRAM(S)/KILOGRAM(S) - MG/KG"
+      ],
+      [
+        "27",
+        "MILLIGRAM(S)/SQ. METERS - MG/SQ M"
+      ],
+      [
+        "28",
+        "MILLIGRAMS/MILLIGRAMS - MG/MG"
+      ],
+      [
+        "29",
+        "MILLIGRAMS/MILLILITRES - MG/ML"
+      ],
+      [
+        "30",
+        "MILLILITRE(S) - ML"
+      ],
+      [
+        "31",
+        "MILLIMOLE(S) - MMOLE"
+      ],
+      [
+        "32",
+        "MOLE(S) - MOLE"
+      ],
+      [
+        "33",
+        "NANOCURIE(S) - NCI"
+      ],
+      [
+        "34",
+        "NANOGRAM(S) - NGM"
+      ],
+      [
+        "35",
+        "PERCENT - %"
+      ],
+      [
+        "36",
+        "PICOGRAM(S) - PGM"
+      ],
+      [
+        "37",
+        "TOTAL - TOT"
+      ],
+      [
+        "38",
+        "TRIMESTER - TRI"
+      ],
+      [
+        "39",
+        "UNKNOWN - UNK"
+      ]
+    ],
+    "topmostSubform[0].Page4[0].Prod1[0].Prod1TherapyDurUnit[0]": [
+      [
+        "8",
+        " "
+      ],
+      [
+        "7",
+        "Minute(s)"
+      ],
+      [
+        "6",
+        "Hour(s)"
+      ],
+      [
+        "5",
+        "Day(s)"
+      ],
+      [
+        "4",
+        "Week(s)"
+      ],
+      [
+        "3",
+        "Month(s)"
+      ],
+      [
+        "2",
+        "Year(s)"
+      ]
+    ],
+    "topmostSubform[0].Page5[0].Prod2[0].Pdt2Country[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "UNITED STATES",
+        "UNITED STATES"
+      ],
+      [
+        "AFGHANISTAN",
+        "AFGHANISTAN"
+      ],
+      [
+        "AKROTIRI",
+        "AKROTIRI"
+      ],
+      [
+        "ALBANIA",
+        "ALBANIA"
+      ],
+      [
+        "ALGERIA",
+        "ALGERIA"
+      ],
+      [
+        "AMERICAN SAMOA",
+        "AMERICAN SAMOA"
+      ],
+      [
+        "ANDORRA",
+        "ANDORRA"
+      ],
+      [
+        "ANGOLA",
+        "ANGOLA"
+      ],
+      [
+        "ANGUILLA",
+        "ANGUILLA"
+      ],
+      [
+        "ANTARCTICA",
+        "ANTARCTICA"
+      ],
+      [
+        "ANTIGUA AND BARBUDA",
+        "ANTIGUA AND BARBUDA"
+      ],
+      [
+        "ARGENTINA",
+        "ARGENTINA"
+      ],
+      [
+        "ARMENIA",
+        "ARMENIA"
+      ],
+      [
+        "ARUBA",
+        "ARUBA"
+      ],
+      [
+        "ASHMORE AND CARTIER ISLANDS",
+        "ASHMORE AND CARTIER ISLANDS"
+      ],
+      [
+        "AUSTRALIA",
+        "AUSTRALIA"
+      ],
+      [
+        "AUSTRIA",
+        "AUSTRIA"
+      ],
+      [
+        "AZERBAIJAN",
+        "AZERBAIJAN"
+      ],
+      [
+        "BAHAMAS, THE",
+        "BAHAMAS, THE"
+      ],
+      [
+        "BAHRAIN",
+        "BAHRAIN"
+      ],
+      [
+        "BAKER ISLAND",
+        "BAKER ISLAND"
+      ],
+      [
+        "BANGLADESH",
+        "BANGLADESH"
+      ],
+      [
+        "BARBADOS",
+        "BARBADOS"
+      ],
+      [
+        "BASSAS DA INDIA",
+        "BASSAS DA INDIA"
+      ],
+      [
+        "BELARUS",
+        "BELARUS"
+      ],
+      [
+        "BELGIUM",
+        "BELGIUM"
+      ],
+      [
+        "BELIZE",
+        "BELIZE"
+      ],
+      [
+        "BENIN",
+        "BENIN"
+      ],
+      [
+        "BERMUDA",
+        "BERMUDA"
+      ],
+      [
+        "BHUTAN",
+        "BHUTAN"
+      ],
+      [
+        "BOLIVIA",
+        "BOLIVIA"
+      ],
+      [
+        "BONAIRE, SINT EUSTATIUS, AND SABA",
+        "BONAIRE, SINT EUSTATIUS, AND SABA"
+      ],
+      [
+        "BOSNIA AND HERZEGOVINA",
+        "BOSNIA AND HERZEGOVINA"
+      ],
+      [
+        "BOTSWANA",
+        "BOTSWANA"
+      ],
+      [
+        "BOUVET ISLAND",
+        "BOUVET ISLAND"
+      ],
+      [
+        "BRAZIL",
+        "BRAZIL"
+      ],
+      [
+        "BRITISH INDIAN OCEAN TERRITORY",
+        "BRITISH INDIAN OCEAN TERRITORY"
+      ],
+      [
+        "BRUNEI",
+        "BRUNEI"
+      ],
+      [
+        "BULGARIA",
+        "BULGARIA"
+      ],
+      [
+        "BURKINA FASO",
+        "BURKINA FASO"
+      ],
+      [
+        "BURMA",
+        "BURMA"
+      ],
+      [
+        "BURUNDI",
+        "BURUNDI"
+      ],
+      [
+        "CABO VERDE",
+        "CABO VERDE"
+      ],
+      [
+        "CAMBODIA",
+        "CAMBODIA"
+      ],
+      [
+        "CAMEROON",
+        "CAMEROON"
+      ],
+      [
+        "CANADA",
+        "CANADA"
+      ],
+      [
+        "CAYMAN ISLANDS",
+        "CAYMAN ISLANDS"
+      ],
+      [
+        "CENTRAL AFRICAN REPUBLIC",
+        "CENTRAL AFRICAN REPUBLIC"
+      ],
+      [
+        "CHAD",
+        "CHAD"
+      ],
+      [
+        "CHILE",
+        "CHILE"
+      ],
+      [
+        "CHINA",
+        "CHINA"
+      ],
+      [
+        "CHRISTMAS ISLAND",
+        "CHRISTMAS ISLAND"
+      ],
+      [
+        "CLIPPERTON ISLAND",
+        "CLIPPERTON ISLAND"
+      ],
+      [
+        "COCOS (KEELING) ISLANDS",
+        "COCOS (KEELING) ISLANDS"
+      ],
+      [
+        "COLOMBIA",
+        "COLOMBIA"
+      ],
+      [
+        "COMOROS",
+        "COMOROS"
+      ],
+      [
+        "CONGO (BRAZZAVILLE)",
+        "CONGO (BRAZZAVILLE)"
+      ],
+      [
+        "CONGO (KINSHASA)",
+        "CONGO (KINSHASA)"
+      ],
+      [
+        "COOK ISLANDS",
+        "COOK ISLANDS"
+      ],
+      [
+        "CORAL SEA ISLANDS",
+        "CORAL SEA ISLANDS"
+      ],
+      [
+        "COSTA RICA",
+        "COSTA RICA"
+      ],
+      [
+        "CROATIA",
+        "CROATIA"
+      ],
+      [
+        "CUBA",
+        "CUBA"
+      ],
+      [
+        "CURAÇAO",
+        "CURAÇAO"
+      ],
+      [
+        "CYPRUS",
+        "CYPRUS"
+      ],
+      [
+        "CZECH REPUBLIC",
+        "CZECH REPUBLIC"
+      ],
+      [
+        "CÔTE D’IVOIRE",
+        "CÔTE D’IVOIRE"
+      ],
+      [
+        "DENMARK",
+        "DENMARK"
+      ],
+      [
+        "DHEKELIA",
+        "DHEKELIA"
+      ],
+      [
+        "DIEGO GARCIA",
+        "DIEGO GARCIA"
+      ],
+      [
+        "DJIBOUTI",
+        "DJIBOUTI"
+      ],
+      [
+        "DOMINICA",
+        "DOMINICA"
+      ],
+      [
+        "DOMINICAN REPUBLIC",
+        "DOMINICAN REPUBLIC"
+      ],
+      [
+        "ECUADOR",
+        "ECUADOR"
+      ],
+      [
+        "EGYPT",
+        "EGYPT"
+      ],
+      [
+        "EL SALVADOR",
+        "EL SALVADOR"
+      ],
+      [
+        "EQUATORIAL GUINEA",
+        "EQUATORIAL GUINEA"
+      ],
+      [
+        "ERITREA",
+        "ERITREA"
+      ],
+      [
+        "ESTONIA",
+        "ESTONIA"
+      ],
+      [
+        "ETHIOPIA",
+        "ETHIOPIA"
+      ],
+      [
+        "EUROPA ISLAND",
+        "EUROPA ISLAND"
+      ],
+      [
+        "FALKLAND ISLANDS (ISLAS MALVINAS)",
+        "FALKLAND ISLANDS (ISLAS MALVINAS)"
+      ],
+      [
+        "FAROE ISLANDS",
+        "FAROE ISLANDS"
+      ],
+      [
+        "FIJI",
+        "FIJI"
+      ],
+      [
+        "FINLAND",
+        "FINLAND"
+      ],
+      [
+        "FRANCE",
+        "FRANCE"
+      ],
+      [
+        "FRENCH GUIANA",
+        "FRENCH GUIANA"
+      ],
+      [
+        "FRENCH POLYNESIA",
+        "FRENCH POLYNESIA"
+      ],
+      [
+        "FRENCH SOUTHERN AND ANTARCTIC LANDS",
+        "FRENCH SOUTHERN AND ANTARCTIC LANDS"
+      ],
+      [
+        "GABON",
+        "GABON"
+      ],
+      [
+        "GAMBIA, THE",
+        "GAMBIA, THE"
+      ],
+      [
+        "GAZA STRIP",
+        "GAZA STRIP"
+      ],
+      [
+        "GEORGIA",
+        "GEORGIA"
+      ],
+      [
+        "GERMANY",
+        "GERMANY"
+      ],
+      [
+        "GHANA",
+        "GHANA"
+      ],
+      [
+        "GIBRALTAR",
+        "GIBRALTAR"
+      ],
+      [
+        "GLORIOSO ISLANDS",
+        "GLORIOSO ISLANDS"
+      ],
+      [
+        "GREECE",
+        "GREECE"
+      ],
+      [
+        "GREENLAND",
+        "GREENLAND"
+      ],
+      [
+        "GRENADA",
+        "GRENADA"
+      ],
+      [
+        "GUADELOUPE",
+        "GUADELOUPE"
+      ],
+      [
+        "GUAM",
+        "GUAM"
+      ],
+      [
+        "GUANTANAMO BAY NAVAL BASE",
+        "GUANTANAMO BAY NAVAL BASE"
+      ],
+      [
+        "GUATEMALA",
+        "GUATEMALA"
+      ],
+      [
+        "GUERNSEY",
+        "GUERNSEY"
+      ],
+      [
+        "GUINEA",
+        "GUINEA"
+      ],
+      [
+        "GUINEA-BISSAU",
+        "GUINEA-BISSAU"
+      ],
+      [
+        "GUYANA",
+        "GUYANA"
+      ],
+      [
+        "HAITI",
+        "HAITI"
+      ],
+      [
+        "HEARD ISLAND AND MCDONALD ISLANDS",
+        "HEARD ISLAND AND MCDONALD ISLANDS"
+      ],
+      [
+        "HONDURAS",
+        "HONDURAS"
+      ],
+      [
+        "HONG KONG",
+        "HONG KONG"
+      ],
+      [
+        "HOWLAND ISLAND",
+        "HOWLAND ISLAND"
+      ],
+      [
+        "HUNGARY",
+        "HUNGARY"
+      ],
+      [
+        "ICELAND",
+        "ICELAND"
+      ],
+      [
+        "INDIA",
+        "INDIA"
+      ],
+      [
+        "INDONESIA",
+        "INDONESIA"
+      ],
+      [
+        "IRAN",
+        "IRAN"
+      ],
+      [
+        "IRAQ",
+        "IRAQ"
+      ],
+      [
+        "IRELAND",
+        "IRELAND"
+      ],
+      [
+        "ISLE OF MAN",
+        "ISLE OF MAN"
+      ],
+      [
+        "ISRAEL",
+        "ISRAEL"
+      ],
+      [
+        "ITALY",
+        "ITALY"
+      ],
+      [
+        "JAMAICA",
+        "JAMAICA"
+      ],
+      [
+        "JAN MAYEN",
+        "JAN MAYEN"
+      ],
+      [
+        "JAPAN",
+        "JAPAN"
+      ],
+      [
+        "JARVIS ISLAND",
+        "JARVIS ISLAND"
+      ],
+      [
+        "JERSEY",
+        "JERSEY"
+      ],
+      [
+        "JOHNSTON ATOLL",
+        "JOHNSTON ATOLL"
+      ],
+      [
+        "JORDAN",
+        "JORDAN"
+      ],
+      [
+        "JUAN DE NOVA ISLAND",
+        "JUAN DE NOVA ISLAND"
+      ],
+      [
+        "KAZAKHSTAN",
+        "KAZAKHSTAN"
+      ],
+      [
+        "KENYA",
+        "KENYA"
+      ],
+      [
+        "KINGMAN REEF",
+        "KINGMAN REEF"
+      ],
+      [
+        "KIRIBATI",
+        "KIRIBATI"
+      ],
+      [
+        "KOREA, NORTH",
+        "KOREA, NORTH"
+      ],
+      [
+        "KOREA, SOUTH",
+        "KOREA, SOUTH"
+      ],
+      [
+        "KOSOVO",
+        "KOSOVO"
+      ],
+      [
+        "KUWAIT",
+        "KUWAIT"
+      ],
+      [
+        "KYRGYZSTAN",
+        "KYRGYZSTAN"
+      ],
+      [
+        "LAOS",
+        "LAOS"
+      ],
+      [
+        "LATVIA",
+        "LATVIA"
+      ],
+      [
+        "LEBANON",
+        "LEBANON"
+      ],
+      [
+        "LESOTHO",
+        "LESOTHO"
+      ],
+      [
+        "LIBERIA",
+        "LIBERIA"
+      ],
+      [
+        "LIBYA",
+        "LIBYA"
+      ],
+      [
+        "LIECHTENSTEIN",
+        "LIECHTENSTEIN"
+      ],
+      [
+        "LITHUANIA",
+        "LITHUANIA"
+      ],
+      [
+        "LUXEMBOURG",
+        "LUXEMBOURG"
+      ],
+      [
+        "MACAU",
+        "MACAU"
+      ],
+      [
+        "MACEDONIA",
+        "MACEDONIA"
+      ],
+      [
+        "MADAGASCAR",
+        "MADAGASCAR"
+      ],
+      [
+        "MALAWI",
+        "MALAWI"
+      ],
+      [
+        "MALAYSIA",
+        "MALAYSIA"
+      ],
+      [
+        "MALDIVES",
+        "MALDIVES"
+      ],
+      [
+        "MALI",
+        "MALI"
+      ],
+      [
+        "MALTA",
+        "MALTA"
+      ],
+      [
+        "MARSHALL ISLANDS",
+        "MARSHALL ISLANDS"
+      ],
+      [
+        "MARTINIQUE",
+        "MARTINIQUE"
+      ],
+      [
+        "MAURITANIA",
+        "MAURITANIA"
+      ],
+      [
+        "MAURITIUS",
+        "MAURITIUS"
+      ],
+      [
+        "MAYOTTE",
+        "MAYOTTE"
+      ],
+      [
+        "MEXICO",
+        "MEXICO"
+      ],
+      [
+        "MICRONESIA, FEDERATED STATES OF",
+        "MICRONESIA, FEDERATED STATES OF"
+      ],
+      [
+        "MIDWAY ISLANDS",
+        "MIDWAY ISLANDS"
+      ],
+      [
+        "MOLDOVA",
+        "MOLDOVA"
+      ],
+      [
+        "MONACO",
+        "MONACO"
+      ],
+      [
+        "MONGOLIA",
+        "MONGOLIA"
+      ],
+      [
+        "MONTENEGRO",
+        "MONTENEGRO"
+      ],
+      [
+        "MONTSERRAT",
+        "MONTSERRAT"
+      ],
+      [
+        "MOROCCO",
+        "MOROCCO"
+      ],
+      [
+        "MOZAMBIQUE",
+        "MOZAMBIQUE"
+      ],
+      [
+        "NAMIBIA",
+        "NAMIBIA"
+      ],
+      [
+        "NAURU",
+        "NAURU"
+      ],
+      [
+        "NAVASSA ISLAND",
+        "NAVASSA ISLAND"
+      ],
+      [
+        "NEPAL",
+        "NEPAL"
+      ],
+      [
+        "NETHERLANDS",
+        "NETHERLANDS"
+      ],
+      [
+        "NEW CALEDONIA",
+        "NEW CALEDONIA"
+      ],
+      [
+        "NEW ZEALAND",
+        "NEW ZEALAND"
+      ],
+      [
+        "NICARAGUA",
+        "NICARAGUA"
+      ],
+      [
+        "NIGER",
+        "NIGER"
+      ],
+      [
+        "NIGERIA",
+        "NIGERIA"
+      ],
+      [
+        "NIUE",
+        "NIUE"
+      ],
+      [
+        "NORFOLK ISLAND",
+        "NORFOLK ISLAND"
+      ],
+      [
+        "NORTHERN MARIANA ISLANDS",
+        "NORTHERN MARIANA ISLANDS"
+      ],
+      [
+        "NORWAY",
+        "NORWAY"
+      ],
+      [
+        "OMAN",
+        "OMAN"
+      ],
+      [
+        "PAKISTAN",
+        "PAKISTAN"
+      ],
+      [
+        "PALAU",
+        "PALAU"
+      ],
+      [
+        "PALMYRA ATOLL",
+        "PALMYRA ATOLL"
+      ],
+      [
+        "PANAMA",
+        "PANAMA"
+      ],
+      [
+        "PAPUA NEW GUINEA",
+        "PAPUA NEW GUINEA"
+      ],
+      [
+        "PARACEL ISLANDS",
+        "PARACEL ISLANDS"
+      ],
+      [
+        "PARAGUAY",
+        "PARAGUAY"
+      ],
+      [
+        "PERU",
+        "PERU"
+      ],
+      [
+        "PHILIPPINES",
+        "PHILIPPINES"
+      ],
+      [
+        "PITCAIRN ISLANDS",
+        "PITCAIRN ISLANDS"
+      ],
+      [
+        "POLAND",
+        "POLAND"
+      ],
+      [
+        "PORTUGAL",
+        "PORTUGAL"
+      ],
+      [
+        "PUERTO RICO",
+        "PUERTO RICO"
+      ],
+      [
+        "QATAR",
+        "QATAR"
+      ],
+      [
+        "REUNION",
+        "REUNION"
+      ],
+      [
+        "ROMANIA",
+        "ROMANIA"
+      ],
+      [
+        "RUSSIA",
+        "RUSSIA"
+      ],
+      [
+        "RWANDA",
+        "RWANDA"
+      ],
+      [
+        "SAINT BARTHELEMY",
+        "SAINT BARTHELEMY"
+      ],
+      [
+        "SAINT HELENA, ASCENSION, AND TRISTAN DA CUNHA",
+        "SAINT HELENA, ASCENSION, AND TRISTAN DA CUNHA"
+      ],
+      [
+        "SAINT KITTS AND NEVIS",
+        "SAINT KITTS AND NEVIS"
+      ],
+      [
+        "SAINT LUCIA",
+        "SAINT LUCIA"
+      ],
+      [
+        "SAINT MARTIN",
+        "SAINT MARTIN"
+      ],
+      [
+        "SAINT PIERRE AND MIQUELON",
+        "SAINT PIERRE AND MIQUELON"
+      ],
+      [
+        "SAINT VINCENT AND THE GRENADINES",
+        "SAINT VINCENT AND THE GRENADINES"
+      ],
+      [
+        "SAMOA",
+        "SAMOA"
+      ],
+      [
+        "SAN MARINO",
+        "SAN MARINO"
+      ],
+      [
+        "SAO TOME AND PRINCIPE",
+        "SAO TOME AND PRINCIPE"
+      ],
+      [
+        "SAUDI ARABIA",
+        "SAUDI ARABIA"
+      ],
+      [
+        "SENEGAL",
+        "SENEGAL"
+      ],
+      [
+        "SERBIA",
+        "SERBIA"
+      ],
+      [
+        "SEYCHELLES",
+        "SEYCHELLES"
+      ],
+      [
+        "SIERRA LEONE",
+        "SIERRA LEONE"
+      ],
+      [
+        "SINGAPORE",
+        "SINGAPORE"
+      ],
+      [
+        "SINT MAARTEN",
+        "SINT MAARTEN"
+      ],
+      [
+        "SLOVAKIA",
+        "SLOVAKIA"
+      ],
+      [
+        "SLOVENIA",
+        "SLOVENIA"
+      ],
+      [
+        "SOLOMON ISLANDS",
+        "SOLOMON ISLANDS"
+      ],
+      [
+        "SOMALIA",
+        "SOMALIA"
+      ],
+      [
+        "SOUTH AFRICA",
+        "SOUTH AFRICA"
+      ],
+      [
+        "SOUTH GEORGIA AND SOUTH SANDWICH ISLANDS",
+        "SOUTH GEORGIA AND SOUTH SANDWICH ISLANDS"
+      ],
+      [
+        "SOUTH SUDAN",
+        "SOUTH SUDAN"
+      ],
+      [
+        "SPAIN",
+        "SPAIN"
+      ],
+      [
+        "SPRATLY ISLANDS",
+        "SPRATLY ISLANDS"
+      ],
+      [
+        "SRI LANKA",
+        "SRI LANKA"
+      ],
+      [
+        "SUDAN",
+        "SUDAN"
+      ],
+      [
+        "SURINAME",
+        "SURINAME"
+      ],
+      [
+        "SVALBARD",
+        "SVALBARD"
+      ],
+      [
+        "SWAZILAND",
+        "SWAZILAND"
+      ],
+      [
+        "SWEDEN",
+        "SWEDEN"
+      ],
+      [
+        "SWITZERLAND",
+        "SWITZERLAND"
+      ],
+      [
+        "SYRIA",
+        "SYRIA"
+      ],
+      [
+        "TAIWAN",
+        "TAIWAN"
+      ],
+      [
+        "TAJIKISTAN",
+        "TAJIKISTAN"
+      ],
+      [
+        "TANZANIA",
+        "TANZANIA"
+      ],
+      [
+        "THAILAND",
+        "THAILAND"
+      ],
+      [
+        "TIMOR-LESTE",
+        "TIMOR-LESTE"
+      ],
+      [
+        "TOGO",
+        "TOGO"
+      ],
+      [
+        "TOKELAU",
+        "TOKELAU"
+      ],
+      [
+        "TONGA",
+        "TONGA"
+      ],
+      [
+        "TRINIDAD AND TOBAGO",
+        "TRINIDAD AND TOBAGO"
+      ],
+      [
+        "TROMELIN ISLAND",
+        "TROMELIN ISLAND"
+      ],
+      [
+        "TUNISIA",
+        "TUNISIA"
+      ],
+      [
+        "TURKEY",
+        "TURKEY"
+      ],
+      [
+        "TURKMENISTAN",
+        "TURKMENISTAN"
+      ],
+      [
+        "TURKS AND CAICOS ISLANDS",
+        "TURKS AND CAICOS ISLANDS"
+      ],
+      [
+        "TUVALU",
+        "TUVALU"
+      ],
+      [
+        "UGANDA",
+        "UGANDA"
+      ],
+      [
+        "UKRAINE",
+        "UKRAINE"
+      ],
+      [
+        "UNITED ARAB EMIRATES",
+        "UNITED ARAB EMIRATES"
+      ],
+      [
+        "UNITED KINGDOM",
+        "UNITED KINGDOM"
+      ],
+      [
+        "UNKNOWN",
+        "UNKNOWN"
+      ],
+      [
+        "URUGUAY",
+        "URUGUAY"
+      ],
+      [
+        "UZBEKISTAN",
+        "UZBEKISTAN"
+      ],
+      [
+        "VANUATU",
+        "VANUATU"
+      ],
+      [
+        "VATICAN CITY",
+        "VATICAN CITY"
+      ],
+      [
+        "VENEZUELA",
+        "VENEZUELA"
+      ],
+      [
+        "VIETNAM",
+        "VIETNAM"
+      ],
+      [
+        "VIRGIN ISLANDS, BRITISH",
+        "VIRGIN ISLANDS, BRITISH"
+      ],
+      [
+        "VIRGIN ISLANDS, U.S.",
+        "VIRGIN ISLANDS, U.S."
+      ],
+      [
+        "WAKE ISLAND",
+        "WAKE ISLAND"
+      ],
+      [
+        "WALLIS AND FUTUNA",
+        "WALLIS AND FUTUNA"
+      ],
+      [
+        "WEST BANK",
+        "WEST BANK"
+      ],
+      [
+        "WESTERN SAHARA",
+        "WESTERN SAHARA"
+      ],
+      [
+        "YEMEN",
+        "YEMEN"
+      ],
+      [
+        "ZAMBIA",
+        "ZAMBIA"
+      ],
+      [
+        "ZIMBABWE",
+        "ZIMBABWE"
+      ]
+    ],
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2DoseUnit[0]": [
+      [
+        "40",
+        " "
+      ],
+      [
+        "INTERNATIONAL UNITS PER MILLILITRE - IU/ML",
+        "AS NECESSARY - AN"
+      ],
+      [
+        "0",
+        "BECQUEREL(S) - BQ"
+      ],
+      [
+        "1",
+        "CURIE(S) - CI"
+      ],
+      [
+        "2",
+        "CYCLICAL - CYC"
+      ],
+      [
+        "3",
+        "DOSAGE FORM - DF"
+      ],
+      [
+        "4",
+        "DROP(S) - GTT"
+      ],
+      [
+        "5",
+        "GIGABECQUEREL(S) - GBQ"
+      ],
+      [
+        "6",
+        "GRAM(S) - GM"
+      ],
+      [
+        "7",
+        "INTERNATIONAL UNIT(S) - IU"
+      ],
+      [
+        "8",
+        "IU(1,000,000S) - MIU"
+      ],
+      [
+        "9",
+        "IU(1000S) - KIU"
+      ],
+      [
+        "10",
+        "IU/KILOGRAM - IU/KG"
+      ],
+      [
+        "11",
+        "KILOBECQUEREL(S) - KBQ"
+      ],
+      [
+        "12",
+        "KILOGRAM(S) - KG"
+      ],
+      [
+        "13",
+        "LITRE(S) - L"
+      ],
+      [
+        "14",
+        "MEGABECQUEREL(S) - MBQ"
+      ],
+      [
+        "15",
+        "MICROCURIE(S) - UCI"
+      ],
+      [
+        "16",
+        "MICROGRAM(S) - UGM"
+      ],
+      [
+        "17",
+        "MICROGRAM(S)/KILOGRAM(S) -UGM/KG"
+      ],
+      [
+        "18",
+        "MICROGRAM(S)/MICROGRAM(S) - UGM/UGM"
+      ],
+      [
+        "19",
+        "MICROGRAM(S)/SQ. METERS - UGM/SQ M"
+      ],
+      [
+        "20",
+        "MICROGRAMS/HOUR - UGM/HR"
+      ],
+      [
+        "21",
+        "MICROLITRE(S) - UL"
+      ],
+      [
+        "22",
+        "MICROMOLE(S) - UMOLE"
+      ],
+      [
+        "23",
+        "MILLICURIE(S) - MCI"
+      ],
+      [
+        "24",
+        "MILLIEQUIVALENT(S) - MEQ"
+      ],
+      [
+        "25",
+        "MILLIGRAM(S) - MG"
+      ],
+      [
+        "26",
+        "MILLIGRAM(S)/KILOGRAM(S) - MG/KG"
+      ],
+      [
+        "27",
+        "MILLIGRAM(S)/SQ. METERS - MG/SQ M"
+      ],
+      [
+        "28",
+        "MILLIGRAMS/MILLIGRAMS - MG/MG"
+      ],
+      [
+        "29",
+        "MILLIGRAMS/MILLILITRES - MG/ML"
+      ],
+      [
+        "30",
+        "MILLILITRE(S) - ML"
+      ],
+      [
+        "31",
+        "MILLIMOLE(S) - MMOLE"
+      ],
+      [
+        "32",
+        "MOLE(S) - MOLE"
+      ],
+      [
+        "33",
+        "NANOCURIE(S) - NCI"
+      ],
+      [
+        "34",
+        "NANOGRAM(S) - NGM"
+      ],
+      [
+        "35",
+        "PERCENT - %"
+      ],
+      [
+        "36",
+        "PICOGRAM(S) - PGM"
+      ],
+      [
+        "37",
+        "TOTAL - TOT"
+      ],
+      [
+        "38",
+        "TRIMESTER - TRI"
+      ],
+      [
+        "39",
+        "UNKNOWN - UNK"
+      ]
+    ],
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Freq[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "BID",
+        "BID"
+      ],
+      [
+        "Daily",
+        "Daily"
+      ],
+      [
+        "HS",
+        "HS"
+      ],
+      [
+        "PRN",
+        "PRN"
+      ],
+      [
+        "QID",
+        "QID"
+      ],
+      [
+        "TID",
+        "TID"
+      ],
+      [
+        "Other",
+        "Other"
+      ]
+    ],
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2Route[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "Auricular (otic)",
+        "Auricular (otic)"
+      ],
+      [
+        "Buccal",
+        "Buccal"
+      ],
+      [
+        "Cutaneous",
+        "Cutaneous"
+      ],
+      [
+        "Dental",
+        "Dental"
+      ],
+      [
+        "Endocervical",
+        "Endocervical"
+      ],
+      [
+        "Endosinusial",
+        "Endosinusial"
+      ],
+      [
+        "Endotracheal",
+        "Endotracheal"
+      ],
+      [
+        "Epidural",
+        "Epidural"
+      ],
+      [
+        "Extra-amniotic",
+        "Extra-amniotic"
+      ],
+      [
+        "Hemodialysis",
+        "Hemodialysis"
+      ],
+      [
+        "Intra corpus cavernosum",
+        "Intra corpus cavernosum"
+      ],
+      [
+        "Intra-amniotic",
+        "Intra-amniotic"
+      ],
+      [
+        "Intra-arterial",
+        "Intra-arterial"
+      ],
+      [
+        "Intra-articular",
+        "Intra-articular"
+      ],
+      [
+        "Intra-uterine",
+        "Intra-uterine"
+      ],
+      [
+        "Intracardiac",
+        "Intracardiac"
+      ],
+      [
+        "Intracavernous",
+        "Intracavernous"
+      ],
+      [
+        "Intracerebral",
+        "Intracerebral"
+      ],
+      [
+        "Intracervical",
+        "Intracervical"
+      ],
+      [
+        "Intracisternal",
+        "Intracisternal"
+      ],
+      [
+        "Intracorneal",
+        "Intracorneal"
+      ],
+      [
+        "Intracoronary",
+        "Intracoronary"
+      ],
+      [
+        "Intradermal",
+        "Intradermal"
+      ],
+      [
+        "Intradiscal (intraspinal)",
+        "Intradiscal (intraspinal)"
+      ],
+      [
+        "Intrahepatic",
+        "Intrahepatic"
+      ],
+      [
+        "Intralesional",
+        "Intralesional"
+      ],
+      [
+        "Intralymphatic",
+        "Intralymphatic"
+      ],
+      [
+        "Intramedullar (bone marrow)",
+        "Intramedullar (bone marrow)"
+      ],
+      [
+        "Intrameningeal",
+        "Intrameningeal"
+      ],
+      [
+        "Intramuscular",
+        "Intramuscular"
+      ],
+      [
+        "Intraocular",
+        "Intraocular"
+      ],
+      [
+        "Intrapericardial",
+        "Intrapericardial"
+      ],
+      [
+        "Intraperitoneal",
+        "Intraperitoneal"
+      ],
+      [
+        "Intrapleural",
+        "Intrapleural"
+      ],
+      [
+        "Intrasynovial",
+        "Intrasynovial"
+      ],
+      [
+        "Intrathecal",
+        "Intrathecal"
+      ],
+      [
+        "Intrathoracic",
+        "Intrathoracic"
+      ],
+      [
+        "Intratracheal",
+        "Intratracheal"
+      ],
+      [
+        "Intratumor",
+        "Intratumor"
+      ],
+      [
+        "Intravenous (not otherwise specified)",
+        "Intravenous (not otherwise specified)"
+      ],
+      [
+        "Intravenous bolus",
+        "Intravenous bolus"
+      ],
+      [
+        "Intravenous drip",
+        "Intravenous drip"
+      ],
+      [
+        "Intravesical",
+        "Intravesical"
+      ],
+      [
+        "Iontophoresis",
+        "Iontophoresis"
+      ],
+      [
+        "Nasal",
+        "Nasal"
+      ],
+      [
+        "Occlusive dressing technique",
+        "Occlusive dressing technique"
+      ],
+      [
+        "Ophthalmic",
+        "Ophthalmic"
+      ],
+      [
+        "Oral",
+        "Oral"
+      ],
+      [
+        "Oropharingeal",
+        "Oropharingeal"
+      ],
+      [
+        "Parenteral",
+        "Parenteral"
+      ],
+      [
+        "Periarticular",
+        "Periarticular"
+      ],
+      [
+        "Perineural",
+        "Perineural"
+      ],
+      [
+        "Rectal",
+        "Rectal"
+      ],
+      [
+        "Respiratory (inhalation)",
+        "Respiratory (inhalation)"
+      ],
+      [
+        "Retrobulbar",
+        "Retrobulbar"
+      ],
+      [
+        "Subcutaneous",
+        "Subcutaneous"
+      ],
+      [
+        "Subdermal",
+        "Subdermal"
+      ],
+      [
+        "Sublingual",
+        "Sublingual"
+      ],
+      [
+        "Sunconjunctival",
+        "Sunconjunctival"
+      ],
+      [
+        "Topical",
+        "Topical"
+      ],
+      [
+        "Transdermal",
+        "Transdermal"
+      ],
+      [
+        "Transmammary",
+        "Transmammary"
+      ],
+      [
+        "Transplacental",
+        "Transplacental"
+      ],
+      [
+        "Unknown",
+        "Unknown"
+      ],
+      [
+        "Urethral",
+        "Urethral"
+      ],
+      [
+        "Vaginal",
+        "Vaginal"
+      ],
+      [
+        "Other",
+        "Other"
+      ]
+    ],
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2StrengthUnit[0]": [
+      [
+        "40",
+        " "
+      ],
+      [
+        "INTERNATIONAL UNITS PER MILLILITRE - IU/ML",
+        "AS NECESSARY - AN"
+      ],
+      [
+        "0",
+        "BECQUEREL(S) - BQ"
+      ],
+      [
+        "1",
+        "CURIE(S) - CI"
+      ],
+      [
+        "2",
+        "CYCLICAL - CYC"
+      ],
+      [
+        "3",
+        "DOSAGE FORM - DF"
+      ],
+      [
+        "4",
+        "DROP(S) - GTT"
+      ],
+      [
+        "5",
+        "GIGABECQUEREL(S) - GBQ"
+      ],
+      [
+        "6",
+        "GRAM(S) - GM"
+      ],
+      [
+        "7",
+        "INTERNATIONAL UNIT(S) - IU"
+      ],
+      [
+        "8",
+        "IU(1,000,000S) - MIU"
+      ],
+      [
+        "9",
+        "IU(1000S) - KIU"
+      ],
+      [
+        "10",
+        "IU/KILOGRAM - IU/KG"
+      ],
+      [
+        "11",
+        "KILOBECQUEREL(S) - KBQ"
+      ],
+      [
+        "12",
+        "KILOGRAM(S) - KG"
+      ],
+      [
+        "13",
+        "LITRE(S) - L"
+      ],
+      [
+        "14",
+        "MEGABECQUEREL(S) - MBQ"
+      ],
+      [
+        "15",
+        "MICROCURIE(S) - UCI"
+      ],
+      [
+        "16",
+        "MICROGRAM(S) - UGM"
+      ],
+      [
+        "17",
+        "MICROGRAM(S)/KILOGRAM(S) -UGM/KG"
+      ],
+      [
+        "18",
+        "MICROGRAM(S)/MICROGRAM(S) - UGM/UGM"
+      ],
+      [
+        "19",
+        "MICROGRAM(S)/SQ. METERS - UGM/SQ M"
+      ],
+      [
+        "20",
+        "MICROGRAMS/HOUR - UGM/HR"
+      ],
+      [
+        "21",
+        "MICROLITRE(S) - UL"
+      ],
+      [
+        "22",
+        "MICROMOLE(S) - UMOLE"
+      ],
+      [
+        "23",
+        "MILLICURIE(S) - MCI"
+      ],
+      [
+        "24",
+        "MILLIEQUIVALENT(S) - MEQ"
+      ],
+      [
+        "25",
+        "MILLIGRAM(S) - MG"
+      ],
+      [
+        "26",
+        "MILLIGRAM(S)/KILOGRAM(S) - MG/KG"
+      ],
+      [
+        "27",
+        "MILLIGRAM(S)/SQ. METERS - MG/SQ M"
+      ],
+      [
+        "28",
+        "MILLIGRAMS/MILLIGRAMS - MG/MG"
+      ],
+      [
+        "29",
+        "MILLIGRAMS/MILLILITRES - MG/ML"
+      ],
+      [
+        "30",
+        "MILLILITRE(S) - ML"
+      ],
+      [
+        "31",
+        "MILLIMOLE(S) - MMOLE"
+      ],
+      [
+        "32",
+        "MOLE(S) - MOLE"
+      ],
+      [
+        "33",
+        "NANOCURIE(S) - NCI"
+      ],
+      [
+        "34",
+        "NANOGRAM(S) - NGM"
+      ],
+      [
+        "35",
+        "PERCENT - %"
+      ],
+      [
+        "36",
+        "PICOGRAM(S) - PGM"
+      ],
+      [
+        "37",
+        "TOTAL - TOT"
+      ],
+      [
+        "38",
+        "TRIMESTER - TRI"
+      ],
+      [
+        "39",
+        "UNKNOWN - UNK"
+      ]
+    ],
+    "topmostSubform[0].Page5[0].Prod2[0].Prod2TherapyDurUnit[0]": [
+      [
+        "8",
+        " "
+      ],
+      [
+        "7",
+        "Minute(s)"
+      ],
+      [
+        "6",
+        "Hour(s)"
+      ],
+      [
+        "5",
+        "Day(s)"
+      ],
+      [
+        "4",
+        "Week(s)"
+      ],
+      [
+        "3",
+        "Month(s)"
+      ],
+      [
+        "2",
+        "Year(s)"
+      ]
+    ],
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].Country[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "UNITED STATES",
+        "UNITED STATES"
+      ],
+      [
+        "AFGHANISTAN",
+        "AFGHANISTAN"
+      ],
+      [
+        "AKROTIRI",
+        "AKROTIRI"
+      ],
+      [
+        "ALBANIA",
+        "ALBANIA"
+      ],
+      [
+        "ALGERIA",
+        "ALGERIA"
+      ],
+      [
+        "AMERICAN SAMOA",
+        "AMERICAN SAMOA"
+      ],
+      [
+        "ANDORRA",
+        "ANDORRA"
+      ],
+      [
+        "ANGOLA",
+        "ANGOLA"
+      ],
+      [
+        "ANGUILLA",
+        "ANGUILLA"
+      ],
+      [
+        "ANTARCTICA",
+        "ANTARCTICA"
+      ],
+      [
+        "ANTIGUA AND BARBUDA",
+        "ANTIGUA AND BARBUDA"
+      ],
+      [
+        "ARGENTINA",
+        "ARGENTINA"
+      ],
+      [
+        "ARMENIA",
+        "ARMENIA"
+      ],
+      [
+        "ARUBA",
+        "ARUBA"
+      ],
+      [
+        "ASHMORE AND CARTIER ISLANDS",
+        "ASHMORE AND CARTIER ISLANDS"
+      ],
+      [
+        "AUSTRALIA",
+        "AUSTRALIA"
+      ],
+      [
+        "AUSTRIA",
+        "AUSTRIA"
+      ],
+      [
+        "AZERBAIJAN",
+        "AZERBAIJAN"
+      ],
+      [
+        "BAHAMAS, THE",
+        "BAHAMAS, THE"
+      ],
+      [
+        "BAHRAIN",
+        "BAHRAIN"
+      ],
+      [
+        "BAKER ISLAND",
+        "BAKER ISLAND"
+      ],
+      [
+        "BANGLADESH",
+        "BANGLADESH"
+      ],
+      [
+        "BARBADOS",
+        "BARBADOS"
+      ],
+      [
+        "BASSAS DA INDIA",
+        "BASSAS DA INDIA"
+      ],
+      [
+        "BELARUS",
+        "BELARUS"
+      ],
+      [
+        "BELGIUM",
+        "BELGIUM"
+      ],
+      [
+        "BELIZE",
+        "BELIZE"
+      ],
+      [
+        "BENIN",
+        "BENIN"
+      ],
+      [
+        "BERMUDA",
+        "BERMUDA"
+      ],
+      [
+        "BHUTAN",
+        "BHUTAN"
+      ],
+      [
+        "BOLIVIA",
+        "BOLIVIA"
+      ],
+      [
+        "BONAIRE, SINT EUSTATIUS, AND SABA",
+        "BONAIRE, SINT EUSTATIUS, AND SABA"
+      ],
+      [
+        "BOSNIA AND HERZEGOVINA",
+        "BOSNIA AND HERZEGOVINA"
+      ],
+      [
+        "BOTSWANA",
+        "BOTSWANA"
+      ],
+      [
+        "BOUVET ISLAND",
+        "BOUVET ISLAND"
+      ],
+      [
+        "BRAZIL",
+        "BRAZIL"
+      ],
+      [
+        "BRITISH INDIAN OCEAN TERRITORY",
+        "BRITISH INDIAN OCEAN TERRITORY"
+      ],
+      [
+        "BRUNEI",
+        "BRUNEI"
+      ],
+      [
+        "BULGARIA",
+        "BULGARIA"
+      ],
+      [
+        "BURKINA FASO",
+        "BURKINA FASO"
+      ],
+      [
+        "BURMA",
+        "BURMA"
+      ],
+      [
+        "BURUNDI",
+        "BURUNDI"
+      ],
+      [
+        "CABO VERDE",
+        "CABO VERDE"
+      ],
+      [
+        "CAMBODIA",
+        "CAMBODIA"
+      ],
+      [
+        "CAMEROON",
+        "CAMEROON"
+      ],
+      [
+        "CANADA",
+        "CANADA"
+      ],
+      [
+        "CAYMAN ISLANDS",
+        "CAYMAN ISLANDS"
+      ],
+      [
+        "CENTRAL AFRICAN REPUBLIC",
+        "CENTRAL AFRICAN REPUBLIC"
+      ],
+      [
+        "CHAD",
+        "CHAD"
+      ],
+      [
+        "CHILE",
+        "CHILE"
+      ],
+      [
+        "CHINA",
+        "CHINA"
+      ],
+      [
+        "CHRISTMAS ISLAND",
+        "CHRISTMAS ISLAND"
+      ],
+      [
+        "CLIPPERTON ISLAND",
+        "CLIPPERTON ISLAND"
+      ],
+      [
+        "COCOS (KEELING) ISLANDS",
+        "COCOS (KEELING) ISLANDS"
+      ],
+      [
+        "COLOMBIA",
+        "COLOMBIA"
+      ],
+      [
+        "COMOROS",
+        "COMOROS"
+      ],
+      [
+        "CONGO (BRAZZAVILLE)",
+        "CONGO (BRAZZAVILLE)"
+      ],
+      [
+        "CONGO (KINSHASA)",
+        "CONGO (KINSHASA)"
+      ],
+      [
+        "COOK ISLANDS",
+        "COOK ISLANDS"
+      ],
+      [
+        "CORAL SEA ISLANDS",
+        "CORAL SEA ISLANDS"
+      ],
+      [
+        "COSTA RICA",
+        "COSTA RICA"
+      ],
+      [
+        "CROATIA",
+        "CROATIA"
+      ],
+      [
+        "CUBA",
+        "CUBA"
+      ],
+      [
+        "CURAÇAO",
+        "CURAÇAO"
+      ],
+      [
+        "CYPRUS",
+        "CYPRUS"
+      ],
+      [
+        "CZECH REPUBLIC",
+        "CZECH REPUBLIC"
+      ],
+      [
+        "CÔTE D’IVOIRE",
+        "CÔTE D’IVOIRE"
+      ],
+      [
+        "DENMARK",
+        "DENMARK"
+      ],
+      [
+        "DHEKELIA",
+        "DHEKELIA"
+      ],
+      [
+        "DIEGO GARCIA",
+        "DIEGO GARCIA"
+      ],
+      [
+        "DJIBOUTI",
+        "DJIBOUTI"
+      ],
+      [
+        "DOMINICA",
+        "DOMINICA"
+      ],
+      [
+        "DOMINICAN REPUBLIC",
+        "DOMINICAN REPUBLIC"
+      ],
+      [
+        "ECUADOR",
+        "ECUADOR"
+      ],
+      [
+        "EGYPT",
+        "EGYPT"
+      ],
+      [
+        "EL SALVADOR",
+        "EL SALVADOR"
+      ],
+      [
+        "EQUATORIAL GUINEA",
+        "EQUATORIAL GUINEA"
+      ],
+      [
+        "ERITREA",
+        "ERITREA"
+      ],
+      [
+        "ESTONIA",
+        "ESTONIA"
+      ],
+      [
+        "ETHIOPIA",
+        "ETHIOPIA"
+      ],
+      [
+        "EUROPA ISLAND",
+        "EUROPA ISLAND"
+      ],
+      [
+        "FALKLAND ISLANDS (ISLAS MALVINAS)",
+        "FALKLAND ISLANDS (ISLAS MALVINAS)"
+      ],
+      [
+        "FAROE ISLANDS",
+        "FAROE ISLANDS"
+      ],
+      [
+        "FIJI",
+        "FIJI"
+      ],
+      [
+        "FINLAND",
+        "FINLAND"
+      ],
+      [
+        "FRANCE",
+        "FRANCE"
+      ],
+      [
+        "FRENCH GUIANA",
+        "FRENCH GUIANA"
+      ],
+      [
+        "FRENCH POLYNESIA",
+        "FRENCH POLYNESIA"
+      ],
+      [
+        "FRENCH SOUTHERN AND ANTARCTIC LANDS",
+        "FRENCH SOUTHERN AND ANTARCTIC LANDS"
+      ],
+      [
+        "GABON",
+        "GABON"
+      ],
+      [
+        "GAMBIA, THE",
+        "GAMBIA, THE"
+      ],
+      [
+        "GAZA STRIP",
+        "GAZA STRIP"
+      ],
+      [
+        "GEORGIA",
+        "GEORGIA"
+      ],
+      [
+        "GERMANY",
+        "GERMANY"
+      ],
+      [
+        "GHANA",
+        "GHANA"
+      ],
+      [
+        "GIBRALTAR",
+        "GIBRALTAR"
+      ],
+      [
+        "GLORIOSO ISLANDS",
+        "GLORIOSO ISLANDS"
+      ],
+      [
+        "GREECE",
+        "GREECE"
+      ],
+      [
+        "GREENLAND",
+        "GREENLAND"
+      ],
+      [
+        "GRENADA",
+        "GRENADA"
+      ],
+      [
+        "GUADELOUPE",
+        "GUADELOUPE"
+      ],
+      [
+        "GUAM",
+        "GUAM"
+      ],
+      [
+        "GUANTANAMO BAY NAVAL BASE",
+        "GUANTANAMO BAY NAVAL BASE"
+      ],
+      [
+        "GUATEMALA",
+        "GUATEMALA"
+      ],
+      [
+        "GUERNSEY",
+        "GUERNSEY"
+      ],
+      [
+        "GUINEA",
+        "GUINEA"
+      ],
+      [
+        "GUINEA-BISSAU",
+        "GUINEA-BISSAU"
+      ],
+      [
+        "GUYANA",
+        "GUYANA"
+      ],
+      [
+        "HAITI",
+        "HAITI"
+      ],
+      [
+        "HEARD ISLAND AND MCDONALD ISLANDS",
+        "HEARD ISLAND AND MCDONALD ISLANDS"
+      ],
+      [
+        "HONDURAS",
+        "HONDURAS"
+      ],
+      [
+        "HONG KONG",
+        "HONG KONG"
+      ],
+      [
+        "HOWLAND ISLAND",
+        "HOWLAND ISLAND"
+      ],
+      [
+        "HUNGARY",
+        "HUNGARY"
+      ],
+      [
+        "ICELAND",
+        "ICELAND"
+      ],
+      [
+        "INDIA",
+        "INDIA"
+      ],
+      [
+        "INDONESIA",
+        "INDONESIA"
+      ],
+      [
+        "IRAN",
+        "IRAN"
+      ],
+      [
+        "IRAQ",
+        "IRAQ"
+      ],
+      [
+        "IRELAND",
+        "IRELAND"
+      ],
+      [
+        "ISLE OF MAN",
+        "ISLE OF MAN"
+      ],
+      [
+        "ISRAEL",
+        "ISRAEL"
+      ],
+      [
+        "ITALY",
+        "ITALY"
+      ],
+      [
+        "JAMAICA",
+        "JAMAICA"
+      ],
+      [
+        "JAN MAYEN",
+        "JAN MAYEN"
+      ],
+      [
+        "JAPAN",
+        "JAPAN"
+      ],
+      [
+        "JARVIS ISLAND",
+        "JARVIS ISLAND"
+      ],
+      [
+        "JERSEY",
+        "JERSEY"
+      ],
+      [
+        "JOHNSTON ATOLL",
+        "JOHNSTON ATOLL"
+      ],
+      [
+        "JORDAN",
+        "JORDAN"
+      ],
+      [
+        "JUAN DE NOVA ISLAND",
+        "JUAN DE NOVA ISLAND"
+      ],
+      [
+        "KAZAKHSTAN",
+        "KAZAKHSTAN"
+      ],
+      [
+        "KENYA",
+        "KENYA"
+      ],
+      [
+        "KINGMAN REEF",
+        "KINGMAN REEF"
+      ],
+      [
+        "KIRIBATI",
+        "KIRIBATI"
+      ],
+      [
+        "KOREA, NORTH",
+        "KOREA, NORTH"
+      ],
+      [
+        "KOREA, SOUTH",
+        "KOREA, SOUTH"
+      ],
+      [
+        "KOSOVO",
+        "KOSOVO"
+      ],
+      [
+        "KUWAIT",
+        "KUWAIT"
+      ],
+      [
+        "KYRGYZSTAN",
+        "KYRGYZSTAN"
+      ],
+      [
+        "LAOS",
+        "LAOS"
+      ],
+      [
+        "LATVIA",
+        "LATVIA"
+      ],
+      [
+        "LEBANON",
+        "LEBANON"
+      ],
+      [
+        "LESOTHO",
+        "LESOTHO"
+      ],
+      [
+        "LIBERIA",
+        "LIBERIA"
+      ],
+      [
+        "LIBYA",
+        "LIBYA"
+      ],
+      [
+        "LIECHTENSTEIN",
+        "LIECHTENSTEIN"
+      ],
+      [
+        "LITHUANIA",
+        "LITHUANIA"
+      ],
+      [
+        "LUXEMBOURG",
+        "LUXEMBOURG"
+      ],
+      [
+        "MACAU",
+        "MACAU"
+      ],
+      [
+        "MACEDONIA",
+        "MACEDONIA"
+      ],
+      [
+        "MADAGASCAR",
+        "MADAGASCAR"
+      ],
+      [
+        "MALAWI",
+        "MALAWI"
+      ],
+      [
+        "MALAYSIA",
+        "MALAYSIA"
+      ],
+      [
+        "MALDIVES",
+        "MALDIVES"
+      ],
+      [
+        "MALI",
+        "MALI"
+      ],
+      [
+        "MALTA",
+        "MALTA"
+      ],
+      [
+        "MARSHALL ISLANDS",
+        "MARSHALL ISLANDS"
+      ],
+      [
+        "MARTINIQUE",
+        "MARTINIQUE"
+      ],
+      [
+        "MAURITANIA",
+        "MAURITANIA"
+      ],
+      [
+        "MAURITIUS",
+        "MAURITIUS"
+      ],
+      [
+        "MAYOTTE",
+        "MAYOTTE"
+      ],
+      [
+        "MEXICO",
+        "MEXICO"
+      ],
+      [
+        "MICRONESIA, FEDERATED STATES OF",
+        "MICRONESIA, FEDERATED STATES OF"
+      ],
+      [
+        "MIDWAY ISLANDS",
+        "MIDWAY ISLANDS"
+      ],
+      [
+        "MOLDOVA",
+        "MOLDOVA"
+      ],
+      [
+        "MONACO",
+        "MONACO"
+      ],
+      [
+        "MONGOLIA",
+        "MONGOLIA"
+      ],
+      [
+        "MONTENEGRO",
+        "MONTENEGRO"
+      ],
+      [
+        "MONTSERRAT",
+        "MONTSERRAT"
+      ],
+      [
+        "MOROCCO",
+        "MOROCCO"
+      ],
+      [
+        "MOZAMBIQUE",
+        "MOZAMBIQUE"
+      ],
+      [
+        "NAMIBIA",
+        "NAMIBIA"
+      ],
+      [
+        "NAURU",
+        "NAURU"
+      ],
+      [
+        "NAVASSA ISLAND",
+        "NAVASSA ISLAND"
+      ],
+      [
+        "NEPAL",
+        "NEPAL"
+      ],
+      [
+        "NETHERLANDS",
+        "NETHERLANDS"
+      ],
+      [
+        "NEW CALEDONIA",
+        "NEW CALEDONIA"
+      ],
+      [
+        "NEW ZEALAND",
+        "NEW ZEALAND"
+      ],
+      [
+        "NICARAGUA",
+        "NICARAGUA"
+      ],
+      [
+        "NIGER",
+        "NIGER"
+      ],
+      [
+        "NIGERIA",
+        "NIGERIA"
+      ],
+      [
+        "NIUE",
+        "NIUE"
+      ],
+      [
+        "NORFOLK ISLAND",
+        "NORFOLK ISLAND"
+      ],
+      [
+        "NORTHERN MARIANA ISLANDS",
+        "NORTHERN MARIANA ISLANDS"
+      ],
+      [
+        "NORWAY",
+        "NORWAY"
+      ],
+      [
+        "OMAN",
+        "OMAN"
+      ],
+      [
+        "PAKISTAN",
+        "PAKISTAN"
+      ],
+      [
+        "PALAU",
+        "PALAU"
+      ],
+      [
+        "PALMYRA ATOLL",
+        "PALMYRA ATOLL"
+      ],
+      [
+        "PANAMA",
+        "PANAMA"
+      ],
+      [
+        "PAPUA NEW GUINEA",
+        "PAPUA NEW GUINEA"
+      ],
+      [
+        "PARACEL ISLANDS",
+        "PARACEL ISLANDS"
+      ],
+      [
+        "PARAGUAY",
+        "PARAGUAY"
+      ],
+      [
+        "PERU",
+        "PERU"
+      ],
+      [
+        "PHILIPPINES",
+        "PHILIPPINES"
+      ],
+      [
+        "PITCAIRN ISLANDS",
+        "PITCAIRN ISLANDS"
+      ],
+      [
+        "POLAND",
+        "POLAND"
+      ],
+      [
+        "PORTUGAL",
+        "PORTUGAL"
+      ],
+      [
+        "PUERTO RICO",
+        "PUERTO RICO"
+      ],
+      [
+        "QATAR",
+        "QATAR"
+      ],
+      [
+        "REUNION",
+        "REUNION"
+      ],
+      [
+        "ROMANIA",
+        "ROMANIA"
+      ],
+      [
+        "RUSSIA",
+        "RUSSIA"
+      ],
+      [
+        "RWANDA",
+        "RWANDA"
+      ],
+      [
+        "SAINT BARTHELEMY",
+        "SAINT BARTHELEMY"
+      ],
+      [
+        "SAINT HELENA, ASCENSION, AND TRISTAN DA CUNHA",
+        "SAINT HELENA, ASCENSION, AND TRISTAN DA CUNHA"
+      ],
+      [
+        "SAINT KITTS AND NEVIS",
+        "SAINT KITTS AND NEVIS"
+      ],
+      [
+        "SAINT LUCIA",
+        "SAINT LUCIA"
+      ],
+      [
+        "SAINT MARTIN",
+        "SAINT MARTIN"
+      ],
+      [
+        "SAINT PIERRE AND MIQUELON",
+        "SAINT PIERRE AND MIQUELON"
+      ],
+      [
+        "SAINT VINCENT AND THE GRENADINES",
+        "SAINT VINCENT AND THE GRENADINES"
+      ],
+      [
+        "SAMOA",
+        "SAMOA"
+      ],
+      [
+        "SAN MARINO",
+        "SAN MARINO"
+      ],
+      [
+        "SAO TOME AND PRINCIPE",
+        "SAO TOME AND PRINCIPE"
+      ],
+      [
+        "SAUDI ARABIA",
+        "SAUDI ARABIA"
+      ],
+      [
+        "SENEGAL",
+        "SENEGAL"
+      ],
+      [
+        "SERBIA",
+        "SERBIA"
+      ],
+      [
+        "SEYCHELLES",
+        "SEYCHELLES"
+      ],
+      [
+        "SIERRA LEONE",
+        "SIERRA LEONE"
+      ],
+      [
+        "SINGAPORE",
+        "SINGAPORE"
+      ],
+      [
+        "SINT MAARTEN",
+        "SINT MAARTEN"
+      ],
+      [
+        "SLOVAKIA",
+        "SLOVAKIA"
+      ],
+      [
+        "SLOVENIA",
+        "SLOVENIA"
+      ],
+      [
+        "SOLOMON ISLANDS",
+        "SOLOMON ISLANDS"
+      ],
+      [
+        "SOMALIA",
+        "SOMALIA"
+      ],
+      [
+        "SOUTH AFRICA",
+        "SOUTH AFRICA"
+      ],
+      [
+        "SOUTH GEORGIA AND SOUTH SANDWICH ISLANDS",
+        "SOUTH GEORGIA AND SOUTH SANDWICH ISLANDS"
+      ],
+      [
+        "SOUTH SUDAN",
+        "SOUTH SUDAN"
+      ],
+      [
+        "SPAIN",
+        "SPAIN"
+      ],
+      [
+        "SPRATLY ISLANDS",
+        "SPRATLY ISLANDS"
+      ],
+      [
+        "SRI LANKA",
+        "SRI LANKA"
+      ],
+      [
+        "SUDAN",
+        "SUDAN"
+      ],
+      [
+        "SURINAME",
+        "SURINAME"
+      ],
+      [
+        "SVALBARD",
+        "SVALBARD"
+      ],
+      [
+        "SWAZILAND",
+        "SWAZILAND"
+      ],
+      [
+        "SWEDEN",
+        "SWEDEN"
+      ],
+      [
+        "SWITZERLAND",
+        "SWITZERLAND"
+      ],
+      [
+        "SYRIA",
+        "SYRIA"
+      ],
+      [
+        "TAIWAN",
+        "TAIWAN"
+      ],
+      [
+        "TAJIKISTAN",
+        "TAJIKISTAN"
+      ],
+      [
+        "TANZANIA",
+        "TANZANIA"
+      ],
+      [
+        "THAILAND",
+        "THAILAND"
+      ],
+      [
+        "TIMOR-LESTE",
+        "TIMOR-LESTE"
+      ],
+      [
+        "TOGO",
+        "TOGO"
+      ],
+      [
+        "TOKELAU",
+        "TOKELAU"
+      ],
+      [
+        "TONGA",
+        "TONGA"
+      ],
+      [
+        "TRINIDAD AND TOBAGO",
+        "TRINIDAD AND TOBAGO"
+      ],
+      [
+        "TROMELIN ISLAND",
+        "TROMELIN ISLAND"
+      ],
+      [
+        "TUNISIA",
+        "TUNISIA"
+      ],
+      [
+        "TURKEY",
+        "TURKEY"
+      ],
+      [
+        "TURKMENISTAN",
+        "TURKMENISTAN"
+      ],
+      [
+        "TURKS AND CAICOS ISLANDS",
+        "TURKS AND CAICOS ISLANDS"
+      ],
+      [
+        "TUVALU",
+        "TUVALU"
+      ],
+      [
+        "UGANDA",
+        "UGANDA"
+      ],
+      [
+        "UKRAINE",
+        "UKRAINE"
+      ],
+      [
+        "UNITED ARAB EMIRATES",
+        "UNITED ARAB EMIRATES"
+      ],
+      [
+        "UNITED KINGDOM",
+        "UNITED KINGDOM"
+      ],
+      [
+        "UNKNOWN",
+        "UNKNOWN"
+      ],
+      [
+        "URUGUAY",
+        "URUGUAY"
+      ],
+      [
+        "UZBEKISTAN",
+        "UZBEKISTAN"
+      ],
+      [
+        "VANUATU",
+        "VANUATU"
+      ],
+      [
+        "VATICAN CITY",
+        "VATICAN CITY"
+      ],
+      [
+        "VENEZUELA",
+        "VENEZUELA"
+      ],
+      [
+        "VIETNAM",
+        "VIETNAM"
+      ],
+      [
+        "VIRGIN ISLANDS, BRITISH",
+        "VIRGIN ISLANDS, BRITISH"
+      ],
+      [
+        "VIRGIN ISLANDS, U.S.",
+        "VIRGIN ISLANDS, U.S."
+      ],
+      [
+        "WAKE ISLAND",
+        "WAKE ISLAND"
+      ],
+      [
+        "WALLIS AND FUTUNA",
+        "WALLIS AND FUTUNA"
+      ],
+      [
+        "WEST BANK",
+        "WEST BANK"
+      ],
+      [
+        "WESTERN SAHARA",
+        "WESTERN SAHARA"
+      ],
+      [
+        "YEMEN",
+        "YEMEN"
+      ],
+      [
+        "ZAMBIA",
+        "ZAMBIA"
+      ],
+      [
+        "ZIMBABWE",
+        "ZIMBABWE"
+      ]
+    ],
+    "topmostSubform[0].Page7[0].SecG_Reporter[0].Occupation[0]": [
+      [
+        " ",
+        " "
+      ],
+      [
+        "Administrator/Supervisor",
+        "Administrator/Supervisor"
+      ],
+      [
+        "Biomedical Engineer",
+        "Biomedical Engineer"
+      ],
+      [
+        "Dentist",
+        "Dentist"
+      ],
+      [
+        "Non-Health Professional",
+        "Non-Health Professional"
+      ],
+      [
+        "Nurse",
+        "Nurse"
+      ],
+      [
+        "Nurse Practitioner",
+        "Nurse Practitioner"
+      ],
+      [
+        "Other Health Professional",
+        "Other Health Professional"
+      ],
+      [
+        "Pharmacist",
+        "Pharmacist"
+      ],
+      [
+        "Physician",
+        "Physician"
+      ],
+      [
+        "Physician Assistant",
+        "Physician Assistant"
+      ],
+      [
+        "Risk Manager",
+        "Risk Manager"
+      ],
+      [
+        "Third Party Servicer",
+        "Third Party Servicer"
+      ]
+    ]
+  },
+  "encrypt_p": -1084,
+  "xfa_packets": [
+    "xdp:xdp",
+    "config",
+    "template",
+    "datasets",
+    "localeSet",
+    "xmpmeta",
+    "xfdf",
+    "form",
+    "</xdp:xdp>"
+  ]
+}

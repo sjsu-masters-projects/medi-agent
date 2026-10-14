@@ -9,6 +9,8 @@ Every error response follows a consistent shape:
             "message": "Patient 'abc-123' not found"
         }
     }
+
+A `ValidationError` may add a `details` object with structured, non-clinical data.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    ConflictError,
     ExternalServiceError,
     MediAgentError,
     NotFoundError,
@@ -47,11 +50,15 @@ def _error_response(
     code: str,
     message: str,
     headers: Mapping[str, str] | None = None,
+    details: Mapping[str, Any] | None = None,
 ) -> JSONResponse:
     """Build a uniform error response."""
+    error: dict[str, Any] = {"code": code, "message": message}
+    if details is not None:
+        error["details"] = dict(details)
     return JSONResponse(
         status_code=status_code,
-        content={"error": {"code": code, "message": message}},
+        content={"error": error},
         headers=headers,
     )
 
@@ -110,7 +117,11 @@ async def _forbidden_handler(request: Request, exc: AuthorizationError) -> JSONR
 
 
 async def _validation_handler(_: Request, exc: ValidationError) -> JSONResponse:
-    return _error_response(422, exc.code, exc.message)
+    return _error_response(422, exc.code, exc.message, details=exc.details)
+
+
+async def _conflict_handler(_: Request, exc: ConflictError) -> JSONResponse:
+    return _error_response(409, exc.code, exc.message)
 
 
 async def _external_service_handler(request: Request, exc: ExternalServiceError) -> JSONResponse:
@@ -233,6 +244,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AuthenticationError, _auth_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(AuthorizationError, _forbidden_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ValidationError, _validation_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(ConflictError, _conflict_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ExternalServiceError, _external_service_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ServiceUnavailableError, _service_unavailable_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _request_validation_handler)  # type: ignore[arg-type]

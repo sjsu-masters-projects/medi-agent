@@ -105,15 +105,72 @@ inspected, and no model call, deployment or remote change was performed by this
 audit. Config/ADK/provider/client/worker focused tests: **54 passed**. Configuration
 agreement and mocked tests do not establish current provider availability.
 
-## MedWatch draft lifecycle
+## MedWatch Form 3500 drafts (PV-001-C)
 
-Assigned clinicians can prepare an evidence-attributed MedWatch-compatible draft from a draft ADR
-assessment, edit it with optimistic revision control, approve it with an explicit attestation, and
-export the approved artifact as JSON. The workflow is implemented by
-`app.services.medwatch_service` and clinician routes under `/api/v1/clinicians/me`. Database
-migration `048_medwatch_draft_lifecycle.sql` keeps mutations behind service-role-only atomic RPCs
-and records immutable create, edit, approve, and export events. There is intentionally no FDA
-submission endpoint or application transition to `submitted`.
+Assigned clinicians prepare an evidence-attributed **Form FDA 3500 (09/2025)** draft from a
+draft ADR assessment, edit it with optimistic revision control, preview it laid out like the
+form, approve it with a versioned attestation, download the official fillable PDF or a JSON
+copy, record a submission they made to FDA themselves, and discard a mistaken draft. MediAgent
+never submits anything to FDA; there is no network path to any FDA system. The workflow is
+`app.services.medwatch_service` plus `app.services.medwatch_3500` (template, field map, PDF
+fill, gate, identifier, 048 upgrade, preview). Form values and the PDF owner password are
+never logged.
+
+Routes (all `require_role("clinician")`, active care-team assignment re-checked; a missing
+record is 404, an unassigned clinician 403):
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/v1/clinicians/me/adr-assessments/{id}/medwatch-draft` | Prepare a v2 draft (`{decision: "prepare_draft", reportability_rationale}`) |
+| `GET /api/v1/clinicians/me/medwatch-drafts?state=active\|submitted\|discarded` | List; each item has `missing_for_approval`, `name_warnings`, `pdf_available`, `current_submission`, `submission_history` (newest first), `attestation`, `template` |
+| `GET .../medwatch-drafts/form-3500-options` | Option lists for the editor (units, routes, frequencies, occupations, countries, ...) |
+| `PUT .../medwatch-drafts/{id}` | Save `{form_data (v2), expected_revision}` |
+| `POST .../medwatch-drafts/{id}/approve` | `{approval_note, expected_revision, attested, attestation_version: "medwatch-3500-approval-v1", non_serious_attested, acknowledged_warnings}` |
+| `GET .../medwatch-drafts/{id}/preview` | Read-only Form 3500 layout (sections A to G, C and E not completed by MediAgent) |
+| `GET .../medwatch-drafts/{id}/export.pdf` | Official PDF, `Content-Disposition: attachment; filename="fda-3500-<first 8 of id>-not-submitted.pdf"`, `Cache-Control: no-store` |
+| `GET .../medwatch-drafts/{id}/export` | JSON copy, `artifact_type: "fda_3500_draft"` |
+| `POST .../medwatch-drafts/{id}/discard` | `{reason, expected_revision}`; the assessment returns to review |
+| `POST .../medwatch-drafts/{id}/submission` | `{submitted_on, method, method_detail?, fda_reference?, attested: true, expected_revision}` |
+| `POST .../medwatch-drafts/{id}/submission/amend` | `{amends_id, submitted_on, method, method_detail?, fda_reference?, reason}` |
+
+Error codes (envelope `{"error": {"code", "message", "details"?}}`): 422
+`MEDWATCH_APPROVAL_INCOMPLETE` (`details.missing_for_approval`),
+`MEDWATCH_WARNINGS_NOT_ACKNOWLEDGED` (`details.name_warnings`),
+`MEDWATCH_LEGACY_DRAFT_INCOMPLETE`, `MEDWATCH_NOT_APPROVED`, `MEDWATCH_NOT_SUBMITTED`,
+`MEDWATCH_DRAFT_DISCARDED`, `MEDWATCH_DRAFT_SUBMITTED`, `MEDWATCH_DRAFT_NOT_EDITABLE`,
+`MEDWATCH_DRAFT_EXISTS`, `ADR_REVIEW_ALREADY_COMPLETED`, `MEDWATCH_IDENTIFIER_IDENTIFIES`,
+`MEDWATCH_REVIEW_FIELDS_LOCKED`, `MEDWATCH_SUBMISSION_INVALID`, `MEDWATCH_INVALID_STATE`,
+`MEDWATCH_INVALID_REQUEST`; 409 `MEDWATCH_REVISION_CONFLICT`, `MEDWATCH_SUBMISSION_CONFLICT`;
+503 `FORM_3500_TEMPLATE_MISMATCH` (no export recorded); 502 `FORM_3500_RENDER_FAILED` (no
+export recorded) and `EXTERNAL_SERVICE_ERROR` (the export audit failed, so no bytes are
+returned). PostgREST detail is never returned.
+
+The official template is vendored at `src/app/assets/fda/form-3500-2025-09.pdf` with a
+generated `TEMPLATE.json` record; it is loaded with `importlib.resources`, never downloaded at
+runtime, and checked against its SHA-256, page and field inventory and every mapped field name
+on every export. Re-pin steps (download into an empty directory outside the repository,
+compare size and SHA-256 and stop on a difference, repeat the copyright check, regenerate the
+record with `scripts/generate_form_3500_template_record.py`) are in
+[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.20.1`
+(pinned in `requirements.in`; BSD), not PyMuPDF, writes the AcroForm fields and the XFA
+`datasets` packet, keeps the form fillable and re-encrypts it with the template's
+permissions.
+
+Database: `048_medwatch_draft_lifecycle.sql` (applied to `mediagent-staging`) and
+`064_medwatch_form_3500.sql`, which requires `063_adr_information_loop_lifecycle.sql`. **063 and
+064 are written and validated locally but not applied anywhere.** This branch ships as one pull
+request, and its backend calls 063 and 064 objects (the 6-argument create, 5-argument approve
+and export, discard and submission RPCs, the submission table and the discard columns), so
+**apply 063 then 064 before the backend from this branch deploys**; merging deploys the
+backend. The deployed backend keeps working after 064 because every 048 function keeps its
+signature. Verify with:
+
+```bash
+python scripts/validate_migrations.py
+PYTHONPATH=src .venv/bin/pytest tests/unit/db/test_medwatch_form_3500_migration.py --no-cov -q
+NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src \
+  .venv/bin/pytest tests/integration/test_medwatch_3500_postgres.py --no-cov -q
+```
 
 ## Care-plan model preflight
 
@@ -263,7 +320,7 @@ email or SMS channel is introduced. Merged in #148/#149 and deployed; migrations
 
 ## Database Migrations
 
-Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`056`. Some
+Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`064`. Some
 prefixes are shared by independent files; the migration ledger records full filenames and
 checksums, so do not maintain a second migration inventory here. New-environment order for
 the appointment booking guards (042/043) is in the setup guide.

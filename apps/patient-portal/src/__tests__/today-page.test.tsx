@@ -6,7 +6,8 @@ const destination = vi.hoisted(() => ({ params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => destination.params }));
 vi.mock("@/components/features/approved-plan-details", () => ({ ApprovedPlanDetails: ({ locale }: { locale: string }) => <p>Approved snapshot {locale}</p> }));
 
-const { markComplete, reportBarrier, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
+const { markComplete, reportBarrier, refreshFeed, useFeedData, usePatientProfile, pending } = vi.hoisted(() => ({
+    pending: { count: 0, loaded: true },
     markComplete: vi.fn(),
     reportBarrier: vi.fn(),
     refreshFeed: vi.fn(),
@@ -20,6 +21,11 @@ vi.mock("@/hooks/use-feed-data", () => ({
 
 vi.mock("@/hooks/use-patient-profile", () => ({
     usePatientProfile,
+}));
+
+// The ADR follow-up entry row reads Redux and the network; tests set the pending count directly.
+vi.mock("@/hooks/use-pending-adr-follow-ups", () => ({
+    usePendingADRFollowUps: () => ({ count: pending.count, loaded: pending.loaded }),
 }));
 
 function mockFeedData(overrides: Partial<ReturnType<typeof baseFeedData>> = {}) {
@@ -57,6 +63,8 @@ describe("TodayPage", () => {
         useFeedData.mockReset();
         usePatientProfile.mockReset();
         usePatientProfile.mockReturnValue(null);
+        pending.count = 0;
+        pending.loaded = true;
     });
 
     it("opens the exact authorized activity from its canonical UUID, without changing completion", async () => {
@@ -408,4 +416,38 @@ describe("TodayPage", () => {
         expect(screen.getByRole("textbox")).toHaveValue("Synthetic QA barrier");
     });
 
+    describe("ADR follow-up entry row", () => {
+        it("is absent when no request is pending or the count has not loaded", () => {
+            mockFeedData();
+            const { rerender } = render(<TodayPage />);
+            expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
+            pending.count = 2;
+            pending.loaded = false;
+            rerender(<TodayPage />);
+            expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
+        });
+        it.each([[1, "1 request is waiting for your answers"], [2, "2 requests are waiting for your answers"]])(
+            "links to the follow-up view while %i request(s) are pending, above the symptom link", (count, text) => {
+                pending.count = count;
+                mockFeedData();
+                render(<TodayPage />);
+                const row = screen.getByRole("link", { name: /Questions from your care team/ });
+                expect(row).toHaveAttribute("href", "/chat?view=follow-up");
+                expect(row).toHaveTextContent(text);
+                const symptom = screen.getByRole("link", { name: /Report a symptom/ });
+                expect(symptom).toHaveAttribute("href", "/chat");
+                expect(row.compareDocumentPosition(symptom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            });
+        it.each([[1, "1 solicitud espera tus respuestas"], [2, "2 solicitudes esperan tus respuestas"]])(
+            "localizes the row in es-MX with %i pending", (count, text) => {
+                pending.count = count;
+                usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX", timezone: "America/Los_Angeles" });
+                mockFeedData();
+                render(<TodayPage />);
+                const row = screen.getByRole("link", { name: /Preguntas de tu equipo de atención/ });
+                expect(row).toHaveAttribute("href", "/chat?view=follow-up");
+                expect(row).toHaveTextContent(text);
+                expect(screen.getByRole("link", { name: /Reportar un síntoma/ })).toHaveAttribute("href", "/chat");
+            });
+    });
 });

@@ -12,6 +12,10 @@ readme = "README.md"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The pinned official Form FDA 3500 template and its record are read at runtime.
+[tool.setuptools.package-data]
+app = ["assets/fda/*"]
+
 # ── Ruff ──────────────────────────────────────────────
 [tool.ruff]
 target-version = "py312"
@@ -64,6 +68,7 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80"
 pythonpath = ["src"]
 asyncio_default_fixture_loop_scope = "function"
+markers = ["slow: long-running corpus tests, such as the Form 3500 PDF read-back"]
 timeout = 30
 timeout_method = "thread"
 session_timeout = 1200

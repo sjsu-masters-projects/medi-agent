@@ -82,6 +82,13 @@ class TestCORSMiddleware:
         assert "access-control-allow-methods" in response.headers
         assert "access-control-allow-headers" in response.headers
 
+    def test_cors_exposes_the_download_filename(self, client):
+        """Cross-origin downloads (the Form 3500 PDF) can read Content-Disposition."""
+        response = client.get("/health", headers={"Origin": "http://localhost:3000"})
+
+        exposed = response.headers.get("access-control-expose-headers", "").lower()
+        assert "content-disposition" in exposed
+
     def test_cors_allows_credentials(self, client):
         """Verify credentials are allowed."""
         response = client.options(

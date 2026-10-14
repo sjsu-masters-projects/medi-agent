@@ -9,6 +9,8 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 
+from app.core import exception_handlers
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
@@ -564,6 +566,183 @@ class TestADRInformationRequestRoutes:
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        override_patient_service.respond_to_adr_information_request.assert_not_called()
+
+    def test_overview_route_is_not_parsed_as_request_id(
+        self,
+        client,
+        override_auth,
+        override_patient_service,
+        patient_id,
+    ):
+        override_patient_service.get_adr_follow_up_overview = AsyncMock(
+            return_value={"selected": None, "pending": [], "recent": []}
+        )
+
+        response = client.get("/api/v1/patients/me/adr-information-requests/overview")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"selected": None, "pending": [], "recent": []}
+        override_patient_service.get_adr_follow_up_overview.assert_awaited_once_with(
+            patient_id, request_id=None, assessment_id=None
+        )
+
+    @pytest.mark.parametrize("parameter", ["request_id", "assessment_id"])
+    def test_overview_forwards_the_selector(
+        self,
+        client,
+        override_auth,
+        override_patient_service,
+        patient_id,
+        parameter,
+    ):
+        target = uuid4()
+        override_patient_service.get_adr_follow_up_overview = AsyncMock(
+            return_value={"selected": None, "pending": [], "recent": []}
+        )
+
+        response = client.get(
+            f"/api/v1/patients/me/adr-information-requests/overview?{parameter}={target}"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        expected = {"request_id": None, "assessment_id": None, parameter: target}
+        override_patient_service.get_adr_follow_up_overview.assert_awaited_once_with(
+            patient_id, **expected
+        )
+
+    def test_overview_rejects_both_selectors(self, client, override_auth, override_patient_service):
+        override_patient_service.get_adr_follow_up_overview = AsyncMock()
+
+        response = client.get(
+            "/api/v1/patients/me/adr-information-requests/overview"
+            f"?request_id={uuid4()}&assessment_id={uuid4()}"
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+        override_patient_service.get_adr_follow_up_overview.assert_not_called()
+
+    def test_overview_rejects_invalid_uuid(self, client, override_auth, override_patient_service):
+        override_patient_service.get_adr_follow_up_overview = AsyncMock()
+
+        response = client.get(
+            "/api/v1/patients/me/adr-information-requests/overview?request_id=not-a-uuid"
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+        override_patient_service.get_adr_follow_up_overview.assert_not_called()
+
+    def test_overview_not_found_uses_error_envelope(
+        self, client, override_auth, override_patient_service
+    ):
+        request_id = uuid4()
+        override_patient_service.get_adr_follow_up_overview = AsyncMock(
+            side_effect=NotFoundError("ADR information request", str(request_id))
+        )
+
+        response = client.get(
+            f"/api/v1/patients/me/adr-information-requests/overview?request_id={request_id}"
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["error"]["code"] == "NOT_FOUND"
+
+    def test_respond_closed_request_returns_code_in_envelope(
+        self, client, override_auth, override_patient_service
+    ):
+        override_patient_service.respond_to_adr_information_request = AsyncMock(
+            side_effect=ValidationError(
+                "This information request is no longer awaiting answers",
+                code="ADR_REQUEST_CLOSED",
+            )
+        )
+
+        response = client.post(
+            f"/api/v1/patients/me/adr-information-requests/{uuid4()}/respond",
+            json={
+                "confirmed": True,
+                "answers": [{"question": "dose_response", "answer": "do_not_know"}],
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["error"]["code"] == "ADR_REQUEST_CLOSED"
+
+    def test_overview_response_drops_score_and_causality(
+        self, client, override_auth, override_patient_service
+    ):
+        def _item(item_status):
+            return {
+                "id": str(uuid4()),
+                "adr_assessment_id": str(uuid4()),
+                "status": item_status,
+                "symptom": "dizziness",
+                "suspect_medication_name": "lisinopril",
+                "requested_information": ["dose_response"],
+                "patient_message": "Tell us about the prior dose change.",
+                "created_at": "2026-10-06T10:00:00Z",
+                "current_naranjo_score": 3,
+                "naranjo_score": 3,
+                "causality": "Possible",
+                "current_causality": "Possible",
+            }
+
+        override_patient_service.get_adr_follow_up_overview = AsyncMock(
+            return_value={
+                "selected": _item("answered"),
+                "pending": [_item("pending")],
+                "recent": [_item("cancelled")],
+                "naranjo_score": 3,
+                "causality": "Possible",
+            }
+        )
+
+        response = client.get("/api/v1/patients/me/adr-information-requests/overview")
+
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.json()
+        items = [payload["selected"], *payload["pending"], *payload["recent"]]
+        for container in [payload, *items]:
+            for key in ("current_naranjo_score", "naranjo_score", "causality"):
+                assert key not in container
+        assert "Possible" not in response.text
+
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("get", "/api/v1/patients/me/adr-information-requests/overview"),
+            ("post", "/api/v1/patients/me/adr-information-requests/{id}/respond"),
+        ],
+    )
+    def test_non_patient_role_is_forbidden(
+        self, client, override_patient_service, monkeypatch, method, path
+    ):
+        monkeypatch.setattr(exception_handlers, "record_denial", AsyncMock(return_value=True))
+        clinician = CurrentUser(id=uuid4(), email="clinician@test.com", role="clinician")
+        app.dependency_overrides[get_current_user] = lambda: clinician
+        override_patient_service.get_adr_follow_up_overview = AsyncMock()
+        override_patient_service.respond_to_adr_information_request = AsyncMock()
+        try:
+            response = client.request(
+                method,
+                path.format(id=uuid4()),
+                json=(
+                    {
+                        "confirmed": True,
+                        "answers": [{"question": "dose_response", "answer": "do_not_know"}],
+                    }
+                    if method == "post"
+                    else None
+                ),
+            )
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["error"]["code"] == "AUTHORIZATION_ERROR"
+        override_patient_service.get_adr_follow_up_overview.assert_not_called()
         override_patient_service.respond_to_adr_information_request.assert_not_called()
 
 

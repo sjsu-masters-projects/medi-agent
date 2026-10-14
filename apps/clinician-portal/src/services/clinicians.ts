@@ -23,6 +23,11 @@ import {
 } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
 import { ApiClientError } from "@/services/api";
+import type {
+    MedWatchFormDataV2,
+    MedWatchGateIssue,
+    MedWatchNameWarning,
+} from "@/services/medwatch-form-3500";
 import { fetchWithReadRecovery } from "../../../../packages/shared/src/utils/api-transport";
 
 // ── Base config ──────────────────────────────────────────────────────────────
@@ -101,6 +106,10 @@ export interface DashboardResponse {
 export interface ADRReviewEvidence {
     answer: string;
     evidence?: string | null;
+    /** Absent for AI extraction; `patient_follow_up` for a patient-confirmed answer. */
+    source?: string | null;
+    /** The information request a patient-confirmed answer responded to. */
+    information_request_id?: string | null;
     question: string;
 }
 
@@ -191,45 +200,13 @@ interface ADRReviewQueueResponse {
     total: number;
 }
 
-export type MedWatchDraftStatus = "draft" | "reviewed";
+export type MedWatchDraftStatus = "draft" | "reviewed" | "submitted";
 
-export interface MedWatchFormData {
-    patient: {
-        patient_identifier: string;
-        date_of_birth: string;
-        sex: string;
-    };
-    event: {
-        description: string;
-        onset_date_or_time: string;
-        outcome: string;
-        seriousness: string;
-    };
-    suspect_product: {
-        name: string;
-        dose: string;
-        frequency: string;
-        route: string;
-        therapy_start_date: string;
-        therapy_end_date: string;
-    };
-    concomitant_products: { products: string };
-    tests_and_history: {
-        relevant_tests: string;
-        other_relevant_history: string;
-    };
-    reporter: {
-        name: string;
-        email: string;
-        specialty: string;
-        clinic_name: string;
-    };
-    clinical_review: {
-        naranjo_score: number;
-        causality: NaranjoCausality;
-        reportability_rationale: string;
-    };
-}
+/** Which list the MedWatch page shows (`?state=`). */
+export type MedWatchDraftState = "active" | "submitted" | "discarded";
+
+export type MedWatchFormData = MedWatchFormDataV2;
+export type { MedWatchGateIssue, MedWatchNameWarning } from "@/services/medwatch-form-3500";
 
 export interface MedWatchEvidenceReference {
     field_paths: string[];
@@ -238,6 +215,92 @@ export interface MedWatchEvidenceReference {
     attribution: string;
     excerpt?: string | null;
     citation?: string | null;
+}
+
+export type MedWatchSubmissionMethod = "medwatch_online" | "fax" | "mail" | "other";
+
+export const SUBMISSION_METHOD_LABELS: Record<MedWatchSubmissionMethod, string> = {
+    medwatch_online: "MedWatch Online",
+    fax: "Fax",
+    mail: "Mail",
+    other: "Other",
+};
+
+/** A clinician's record that they submitted the report to FDA outside MediAgent. */
+export interface MedWatchSubmissionRecord {
+    id: string;
+    submittedOn: string;
+    method: MedWatchSubmissionMethod;
+    methodDetail: string | null;
+    fdaReference: string | null;
+    recordedBy: string | null;
+    recordedByName: string | null;
+    createdAt: string;
+    amendsId: string | null;
+    amendReason: string | null;
+}
+
+interface MedWatchSubmissionResponse {
+    id: string;
+    submitted_on: string;
+    method: MedWatchSubmissionMethod;
+    method_detail?: string | null;
+    fda_reference?: string | null;
+    recorded_by?: string | null;
+    recorded_by_name?: string | null;
+    created_at: string;
+    amends_id?: string | null;
+    amend_reason?: string | null;
+}
+
+export interface MedWatchAttestation {
+    version: string;
+    text: string;
+}
+
+/** The vendored Form 3500 revision and whether it may have been superseded (R15.5). */
+export interface Form3500TemplateInfo {
+    revision: string;
+    expires: string;
+    maySuperseded: boolean;
+}
+
+interface Form3500TemplateResponse {
+    revision: string;
+    expires: string;
+    may_be_superseded: boolean;
+}
+
+/** The pinned template record (backend `assets/fda/TEMPLATE.json`), used when a response omits it. */
+export const FORM_3500_TEMPLATE = { revision: "09/2025", expires: "2027-09-30" } as const;
+
+/** Today's calendar date at the clinic (America/Los_Angeles), as `YYYY-MM-DD`. */
+export function clinicTodayIso(now: Date = new Date()): string {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Los_Angeles",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(now);
+    const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+export function form3500TemplateInfo(
+    template?: Form3500TemplateResponse | null,
+    now: Date = new Date(),
+): Form3500TemplateInfo {
+    if (template) {
+        return {
+            revision: template.revision,
+            expires: template.expires,
+            maySuperseded: template.may_be_superseded,
+        };
+    }
+    return {
+        ...FORM_3500_TEMPLATE,
+        maySuperseded: clinicTodayIso(now) > FORM_3500_TEMPLATE.expires,
+    };
 }
 
 export interface MedWatchDraft {
@@ -256,6 +319,17 @@ export interface MedWatchDraft {
     exportVersion: string;
     createdAt: string;
     updatedAt: string;
+    missingForApproval: MedWatchGateIssue[];
+    nameWarnings: MedWatchNameWarning[];
+    currentSubmission: MedWatchSubmissionRecord | null;
+    /** Every submission record for the draft, newest first (original and amendments). */
+    submissionHistory: MedWatchSubmissionRecord[];
+    attestation: MedWatchAttestation | null;
+    template: Form3500TemplateInfo;
+    /** False when an approved draft cannot be filled into the PDF (an incomplete earlier draft). */
+    pdfAvailable: boolean;
+    discardedAt: string | null;
+    discardReason: string | null;
 }
 
 interface MedWatchDraftResponse {
@@ -274,6 +348,15 @@ interface MedWatchDraftResponse {
     export_version: string;
     created_at: string;
     updated_at: string;
+    missing_for_approval?: MedWatchGateIssue[];
+    name_warnings?: MedWatchNameWarning[];
+    current_submission?: MedWatchSubmissionResponse | null;
+    submission_history?: MedWatchSubmissionResponse[];
+    attestation?: MedWatchAttestation | null;
+    template?: Form3500TemplateResponse | null;
+    pdf_available?: boolean;
+    discarded_at?: string | null;
+    discard_reason?: string | null;
 }
 
 export interface MedWatchDraftExport {
@@ -282,7 +365,24 @@ export interface MedWatchDraftExport {
     content: Record<string, unknown>;
 }
 
+function mapSubmission(record: MedWatchSubmissionResponse): MedWatchSubmissionRecord {
+    return {
+        id: record.id,
+        submittedOn: record.submitted_on,
+        method: record.method,
+        methodDetail: record.method_detail ?? null,
+        fdaReference: record.fda_reference ?? null,
+        recordedBy: record.recorded_by ?? null,
+        recordedByName: record.recorded_by_name ?? null,
+        createdAt: record.created_at,
+        amendsId: record.amends_id ?? null,
+        amendReason: record.amend_reason ?? null,
+    };
+}
+
 function mapMedWatchDraft(draft: MedWatchDraftResponse): MedWatchDraft {
+    const current = draft.current_submission ? mapSubmission(draft.current_submission) : null;
+    const history = (draft.submission_history ?? []).map(mapSubmission);
     return {
         id: draft.id,
         adrAssessmentId: draft.adr_assessment_id,
@@ -299,8 +399,204 @@ function mapMedWatchDraft(draft: MedWatchDraftResponse): MedWatchDraft {
         exportVersion: draft.export_version,
         createdAt: draft.created_at,
         updatedAt: draft.updated_at,
+        missingForApproval: draft.missing_for_approval ?? [],
+        nameWarnings: draft.name_warnings ?? [],
+        currentSubmission: current,
+        submissionHistory: history.length > 0 ? history : current ? [current] : [],
+        attestation: draft.attestation ?? null,
+        template: form3500TemplateInfo(draft.template),
+        pdfAvailable: draft.pdf_available ?? true,
+        discardedAt: draft.discarded_at ?? null,
+        discardReason: draft.discard_reason ?? null,
     };
 }
+
+// ── Form 3500 preview (GET /medwatch-drafts/{id}/preview) ───────────────────────
+
+/** Where a previewed value came from. Only `ai_extracted` may carry the AI chip. */
+export type Form3500ProvenanceKind =
+    | "record"
+    | "ai_extracted"
+    | "patient_confirmed"
+    | "clinician_edited";
+
+export interface Form3500Provenance {
+    kind: Form3500ProvenanceKind;
+    sourceType: string | null;
+    attribution: string | null;
+    citation: string | null;
+}
+
+interface Form3500ProvenanceResponse {
+    kind?: Form3500ProvenanceKind | null;
+    source_type?: string | null;
+    attribution?: string | null;
+    citation?: string | null;
+}
+
+export interface Form3500PreviewItem {
+    item: string;
+    label: string;
+    path: string;
+    value: string | null;
+    provenance: Form3500Provenance[];
+    /** Gate codes that block approval on this item (the same rule approval enforces). */
+    missingForApproval: string[];
+}
+
+export interface Form3500PreviewSection {
+    id: string;
+    title: string;
+    notCompletedByMediAgent: boolean;
+    items: Form3500PreviewItem[];
+}
+
+export interface Form3500Preview {
+    draftId: string;
+    status: MedWatchDraftStatus;
+    sections: Form3500PreviewSection[];
+    missingForApproval: MedWatchGateIssue[];
+    mediagentReview: {
+        naranjoScore: number | null;
+        causality: string | null;
+        reportabilityRationale: string;
+    };
+    legacy: Record<string, string>;
+    template: Form3500TemplateInfo;
+}
+
+interface Form3500PreviewResponse {
+    draft_id: string;
+    status: MedWatchDraftStatus;
+    sections: Array<{
+        section: string;
+        title: string;
+        completion: "mediagent" | "not_completed_by_mediagent";
+        items?: Array<{
+            item: string;
+            label: string;
+            path: string;
+            value?: string | null;
+            provenance?: Form3500ProvenanceResponse[];
+            missing_for_approval?: string[];
+        }>;
+    }>;
+    missing_for_approval?: MedWatchGateIssue[];
+    mediagent_review?: {
+        naranjo_score?: number | null;
+        causality?: string | null;
+        reportability_rationale?: string | null;
+    };
+    legacy?: Record<string, string>;
+    template?: Form3500TemplateResponse | null;
+}
+
+/** Classify a provenance entry; an entry is AI-extracted only when its source says so. */
+export function provenanceKind(entry: Form3500ProvenanceResponse): Form3500ProvenanceKind {
+    if (entry.kind) return entry.kind;
+    const source = (entry.source_type ?? "").toLowerCase();
+    if (source === "patient_follow_up" || source.startsWith("patient_confirmed")) {
+        return "patient_confirmed";
+    }
+    if (source.includes("ai_extract")) return "ai_extracted";
+    if (source.startsWith("clinician_edit")) return "clinician_edited";
+    return "record";
+}
+
+function mapPreview(preview: Form3500PreviewResponse): Form3500Preview {
+    return {
+        draftId: preview.draft_id,
+        status: preview.status,
+        sections: preview.sections.map((section) => ({
+            id: section.section,
+            title: section.title,
+            notCompletedByMediAgent: section.completion === "not_completed_by_mediagent",
+            items: (section.items ?? []).map((item) => ({
+                item: item.item,
+                label: item.label,
+                path: item.path,
+                value: item.value ?? null,
+                provenance: (item.provenance ?? []).map((entry) => ({
+                    kind: provenanceKind(entry),
+                    sourceType: entry.source_type ?? null,
+                    attribution: entry.attribution ?? null,
+                    citation: entry.citation ?? null,
+                })),
+                missingForApproval: item.missing_for_approval ?? [],
+            })),
+        })),
+        missingForApproval: preview.missing_for_approval ?? [],
+        mediagentReview: {
+            naranjoScore: preview.mediagent_review?.naranjo_score ?? null,
+            causality: preview.mediagent_review?.causality ?? null,
+            reportabilityRationale: preview.mediagent_review?.reportability_rationale ?? "",
+        },
+        legacy: preview.legacy ?? {},
+        template: form3500TemplateInfo(preview.template),
+    };
+}
+
+// ── MedWatch error codes ──────────────────────────────────────────────────────
+
+/**
+ * A MedWatch request failure. It carries the server's error code and HTTP status only;
+ * the server's message text is never shown, so the portal owns every visible sentence.
+ */
+export class MedWatchRequestError extends Error {
+    readonly code: string;
+    readonly status: number;
+
+    constructor(code: string, status: number) {
+        super(medWatchErrorMessage(code, status));
+        this.name = "MedWatchRequestError";
+        this.code = code;
+        this.status = status;
+    }
+}
+
+const MEDWATCH_ERROR_MESSAGES: Record<string, string> = {
+    MEDWATCH_APPROVAL_INCOMPLETE:
+        "Approval is blocked until the missing items are complete. Refresh to see the current list.",
+    MEDWATCH_LEGACY_DRAFT_INCOMPLETE:
+        "This earlier draft cannot be downloaded as Form 3500. Discard it and prepare a new draft.",
+    FORM_3500_TEMPLATE_MISMATCH:
+        "The Form 3500 template failed its integrity check, so no PDF was produced. Contact support.",
+    FORM_3500_RENDER_FAILED: "The Form 3500 PDF could not be produced. Try again.",
+    NETWORK: "Could not connect. Check your connection and try again.",
+};
+
+export function medWatchErrorMessage(code: string, status: number): string {
+    if (MEDWATCH_ERROR_MESSAGES[code]) return MEDWATCH_ERROR_MESSAGES[code];
+    if (status === 409) {
+        return "This draft changed since you opened it. Refresh, then try again.";
+    }
+    if (status === 403) return "You are no longer assigned to this patient.";
+    if (status === 404) return "This MedWatch draft is no longer available.";
+    if (status === 422) {
+        return "This action is not allowed for the draft in its current state, or a value is invalid.";
+    }
+    return "Unable to complete this action. Try again.";
+}
+
+function toMedWatchError(error: unknown): MedWatchRequestError {
+    if (error instanceof MedWatchRequestError) return error;
+    if (error instanceof ApiClientError) {
+        const details = error.details as { error?: { code?: unknown } } | null;
+        const code = typeof details?.error?.code === "string" ? details.error.code : "";
+        return new MedWatchRequestError(code, error.status);
+    }
+    return new MedWatchRequestError("NETWORK", 0);
+}
+
+async function medwatchCall<T>(request: () => Promise<T>): Promise<T> {
+    try {
+        return await request();
+    } catch (error) {
+        throw toMedWatchError(error);
+    }
+}
+
+const MEDWATCH_BASE = "/api/v1/clinicians/me/medwatch-drafts";
 
 export interface SoapNote {
     subjective: string;
@@ -844,12 +1140,14 @@ export async function createMedWatchDraft(
     return mapMedWatchDraft(result);
 }
 
-/** Fetch editable and approved drafts for assigned patients. */
-export async function fetchMedWatchDrafts(): Promise<MedWatchDraft[]> {
+/** Fetch the active (default), submitted or discarded drafts for assigned patients. */
+export async function fetchMedWatchDrafts(
+    state: MedWatchDraftState = "active",
+): Promise<MedWatchDraft[]> {
     const result = await apiFetch<{
         items: MedWatchDraftResponse[];
         total: number;
-    }>("/api/v1/clinicians/me/medwatch-drafts");
+    }>(`${MEDWATCH_BASE}?state=${encodeURIComponent(state)}`);
     return result.items.map(mapMedWatchDraft);
 }
 
@@ -859,45 +1157,180 @@ export async function updateMedWatchDraft(
     formData: MedWatchFormData,
     expectedRevision: number,
 ): Promise<MedWatchDraft> {
-    const result = await apiFetch<MedWatchDraftResponse>(
-        `/api/v1/clinicians/me/medwatch-drafts/${draftId}`,
-        {
-            method: "PUT",
-            body: JSON.stringify({
-                form_data: formData,
-                expected_revision: expectedRevision,
+    return medwatchCall(async () =>
+        mapMedWatchDraft(
+            await apiFetch<MedWatchDraftResponse>(`${MEDWATCH_BASE}/${draftId}`, {
+                method: "PUT",
+                body: JSON.stringify({
+                    form_data: formData,
+                    expected_revision: expectedRevision,
+                }),
             }),
-        },
+        ),
     );
-    return mapMedWatchDraft(result);
+}
+
+export interface MedWatchApprovalInput {
+    approvalNote: string;
+    expectedRevision: number;
+    /** The attestation version the clinician was shown (from the draft). */
+    attestationVersion: string;
+    nonSeriousAttested: boolean;
+    acknowledgedWarnings: MedWatchNameWarning[];
 }
 
 /** Record explicit clinician sign-off. This does not file the draft externally. */
 export async function approveMedWatchDraft(
     draftId: string,
-    approvalNote: string,
-    expectedRevision: number,
+    input: MedWatchApprovalInput,
 ): Promise<MedWatchDraft> {
-    const result = await apiFetch<MedWatchDraftResponse>(
-        `/api/v1/clinicians/me/medwatch-drafts/${draftId}/approve`,
-        {
-            method: "POST",
-            body: JSON.stringify({
-                approval_note: approvalNote,
-                expected_revision: expectedRevision,
-                attested: true,
+    return medwatchCall(async () =>
+        mapMedWatchDraft(
+            await apiFetch<MedWatchDraftResponse>(`${MEDWATCH_BASE}/${draftId}/approve`, {
+                method: "POST",
+                body: JSON.stringify({
+                    approval_note: input.approvalNote,
+                    expected_revision: input.expectedRevision,
+                    attested: true,
+                    attestation_version: input.attestationVersion,
+                    non_serious_attested: input.nonSeriousAttested,
+                    acknowledged_warnings: input.acknowledgedWarnings.map((warning) => ({
+                        path: warning.path,
+                        kind: warning.kind,
+                    })),
+                }),
             }),
-        },
+        ),
     );
-    return mapMedWatchDraft(result);
 }
 
 /** Export an approved JSON artifact. The backend never submits it to the FDA. */
 export async function exportMedWatchDraft(
     draftId: string,
 ): Promise<MedWatchDraftExport> {
-    return apiFetch<MedWatchDraftExport>(
-        `/api/v1/clinicians/me/medwatch-drafts/${draftId}/export`,
+    return medwatchCall(() => apiFetch<MedWatchDraftExport>(`${MEDWATCH_BASE}/${draftId}/export`));
+}
+
+/** Read-only Form 3500 layout of a draft in any status. */
+export async function fetchForm3500Preview(draftId: string): Promise<Form3500Preview> {
+    return medwatchCall(async () =>
+        mapPreview(await apiFetch<Form3500PreviewResponse>(`${MEDWATCH_BASE}/${draftId}/preview`)),
+    );
+}
+
+export interface Form3500PdfDownload {
+    blob: Blob;
+    filename: string;
+}
+
+/** The fallback equals the server's name: `fda-3500-<first 8 of id>-not-submitted.pdf`. */
+export function form3500PdfFilename(draftId: string, contentDisposition?: string | null): string {
+    const match = /filename="?([^";]+)"?/i.exec(contentDisposition ?? "");
+    const name = match?.[1]?.trim();
+    // Keep only a plain file name; never a path from the header.
+    if (name && /^[\w.-]+\.pdf$/i.test(name)) return name;
+    return `fda-3500-${draftId.slice(0, 8)}-not-submitted.pdf`;
+}
+
+/**
+ * Download the official Form 3500 PDF filled from the approved revision. Each successful
+ * download is audited by the server, so the request is sent once and never replayed.
+ */
+export async function downloadForm3500Pdf(draftId: string): Promise<Form3500PdfDownload> {
+    const token =
+        typeof window !== "undefined"
+            ? readStoredSession()?.accessToken ?? localStorage.getItem("access_token") ?? ""
+            : "";
+    if (!token) throw new MedWatchRequestError("AUTHENTICATION_ERROR", 401);
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE}${MEDWATCH_BASE}/${draftId}/export.pdf`, {
+            headers: { Accept: "application/pdf", Authorization: `Bearer ${token}` },
+        });
+    } catch {
+        throw new MedWatchRequestError("NETWORK", 0);
+    }
+    if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as {
+            error?: { code?: unknown };
+        };
+        const code = typeof body?.error?.code === "string" ? body.error.code : "";
+        throw new MedWatchRequestError(code, response.status);
+    }
+    return {
+        blob: await response.blob(),
+        filename: form3500PdfFilename(draftId, response.headers.get("Content-Disposition")),
+    };
+}
+
+export interface MedWatchDiscardInput {
+    reason: string;
+    expectedRevision: number;
+}
+
+/** Discard a draft with a reason; the ADR assessment returns to review. */
+export async function discardMedWatchDraft(
+    draftId: string,
+    input: MedWatchDiscardInput,
+): Promise<void> {
+    await medwatchCall(() =>
+        apiFetch<unknown>(`${MEDWATCH_BASE}/${draftId}/discard`, {
+            method: "POST",
+            body: JSON.stringify({
+                reason: input.reason,
+                expected_revision: input.expectedRevision,
+            }),
+        }),
+    );
+}
+
+export interface MedWatchSubmissionInput {
+    submittedOn: string;
+    method: MedWatchSubmissionMethod;
+    methodDetail: string;
+    fdaReference: string;
+}
+
+function submissionBody(input: MedWatchSubmissionInput) {
+    return {
+        submitted_on: input.submittedOn,
+        method: input.method,
+        method_detail: input.method === "other" ? input.methodDetail.trim() : null,
+        fda_reference: input.fdaReference.trim() || null,
+    };
+}
+
+/** Record that the clinician submitted the approved report to FDA outside MediAgent. */
+export async function recordMedWatchSubmission(
+    draftId: string,
+    input: MedWatchSubmissionInput & { expectedRevision: number },
+): Promise<void> {
+    await medwatchCall(() =>
+        apiFetch<unknown>(`${MEDWATCH_BASE}/${draftId}/submission`, {
+            method: "POST",
+            body: JSON.stringify({
+                ...submissionBody(input),
+                attested: true,
+                expected_revision: input.expectedRevision,
+            }),
+        }),
+    );
+}
+
+/** Correct the current submission record; the original stays in the history. */
+export async function amendMedWatchSubmission(
+    draftId: string,
+    input: MedWatchSubmissionInput & { amendsId: string; reason: string },
+): Promise<void> {
+    await medwatchCall(() =>
+        apiFetch<unknown>(`${MEDWATCH_BASE}/${draftId}/submission/amend`, {
+            method: "POST",
+            body: JSON.stringify({
+                amends_id: input.amendsId,
+                ...submissionBody(input),
+                reason: input.reason.trim(),
+            }),
+        }),
     );
 }
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from supabase import Client
 
 from app.core.security import require_role
@@ -28,10 +28,13 @@ from app.models.adr import (
     ADRReviewQueueResponse,
     MedWatchDraftApprovalRequest,
     MedWatchDraftCreateRequest,
+    MedWatchDraftDiscardRequest,
     MedWatchDraftExportResponse,
     MedWatchDraftListResponse,
     MedWatchDraftRead,
     MedWatchDraftUpdateRequest,
+    MedWatchSubmissionAmendRequest,
+    MedWatchSubmissionRecordRequest,
 )
 from app.models.auth import CurrentUser
 from app.models.care_plan import CarePlanVersionRead
@@ -64,6 +67,11 @@ from app.models.invite import (
     InviteCodeGenerateResponse,
     InviteCodeListResponse,
     InviteCodeRevokeResponse,
+)
+from app.models.medwatch_form_3500 import (
+    Form3500OptionsRead,
+    Form3500PreviewRead,
+    MedWatchListState,
 )
 from app.models.patient import PatientRead
 from app.services.clinician_service import ClinicianService
@@ -378,9 +386,9 @@ async def review_adr_assessment(
 @router.post(
     "/me/adr-assessments/{assessment_id}/medwatch-draft",
     response_model=MedWatchDraftRead,
-    summary="Prepare an editable MedWatch draft",
+    summary="Prepare an editable Form 3500 draft",
     description=(
-        "Creates an evidence-attributed draft after an explicit clinician "
+        "Creates an evidence-attributed Form FDA 3500 draft after an explicit clinician "
         "reportability decision. This does not submit anything to the FDA."
     ),
 )
@@ -396,13 +404,40 @@ async def create_medwatch_draft(
 @router.get(
     "/me/medwatch-drafts",
     response_model=MedWatchDraftListResponse,
-    summary="List assigned-patient MedWatch drafts",
+    summary="List assigned-patient Form 3500 drafts",
+    description="`state` is `active` (default; draft or approved), `submitted` or `discarded`.",
 )
 async def list_medwatch_drafts(
+    state: MedWatchListState = Query(default="active"),
     user: CurrentUser = Depends(_clinician_dep),
     service: MedWatchService = Depends(_get_medwatch_service),
 ) -> Any:
-    return await service.list_drafts(user.id)
+    return await service.list_drafts(user.id, state)
+
+
+@router.get(
+    "/me/medwatch-drafts/form-3500-options",
+    response_model=Form3500OptionsRead,
+    summary="Form 3500 option lists for the draft editor",
+)
+async def get_medwatch_form_options(
+    _user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return service.form_options()
+
+
+@router.get(
+    "/me/medwatch-drafts/{draft_id}/preview",
+    response_model=Form3500PreviewRead,
+    summary="Read-only Form 3500 preview of a draft",
+)
+async def preview_medwatch_draft(
+    draft_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.get_preview(user.id, draft_id)
 
 
 @router.put(
@@ -437,7 +472,7 @@ async def approve_medwatch_draft(
 @router.get(
     "/me/medwatch-drafts/{draft_id}/export",
     response_model=MedWatchDraftExportResponse,
-    summary="Export an approved MedWatch draft",
+    summary="Export an approved Form 3500 draft as JSON",
     description="Returns an approved JSON artifact and never submits it externally.",
 )
 async def export_medwatch_draft(
@@ -446,6 +481,75 @@ async def export_medwatch_draft(
     service: MedWatchService = Depends(_get_medwatch_service),
 ) -> Any:
     return await service.export_draft(user.id, draft_id)
+
+
+@router.get(
+    "/me/medwatch-drafts/{draft_id}/export.pdf",
+    response_class=Response,
+    summary="Download the official Form FDA 3500 PDF for an approved draft",
+    description=(
+        "The fillable official form, filled from the stored revision. MediAgent does not "
+        "submit it; the clinician does."
+    ),
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def export_medwatch_draft_pdf(
+    draft_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Response:
+    exported = await service.export_pdf(user.id, draft_id)
+    return Response(
+        content=exported["content"],
+        media_type=exported["media_type"],
+        headers={
+            "Content-Disposition": f'attachment; filename="{exported["filename"]}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post(
+    "/me/medwatch-drafts/{draft_id}/discard",
+    response_model=MedWatchDraftRead,
+    summary="Discard a Form 3500 draft and return its assessment to review",
+)
+async def discard_medwatch_draft(
+    draft_id: UUID,
+    request: MedWatchDraftDiscardRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.discard_draft(user.id, draft_id, request)
+
+
+@router.post(
+    "/me/medwatch-drafts/{draft_id}/submission",
+    response_model=MedWatchDraftRead,
+    summary="Record a submission the clinician made to FDA outside MediAgent",
+    description="Records the clinician's attestation only; nothing is sent to FDA.",
+)
+async def record_medwatch_submission(
+    draft_id: UUID,
+    request: MedWatchSubmissionRecordRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.record_submission(user.id, draft_id, request)
+
+
+@router.post(
+    "/me/medwatch-drafts/{draft_id}/submission/amend",
+    response_model=MedWatchDraftRead,
+    summary="Amend the current submission record; the original is kept",
+)
+async def amend_medwatch_submission(
+    draft_id: UUID,
+    request: MedWatchSubmissionAmendRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.amend_submission(user.id, draft_id, request)
 
 
 @router.get(
