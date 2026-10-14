@@ -1,6 +1,6 @@
 # CLN-003 — Clinicians who work at more than one clinic
 
-**Status:** Backlog; decisions needed before design. Raised by the project advisor at the
+**Status:** Backlog; core decisions made October 13, two questions remain. Raised by the project advisor at the
 October 13 checkpoint demo.
 
 ## Why
@@ -69,17 +69,45 @@ and keep one schedule across all of them. MediAgent models one clinic per clinic
   clinic chips, per-clinic settings and team pages, and a combined calendar.
 - **Patient portal:** clinic names on the care team, offers and visits.
 
-## Decisions needed
+## Decisions (requester, October 13)
 
-1. Does a patient belong to a clinic, or only to clinicians through clinic-tagged
-   care-team links?
-2. Can staff at clinic B see that a shared patient has visits or plans at clinic A? Or do
-   they only see busy blocks on the shared clinician's calendar?
-3. Should the default view be "All clinics" or the last clinic used?
-4. Is there one care plan per patient or one per clinic? Who approves when two clinics
-   both treat the patient?
-5. Expo scope before the December 4 feature freeze: which slices (data model and sign-in,
-   unified lists, scheduling) are in, and which are shown as design only?
+1. **A patient belongs to care teams, and each care-team link belongs to a clinic.** The
+   link takes the clinic of the invite code the patient used. The same provider can work
+   at several clinics, so a patient seen by that provider at two clinics has two links,
+   one per clinic. `care_teams` becomes unique on (patient, clinician, clinic) instead of
+   (patient, clinician).
+2. **Care plans are per care team, not per patient.** A cardiologist, an ENT specialist
+   and an orthopaedic provider each write and approve their own plan. Today one plan per
+   patient combines everything. The design is in
+   [PLAN-002](plan-002-care-plans-per-care-team.md).
+3. **No feature-freeze constraint:** design and build the complete version.
+
+## Recommended answers (pending confirmation)
+
+1. **Cross-clinic visibility: clinically shared core, everything else per clinic.**
+   - **Shared with every clinician on the patient's care teams, for treatment:** the
+     active medication list (each medication tagged with the care team and clinic that
+     prescribed it), allergies, active conditions and critical-result alerts. Polypharmacy
+     safety depends on one complete medication list; a cardiologist who cannot see the
+     ENT's prescription cannot catch an interaction or duplicate.
+   - **Visible only to the care team that owns it:** documents uploaded for another care
+     team, that team's care plan detail, chat and messages, SOAP notes, ADR reviews and
+     visit details. Another clinic sees only that a plan exists ("Cardiology plan,
+     Cedar Grove, approved Oct 13") and its medication items through the shared list.
+   - **Scheduling:** another clinic sees only "busy" blocks on a shared clinician's
+     calendar, never the patient or the reason.
+   - **Patient control:** the patient's Profile lists who can see the shared core. A
+     patient may hide it from one care team, and the clinician then sees a "medication
+     list hidden by the patient" notice instead of a partial list.
+2. **Default view:** "All clinics", remembering the last filter per page.
+
+## Remaining questions
+
+- Can a patient hide the shared medication list from a care team, as recommended? Or is
+  the full list always shared for safety?
+- Does a clinician who belongs to a clinic, but has no link to a patient, ever see that
+  patient (for example covering for a colleague)? Recommendation: only through an
+  explicit, audited temporary care-team link.
 
 ## Suggested slices
 
@@ -91,3 +119,5 @@ and keep one schedule across all of them. MediAgent models one clinic per clinic
 | D | Per-clinic roles, settings and invitations |
 | E | Cross-clinic scheduling and conflict checks |
 | F | Clinic tags in notifications, email and audit |
+| G | Shared clinical core (medications, allergies, conditions, critical alerts) with per-team ownership of everything else, and the patient's visibility control |
+| H | Care plans per care team (PLAN-002) |

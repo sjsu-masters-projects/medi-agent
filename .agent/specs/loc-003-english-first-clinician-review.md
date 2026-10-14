@@ -1,6 +1,6 @@
 # LOC-003 — English-first clinician review of Spanish content
 
-**Status:** Backlog; design agreed in outline, decisions below. Raised at the October 13
+**Status:** Backlog; design agreed in outline, translation timing decided, two questions remain. Raised at the October 13
 checkpoint demo.
 
 ## Principle
@@ -68,11 +68,13 @@ Both uses are labelled as such.
 | ADR evidence quoting patient answers | English gloss with the original |
 | Clinician chat tab (patient–Nora transcript) and care-team messages | Open decision 3 |
 
-## Decisions needed
+## Decisions
 
-1. Translate extracted facts once at ingestion, with the same number-equality guard as
-   LOC-001 and stored as display fields? Or translate on read and cache? Ingestion is
-   simpler to audit.
+1. **Decided (requester, October 13): translate when the document is processed.** The
+   English display fields are written at ingestion with the same guard as LOC-001: numbers,
+   doses and medication names must match, or the item keeps only its original text and is
+   marked untranslated. They are stored with the fact and audited with it, so every viewer
+   sees the same English.
 2. Is a bilingual reviewer optional or required for es-MX publication? The current rule
    is a clinician attestation of both languages.
 3. Should clinicians get an English rendering of a Spanish-speaking patient's chat and
