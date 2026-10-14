@@ -234,7 +234,10 @@ jobs:
       - backend-ruff-format
       - backend-mypy
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The full suite runs every opt-in Docker PostgreSQL contract suite in series; it took
+    # 7–9 minutes before the ADR loop and Form 3500 suites and is cancelled at 10. The
+    # pytest session limit in pyproject.toml (20 minutes) still bounds a hung run.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
