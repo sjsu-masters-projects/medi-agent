@@ -30,7 +30,7 @@ So a cardiology instruction and an ENT instruction share one plan and one approv
   - A clinician's upload belongs to their care team.
   - A patient upload asks "Which care team is this for?", listing the patient's care teams
     plus "Not sure". Each named care team's clinician reviews it; "Not sure" goes to every
-    care team's review queue until one claims it.
+    care team's review queue until one claims the whole document.
   - Extracted facts still enter the shared record only through the review path.
   - Drafting uses the documents routed to that plan, plus the shared medication list for
     reconciliation.
@@ -118,5 +118,6 @@ Decided October 13:
 2. **Decided October 13:** cross-plan conflicts block publication, resolved as described
    in "How a blocker is handled".
 3. **Decided October 13:** activities stay in Today when a care team ends, until a clinician adopts or retires them.
-4. **Open:** how a patient upload marked "Not sure" is claimed. Recommendation: any care
-   team can claim the whole document; once one claims it, it leaves the others' queues.
+4. **Decided October 13:** a patient upload marked "Not sure" appears in every one of the
+   patient's care teams' queues. Any of them can claim the whole document; once one does, it
+   leaves the other queues, and the claim is audited.
