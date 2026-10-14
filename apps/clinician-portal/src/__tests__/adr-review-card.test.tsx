@@ -278,5 +278,5 @@ describe("Property 6: each evidence entry carries exactly one truthful provenanc
             args.some((arg) => typeof arg === "string" && /same key|unique "key"/i.test(arg)),
         );
         expect(keyWarnings).toEqual([]);
-    });
+    }, 30_000); // 312 full renders: CI runners take longer than the 5-second default.
 });
