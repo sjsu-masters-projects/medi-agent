@@ -11,6 +11,7 @@ spring-2026 meeting records. Neither is current implementation guidance.
 | Product boundary, decisions, ownership, and active work | `../.agent/PROJECT.md`, `../.agent/TEAM.md`, and `../.agent/TASKS.md` |
 | Detailed task acceptance (required before coding) | [Backlog requirements](../.agent/specs/project-backlog-acceptance.md), or the issue's dedicated spec below |
 | Care-plan generation, review, approval and Today contract | [PAT-005 specification](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md) and [patient-upload evidence gate](patient-upload-care-plan-review-gate.md) |
+| Advisor items from the October 13 checkpoint | [Multi-clinic clinicians (CLN-003)](../.agent/specs/clin-003-multi-clinic-clinicians.md) and [English-first review of Spanish content (LOC-003)](../.agent/specs/loc-003-english-first-clinician-review.md) |
 | Scheduling and addressed human messaging | [Scheduling specification](../.agent/specs/sch-001-appointment-scheduling.md) and [conversation specification](../.agent/specs/com-001-two-way-conversations.md) |
 | Latest prototype acceptance and pending presentation checks | [Deployed recheck, October 11–13](deployed-recheck-2026-10-11.md), [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md), [portal UI/UX evidence](portal-ui-ux-review-2026-10-10.md) and [UX-002 overhaul verification](ux-002-overhaul-verification.md) |
 | Visual design and app icons | `../.agent/DESIGN_SYSTEM.md` and [app icons](brand-icons.md) |
