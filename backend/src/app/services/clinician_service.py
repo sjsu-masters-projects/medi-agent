@@ -18,7 +18,7 @@ import logging
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from supabase import Client
@@ -513,35 +513,81 @@ class ClinicianService:
             "medwatch_pending": medwatch_count,
         }
 
+    _ADR_REVIEW_COLUMNS = (
+        "id, patient_id, symptom_report_id, suspect_medication_id, "
+        "suspect_medication_name, naranjo_score, causality, naranjo_answers, "
+        "naranjo_assessment, evidence, status, last_review_action, review_note, "
+        "requested_information, reviewed_by, reviewed_at, created_at, "
+        "patients(first_name, last_name), "
+        "symptom_reports(symptom, severity, onset, created_at)"
+    )
+
     async def list_adr_review_queue(
         self,
         clinician_id: UUID,
         *,
-        status_filter: ADRStatus = ADRStatus.DRAFT,
+        status_filter: ADRStatus | Literal["all"] = ADRStatus.DRAFT,
+        patient_id: UUID | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
-        """Return evidence-backed ADR drafts for the clinician's assigned patients."""
+        """Return evidence-backed ADR assessments for the clinician's assigned patients.
+
+        ``status_filter="all"`` lists every status; ``patient_id`` narrows to one patient
+        and, when that patient is not assigned, yields an empty list.
+        """
         patient_ids = await self._get_assigned_patient_ids(clinician_id)
+        if patient_id is not None:
+            patient_ids = [pid for pid in patient_ids if pid == patient_id]
         if not patient_ids:
             return {"items": [], "total": 0}
 
-        result = await self._execute(
+        query = (
             self.db.table("adr_assessments")
-            .select(
-                "id, patient_id, symptom_report_id, suspect_medication_id, "
-                "suspect_medication_name, naranjo_score, causality, naranjo_answers, "
-                "naranjo_assessment, evidence, status, last_review_action, review_note, "
-                "requested_information, reviewed_by, reviewed_at, created_at, "
-                "patients(first_name, last_name), "
-                "symptom_reports(symptom, severity, onset, created_at)"
-            )
-            .in_("patient_id", [str(patient_id) for patient_id in patient_ids])
-            .eq("status", status_filter.value)
-            .order("created_at", desc=True)
-            .limit(max(1, min(limit, 200)))
+            .select(self._ADR_REVIEW_COLUMNS)
+            .in_("patient_id", [str(pid) for pid in patient_ids])
+        )
+        if status_filter != "all":
+            query = query.eq("status", ADRStatus(status_filter).value)
+        result = await self._execute(
+            query.order("created_at", desc=True).limit(max(1, min(limit, 200)))
         )
 
         rows = cast(list[dict[str, Any]], result.data or [])
+        latest_requests = await self._latest_information_requests(rows)
+        items = [
+            self._normalize_adr_review_item(
+                row,
+                latest_request=latest_requests.get(str(row["id"])),
+            )
+            for row in rows
+        ]
+        return {"items": items, "total": len(items)}
+
+    async def get_adr_review_item(self, clinician_id: UUID, assessment_id: UUID) -> dict[str, Any]:
+        """One assessment of any status. Unknown and unassigned ids share one 404."""
+        result = await self._execute(
+            self.db.table("adr_assessments")
+            .select(self._ADR_REVIEW_COLUMNS)
+            .eq("id", str(assessment_id))
+            .limit(1)
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if rows:
+            assignment = await self.care_team_repo.find_active_assignment(
+                str(clinician_id), str(rows[0]["patient_id"])
+            )
+            if not assignment:
+                rows = []
+        if not rows:
+            raise NotFoundError("ADR assessment", str(assessment_id))
+        latest = await self._latest_information_requests(rows)
+        return self._normalize_adr_review_item(
+            rows[0], latest_request=latest.get(str(rows[0]["id"]))
+        )
+
+    async def _latest_information_requests(
+        self, rows: list[dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
         latest_requests: dict[str, dict[str, Any]] = {}
         if rows:
             request_result = await self._execute(
@@ -552,15 +598,7 @@ class ClinicianService:
             )
             for request in cast(list[dict[str, Any]], request_result.data or []):
                 latest_requests.setdefault(str(request["adr_assessment_id"]), request)
-
-        items = [
-            self._normalize_adr_review_item(
-                row,
-                latest_request=latest_requests.get(str(row["id"])),
-            )
-            for row in rows
-        ]
-        return {"items": items, "total": len(items)}
+        return latest_requests
 
     async def review_adr_assessment(
         self,

@@ -850,8 +850,38 @@ class TestADRReviewQueueRoutes:
         override_service.list_adr_review_queue.assert_awaited_once_with(
             clinician_id,
             status_filter="draft",
+            patient_id=None,
             limit=25,
         )
+
+    def test_list_accepts_all_statuses_and_a_patient_filter(
+        self, client, override_auth, override_service, clinician_id
+    ):
+        patient_id = uuid4()
+        override_service.list_adr_review_queue = AsyncMock(return_value={"items": [], "total": 0})
+
+        response = client.get(
+            "/api/v1/clinicians/me/adr-assessments",
+            params={"status": "all", "patient_id": str(patient_id)},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        override_service.list_adr_review_queue.assert_awaited_once_with(
+            clinician_id, status_filter="all", patient_id=patient_id, limit=100
+        )
+
+    def test_single_assessment_unknown_and_unassigned_share_one_404(
+        self, client, override_auth, override_service
+    ):
+        override_service.get_adr_review_item = AsyncMock(
+            side_effect=NotFoundError("ADR assessment", "x")
+        )
+
+        first = client.get(f"/api/v1/clinicians/me/adr-assessments/{uuid4()}")
+        second = client.get(f"/api/v1/clinicians/me/adr-assessments/{uuid4()}")
+
+        assert first.status_code == second.status_code == status.HTTP_404_NOT_FOUND
+        assert first.json()["error"]["code"] == second.json()["error"]["code"] == "NOT_FOUND"
 
     def test_review_action_is_passed_to_the_clinician_service(
         self, client, override_auth, override_service, clinician_id
@@ -1321,6 +1351,40 @@ class TestMedWatchDraftRoutes:
         assert response.headers["content-disposition"] == f'attachment; filename="{filename}"'
         assert response.headers["cache-control"] == "no-store"
         assert response.content == b"%PDF-synthetic"
+
+    def test_preview_pdf_is_inline_uncached_and_not_an_export(
+        self, client, override_auth, override_medwatch_service
+    ):
+        draft_id = uuid4()
+        override_medwatch_service.preview_pdf = AsyncMock(
+            return_value={
+                "filename": "fda-3500-draft-preview.pdf",
+                "media_type": "application/pdf",
+                "content": b"%PDF-synthetic",
+            }
+        )
+
+        response = client.get(f"{_DRAFTS}/{draft_id}/preview.pdf")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.headers["content-disposition"].startswith("inline;")
+        assert response.headers["cache-control"] == "no-store"
+        override_medwatch_service.export_pdf.assert_not_called()
+
+    def test_single_draft_read_and_unknown_draft_404(
+        self, client, override_auth, override_medwatch_service
+    ):
+        override_medwatch_service.get_draft = AsyncMock(
+            side_effect=NotFoundError("MedWatch draft", "x")
+        )
+        for path in ("", "/preview.pdf"):
+            override_medwatch_service.preview_pdf = AsyncMock(
+                side_effect=NotFoundError("MedWatch draft", "x")
+            )
+            response = client.get(f"{_DRAFTS}/{uuid4()}{path}")
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            assert response.json()["error"]["code"] == "NOT_FOUND"
 
     @pytest.mark.parametrize(
         ("error", "expected_status", "code"),

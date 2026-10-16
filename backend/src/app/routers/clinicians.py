@@ -13,7 +13,7 @@ New in Phase 6:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -25,6 +25,7 @@ from app.middleware.rate_limit import soap_note_rate_limiter
 from app.models.adr import (
     ADRReviewDecisionRequest,
     ADRReviewDecisionResponse,
+    ADRReviewQueueItem,
     ADRReviewQueueResponse,
     MedWatchDraftApprovalRequest,
     MedWatchDraftCreateRequest,
@@ -353,7 +354,8 @@ async def get_dashboard(
     ),
 )
 async def list_adr_assessments(
-    status_filter: ADRStatus = Query(default=ADRStatus.DRAFT, alias="status"),
+    status_filter: ADRStatus | Literal["all"] = Query(default=ADRStatus.DRAFT, alias="status"),
+    patient_id: UUID | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
@@ -361,8 +363,23 @@ async def list_adr_assessments(
     return await service.list_adr_review_queue(
         user.id,
         status_filter=status_filter,
+        patient_id=patient_id,
         limit=limit,
     )
+
+
+@router.get(
+    "/me/adr-assessments/{assessment_id}",
+    response_model=ADRReviewQueueItem,
+    summary="Read one assigned-patient ADR assessment",
+    description="An unknown or unauthorised id returns the same 404.",
+)
+async def get_adr_assessment(
+    assessment_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.get_adr_review_item(user.id, assessment_id)
 
 
 @router.post(
@@ -425,6 +442,46 @@ async def get_medwatch_form_options(
     service: MedWatchService = Depends(_get_medwatch_service),
 ) -> Any:
     return service.form_options()
+
+
+@router.get(
+    "/me/medwatch-drafts/{draft_id}",
+    response_model=MedWatchDraftRead,
+    summary="Read one assigned-patient Form 3500 draft",
+    description="An unknown or unauthorised id returns the same 404.",
+)
+async def get_medwatch_draft(
+    draft_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.get_draft(user.id, draft_id)
+
+
+@router.get(
+    "/me/medwatch-drafts/{draft_id}/preview.pdf",
+    response_class=Response,
+    summary="Watermarked Form FDA 3500 PDF preview of a draft",
+    description=(
+        "The filled form stamped 'DRAFT - not for submission'. It is not an export: no audit "
+        "event and no state change."
+    ),
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def preview_medwatch_draft_pdf(
+    draft_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Response:
+    preview = await service.preview_pdf(user.id, draft_id)
+    return Response(
+        content=preview["content"],
+        media_type=preview["media_type"],
+        headers={
+            "Content-Disposition": f'inline; filename="{preview["filename"]}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get(
