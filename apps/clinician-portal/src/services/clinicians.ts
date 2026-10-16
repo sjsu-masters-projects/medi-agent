@@ -89,7 +89,7 @@ export interface PatientRiskData {
     adherence_score: number;
     open_adr_count: number;
     active_med_count: number;
-    recent_symptom_severity: number;
+    recent_symptom_severity: number | null;
     last_activity: string;
 }
 
@@ -120,7 +120,7 @@ export interface ADRReviewQueueItem {
     patientLastName: string;
     symptomReportId: string;
     symptom: string;
-    severity: number;
+    severity: number | null;
     onset?: string | null;
     symptomCreatedAt: string;
     suspectMedicationId: string;
@@ -175,7 +175,7 @@ interface ADRReviewQueueResponse {
         patient_last_name: string;
         symptom_report_id: string;
         symptom: string;
-        severity: number;
+        severity: number | null;
         onset?: string | null;
         symptom_created_at: string;
         suspect_medication_id: string;
@@ -918,7 +918,11 @@ function normalizeSymptomReport(raw: Record<string, unknown>): SymptomReport {
         id: String(raw.id ?? ""),
         patientId: String(raw.patientId ?? raw.patient_id ?? ""),
         symptom: String(raw.symptom ?? ""),
-        severity: Number(raw.severity ?? 0),
+        severity: typeof raw.severity === "number" ? raw.severity : null,
+        confirmationState: raw.confirmation_state === "patient_confirmed" ? "patient_confirmed" : "legacy_unconfirmed",
+        confirmedAt: typeof raw.confirmed_at === "string" ? raw.confirmed_at : undefined,
+        confirmedSummary: typeof (raw.confirmed_content as Record<string, unknown> | undefined)?.summary === "string"
+            ? String((raw.confirmed_content as Record<string, unknown>).summary) : undefined,
         onset: typeof raw.onset === "string" ? raw.onset : undefined,
         duration: typeof raw.duration === "string" ? raw.duration : undefined,
         relatedMedicationId:

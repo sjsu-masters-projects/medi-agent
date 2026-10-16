@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
+import { SymptomIntakePanel } from "@/components/features/symptom-intake-panel";
 import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
 import { ADRFollowUpView } from "@/components/features/adr-follow-up-view";
 import { getADRFollowUpCopy } from "@/content/adr-follow-up-copy";
@@ -47,7 +48,9 @@ export default function ChatPage() {
     }
     const [showHistory, setShowHistory] = useState(false);
     const [humanThreadId, setHumanThreadId] = useState<string | null>(null);
-    const bottomRef = useRef<HTMLDivElement | null>(null);
+    const conversationRef = useRef<HTMLDivElement | null>(null);
+    const followLatestRef = useRef(true);
+    const scrollSessionRef = useRef<string | null>(null);
     const headingRef = useRef<HTMLHeadingElement | null>(null);
     const noraOpenRef = useRef<HTMLButtonElement | null>(null);
     const previousInbox = useRef(inbox);
@@ -90,11 +93,25 @@ export default function ChatPage() {
         previousInbox.current = inbox;
     }, [inbox]);
 
-    useEffect(() => {
-        if (!inbox) bottomRef.current?.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
-    }, [assistantDraft, isTyping, messages, conversation, inbox]);
-
     const assistantThread = !inbox && conversation === "assistant";
+    useLayoutEffect(() => {
+        const container = conversationRef.current;
+        if (!assistantThread || !container) {
+            scrollSessionRef.current = null;
+            followLatestRef.current = true;
+            return;
+        }
+        if (scrollSessionRef.current !== sessionId) {
+            scrollSessionRef.current = sessionId;
+            followLatestRef.current = true;
+        }
+        // Streaming must not restart an animation or pull a reader away from
+        // earlier messages (including an intake answer they are editing).
+        if (!loading && followLatestRef.current && !container.contains(document.activeElement)) {
+            container.scrollTo({ top: container.scrollHeight, behavior: "instant" });
+        }
+    }, [assistantDraft, isTyping, messages, assistantThread, sessionId, loading]);
+
     const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
     if (followUpMode) {
         const followUpCopy = getADRFollowUpCopy(locale);
@@ -110,8 +127,8 @@ export default function ChatPage() {
             <ADRFollowUpView locale={profile ? locale : undefined} timeZone={profile?.timezone} requestId={followUpRequestId} assessmentId={followUpAssessmentId} onBack={leaveFollowUp} />
         </div>;
     }
-    return <div className={`flex w-full flex-col text-ink ${threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
-        <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
+    return <div className={`flex w-full flex-col text-ink ${assistantThread ? "h-dvh min-h-0 overflow-hidden" : threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
+        <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "shrink-0 sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
             {!inbox && <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
             {!inbox && conversation === "assistant" && <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" className="h-[18px] w-[18px]" /></span>}
             <div className="min-w-0 flex-1">
@@ -161,6 +178,12 @@ export default function ChatPage() {
             </section>}
         </div>}
         {assistantThread && <>
+            <div ref={conversationRef} role="region" aria-label={locale === "es-MX" ? "Conversación con Nora" : "Nora conversation"}
+                onScroll={(event) => {
+                    const container = event.currentTarget;
+                    followLatestRef.current = container.scrollHeight - container.clientHeight - container.scrollTop <= 80;
+                }} className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+            <SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId={visibleMessages.findLast((message) => message.role === ChatRole.USER)?.id} />
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
             <div className="empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>
             {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
@@ -176,7 +199,7 @@ export default function ChatPage() {
             {error && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.chatError}</p>}
             {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <Icon name="alert" className="mt-px h-5 w-5 shrink-0" />
-                <p className="flex-1 font-medium">{copy.escalationNotice}</p>
+                <p className="flex-1 font-medium">{safetyNotice}</p>
                 <button className="ma-press min-h-11 shrink-0 rounded-xl bg-surface px-3 text-sm font-semibold text-danger-ink" onClick={dismissSafetyNotice} type="button">{controls.dismiss}</button>
             </div>}
             {voiceError && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
@@ -192,9 +215,9 @@ export default function ChatPage() {
                 {assistantDraft && <ChatBubble content={assistantDraft} isStreaming language={locale} locale={locale}
                     role="assistant" timestamp={assistantDraftStartedAt ?? new Date().toISOString()} />}
                 {isTyping && !assistantDraft && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
-                <div ref={bottomRef} />
             </div>
-            <form className="sticky bottom-0 z-10 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={handleSend}>
+            </div>
+            <form className="shrink-0 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={(event) => { followLatestRef.current = true; handleSend(event); }}>
                 <div className="flex items-end gap-2">
                     <div className="flex min-h-[52px] min-w-0 flex-1 items-end rounded-[26px] border border-line-strong bg-surface pr-1.5 pb-1.5 transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/12">
                         <ChatTextarea aria-label={controls.message} className="pl-[18px]" onChange={(event) => setInput(event.target.value)}

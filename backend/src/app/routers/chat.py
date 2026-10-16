@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, WebSocketException
 from starlette import status
@@ -21,24 +21,24 @@ from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
 from app.db.connection import get_db
-from app.followup import analyse_symptom
-from app.followup.service import EMERGENCY_THRESHOLD
 from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.chat import ChatConversation
 from app.models.enums import ChatRole, Language
-from app.safety import TRIAGE_COPY
-from app.services.a2a_task_service import A2ATaskService
+from app.models.symptom_intake import IntakeStart
+from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety
 from app.services.chat_document_catalog import (
     build_document_catalog_reply,
     is_document_catalog_question,
 )
+from app.services.chat_safety_service import ChatSafetyService
 from app.services.chat_service import (
     ChatService,
     ConversationStateConflictError,
     conversation_title,
     normalize_session_id,
 )
+from app.services.symptom_intake_service import SymptomIntakeService
 from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
@@ -87,6 +87,76 @@ def _chunk_text(text: str, chunk_size: int = 140) -> list[str]:
     return [
         normalized[index : index + chunk_size] for index in range(0, len(normalized), chunk_size)
     ]
+
+
+def _safety_turn_payload(options: dict[str, Any]) -> dict[str, Any]:
+    incoming = options["incoming"]
+    decision = options["decision"]
+    return {
+        "turn_id": str(uuid4()),
+        "content": incoming.content,
+        "session_id": options.get("session_id", "default"),
+        "language": incoming.language.value,
+        "audio_url": incoming.audio_url,
+        "safety_rule": decision.verdict.safety_rule,
+        "rule_version": decision.rule_version,
+        "response_text": decision.response_text,
+        "intent": decision.verdict.intent,
+    }
+
+
+def _safety_completion(record: dict[str, Any], decision: IntakeSafetyDecision) -> dict[str, Any]:
+    return {
+        "type": "assistant_complete",
+        "message": _serialize_chat_message(record["assistant_message"]),
+        "intent": decision.verdict.intent,
+        "urgency": "emergency",
+        "escalation_required": True,
+        "persistence_status": record["persistence_status"],
+        "safety_rule": decision.verdict.safety_rule,
+        "safety_rule_version": decision.rule_version,
+    }
+
+
+async def _send_safety_direction(websocket: WebSocket, decision: IntakeSafetyDecision) -> None:
+    await websocket.send_json(
+        {"type": "assistant_start", "intent": decision.verdict.intent, "urgency": "emergency"}
+    )
+    for chunk in _chunk_text(decision.response_text):
+        await websocket.send_json({"type": "assistant_chunk", "content": chunk})
+
+
+async def _send_safety_turn(
+    websocket: WebSocket, service: ChatSafetyService, options: dict[str, Any]
+) -> dict[str, Any]:
+    decision: IntakeSafetyDecision = options["decision"]
+    recording = asyncio.create_task(
+        service.record_safely(options["patient_id"], _safety_turn_payload(options))
+    )
+    try:
+        await _send_safety_direction(websocket, decision)
+    finally:
+        # A disconnect during streaming still leaves the alert for worker delivery.
+        record = await recording
+    if record.get("user_message"):
+        await websocket.send_json(
+            {
+                "type": "user_message_saved",
+                "message": _serialize_chat_message(record["user_message"]),
+            }
+        )
+    await websocket.send_json(_safety_completion(record, decision))
+    # Alert delivery follows the reviewed direction and terminal reply.
+    delivery = await service.deliver_safely(record)
+    await websocket.send_json(
+        {
+            "type": "escalation_recommended",
+            "message": decision.response_text,
+            "urgency": "emergency",
+            **delivery,
+        }
+    )
+    return record
 
 
 DOCUMENT_CONTEXT_DISMISSED = "none"
@@ -565,7 +635,7 @@ async def chat_websocket_endpoint(
 
     await websocket.accept(subprotocol=negotiated_subprotocol(websocket))
     service = ChatService(db)
-    a2a_service = A2ATaskService(db)
+    safety_service = ChatSafetyService(db)
     care_coordinator = CareCoordinatorRuntime()
 
     try:
@@ -624,6 +694,19 @@ async def chat_websocket_endpoint(
         conversation_state = _conversation_state_from_record(state_record)
     except WebSocketDisconnect:
         logger.info("Chat websocket disconnected during initialization")
+        return
+    except Exception as exc:
+        logger.error("Chat initialization failed (%s)", type(exc).__name__)
+        sent = await _send_terminal_event(
+            websocket,
+            {
+                "type": "error",
+                "code": "chat_initialization_failed",
+                "message": "Chat is temporarily unavailable. Please try again later.",
+            },
+        )
+        if sent and websocket.application_state is WebSocketState.CONNECTED:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         return
 
     try:
@@ -700,6 +783,24 @@ async def chat_websocket_endpoint(
             incoming = incoming.model_copy(
                 update={"language": written_language(incoming.content, incoming.language)}
             )
+            safety_decision = evaluate_intake_safety(incoming.content, incoming.language.value)
+            if safety_decision is not None:
+                record = await _send_safety_turn(
+                    websocket,
+                    safety_service,
+                    {
+                        "patient_id": str(patient_id),
+                        "incoming": incoming,
+                        "session_id": session_id,
+                        "decision": safety_decision,
+                    },
+                )
+                if record["persistence_status"] == "saved":
+                    conversation_history.extend(
+                        [record["user_message"], record["assistant_message"]]
+                    )
+                continue
+
             user_message = await service.save_message(
                 patient_id=str(patient_id),
                 data={**incoming.model_dump(), "session_id": session_id},
@@ -733,7 +834,6 @@ async def chat_websocket_endpoint(
             route = "triage"
             assistant_start_sent = False
             streamed_response = False
-            outer_fallback = False
 
             try:
                 # The patient's own record is read by the coordinator through a tool
@@ -807,7 +907,6 @@ async def chat_websocket_endpoint(
                         "chat_fallback_reason": fallback_reason,
                     },
                 )
-                outer_fallback = True
                 # Every other fallback tier is localized through TRIAGE_COPY; this one
                 # answered a Spanish-speaking patient in English.
                 assistant_content = resolve_locale_resource(incoming.language, OUTER_FALLBACK_COPY)[
@@ -818,121 +917,40 @@ async def chat_websocket_endpoint(
                 escalation_required = False
                 route = "triage"
 
-            if route == "symptom":
-                delegation_events: list[dict[str, Any]] = []
-                saved_report: dict[str, Any] | None = None
-                # The stream is aborted once the route is known, so the patient is never
-                # shown a reply the symptom worker is about to replace. That used to be
-                # followed by a second, buffered call to the same model for text that is
-                # discarded in the common case. This seeds the honest answer instead: if
-                # the worker below produces nothing, we say we could not reply rather than
-                # making a second attempt at the failure that just happened.
-                if not assistant_content and not outer_fallback:
-                    # "Try again in a few minutes" is never the right thing to tell someone
-                    # reporting a medical emergency, whatever else has failed this turn.
-                    # Only a medical emergency reaches the symptom route; self-harm
-                    # classifies as `mental_health` and is answered elsewhere.
-                    seeded_copy_key = (
-                        "emergency_response"
-                        if assistant_urgency == "emergency"
-                        else "service_unavailable"
-                    )
-                    assistant_content = resolve_locale_resource(incoming.language, TRIAGE_COPY)[
-                        seeded_copy_key
-                    ]
+            delegation_events: list[dict[str, Any]] = []
+            if route == "symptom" and assistant_urgency != "emergency":
+                intake = SymptomIntakeService(db, current_user)
                 try:
-                    symptom_result = await analyse_symptom(
-                        message=incoming.content,
-                        language=incoming.language,
-                        history=conversation_history[-12:],
-                        patient_context=patient_context,
-                    )
-                    # An emergency has already been answered with reviewed 911 copy by the
-                    # deterministic floor, and that answer is not the symptom worker's to
-                    # replace. The floor classifies a medical emergency as `symptom`, which
-                    # routes into this branch, so without this guard a patient reporting
-                    # crushing chest pain was shown "I logged your symptom for follow-up"
-                    # and never told to call 911. Self-harm escaped it only because it
-                    # classifies as `mental_health` and never reaches here. The report is
-                    # still captured and the delegation still runs; only the words the
-                    # patient reads are protected.
-                    # Keyed on the text rather than on `status`, because a degraded result
-                    # still carries something the patient needs to read: that the symptom
-                    # could not be recorded. Requiring success would swallow exactly the
-                    # message that admits the failure.
-                    if symptom_result.response_text:
-                        if assistant_urgency != "emergency":
-                            assistant_content = symptom_result.response_text
-                        else:
-                            logger.warning(
-                                "Withheld the symptom worker's reply: the emergency answer stands"
-                            )
-
-                    if symptom_result.symptom_report:
-                        saved_report = await service.save_symptom_report(
-                            patient_id=str(patient_id),
-                            report=symptom_result.symptom_report,
+                    draft = await intake.start(
+                        IntakeStart(
+                            source_message_id=user_message["id"],
+                            session_id=session_id,
                         )
-                        if saved_report:
-                            recent_symptoms = patient_context.get("recent_symptoms", [])
-                            patient_context["recent_symptoms"] = [saved_report, *recent_symptoms][
-                                :6
-                            ]
-
-                    severity = int((symptom_result.symptom_report or {}).get("severity") or 0)
-                    if severity >= EMERGENCY_THRESHOLD:
-                        # Worst-imaginable or danger-sign symptoms reach the care team even
-                        # when no medication is linked; the reply already carries 911 advice.
-                        escalation_required = True
-                        if assistant_urgency == "routine":
-                            assistant_urgency = "urgent"
-
-                    if symptom_result.flagged_for_adr:
-                        escalation_required = True
-                        if assistant_urgency == "routine":
-                            assistant_urgency = "urgent"
-
-                        symptom_event_id = str((saved_report or {}).get("id") or "").strip()
-                        if symptom_result.symptom_report and symptom_event_id:
-                            lifecycle = await a2a_service.run_symptom_to_pharmacovigilance(
-                                patient_id=str(patient_id),
-                                payload={
-                                    "session_id": session_id,
-                                    "symptom_event_id": symptom_event_id,
-                                    "idempotency_key": f"symptom_event:{symptom_event_id}",
-                                    "symptom_report": saved_report,
-                                    "flagged_for_adr": True,
-                                    "naranjo_answers": symptom_result.naranjo_answers,
-                                    "adr_evidence": symptom_result.adr_evidence,
-                                    "document_context": document_context,
-                                    "conversation_state": conversation_state,
-                                },
-                            )
-                            delegation_events = [
-                                event
-                                for event in (lifecycle.get("events") or [])
-                                if isinstance(event, dict)
-                            ]
-                        elif symptom_result.symptom_report:
-                            logger.warning(
-                                "Skipping A2A delegation: unable to persist symptom event id"
-                            )
-
-                    assistant_intent = "symptom"
-                except Exception as exc:
-                    fallback_reason = categorize_llm_failure(exc)
-                    record_chat_fallback(layer="symptom_agent", reason=fallback_reason)
-                    logger.warning(
-                        "Symptom routing failed, continuing triage response: %s",
-                        exc,
-                        extra={
-                            "chat_fallback_layer": "symptom_agent",
-                            "chat_fallback_reason": fallback_reason,
-                        },
                     )
-                    delegation_events = []
-            else:
-                delegation_events = []
+                    await websocket.send_json(
+                        {
+                            "type": "symptom_intake_updated",
+                            "intake_id": draft["intake_id"],
+                            "revision": draft["revision"],
+                        }
+                    )
+                    assistant_content = (
+                        "Tu borrador privado está abierto. Revisa el formulario antes de compartirlo."
+                        if incoming.language == Language.ES
+                        else "Your private draft is open. Review the form before sharing it."
+                    )
+                except Exception:
+                    # An unavailable library/schema cannot restore automatic report saving.
+                    assistant_content = (
+                        "La captura guiada de síntomas no está disponible. No se guardó un informe de síntomas."
+                        if incoming.language == Language.ES
+                        else "Guided symptom intake is unavailable. No symptom report was saved."
+                    )
+                    await websocket.send_json({"type": "symptom_intake_unavailable"})
+                assistant_intent = "symptom"
+                # Guided intake replaces persistence, not triage. Preserve an urgent
+                # classification so assigned clinicians still receive the same alert
+                # they would have received before the private draft was introduced.
 
             # If we never sent assistant_start (e.g. exception before classification),
             # emit it now so the client transitions out of "loading" state.

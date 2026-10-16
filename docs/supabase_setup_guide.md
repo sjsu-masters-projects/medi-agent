@@ -138,6 +138,33 @@ overlap pairs), apply `042_appointment_expired_status.sql` before
 conflict/expiry journey are in
 [the scheduling design §14](../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry).
 
+## PAT-002-B local safety checkpoint
+
+B2 adds local migration `059_chat_safety_alerts.sql` (SHA-256
+`9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5`).
+It creates server-only safety evidence and the narrowly granted service RPCs
+`record_chat_safety_turn` and `deliver_chat_safety_alerts`. Ordinary initial
+emergency chat rows retain existing transcript visibility; this is not private
+draft storage. Safety evidence and its source rows are immutable; pending alert
+delivery uses current active care-team assignments and existing operational alerts.
+No-recipient dispatch records that outcome without claiming a recipient was notified.
+
+After separate authorization, the target must have the preceding schema and
+private schema, migration 059 must precede this backend version, and
+`A2A_RETRY_WORKER_ENABLED=true` is required for background redelivery. A backend
+without 059 still shows direction but cannot guarantee saved evidence/delivery;
+that mismatch is not accepted rollout. Pending delivery notices are not pushed
+again when the worker later succeeds. Verify service-only RPC execution, browser
+denial, assignment changes, rollback/retry and operational alert deduplication
+on the authorized target. Disposable local SQL checks cover selected migrations
+and platform stubs, not that target's complete Supabase setup or grants. See
+[B2 evidence and reproduction commands](pat-002-b-acceptance-2026-10-10.md#b2-verification).
+
+Private drafts, explicit report confirmation and revoked browser report writes
+remain later work. Migration 027's service-role SELECT grant does not remove the
+old owner INSERT policy. No remote migration, seed/reset, deployment, review or
+PR #136 migration is authorized or claimed by this checkpoint.
+
 ## Configure SMART staging
 
 Cloud Run staging must expose a stable HTTPS backend URL. Set these server-side values there:
@@ -240,3 +267,49 @@ reads, and browser write/publication-RPC denial. Local tests do not prove remote
 - [ ] An assigned clinician can retry a retryable failed document, while a concurrent retry and a fourth total attempt are denied.
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.
+
+## PAT-002-B confirmation rollout (local verification active)
+
+Migrations 059/060 are versioned implementation artifacts. Applying them, publishing
+question eligibility and changing deployed configuration are distinct rollout
+actions. No bundle is seeded or approved by migration 060. On October 12 the requester
+reported Ganesh approved the unchanged paired-locale candidate; the
+[approval record](../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+states its provenance, date and canonical hash. This is not a formal PR approval.
+
+October 12 requester rollout recheck: the requester reported applying the migrations.
+Read-only `schema_migrations` queries confirmed both 059/060 ledger entries match the
+versioned file checksums below. The confirmation column is available and the intake
+RPC rejects an unknown patient with `42501`. After the dated approval report, the
+manifest selected `candidate-1`, matching eligibility metadata were published via
+`set_symptom_question_eligibility`, and the local backend was restarted with
+`SYMPTOM_INTAKE_ENABLED=true`. An authenticated fictional patient confirmation and
+assigned-clinician summary then passed locally, as recorded in the
+[acceptance evidence](pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
+The deployed backend setting and deployed acceptance remain separate.
+
+| Migration | SHA-256 |
+| --- | --- |
+| `059_chat_safety_alerts.sql` | `9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5` |
+| `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
+
+Before an authorized rollout, drain old direct symptom-report writers, including
+old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct
+browser report writes and requires new reports through confirmation. Historical rows
+stay legacy and are not converted into fabricated patient consent. Deploy compatible
+nullable-severity consumers with the schema before enabling new confirmation behavior.
+Verify owner read, browser stored-context column denial, staff/unassigned denial,
+service-RPC-only writes, append-only audit,
+source/session binding, exact confirmation/retry and independent safety alert delivery.
+
+Activation requires the reviewed immutable packaged version/hash, matching genuine
+`set_symptom_question_eligibility` metadata and `SYMPTOM_INTAKE_ENABLED=true`. That
+manifest RPC is deployment-only; runtime intake never calls it and browsers cannot.
+Changed content requires a new version. Revocation blocks progression/confirmation;
+owned recovery, cancellation and existing safety escalation remain available. Never
+substitute the disposable SQL fixtures' approval reference into a runtime manifest.
+
+Rollback disables intake and its ordinary writes while preserving drafts, confirmed
+reports and durable safety-alert retry. It must not restore automatic unconfirmed
+report insertion. See [the acceptance record](pat-002-b-acceptance-2026-10-12.md) for
+local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.

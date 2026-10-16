@@ -28,6 +28,7 @@ export interface AssistantCompleteEvent {
     intent?: string;
     urgency?: string;
     escalation_required?: boolean;
+    persistence_status?: "saved" | "uncertain";
 }
 
 export interface AssistantStartEvent {
@@ -80,6 +81,9 @@ export interface ChatErrorEvent {
 export interface EscalationRecommendedEvent {
     type: "escalation_recommended";
     message: string;
+    urgency?: "emergency";
+    delivery_state?: "pending" | "delivered" | "no_recipients" | "unavailable";
+    clinicians_notified?: number;
 }
 
 export interface ClinicianMessageApi {
@@ -136,6 +140,8 @@ export type ChatSocketEvent =
     | ClinicianMessageEvent
     | EscalationRecommendedEvent
     | UserMessageSavedEvent
+    | { type: "symptom_intake_updated" | "symptom_intake_interrupted"; intake_id: string; revision: number }
+    | { type: "symptom_intake_unavailable" }
     | { type: "pong" };
 
 function optionalText(value: unknown): string | null {

@@ -218,3 +218,13 @@ verification evidence are in
 On Node 26, if existing auth-session tests fail because localStorage is unavailable,
 run `NODE_OPTIONS=--no-experimental-webstorage npm run test` so jsdom supplies browser
 storage. This is a test-runtime setting, not a change to portal authentication.
+
+### Confirmed symptom testimony
+
+The existing patient detail screen distinguishes patient-confirmed reports from
+historical reports without confirmation evidence and shows the confirmed summary.
+Private intake answers do not enter this view. Active care-team assignment remains
+required. Unknown severity is labelled and is a gap in the chart, never a zero or mild
+rating. Confirmation records testimony for clinician review, not causality or a clinical
+verdict. The full symptom timeline/detail expansion remains PAT-002-C; see the
+[PAT-002-B acceptance record](../../docs/pat-002-b-acceptance-2026-10-12.md).

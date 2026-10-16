@@ -491,13 +491,17 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                 <span
                                                     aria-hidden="true"
                                                     className={`h-2 w-2 shrink-0 rounded-full ${
-                                                        s.severity >= 8 ? "bg-risk" : s.severity >= 5 ? "bg-warn" : "bg-ok"
+                                                        s.severity === null ? "bg-line-strong" : s.severity >= 8 ? "bg-risk" : s.severity !== null && s.severity >= 5 ? "bg-warn" : "bg-ok"
                                                     }`}
                                                 />
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-medium capitalize text-ink">
                                                         {s.symptom}
                                                     </p>
+                                                    <p className="mt-0.5 text-xs text-muted">{s.confirmationState === "patient_confirmed"
+                                                        ? `Patient-confirmed${s.confirmedAt ? ` · ${s.confirmedAt}` : ""}`
+                                                        : "Historical report — patient confirmation not recorded"}</p>
+                                                    {s.confirmedSummary && <details className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer py-2">Confirmed patient summary</summary><p className="whitespace-pre-wrap">{s.confirmedSummary}</p></details>}
                                                     {s.onset && (
                                                         <p className="mt-0.5 text-xs text-muted">
                                                             Onset: {s.onset}
@@ -514,14 +518,14 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                 )}
                                                 <span
                                                     className={`min-w-[3.25rem] text-right font-mono text-sm font-medium ${
-                                                        s.severity >= 8
+                                                        s.severity === null ? "text-muted" : s.severity >= 8
                                                             ? "text-risk-ink"
-                                                            : s.severity >= 5
+                                                            : s.severity !== null && s.severity >= 5
                                                               ? "text-warn-ink"
                                                               : "text-ok-ink"
                                                     }`}
                                                 >
-                                                    {s.severity}/10
+                                                    {s.severity === null ? "Unknown / not provided" : `${s.severity}/10`}
                                                 </span>
                                             </div>
                                         </div>

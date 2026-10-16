@@ -31,7 +31,9 @@ async def get_patient_context(tool_context: Any) -> dict[str, Any]:
     """Get this patient's active medications, conditions, recent symptoms and care team.
 
     Use this before answering anything that depends on what the patient is taking or
-    being treated for. It returns only this patient's own record.
+    being treated for. It returns only this patient's own record. When
+    recent_symptoms_available is false, saved symptom reports cannot be read;
+    an empty recent_symptoms list must not be interpreted as no reported symptoms.
 
     Args:
         tool_context: Supplied by the runtime; not part of the model's request.
@@ -53,5 +55,6 @@ async def get_patient_context(tool_context: Any) -> dict[str, Any]:
         "medications": context.get("medications", []),
         "conditions": context.get("conditions", []),
         "recent_symptoms": context.get("recent_symptoms", []),
+        "recent_symptoms_available": context.get("recent_symptoms_available", True),
         "care_teams": context.get("care_teams", []),
     }

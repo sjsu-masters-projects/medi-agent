@@ -9,6 +9,8 @@ import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
 import { getChatControlsCopy, getPatientChatCopy } from "@/content/chat-copy";
 
+vi.mock("@/services/symptom-intakes", () => ({ fetchActiveIntake: vi.fn().mockResolvedValue(null) }));
+
 const {
     buildChatWebSocketUrl,
     fetchChatConversations,
@@ -164,6 +166,7 @@ describe("Patient chat page", () => {
         MockWebSocket.reset();
         vi.stubGlobal("WebSocket", MockWebSocket);
         Element.prototype.scrollIntoView = vi.fn();
+        Element.prototype.scrollTo = vi.fn();
         window.sessionStorage.clear();
         window.localStorage.clear();
         window.history.replaceState({}, "", "/chat");
@@ -897,6 +900,126 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/^Connected$/)).toBeInTheDocument();
     });
 
+    it("stops retrying sockets that repeatedly open and immediately close", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        vi.useFakeTimers();
+        for (const delay of [800, 1600, 3200, 6400, 8000]) {
+            const socket = MockWebSocket.instances.at(-1)!;
+            await act(async () => { socket.emitOpen(); socket.close(); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(delay); });
+        }
+        expect(MockWebSocket.instances).toHaveLength(6);
+        await act(async () => {
+            const socket = MockWebSocket.instances.at(-1)!;
+            socket.emitOpen(); socket.close();
+            await vi.advanceTimersByTimeAsync(30000);
+        });
+        expect(MockWebSocket.instances).toHaveLength(6);
+        expect(store.getState().chat.connectionStatus).toBe("disconnected");
+        expect(store.getState().chat.error).toBe("Live chat is offline. Refresh the page to reconnect.");
+    });
+
+    it("restores the retry budget after a connection remains healthy", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        vi.useFakeTimers();
+        await act(async () => { MockWebSocket.instances[0].emitOpen(); MockWebSocket.instances[0].close(); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+        await act(async () => { MockWebSocket.instances[1].emitOpen(); await vi.advanceTimersByTimeAsync(5000); });
+        await act(async () => { MockWebSocket.instances[1].close(); await vi.advanceTimersByTimeAsync(800); });
+        expect(MockWebSocket.instances).toHaveLength(3);
+    });
+
+    it("keeps history and the reader's position while reconnecting and rehydrating", async () => {
+        const history = [{ id: "earlier-reply", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "Earlier conversation stays visible", language: Language.EN, createdAt: "2026-10-12T12:00:00Z" }];
+        fetchChatHistory.mockResolvedValueOnce(history);
+        // Recovery is deliberately pending so a collapse cannot be hidden by
+        // an immediately resolved history request.
+        let recover!: (value: typeof history) => void;
+        fetchChatHistory.mockImplementationOnce(() => new Promise((resolve) => { recover = resolve; }));
+        renderPage();
+        await screen.findByText(history[0].content);
+        const region = screen.getByRole("region", { name: "Nora conversation" });
+        Object.defineProperties(region, { scrollHeight: { configurable: true, value: 2000 },
+            clientHeight: { configurable: true, value: 500 } });
+        region.scrollTop = 300;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); socket.close(); });
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2), { timeout: 1500 });
+        expect(screen.getByText(history[0].content)).toBeInTheDocument();
+        expect(store.getState().chat.loading).toBe(false);
+        await act(async () => {
+            recover([...history]);
+            MockWebSocket.instances[1].emitOpen();
+            MockWebSocket.instances[1].emitMessage({ type: "chat_history", messages: [{
+                id: history[0].id, patient_id: "patient-1", role: "assistant", content: history[0].content,
+                language: Language.EN, created_at: history[0].createdAt,
+            }] });
+        });
+        expect(region.scrollTo).not.toHaveBeenCalled();
+        expect(region.scrollTop).toBe(300);
+    });
+
+    it.each([Language.EN, Language.ES])("follows streaming without animations only near the bottom in %s", async (locale) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        await screen.findByText(getPatientChatCopy(locale).welcomeMessage);
+        const region = screen.getByRole("region", { name: locale === Language.ES ? "Conversación con Nora" : "Nora conversation" });
+        Object.defineProperties(region, { scrollHeight: { configurable: true, value: 2000 },
+            clientHeight: { configurable: true, value: 500 } });
+        region.scrollTop = 1500;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitMessage({ type: "assistant_chunk", content: "A streamed " }); });
+        expect(region.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "instant" });
+        region.scrollTop = 300;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        await act(async () => { socket.emitMessage({ type: "assistant_chunk", content: "reply" }); });
+        expect(screen.getByText("A streamed reply")).toBeInTheDocument();
+        expect(region.scrollTo).not.toHaveBeenCalled();
+        region.scrollTop = 1490;
+        fireEvent.scroll(region);
+        await act(async () => { socket.emitMessage({ type: "assistant_chunk", content: " continues" }); });
+        expect(region.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "instant" });
+    });
+
+    it("starts a newly selected conversation at the bottom and ignores the previous socket", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const region = screen.getByRole("region", { name: "Nora conversation" });
+        Object.defineProperties(region, { scrollHeight: { configurable: true, value: 2000 },
+            clientHeight: { configurable: true, value: 500 } });
+        region.scrollTop = 300;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        const oldSocket = MockWebSocket.instances[0];
+        fetchChatHistory.mockResolvedValueOnce([{ id: "new-reply", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "New conversation history", language: Language.EN, createdAt: "2026-10-12T12:00:00Z" }]);
+        fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+        await screen.findByText("New conversation history");
+        expect(region.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "instant" });
+        await act(async () => { oldSocket.emitMessage({ type: "chat_history", messages: [] }); });
+        expect(screen.getByText("New conversation history")).toBeInTheDocument();
+    });
+
+    it("keeps recovered history when the reconnect REST request fails", async () => {
+        fetchChatHistory.mockResolvedValueOnce([{ id: "kept-reply", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "Keep this reply during recovery", language: Language.EN, createdAt: "2026-10-12T12:00:00Z" }]);
+        fetchChatHistory.mockRejectedValueOnce(new Error("History unavailable"));
+        renderPage();
+        await screen.findByText("Keep this reply during recovery");
+        await act(async () => { MockWebSocket.instances[0].close(); });
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2), { timeout: 1500 });
+        await waitFor(() => expect(store.getState().chat.error).toMatch(/Unable to load chat history/));
+        expect(screen.getByText("Keep this reply during recovery")).toBeInTheDocument();
+    });
+
     it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {
         getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
         const trackStop = vi.fn();
@@ -1030,6 +1153,49 @@ describe("Patient chat page", () => {
             "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
         ));
     });
+    it.each([
+        ["en-US", "pending"], ["en-US", "unavailable"], ["en-US", "no_recipients"],
+        ["es-MX", "pending"], ["es-MX", "unavailable"], ["es-MX", "no_recipients"],
+    ] as const)("preserves emergency direction and honest %s %s delivery status", async (locale, status) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(0));
+        const socket = MockWebSocket.instances[0];
+        const direction = locale === "es-MX"
+            ? "Esto podría ser una emergencia. Llama al 911 ahora."
+            : "This may be an emergency. Please call 911 now.";
+        const copy = getPatientChatCopy(locale);
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({
+                type: "assistant_start", urgency: "emergency", intent: "symptom",
+            });
+            socket.emitMessage({ type: "assistant_chunk", content: direction });
+            socket.emitMessage({
+                type: "assistant_complete", urgency: "emergency", escalation_required: true,
+                persistence_status: status === "unavailable" ? "uncertain" : "saved",
+                message: {
+                    id: "safety-reply", patient_id: "patient-1", content: direction,
+                    role: "assistant", language: locale, created_at: "2026-10-10T12:00:00Z",
+                },
+            });
+        });
+        const notice = screen.getByRole("alert");
+        expect(notice).toHaveTextContent(direction);
+        if (status === "unavailable") expect(notice).toHaveTextContent(copy.safetySaveUncertain);
+        await act(async () => {
+            socket.emitMessage({
+                type: "escalation_recommended", urgency: "emergency", message: direction,
+                delivery_state: status, clinicians_notified: 0,
+            });
+        });
+        expect(notice).toHaveTextContent(direction);
+        expect(notice).toHaveTextContent(status === "pending" ? copy.safetyAlertPending
+            : status === "unavailable" ? copy.safetySaveUncertain : copy.safetyAlertNoRecipients);
+        expect(notice).not.toHaveTextContent(copy.escalationNotice);
+        expect(screen.queryByText(/Nora is typing|Nora está escribiendo/)).not.toBeInTheDocument();
+    });
+
     describe("ADR follow-up mode", () => {
         const requestId = "11111111-1111-4111-8111-111111111111";
         const assessmentId = "22222222-2222-4222-8222-222222222222";

@@ -78,6 +78,7 @@ function composeDictatedInput(prefix: string, transcript: string): string {
 const MAX_CHAT_RECONNECT_ATTEMPTS = 5;
 const BASE_CHAT_RECONNECT_DELAY_MS = 800;
 const MAX_CHAT_RECONNECT_DELAY_MS = 8_000;
+const CHAT_CONNECTION_STABLE_MS = 5_000;
 
 function buildWelcomeMessage(patientId: string, language: ChatLocale): ChatMessage {
     return {
@@ -240,13 +241,16 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         handsFreeMode: resolveInitialHandsFree(),
     });
     const socketRef = useRef<WebSocket | null>(null);
+    const historyScopeRef = useRef<string | null>(null);
     const voiceSocketRef = useRef<WebSocket | null>(null);
     const reconnectRef = useRef<{
         attempts: number;
         timer: ReturnType<typeof setTimeout> | null;
+        stabilityTimer: ReturnType<typeof setTimeout> | null;
     }>({
         attempts: 0,
         timer: null,
+        stabilityTimer: null,
     });
 
     const canPlayAssistantAudio = Boolean(accessToken && user) || voiceCapabilities.synthesis;
@@ -529,6 +533,13 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         }
     }
 
+    function clearChatStabilityTimer(): void {
+        if (reconnectRef.current.stabilityTimer) {
+            clearTimeout(reconnectRef.current.stabilityTimer);
+            reconnectRef.current.stabilityTimer = null;
+        }
+    }
+
     function scheduleChatReconnect(): void {
         if (reconnectRef.current.timer) {
             return;
@@ -614,12 +625,22 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
     useEffect(() => {
         if (!accessToken || !user) {
+            historyScopeRef.current = null;
             return;
         }
 
         let isMounted = true;
-        dispatch(clearChatState());
-        dispatch(setLoading(true));
+        const historyScope = JSON.stringify([user.id, sessionId]);
+        const changingConversation = historyScopeRef.current !== historyScope;
+        historyScopeRef.current = historyScope;
+        // Reconnecting the same conversation must not collapse its history or
+        // reset the reader's scroll position while REST/WebSocket recover.
+        if (changingConversation) {
+            clearChatReconnectTimer();
+            reconnectRef.current.attempts = 0;
+            dispatch(clearChatState());
+            dispatch(setLoading(true));
+        }
 
         fetchChatHistory(user.id, accessToken, sessionId)
             .then((history) => {
@@ -640,7 +661,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     return;
                 }
 
-                dispatch(setMessages([buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)]));
+                if (changingConversation) {
+                    dispatch(setMessages([buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)]));
+                }
                 dispatch(setChatError("Unable to load chat history. Live chat is still available."));
             })
             .finally(() => {
@@ -668,12 +691,24 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             clearChatReconnectTimer();
-            reconnectRef.current.attempts = 0;
+            clearChatStabilityTimer();
+            // Accepting the socket does not prove initialization succeeded.
+            // Repeated short-lived opens must still exhaust the retry budget.
+            reconnectRef.current.stabilityTimer = setTimeout(() => {
+                reconnectRef.current.stabilityTimer = null;
+                if (isMounted && socket.readyState === WebSocket.OPEN) {
+                    reconnectRef.current.attempts = 0;
+                }
+            }, CHAT_CONNECTION_STABLE_MS);
             dispatch(setConnectionStatus("connected"));
+            window.dispatchEvent(new Event("symptom-intake-updated"));
             dispatch(setChatError(null));
         };
 
         socket.onmessage = (event) => {
+            if (!isMounted) {
+                return;
+            }
             let payload: unknown;
 
             try {
@@ -698,6 +733,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     );
                     return;
                 }
+                case "symptom_intake_updated":
+                case "symptom_intake_interrupted":
+                case "symptom_intake_unavailable":
+                    window.dispatchEvent(new Event("symptom-intake-updated"));
+                    return;
                 case "chat_context_loaded": {
                     const loadedDocumentContext = mapLoadedDocumentContext(
                         payload.document,
@@ -788,15 +828,29 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     }
 
                     if (payload.escalation_required) {
+                        const copy = getPatientChatCopy(voiceRefs.current.selectedLanguage);
                         setSafetyNotice(
-                            getPatientChatCopy(voiceRefs.current.selectedLanguage).escalationNotice,
+                            payload.urgency === "emergency"
+                                ? `${assistantMessage.content}${payload.persistence_status === "uncertain" ? ` ${copy.safetySaveUncertain}` : ""}`
+                                : copy.escalationNotice,
                         );
                     }
                     return;
                 }
-                case "escalation_recommended":
-                    setSafetyNotice(getPatientChatCopy(voiceRefs.current.selectedLanguage).escalationNotice);
+                case "escalation_recommended": {
+                    const copy = getPatientChatCopy(voiceRefs.current.selectedLanguage);
+                    const status = payload.delivery_state === "pending"
+                        ? copy.safetyAlertPending
+                        : payload.delivery_state === "no_recipients"
+                            ? copy.safetyAlertNoRecipients
+                            : payload.delivery_state === "unavailable" ? copy.safetySaveUncertain : "";
+                    setSafetyNotice(
+                        payload.urgency === "emergency"
+                            ? `${payload.message}${status ? ` ${status}` : ""}`
+                            : copy.escalationNotice,
+                    );
                     return;
+                }
                 case "error":
                     resetAssistantDraft();
                     dispatch(setTyping(false));
@@ -818,6 +872,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 return;
             }
 
+            clearChatStabilityTimer();
             resetAssistantDraft();
             dispatch(setConnectionStatus("error"));
             dispatch(setTyping(false));
@@ -831,6 +886,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 return;
             }
 
+            clearChatStabilityTimer();
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setTyping(false));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
@@ -843,6 +899,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         return () => {
             isMounted = false;
+            clearChatStabilityTimer();
             stopSpeechRecognition();
             stopAssistantPlayback();
             closeVoiceSocket();

@@ -562,7 +562,10 @@ export interface SymptomReport {
     id: string;
     patientId: string;
     symptom: string;
-    severity: number;
+    severity: number | null;
+    confirmationState?: "legacy_unconfirmed" | "patient_confirmed";
+    confirmedAt?: string;
+    confirmedSummary?: string;
     onset?: string;
     duration?: string;
     relatedMedicationId?: string;
@@ -695,4 +698,43 @@ export interface PatientSummary {
     activeMedCount: number;
     lastActivity: string;
     openAdrCount: number;
+}
+
+/** Patient-private form state; never persisted in the shared chat transcript. */
+export interface IntakeQuestion {
+    id: string;
+    wording: Record<Locale, string>;
+    answer_type: "text" | "rating" | "boolean" | "product";
+}
+export interface IntakeAnswer {
+    question_id: string;
+    state: "answered" | "unknown" | "declined" | "not_asked" | "not_applicable";
+    value: string | number | boolean | Record<string, string | boolean> | null;
+    wording: string;
+    locale: Locale;
+    captured_at?: string;
+}
+export interface SymptomIntake {
+    intake_id: string;
+    status: "collecting" | "ready_for_confirmation" | "confirmed" | "cancelled" | "interrupted_safety";
+    revision: number;
+    locale: Locale;
+    timezone: string;
+    timezone_fallback: boolean;
+    answers: Record<string, IntakeAnswer>;
+    questions?: IntakeQuestion[];
+    current_question: IntakeQuestion | null;
+    progress?: { resolved: number; budget: number };
+    library_available: boolean;
+    can_review: boolean;
+    can_confirm: boolean;
+    preview_hash?: string | null;
+    preview?: { schema_version: string; answers: Record<string, IntakeAnswer>;
+        context: { purpose: string; version: string; medications: Array<Record<string, unknown>>;
+            facts: Array<Record<string, unknown>>; excerpts: Array<Record<string, unknown>> };
+        summary: string; source_message_id: string; session_id: string;
+        selection?: Record<string, { state: "not_asked" | "not_applicable"; reason: string }> } | null;
+    confirmed_report_id?: string | null;
+    safety?: { response_text: string; safety_rule: string; rule_version: string };
+    persistence_status?: "saved" | "uncertain";
 }

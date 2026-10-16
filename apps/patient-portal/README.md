@@ -179,4 +179,34 @@ visible focus ring on the label of each visually hidden radio and checkbox.
 - The browser never writes ADR assessment or audit tables directly; the backend owns the atomic
   response, reassessment, notification, and audit transaction.
 
+### Confirmed symptom draft panel
+
+Nora keeps its composer visible while the conversation and intake content scroll
+within the available height. The current portal hides bottom navigation while a
+conversation is open. Reconnects retain the visible conversation while history
+recovers. Streaming follows the latest reply without animated scrolling only
+when the reader is near the bottom; scrolling up pauses following, and returning
+to the bottom resumes it. Sending a typed message or selecting another conversation
+resumes following. Short-lived reconnects retain their retry count; the count resets
+only after a socket stays open for five seconds, so repeated initialization failures
+stop after five retries. A database without migration 060 omits saved symptom context
+and marks it unavailable to Nora's record tool; it never falls back to unconfirmed
+reports. This does not activate guided intake. Initial draft-read failures
+offer reload feedback; only an uncertain mutation uses the action/save recovery
+message. Loading a draft does not imply that a report was submitted.
+
+Nora mounts the private intake panel; human message threads do not. The panel recovers
+the latest owned state for the selected Nora conversation by REST on authentication/reconnect signals, asks paired-locale
+library questions, and supports unknown/declined, corrections, cancellation, review
+and consent-based confirmation. It stores pending action identities only in memory;
+clinical draft content is never written to browser storage or mirrored into chat.
+A lost write response retains its exact identity for reload/retry. Account switches
+abort pending reads and reject stale responses. Controls use localized labels,
+44-pixel button targets and focus the next unanswered field without stealing chat focus.
+
+A real approved library and authorized schema rollout are required to activate this
+screen. With the current pending-review manifest, start fails closed without saving a
+report. Follow [the synthetic journey and verification record](../../docs/pat-002-b-acceptance-2026-10-12.md).
+The saved patient symptom timeline remains PAT-002-C.
+
 Chat results card: an assistant message may carry `attachments` of type `document_results`, built by the server from the cited document's extracted results (never from the reply text). The chat shows them under the reply: critical results first with a contact-your-care-team line, out-of-range results with chips, the rest behind a toggle, and a link to the document in Records.

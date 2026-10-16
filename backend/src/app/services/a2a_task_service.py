@@ -157,7 +157,7 @@ class A2ATaskService:
         task = await self._get_task(task_id)
         current_attempt = int(task.get("retry_attempt") or 0)
 
-        await self.mark_working(
+        working = await self.mark_working(
             task_id=task_id,
             worker_payload={
                 "step": "retry_execution",
@@ -166,7 +166,7 @@ class A2ATaskService:
             },
         )
 
-        input_payload = task.get("input_payload")
+        input_payload = working.get("input_payload", task.get("input_payload"))
         if not isinstance(input_payload, dict):
             input_payload = {}
 
@@ -232,6 +232,9 @@ class A2ATaskService:
             },
         )
         events = [self._to_event(submitted)]
+        # The database replaces testimony with the owned confirmed report at submission.
+        if isinstance(submitted.get("input_payload"), dict):
+            payload = submitted["input_payload"]
 
         task_id = str(submitted.get("id"))
         try:
@@ -243,6 +246,8 @@ class A2ATaskService:
                 },
             )
             events.append(self._to_event(working))
+            if isinstance(working.get("input_payload"), dict):
+                payload = working["input_payload"]
 
             output_payload = self._build_pharmacovigilance_result(payload)
             if output_payload["requires_clinician_review"]:
@@ -480,7 +485,7 @@ class A2ATaskService:
     @staticmethod
     def _build_pharmacovigilance_result(payload: dict[str, Any]) -> dict[str, Any]:
         report = payload.get("symptom_report") or {}
-        severity = int(report.get("severity") or 0)
+        severity = int(report["severity"]) if report.get("severity") is not None else None
         symptom = str(report.get("symptom") or "reported symptom")
         flagged_for_adr = bool(report.get("flagged_for_adr") or payload.get("flagged_for_adr"))
         raw_answers = payload.get("naranjo_answers")
@@ -491,7 +496,9 @@ class A2ATaskService:
         naranjo = score_naranjo(raw_answers)
 
         requires_review = flagged_for_adr
-        priority = "high" if severity >= 8 or flagged_for_adr else "medium"
+        priority = (
+            "high" if (severity is not None and severity >= 8) or flagged_for_adr else "medium"
+        )
 
         if requires_review:
             recommendation = (

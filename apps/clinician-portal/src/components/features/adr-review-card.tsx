@@ -158,7 +158,7 @@ export function ADRReviewCard({
                         </div>
                         <p className="mt-2.5 text-[15px] font-semibold text-ink">{item.symptom}</p>
                         <p className="mt-1 text-xs text-muted">
-                            Severity <span className="font-mono">{item.severity}/10</span>
+                            Severity <span className="font-mono">{item.severity === null ? "Unknown / not provided" : `${item.severity}/10`}</span>
                         </p>
                         {item.onset ? (
                             <p className="mt-2 max-w-[72ch] text-sm text-ink-2">Onset: {item.onset}</p>
