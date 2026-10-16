@@ -58,6 +58,14 @@ FROM public.clinicians c
 WHERE c.clinic_id IS NOT NULL
 ON CONFLICT (clinician_id, clinic_id) DO NOTHING;
 
+-- Browser roles never write clinicians. 002's clinicians_own_insert/clinicians_own_update
+-- policies have no column restriction, so with table privileges a signed-in clinician could
+-- set their own role or clinic_id through the Data API, and the mirror below would copy it
+-- into memberships. Every application write uses the service role (the portals do not write
+-- this table, and the only SQL function that writes it, clinician_email_invitation_operation
+-- from 057/058, is executable by service_role only). SELECT is unchanged.
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.clinicians FROM PUBLIC, anon, authenticated;
+
 -- Compatibility mirror: the legacy columns stay the write path until slice B. The clinic a
 -- clinician now belongs to gets an active membership with the current role; a clinic they
 -- leave (profile clinic change, staff removal, invitation acceptance) becomes inactive.
@@ -260,6 +268,14 @@ BEGIN
         WHERE pg_catalog.has_table_privilege('authenticated', 'public.clinic_memberships', p.privilege)
      ) THEN
     RAISE EXCEPTION 'clinic_memberships grants are wider than service-role writes and own reads';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM unnest(ARRAY['anon', 'authenticated']) r(role)
+     CROSS JOIN unnest(ARRAY['public.clinicians', 'public.clinic_memberships']) t(name)
+     CROSS JOIN unnest(ARRAY['INSERT', 'UPDATE', 'DELETE']) p(privilege)
+     WHERE pg_catalog.has_table_privilege(r.role, t.name, p.privilege)
+  ) THEN
+    RAISE EXCEPTION 'Browser roles may not write clinicians or clinic_memberships';
   END IF;
   IF pg_catalog.has_function_privilege('anon', 'private.is_clinic_member(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'anon may not call private.is_clinic_member';

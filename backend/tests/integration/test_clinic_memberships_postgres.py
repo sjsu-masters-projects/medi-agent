@@ -381,3 +381,57 @@ def test_memberships_are_written_only_by_the_service_role(sql):
     assert "permission denied" in sql(
         f"SET ROLE anon; SELECT private.is_clinic_member('{CLINIC}');", succeeds=False
     )
+
+
+@pytest.mark.before_clinic_memberships
+def test_a_signed_in_clinician_cannot_promote_or_move_themselves(sql):
+    # Hosted Supabase grants browser roles table privileges by default; 065 itself must take
+    # the write privileges back.
+    sql("GRANT INSERT, UPDATE, DELETE ON clinicians TO authenticated, anon;")
+    apply_clinic_memberships(sql)
+    signed_in(sql)
+    second_clinic(sql)
+    before = memberships(sql, CLINICIAN)
+
+    for statement in (
+        f"UPDATE clinicians SET role='admin' WHERE id='{CLINICIAN}';",
+        f"UPDATE clinicians SET clinic_id='{SECOND_CLINIC}' WHERE id='{CLINICIAN}';",
+        f"DELETE FROM clinicians WHERE id='{CLINICIAN}';",
+    ):
+        assert "permission denied for table clinicians" in sql(
+            as_user(CLINICIAN, statement), succeeds=False
+        )
+    newcomer = str(uuid4())
+    sql(f"INSERT INTO auth.users VALUES ('{newcomer}');")
+    insert = (
+        "INSERT INTO clinicians(id,email,first_name,last_name,specialty,clinic_name,clinic_id,role) "
+        f"VALUES('{newcomer}','{newcomer}@synthetic.invalid','Synthetic','Staff','Synthetic',"
+        f"'Synthetic clinic','{CLINIC}','admin');"
+    )
+    assert "permission denied for table clinicians" in sql(
+        as_user(newcomer, insert), succeeds=False
+    )
+    assert "permission denied" in sql(
+        f"SET ROLE anon; UPDATE clinicians SET role='admin' WHERE id='{CLINICIAN}';", succeeds=False
+    )
+
+    assert memberships(sql, CLINICIAN) == before
+    assert memberships(sql, newcomer) == []
+    assert sql(f"SELECT role FROM clinicians WHERE id='{CLINICIAN}'") == "provider"
+    # Reading one's own row is unchanged.
+    assert sql(as_user(CLINICIAN, "SELECT count(*) FROM clinicians WHERE id=auth.uid()")) == "1"
+    # The only SQL function that writes clinicians is for the service role alone.
+    assert (
+        sql(
+            "SELECT has_function_privilege('authenticated',"
+            "'public.clinician_email_invitation_operation(uuid,text,jsonb)','EXECUTE')"
+        )
+        == "f"
+    )
+    # Profile updates through the service role still work and stay mirrored.
+    sql(
+        f"SET ROLE service_role; UPDATE clinicians SET specialty='Synthetic cardiology', "
+        f"role='nurse' WHERE id='{CLINICIAN}';"
+    )
+    assert sql(f"SELECT specialty FROM clinicians WHERE id='{CLINICIAN}'") == "Synthetic cardiology"
+    assert memberships(sql, CLINICIAN) == [(CLINIC, "nurse", "active")]

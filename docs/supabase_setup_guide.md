@@ -138,7 +138,9 @@ clinician, and replaces `UNIQUE (patient_id, clinician_id)` with
 for clinicians without a clinic). Triggers mirror `clinicians.clinic_id`/`role` into
 memberships during the compatibility period and give a new care-team row its clinician's clinic
 when none is sent. RLS: a clinician reads only their own memberships; only `service_role`
-writes them; nobody deletes them. `private.is_clinic_member(uuid)` is added for later slices
+writes them; nobody deletes them. It also revokes INSERT, UPDATE and DELETE on `clinicians`
+from `anon` and `authenticated` (SELECT unchanged), so a signed-in clinician cannot change
+their own role or clinic through the Data API. `private.is_clinic_member(uuid)` is added for later slices
 and used by no policy; `is_assigned_clinician` and every existing policy are unchanged. It
 ends with a fail-closed verification block.
 

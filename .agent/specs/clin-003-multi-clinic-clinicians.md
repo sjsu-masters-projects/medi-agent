@@ -169,6 +169,15 @@ a pair (listed below) must take an explicit care team before the app creates a s
   (later slices combine it with the care-team check).
 - `clinic_memberships`: RLS on; a clinician reads only their own rows; `service_role` has
   SELECT, INSERT and UPDATE; no role has DELETE; `anon` has nothing.
+- `clinicians`: 065 revokes INSERT, UPDATE and DELETE from `PUBLIC`, `anon` and
+  `authenticated` before the compatibility trigger exists. `clinicians_own_insert` and
+  `clinicians_own_update` (002) have no column restriction, so with hosted default grants a
+  signed-in clinician could have set their own `role` or `clinic_id` through the Data API, and
+  the trigger would have copied it into memberships. SELECT is unchanged. No portal writes the
+  table, every backend write uses the service role, and the only SQL function that writes it
+  (`clinician_email_invitation_operation`, 057/058, SECURITY INVOKER) is executable by
+  `service_role` only. The verification block fails if `anon` or `authenticated` can insert,
+  update or delete either table.
 
 ### Compatibility period
 
@@ -206,9 +215,6 @@ working once 065 is applied (the trigger tags its new invite rows).
   `ORDER BY created_at LIMIT 1` or a single-row `SELECT INTO` (care-plan approval in
   `040`/`042`/`045`/`049`, conversation `open` in `048`): correct while a pair has one link;
   they must take an explicit care team before a second clinic link can exist (slices C, H).
-- A clinician can still update their own `clinicians` row under `clinicians_own_update`
-  (`002`); whether hosted table grants let that reach `role` should be checked before slice D
-  makes memberships authoritative.
 
 ## Suggested slices
 

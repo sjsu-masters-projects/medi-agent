@@ -143,3 +143,21 @@ def test_it_ends_with_a_fail_closed_verification_block() -> None:
     ):
         assert f"RAISE EXCEPTION '{message}'" in verification
     assert MIGRATION.rstrip().endswith("END $$;")
+
+
+def test_browser_roles_cannot_write_clinicians_before_the_mirror_exists() -> None:
+    revoke = (
+        "REVOKE INSERT, UPDATE, DELETE ON TABLE public.clinicians FROM PUBLIC, anon, authenticated;"
+    )
+    assert revoke in CODE
+    assert CODE.index(revoke) < CODE.index("CREATE TRIGGER clinicians_mirror_clinic_membership")
+    assert not re.search(
+        r"GRANT[^;]*ON TABLE public\.clinicians[^;]*TO[^;]*(anon|authenticated)", CODE
+    )
+    assert "REVOKE SELECT" not in CODE
+    verification = MIGRATION.split("── 4. Fail-closed")[1]
+    assert "ARRAY['public.clinicians', 'public.clinic_memberships']" in verification
+    assert "ARRAY['INSERT', 'UPDATE', 'DELETE']" in verification
+    assert "RAISE EXCEPTION 'Browser roles may not write clinicians or clinic_memberships'" in (
+        verification
+    )
