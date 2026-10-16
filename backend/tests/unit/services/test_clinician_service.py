@@ -1245,3 +1245,70 @@ def test_last_activity_age_days_parses_supported_units(service):
     assert service._last_activity_age_days("Logged medication 3h ago") == pytest.approx(3 / 24)
     assert service._last_activity_age_days("Logged medication 4d ago") == 4.0
     assert service._last_activity_age_days("No recent activity") is None
+
+
+@pytest.mark.asyncio
+async def test_list_adr_review_queue_all_statuses_for_one_patient(service, mock_db):
+    patient_id, other_id = uuid4(), uuid4()
+    service._get_assigned_patient_ids = AsyncMock(return_value=[patient_id, other_id])  # type: ignore[method-assign]
+    chain = MagicMock()
+    for method in ("select", "in_", "eq", "order", "limit"):
+        getattr(chain, method).return_value = chain
+    mock_db.table.return_value = chain
+    service._execute = AsyncMock(side_effect=[_response(data=[])])  # type: ignore[method-assign]
+
+    await service.list_adr_review_queue(uuid4(), status_filter="all", patient_id=patient_id)
+
+    chain.in_.assert_called_once_with("patient_id", [str(patient_id)])
+    chain.eq.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_adr_review_queue_unassigned_patient_filter_is_empty(service, mock_db):
+    service._get_assigned_patient_ids = AsyncMock(return_value=[uuid4()])  # type: ignore[method-assign]
+
+    result = await service.list_adr_review_queue(uuid4(), patient_id=uuid4())
+
+    assert result == {"items": [], "total": 0}
+    mock_db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_adr_review_item_unknown_and_unassigned_raise_the_same_404(service, mock_db):
+    assessment_id, patient_id = uuid4(), uuid4()
+    row = {"id": str(assessment_id), "patient_id": str(patient_id), "status": "reviewed"}
+    service.care_team_repo = MagicMock()
+    service.care_team_repo.find_active_assignment = AsyncMock(return_value=[])
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(data=[]), _response(data=[row])]
+    )
+
+    with pytest.raises(NotFoundError) as unknown:
+        await service.get_adr_review_item(uuid4(), assessment_id)
+    with pytest.raises(NotFoundError) as unassigned:
+        await service.get_adr_review_item(uuid4(), assessment_id)
+
+    assert unknown.value.code == unassigned.value.code == "NOT_FOUND"
+    assert unknown.value.message == unassigned.value.message
+    assert service._execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_adr_review_item_returns_any_status_for_an_assigned_clinician(service, mock_db):
+    assessment_id, patient_id = uuid4(), uuid4()
+    row = {
+        "id": str(assessment_id),
+        "patient_id": str(patient_id),
+        "status": "dismissed",
+        "patients": {"first_name": "Maya", "last_name": "Patel"},
+        "symptom_reports": {"symptom": "cough", "severity": 2},
+    }
+    service.care_team_repo = MagicMock()
+    service.care_team_repo.find_active_assignment = AsyncMock(return_value=[{"id": "x"}])
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(data=[row]), _response(data=[])]
+    )
+
+    item = await service.get_adr_review_item(uuid4(), assessment_id)
+
+    assert item["status"] == "dismissed" and item["patient_first_name"] == "Maya"

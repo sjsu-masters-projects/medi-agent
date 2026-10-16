@@ -7,6 +7,8 @@ import { ApprovalSeal } from "@/components/ui/approval-seal";
 import { Icon } from "@/components/ui/icons";
 import { formatReviewTimestamp } from "@/components/features/review-time";
 import { Form3500PreviewDialog } from "@/components/features/form-3500-preview";
+import { Form3500PdfPreview } from "@/components/features/form-3500-pdf-preview";
+import { MedWatchStepper, type ReportStep } from "@/components/features/medwatch-stepper";
 import {
     Form3500DownloadDialog,
     TemplateSupersededNote,
@@ -24,6 +26,7 @@ import {
     type MedWatchDiscardInput,
     type MedWatchDraft,
     type MedWatchFormData,
+    type MedWatchGateIssue,
     type MedWatchSubmissionInput,
     type MedWatchSubmissionRecord,
 } from "@/services/clinicians";
@@ -34,7 +37,9 @@ import {
     blankOtherProduct,
     blankProduct,
     blankTestRow,
+    fieldPathLabel,
     gateIssueLabel,
+    isAttestationIssue,
     nameWarningLabel,
     type Form3500Product,
     type MedWatchNameWarning,
@@ -357,6 +362,69 @@ function SubmissionLine({ record }: { record: MedWatchSubmissionRecord }) {
     );
 }
 
+const SECTION_OF_PATH: Record<string, string> = {
+    section_a: "A",
+    section_b: "B",
+    section_d: "D",
+    section_f: "F",
+    section_g: "G",
+    mediagent_review: "M",
+};
+
+function sectionOfPath(path: string): string {
+    return SECTION_OF_PATH[path.split(/[.[]/)[0]] ?? "B";
+}
+
+/**
+ * One Form 3500 section. In the report workspace it is a collapsed disclosure that shows
+ * whether the section is complete; elsewhere it is the plain fieldset.
+ */
+function Section({
+    id,
+    legend,
+    workspace,
+    missing,
+    showStatus,
+    children,
+}: {
+    id: string;
+    legend: string;
+    workspace: boolean;
+    missing: number;
+    showStatus: boolean;
+    children: ReactNode;
+}) {
+    if (!workspace) {
+        return (
+            <fieldset className={fieldsetClass}>
+                <legend className={legendClass}>{legend}</legend>
+                {children}
+            </fieldset>
+        );
+    }
+    return (
+        <details className="ma-disclosure rounded-xl border border-line bg-surface" id={`section-${id}`}>
+            <summary className="min-h-11 px-4 py-2.5 text-[13px] font-semibold text-ink">
+                <span className="min-w-0 flex-1">{legend}</span>
+                {showStatus ? (
+                    missing > 0 ? (
+                        <Badge variant="warning">{missing} missing</Badge>
+                    ) : (
+                        <Badge variant="success">
+                            <Icon aria-hidden="true" className="h-3 w-3" name="check" />
+                            Complete
+                        </Badge>
+                    )
+                ) : null}
+            </summary>
+            <fieldset className="min-w-0 space-y-3 border-t border-line p-4">
+                <legend className="sr-only">{legend}</legend>
+                {children}
+            </fieldset>
+        </details>
+    );
+}
+
 type DialogKind = "preview" | "approve" | "download" | "submission" | "discard";
 
 export function MedWatchDraftCard({
@@ -370,6 +438,8 @@ export function MedWatchDraftCard({
     onAmendSubmission,
     onPdfDownloaded,
     downloadPdf,
+    workspace,
+    fetchPreviewPdf,
 }: {
     draft: MedWatchDraft;
     busy: boolean;
@@ -387,6 +457,9 @@ export function MedWatchDraftCard({
     ) => Promise<void>;
     onPdfDownloaded?: (filename: string) => void;
     downloadPdf?: (draftId: string) => Promise<Form3500PdfDownload>;
+    /** The report page's stepper drives the card: one step at a time, sections collapsed. */
+    workspace?: { step: ReportStep; onStepChange: (step: ReportStep) => void };
+    fetchPreviewPdf?: (draftId: string) => Promise<Blob>;
 }) {
     const [form, setForm] = useState(draft.formData);
     // The server revision and values the form was last synced from.
@@ -398,6 +471,8 @@ export function MedWatchDraftCard({
     const submitted = draft.status === "submitted";
     const approved = draft.status === "reviewed" && !discarded;
     const editable = draft.status === "draft" && !discarded;
+    const inWorkspace = workspace !== undefined;
+    const editorRef = useRef<HTMLDivElement>(null);
 
     // Adjust state when the draft prop changes. A queue refresh replaces the draft object;
     // the form follows it only when it holds no unsaved edits (or already matches the
@@ -425,6 +500,31 @@ export function MedWatchDraftCard({
             mutate(next);
             return next;
         });
+    }
+
+    function missingIn(section: string): number {
+        return draft.missingForApproval.filter(
+            (issue) => !isAttestationIssue(issue) && sectionOfPath(issue.path) === section,
+        ).length;
+    }
+
+    /** Open the issue's section and put the cursor in the field it names. */
+    function focusIssue(issue: MedWatchGateIssue) {
+        const root = editorRef.current;
+        if (!root) return;
+        const section = root.querySelector<HTMLDetailsElement>(`#section-${sectionOfPath(issue.path)}`);
+        if (section) section.open = true;
+        const target = fieldPathLabel(issue.path);
+        const heading = Array.from(root.querySelectorAll("label, legend")).find((element) =>
+            (element.textContent ?? "").trim().startsWith(target),
+        );
+        const scope = heading?.tagName === "LEGEND" ? heading.parentElement : heading;
+        const control =
+            scope?.querySelector<HTMLElement>("input, textarea, select") ??
+            section?.querySelector<HTMLElement>("summary") ??
+            null;
+        control?.scrollIntoView?.({ block: "center" });
+        control?.focus();
     }
 
     function warningsFor(path: string): MedWatchNameWarning[] {
@@ -461,30 +561,270 @@ export function MedWatchDraftCard({
         <Badge variant="neutral">Needs approval</Badge>
     );
 
-    return (
-        <Card className="ma-enter min-w-0" padding="none">
-            <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-6 py-4">
-                <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
-                            MedWatch Form 3500 draft
-                        </h2>
-                        {statusBadge}
-                        <span aria-live="polite" className="inline-flex">
-                            {unsaved ? <Badge variant="warning">Unsaved changes</Badge> : null}
-                        </span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted">
-                        Revision <span className="font-mono">{baseline.revision}</span> · Draft ID{" "}
-                        <span className="font-mono break-all">{draft.id}</span>
-                    </p>
-                </div>
-                <Badge variant="warning">
-                    {submitted ? "Not submitted to FDA by MediAgent" : "Not submitted to FDA"}
-                </Badge>
-            </header>
+    const sectionsBlock = (
+                <div className={inWorkspace ? "space-y-3" : "grid gap-5 xl:grid-cols-2"}>
+                    <Section id="A" legend="A. Patient information" missing={missingIn("A")} showStatus={editable} workspace={inWorkspace}>
+                        <TextField
+                            disabled={disabled}
+                            hint="Initials and a reference, never the patient's name"
+                            label="A1 Patient identifier"
+                            maxLength={50}
+                            onChange={(value) => update((next) => { next.section_a.identifier = value; })}
+                            value={a.identifier}
+                        />
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <TextField disabled={disabled} label="A2 Age" maxLength={3} onChange={(value) => update((next) => { next.section_a.age_value = value; })} value={a.age_value} />
+                            <SelectField disabled={disabled} label="A2 Age unit" onChange={(value) => update((next) => { next.section_a.age_unit = value; })} options={FORM_3500_OPTIONS.ageUnit} value={a.age_unit} />
+                            <DateField disabled={disabled} label="A2 Date of birth" onChange={(value) => update((next) => { next.section_a.date_of_birth = value; })} value={a.date_of_birth} />
+                            <SelectField disabled={disabled} label="A3 Sex" onChange={(value) => update((next) => { next.section_a.sex = value; })} options={FORM_3500_OPTIONS.sex} value={a.sex} />
+                            <TextField disabled={disabled} label="A4 Weight" maxLength={5} onChange={(value) => update((next) => { next.section_a.weight_value = value; })} value={a.weight_value} />
+                            <SelectField disabled={disabled} label="A4 Weight unit" onChange={(value) => update((next) => { next.section_a.weight_unit = value; })} options={FORM_3500_OPTIONS.weightUnit} value={a.weight_unit} />
+                        </div>
+                        <CheckboxGroup disabled={disabled} legend="A5 Race" onChange={(values) => update((next) => { next.section_a.race = values; })} options={FORM_3500_OPTIONS.race} values={a.race} />
+                        <Checkbox checked={a.hispanic_latino} disabled={disabled} label="A5 Hispanic/Latino" onChange={(checked) => update((next) => { next.section_a.hispanic_latino = checked; })} />
+                    </Section>
 
-            <div className="space-y-5 p-6">
+                    <Section id="B" legend="B. Adverse event or product problem" missing={missingIn("B")} showStatus={editable} workspace={inWorkspace}>
+                        <CheckboxGroup disabled={disabled} legend="B1 Type of report" onChange={(values) => update((next) => { next.section_b.report_types = values; })} options={FORM_3500_OPTIONS.reportType} values={b.report_types} />
+                        <CheckboxGroup
+                            disabled={disabled}
+                            legend="B2 Outcome (leave all unchecked if not serious)"
+                            onChange={(values) =>
+                                update((next) => {
+                                    next.section_b.outcomes = values;
+                                    if (!values.includes("death")) next.section_b.death_date = null;
+                                })
+                            }
+                            options={FORM_3500_OPTIONS.outcome}
+                            values={b.outcomes}
+                        />
+                        {b.outcomes.includes("death") ? (
+                            <DateField disabled={disabled} label="B2 Date of death" onChange={(value) => update((next) => { next.section_b.death_date = value; })} value={b.death_date} />
+                        ) : null}
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="min-w-0">
+                                <DateField disabled={disabled} label="B3 Date of event" onChange={(value) => update((next) => { next.section_b.event_date = value; })} value={b.event_date} />
+                                {b.event_date && !b.event_date_confirmed ? (
+                                    <span className="mt-1.5 inline-flex">
+                                        <Badge variant="warning">Best estimate, confirm</Badge>
+                                    </span>
+                                ) : null}
+                                <Checkbox checked={b.event_date_confirmed} disabled={disabled} label="I confirm the date of event" onChange={(checked) => update((next) => { next.section_b.event_date_confirmed = checked; })} />
+                            </div>
+                            <DateField disabled={disabled} label="B4 Date of this report" onChange={(value) => update((next) => { next.section_b.report_date = value; })} value={b.report_date} />
+                        </div>
+                        <TextField
+                            disabled={disabled}
+                            label="B5 Describe event, problem or product use/medication error"
+                            maxLength={4000}
+                            multiline
+                            onChange={(value) => update((next) => { next.section_b.narrative = value; })}
+                            value={b.narrative}
+                            warnings={warningsFor("section_b.narrative")}
+                        />
+                        <fieldset className="min-w-0 space-y-3">
+                            <legend className={labelTextClass}>B6 Relevant tests/laboratory data</legend>
+                            {b.tests.length === 0 ? (
+                                <p className="text-[13px] text-muted">No test rows. MediAgent does not prefill tests.</p>
+                            ) : null}
+                            {b.tests.map((row, index) => (
+                                <div className="space-y-3 rounded-lg border border-line p-3" key={index}>
+                                    <TextField disabled={disabled} label={`Test ${index + 1}: test and result`} maxLength={500} onChange={(value) => update((next) => { next.section_b.tests[index].test = value; })} value={row.test} warnings={warningsFor(`section_b.tests[${index}].test`)} />
+                                    <div className="grid gap-3 sm:grid-cols-3">
+                                        <TextField disabled={disabled} label={`Test ${index + 1}: low range`} maxLength={50} onChange={(value) => update((next) => { next.section_b.tests[index].low_range = value; })} value={row.low_range} warnings={warningsFor(`section_b.tests[${index}].low_range`)} />
+                                        <TextField disabled={disabled} label={`Test ${index + 1}: high range`} maxLength={50} onChange={(value) => update((next) => { next.section_b.tests[index].high_range = value; })} value={row.high_range} warnings={warningsFor(`section_b.tests[${index}].high_range`)} />
+                                        <DateField disabled={disabled} label={`Test ${index + 1}: date`} onChange={(value) => update((next) => { next.section_b.tests[index].date = value; })} value={row.date} />
+                                    </div>
+                                    {editable ? (
+                                        <Button disabled={busy} onClick={() => update((next) => { next.section_b.tests.splice(index, 1); })} size="sm" variant="ghost">
+                                            Remove test {index + 1}
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            ))}
+                            {editable && b.tests.length < MAX_TEST_ROWS ? (
+                                <Button disabled={busy} onClick={() => update((next) => { next.section_b.tests.push(blankTestRow()); })} size="sm" variant="secondary">
+                                    <Icon className="h-4 w-4" name="plus" />
+                                    Add test row
+                                </Button>
+                            ) : null}
+                        </fieldset>
+                        <TextField disabled={disabled} label="B6 Additional comments on tests" maxLength={2000} multiline onChange={(value) => update((next) => { next.section_b.tests_comments = value; })} value={b.tests_comments} warnings={warningsFor("section_b.tests_comments")} />
+                        <TextField disabled={disabled} label="B7 Other relevant history" maxLength={2000} multiline onChange={(value) => update((next) => { next.section_b.other_history = value; })} value={b.other_history} warnings={warningsFor("section_b.other_history")} />
+                    </Section>
+
+                    <Section id="D" legend="D. Suspect products" missing={missingIn("D")} showStatus={editable} workspace={inWorkspace}>
+                        <fieldset className="min-w-0 space-y-3 rounded-lg border border-line p-3">
+                            <legend className="px-1 text-[13px] font-medium text-ink">Suspect product 1</legend>
+                            <ProductFields disabled={disabled} onChange={(mutate) => update((next) => mutate(next.section_d.product_1))} product={d.product_1} />
+                        </fieldset>
+                        {d.product_2 ? (
+                            <fieldset className="min-w-0 space-y-3 rounded-lg border border-line p-3">
+                                <legend className="px-1 text-[13px] font-medium text-ink">Suspect product 2</legend>
+                                <ProductFields
+                                    disabled={disabled}
+                                    onChange={(mutate) =>
+                                        update((next) => {
+                                            if (next.section_d.product_2) mutate(next.section_d.product_2);
+                                        })
+                                    }
+                                    product={d.product_2}
+                                />
+                                {editable ? (
+                                    <Button disabled={busy} onClick={() => update((next) => { next.section_d.product_2 = null; })} size="sm" variant="ghost">
+                                        Remove suspect product 2
+                                    </Button>
+                                ) : null}
+                            </fieldset>
+                        ) : editable ? (
+                            <Button disabled={busy} onClick={() => update((next) => { next.section_d.product_2 = blankProduct(); })} size="sm" variant="secondary">
+                                <Icon className="h-4 w-4" name="plus" />
+                                Add suspect product 2
+                            </Button>
+                        ) : null}
+                    </Section>
+
+                    <div className={inWorkspace ? "min-w-0 space-y-3" : "min-w-0 space-y-5"}>
+                        <Section id="F" legend="F. Other (concomitant) medical products" missing={missingIn("F")} showStatus={editable} workspace={inWorkspace}>
+                            {form.section_f.others.length === 0 ? (
+                                <p className="text-[13px] text-muted">No other products listed.</p>
+                            ) : null}
+                            {form.section_f.others.map((other, index) => (
+                                <div className="space-y-3 rounded-lg border border-line p-3" key={index}>
+                                    <TextField disabled={disabled} label={`Other product ${index + 1}: name`} maxLength={255} onChange={(value) => update((next) => { next.section_f.others[index].name = value; })} value={other.name} warnings={warningsFor(`section_f.others[${index}].name`)} />
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <DateField disabled={disabled} label={`Other product ${index + 1}: start date`} onChange={(value) => update((next) => { next.section_f.others[index].start = value; })} value={other.start} />
+                                        <DateField disabled={disabled} label={`Other product ${index + 1}: end date`} onChange={(value) => update((next) => { next.section_f.others[index].end = value; })} value={other.end} />
+                                    </div>
+                                    {editable ? (
+                                        <Button disabled={busy} onClick={() => update((next) => { next.section_f.others.splice(index, 1); })} size="sm" variant="ghost">
+                                            Remove other product {index + 1}
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            ))}
+                            {editable && form.section_f.others.length < MAX_OTHER_PRODUCTS ? (
+                                <Button disabled={busy} onClick={() => update((next) => { next.section_f.others.push(blankOtherProduct()); })} size="sm" variant="secondary">
+                                    <Icon className="h-4 w-4" name="plus" />
+                                    Add other product
+                                </Button>
+                            ) : null}
+                        </Section>
+
+                        <Section id="G" legend="G. Reporter" missing={missingIn("G")} showStatus={editable} workspace={inWorkspace}>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <TextField disabled={disabled} label="G1 First name" maxLength={100} onChange={(value) => update((next) => { next.section_g.first_name = value; })} value={g.first_name} />
+                                <TextField disabled={disabled} label="G1 Last name" maxLength={100} onChange={(value) => update((next) => { next.section_g.last_name = value; })} value={g.last_name} />
+                                <TextField disabled={disabled} label="G1 Address" maxLength={100} onChange={(value) => update((next) => { next.section_g.address = value; })} value={g.address} />
+                                <TextField disabled={disabled} label="G1 City" maxLength={100} onChange={(value) => update((next) => { next.section_g.city = value; })} value={g.city} />
+                                <TextField disabled={disabled} label="G1 State/province/region" maxLength={100} onChange={(value) => update((next) => { next.section_g.state = value; })} value={g.state} />
+                                <TextField disabled={disabled} label="G1 ZIP/postal code" maxLength={10} onChange={(value) => update((next) => { next.section_g.zip_code = value; })} value={g.zip_code} />
+                                <TextField disabled={disabled} hint="As listed on the form, for example UNITED STATES" label="G1 Country" maxLength={100} onChange={(value) => update((next) => { next.section_g.country = value; })} value={g.country} />
+                                <TextField disabled={disabled} label="G1 Phone #" maxLength={30} onChange={(value) => update((next) => { next.section_g.phone = value; })} value={g.phone} />
+                                <TextField disabled={disabled} label="G1 Email" maxLength={254} onChange={(value) => update((next) => { next.section_g.email = value; })} value={g.email} />
+                                <SelectField disabled={disabled} label="G2 Health professional" onChange={(value) => update((next) => { next.section_g.health_professional = value; })} options={FORM_3500_OPTIONS.yesNo} value={g.health_professional} />
+                                <SelectField disabled={disabled} label="G3 Occupation" onChange={(value) => update((next) => { next.section_g.occupation = value; })} options={FORM_3500_OPTIONS.occupation} value={g.occupation} />
+                            </div>
+                            <CheckboxGroup disabled={disabled} legend="G4 Also reported to" onChange={(values) => update((next) => { next.section_g.also_reported_to = values; })} options={FORM_3500_OPTIONS.alsoReportedTo} values={g.also_reported_to} />
+                            <Checkbox checked={g.identity_withheld} disabled={disabled} label="G5 Do not disclose reporter identity to the manufacturer" onChange={(checked) => update((next) => { next.section_g.identity_withheld = checked; })} />
+                        </Section>
+
+                        <Section id="M" legend="MediAgent review (not part of Form 3500)" missing={missingIn("M")} showStatus={editable} workspace={inWorkspace}>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-sm text-ink-2">
+                                <span>
+                                    Deterministic Naranjo score:{" "}
+                                    <strong className="font-mono font-medium text-ink">
+                                        {form.mediagent_review.naranjo_score ?? "—"}
+                                    </strong>
+                                </span>
+                                {form.mediagent_review.causality ? (
+                                    <Badge variant="warning">{form.mediagent_review.causality}</Badge>
+                                ) : null}
+                            </div>
+                            <TextField disabled={disabled} label="Reportability rationale" maxLength={2000} multiline onChange={(value) => update((next) => { next.mediagent_review.reportability_rationale = value; })} value={form.mediagent_review.reportability_rationale} />
+                        </Section>
+                    </div>
+                </div>
+    );
+    const extrasBlock = (
+        <>
+                {Object.keys(form.legacy).length > 0 ? (
+                    <details className="ma-disclosure rounded-xl border border-line bg-surface">
+                        <summary className="min-h-10 px-4 py-2 text-[13px] font-semibold text-ink">
+                            Earlier draft text with no Form 3500 item (
+                            <span className="font-mono">{Object.keys(form.legacy).length}</span>)
+                        </summary>
+                        <dl className="divide-y divide-line border-t border-line">
+                            {Object.entries(form.legacy).map(([key, value]) => (
+                                <div className="px-4 py-2.5 text-sm" key={key}>
+                                    <dt className={`font-mono text-xs text-muted ${wrapClass}`}>{key}</dt>
+                                    <dd className={`mt-1 text-ink-2 ${wrapClass}`}>{value}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </details>
+                ) : null}
+
+                <details className="ma-disclosure rounded-xl border border-line bg-surface">
+                    <summary className="min-h-10 px-4 py-2 text-[13px] font-semibold text-ink">
+                        Source evidence and attribution (
+                        <span className="font-mono">{draft.sourceEvidence.length}</span>)
+                    </summary>
+                    <ul className="divide-y divide-line border-t border-line">
+                        {draft.sourceEvidence.map((source, index) => (
+                            <li className="min-w-0 space-y-1.5 px-4 py-3 text-sm" key={`${source.source_type}-${index}`}>
+                                <p className={`font-medium text-ink ${wrapClass}`}>{source.attribution}</p>
+                                <p className={`text-xs text-muted ${wrapClass}`}>{source.field_paths.join(", ")}</p>
+                                {source.excerpt ? (
+                                    <blockquote className={`max-w-[72ch] border-l-2 border-line-strong pl-3 leading-relaxed text-ink-2 ${wrapClass}`}>
+                                        “{source.excerpt}”
+                                    </blockquote>
+                                ) : null}
+                                {source.citation ? (
+                                    <p className={`text-xs text-primary ${wrapClass}`}>Source: {source.citation}</p>
+                                ) : null}
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+        </>
+    );
+    const errorBlock = (
+        <>
+                {error ? (
+                    <p
+                        className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
+                        role="alert"
+                    >
+                        <Icon className="mt-0.5 h-4 w-4 shrink-0" name="alert" />
+                        <span>{error}</span>
+                    </p>
+                ) : null}
+        </>
+    );
+
+    // In the report workspace a successful approval moves on to the download step.
+    const approveHandler = async (draftId: string, input: MedWatchApprovalInput) => {
+        await onApprove(draftId, input);
+        workspace?.onStepChange("download");
+    };
+
+    /** Leaving the form for a later step saves pending edits first, so the PDF matches the screen. */
+    async function goTo(step: ReportStep) {
+        if (!workspace || busy) return;
+        if (workspace.step === "complete" && step !== "complete" && unsaved) {
+            let saved = false;
+            await perform(async () => {
+                await onSave(draft.id, form, baseline.revision);
+                saved = true;
+            });
+            if (!saved) return;
+        }
+        workspace.onStepChange(step);
+    }
+
+    const recordsBlock = (
+        <>
                 {submitted && draft.currentSubmission ? (
                     <section
                         aria-label="FDA submission record"
@@ -553,7 +893,10 @@ export function MedWatchDraftCard({
                         ) : null}
                     </section>
                 ) : null}
-
+        </>
+    );
+    const missingBlock = (
+        <>
                 {editable && draft.missingForApproval.length > 0 ? (
                     <section
                         aria-label="Missing for approval"
@@ -574,249 +917,10 @@ export function MedWatchDraftCard({
                         <p className="mt-2 text-xs">Checked against the last saved revision.</p>
                     </section>
                 ) : null}
-
-                <div className="grid gap-5 xl:grid-cols-2">
-                    <fieldset className={fieldsetClass}>
-                        <legend className={legendClass}>A. Patient information</legend>
-                        <TextField
-                            disabled={disabled}
-                            hint="Initials and a reference, never the patient's name"
-                            label="A1 Patient identifier"
-                            maxLength={50}
-                            onChange={(value) => update((next) => { next.section_a.identifier = value; })}
-                            value={a.identifier}
-                        />
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <TextField disabled={disabled} label="A2 Age" maxLength={3} onChange={(value) => update((next) => { next.section_a.age_value = value; })} value={a.age_value} />
-                            <SelectField disabled={disabled} label="A2 Age unit" onChange={(value) => update((next) => { next.section_a.age_unit = value; })} options={FORM_3500_OPTIONS.ageUnit} value={a.age_unit} />
-                            <DateField disabled={disabled} label="A2 Date of birth" onChange={(value) => update((next) => { next.section_a.date_of_birth = value; })} value={a.date_of_birth} />
-                            <SelectField disabled={disabled} label="A3 Sex" onChange={(value) => update((next) => { next.section_a.sex = value; })} options={FORM_3500_OPTIONS.sex} value={a.sex} />
-                            <TextField disabled={disabled} label="A4 Weight" maxLength={5} onChange={(value) => update((next) => { next.section_a.weight_value = value; })} value={a.weight_value} />
-                            <SelectField disabled={disabled} label="A4 Weight unit" onChange={(value) => update((next) => { next.section_a.weight_unit = value; })} options={FORM_3500_OPTIONS.weightUnit} value={a.weight_unit} />
-                        </div>
-                        <CheckboxGroup disabled={disabled} legend="A5 Race" onChange={(values) => update((next) => { next.section_a.race = values; })} options={FORM_3500_OPTIONS.race} values={a.race} />
-                        <Checkbox checked={a.hispanic_latino} disabled={disabled} label="A5 Hispanic/Latino" onChange={(checked) => update((next) => { next.section_a.hispanic_latino = checked; })} />
-                    </fieldset>
-
-                    <fieldset className={fieldsetClass}>
-                        <legend className={legendClass}>B. Adverse event or product problem</legend>
-                        <CheckboxGroup disabled={disabled} legend="B1 Type of report" onChange={(values) => update((next) => { next.section_b.report_types = values; })} options={FORM_3500_OPTIONS.reportType} values={b.report_types} />
-                        <CheckboxGroup
-                            disabled={disabled}
-                            legend="B2 Outcome (leave all unchecked if not serious)"
-                            onChange={(values) =>
-                                update((next) => {
-                                    next.section_b.outcomes = values;
-                                    if (!values.includes("death")) next.section_b.death_date = null;
-                                })
-                            }
-                            options={FORM_3500_OPTIONS.outcome}
-                            values={b.outcomes}
-                        />
-                        {b.outcomes.includes("death") ? (
-                            <DateField disabled={disabled} label="B2 Date of death" onChange={(value) => update((next) => { next.section_b.death_date = value; })} value={b.death_date} />
-                        ) : null}
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="min-w-0">
-                                <DateField disabled={disabled} label="B3 Date of event" onChange={(value) => update((next) => { next.section_b.event_date = value; })} value={b.event_date} />
-                                {b.event_date && !b.event_date_confirmed ? (
-                                    <span className="mt-1.5 inline-flex">
-                                        <Badge variant="warning">Best estimate, confirm</Badge>
-                                    </span>
-                                ) : null}
-                                <Checkbox checked={b.event_date_confirmed} disabled={disabled} label="I confirm the date of event" onChange={(checked) => update((next) => { next.section_b.event_date_confirmed = checked; })} />
-                            </div>
-                            <DateField disabled={disabled} label="B4 Date of this report" onChange={(value) => update((next) => { next.section_b.report_date = value; })} value={b.report_date} />
-                        </div>
-                        <TextField
-                            disabled={disabled}
-                            label="B5 Describe event, problem or product use/medication error"
-                            maxLength={4000}
-                            multiline
-                            onChange={(value) => update((next) => { next.section_b.narrative = value; })}
-                            value={b.narrative}
-                            warnings={warningsFor("section_b.narrative")}
-                        />
-                        <fieldset className="min-w-0 space-y-3">
-                            <legend className={labelTextClass}>B6 Relevant tests/laboratory data</legend>
-                            {b.tests.length === 0 ? (
-                                <p className="text-[13px] text-muted">No test rows. MediAgent does not prefill tests.</p>
-                            ) : null}
-                            {b.tests.map((row, index) => (
-                                <div className="space-y-3 rounded-lg border border-line p-3" key={index}>
-                                    <TextField disabled={disabled} label={`Test ${index + 1}: test and result`} maxLength={500} onChange={(value) => update((next) => { next.section_b.tests[index].test = value; })} value={row.test} warnings={warningsFor(`section_b.tests[${index}].test`)} />
-                                    <div className="grid gap-3 sm:grid-cols-3">
-                                        <TextField disabled={disabled} label={`Test ${index + 1}: low range`} maxLength={50} onChange={(value) => update((next) => { next.section_b.tests[index].low_range = value; })} value={row.low_range} warnings={warningsFor(`section_b.tests[${index}].low_range`)} />
-                                        <TextField disabled={disabled} label={`Test ${index + 1}: high range`} maxLength={50} onChange={(value) => update((next) => { next.section_b.tests[index].high_range = value; })} value={row.high_range} warnings={warningsFor(`section_b.tests[${index}].high_range`)} />
-                                        <DateField disabled={disabled} label={`Test ${index + 1}: date`} onChange={(value) => update((next) => { next.section_b.tests[index].date = value; })} value={row.date} />
-                                    </div>
-                                    {editable ? (
-                                        <Button disabled={busy} onClick={() => update((next) => { next.section_b.tests.splice(index, 1); })} size="sm" variant="ghost">
-                                            Remove test {index + 1}
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            ))}
-                            {editable && b.tests.length < MAX_TEST_ROWS ? (
-                                <Button disabled={busy} onClick={() => update((next) => { next.section_b.tests.push(blankTestRow()); })} size="sm" variant="secondary">
-                                    <Icon className="h-4 w-4" name="plus" />
-                                    Add test row
-                                </Button>
-                            ) : null}
-                        </fieldset>
-                        <TextField disabled={disabled} label="B6 Additional comments on tests" maxLength={2000} multiline onChange={(value) => update((next) => { next.section_b.tests_comments = value; })} value={b.tests_comments} warnings={warningsFor("section_b.tests_comments")} />
-                        <TextField disabled={disabled} label="B7 Other relevant history" maxLength={2000} multiline onChange={(value) => update((next) => { next.section_b.other_history = value; })} value={b.other_history} warnings={warningsFor("section_b.other_history")} />
-                    </fieldset>
-
-                    <fieldset className={fieldsetClass}>
-                        <legend className={legendClass}>D. Suspect products</legend>
-                        <fieldset className="min-w-0 space-y-3 rounded-lg border border-line p-3">
-                            <legend className="px-1 text-[13px] font-medium text-ink">Suspect product 1</legend>
-                            <ProductFields disabled={disabled} onChange={(mutate) => update((next) => mutate(next.section_d.product_1))} product={d.product_1} />
-                        </fieldset>
-                        {d.product_2 ? (
-                            <fieldset className="min-w-0 space-y-3 rounded-lg border border-line p-3">
-                                <legend className="px-1 text-[13px] font-medium text-ink">Suspect product 2</legend>
-                                <ProductFields
-                                    disabled={disabled}
-                                    onChange={(mutate) =>
-                                        update((next) => {
-                                            if (next.section_d.product_2) mutate(next.section_d.product_2);
-                                        })
-                                    }
-                                    product={d.product_2}
-                                />
-                                {editable ? (
-                                    <Button disabled={busy} onClick={() => update((next) => { next.section_d.product_2 = null; })} size="sm" variant="ghost">
-                                        Remove suspect product 2
-                                    </Button>
-                                ) : null}
-                            </fieldset>
-                        ) : editable ? (
-                            <Button disabled={busy} onClick={() => update((next) => { next.section_d.product_2 = blankProduct(); })} size="sm" variant="secondary">
-                                <Icon className="h-4 w-4" name="plus" />
-                                Add suspect product 2
-                            </Button>
-                        ) : null}
-                    </fieldset>
-
-                    <div className="min-w-0 space-y-5">
-                        <fieldset className={fieldsetClass}>
-                            <legend className={legendClass}>F. Other (concomitant) medical products</legend>
-                            {form.section_f.others.length === 0 ? (
-                                <p className="text-[13px] text-muted">No other products listed.</p>
-                            ) : null}
-                            {form.section_f.others.map((other, index) => (
-                                <div className="space-y-3 rounded-lg border border-line p-3" key={index}>
-                                    <TextField disabled={disabled} label={`Other product ${index + 1}: name`} maxLength={255} onChange={(value) => update((next) => { next.section_f.others[index].name = value; })} value={other.name} warnings={warningsFor(`section_f.others[${index}].name`)} />
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        <DateField disabled={disabled} label={`Other product ${index + 1}: start date`} onChange={(value) => update((next) => { next.section_f.others[index].start = value; })} value={other.start} />
-                                        <DateField disabled={disabled} label={`Other product ${index + 1}: end date`} onChange={(value) => update((next) => { next.section_f.others[index].end = value; })} value={other.end} />
-                                    </div>
-                                    {editable ? (
-                                        <Button disabled={busy} onClick={() => update((next) => { next.section_f.others.splice(index, 1); })} size="sm" variant="ghost">
-                                            Remove other product {index + 1}
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            ))}
-                            {editable && form.section_f.others.length < MAX_OTHER_PRODUCTS ? (
-                                <Button disabled={busy} onClick={() => update((next) => { next.section_f.others.push(blankOtherProduct()); })} size="sm" variant="secondary">
-                                    <Icon className="h-4 w-4" name="plus" />
-                                    Add other product
-                                </Button>
-                            ) : null}
-                        </fieldset>
-
-                        <fieldset className={fieldsetClass}>
-                            <legend className={legendClass}>G. Reporter</legend>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <TextField disabled={disabled} label="G1 First name" maxLength={100} onChange={(value) => update((next) => { next.section_g.first_name = value; })} value={g.first_name} />
-                                <TextField disabled={disabled} label="G1 Last name" maxLength={100} onChange={(value) => update((next) => { next.section_g.last_name = value; })} value={g.last_name} />
-                                <TextField disabled={disabled} label="G1 Address" maxLength={100} onChange={(value) => update((next) => { next.section_g.address = value; })} value={g.address} />
-                                <TextField disabled={disabled} label="G1 City" maxLength={100} onChange={(value) => update((next) => { next.section_g.city = value; })} value={g.city} />
-                                <TextField disabled={disabled} label="G1 State/province/region" maxLength={100} onChange={(value) => update((next) => { next.section_g.state = value; })} value={g.state} />
-                                <TextField disabled={disabled} label="G1 ZIP/postal code" maxLength={10} onChange={(value) => update((next) => { next.section_g.zip_code = value; })} value={g.zip_code} />
-                                <TextField disabled={disabled} hint="As listed on the form, for example UNITED STATES" label="G1 Country" maxLength={100} onChange={(value) => update((next) => { next.section_g.country = value; })} value={g.country} />
-                                <TextField disabled={disabled} label="G1 Phone #" maxLength={30} onChange={(value) => update((next) => { next.section_g.phone = value; })} value={g.phone} />
-                                <TextField disabled={disabled} label="G1 Email" maxLength={254} onChange={(value) => update((next) => { next.section_g.email = value; })} value={g.email} />
-                                <SelectField disabled={disabled} label="G2 Health professional" onChange={(value) => update((next) => { next.section_g.health_professional = value; })} options={FORM_3500_OPTIONS.yesNo} value={g.health_professional} />
-                                <SelectField disabled={disabled} label="G3 Occupation" onChange={(value) => update((next) => { next.section_g.occupation = value; })} options={FORM_3500_OPTIONS.occupation} value={g.occupation} />
-                            </div>
-                            <CheckboxGroup disabled={disabled} legend="G4 Also reported to" onChange={(values) => update((next) => { next.section_g.also_reported_to = values; })} options={FORM_3500_OPTIONS.alsoReportedTo} values={g.also_reported_to} />
-                            <Checkbox checked={g.identity_withheld} disabled={disabled} label="G5 Do not disclose reporter identity to the manufacturer" onChange={(checked) => update((next) => { next.section_g.identity_withheld = checked; })} />
-                        </fieldset>
-
-                        <fieldset className={fieldsetClass}>
-                            <legend className={legendClass}>MediAgent review (not part of Form 3500)</legend>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-sm text-ink-2">
-                                <span>
-                                    Deterministic Naranjo score:{" "}
-                                    <strong className="font-mono font-medium text-ink">
-                                        {form.mediagent_review.naranjo_score ?? "—"}
-                                    </strong>
-                                </span>
-                                {form.mediagent_review.causality ? (
-                                    <Badge variant="warning">{form.mediagent_review.causality}</Badge>
-                                ) : null}
-                            </div>
-                            <TextField disabled={disabled} label="Reportability rationale" maxLength={2000} multiline onChange={(value) => update((next) => { next.mediagent_review.reportability_rationale = value; })} value={form.mediagent_review.reportability_rationale} />
-                        </fieldset>
-                    </div>
-                </div>
-
-                {Object.keys(form.legacy).length > 0 ? (
-                    <details className="ma-disclosure rounded-xl border border-line bg-surface">
-                        <summary className="min-h-10 px-4 py-2 text-[13px] font-semibold text-ink">
-                            Earlier draft text with no Form 3500 item (
-                            <span className="font-mono">{Object.keys(form.legacy).length}</span>)
-                        </summary>
-                        <dl className="divide-y divide-line border-t border-line">
-                            {Object.entries(form.legacy).map(([key, value]) => (
-                                <div className="px-4 py-2.5 text-sm" key={key}>
-                                    <dt className={`font-mono text-xs text-muted ${wrapClass}`}>{key}</dt>
-                                    <dd className={`mt-1 text-ink-2 ${wrapClass}`}>{value}</dd>
-                                </div>
-                            ))}
-                        </dl>
-                    </details>
-                ) : null}
-
-                <details className="ma-disclosure rounded-xl border border-line bg-surface">
-                    <summary className="min-h-10 px-4 py-2 text-[13px] font-semibold text-ink">
-                        Source evidence and attribution (
-                        <span className="font-mono">{draft.sourceEvidence.length}</span>)
-                    </summary>
-                    <ul className="divide-y divide-line border-t border-line">
-                        {draft.sourceEvidence.map((source, index) => (
-                            <li className="min-w-0 space-y-1.5 px-4 py-3 text-sm" key={`${source.source_type}-${index}`}>
-                                <p className={`font-medium text-ink ${wrapClass}`}>{source.attribution}</p>
-                                <p className={`text-xs text-muted ${wrapClass}`}>{source.field_paths.join(", ")}</p>
-                                {source.excerpt ? (
-                                    <blockquote className={`max-w-[72ch] border-l-2 border-line-strong pl-3 leading-relaxed text-ink-2 ${wrapClass}`}>
-                                        “{source.excerpt}”
-                                    </blockquote>
-                                ) : null}
-                                {source.citation ? (
-                                    <p className={`text-xs text-primary ${wrapClass}`}>Source: {source.citation}</p>
-                                ) : null}
-                            </li>
-                        ))}
-                    </ul>
-                </details>
-
-                {error ? (
-                    <p
-                        className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"
-                        role="alert"
-                    >
-                        <Icon className="mt-0.5 h-4 w-4 shrink-0" name="alert" />
-                        <span>{error}</span>
-                    </p>
-                ) : null}
-            </div>
-
-            <div className="space-y-3 border-t border-line px-6 py-5">
+        </>
+    );
+    const footerBlock = (
+            <div className={inWorkspace ? "space-y-3" : "space-y-3 border-t border-line px-6 py-5"}>
                 {approved || submitted ? (
                     <p className="max-w-[80ch] text-sm text-ink-2">
                         Approved
@@ -856,7 +960,7 @@ export function MedWatchDraftCard({
                     </>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-2">
-                    {editable ? (
+                    {editable && !inWorkspace ? (
                         <>
                             <Button disabled={busy} onClick={() => void perform(() => onSave(draft.id, form, baseline.revision))} variant="secondary">
                                 Save draft
@@ -866,10 +970,12 @@ export function MedWatchDraftCard({
                             </Button>
                         </>
                     ) : null}
-                    <Button disabled={busy} onClick={() => setDialog("preview")} variant="secondary">
-                        <Icon className="h-4 w-4" name="eye" />
-                        Preview Form 3500
-                    </Button>
+                    {inWorkspace ? null : (
+                        <Button disabled={busy} onClick={() => setDialog("preview")} variant="secondary">
+                            <Icon className="h-4 w-4" name="eye" />
+                            Preview Form 3500
+                        </Button>
+                    )}
                     {approved || submitted ? (
                         <Button disabled={busy} onClick={() => void perform(() => onExport(draft.id))} variant="secondary">
                             <Icon className="h-4 w-4" name="download" />
@@ -894,14 +1000,16 @@ export function MedWatchDraftCard({
                     ) : null}
                 </div>
             </div>
-
+    );
+    const dialogsBlock = (
+        <>
             {dialog === "preview" ? (
                 <Form3500PreviewDialog draftId={draft.id} onClose={() => setDialog(null)} open />
             ) : null}
             {dialog === "approve" ? (
                 <MedWatchApprovalDialog
                     draft={draft}
-                    onApprove={onApprove}
+                    onApprove={approveHandler}
                     onClose={() => setDialog(null)}
                     open
                     unsaved={unsaved}
@@ -929,6 +1037,211 @@ export function MedWatchDraftCard({
             {dialog === "discard" && onDiscard ? (
                 <DiscardDraftDialog draft={draft} onClose={() => setDialog(null)} onDiscard={onDiscard} open />
             ) : null}
+        </>
+    );
+
+    if (workspace) {
+        const step = workspace.step;
+        const gateIssues = draft.missingForApproval.filter((issue) => !isAttestationIssue(issue));
+        const panelClass = "rounded-xl border border-line bg-surface p-5";
+        return (
+            <div className="min-w-0 space-y-5" ref={editorRef}>
+                <MedWatchStepper disabled={busy} onSelect={(next) => void goTo(next)} step={step} />
+                {errorBlock}
+
+                {/* Complete stays mounted behind the other steps so unsaved edits are not lost. */}
+                <div className="space-y-4" hidden={step !== "complete"}>
+                    {discarded ? recordsBlock : null}
+                    {editable && gateIssues.length > 0 ? (
+                        <section
+                            aria-label="Items needing attention"
+                            className="rounded-xl border border-warn-line bg-warn-soft px-4 py-3.5 text-sm text-warn-ink"
+                        >
+                            <p className="flex items-center gap-2 font-semibold">
+                                <Icon aria-hidden="true" className="h-4 w-4 shrink-0" name="alert" />
+                                {gateIssues.length} {gateIssues.length === 1 ? "item needs" : "items need"} attention before approval
+                            </p>
+                            <ul className="mt-2 space-y-1">
+                                {gateIssues.map((issue) => (
+                                    <li key={`${issue.path}-${issue.code}`}>
+                                        <button
+                                            className={`rounded text-left font-medium underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${wrapClass}`}
+                                            onClick={() => focusIssue(issue)}
+                                            type="button"
+                                        >
+                                            {gateIssueLabel(issue)}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="mt-2 text-xs">Checked against the last saved revision.</p>
+                        </section>
+                    ) : null}
+                    {editable && gateIssues.length === 0 ? (
+                        <p className="flex items-center gap-2 rounded-xl border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">
+                            <Icon aria-hidden="true" className="h-4 w-4 shrink-0" name="check" />
+                            Nothing is missing for approval.
+                        </p>
+                    ) : null}
+                    {sectionsBlock}
+                    {extrasBlock}
+                    <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-line bg-surface/95 px-1 py-3 backdrop-blur">
+                        <span aria-live="polite" className="inline-flex items-center gap-2">
+                            {unsaved ? <Badge variant="warning">Unsaved changes</Badge> : null}
+                            {editable && onDiscard ? (
+                                <Button disabled={busy} onClick={() => setDialog("discard")} variant="ghost">
+                                    Discard draft
+                                </Button>
+                            ) : null}
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {editable ? (
+                                <Button disabled={busy} onClick={() => void perform(() => onSave(draft.id, form, baseline.revision))} variant="secondary">
+                                    Save draft
+                                </Button>
+                            ) : null}
+                            <Button disabled={busy} onClick={() => void goTo("preview")}>
+                                Continue to preview
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                {step === "preview" ? (
+                    <div className="space-y-4">
+                        <Form3500PdfPreview
+                            draftId={draft.id}
+                            fetchPdf={fetchPreviewPdf}
+                            revision={draft.revision}
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <Button onClick={() => void goTo("complete")} variant="secondary">
+                                Back to edit
+                            </Button>
+                            <Button disabled={busy} onClick={() => void goTo("approve")}>
+                                Continue to approval
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
+
+                {step === "approve" ? (
+                    <section aria-label="Approve report" className={`${panelClass} space-y-4`}>
+                        {approved || submitted ? (
+                            <>
+                                <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+                                    <ApprovalSeal pill>Approved for export</ApprovalSeal>
+                                    {draft.approvedAt ? (
+                                        <time className="font-mono text-xs text-muted" dateTime={draft.approvedAt}>
+                                            {formatReviewTimestamp(draft.approvedAt)}
+                                        </time>
+                                    ) : null}
+                                </p>
+                                <Button onClick={() => void goTo("download")}>Continue to download</Button>
+                            </>
+                        ) : discarded ? (
+                            <p className="text-sm text-ink-2">This report was discarded and cannot be approved.</p>
+                        ) : (
+                            <>
+                                <h2 className="text-sm font-semibold text-ink">Review before you approve</h2>
+                                <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                                    <div className="min-w-0">
+                                        <dt className="text-xs text-muted">Patient identifier</dt>
+                                        <dd className={`font-mono text-sm font-medium text-ink ${wrapClass}`}>{a.identifier || "—"}</dd>
+                                    </div>
+                                    <div className="min-w-0">
+                                        <dt className="text-xs text-muted">Suspect product</dt>
+                                        <dd className={`text-sm font-medium text-ink ${wrapClass}`}>{d.product_1.name || "—"}</dd>
+                                    </div>
+                                    <div className="min-w-0 sm:col-span-2">
+                                        <dt className="text-xs text-muted">Event (B5)</dt>
+                                        <dd className={`line-clamp-3 text-sm text-ink-2 ${wrapClass}`}>{b.narrative || "—"}</dd>
+                                    </div>
+                                </dl>
+                                {gateIssues.length > 0 ? (
+                                    <div className="space-y-3 rounded-xl border border-warn-line bg-warn-soft px-4 py-3.5 text-sm text-warn-ink" role="note">
+                                        <p className="font-semibold">
+                                            {gateIssues.length} {gateIssues.length === 1 ? "item needs" : "items need"} attention before approval.
+                                        </p>
+                                        <Button onClick={() => void goTo("complete")} variant="secondary">
+                                            Back to edit
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <p className="max-w-[72ch] text-sm leading-relaxed text-ink-2">
+                                        Approving records your sign-off on the saved revision and makes the report
+                                        downloadable as Form FDA 3500. It does not submit anything to FDA.
+                                    </p>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Button disabled={busy || gateIssues.length > 0} onClick={() => setDialog("approve")} variant="approve">
+                                        Approve for export
+                                    </Button>
+                                    <Button onClick={() => void goTo("preview")} variant="ghost">
+                                        Back to preview
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </section>
+                ) : null}
+
+                {step === "download" ? (
+                    <section aria-label="Download and record submission" className={`${panelClass} space-y-4`}>
+                        {editable ? (
+                            <>
+                                <p className="text-sm text-ink-2">
+                                    Approve the report first. The unwatermarked Form 3500 is available after approval.
+                                </p>
+                                <Button onClick={() => void goTo("approve")}>Go to approval</Button>
+                            </>
+                        ) : (
+                            <>
+                                {discarded ? null : recordsBlock}
+                                {footerBlock}
+                            </>
+                        )}
+                    </section>
+                ) : null}
+                {dialogsBlock}
+            </div>
+        );
+    }
+
+    return (
+        <Card className="ma-enter min-w-0" padding="none">
+            <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-6 py-4">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
+                            MedWatch Form 3500 draft
+                        </h2>
+                        {statusBadge}
+                        <span aria-live="polite" className="inline-flex">
+                            {unsaved ? <Badge variant="warning">Unsaved changes</Badge> : null}
+                        </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                        Revision <span className="font-mono">{baseline.revision}</span> · Draft ID{" "}
+                        <span className="font-mono break-all">{draft.id}</span>
+                    </p>
+                </div>
+                <Badge variant="warning">
+                    {submitted ? "Not submitted to FDA by MediAgent" : "Not submitted to FDA"}
+                </Badge>
+            </header>
+
+            <div className="space-y-5 p-6">
+                {recordsBlock}
+                {missingBlock}
+                {sectionsBlock}
+                {extrasBlock}
+                {errorBlock}
+            </div>
+
+            {footerBlock}
+
+            {dialogsBlock}
         </Card>
     );
 }
