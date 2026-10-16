@@ -501,6 +501,10 @@ GRANT EXECUTE ON FUNCTION public.care_conversation_operation(uuid,text,text,json
 REVOKE ALL ON FUNCTION private.lock_care_conversation_pair(uuid,uuid,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION private.lock_care_conversation_pair(uuid,uuid,text) TO service_role;
 
+-- A clinician removed before this migration may still carry the admin role with no default
+-- clinic. Normalise it so the check below holds on existing data, not only on new removals.
+UPDATE public.clinicians SET role = 'provider' WHERE clinic_id IS NULL AND role = 'admin';
+
 -- ── 5. Fail-closed verification ──────────────────────────────────────────────────────────
 DO $$
 BEGIN
