@@ -59,8 +59,9 @@ async def test_oversized_title_does_not_fail_the_generation_batch() -> None:
         return_value={str(MEDICATION_FACT_ID): "medication", str(MONITORING_FACT_ID): "monitoring"}
     )
     service._open_draft = MagicMock(return_value={"id": str(UUID(int=303))})
-    # Translation runs after the atomic write; its own tests cover it.
+    # Translation and back-translation run after the atomic write; their tests cover them.
     service._draft_missing_translations = AsyncMock(return_value={})
+    service._draft_missing_back_translations = AsyncMock(return_value={})
     await service._generate(
         {
             "patient_id": str(UUID(int=302)),
@@ -89,8 +90,9 @@ async def test_missing_frequency_commits_a_cited_blocker_without_inventing_wordi
         }
     )
     service._open_draft = MagicMock(return_value={"id": str(UUID(int=303))})
-    # Translation runs after the atomic write; its own tests cover it.
+    # Translation and back-translation run after the atomic write; their tests cover them.
     service._draft_missing_translations = AsyncMock(return_value={})
+    service._draft_missing_back_translations = AsyncMock(return_value={})
     await service._generate(
         {
             "patient_id": str(UUID(int=302)),

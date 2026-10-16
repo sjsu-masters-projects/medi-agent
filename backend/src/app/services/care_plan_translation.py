@@ -8,10 +8,13 @@ Diagnostics carry counts only: never wording, fact values or identifiers.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from pydantic import BaseModel, Field
@@ -69,6 +72,7 @@ class TranslationDraft:
     source_locale: PatientLocale
     target_locale: PatientLocale
     wording: CarePlanWording
+    model: str | None = None
 
 
 def other_locale(locale: PatientLocale) -> PatientLocale:
@@ -99,15 +103,42 @@ def response_schema() -> dict[str, Any]:
     }
 
 
-def _numbers(wording: dict[str, str]) -> Counter[str]:
+def number_counts(texts: Iterable[str]) -> Counter[str]:
+    """Every printed number, with a decimal comma read as a point."""
     return Counter(
-        match.replace(",", ".")
-        for field in _FIELDS
-        for match in _NUMBER.findall(wording.get(field) or "")
+        match.replace(",", ".") for text in texts for match in _NUMBER.findall(text or "")
     )
 
 
-def _protected_terms(item: dict[str, Any]) -> list[str]:
+def _numbers(wording: Mapping[str, Any]) -> Counter[str]:
+    return number_counts(str(wording.get(field) or "") for field in _FIELDS)
+
+
+def _term(term: str) -> re.Pattern[str]:
+    # Whole words: "Metformina" is a changed name, not the original one.
+    return re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE)
+
+
+def names_kept(source: Iterable[str], draft: Iterable[str], terms: Sequence[Sequence[str]]) -> bool:
+    """True when every protected name printed in the source is still in the draft.
+
+    Each term lists the printed name first, then any accepted equivalent (such as its
+    RxNorm ingredient): "metformina" may become "metformin", never another drug.
+    """
+    source_texts, draft_texts = list(source), list(draft)
+    for spellings in terms:
+        if not spellings or not spellings[0].strip():
+            continue
+        printed = _term(spellings[0])
+        if not any(printed.search(text) for text in source_texts):
+            continue
+        accepted = [_term(spelling) for spelling in spellings if spelling.strip()]
+        if not any(pattern.search(text) for pattern in accepted for text in draft_texts):
+            return False
+    return True
+
+
+def _protected_terms(item: Mapping[str, Any]) -> list[str]:
     medication = cast(dict[str, Any], item.get("medication") or {})
     return [term for term in (str(medication.get("name") or "").strip(),) if term]
 
@@ -121,14 +152,45 @@ def validate_draft(
             return "field_missing"
     if _numbers(source) != _numbers(draft):
         return "numbers_changed"
-    for term in _protected_terms(item):
-        # Whole words: "Metformina" is a changed name, not the original one.
-        pattern = re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE)
-        in_source = any(pattern.search(source.get(field) or "") for field in _FIELDS)
-        in_draft = any(pattern.search(draft.get(field) or "") for field in _FIELDS)
-        if in_source and not in_draft:
-            return "medication_name_changed"
+    if not names_kept(
+        (source.get(field) or "" for field in _FIELDS),
+        (draft.get(field) or "" for field in _FIELDS),
+        [(term,) for term in _protected_terms(item)],
+    ):
+        return "medication_name_changed"
     return None
+
+
+def wording_checks(item: Mapping[str, Any]) -> dict[str, bool] | None:
+    """The LOC-001 guard read back for review: do both languages carry the same facts?
+
+    Compares the source-language wording with the other language. None when either
+    language is missing, so an incomplete item is never reported as checked.
+    """
+    wording = cast(dict[str, dict[str, Any]], item.get("wording") or {})
+    source_locale = item.get("source_locale")
+    if source_locale not in PATIENT_LOCALES:
+        return None
+    source = wording.get(source_locale) or {}
+    other = wording.get(other_locale(cast(PatientLocale, source_locale))) or {}
+    if not all(str(text.get("title") or "").strip() for text in (source, other)):
+        return None
+    return {
+        "numbers_match": _numbers(source) == _numbers(other),
+        "medication_names_match": names_kept(
+            (str(source.get(field) or "") for field in _FIELDS),
+            (str(other.get(field) or "") for field in _FIELDS),
+            [(term,) for term in _protected_terms(item)],
+        ),
+    }
+
+
+def wording_sha256(wording: Mapping[str, Any]) -> str:
+    """Identity of one language's wording, so a stored back-translation can go stale."""
+    canonical = {field: " ".join(str(wording.get(field) or "").split()) for field in _FIELDS}
+    return hashlib.sha256(
+        json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
 
 
 def _source_wording(item: dict[str, Any]) -> dict[str, str]:
@@ -144,7 +206,16 @@ async def draft_translations(
     language, and may give ``source_locale`` when it is already known. Provider errors
     propagate so the caller decides whether a draft stays retryable.
     """
+    drafts, _, diagnostics = await _translate(items, record_telemetry=record_telemetry)
+    return drafts, diagnostics
+
+
+async def _translate(
+    items: list[dict[str, Any]], *, record_telemetry: bool = True
+) -> tuple[dict[str, TranslationDraft], dict[str, str], dict[str, int]]:
+    """Drafts, the rejection reason of every item without one, and count diagnostics."""
     drafts: dict[str, TranslationDraft] = {}
+    reasons: dict[str, str] = {}
     rejected: Counter[str] = Counter()
     schema = response_schema()
     for start in range(0, len(items), _BATCH):
@@ -182,6 +253,7 @@ async def draft_translations(
             parsed = _TranslationResponse.model_validate_json(response.text)
         except PydanticValidationError:
             rejected["schema_invalid"] += len(chunk)
+            reasons.update({str(item["id"]): "schema_invalid" for item in chunk})
             continue
         returned = {entry.id: entry for entry in parsed.items}
         for item in chunk:
@@ -189,25 +261,97 @@ async def draft_translations(
             entry = returned.get(item_id)
             if entry is None:
                 rejected["item_missing"] += 1
+                reasons[item_id] = "item_missing"
                 continue
             # A confident local detection wins over the model's own claim.
             source_locale = known[item_id] or entry.source_locale
             if source_locale is None:
                 rejected["source_locale_unknown"] += 1
+                reasons[item_id] = "source_locale_unknown"
                 continue
             draft = {field: getattr(entry, field).strip() for field in _FIELDS}
             reason = validate_draft(_source_wording(item), draft, item)
             if reason:
                 rejected[reason] += 1
+                reasons[item_id] = reason
                 continue
             drafts[item_id] = TranslationDraft(
                 source_locale=source_locale,
                 target_locale=other_locale(source_locale),
                 wording=CarePlanWording(**draft),
+                model=response.telemetry.model,
             )
     diagnostics = {
         "translation_requested_count": len(items),
         "translation_drafted_count": len(drafts),
         **{f"translation_rejected_{reason}": count for reason, count in rejected.items()},
     }
-    return drafts, diagnostics
+    return drafts, reasons, diagnostics
+
+
+def forward_back_translation(
+    spanish: Mapping[str, Any], english: Mapping[str, Any], *, model: str | None
+) -> dict[str, Any]:
+    """English drafted *from* this Spanish already reads the Spanish back into English.
+
+    Stored as the Spanish wording's English reading without a second model call. Editing
+    the Spanish makes it stale, because the stored hash no longer matches.
+    """
+    return {
+        "status": "drafted",
+        "method": "forward_translation",
+        "wording_sha256": wording_sha256(spanish),
+        "text": {field: str(english.get(field) or "").strip() for field in _FIELDS},
+        "model": model,
+        "drafted_at": datetime.now(UTC).isoformat(),
+    }
+
+
+async def draft_back_translations(
+    items: list[dict[str, Any]], *, record_telemetry: bool = True
+) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
+    """Read each item's Spanish wording back into English for an English-only reviewer.
+
+    The same route, schema and guard as a forward draft: a back-translation that changes a
+    number or a medication name is stored as rejected, never shown as the meaning of the
+    Spanish. Provider errors propagate; the caller leaves the item without one.
+    """
+    pending: list[dict[str, Any]] = []
+    for item in items:
+        spanish = cast(dict[str, Any], (item.get("wording") or {}).get("es-MX") or {})
+        if str(spanish.get("title") or "").strip():
+            pending.append(
+                {
+                    "id": str(item["id"]),
+                    **{field: str(spanish.get(field) or "") for field in _FIELDS},
+                    "source_locale": "es-MX",
+                    "medication": item.get("medication") or {},
+                }
+            )
+    if not pending:
+        return {}, {}
+    drafts, reasons, counts = await _translate(pending, record_telemetry=record_telemetry)
+    drafted_at = datetime.now(UTC).isoformat()
+    records: dict[str, dict[str, Any]] = {}
+    for entry in pending:
+        item_id = str(entry["id"])
+        base = {
+            "method": "back_translation",
+            "wording_sha256": wording_sha256(entry),
+            "drafted_at": drafted_at,
+        }
+        draft = drafts.get(item_id)
+        if draft is not None:
+            records[item_id] = {
+                **base,
+                "status": "drafted",
+                "text": draft.wording.model_dump(),
+                "model": draft.model,
+            }
+        else:
+            records[item_id] = {
+                **base,
+                "status": "rejected",
+                "reason": reasons.get(item_id, "item_missing"),
+            }
+    return records, {f"back_{key}": value for key, value in counts.items()}

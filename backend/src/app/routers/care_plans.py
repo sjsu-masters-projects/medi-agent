@@ -126,6 +126,20 @@ async def translate_care_plan_item(
 
 
 @router.post(
+    "/clinician/patients/{patient_id}/{plan_id}/items/{item_id}/back-translate",
+    summary="Read one draft item's Spanish wording back into English for review",
+)
+async def back_translate_care_plan_item(
+    patient_id: UUID,
+    plan_id: UUID,
+    item_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanService = Depends(_service),
+) -> Any:
+    return await service.back_translate_item(user.id, patient_id, plan_id, item_id)
+
+
+@router.post(
     "/clinician/patients/{patient_id}/{plan_id}/approve",
     summary="Approve and publish the complete care plan",
 )

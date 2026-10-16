@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.core import authorization_reasons as reasons
@@ -35,14 +36,49 @@ from app.services.care_plan_classification import (
 )
 from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_reconciliation import overlaps
-from app.services.care_plan_translation import draft_translations
+from app.services.care_plan_translation import (
+    draft_back_translations,
+    draft_translations,
+    forward_back_translation,
+    wording_checks,
+    wording_sha256,
+)
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_intelligence.grounding import (
     INACTIVE_MEDICATION_ACTIONS,
     medication_action,
 )
+from app.services.record_display import source_display
 
 logger = logging.getLogger(__name__)
+
+# LOC-003 (migration 066): the English reading of an item's Spanish wording, stored once
+# with the item. A review aid only; it is never projected to patients or required.
+_BACK_TRANSLATION = "wording_back_translation"
+_MISSING_COLUMN_CODES = frozenset({"PGRST204", "42703"})
+# Review data the patient's own care-plan read does not need.
+_CLINICIAN_REVIEW_FIELDS = (_BACK_TRANSLATION, "wording_checks", "source_fact_display")
+
+
+def _missing_back_translation_column(error: APIError) -> bool:
+    """True before migration 066 is applied: wording is stored, the review aid is not."""
+    message = str(getattr(error, "message", "") or error)
+    return str(getattr(error, "code", "")) in _MISSING_COLUMN_CODES and _BACK_TRANSLATION in message
+
+
+def _spanish(item: Mapping[str, Any]) -> dict[str, Any]:
+    return cast(dict[str, Any], (item.get("wording") or {}).get("es-MX") or {})
+
+
+def _back_translation_state(item: Mapping[str, Any]) -> str:
+    """missing, stale, rejected or current: what the Spanish card can honestly claim."""
+    stored = item.get(_BACK_TRANSLATION)
+    if not isinstance(stored, dict) or not stored:
+        return "missing"
+    if stored.get("wording_sha256") != wording_sha256(_spanish(item)):
+        return "stale"
+    return "rejected" if stored.get("status") == "rejected" else "current"
+
 
 _LOW_CONFIDENCE = 0.7
 _STOP_SOURCE_BLOCKER = (
@@ -164,7 +200,14 @@ class CarePlanService:
             .execute()
         )
         rows = cast(list[dict[str, Any]], result.data or [])
-        return self._hydrate_plan(rows[0]) if rows else None
+        if not rows:
+            return None
+        plan = self._hydrate_plan(rows[0])
+        plan["items"] = [
+            {key: value for key, value in item.items() if key not in _CLINICIAN_REVIEW_FIELDS}
+            for item in plan["items"]
+        ]
+        return plan
 
     def update_draft(
         self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, update: CarePlanDraftUpdate
@@ -342,8 +385,12 @@ class CarePlanService:
                 "The translation changed a number or medication name, so it was discarded. "
                 "Try again, or write it yourself."
             )
-        self._store_translation(
-            item, draft.source_locale, draft.target_locale, draft.wording.model_dump()
+        stored = self._store_translation(
+            item,
+            draft.source_locale,
+            draft.target_locale,
+            draft.wording.model_dump(),
+            model=draft.model,
         )
         self._audit(
             plan_id,
@@ -351,7 +398,63 @@ class CarePlanService:
             "translation_drafted",
             {"item_id": str(item_id), "target_locale": draft.target_locale},
         )
+        if draft.target_locale == "es-MX" and _BACK_TRANSLATION in stored:
+            # New Spanish is read back into English at once; an outage only leaves the
+            # clinician a "Back-translate" action, never a blocked review.
+            try:
+                await self._store_back_translations([stored])
+            except GenerationProviderError:
+                logger.warning("Back-translation unavailable after a re-translation")
         return self._hydrate_plan(self._plan(plan_id, patient_id))
+
+    async def back_translate_item(
+        self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, item_id: UUID
+    ) -> dict[str, Any]:
+        """Read one draft item's Spanish wording back into English for review."""
+        self._require_assignment(clinician_id, patient_id)
+        self._draft(plan_id, patient_id)
+        item = next((row for row in self._items(plan_id) if str(row["id"]) == str(item_id)), None)
+        if item is None or item.get("is_removed"):
+            raise NotFoundError("Care plan item", str(item_id))
+        if not str(_spanish(item).get("title") or "").strip():
+            raise ValidationError("Add the Spanish wording before back-translating it")
+        if _BACK_TRANSLATION not in item:
+            raise ValidationError(
+                "Back-translations are not available until the database is updated"
+            )
+        try:
+            records = await self._store_back_translations([item])
+        except GenerationProviderError:
+            raise ValidationError(
+                "Back-translation is unavailable right now. Try again, or check the Spanish "
+                "with a translation tool or a bilingual colleague."
+            ) from None
+        record = records.get(str(item_id)) or {}
+        self._audit(
+            plan_id,
+            clinician_id,
+            "back_translation_drafted",
+            {"item_id": str(item_id), "status": record.get("status")},
+        )
+        return self._hydrate_plan(self._plan(plan_id, patient_id))
+
+    def _update_item(self, item: Mapping[str, Any], payload: dict[str, Any]) -> None:
+        """Update one draft item, storing wording even before migration 066 exists."""
+
+        def write(body: dict[str, Any]) -> None:
+            self.db.table("care_plan_items").update(body).eq("id", str(item["id"])).eq(
+                "plan_version_id", str(item["plan_version_id"])
+            ).execute()
+
+        try:
+            write(payload)
+        except APIError as error:
+            if _BACK_TRANSLATION not in payload or not _missing_back_translation_column(error):
+                raise
+            logger.warning("Back-translation column is not deployed; stored the wording only")
+            remaining = {key: value for key, value in payload.items() if key != _BACK_TRANSLATION}
+            if remaining:
+                write(remaining)
 
     def _store_translation(
         self,
@@ -359,7 +462,10 @@ class CarePlanService:
         source_locale: str,
         target_locale: str,
         translated: dict[str, str],
-    ) -> None:
+        *,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """Store a drafted language and return the item as it now reads."""
         wording = dict(cast(dict[str, dict[str, str]], item.get("wording") or {}))
         origin = dict(cast(dict[str, str], item.get("wording_origin") or {}))
         wording[source_locale] = {
@@ -368,14 +474,73 @@ class CarePlanService:
         wording[target_locale] = translated
         origin.setdefault(source_locale, "source")
         origin[target_locale] = "ai_draft"
-        self.db.table("care_plan_items").update(
-            {
-                "source_locale": source_locale,
-                "wording": wording,
-                "wording_origin": origin,
-                "wording_verified": False,
-            }
-        ).eq("id", str(item["id"])).eq("plan_version_id", str(item["plan_version_id"])).execute()
+        payload: dict[str, Any] = {
+            "source_locale": source_locale,
+            "wording": wording,
+            "wording_origin": origin,
+            "wording_verified": False,
+        }
+        if _BACK_TRANSLATION in item:
+            # English drafted from the Spanish is that Spanish's English reading; new
+            # Spanish needs its own back-translation, drafted by the caller.
+            payload[_BACK_TRANSLATION] = (
+                forward_back_translation(wording["es-MX"], translated, model=model)
+                if source_locale == "es-MX"
+                else {}
+            )
+        self._update_item(item, payload)
+        return {**item, **payload}
+
+    async def _store_back_translations(
+        self, items: list[dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
+        """Draft and store the English reading of each item's Spanish wording."""
+        records, diagnostics = await draft_back_translations(items)
+        by_id = {str(item["id"]): item for item in items}
+        for item_id, record in records.items():
+            self._update_item(by_id[item_id], {_BACK_TRANSLATION: record})
+        if diagnostics:
+            self._log_translation_outcome(UUID(str(items[0]["plan_version_id"])), diagnostics)
+        return records
+
+    async def _draft_missing_back_translations(self, plan_id: UUID) -> dict[str, int]:
+        """Give every Spanish wording a current English reading; never fails generation.
+
+        Spanish that is the source of an unedited English draft needs no model call: that
+        English is its reading. Anything else (Spanish drafted from English, or edited
+        Spanish) is back-translated by the model under the same guard.
+        """
+        pending = [
+            item
+            for item in self._items(plan_id)
+            if not item.get("is_removed")
+            and _BACK_TRANSLATION in item
+            and str(_spanish(item).get("title") or "").strip()
+            and _back_translation_state(item) in ("missing", "stale")
+        ]
+        if not pending:
+            return {}
+        model_items: list[dict[str, Any]] = []
+        forward = 0
+        for item in pending:
+            origin = cast(dict[str, str], item.get("wording_origin") or {})
+            english = cast(dict[str, Any], (item.get("wording") or {}).get("en-US") or {})
+            if (
+                item.get("source_locale") == "es-MX"
+                and origin.get("es-MX") == "source"
+                and origin.get("en-US") == "ai_draft"
+                and str(english.get("title") or "").strip()
+            ):
+                record = forward_back_translation(_spanish(item), english, model=None)
+                self._update_item(item, {_BACK_TRANSLATION: record})
+                forward += 1
+            else:
+                model_items.append(item)
+        drafted = await self._store_back_translations(model_items) if model_items else {}
+        return {
+            "back_translation_forward_count": forward,
+            "back_translation_stored_count": len(drafted),
+        }
 
     async def _draft_missing_translations(self, plan_id: UUID) -> dict[str, int]:
         """Fill the second language for draft items that lack one; never fails generation."""
@@ -395,7 +560,11 @@ class CarePlanService:
             draft = drafts.get(str(item["id"]))
             if draft is not None:
                 self._store_translation(
-                    item, draft.source_locale, draft.target_locale, draft.wording.model_dump()
+                    item,
+                    draft.source_locale,
+                    draft.target_locale,
+                    draft.wording.model_dump(),
+                    model=draft.model,
                 )
         return diagnostics
 
@@ -427,7 +596,7 @@ class CarePlanService:
     def approve(
         self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, note: str
     ) -> dict[str, Any]:
-        self.publication_snapshot(clinician_id, patient_id, plan_id)
+        _, items = self.publication_snapshot(clinician_id, patient_id, plan_id)
         result = self.db.rpc(
             "approve_care_plan_version",
             {
@@ -436,7 +605,38 @@ class CarePlanService:
                 "p_note": note.strip(),
             },
         ).execute()
+        self._record_attestation(plan_id, clinician_id, items)
         return cast(dict[str, Any], result.data or {})
+
+    def _record_attestation(
+        self, plan_id: UUID, clinician_id: UUID, items: list[dict[str, Any]]
+    ) -> None:
+        """Record what the approving clinician could check, item by item (LOC-003).
+
+        English is reviewed directly; Spanish through its stored back-translation and the
+        number and medication-name checks. A bilingual colleague's review is optional, so
+        a missing back-translation is recorded, not blocking. Statuses only, never text.
+        """
+        checked: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if item.get("is_removed"):
+                continue
+            checks = wording_checks(item) or {}
+            checked[str(item["id"])] = {
+                "source_locale": item.get("source_locale"),
+                "spanish_back_translation": _back_translation_state(item),
+                "numbers_match": checks.get("numbers_match"),
+                "medication_names_match": checks.get("medication_names_match"),
+            }
+        try:
+            self._audit(
+                plan_id,
+                clinician_id,
+                "wording_attestation_recorded",
+                {"attestation": "english_reviewed_spanish_via_back_translation", "items": checked},
+            )
+        except Exception:  # noqa: BLE001 - the plan is already published; keep the result
+            logger.exception("Could not record the wording attestation for a published plan")
 
     def publication_snapshot(
         self, clinician_id: UUID, patient_id: UUID, plan_id: UUID
@@ -681,6 +881,9 @@ class CarePlanService:
             diagnostics: dict[str, int | str] = dict(
                 await self._draft_missing_translations(plan_id)
             )
+            # LOC-003: the English reading of each Spanish wording, generated once here
+            # rather than on every view; carried-forward items get theirs too.
+            diagnostics.update(await self._draft_missing_back_translations(plan_id))
         except GenerationProviderError as error:
             diagnostics = {"translation_provider_error": error.code.value}
         except Exception:  # noqa: BLE001 - the draft is already durable and reviewable
@@ -1202,11 +1405,16 @@ class CarePlanService:
                         }
                     )
         peers = overlaps(items, facts) if plan.get("status") == "draft" else {}
+        # LOC-003: English glosses of Spanish source facts, written once at ingestion.
+        displays = {str(fact["id"]): source_display(fact) for fact in facts}
         return {
             **plan,
             "items": [
                 {
                     **item,
+                    _BACK_TRANSLATION: self._back_translation_view(item),
+                    "wording_checks": wording_checks(item),
+                    "source_fact_display": displays.get(str(item.get("source_fact_id"))),
                     "overlapping_item_ids": peers.get(str(item["id"]), []),
                     "imported_evidence": bool(
                         origins.get(str(item.get("source_fact_id")))
@@ -1219,6 +1427,15 @@ class CarePlanService:
                 for item in items
             ],
         }
+
+    @staticmethod
+    def _back_translation_view(item: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The stored English reading of the Spanish, and whether it is still current."""
+        stored = item.get(_BACK_TRANSLATION)
+        if not isinstance(stored, dict) or not stored:
+            return None
+        view = {key: value for key, value in stored.items() if key != "wording_sha256"}
+        return {**view, "current": _back_translation_state(item) in ("current", "rejected")}
 
     def _audit(
         self, plan_id: UUID, actor_id: UUID | None, event: str, data: dict[str, Any]

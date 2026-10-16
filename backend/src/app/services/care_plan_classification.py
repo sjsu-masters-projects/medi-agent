@@ -17,6 +17,7 @@ from app.adk.background_generation import generate_for_workload
 from app.adk.registry import Workload
 from app.models.care_plan import CarePlanCategory, CarePlanDraftProposal
 from app.services.care_plan_prompts import CARE_PLAN_DRAFT_SYSTEM, CARE_PLAN_DRAFT_USER
+from app.services.record_display import source_value
 
 
 class CarePlanClassificationError(ValueError):
@@ -35,7 +36,8 @@ def prompt_for_facts(facts: list[dict[str, Any]], *, repair: bool = False) -> st
         {
             "source_fact_id": str(fact["id"]),
             "fact_type": fact["fact_type"],
-            "value": fact.get("value") or {},
+            # Printed fields only; English display text (LOC-003) is not evidence.
+            "value": source_value(fact.get("value") or {}),
             "confidence_score": fact.get("confidence_score"),
             "uncertainty": fact.get("uncertainty") or [],
         }

@@ -1199,6 +1199,64 @@ def test_carried_forward_wording_is_kept_but_must_be_verified_again(sql) -> None
     )
 
 
+BACK_TRANSLATION = {
+    "status": "drafted",
+    "method": "back_translation",
+    "wording_sha256": "a" * 64,
+    "text": {"title": "Walk", "instructions": "Synthetic walk", "frequency": "daily"},
+    "model": "synthetic-model",
+    "drafted_at": "2026-10-14T00:00:00Z",
+}
+
+
+def setup_back_translation(sql):
+    setup_bilingual(sql)
+    sql((MIGRATIONS / "066_care_plan_wording_back_translation.sql").read_text())
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        {"status": "drafted"},
+        {**BACK_TRANSLATION, "status": "approved"},
+        {**BACK_TRANSLATION, "method": "guess"},
+        {**BACK_TRANSLATION, "wording_sha256": "not-a-hash"},
+        {**BACK_TRANSLATION, "text": {"title": "Walk", "note": "extra"}},
+        {**BACK_TRANSLATION, "text": {"title": "x" * 301}},
+        {**BACK_TRANSLATION, "spanish": "Caminar"},
+        "Walk",
+    ],
+)
+def test_back_translation_shape_is_enforced_by_the_table(sql, stored) -> None:
+    setup_back_translation(sql)
+    assert "check constraint" in sql(
+        f"UPDATE care_plan_items SET wording_back_translation='{json.dumps(stored)}'",
+        succeeds=False,
+    )
+
+
+def test_back_translation_is_a_review_aid_never_projected_or_required(sql) -> None:
+    setup_back_translation(sql)
+    assert sql("SELECT DISTINCT wording_back_translation::text FROM care_plan_items") == "{}"
+    rejected = {
+        "status": "rejected",
+        "method": "back_translation",
+        "wording_sha256": "b" * 64,
+        "reason": "numbers_changed",
+        "drafted_at": "2026-10-14T00:00:00Z",
+    }
+    sql(f"UPDATE care_plan_items SET wording_back_translation='{json.dumps(rejected)}'")
+    sql(f"""UPDATE care_plan_items SET source_locale='en-US', wording='{BILINGUAL}',
+      wording_origin='{{"en-US":"source","es-MX":"ai_draft"}}', wording_verified=true,
+      wording_back_translation='{json.dumps(BACK_TRANSLATION)}'""")
+    # Approval needs no back-translation, and a stored one never reaches the patient.
+    sql(f"SELECT approve_care_plan_version('{PLAN}', '{PATIENT}', 'Synthetic review')")
+    projected = json.loads(sql("SELECT patient_wording::text FROM obligations WHERE is_active"))
+    assert projected == json.loads(BILINGUAL)
+    projection = sql("SELECT row_to_json(obligations)::text FROM obligations WHERE is_active")
+    assert "synthetic-model" not in projection and "back_translation" not in projection
+
+
 @pytest.mark.parametrize("role", ["anon", "authenticated"])
 def test_bilingual_helpers_are_not_browser_callable(sql, role) -> None:
     setup_bilingual(sql)

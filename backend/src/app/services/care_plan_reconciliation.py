@@ -6,10 +6,13 @@ import json
 import re
 from typing import Any
 
+from app.services.record_display import source_value
+
 
 def evidence_key(fact: dict[str, Any]) -> str | None:
     """Exact structured evidence, independent of document/fact identity."""
-    value = fact.get("value") or {}
+    # Printed fields only: English display text is a rendering, not evidence identity.
+    value = source_value(fact.get("value") or {})
     identity = "name" if fact.get("fact_type") == "medication" else "description"
     if not value.get(identity):
         return None

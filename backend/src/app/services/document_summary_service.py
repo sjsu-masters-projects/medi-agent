@@ -23,6 +23,7 @@ from app.agents.ingestion.prompts import GENERATE_SUMMARY_SYSTEM, summary_prompt
 from app.clients.model_router import TaskType, get_router
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.explanation_service import normalize_patient_summary, numbers_in
+from app.services.record_display import DISPLAY_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,9 @@ _FACT_GROUPS = {
     "appointment": "appointments",
 }
 # Derived explanations of a fact that are not source text; never shown to the model as a
-# number source, and never needed to check one.
-_NON_SOURCE_KEYS = frozenset({"consistency"})
+# number source, and never needed to check one. The clinician's English display text
+# (LOC-003) is a rendering of the printed fields, not a second source.
+_NON_SOURCE_KEYS = frozenset({"consistency", DISPLAY_KEY})
 
 
 def unsupported_numbers(summary: str, sources: dict[str, list[Any]]) -> set[str]:

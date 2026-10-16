@@ -35,6 +35,7 @@ from app.services.document_intelligence.models import (
 from app.services.document_intelligence.pipeline import DocumentIntelligenceService
 from app.services.document_preview_service import DocumentPreviewService
 from app.services.document_summary_service import is_missing_summary_column_error
+from app.services.record_translation import IngredientResolver, english_display
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +50,40 @@ class IngestionService:
         db: Client,
         *,
         intelligence: DocumentIntelligenceService | None = None,
+        ingredient_resolver: IngredientResolver | None = None,
     ) -> None:
         self.db = db
         self._intelligence = intelligence or DocumentIntelligenceService()
+        self._ingredient_resolver = ingredient_resolver or self._rxnorm_ingredient
+
+    async def _rxnorm_ingredient(self, name: str) -> str | None:
+        """The RxNorm ingredient Nora already resolves names to, cached per name."""
+        from app.services.health_knowledge_service import HealthKnowledgeService
+
+        ingredient = await HealthKnowledgeService(self.db).ingredient_of(name)
+        return ingredient.name if ingredient else None
+
+    async def _english_display(
+        self, items: list[tuple[str, dict[str, Any]]], document_text: str
+    ) -> dict[int, dict[str, Any]]:
+        """English display fields for facts read in Spanish; never fails ingestion."""
+        try:
+            records, diagnostics = await english_display(
+                items, document_text=document_text, resolve_ingredient=self._ingredient_resolver
+            )
+        except Exception:  # noqa: BLE001 - the printed facts are still complete evidence
+            logger.exception("English display translation failed during ingestion")
+            return {}
+        if diagnostics:
+            logger.info(
+                "%s",
+                json.dumps(
+                    {"event": "record_translation_outcome", **diagnostics},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        return records
 
     async def ingest_document(
         self,
@@ -167,6 +199,9 @@ class IngestionService:
                 "review the original document."
             )
         items = items_from_extraction_result(extraction_result)
+        # Decided for LOC-003: English for a Spanish document is written once, here, and
+        # stored with each fact, so every clinician sees the same guarded English.
+        display = await self._english_display(items, model_text)
         try:
             registered = DocumentEvidenceCandidateService(self.db).register(
                 patient_id=patient_id,
@@ -175,6 +210,7 @@ class IngestionService:
                 extraction=extraction,
                 items=items,
                 model_version=model_version,
+                english_display=display,
             )
         except Exception as exc:  # noqa: BLE001 - do not strand a claimed row in processing
             logger.exception("Could not register document candidates for %s", document_id)

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -41,6 +41,7 @@ from app.services.document_intelligence.models import (
     PageQuality,
     WordBox,
 )
+from app.services.record_display import attach as attach_display
 
 SOURCE_SYSTEM = "document_intelligence"
 REVIEW_NOTE = "Document extraction requires clinician review before clinical use."
@@ -281,7 +282,13 @@ class DocumentEvidenceCandidateService:
         extraction: DocumentExtraction,
         items: Sequence[tuple[str, dict[str, Any]]],
         model_version: str | None = None,
+        english_display: Mapping[int, Mapping[str, Any]] | None = None,
     ) -> CandidateRegistrationSummary:
+        """Register grounded candidates; ``english_display`` is keyed by item position.
+
+        English display text is attached after grounding, so it covers only the printed
+        fields that were found on a page; it never decides whether a fact is registered.
+        """
         if extraction.route in (ExtractionRoute.REJECTED, ExtractionRoute.CLINICIAN_ONLY):
             raise ValueError(
                 f"Extraction route {extraction.route.value!r} does not permit candidates"
@@ -289,6 +296,8 @@ class DocumentEvidenceCandidateService:
         summary = CandidateRegistrationSummary()
         for index, (fact_type, value) in enumerate(items):
             grounded = ground_item(extraction, fact_type, value, policy=self.policy)
+            if english_display and index in english_display:
+                grounded.value = attach_display(grounded.value, english_display[index])
             # A page citation is a safety boundary, not a best-effort enrichment.  A
             # proposed value without its primary value on the source page must be
             # surfaced for review rather than written as a candidate with a synthetic

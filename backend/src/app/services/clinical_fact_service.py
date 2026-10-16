@@ -14,6 +14,7 @@ from app.models.clinical_fact import (
     ClinicalFactReviewState,
     EvidenceCitationCreate,
 )
+from app.services.record_display import audit_summary, keep_display_if_unchanged
 
 
 class ClinicalFactService:
@@ -50,11 +51,16 @@ class ClinicalFactService:
         for citation in candidate.citations:
             self._create_citation(fact_id, provenance_id, citation)
 
+        event_data: dict[str, Any] = {"review_state": ClinicalFactReviewState.PENDING_REVIEW.value}
+        display = audit_summary(candidate.value)
+        if display is not None:
+            # English written at ingestion is audited with the fact it describes.
+            event_data["display_en"] = display
         self._audit(
             fact_id=fact_id,
             actor_id=actor_id,
             event_type="created",
-            event_data={"review_state": ClinicalFactReviewState.PENDING_REVIEW.value},
+            event_data=event_data,
         )
         return fact
 
@@ -107,6 +113,11 @@ class ClinicalFactService:
             raise ValidationError("Only pending clinical facts can be corrected")
         if fact.get("reconciliation_state") not in {None, "not_started", "deferred"}:
             raise ValidationError("Reconciled clinical facts are immutable evidence")
+        # English display text describes the printed wording; a correction that changes
+        # that wording drops it rather than leave English for text no longer stored.
+        value = keep_display_if_unchanged(
+            cast(dict[str, Any], fact.get("value") or {}), value, str(fact.get("fact_type") or "")
+        )
 
         updated = self._update_one(
             "clinical_facts",
