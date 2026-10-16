@@ -1,6 +1,6 @@
 # UX-005 — ADR review and MedWatch workspace
 
-Status: accepted design (October 16, 2026). Owner: Rajeev. Builds on PV-001
+Status: accepted design (October 16, 2026), implemented on the feature branch pending the deployed check. Owner: Rajeev. Builds on PV-001
 (ADR review) and PV-002/PV-001-C (Form 3500 drafts and PDF export).
 
 ## Problem

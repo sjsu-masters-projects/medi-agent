@@ -65,7 +65,9 @@ Invite history is intentionally role-sensitive:
 - login flow: `src/app/(auth)/login/page.tsx`
 - admin bootstrap: `src/app/(auth)/signup/admin/page.tsx`
 - dashboard review queue: `src/app/(dashboard)/review-queue/page.tsx`
-- ADR evidence queue: `src/app/(dashboard)/medwatch/page.tsx`
+- ADR review queue: `src/app/(dashboard)/adr-reviews/page.tsx`; case page: `src/app/(dashboard)/adr-reviews/[assessmentId]/page.tsx`
+- MedWatch reports list: `src/app/(dashboard)/medwatch/page.tsx`; report workspace: `src/app/(dashboard)/medwatch/[draftId]/page.tsx`
+- shared list pieces (tabs, search, sort, pagination, URL state): `src/components/features/work-list.tsx`
 - patient deep dive: `src/app/(dashboard)/patients/[id]/page.tsx`
 - patient deep dive documents panel: `src/components/features/patient-documents-panel.tsx`
 - settings / invite history: `src/app/(dashboard)/settings/page.tsx`
@@ -79,7 +81,22 @@ Invite history is intentionally role-sensitive:
 - Review actions are surfaced in both the dedicated review queue and the patient deep dive documents tab.
 - The deep-dive documents experience is intentionally factored into `PatientDocumentsPanel` so document review state, modal flows, and refresh behavior stay isolated from the rest of the deep-dive page.
 
+## Routes: ADR Reviews and MedWatch (UX-005)
+
+| Route | Purpose |
+| --- | --- |
+| `/adr-reviews` | Compact work queue, one row per case. Tabs: Awaiting review, Information requested, Reviewed, Dismissed (with counts). Search by patient, medicine or reaction; sort by score or age; 10 rows per page. Tab, search, sort and page live in the URL query, so Back from a case restores them. |
+| `/adr-reviews/[assessmentId]` | Case page: summary, evidence with provenance labels, collapsed scoring details, missing information, and a side action panel (stacked under the evidence below 1024 px). Mark reviewed is the one primary action; Prepare MedWatch draft opens the report; a reviewed case with a report links to it. |
+| `/patients/[id]?tab=adr` | The patient's ADR cases, current and past, linking to the case page. |
+| `/medwatch` | Reports table. Tabs: Drafts, Approved, Submitted, Discarded. `/medwatch?assessment=<id>` (an old link) redirects to `/adr-reviews/<id>`. |
+| `/medwatch/[draftId]` | Report stepper: Complete (gate issues first, link to each field; Form 3500 sections collapsed) → Preview (the watermarked PDF inline) → Approve (attestation dialog) → Download and record submission. |
+
+- The preview is `GET /api/v1/clinicians/me/medwatch-drafts/{id}/preview.pdf` fetched with the bearer token and shown from a blob URL that is revoked on leaving the step. It is watermarked "DRAFT – not for submission", is not an export, and records no audit event. Continuing from Complete saves pending edits first so the PDF matches the screen. The audited, unwatermarked download stays on the Download step after approval.
+- Layouts: below 768 px the tables become stacked rows and the stepper reads "Step N of 4"; from 768 px a grid table and a numbered stepper. Neither page scrolls horizontally at 390 px or 1280 px.
+
 ## ADR Review Workflow
+
+- The cases page and report page replace the single `/medwatch` page: where this section says "queue" or "editor", read the routes above.
 
 - `GET /api/v1/clinicians/me/adr-assessments` returns draft assessments only for patients assigned to the authenticated clinician.
 - `POST /api/v1/clinicians/me/adr-assessments/{assessment_id}/review` atomically marks a draft reviewed, dismisses it with a reason, or records an information request. The database rechecks active assignment and writes an immutable audit event.
@@ -93,7 +110,7 @@ Invite history is intentionally role-sensitive:
 - An approved draft offers **Download Form 3500 (PDF)**. A confirmation states "MediAgent did not submit this report. You submit it to FDA." before the official fillable PDF is saved under the server filename (`fda-3500-<id prefix>-not-submitted.pdf`). Each download is audited by the server and is never retried automatically. The JSON export stays as a secondary action. An approved earlier draft that cannot fill the PDF says to discard it and prepare a new draft.
 - **Record FDA submission** records a submission the clinician made outside MediAgent: date (not in the future or before approval), method (MedWatch Online, fax, mail, or other with a description), an optional FDA reference and an attestation. Recording sends nothing to FDA. The draft then appears read-only under **Submitted** with "Submitted by <clinician> outside MediAgent on <date>", its amendment history and **Amend record** (date, method or reference, with a required reason; the original record is kept).
 - **Discard draft** (for a draft, or an approved draft without a submission record) asks for a reason and returns the ADR assessment to review. Discarded drafts are listed read-only under **Discarded** with the reason and date.
-- The Active, Submitted and Discarded switch is bound to `?state=` on `/medwatch`. The application has no FDA filing action and never presents an export or a download as a submission.
+- The Drafts, Approved, Submitted and Discarded tabs are bound to `?tab=` on `/medwatch`. The application has no FDA filing action and never presents an export or a download as a submission.
 
 ## Care-plan revision review
 
