@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
 import { SymptomIntakePanel } from "@/components/features/symptom-intake-panel";
-import { ADRFollowUpPanel } from "@/components/features/adr-follow-up-panel";
+import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
+import { ADRFollowUpView } from "@/components/features/adr-follow-up-view";
+import { getADRFollowUpCopy } from "@/content/adr-follow-up-copy";
 import { todayConversationId } from "@/services/chat-api";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
@@ -28,6 +30,11 @@ export default function ChatPage() {
     const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
     const [careTeamOpened, setCareTeamOpened] = useState(false);
     const searchParams = useSearchParams();
+    const router = useRouter();
+    // `?view=follow-up` hosts the ADR follow-up view; `request` wins over `assessment`.
+    const followUpMode = searchParams.get("view") === "follow-up";
+    const followUpRequestId = followUpMode ? searchParams.get("request") : null;
+    const followUpAssessmentId = followUpMode && !followUpRequestId ? searchParams.get("assessment") : null;
     const careTeamDestination = searchParams.get("view") === "care-team";
     const conversationId = careTeamDestination ? searchParams.get("conversation") : null;
     const recipientId = careTeamDestination ? searchParams.get("recipient") : null;
@@ -47,6 +54,7 @@ export default function ChatPage() {
     const headingRef = useRef<HTMLHeadingElement | null>(null);
     const noraOpenRef = useRef<HTMLButtonElement | null>(null);
     const previousInbox = useRef(inbox);
+    const wasFollowUp = useRef(false);
     const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
@@ -64,12 +72,18 @@ export default function ChatPage() {
             : message);
     const voiceBusy = ["listening", "processing", "playing"].includes(voiceStatus);
     const back = locale === "es-MX" ? "Volver a mensajes" : "Back to messages";
-    const threadOpen = (!inbox && conversation === "assistant") || Boolean(humanThreadId);
+    const threadOpen = (!inbox && conversation === "assistant") || Boolean(humanThreadId) || followUpMode;
 
     useEffect(() => {
         setConversationOpen(threadOpen);
         return () => setConversationOpen(false);
     }, [threadOpen, setConversationOpen]);
+
+    useEffect(() => {
+        if (followUpMode) headingRef.current?.focus();
+        else if (wasFollowUp.current) noraOpenRef.current?.focus();
+        wasFollowUp.current = followUpMode;
+    }, [followUpMode]);
 
     useEffect(() => {
         if (previousInbox.current !== inbox) {
@@ -99,6 +113,20 @@ export default function ChatPage() {
     }, [assistantDraft, isTyping, messages, assistantThread, sessionId, loading]);
 
     const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
+    if (followUpMode) {
+        const followUpCopy = getADRFollowUpCopy(locale);
+        const leaveFollowUp = () => { setInbox(true); setCareTeamOpened(true); router.replace("/chat"); };
+        return <div className="flex min-h-dvh w-full flex-col gap-3 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] text-ink" lang={locale}>
+            <header className="sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md">
+                <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface" aria-label={back} onClick={leaveFollowUp}><Icon name="back" className="h-[22px] w-[22px]" /></button>
+                <div className="min-w-0 flex-1">
+                    <h1 ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold leading-tight outline-none">{followUpCopy.entry.title}</h1>
+                </div>
+            </header>
+            <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
+            <ADRFollowUpView locale={profile ? locale : undefined} timeZone={profile?.timezone} requestId={followUpRequestId} assessmentId={followUpAssessmentId} onBack={leaveFollowUp} />
+        </div>;
+    }
     return <div className={`flex w-full flex-col text-ink ${assistantThread ? "h-dvh min-h-0 overflow-hidden" : threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
         <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "shrink-0 sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
             {!inbox && <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
@@ -130,6 +158,7 @@ export default function ChatPage() {
             <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15" onClick={() => openNora()}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}<Icon name="arrow" className="h-4 w-4" /></button>
             </div>
         </section> : null}
+        {inbox && <div hidden={Boolean(humanThreadId)} className="empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>}
         {inbox && !humanThreadId && <NoraConversations locale={locale} activeSessionId={sessionId} onOpen={openNora} />}
         {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-3">
             <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
@@ -156,7 +185,7 @@ export default function ChatPage() {
                 }} className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             <SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId={visibleMessages.findLast((message) => message.role === ChatRole.USER)?.id} />
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
-            <ADRFollowUpPanel />
+            <div className="empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>
             {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
                 <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
@@ -176,7 +205,7 @@ export default function ChatPage() {
             {voiceError && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
             <div className="flex flex-1 flex-col gap-3 pt-1" aria-busy={loading}>
                 {loading && <p className="text-center text-sm text-muted" role="status">{controls.loading}</p>}
-                {visibleMessages.map((message) => <ChatBubble key={message.id} content={message.content}
+                {visibleMessages.map((message) => <ChatBubble key={message.id} attachments={message.role === ChatRole.ASSISTANT ? message.attachments : undefined} content={message.content}
                     language={message.language} locale={locale} role={message.role === ChatRole.USER ? "user" : "assistant"}
                     timestamp={message.createdAt} onPlayAudio={message.role === ChatRole.ASSISTANT && (Boolean(message.audioUrl) || canPlayAssistantAudio) ? () => handlePlayAssistantMessage(message) : undefined} />)}
                 {!loading && !documentContext && !messages.some((message) => message.role === ChatRole.USER) && <section className="ma-enter space-y-2.5 pt-1">

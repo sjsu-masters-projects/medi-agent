@@ -500,3 +500,151 @@ def test_legacy_obligation_payload_stages_a_provenance_backed_draft(
             "blocker_reason": None,
         }
     )
+
+
+def _stop_fact(action_text: str = "STOP") -> dict[str, object]:
+    return {
+        "id": "00000000-0000-0000-0000-000000000104",
+        "fact_type": "medication",
+        "value": {
+            "name": "Metformin",
+            "dosage": "500 mg",
+            "frequency": "twice daily",
+            "route": "oral",
+            "instructions": "Stop taking metformin.",
+            "status": action_text,
+            "medication_action": "stopped",
+        },
+        "confidence_score": 0.98,
+    }
+
+
+def test_document_that_stops_a_medicine_blocks_the_matching_instruction() -> None:
+    facts = [_facts()[0], _stop_fact()]
+    conflicts = CarePlanService._medication_conflicts(facts)
+
+    active = conflicts[str(MEDICATION_FACT_ID)]
+    assert active["kind"] == "medication_stopped"
+    assert active["stop_fact_ids"] == ["00000000-0000-0000-0000-000000000104"]
+    item = CarePlanService(MagicMock())._item_from_fact(
+        facts[0], category="medication", conflict=active
+    )
+    assert "says to stop or hold this medication" in item["blocker_reason"]
+    # The clinician may decide the medicine continues; that decision is theirs.
+    assert (
+        CarePlanService._blocker(
+            category="medication",
+            title=item["title"],
+            instructions=item["instructions"],
+            frequency=item["frequency"],
+            medication=item["medication"],
+            confidence=0.98,
+            conflict=active,
+            removed=False,
+            confirmed=True,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_stop_line_itself_can_never_be_published_as_a_today_task(confirmed: bool) -> None:
+    facts = [_stop_fact()]
+    conflict = CarePlanService._medication_conflicts(facts)[str(facts[0]["id"])]
+    assert conflict["kind"] == "medication_stop_source"
+    item = CarePlanService(MagicMock())._item_from_fact(
+        facts[0], category="medication", conflict=conflict
+    )
+    blocker = CarePlanService._blocker(
+        category="medication",
+        title=item["title"],
+        instructions=item["instructions"],
+        frequency=item["frequency"],
+        medication=item["medication"],
+        confidence=0.98,
+        conflict=conflict,
+        removed=False,
+        confirmed=confirmed,
+    )
+    assert blocker is not None and "cannot become a Today activity" in blocker
+    removed = CarePlanService._blocker(
+        category="medication",
+        title=item["title"],
+        instructions=item["instructions"],
+        frequency=item["frequency"],
+        medication=item["medication"],
+        confidence=0.98,
+        conflict=conflict,
+        removed=True,
+        confirmed=confirmed,
+    )
+    assert removed is None
+
+
+def test_printed_stop_without_a_stored_action_is_still_recognized() -> None:
+    legacy = _stop_fact("Discontinue")
+    legacy["value"].pop("medication_action")  # type: ignore[union-attr]
+    conflicts = CarePlanService._medication_conflicts([_facts()[0], legacy])
+    assert conflicts[str(legacy["id"])]["kind"] == "medication_stop_source"
+
+
+def test_changed_medication_needs_the_new_dose_confirmed() -> None:
+    changed = {
+        "id": "00000000-0000-0000-0000-000000000105",
+        "fact_type": "medication",
+        "value": {
+            "name": "Lisinopril",
+            "dosage": "10 mg",
+            "frequency": "daily",
+            "route": "oral",
+            "instructions": "1 tablet by mouth daily",
+            "status": "Increase to 20 mg daily",
+            "medication_action": "changed",
+        },
+        "confidence_score": 0.98,
+    }
+    conflict = CarePlanService._medication_conflicts([changed])[str(changed["id"])]
+    assert conflict["kind"] == "medication_changed"
+    assert conflict["printed_change"] == "Increase to 20 mg daily"
+    item = CarePlanService(MagicMock())._item_from_fact(
+        changed, category="medication", conflict=conflict
+    )
+    assert "Enter the new dose" in item["blocker_reason"]
+    assert (
+        CarePlanService._blocker(
+            category="medication",
+            title="Lisinopril 20 mg",
+            instructions="1 tablet by mouth daily",
+            frequency="daily",
+            medication={
+                "name": "Lisinopril",
+                "dosage": "20 mg",
+                "frequency": "daily",
+                "route": "oral",
+            },
+            confidence=0.98,
+            conflict=conflict,
+            removed=False,
+            confirmed=True,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "name,dosage,title",
+    [
+        ("Atorvastatin 20 mg tablet", "1 tablet", "Atorvastatin 20 mg tablet"),
+        ("Metformin", "500 mg", "Metformin 500 mg"),
+        ("Insulin glargine 100 units/mL", "10 units", "Insulin glargine 100 units/mL"),
+        ("Hydrocortisone cream 1%", "thin layer", "Hydrocortisone cream 1%"),
+        ("Lisinopril", "", "Lisinopril"),
+    ],
+)
+def test_medication_title_does_not_repeat_the_dose_after_a_printed_strength(
+    name: str, dosage: str, title: str
+) -> None:
+    fact = deepcopy(_facts()[0])
+    fact["value"].update(name=name, dosage=dosage)
+    item = CarePlanService(MagicMock())._item_from_fact(fact, category="medication", conflict={})
+    assert item["title"] == title

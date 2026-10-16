@@ -1,5 +1,7 @@
 """Custom exception hierarchy — catch `MediAgentError` to handle all app errors uniformly."""
 
+from typing import Any
+
 
 class MediAgentError(Exception):
     """Base. All app exceptions carry `message` and `code`."""
@@ -56,9 +58,27 @@ class AuthorizationError(MediAgentError):
 
 
 class ValidationError(MediAgentError):
-    """Business rule violation — not Pydantic schema validation."""
+    """Business rule violation — not Pydantic schema validation.
 
-    def __init__(self, message: str, *, code: str = "VALIDATION_ERROR"):
+    `details` is optional structured data for the client (for example the items that
+    block an approval); it must never contain stored clinical text.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "VALIDATION_ERROR",
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(message=message, code=code)
+        self.details = details
+
+
+class ConflictError(MediAgentError):
+    """The record changed since the caller read it (HTTP 409); refresh and retry."""
+
+    def __init__(self, message: str, *, code: str = "CONFLICT"):
         super().__init__(message=message, code=code)
 
 

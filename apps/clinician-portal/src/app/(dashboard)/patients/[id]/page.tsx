@@ -17,6 +17,7 @@ import { SmartImportReviewPanel } from "@/components/features/smart-import-revie
 import Link from "next/link";
 import { usePatientDetail } from "@/hooks/use-patient-detail";
 import type { RootState } from "@/store/store";
+import { formatClinicianDateTime } from "@/utils/dates";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
@@ -633,7 +634,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                     Generated{" "}
                                     <span className="font-mono">
                                         {patient.latest_soap_note?.generated_at
-                                            ? new Date(patient.latest_soap_note.generated_at).toLocaleString()
+                                            ? formatClinicianDateTime(patient.latest_soap_note.generated_at)
                                             : "recently"}
                                     </span>
                                 </p></details>

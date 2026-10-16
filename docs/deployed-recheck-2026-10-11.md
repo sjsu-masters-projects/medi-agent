@@ -1,9 +1,10 @@
-# Deployed portal recheck — October 11, 2026
+# Deployed portal recheck — October 11–12, 2026
 
 Synthetic Morgan Ellis (patient, `app.mediagent.live`) and Elena Park (clinician,
 `clinician.mediagent.live`) only, on main `8b93b48` (#149) as deployed. The requester
 signed in to both accounts; the checks below were run in a browser against the
-production deployment. This is prototype acceptance evidence, not a clinical,
+production deployment. Later sections record checks after later merges (#151–#157)
+and name their own accounts. This is prototype acceptance evidence, not a clinical,
 compliance or production-readiness certification.
 
 ## Screens and widths
@@ -94,3 +95,139 @@ compliance or production-readiness certification.
   rows were found, in English and Spanish where both exist, for example Osteoarthritis /
   Osteoartritis and Eczema / Eccema; the run logged `scheduled_job.finished` (success).
   Three subjects cached in one language were not seeded in the other (OPS-004).
+
+## After #154 deployed (night)
+
+- Document citations: as Morgan, Records → Metformin prescription → Ask about this
+  document. In English the answer ended "Source: Metformin prescription
+  (Morgan-Ellis_Metformin-Medication-Order_2026-10-02.pdf)"; in Spanish "Fuente: Receta
+  de metformina (…pdf)". Both answers matched the document (one tablet twice daily with
+  meals) and pointed to Elena for changes. No page number was shown because Nora answered
+  from the document summary; page numbers appear only when page-level details are read.
+
+## EMAIL-001 on production (October 12)
+
+After #152, #156 and #157 deployed, with migrations 057 and 058 applied. Mail went to
+requester-owned test accounts (`+clinician` and `+patient` addresses of one university
+mailbox) attached to synthetic profiles; Morgan and Elena's login addresses were not
+changed. The requester typed every password and one-time code.
+
+- **Clinician invitation:** delivered about one second after sending; SPF, DKIM and
+  DMARC passed. The first one landed in Spam (new sending domain). The link carries its
+  token after `#` and has no click-tracking redirect. Signup created the account and
+  joined Cedar Grove; a non-admin's invitation attempt was refused with a clear message.
+  After #156, only clinic admins see the invitation form.
+- **Patient verification code:** arrived in the Inbox. Verifying did not turn on any
+  notice; opt-in was a separate save.
+- **Notices:** an unread care-team message notice and, with the patient set to Spanish,
+  an appointment-offer notice ("Horarios de cita disponibles") both arrived in the Inbox.
+  Neither contained health details; both linked only to
+  `https://app.mediagent.live/notifications`.
+- **Opt-out:** with appointment notices turned off, a new appointment offer created the
+  in-app notification ("Propuesta de cita") and no outbox row. The setting and the
+  patient's English language were restored afterwards.
+- **Delivery status:** every send stays "accepted". The backend logs that status checks
+  need a full-access Resend key; the configured key can only send.
+- **Password reset:** the request page shows the same neutral message either way. The
+  first reset links (October 11 template) were reported "unavailable or expired" before
+  use, most likely consumed by the university's link scanner; #157 moved the link to the
+  portal page, which redeems it only after **Continue**. The new Reset password template
+  was installed and confirmed after a reload (6,876 bytes, matching the repository file).
+  The clinician reset email then arrived in the Inbox with the MediAgent Pro blue design,
+  "Use the button within 1 hour … The link works once" and a link carrying `token_hash`.
+  Opening it showed **Continue**, removed the token from the address bar, and Continue
+  verified the link. **Saving the new password failed twice ("We could not complete the
+  request"), with 401 "Invalid API key" from the account-update call.** Cause: both
+  deployed portals were built with a `NEXT_PUBLIC_SUPABASE_ANON_KEY` missing its first
+  character (the bundled value starts `yJhbGci`, the project's key `eyJhbGci`). Supabase's
+  `/verify` route does not check the key, so Continue worked; the account update does.
+  The same client configuration with the correct key, outside the browser, updated the
+  account without error.
+- **After the key fix:** the requester corrected `NEXT_PUBLIC_SUPABASE_ANON_KEY` in both
+  Vercel projects and redeployed. Both portals' bundled key then matched the project's key
+  and Supabase accepted it. A new clinician reset (requested 05:34 UTC) was opened from
+  the email, continued, saved, and the requester signed in again at 05:36 UTC, landing on
+  Risk Radar. Supabase cleared the recovery token. The account has no MFA factor, so MFA
+  after reset was not exercised.
+- **Patient reset:** requested from `app.mediagent.live` at 05:47:11 UTC (neutral 204);
+  the requester opened the email, saved a new password and signed in at 05:47:47 UTC;
+  Supabase cleared the recovery token.
+- **Reset emails in the inbox (checked in Gmail):** five in one thread, each the intended
+  variant. 21:08 PT, `+clinician`: the old October 11 template (green, Supabase verify
+  link), the one #157 replaced. 21:55 and 22:34 PT, `+clinician`: MediAgent Pro, blue
+  `#2563EB` button, link to `clinician.mediagent.live/reset-password?lang=en-US` with
+  `token_hash`. 22:47 PT, `+patient`: green `#147465`, English, `lang=en-US`. 22:48 PT,
+  `+patient`: green, Spanish ("Restablece tu contraseña", "menos de 1 hora"), `lang=es-MX`.
+
+## Email preferences, Team & Roles and Copy (October 12, late)
+
+- **#158 email card:** Morgan's Profile shows an EMAIL NOTICES label over one grouped card:
+  truncated address, "Email unavailable" chip, "Demo accounts can't receive email. In-app
+  notifications stay on." and one footnote; no controls. Same at 375 px, with no
+  horizontal scrolling. Elena's Settings shows the same state in a standard Settings card
+  (mail icon, Email notices heading and badge, footer note).
+- **UX-003 as provider Elena:** Team & Roles shows "Only clinic admins can invite team
+  members." and no invite form; the per-member ⋯ menus are still shown (known). Clinic-code
+  Copy showed "Copied" with no uncaught error; earlier "Write permission denied" console
+  errors predate #156.
+- **Public key consumers:** after the key fix both portals' bundled key matches the
+  project's and Supabase accepts it. No upload was performed (the browser used here cannot
+  choose files). Clinician dashboard realtime is disabled in production
+  (`NEXT_PUBLIC_ENABLE_DASHBOARD_REALTIME` is not set), so it was not affected.
+- **Requester checks:** as clinic admin Carmen, Copy worked. A fresh invitation link
+  opened signed out showed one primary "Create clinician account" button, the invited
+  clinic/role/address, and "Already have a MediAgent clinician account? Sign in to accept"
+  as a text link.
+- **Upload after the key fix:** a synthetic one-page follow-up lab report for Morgan
+  (`Morgan-Ellis_Diabetes-Follow-Up-Lab-Report_2026-10-12.pdf`, 3,140 bytes; HbA1c, fasting
+  glucose, metabolic panel with eGFR, lipids, liver enzymes, urine albumin/creatinine and
+  B12, all consistent with her October 2 visit and Metformin order; every page marked
+  "SYNTHETIC TEST DOCUMENT ONLY") was sent through the patient Records upload. Storage
+  accepted it with the corrected key (200) and the backend registered it (201) as a
+  patient upload pending clinician review; the stored hash matches the file.
+
+## Clinician flow for an uploaded lab report (October 12)
+
+The synthetic lab report above, uploaded by Morgan at 05:59 UTC:
+
+- **Ingestion** (06:03 run): parse completed; record title "Diabetes follow-up lab report" /
+  "Reporte de laboratorio de diabetes"; patient explanation ready. One candidate fact: the
+  condition "Type 2 diabetes mellitus" (high confidence, page 1 excerpt). None of the 20
+  results was extracted: the extraction prompt asks only for medications, conditions,
+  allergies and obligations (AI-005). The explanation said the record lists no follow-up
+  steps and suggested asking about tests.
+- **Review queue and Documents** (Elena): queue item, protected source preview of the full
+  page, facts dialog. Two display bugs (UX-004): dates show day-first (12/10/2026) from the
+  browser region, and the condition's name is labelled "Medication".
+- **Document approval** 06:05 UTC; the draft request queued at parse time completed in the
+  06:12 run as version 5: the same four active items as version 4 (Metformin 500 mg twice
+  daily, water with meals, walking Monday/Wednesday/Friday, daily fasting glucose), because a
+  condition cannot become a care-plan item.
+- **Plan approval:** each item's English wording checked against its Spanish source
+  (4/4), Metformin reconciled as an update of the existing record, approval note added,
+  review saved, Today preview checked, then approved 06:15:43 UTC; version 4 superseded.
+- **Patient:** Today shows the same five tasks credited to Dr. Elena Park; notifications
+  show "Document processing completed", "Document review updated" and "Your care plan was
+  updated".
+
+## AI-005 production check (October 13)
+
+Synthetic test patient (Rajeev Chaurasia) and Elena Park, both portals, after #161–#164
+deployed. #164's backend was live only after #165 redeployed `main`: #163 and #164 had
+deployed in parallel and the older image took the traffic.
+
+- Critical result: the synthetic potassium 6.9 report raised "Critical test result
+  reported" under Alerts → Needs attention; acknowledging it removed it (22 → 21 open).
+- Evidence: each result on a new synthetic lipid/A1c upload cites its whole printed row
+  (`HDL cholesterol | 38 | L | > 40 | mg/dL`). The first upload lost A1c because the report
+  heading names it; after #166 the recheck upload registered all seven results.
+- Nora: a question about the lipid report shows the results card (five flagged results,
+  "Show 1 result in range", link to Records), still present after a reload; a general
+  question in the same conversation gets no card.
+- Care plan: the discharge draft was reviewed (glipizide removed per its STOP line,
+  lisinopril changed to the printed 20 mg in both languages, routes chosen) and published;
+  the patient's Today shows the four activities and "Care plan approved by Dr. Elena Park".
+- Email: Resend lists every recent send as Delivered.
+
+Defects found and their fixes are recorded in the
+[AI-005 spec](../.agent/specs/ai-005-agent-quality.md).

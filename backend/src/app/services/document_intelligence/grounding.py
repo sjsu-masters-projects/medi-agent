@@ -9,6 +9,8 @@ open the page and see the words. Nothing here writes canonical clinical records.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
@@ -16,6 +18,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 from supabase import Client
 
+from app.agents.ingestion.prompts import EXTRACTION_PROMPT_VERSION
 from app.models.clinical_fact import (
     ClinicalFactCreate,
     ConfidenceBand,
@@ -24,13 +27,19 @@ from app.models.clinical_fact import (
     SourceProvenanceCreate,
 )
 from app.services.clinical_fact_service import ClinicalFactService
-from app.services.document_intelligence.anchoring import anchor_value, normalize_for_match
+from app.services.document_intelligence.anchoring import (
+    anchor_occurrences,
+    anchor_on_page,
+    anchor_value,
+    normalize_for_match,
+)
 from app.services.document_intelligence.models import (
     DocumentExtraction,
     DocumentIntelligencePolicy,
     EvidenceAnchor,
     ExtractionRoute,
     PageQuality,
+    WordBox,
 )
 
 SOURCE_SYSTEM = "document_intelligence"
@@ -40,11 +49,49 @@ _PLACEHOLDER_VALUES = frozenset({"", "as directed", "unknown", "active"})
 # Attributes that must be read on the page for each candidate type. The first is the
 # primary anchor; a candidate whose primary value is not on any page scores zero.
 ANCHOR_FIELDS: dict[str, tuple[str, ...]] = {
-    "medication": ("name", "dosage", "frequency", "route", "instructions", "generic_name", "rxcui"),
+    "medication": (
+        "name",
+        "dosage",
+        "frequency",
+        "route",
+        "instructions",
+        "status",
+        "generic_name",
+        "rxcui",
+    ),
     "condition": ("name", "status", "notes"),
     "allergy": ("allergen", "reaction", "severity"),
     "obligation": ("description", "frequency", "obligation_type"),
+    "lab_result": (
+        "test_name",
+        "value",
+        "unit",
+        "reference_range",
+        "flag",
+        "collected_at",
+        "specimen",
+        "panel",
+    ),
+    "vital_sign": ("name", "value", "unit", "measured_at"),
+    "immunization": ("vaccine", "administered_at", "dose_number"),
+    "procedure": ("name", "performed_at", "result"),
+    "appointment": ("description", "scheduled_for", "provider", "location"),
 }
+# Fields that must be read on the same printed row as the primary value. A short value
+# such as "14" can appear many times on a report; only the copy beside the test name counts.
+ROW_FIELDS: dict[str, frozenset[str]] = {
+    "lab_result": frozenset({"value", "unit", "reference_range", "flag"}),
+    "vital_sign": frozenset({"value", "unit"}),
+}
+# Fields without which a candidate is meaningless; all must be anchored.
+REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "lab_result": ("test_name", "value"),
+    "vital_sign": ("name", "value"),
+}
+# A printed number must match exactly: 7.8 and 7.9 are different results.
+EXACT_FIELDS = frozenset({"value"})
+# Results stay review-only evidence: they never become care-plan items.
+CARE_PLAN_FACT_TYPES = frozenset({"medication", "obligation"})
 
 
 class GroundedEvidence(BaseModel):
@@ -79,6 +126,12 @@ class CandidateRegistrationSummary(BaseModel):
     low_confidence: int = 0
     unanchored: int = 0
     fact_ids: list[str] = Field(default_factory=list)
+    fact_types: set[str] = Field(default_factory=set)
+
+    @property
+    def informs_care_plan(self) -> bool:
+        """Only medications and patient obligations can become care-plan proposals."""
+        return bool(self.fact_types & CARE_PLAN_FACT_TYPES)
 
 
 def ground_item(
@@ -97,9 +150,43 @@ def ground_item(
         f"The {field} was omitted because it could not be located in the source text."
         for field in dropped_fields
     )
-    primary = ANCHOR_FIELDS.get(fact_type, ("name",))[0]
-    score = _confidence_score(anchors, primary)
+    required = REQUIRED_FIELDS.get(fact_type, (ANCHOR_FIELDS.get(fact_type, ("name",))[0],))
+    score = _confidence_score(anchors, required)
+    if fact_type == "lab_result" and score > 0:
+        source_value.update(result_interpretation(source_value))
+        disagreement = source_value.get("consistency")
+        if disagreement:
+            uncertainty.append(str(disagreement))
+            # A flag that contradicts its own range is most often an OCR error (a dropped
+            # decimal point); never let it present as a confident reading.
+            score = min(score, policy.medium_confidence - 0.01)
+        if source_value.get("flag_meaning") == "critical":
+            uncertainty.append("The report marks this result as critical.")
+    if fact_type == "medication" and score > 0:
+        action = medication_action(source_value.get("status"))
+        if action is not None:
+            source_value["medication_action"] = action
+            if action in INACTIVE_MEDICATION_ACTIONS:
+                verb = {"stopped": "stop", "held": "hold"}[action]
+                uncertainty.append(
+                    f"The document says to {verb} this medication; "
+                    "it must not become an active care-plan item."
+                )
     evidence = [_grounded_evidence(field, anchor) for field, anchor in anchors.items()]
+    primary_field = ANCHOR_FIELDS.get(fact_type, ("name",))[0]
+    row_fields = ROW_FIELDS.get(fact_type)
+    if row_fields and primary_field in anchors:
+        # A result's evidence is its whole printed row ("Creatinine | 1.42 | H | mg/dL |
+        # 0.74 - 1.35"), not the one cell a value was found in; the reviewer reads the row.
+        row = _printed_row(extraction, anchors[primary_field])
+        if row:
+            evidence = [
+                item.model_copy(update={"excerpt": row})
+                if item.field == primary_field or item.field in row_fields
+                else item
+                for item in evidence
+            ]
+    evidence.sort(key=lambda item: item.field != primary_field)
     pages = sorted({item.page for item in evidence})
     return GroundedItem(
         fact_type=fact_type,
@@ -144,6 +231,7 @@ def candidate_from_grounded(
                 "route": extraction.route.value,
                 "pages": item.pages,
                 "source_sha256": extraction.source_sha256,
+                "prompt_version": EXTRACTION_PROMPT_VERSION,
             },
             extractor_version=extraction.extractor_version[:100],
             model_version=model_version,
@@ -160,6 +248,11 @@ def items_from_extraction_result(result: Any) -> list[tuple[str, dict[str, Any]]
         ("condition", "conditions"),
         ("allergy", "allergies"),
         ("obligation", "obligations"),
+        ("lab_result", "lab_results"),
+        ("vital_sign", "vital_signs"),
+        ("immunization", "immunizations"),
+        ("procedure", "procedures"),
+        ("appointment", "appointments"),
     ):
         for row in getattr(result, attribute, []) or []:
             pairs.append((fact_type, row.model_dump(mode="json")))
@@ -214,6 +307,7 @@ class DocumentEvidenceCandidateService:
             fact = self.registry.create_candidate(candidate, actor_id=actor_id)
             summary.created += 1
             summary.fact_ids.append(str(fact.get("id")))
+            summary.fact_types.add(fact_type)
             if grounded.confidence_band is ConfidenceBand.LOW:
                 summary.low_confidence += 1
         return summary
@@ -230,12 +324,28 @@ def _anchor_attributes(
 ) -> tuple[dict[str, EvidenceAnchor], list[str]]:
     anchors: dict[str, EvidenceAnchor] = {}
     uncertainty: list[str] = []
-    for field in ANCHOR_FIELDS.get(fact_type, ("name",)):
+    fields = ANCHOR_FIELDS.get(fact_type, ("name",))
+    row_fields = ROW_FIELDS.get(fact_type, frozenset())
+    for field in fields:
         raw = value.get(field)
         text = str(raw).strip() if raw is not None else ""
         if text.casefold() in _PLACEHOLDER_VALUES:
             continue
-        anchor = anchor_value(extraction, text, policy=policy)
+        if field in row_fields:
+            primary = anchors.get(fields[0])
+            anchor = (
+                _anchor_on_row(extraction, primary, text, policy=policy)
+                if primary is not None
+                else None
+            )
+        elif field == fields[0] and row_fields:
+            anchor = _row_primary(extraction, fields, row_fields, value, text, policy)
+        elif field != fields[0] and fields[0] in anchors:
+            anchor = _near_primary(extraction, anchors[fields[0]], text, policy)
+        else:
+            anchor = anchor_value(extraction, text, policy=policy)
+        if anchor is not None and field in EXACT_FIELDS and anchor.match_score < 1.0:
+            anchor = None
         if anchor is None:
             uncertainty.append(
                 f"The {field} '{text}' was not found in the source text; "
@@ -299,11 +409,233 @@ def _source_backed_value(
     return stored, dropped
 
 
-def _confidence_score(anchors: dict[str, EvidenceAnchor], primary_field: str) -> float:
-    """The weakest anchored attribute bounds the item; no primary anchor means zero."""
-    if primary_field not in anchors:
+def _row_primary(
+    extraction: DocumentExtraction,
+    fields: tuple[str, ...],
+    row_fields: frozenset[str],
+    value: dict[str, Any],
+    text: str,
+    policy: DocumentIntelligencePolicy,
+) -> EvidenceAnchor | None:
+    """The printed copy of a result's name whose row also carries its value and unit.
+
+    "Hemoglobin A1c" in the heading "LIPID PANEL AND HEMOGLOBIN A1C" is an exact match too,
+    and it comes first; anchoring there found no 8.1 on that line and dropped the result.
+    """
+    occurrences = anchor_occurrences(extraction, text, policy=policy)
+    if len(occurrences) < 2:
+        return occurrences[0] if occurrences else None
+
+    def found_on_row(candidate: EvidenceAnchor) -> int:
+        count = 0
+        for field in fields[1:]:
+            if field not in row_fields:
+                continue
+            raw = value.get(field)
+            wanted = str(raw).strip() if raw is not None else ""
+            if wanted.casefold() in _PLACEHOLDER_VALUES:
+                continue
+            anchor = _anchor_on_row(extraction, candidate, wanted, policy=policy)
+            if anchor is not None and (field not in EXACT_FIELDS or anchor.match_score >= 1.0):
+                count += 1
+        return count
+
+    # Ties keep the earlier, better-matching copy, which is the previous behaviour.
+    return max(occurrences, key=lambda candidate: (found_on_row(candidate), candidate.match_score))
+
+
+def _near_primary(
+    extraction: DocumentExtraction,
+    primary: EvidenceAnchor,
+    text: str,
+    policy: DocumentIntelligencePolicy,
+) -> EvidenceAnchor | None:
+    """The printed copy of an attribute nearest its item's name, preferring lines below it.
+
+    "1 tablet by mouth daily" or "Continue" can belong to any medication in a list; the
+    first copy on the page cited Metformin's line as Atorvastatin's dose.
+    """
+    occurrences = anchor_occurrences(extraction, text, policy=policy)
+    if len(occurrences) < 2:
+        return occurrences[0] if occurrences else None
+    best = occurrences[0].match_score
+    slack = 0.35 * max(primary.bbox.y1 - primary.bbox.y0, 1.0)
+
+    def distance(candidate: EvidenceAnchor) -> tuple[int, int, float]:
+        if candidate.page_number != primary.page_number:
+            return (1, abs(candidate.page_number - primary.page_number), 0.0)
+        offset = candidate.bbox.y0 - primary.bbox.y0
+        return (0, 0 if offset >= -slack else 1, abs(offset))
+
+    # Only equally good matches compete; a closer but weaker copy never wins.
+    return min((item for item in occurrences if item.match_score >= best), key=distance)
+
+
+def _anchor_on_row(
+    extraction: DocumentExtraction,
+    primary: EvidenceAnchor,
+    value: str,
+    *,
+    policy: DocumentIntelligencePolicy,
+) -> EvidenceAnchor | None:
+    """Anchor ``value`` only among the words printed on the primary value's row."""
+    page = extraction.page(primary.page_number)
+    if page is None:
+        return None
+    top, bottom = primary.bbox.y0, primary.bbox.y1
+    slack = 0.35 * max(bottom - top, 1.0)
+
+    def on_row(word: WordBox) -> bool:
+        middle = (word.bbox.y0 + word.bbox.y1) / 2
+        return top - slack <= middle <= bottom + slack
+
+    row_page = page.model_copy(update={"words": [word for word in page.words if on_row(word)]})
+    return anchor_on_page(row_page, value, policy=policy)
+
+
+def _printed_row(extraction: DocumentExtraction, primary: EvidenceAnchor) -> str:
+    """The text of the printed row the primary value sits on, left to right."""
+    page = extraction.page(primary.page_number)
+    if page is None:
+        return ""
+    top, bottom = primary.bbox.y0, primary.bbox.y1
+    slack = 0.35 * max(bottom - top, 1.0)
+    cells = [
+        line
+        for line in page.lines
+        if top - slack <= (line.bbox.y0 + line.bbox.y1) / 2 <= bottom + slack
+    ]
+    return " | ".join(line.text for line in sorted(cells, key=lambda line: line.bbox.x0))[:2000]
+
+
+def _confidence_score(anchors: dict[str, EvidenceAnchor], required: Sequence[str]) -> float:
+    """The weakest anchored attribute bounds the item; a missing required anchor means zero."""
+    if any(field not in anchors for field in required):
         return 0.0
     return round(min(anchor.match_score * anchor.word_confidence for anchor in anchors.values()), 3)
+
+
+# Printed flags, in English and Spanish. "A" is "abnormal" in English reports and "alto"
+# in Spanish ones, so it only ever means "outside the range", never a direction.
+_CRITICAL_FLAGS = frozenset(
+    {"hh", "ll", "c", "crit", "critical", "critico", "panic", "panico", "!!", "*h", "*l"}
+)
+_HIGH_FLAGS = frozenset({"h", "hi", "high", "alto", "elevado", "↑"})
+_LOW_FLAGS = frozenset({"l", "lo", "low", "bajo", "↓"})
+_ABNORMAL_FLAGS = frozenset({"a", "abn", "abnormal", "anormal", "*", "!"})
+_NUMBER = r"[-+]?\d+(?:[.,]\d+)?"
+_RANGE_BETWEEN = re.compile(rf"^\s*({_NUMBER})\s*(?:-|–|—|to|a)\s*({_NUMBER})\s*$", re.I)
+_RANGE_BOUND = re.compile(rf"^\s*(<=|>=|≤|≥|<|>)\s*({_NUMBER})\s*$")
+_PLAIN_VALUE = re.compile(rf"^\s*({_NUMBER})\s*$")
+
+
+def _number(text: str) -> float:
+    return float(text.replace(",", "."))
+
+
+# Printed medication actions, in English and Spanish, checked in this order. A stop or hold
+# word wins over any other, so "do not stop" is read as a stop: that blocks the plan for
+# clinician review instead of silently continuing a medicine the document may have ended.
+INACTIVE_MEDICATION_ACTIONS = frozenset({"stopped", "held"})
+_MEDICATION_ACTION_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "stopped",
+        ("stop", "discontinu", "d/c", "dc'd", "cease", "suspend", "suspender", "deje de"),
+    ),
+    ("held", ("hold", "pause", "withhold", "no tomar hasta", "pausar")),
+    ("continued", ("no change", "unchanged", "sin cambio", "same dose", "misma dosis")),
+    (
+        "changed",
+        ("change", "increase", "decrease", "reduce", "adjust", "cambi", "aument", "disminu"),
+    ),
+    ("new", ("new", "start", "begin", "initiat", "nuevo", "nueva", "inici", "empez", "comenz")),
+    ("continued", ("continu", "same", "no change", "sin cambio", "seguir", "siga")),
+)
+
+
+def medication_action(status: str | None) -> str | None:
+    """Classify a printed medication action; text that names no action stays unknown."""
+    if not status or not status.strip():
+        return None
+    folded = unicodedata.normalize("NFKD", status)
+    folded = "".join(ch for ch in folded if not unicodedata.combining(ch)).casefold()
+    for action, words in _MEDICATION_ACTION_WORDS:
+        if any(re.search(rf"(?<![a-z]){re.escape(word)}", folded) for word in words):
+            return action
+    return "unknown"
+
+
+def flag_meaning(flag: str | None) -> str | None:
+    """Translate a printed flag to high/low/abnormal/critical; unknown flags stay unknown."""
+    if not flag:
+        return None
+    folded = unicodedata.normalize("NFKD", flag)
+    folded = "".join(ch for ch in folded if not unicodedata.combining(ch)).strip().casefold()
+    folded = folded.strip("() ")
+    if folded in _CRITICAL_FLAGS:
+        return "critical"
+    if folded in _HIGH_FLAGS:
+        return "high"
+    if folded in _LOW_FLAGS:
+        return "low"
+    if folded in _ABNORMAL_FLAGS:
+        return "abnormal"
+    return "unrecognized"
+
+
+def range_status(value: str | None, reference_range: str | None) -> str | None:
+    """Compare a plain printed number with a plain printed range: below/within/above.
+
+    Anything else (qualifiers such as "<5", text results, ranges with words or units) is
+    left undetermined rather than guessed.
+    """
+    if not value or not reference_range:
+        return None
+    number = _PLAIN_VALUE.match(value)
+    if number is None:
+        return None
+    result = _number(number.group(1))
+    between = _RANGE_BETWEEN.match(reference_range)
+    if between:
+        low, high = _number(between.group(1)), _number(between.group(2))
+        if low > high:
+            return None
+        return "below" if result < low else "above" if result > high else "within"
+    bound = _RANGE_BOUND.match(reference_range)
+    if bound:
+        operator, limit = bound.group(1), _number(bound.group(2))
+        if operator in ("<", "<=", "≤"):
+            inside = result < limit if operator == "<" else result <= limit
+            return "within" if inside else "above"
+        inside = result > limit if operator == ">" else result >= limit
+        return "within" if inside else "below"
+    return None
+
+
+def result_interpretation(value: dict[str, Any]) -> dict[str, Any]:
+    """Deterministic reading of a result's own printed flag and range; never a model's."""
+    meaning = flag_meaning(value.get("flag"))
+    status = range_status(value.get("value"), value.get("reference_range"))
+    derived: dict[str, Any] = {}
+    if meaning is not None:
+        derived["flag_meaning"] = meaning
+    if status is not None:
+        derived["range_status"] = status
+    contradiction = (meaning == "high" and status in ("below", "within")) or (
+        meaning == "low" and status in ("above", "within")
+    )
+    if contradiction:
+        derived["consistency"] = (
+            f"The printed flag '{value.get('flag')}' does not match the value "
+            f"'{value.get('value')}' and range '{value.get('reference_range')}'; "
+            "verify all three against the original document."
+        )
+    elif meaning is None and status in ("above", "below"):
+        derived["consistency"] = (
+            f"The value '{value.get('value')}' is outside the printed range "
+            f"'{value.get('reference_range')}' but no flag was read; verify against the original."
+        )
+    return derived
 
 
 def _page_quality_notes(extraction: DocumentExtraction, pages: list[int]) -> list[str]:

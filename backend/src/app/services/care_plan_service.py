@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -36,10 +37,28 @@ from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_reconciliation import overlaps
 from app.services.care_plan_translation import draft_translations
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.document_intelligence.grounding import (
+    INACTIVE_MEDICATION_ACTIONS,
+    medication_action,
+)
 
 logger = logging.getLogger(__name__)
 
 _LOW_CONFIDENCE = 0.7
+_STOP_SOURCE_BLOCKER = (
+    "This document says to stop or hold this medication, so it cannot become a Today "
+    "activity. Update the medication list if needed, then remove this item."
+)
+
+
+def _medication_action(fact: dict[str, Any]) -> str | None:
+    value = cast(dict[str, Any], fact.get("value") or {})
+    stored = value.get("medication_action")
+    return str(stored) if stored else medication_action(value.get("status"))
+
+
+# A printed strength in a medication name ("20 mg", "0.5 mL", "100 units", "2.5%").
+_STRENGTH = re.compile(r"\d+(?:[.,]\d+)?\s*(?:mg|mcg|µg|g|ml|units?|iu|meq|%)(?![a-z])", re.I)
 _SOURCE_TITLE_REVIEW = (
     "Source title exceeds the draft limit; replace it after reviewing the full evidence."
 )
@@ -706,6 +725,37 @@ class CarePlanService:
 
         conflicts: dict[str, dict[str, Any]] = {}
         for name, candidates in groups.items():
+            stops = [
+                candidate
+                for candidate in candidates
+                if _medication_action(candidate) in INACTIVE_MEDICATION_ACTIONS
+            ]
+            if stops:
+                # A document that stops or holds a medicine outranks a matching instruction
+                # to take it: the stop line itself can never be published as a Today task,
+                # and every other line for the same medicine needs a clinician decision.
+                stop_ids = sorted(str(candidate["id"]) for candidate in stops)
+                for candidate in candidates:
+                    fact_id = str(candidate["id"])
+                    is_stop = fact_id in stop_ids
+                    conflicts[fact_id] = {
+                        "kind": "medication_stop_source" if is_stop else "medication_stopped",
+                        "medication_name": name,
+                        "action": _medication_action(candidate),
+                        "stop_fact_ids": [item for item in stop_ids if item != fact_id],
+                    }
+                continue
+            for candidate in candidates:
+                if _medication_action(candidate) == "changed":
+                    # "Increase to 20 mg daily" usually sits beside the old printed dose; the
+                    # clinician sets the new dose and instructions before approval.
+                    value = cast(dict[str, Any], candidate.get("value") or {})
+                    conflicts[str(candidate["id"])] = {
+                        "kind": "medication_changed",
+                        "medication_name": name,
+                        "action": "changed",
+                        "printed_change": str(value.get("status") or "")[:200],
+                    }
             instructions = {
                 tuple(
                     str(value.get(field) or "").strip().casefold()
@@ -739,7 +789,11 @@ class CarePlanService:
                 for key in ("name", "dosage", "frequency", "route")
                 if value.get(key)
             }
-            title = " ".join(filter(None, [name, str(value.get("dosage") or "")])).strip()
+            dosage = str(value.get("dosage") or "")
+            # "Atorvastatin 20 mg tablet" already carries its strength; appending the
+            # per-dose count gave "Atorvastatin 20 mg tablet 1 tablet".
+            title = name if _STRENGTH.search(name) else " ".join(filter(None, [name, dosage]))
+            title = title.strip()
             frequency = str(value.get("frequency") or "")
             # Missing source instructions are a clinician-review blocker.  Do not
             # manufacture a patient-facing instruction such as "take as directed".
@@ -962,6 +1016,10 @@ class CarePlanService:
     ) -> str | None:
         if removed:
             return None
+        if (conflict or {}).get("kind") == "medication_stop_source":
+            # Not confirmable: confirming would publish "stop this medicine" as a reminder
+            # to take it. The clinician updates the medication list and removes the line.
+            return _STOP_SOURCE_BLOCKER
         if source_title_requires_edit:
             return _SOURCE_TITLE_REVIEW
         if (
@@ -986,6 +1044,16 @@ class CarePlanService:
             return "Review and select a supported medication route before approval."
         if confirmed:
             return None
+        if (conflict or {}).get("kind") == "medication_stopped":
+            return (
+                "A source document says to stop or hold this medication. Confirm it should "
+                "continue, or remove it, before approval."
+            )
+        if (conflict or {}).get("kind") == "medication_changed":
+            return (
+                "The document changes this medication. Enter the new dose and instructions, "
+                "then confirm, before approval."
+            )
         if conflict:
             return "Resolve conflicting medication instructions before approval."
         if confidence is None or float(confidence) < _LOW_CONFIDENCE:

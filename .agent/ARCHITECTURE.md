@@ -41,9 +41,10 @@ returns a local JSON artifact explicitly marked as not submitted; there is no ex
 operation. Confirmed-report intake remains a delivery target. The follow-up schema requires
 migration `047`, and the draft lifecycle requires migration `048`, in each environment.
 
-## Selective email (EMAIL-001, pending rollout)
+## Selective email (EMAIL-001)
 
-Supabase Auth owns recovery tokens and uses operator-configured Resend SMTP.
+Supabase Auth owns recovery tokens and uses operator-configured Resend SMTP; its reset
+link opens the portal page, which redeems the token only after an explicit click.
 Backend `/api/v1/email` owns contact verification, optional preferences and
 addressed clinician invitations. SQL event capture and a server-only outbox
 extend saved in-app notifications with selective email; no model writes email
@@ -51,11 +52,10 @@ copy, recipients or access decisions. Membership changes only through explicit
 addressed invitation acceptance, not sending or opening a message. Dispatch
 rechecks current authorization, consent, unread/work state and freezes retry
 payloads. Provider acceptance and confirmed delivery remain different states.
-The existing authenticated reminder heartbeat also dispatches email.
+The `email_dispatch` job runs after each reminder run.
 
-This is implemented on the EMAIL-001 branch, not deployed acceptance. Migration
-057, the recovery-template installation and inbox/password QA remain separate
-authorized rollout steps. [Contract and handoff](specs/email-001-email-flows.md).
+Deployed October 12 (migrations 057/058); production status and open items are in the
+[contract](specs/email-001-email-flows.md#production-status--october-12).
 
 ## Worker and service boundaries
 

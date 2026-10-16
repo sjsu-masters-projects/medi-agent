@@ -263,6 +263,21 @@ def _routine_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
 
 
+def _urgent_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _process_stream(_self, **_kwargs):
+        yield {
+            "type": "classification",
+            "intent": "symptom",
+            "urgency": "urgent",
+            "route": "symptom",
+            "escalation_required": True,
+            "classification_reason": "stubbed urgent classification",
+        }
+        yield {"type": "complete", "response_text": "", "fallback_used": False}
+
+    monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
+
+
 def _run_turn(client, patient_id, message: str, language: str = "en") -> dict[str, Any]:
     with client.websocket_connect(
         f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
@@ -515,3 +530,19 @@ def test_non_emergency_starts_private_draft_without_report(
     assert "private draft is open" in result["complete"]["message"]["content"]
     start.assert_awaited_once()
     save.assert_not_awaited()
+
+
+def test_urgent_symptom_keeps_care_team_escalation_when_draft_starts(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _urgent_symptom_classification(monkeypatch)
+    monkeypatch.setattr(
+        "app.routers.chat.SymptomIntakeService.start",
+        AsyncMock(return_value={"intake_id": str(uuid4()), "revision": 0}),
+    )
+
+    result = _run_turn(client, patient_id, "I have severe dizziness")
+
+    assert result["start"]["urgency"] == "urgent"
+    assert result["complete"]["escalation_required"] is True

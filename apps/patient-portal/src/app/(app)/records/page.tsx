@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { DocumentSourceViewer } from "@/components/features";
+import { DocumentResults } from "@/components/features/document-results";
 import { NotificationBell } from "@/components/features/notification-centre";
 import { groupRecordDates, RecordRow, recordTitle } from "@/components/features/record-row";
 import { Icon } from "@/components/ui/icons";
@@ -123,7 +124,7 @@ function describeMissingSummary(
 
 function duplicateUploadMessage(locale: Locale): string {
   return locale === "es-MX"
-    ? "Este mismo archivo ya se procesó para usted. Se guardó esta copia, pero no se extrajeron datos nuevos ni se agregaron instrucciones al plan de cuidado. Puede abrir el original o consultar a su equipo de atención."
+    ? "Este mismo archivo ya se procesó. Se guardó esta copia, pero no se extrajeron datos nuevos ni se agregaron instrucciones al plan de cuidado. Puedes abrir el original o consultar a tu equipo de atención."
     : "These exact file contents were already processed for you. This copy is stored, but no new facts or care-plan instructions were created. You can open the original or ask your care team about it.";
 }
 const INITIAL_POLL_DELAY_MS = 3_000;
@@ -976,6 +977,18 @@ export default function RecordsPage() {
                   : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
               </p>
             </div>
+            {selectedDocument &&
+            selectedDocument.parseStatus !== DocumentParseStatus.DUPLICATE &&
+            !isDocumentProcessing(selectedDocument.parseStatus) &&
+            !parsingDocIds.has(selectedDocument.id) ? (
+              // Fetched only for the opened document, never for every row in the list.
+              <DocumentResults
+                key={selectedDocument.id}
+                documentId={selectedDocument.id}
+                locale={locale}
+                token={accessToken}
+              />
+            ) : null}
             <div className="space-y-3">
               <Button fullWidth onClick={handleAskAboutDocument} size="lg">
                 <Icon name="chat" className="h-5 w-5" />{copy("Ask about this document")}

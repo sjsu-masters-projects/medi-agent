@@ -55,22 +55,22 @@ References: [Resend SMTP](https://resend.com/docs/send-with-supabase-smtp),
 [Supabase password recovery](https://supabase.com/docs/guides/auth/passwords).
 
 Application email uses separate verified opt-in contacts and server-only outbox
-records from `057_email_delivery.sql` (applied to staging October 11) and its fixes in
-`058_email_delivery_fixes.sql`. Apply 058 through the ledger, with project-specific
-authorization, before the backend that uses it is merged or deployed. No email
-function reads the `auth` schema: a hosted migration cannot grant `service_role`
-access there (057's attempt only produced "no privileges were granted"), so the
-backend reads account addresses through the Auth Admin API with the service-role key. The
-notification and onboarding sender identities are documented in `.env.example`;
-they are not Supabase SMTP configuration. With no configured notification sender,
-verification is unavailable rather than sent from a default testing identity.
+records from `057_email_delivery.sql` and `058_email_delivery_fixes.sql` (both applied
+to the synthetic project). No email function reads the `auth` schema: a hosted migration
+cannot grant `service_role` access there, so the backend reads account addresses through
+the Auth Admin API with the service-role key. The notification and onboarding sender
+identities are documented in `.env.example`; they are not Supabase SMTP configuration.
+With no configured notification sender, verification is unavailable rather than sent
+from a default testing identity.
 
-The reviewed rollout and continuation checklist is in
-[EMAIL-001](../.agent/specs/email-001-email-flows.md#current-implementation-and-continuation-handoff).
-The installable Reset password template candidate is
-`docs/email-templates/supabase-password-recovery.html`. Do not install it or enable
-confirmation as a side effect of applying SQL. The existing reminder heartbeat
-also dispatches application email; a paused trigger means no periodic delivery.
+The Reset password template is `docs/email-templates/supabase-password-recovery.html`,
+installed October 12. Reinstall it in Authentication → Emails → Reset password after
+every change to that file, with separate authorization; never enable confirmation as a
+side effect of applying SQL. Its link opens the portal reset page, so both portals'
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` must be the project's exact public key: `/verify` does not
+check the key, but saving the new password does. Periodic email delivery runs after each
+reminder run. Configuration and production status:
+[EMAIL-001](../.agent/specs/email-001-email-flows.md#operations-and-configuration).
 
 ## Apply migrations
 
@@ -86,7 +86,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 70 SQL migration files, prefixes `001`–`058`. Some prefixes are
+The checkout contains 76 SQL migration files, prefixes `001`–`064`. Some prefixes are
 shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
 branches; they coexist because the ledger identifies migrations by full filename and
 checksum, not by prefix. Preserve applied names and bytes. The ledger in
@@ -100,6 +100,32 @@ It does not create a MedWatch draft or external submission.
 Migration `048_medwatch_draft_lifecycle.sql` adds the assigned-clinician
 draft/edit/approval/export lifecycle with immutable audit events and optimistic revision control.
 It deliberately does not add an FDA submission operation.
+
+### ADR loop and Form 3500 (063/064, PV-001-C) — written, not applied
+
+`063_adr_information_loop_lifecycle.sql` makes each ADR information request its own
+notification source, adds the clinician "patient answered" alert and cascades ADR audit on
+patient deletion. `064_medwatch_form_3500.sql` requires 063 and adds Form FDA 3500 drafts: the
+discard columns and a partial unique index (one non-discarded draft per assessment), the
+non-identifying `patient_reference`, the append-only `medwatch_external_submissions` table
+(SELECT only for `authenticated` and `service_role`; no role may insert, update, delete or
+truncate it directly), the `medwatch_drafts_submission_guard` trigger (`submitted` only after
+approval and a submission record; submitted and discarded drafts frozen), the extended audit
+types, and service-role-only RPCs: `create_medwatch_draft(uuid, uuid, jsonb, jsonb, text,
+uuid)`, `approve_medwatch_draft(uuid, uuid, text, integer, jsonb)`,
+`record_medwatch_draft_export(uuid, uuid, text, text, text)` (the 048 2-argument export
+delegates with `'json'`), `discard_medwatch_draft`, `record_medwatch_external_submission` and
+`amend_medwatch_external_submission`. It ends with a fail-closed verification block. No
+function or table sends anything to FDA.
+
+Neither file is applied to any hosted project. Applying either needs the requester's explicit
+authorization naming that action. **Order:** apply 063, then 064, before the backend from
+`fix/adr-information-loop-gaps` deploys (the branch ships as one pull request and its backend
+calls 064 objects; merging deploys the backend, so apply first and merge after). Every 048
+function keeps its signature, so the currently deployed backend keeps working once 064 is
+applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
+are upgraded on read. After applying, verify with the ledger and with the read-only checks the
+fail-closed block already performs (it raises and rolls the migration back on any gap).
 
 ### Appointment booking guards (042/043)
 

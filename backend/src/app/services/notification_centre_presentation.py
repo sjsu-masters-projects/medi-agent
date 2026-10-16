@@ -94,9 +94,26 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     ),
     "adr_information_requested": (
         "Your care team requested information",
-        "Contact the requesting clinician through Care team messages.",
+        "Answer a few questions in the app about a symptom you already reported. "
+        "Describe only what already happened.",
         "Tu equipo de atención solicita información",
-        "Contacta al profesional que hizo la solicitud en Mensajes del equipo de atención.",
+        "Responde en la app unas preguntas sobre un síntoma que ya reportaste. "
+        "Describe solo lo que ya pasó.",
+    ),
+    # Clinician-only; the patient's answers stay in the assessment. No clinical content.
+    "adr_information_answered": (
+        "Patient answered medication-safety follow-up",
+        "A patient sent answers to follow-up questions. Review the updated evidence; "
+        "this is not a clinical decision.",
+        "El paciente respondió el seguimiento de seguridad",
+        "Un paciente envió respuestas a preguntas de seguimiento. Revisa la evidencia "
+        "actualizada; esto no es una decisión clínica.",
+    ),
+    "critical_result": (
+        "Critical test result reported",
+        "A patient's document reports a result the laboratory marked critical. Open the document to review it.",
+        "Resultado crítico reportado",
+        "Un documento informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo.",
     ),
     "safety_flag": (
         "Patient safety flag needs review",
@@ -117,6 +134,24 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Está en tu lista de Hoy.",
     ),
 }
+
+# Fixed (en-US, es-MX) wording per patient-answerable question key. Stored values are
+# never echoed: anything outside this allowlist is dropped.
+_QUESTION_WORDING: dict[str, tuple[str, str]] = {
+    "reappeared_on_rechallenge": (
+        "Whether the symptom came back after restarting this medicine",
+        "Si el síntoma volvió después de reiniciar este medicamento",
+    ),
+    "dose_response": (
+        "Whether the symptom changed after a dose change your clinician directed",
+        "Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud",
+    ),
+    "similar_previous_reaction": (
+        "Whether you have had a similar reaction to this medicine before",
+        "Si has tenido antes una reacción similar a este medicamento",
+    ),
+}
+_MAX_LISTED_QUESTIONS = 3
 
 
 def _identifier(value: Any) -> str | None:
@@ -182,10 +217,17 @@ def _reminder_link(row: dict[str, Any], role: str) -> Destination:
 
 def _safety_link(row: dict[str, Any], role: str) -> Destination:
     patient, source = _identifier(row.get("patient_id")), _identifier(row.get("source_id"))
+    if row["event_type"] == "critical_result":
+        link = (
+            f"/patients/{patient}?tab=documents#document-{source}" if patient and source else None
+        )
+        return (link, "Open document", "Abrir documento")
     if row["event_type"] == "safety_flag":
         link = f"/patients/{patient}?tab=chat" if patient else None
     else:
-        link = f"/medwatch?assessment={source}" if source else None
+        # A request-sourced alert names its assessment; otherwise the source is one.
+        assessment = _identifier(_metadata(row).get("adr_assessment_id")) or source
+        link = f"/medwatch?assessment={assessment}" if assessment else None
     return (link, "Review source", "Revisar fuente")
 
 
@@ -208,27 +250,32 @@ _LINKS: dict[str, Callable[[dict[str, Any], str], Destination]] = {
 
 def destination(row: dict[str, Any], role: str) -> Destination:
     if row["event_type"] == "adr_information_requested" and role == "patient":
-        clinician = _identifier(_metadata(row).get("clinician_id"))
-        link = (
-            f"/chat?view=care-team&recipient={clinician}" if clinician else "/chat?view=care-team"
+        # Since 063 the source is the request itself; earlier items name the assessment.
+        # The follow-up view resolves either.
+        source = _identifier(row.get("source_id"))
+        parameter = (
+            "request" if row.get("source_type") == "adr_information_requests" else "assessment"
         )
-        return (link, "Contact care team", "Contactar al equipo de atención")
+        link = f"/chat?view=follow-up&{parameter}={source}" if source else "/chat?view=follow-up"
+        return (link, "Answer questions", "Responder preguntas")
     return _LINKS.get(str(row["category"]), _follow_up_link)(row, role)
 
 
 def _questions(row: dict[str, Any], spanish: bool) -> str:
-    questions = _metadata(row).get("requested_information")
-    if not isinstance(questions, list):
+    requested = _metadata(row).get("requested_information")
+    if not isinstance(requested, list):
         return ""
-    reviewed = [q for q in questions[:20] if isinstance(q, str) and 0 < len(q) <= 200]
-    if not reviewed:
+    keys: list[str] = []
+    for value in requested:
+        if isinstance(value, str) and value in _QUESTION_WORDING and value not in keys:
+            keys.append(value)
+            if len(keys) == _MAX_LISTED_QUESTIONS:
+                break
+    if not keys:
         return ""
-    heading = (
-        "Preguntas de tu profesional de salud (texto original):"
-        if spanish
-        else "Questions from your clinician (shown as written):"
-    )
-    return "\n\n" + heading + "\n" + "\n".join(reviewed)
+    heading = "Tu equipo de atención pregunta sobre:" if spanish else "Your care team asks about:"
+    lines = ["• " + _QUESTION_WORDING[key][int(spanish)] for key in keys]
+    return "\n\n" + heading + "\n" + "\n".join(lines)
 
 
 def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, str]:

@@ -4,7 +4,12 @@ import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
 import { ADRReviewActions } from "@/components/features/adr-review-actions";
 import { MedWatchPreparationAction } from "@/components/features/medwatch-preparation-action";
-import type { ADRReviewDecisionInput, ADRReviewQueueItem } from "@/services/clinicians";
+import { formatReviewTimestamp } from "@/components/features/review-time";
+import type {
+    ADRReviewDecisionInput,
+    ADRReviewEvidence,
+    ADRReviewQueueItem,
+} from "@/services/clinicians";
 
 const QUESTION_LABELS: Record<string, string> = {
     alternative_causes: "Alternative causes",
@@ -23,11 +28,47 @@ function questionLabel(question: string) {
     return QUESTION_LABELS[question] ?? question.replaceAll("_", " ");
 }
 
-function formatTimestamp(value: string) {
-    return new Intl.DateTimeFormat("en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
-    }).format(new Date(value));
+type EvidenceProvenance = "ai" | "patient" | "other";
+
+/** Where an evidence entry came from, based only on what the stored entry records. */
+function provenance(entry: ADRReviewEvidence): EvidenceProvenance {
+    if (entry.source === "patient_follow_up") return "patient";
+    if (entry.source === undefined || entry.source === null) return "ai";
+    return "other";
+}
+
+function ProvenanceLabel({
+    entry,
+    item,
+}: {
+    entry: ADRReviewEvidence;
+    item: ADRReviewQueueItem;
+}) {
+    const kind = provenance(entry);
+    if (kind === "ai") return <AiChip>AI-extracted</AiChip>;
+    if (kind === "other") return <Badge variant="neutral">Other source</Badge>;
+
+    // Only date the answer when it belongs to the request the response time describes.
+    const answeredAt =
+        entry.information_request_id &&
+        entry.information_request_id === item.informationRequestId &&
+        item.patientRespondedAt
+            ? item.patientRespondedAt
+            : null;
+
+    return (
+        <>
+            <Badge variant="neutral">Patient-confirmed</Badge>
+            {answeredAt ? (
+                <span className="text-xs text-muted">
+                    Answered{" "}
+                    <time className="font-mono" dateTime={answeredAt}>
+                        {formatReviewTimestamp(answeredAt)}
+                    </time>
+                </span>
+            ) : null}
+        </>
+    );
 }
 
 const panelClass = "rounded-xl border border-line bg-surface p-4";
@@ -44,8 +85,11 @@ function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
 
     return (
         <ul className="divide-y divide-line rounded-xl border border-line">
-            {item.evidence.map((entry) => (
-                <li className="space-y-2.5 px-4 py-3.5" key={entry.question}>
+            {item.evidence.map((entry, index) => (
+                <li
+                    className="space-y-2.5 px-4 py-3.5"
+                    key={`${index}:${entry.question}:${entry.source ?? "ai"}`}
+                >
                     <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
                         <p className="min-w-0 text-sm font-medium text-ink">
                             {questionLabel(entry.question)}
@@ -56,6 +100,9 @@ function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
                         >
                             {entry.answer.replaceAll("_", " ")}
                         </Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <ProvenanceLabel entry={entry} item={item} />
                     </div>
                     {entry.evidence ? (
                         <blockquote className="max-w-[72ch] border-l-2 border-line-strong pl-3 text-sm leading-relaxed text-ink-2">
@@ -93,7 +140,7 @@ export function ADRReviewCard({
                         <Badge variant="warning">Awaiting review</Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted">
-                        Captured <span className="font-mono">{formatTimestamp(item.createdAt)}</span>
+                        Captured <span className="font-mono">{formatReviewTimestamp(item.createdAt)}</span>
                     </p>
                 </div>
                 <Badge className="font-mono" variant="neutral">
@@ -119,12 +166,9 @@ export function ADRReviewCard({
                     </section>
 
                     <section>
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <h3 className="text-sm font-semibold text-ink">
-                                Patient-grounded Naranjo evidence
-                            </h3>
-                            <AiChip>AI-extracted</AiChip>
-                        </div>
+                        <h3 className="mb-3 text-sm font-semibold text-ink">
+                            Patient-grounded Naranjo evidence
+                        </h3>
                         <EvidenceList item={item} />
                     </section>
                 </div>

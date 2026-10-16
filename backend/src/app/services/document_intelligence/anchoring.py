@@ -23,6 +23,8 @@ _DIGIT_LETTER_BOUNDARY = re.compile(r"(?<=\d)(?=[a-z%])|(?<=[a-z])(?=\d)")
 _DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
 _NON_TOKEN = re.compile(r"[^a-z0-9./%-]+")
 _LETTER_DOTS = re.compile(r"(?<=[a-z])\.|\.(?=[a-z])")
+# "7-20" and "7 - 20" are the same printed range; split a dash between two numbers.
+_NUMBER_DASH = re.compile(r"(?<=\d)\s*[-–—]\s*(?=\d)")
 
 
 def normalize_for_match(text: str) -> str:
@@ -31,6 +33,7 @@ def normalize_for_match(text: str) -> str:
     folded = "".join(ch for ch in folded if not unicodedata.combining(ch))
     folded = folded.casefold().replace("µ", "u").replace("μ", "u")
     folded = _DECIMAL_COMMA.sub(".", folded)
+    folded = _NUMBER_DASH.sub(" - ", folded)
     folded = _LETTER_DOTS.sub("", folded)
     folded = _DIGIT_LETTER_BOUNDARY.sub(" ", folded)
     folded = _NON_TOKEN.sub(" ", folded)
@@ -49,6 +52,34 @@ def anchor_value(
             if best.match_score >= 1.0:
                 break
     return best
+
+
+def anchor_occurrences(
+    extraction: DocumentExtraction,
+    value: str,
+    *,
+    policy: DocumentIntelligencePolicy,
+    limit: int = 10,
+) -> list[EvidenceAnchor]:
+    """Every place ``value`` is printed, best match first and in page order within a score.
+
+    A test name is often printed twice: in a section heading ("LIPID PANEL AND HEMOGLOBIN
+    A1C") and on its own result row. The caller picks the copy that carries the item's
+    other values; the single best match alone is whichever comes first on the page.
+    """
+    target = normalize_for_match(value).split()
+    if not target:
+        return []
+    found: list[EvidenceAnchor] = []
+    for page in extraction.model_input_pages():
+        if not page.words:
+            continue
+        tokens = [(index, normalize_for_match(word.text)) for index, word in enumerate(page.words)]
+        tokens = [(index, token) for index, token in tokens if token]
+        for score, word_indexes in _all_windows(tokens, target, policy.anchor_min_similarity):
+            found.append(_build_anchor(page, word_indexes, score, policy))
+    found.sort(key=lambda anchor: -anchor.match_score)
+    return found[:limit]
 
 
 def anchor_on_page(
@@ -91,6 +122,29 @@ def _best_window(
             if score >= minimum and (best is None or score > best[0]):
                 best = (score, sorted({index for index, _ in window}))
     return best
+
+
+def _all_windows(
+    tokens: list[tuple[int, str]], target: list[str], minimum: float
+) -> list[tuple[float, list[int]]]:
+    """Every exact window, or the best near-match when nothing is exact, without overlaps."""
+    flat: list[tuple[int, str]] = []
+    for index, token in tokens:
+        flat.extend((index, piece) for piece in token.split())
+    target_text = " ".join(target)
+    size = len(target)
+    exact: list[tuple[float, list[int]]] = []
+    used: set[int] = set()
+    for start in range(0, max(0, len(flat) - size + 1)):
+        window = flat[start : start + size]
+        indexes = sorted({index for index, _ in window})
+        if " ".join(piece for _, piece in window) == target_text and not used & set(indexes):
+            exact.append((1.0, indexes))
+            used.update(indexes)
+    if exact:
+        return exact
+    best = _best_window(tokens, target, minimum)
+    return [best] if best is not None else []
 
 
 def _build_anchor(

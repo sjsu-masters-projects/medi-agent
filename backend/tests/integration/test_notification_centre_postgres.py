@@ -90,8 +90,13 @@ def postgres():
         )
         yield command
     finally:
+        # --volumes also removes the image's anonymous data volume, which otherwise
+        # accumulates with every run and fills the Docker disk.
         subprocess.run(
-            [docker, "rm", "--force", container], check=True, capture_output=True, timeout=15
+            [docker, "rm", "--force", "--volumes", container],
+            check=True,
+            capture_output=True,
+            timeout=15,
         )
 
 
@@ -157,6 +162,7 @@ def sql(postgres):
         "040_clinician_approved_care_plans.sql",
         "042_care_plan_publication_review_guards.sql",
         "043_incomplete_care_plan_drafts.sql",
+        "042_auditable_adr_assessments.sql",
         "046_adr_clinician_review_actions.sql",
     ):
         execute((MIGRATIONS / name).read_text())
@@ -170,7 +176,14 @@ def sql(postgres):
         "043_appointment_booking_guards.sql",
     ):
         execute((MIGRATIONS / name).read_text())
-    execute((MIGRATIONS / "048_care_team_conversations.sql").read_text())
+    # Remaining 047/048 ledger entries the ADR loop and the notification sources depend on.
+    for name in (
+        "047_adr_patient_information_loop.sql",
+        "047_care_plan_private_rls_helpers.sql",
+        "048_care_team_conversations.sql",
+        "048_medwatch_draft_lifecycle.sql",
+    ):
+        execute((MIGRATIONS / name).read_text())
     execute(Path(__file__).with_name("notification_centre_seed.sql").read_text())
     # Baseline old notices exist before capture installation; old safety rows
     # must never become new shared work. Reminder adapter preserves original rows.
@@ -186,8 +199,29 @@ def sql(postgres):
         "054_notification_page_proportional_reads.sql",
         "055_notification_one_response_per_offer.sql",
         "056_notification_prepare_waits.sql",
+        "057_email_delivery.sql",
     ):
         execute((MIGRATIONS / name).read_text())
+    # Hosted migrations cannot grant auth privileges to service_role; prove 058 needs none.
+    execute(
+        "REVOKE ALL ON auth.users FROM service_role; REVOKE USAGE ON SCHEMA auth FROM service_role;"
+    )
+    execute((MIGRATIONS / "058_email_delivery_fixes.sql").read_text())
+    for name in (
+        "059_critical_result_alerts.sql",
+        "060_critical_result_open_work.sql",
+        "061_critical_result_acknowledge.sql",
+    ):
+        execute((MIGRATIONS / name).read_text())
+    # The ADR information-loop lifecycle migration (PV-001-C, PR 2) applies on top of the ledger
+    # once it exists. It is found by name, not number, because main keeps taking numbers.
+    # ADR_LOOP_GAP_BASELINE=1 skips it to record unmodified behaviour.
+    # The Form 3500 migration (PR 3) requires it and follows it in ledger order, so the
+    # baseline run skips both.
+    if os.environ.get("ADR_LOOP_GAP_BASELINE") != "1":
+        for pattern in ("*_adr_information_loop_lifecycle.sql", "*_medwatch_form_3500.sql"):
+            for path in sorted(MIGRATIONS.glob(pattern)):
+                execute(path.read_text())
     try:
         yield execute
     finally:
@@ -564,15 +598,16 @@ def test_adr_reviewed_questions_only_and_current_status(sql):
       VALUES('{adr}','{PATIENT}','{symptom}','{med}','Synthetic medication',0,'Doubtful','PRIVATE MUST NOT LEAK');""")
     assert clinician(sql, "action_items")["items"][0]["event_type"] == "adr_review"
     sql(
-        f"SELECT review_adr_assessment('{adr}','{CLINICIAN}','request_information','Reviewed request','[\"¿Cuándo comenzó?\"]');"
+        f"SELECT review_adr_assessment('{adr}','{CLINICIAN}','request_information','Reviewed request','[\"dose_response\"]');"
     )
     row = next(r for r in call(sql)["items"] if r["event_type"] == "adr_information_requested")
-    assert row["metadata"]["requested_information"] == ["¿Cuándo comenzó?"]
+    assert row["metadata"]["requested_information"] == ["dose_response"]
     assert row["metadata"]["clinician_id"] == CLINICIAN
     assert "PRIVATE" not in json.dumps(row)
     sql(f"SELECT review_adr_assessment('{adr}','{CLINICIAN}','mark_reviewed');")
     assert clinician(sql, "action_items")["items"] == []
-    assert not next(r for r in call(sql)["items"] if r["source_id"] == adr)["actionable"]
+    # The same patient item, whichever source captured it (the request after 063).
+    assert not next(r for r in call(sql)["items"] if r["id"] == row["id"])["actionable"]
 
 
 def test_invalid_bounds_and_role_actions(sql):
@@ -1074,3 +1109,66 @@ def test_cancelled_visit_needs_attention_whatever_its_time(sql):
     sql("ALTER TABLE appointments ENABLE TRIGGER appointments_booking_guard;")
     items = clinician(sql, "action_items")["items"]
     assert [(r["source_id"], r["can_acknowledge"]) for r in items] == [(key, True)]
+
+
+def result(sql, doc, *, flag_meaning="critical", state="pending_review"):
+    """A lab-result candidate cited to ``doc``, as document grounding writes it."""
+    fact, provenance = str(uuid4()), str(uuid4())
+    value = json.dumps({"test_name": "Potassium", "value": "6.9", "flag_meaning": flag_meaning})
+    sql(f"""INSERT INTO clinical_facts(id,patient_id,fact_type,subject_type,value,review_state)
+      VALUES('{fact}','{PATIENT}','lab_result','lab_result','{value}'::jsonb,'{state}');
+      INSERT INTO source_provenances(id,artifact_type,source_system,source_reference,document_id)
+      VALUES('{provenance}','document','document_intelligence','document:{doc}','{doc}');
+      INSERT INTO evidence_citations(fact_id,provenance_id,excerpt)
+      VALUES('{fact}','{provenance}','Potassium | 6.9 | HH');""")
+    return fact
+
+
+def critical_events(sql, doc):
+    rows = sql(f"""SELECT e.audience||'|'||coalesce((SELECT string_agg(d.recipient_id::text,','
+        ORDER BY d.recipient_id) FROM notification_pending_deliveries d WHERE d.event_id=e.id),'')
+      FROM notification_events e WHERE e.event_type='critical_result' AND e.source_id='{doc}'""")
+    return [tuple(row.split("|")) for row in rows.splitlines()]
+
+
+def test_critical_result_alerts_the_care_team_once_per_document(sql):
+    doc = document(sql)
+    result(sql, doc)
+    result(sql, doc)  # a second critical result on the same report adds no second alert
+    assert critical_events(sql, doc) == [("shared", CLINICIAN)]
+    rows = [row for row in clinician(sql)["items"] if row["event_type"] == "critical_result"]
+    assert len(rows) == 1 and rows[0]["source_id"] == doc and rows[0]["actionable"]
+    assert rows[0]["category"] == "safety"
+    # The patient is told by their own explanation; they never receive this alert.
+    assert all(row["event_type"] != "critical_result" for row in call(sql)["items"])
+
+
+def test_non_critical_or_rejected_results_raise_no_alert(sql):
+    doc = document(sql)
+    result(sql, doc, flag_meaning="high")
+    result(sql, doc, state="rejected")
+    assert critical_events(sql, doc) == []
+
+
+def test_critical_alert_stops_being_work_when_the_document_is_rejected(sql):
+    doc = document(sql)
+    result(sql, doc)
+    sql(f"UPDATE documents SET review_status='rejected' WHERE id='{doc}'")
+    rows = [row for row in clinician(sql)["items"] if row["source_id"] == doc
+            and row["event_type"] == "critical_result"]
+    assert rows == [] or not rows[0]["actionable"]
+
+
+def test_critical_result_is_open_work_until_acknowledged(sql):
+    doc = document(sql)
+    result(sql, doc)
+    items = [
+        row for row in clinician(sql, "action_items")["items"]
+        if row["event_type"] == "critical_result" and row["source_id"] == doc
+    ]
+    assert len(items) == 1 and items[0]["can_acknowledge"]
+    clinician(sql, "acknowledge", {"id": items[0]["id"], "note": "Reviewed the document"})
+    assert all(
+        row["source_id"] != doc or row["event_type"] != "critical_result"
+        for row in clinician(sql, "action_items")["items"]
+    )

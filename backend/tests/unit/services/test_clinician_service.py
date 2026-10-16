@@ -168,7 +168,7 @@ async def test_pending_adr_review_count_queries_only_valid_draft_status(service,
 @pytest.mark.asyncio
 async def test_pending_medwatch_count_queries_medwatch_drafts(service, mock_db):
     chain = MagicMock()
-    for method in ("select", "in_"):
+    for method in ("select", "in_", "is_"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
     service._execute = AsyncMock(return_value=_response(count=1))  # type: ignore[method-assign]
@@ -178,6 +178,7 @@ async def test_pending_medwatch_count_queries_medwatch_drafts(service, mock_db):
     assert count == 1
     mock_db.table.assert_called_once_with("medwatch_drafts")
     chain.in_.assert_any_call("status", ["draft"])
+    chain.is_.assert_called_once_with("discarded_at", "null")
 
 
 @pytest.mark.asyncio

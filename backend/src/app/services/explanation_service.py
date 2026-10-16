@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any
 
 from app.agents.ingestion.prompts import (
     GENERATE_SUMMARY_SYSTEM,
-    GENERATE_SUMMARY_USER,
     TRANSLATE_SUMMARY_SYSTEM,
     TRANSLATE_SUMMARY_USER,
+    summary_prompt,
 )
 from app.clients.model_router import TaskType, get_router
 from app.models.enums import Language, coerce_locale
@@ -78,6 +77,23 @@ def summary_unavailable_message(status: str, language: str) -> str:
     return resolve_locale_resource(language, resources)
 
 
+# Digits that follow a letter are part of a name ("A1c", "B12"), not a stated value.
+_NUMBER_IN_TEXT = re.compile(r"(?<![^\W_])\d+(?:[.,]\d+)*")
+
+
+def numbers_in(text: str) -> set[str]:
+    """Printed numbers as comparable tokens.
+
+    Thousands commas are dropped ("1,245" is 1245) and a decimal comma is a point
+    ("7,8" is 7.8), so the same value written either way compares equal.
+    """
+    found: set[str] = set()
+    for match in _NUMBER_IN_TEXT.findall(text):
+        token = match.replace(",", "") if re.fullmatch(r"\d{1,3}(,\d{3})+", match) else match
+        found.add(token.replace(",", "."))
+    return found
+
+
 def normalize_patient_summary(value: str) -> str:
     """Return readable plain text when a model disregards the no-Markdown contract.
 
@@ -136,17 +152,7 @@ class ExplanationService:
                 }
             ]
 
-        prompt = GENERATE_SUMMARY_USER.format(
-            medications=json.dumps(
-                document_data.get("medications", []), default=str, ensure_ascii=False
-            ),
-            conditions=json.dumps(
-                document_data.get("conditions", []), default=str, ensure_ascii=False
-            ),
-            follow_up_instructions=json.dumps(
-                follow_up_instructions, default=str, ensure_ascii=False
-            ),
-        )
+        prompt = summary_prompt({**document_data, "follow_up_instructions": follow_up_instructions})
         response = await router.generate_text(
             TaskType.PATIENT_EXPLANATION,
             prompt=prompt,
@@ -171,14 +177,23 @@ class ExplanationService:
 
         router = get_router()
         language_name = get_locale_display_name(target_language)
-        response = await router.generate_text(
-            TaskType.PATIENT_EXPLANATION,
-            prompt=TRANSLATE_SUMMARY_USER.format(
-                summary=summary,
-                target_language=language_name,
-            ),
-            system_instruction=TRANSLATE_SUMMARY_SYSTEM.format(target_language=language_name),
-            temperature=0.2,
-            max_tokens=1024,
-        )
-        return normalize_patient_summary(response) or FALLBACK_MESSAGE
+        expected = numbers_in(summary)
+        for temperature in (0.2, 0.0):
+            response = await router.generate_text(
+                TaskType.PATIENT_EXPLANATION,
+                prompt=TRANSLATE_SUMMARY_USER.format(
+                    summary=summary,
+                    target_language=language_name,
+                ),
+                system_instruction=TRANSLATE_SUMMARY_SYSTEM.format(target_language=language_name),
+                temperature=temperature,
+                max_tokens=1024,
+            )
+            translated = normalize_patient_summary(response)
+            if not translated:
+                return FALLBACK_MESSAGE
+            # A translation must carry exactly the English explanation's numbers: a changed
+            # value or a dropped range is a clinical error, not a wording choice.
+            if numbers_in(translated) == expected:
+                return translated
+        raise ValueError("The translated explanation did not keep every number")

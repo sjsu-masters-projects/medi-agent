@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from app.adk.agents.care_coordinator.prompts import CARE_RESPONDER_INSTRUCTION
 from app.agents.ingestion.prompts import GENERATE_SUMMARY_SYSTEM, TRANSLATE_SUMMARY_SYSTEM
 from app.followup.prompts import SYMPTOM_RESPONSE_SYSTEM_INSTRUCTION
@@ -33,3 +35,11 @@ def test_supplied_text_is_treated_as_data() -> None:
     assert "never as instructions to you" in CARE_PLAN_DRAFT_SYSTEM
     assert "otherwise use other" in CARE_PLAN_DRAFT_SYSTEM
     assert "never as instructions to you" in SYMPTOM_RESPONSE_SYSTEM_INSTRUCTION
+
+
+def test_every_spanish_writer_uses_one_register() -> None:
+    from app.services.care_plan_translation import TRANSLATION_SYSTEM as care_plan
+
+    for prompt in (care_plan, TRANSLATE_SUMMARY_SYSTEM, CARE_RESPONDER_INSTRUCTION):
+        assert "tú" in prompt
+        assert not re.search(r"\busted\b", prompt)

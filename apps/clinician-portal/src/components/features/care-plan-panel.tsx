@@ -9,6 +9,7 @@ import { ApprovalSeal } from "@/components/ui/approval-seal";
 import { Icon } from "@/components/ui/icons";
 import { Popover } from "@/components/ui/popover";
 import { SourceFileIcon } from "@/components/features/source-file";
+import { formatClinicianDateTime } from "@/utils/dates";
 import { ApprovedWording, BilingualWording, LOCALE_LABEL, otherLocale, wordingComplete } from "@/components/features/care-plan-wording";
 import {
     approveClinicianCarePlan,
@@ -419,7 +420,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                         {isDraft ? <><Icon name="arrow" className="h-4 w-4 text-[#94A3B8]" /><AiChip>v{plan.version_number} draft · not visible to patient</AiChip></> : null}
                         {justApproved && !isDraft ? <span className="sr-only">Approved and published</span> : null}
                     </div>
-                    {generation?.status === "retry" ? <p className="text-xs text-warn-ink">Automatic retry scheduled{generation.next_attempt_at ? ` for ${new Date(generation.next_attempt_at).toLocaleString()}` : ""}.</p> : null}
+                    {generation?.status === "retry" ? <p className="text-xs text-warn-ink">Automatic retry scheduled{generation.next_attempt_at ? ` for ${formatClinicianDateTime(generation.next_attempt_at)}` : ""}.</p> : null}
                 </div>
             </div>
 

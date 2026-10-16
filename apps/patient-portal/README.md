@@ -41,6 +41,17 @@ Records distinguishes duplicate-skipped uploads from empty successful extraction
 The duplicate explanation is static en-US/es-MX copy; switching its language does
 not invoke a model or carry that reason into Nora as a clinical summary.
 
+An opened record shows **Test results / Resultados** from
+`GET /api/v1/documents/{id}/results`, requested only for that opened document (not
+for list rows, and not while it is still being read or is a duplicate). Lab results
+are grouped by printed panel and measurements are listed separately. Names, values,
+units, ranges and dates are shown exactly as printed. The only client logic is the
+status chip: the report's own flag first (High, Low, Outside range, Critical), else
+its own printed range; within range shows no chip. Critical adds "Contact your care
+team today." Unreviewed rows are marked, and the section states that results were
+read automatically and that the care team will review them. An empty response
+renders nothing; a failed request shows a retry.
+
 The authenticated layout shares one patient profile across all screens. The saved
 language selector is in Profile, not a repeated banner. Saving a language updates
 navigation, controls and explanatory UI, and switches care-plan items to their wording
@@ -125,15 +136,46 @@ concurrent arrivals. No new email, SMS or push delivery is introduced. See
 
 ## ADR care-team follow-up
 
-The chat page also hosts structured follow-up requests for an existing draft ADR assessment.
-The patient may answer only retrospective questions about a prior clinician-directed dose change,
-a prior restart, or a similar prior reaction. The form explicitly says not to restart, stop, or
-change a medicine to answer, requires a description for known yes/no answers, and requires a final
-confirmation before sending.
+When an assigned clinician needs more detail on a draft ADR assessment, the patient answers up to
+three retrospective questions about a prior clinician-directed dose change, a prior restart, or a
+similar prior reaction. The form says not to restart, stop, or change a medicine to answer, asks for
+a description of known yes/no answers, and requires a final confirmation before sending.
 
-- `GET /api/v1/patients/me/adr-information-requests` loads pending patient-safe requests.
-- `POST /api/v1/patients/me/adr-information-requests/{request_id}/respond` saves the confirmed
-  answers and returns the deterministic Naranjo rescore.
+**Route.** `/chat?view=follow-up` opens the follow-up view without a thread or recipient step. The
+optional `request` parameter opens one request in any state and wins over `assessment`, which opens
+the newest request for that assessment. With neither, the view lists every pending request.
+Notifications link here by assessment (or by request), and the entry rows link to the bare route.
+The view carries the same emergency and "not continuously monitored" caution as chat. Signed-out
+visits follow the normal sign-in redirect and return to the same URL.
+
+**Entry rows.** A row appears in the chat inbox, in an open Nora thread and on Today, only while at
+least one request is pending. It is hidden while loading, on a load error, or when nothing is
+pending, because the view itself reports errors. The count refreshes on focus and does not poll.
+
+**Endpoints.**
+- `GET /api/v1/patients/me/adr-information-requests` lists pending requests (used by the entry rows).
+- `GET /api/v1/patients/me/adr-information-requests/overview` returns `selected`, `pending` and
+  `recent` for any state. It takes `request_id` or `assessment_id`; both together return 422, and a
+  missing or another patient's ID returns the same 404.
+- `POST /api/v1/patients/me/adr-information-requests/{request_id}/respond` saves the confirmed answers.
+
+Patient responses carry no Naranjo score or causality.
+
+**States.** Loading skeleton; error with retry; not found; pending form; answered, as a read-only
+summary of the patient's own answers and date; closed, with a link to the newer request when one
+exists; empty; and recent history (up to 5 answered or closed requests from the last 90 days).
+
+**Localization.** All strings come from `src/content/adr-follow-up-copy.ts` in en-US and es-MX,
+guarded by a key-parity test. The clinician's message, symptom and medication name are shown
+verbatim. The Spanish wording is pending review by a Spanish-fluent reviewer.
+
+**Errors and drafts.** The server error code is mapped to localized copy: `ADR_REQUEST_CLOSED`
+shows the closed state, and server message text is never displayed. Unsent answers live only in
+component state and are lost on reload; nothing is written to browser storage.
+
+**UI standard.** Built from shared primitives and design tokens, with 44 px touch targets and a
+visible focus ring on the label of each visually hidden radio and checkbox.
+
 - The browser never writes ADR assessment or audit tables directly; the backend owns the atomic
   response, reassessment, notification, and audit transaction.
 
@@ -166,3 +208,5 @@ A real approved library and authorized schema rollout are required to activate t
 screen. With the current pending-review manifest, start fails closed without saving a
 report. Follow [the synthetic journey and verification record](../../docs/pat-002-b-acceptance-2026-10-12.md).
 The saved patient symptom timeline remains PAT-002-C.
+
+Chat results card: an assistant message may carry `attachments` of type `document_results`, built by the server from the cited document's extracted results (never from the reply text). The chat shows them under the reply: critical results first with a contact-your-care-team line, out-of-range results with chips, the rest behind a toggle, and a link to the document in Records.

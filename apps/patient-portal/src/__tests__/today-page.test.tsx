@@ -6,7 +6,8 @@ const destination = vi.hoisted(() => ({ params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => destination.params }));
 vi.mock("@/components/features/approved-plan-details", () => ({ ApprovedPlanDetails: ({ locale }: { locale: string }) => <p>Approved snapshot {locale}</p> }));
 
-const { markComplete, reportBarrier, refreshFeed, useFeedData, usePatientProfile } = vi.hoisted(() => ({
+const { markComplete, reportBarrier, refreshFeed, useFeedData, usePatientProfile, pending } = vi.hoisted(() => ({
+    pending: { count: 0, loaded: true },
     markComplete: vi.fn(),
     reportBarrier: vi.fn(),
     refreshFeed: vi.fn(),
@@ -20,6 +21,11 @@ vi.mock("@/hooks/use-feed-data", () => ({
 
 vi.mock("@/hooks/use-patient-profile", () => ({
     usePatientProfile,
+}));
+
+// The ADR follow-up entry row reads Redux and the network; tests set the pending count directly.
+vi.mock("@/hooks/use-pending-adr-follow-ups", () => ({
+    usePendingADRFollowUps: () => ({ count: pending.count, loaded: pending.loaded }),
 }));
 
 function mockFeedData(overrides: Partial<ReturnType<typeof baseFeedData>> = {}) {
@@ -57,6 +63,8 @@ describe("TodayPage", () => {
         useFeedData.mockReset();
         usePatientProfile.mockReset();
         usePatientProfile.mockReturnValue(null);
+        pending.count = 0;
+        pending.loaded = true;
     });
 
     it("opens the exact authorized activity from its canonical UUID, without changing completion", async () => {
@@ -141,7 +149,7 @@ describe("TodayPage", () => {
         await act(async () => fireEvent.click(screen.getByRole("button", { name: "Marcar como completada" })));
         expect(markComplete).toHaveBeenCalledWith(task);
         fireEvent.click(screen.getByRole("button", { name: "Detalles del plan de atención" }));
-        expect(screen.getByText(/Versión 3 del plan aprobado/)).toBeInTheDocument();
+        expect(screen.getByText("Seguimiento · Versión 3")).toBeInTheDocument();
     });
 
     it.each([
@@ -183,7 +191,9 @@ describe("TodayPage", () => {
         mockFeedData({ tasks: [{ id: "synthetic", name: "Source activity", type: FeedTaskType.OBLIGATION, status: FeedTaskStatus.PENDING, carePlan: { category, versionNumber: 1 } } as FeedTask] });
         render(<TodayPage />);
         fireEvent.click(screen.getByRole("button", { name: "Detalles del plan de atención" }));
-        expect(screen.getByText(`Aprobado por tu equipo de atención • ${label}`)).toBeInTheDocument();
+        const sheet = screen.getByRole("dialog");
+        expect(within(sheet).getAllByText("Aprobado por tu equipo de atención")).toHaveLength(1);
+        expect(within(sheet).getByText(`${label.charAt(0).toUpperCase()}${label.slice(1)} · Versión 1`)).toBeInTheDocument();
     });
 
     it("localizes due-now clock and saving copy while keeping controls disabled during submission", () => {
@@ -284,7 +294,9 @@ describe("TodayPage", () => {
         await act(async () => fireEvent.click(screen.getByRole("button", { name: /mark as taken/i })));
         expect(markComplete).toHaveBeenCalledWith(task);
         fireEvent.click(screen.getByRole("button", { name: "Care plan details" }));
-        expect(screen.getByText(/Approved plan version 2/)).toBeInTheDocument();
+        expect(screen.getByText(/ · Version 2$/)).toBeInTheDocument();
+        // One approval line per card, not three.
+        expect(screen.queryByText(/This activity is part of your approved care plan/)).not.toBeInTheDocument();
     });
 
     it("keeps a future scheduled dose upcoming instead of due now", () => {
@@ -404,4 +416,38 @@ describe("TodayPage", () => {
         expect(screen.getByRole("textbox")).toHaveValue("Synthetic QA barrier");
     });
 
+    describe("ADR follow-up entry row", () => {
+        it("is absent when no request is pending or the count has not loaded", () => {
+            mockFeedData();
+            const { rerender } = render(<TodayPage />);
+            expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
+            pending.count = 2;
+            pending.loaded = false;
+            rerender(<TodayPage />);
+            expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
+        });
+        it.each([[1, "1 request is waiting for your answers"], [2, "2 requests are waiting for your answers"]])(
+            "links to the follow-up view while %i request(s) are pending, above the symptom link", (count, text) => {
+                pending.count = count;
+                mockFeedData();
+                render(<TodayPage />);
+                const row = screen.getByRole("link", { name: /Questions from your care team/ });
+                expect(row).toHaveAttribute("href", "/chat?view=follow-up");
+                expect(row).toHaveTextContent(text);
+                const symptom = screen.getByRole("link", { name: /Report a symptom/ });
+                expect(symptom).toHaveAttribute("href", "/chat");
+                expect(row.compareDocumentPosition(symptom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            });
+        it.each([[1, "1 solicitud espera tus respuestas"], [2, "2 solicitudes esperan tus respuestas"]])(
+            "localizes the row in es-MX with %i pending", (count, text) => {
+                pending.count = count;
+                usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX", timezone: "America/Los_Angeles" });
+                mockFeedData();
+                render(<TodayPage />);
+                const row = screen.getByRole("link", { name: /Preguntas de tu equipo de atención/ });
+                expect(row).toHaveAttribute("href", "/chat?view=follow-up");
+                expect(row).toHaveTextContent(text);
+                expect(screen.getByRole("link", { name: /Reportar un síntoma/ })).toHaveAttribute("href", "/chat");
+            });
+    });
 });

@@ -68,6 +68,8 @@ These run real migrations against disposable PostgreSQL 16 and skip unless enabl
 |-------|-------------|
 | `integration/test_care_conversation_postgres.py` | `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` (official `postgres:16` image) |
 | `integration/test_notification_centre_postgres.py` | `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` (official `postgres:16` image) |
+| `integration/test_adr_loop_postgres.py`, `integration/test_medwatch_3500_postgres.py` | `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` (same fixture) |
+| `integration/test_email_postgres.py` | `EMAIL_TEST_POSTGRES_DOCKER=1` (same fixture) |
 | `integration/test_care_plan_postgres.py` | `CARE_PLAN_TEST_POSTGRES=1` (local `initdb`/`pg_ctl`), plus `CARE_PLAN_TEST_POSTGRES_DOCKER=1` to use Docker instead |
 | `integration/test_appointment_offer_transactions.py` | Runs when PostgreSQL server binaries are on `PATH`; skips otherwise |
 
@@ -282,8 +284,12 @@ async def test_multiple_calls():
 
 `.github/workflows/ci.yml` runs the backend tests on every push and pull request in four
 sharded jobs (`integration-routers`, `integration-workflows`, `unit-foundation`,
-`unit-services`) without coverage, plus a full-suite coverage job that enables the Docker
-PostgreSQL suites and enforces the 80% threshold.
+`unit-services`) without coverage, a full-suite coverage job that enforces the 80%
+threshold, and a parallel `backend-postgres-contracts` job that runs the Docker PostgreSQL
+suites in three shards (notifications and email, ADR loop and MedWatch, care conversations)
+and fails if any expected case is skipped or missing. The containers are disposable and run
+with `--network=none`; no CI job touches a hosted database. `test_care_plan_postgres.py` is
+not run in CI.
 
 ## Pre-commit Hooks
 

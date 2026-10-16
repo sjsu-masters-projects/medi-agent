@@ -10,9 +10,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from supabase import Client
 
+from app.core.exceptions import ValidationError
 from app.core.security import require_role
 from app.db.connection import get_db
 from app.models.adr import (
+    ADRFollowUpOverviewRead,
     ADRInformationRequestRead,
     ADRInformationResponseRead,
     ADRInformationResponseRequest,
@@ -93,6 +95,35 @@ async def list_my_adr_information_requests(
 ) -> list[ADRInformationRequestRead]:
     payload = await service.list_adr_information_requests(user.id)
     return [ADRInformationRequestRead.model_validate(item) for item in payload]
+
+
+# Declared before any ``/{request_id}`` path so "overview" is never parsed as an ID.
+@router.get(
+    "/me/adr-information-requests/overview",
+    response_model=ADRFollowUpOverviewRead,
+    summary="Get my ADR follow-up overview",
+    description=(
+        "Returns the selected follow-up request (by request or assessment), every pending "
+        "request, and bounded recent history. It carries no score or causality fields."
+    ),
+)
+async def get_my_adr_follow_up_overview(
+    request_id: UUID | None = None,
+    assessment_id: UUID | None = None,
+    user: CurrentUser = Depends(_patient_dep),
+    service: PatientService = Depends(_get_service),
+) -> ADRFollowUpOverviewRead:
+    """Return the patient's own ADR follow-up requests.
+
+    At most one of ``request_id`` and ``assessment_id`` may be given. A missing ID and
+    another patient's ID return the same 404.
+    """
+    if request_id is not None and assessment_id is not None:
+        raise ValidationError("Choose a request or an assessment, not both")
+    payload = await service.get_adr_follow_up_overview(
+        user.id, request_id=request_id, assessment_id=assessment_id
+    )
+    return ADRFollowUpOverviewRead.model_validate(payload)
 
 
 @router.post(

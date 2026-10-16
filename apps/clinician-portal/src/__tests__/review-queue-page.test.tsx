@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Provider } from "react-redux";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import ReviewQueuePage from "@/app/(dashboard)/review-queue/page";
 import {
     approveDocumentReview,
@@ -8,6 +8,7 @@ import {
     rejectDocumentReview,
 } from "@/services/clinicians";
 import { store } from "@/store/store";
+import { simulateNonUsDefaultLocale } from "./fixtures/locale";
 
 vi.mock("@/services/clinicians", () => ({
     fetchDocumentReviewQueue: vi.fn(),
@@ -117,5 +118,38 @@ describe("ReviewQueuePage", () => {
         await waitFor(() =>
             expect(screen.queryByText("image.png")).not.toBeInTheDocument(),
         );
+    });
+
+    describe("upload dates", () => {
+        afterEach(() => vi.restoreAllMocks());
+
+        it("formats the upload time as en-US even when the default locale is not US", async () => {
+            simulateNonUsDefaultLocale();
+            vi.mocked(fetchDocumentReviewQueue).mockResolvedValue([
+                {
+                    id: "doc-date",
+                    patientId: "patient-date",
+                    patientFirstName: "Ana",
+                    patientLastName: "Lopez",
+                    fileName: "dated.pdf",
+                    documentType: "other",
+                    parseStatus: "completed",
+                    createdAt: "2026-10-12T12:00:00Z",
+                    uploadedByRole: "patient",
+                    reviewStatus: "pending",
+                },
+            ]);
+
+            render(
+                <Provider store={store}>
+                    <ReviewQueuePage />
+                </Provider>,
+            );
+
+            expect(await screen.findByText("dated.pdf")).toBeInTheDocument();
+            const time = document.querySelector('time[datetime="2026-10-12T12:00:00Z"]');
+            expect(time?.textContent).toMatch(/^10\/12\/2026, /);
+            expect(time?.textContent).not.toContain("12/10/2026");
+        });
     });
 });

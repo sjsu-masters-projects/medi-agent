@@ -126,6 +126,8 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # File downloads (Form 3500 PDF) name themselves; the portal reads the filename.
+        expose_headers=["Content-Disposition"],
     )
 
     # ── Exception Handlers ──────────────────────────────

@@ -80,7 +80,7 @@ async def test_full_ingestion_pipeline_creates_only_grounded_candidates() -> Non
     intelligence = MagicMock()
     intelligence.extract.return_value = _source_extraction()
     service = IngestionService(db, intelligence=intelligence)
-    service._extract_structured = AsyncMock(return_value=(_model_extraction(), "gemini-test"))
+    service._extract_structured = AsyncMock(return_value=(_model_extraction(), "gemini-test", 0))
 
     with patch("app.services.ingestion_service.DocumentEvidenceCandidateService") as registry:
         registry.return_value.register.return_value = CandidateRegistrationSummary(created=1)
@@ -252,3 +252,65 @@ def test_an_unrelated_write_failure_still_surfaces() -> None:
         IngestionService(db, intelligence=MagicMock())._set_document(
             DOCUMENT_ID, parse_status="completed", parsed=True, summary_status="pending"
         )
+
+
+async def _ingest_with(
+    fact_types: set[str], *, document_type: str, proposed_type: str | None
+) -> tuple[MagicMock, MagicMock]:
+    db = _make_db()
+    db.rpc().execute.return_value.data["document_type"] = document_type
+    intelligence = MagicMock()
+    intelligence.extract.return_value = _source_extraction()
+    service = IngestionService(db, intelligence=intelligence)
+    result = _model_extraction()
+    result.document.document_type = proposed_type
+    service._extract_structured = AsyncMock(return_value=(result, "gemini-test", 0))
+    with (
+        patch("app.services.ingestion_service.DocumentEvidenceCandidateService") as registry,
+        patch("app.services.care_plan_service.CarePlanService") as care_plan,
+    ):
+        registry.return_value.register.return_value = CandidateRegistrationSummary(
+            created=len(fact_types), fact_types=fact_types
+        )
+        outcome = await service.ingest_document(
+            document_id=DOCUMENT_ID, patient_id=PATIENT_ID, file_path="patient/doc.pdf"
+        )
+    assert outcome["status"] == "completed"
+    return db, care_plan
+
+
+@pytest.mark.asyncio
+async def test_results_only_document_does_not_open_a_care_plan_draft() -> None:
+    _, care_plan = await _ingest_with(
+        {"lab_result", "condition"}, document_type="lab_report", proposed_type="lab_report"
+    )
+    care_plan.return_value.request_generation.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_medication_document_still_requests_a_draft() -> None:
+    _, care_plan = await _ingest_with(
+        {"medication", "lab_result"}, document_type="lab_report", proposed_type=None
+    )
+    care_plan.return_value.request_generation.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_other_document_records_its_classified_type_only() -> None:
+    db, _ = await _ingest_with({"lab_result"}, document_type="other", proposed_type="lab_report")
+    documents = db.table("documents")
+    assert any(
+        call.args[0] == {"document_type": "lab_report"} for call in documents.update.call_args_list
+    )
+    # The write is guarded in the database too: only a row still marked "other" changes.
+    assert any(call.args == ("document_type", "other") for call in documents.eq.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_chosen_document_type_is_never_replaced() -> None:
+    db, _ = await _ingest_with(
+        {"lab_result"}, document_type="prescription", proposed_type="lab_report"
+    )
+    assert not any(
+        "document_type" in call.args[0] for call in db.table("documents").update.call_args_list
+    )

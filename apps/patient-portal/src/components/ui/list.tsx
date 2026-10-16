@@ -28,10 +28,10 @@ export function IconTile({ icon, tone = "neutral", size = "md", className = "" }
 }
 
 /** Monospace uppercase eyebrow above a grouped list. */
-export function SectionLabel({ children, action, as: Tag = "h2", className = "" }: { children: ReactNode; action?: ReactNode; as?: "h2" | "h3" | "p"; className?: string }) {
+export function SectionLabel({ children, action, as: Tag = "h2", className = "", id }: { children: ReactNode; action?: ReactNode; as?: "h2" | "h3" | "p"; className?: string; id?: string }) {
     return (
         <div className={`flex min-h-9 items-end justify-between gap-3 px-[22px] pt-5 pb-2 ${className}`}>
-            <Tag className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{children}</Tag>
+            <Tag id={id} className="font-mono text-xs uppercase tracking-[0.08em] text-muted">{children}</Tag>
             {action}
         </div>
     );

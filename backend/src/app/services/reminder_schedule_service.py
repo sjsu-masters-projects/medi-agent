@@ -92,11 +92,30 @@ def normalize_supported_frequency(frequency: str) -> str:
         "con el desayuno y la cena": "with breakfast and dinner",
         "con cada comida": "with each meal",
         "antes de acostarse": "before bed",
+        "al acostarse": "before bed",
+        "al acostarte": "before bed",
+        "antes de dormir": "before bed",
+        "cada noche": "before bed",
+        "todas las noches": "before bed",
+        "cada manana": "every morning",
+        "todas las mananas": "every morning",
         "todos los dias antes del desayuno": "each day before breakfast",
         "cada dia antes del desayuno": "each day before breakfast",
     }
     if value in aliases:
         return aliases[value]
+    # One dose at a named time of day is a daily routine, not an unclear frequency:
+    # "at bedtime" and "every morning" left an approved activity without reminders.
+    if re.fullmatch(
+        r"(?:once )?(?:(?:daily|each day|every day) )?(?:at bedtime|bedtime|nightly"
+        r"|at night|every night|each night|before bed(?:time)?)",
+        value,
+    ):
+        return "before bed"
+    if re.fullmatch(
+        r"(?:once )?(?:(?:daily|each day|every day) )?(?:every|each|in the) morning", value
+    ):
+        return "every morning"
     spanish_days = dict(
         zip(
             ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"],
@@ -204,6 +223,13 @@ def infer_frequency_guidance(frequency: str) -> dict[str, Any]:
             "recommended_times_per_day": 2,
             "recommended_days_per_week": 7,
             "guidance_text": "Set two reminder times, usually one earlier and one later in the day.",
+        }
+    if value == "every morning":
+        return {
+            "supports_automatic_reminders": True,
+            "recommended_times_per_day": 1,
+            "recommended_days_per_week": 7,
+            "guidance_text": "Choose the time you usually start your morning.",
         }
     if value == "before bed":
         return {

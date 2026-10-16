@@ -174,3 +174,38 @@ async def test_matching_three_day_schedule_is_saved(monkeypatch):
     )
     assert result["id"] == "schedule"
     execute.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "frequency,canonical",
+    [
+        ("at bedtime", "before bed"),
+        ("Nightly", "before bed"),
+        ("once daily at bedtime", "before bed"),
+        ("every night", "before bed"),
+        ("al acostarte", "before bed"),
+        ("todas las noches", "before bed"),
+        ("every morning", "every morning"),
+        ("each morning", "every morning"),
+        ("cada mañana", "every morning"),
+    ],
+)
+def test_a_named_time_of_day_is_a_once_daily_routine(frequency, canonical):
+    guidance = infer_frequency_guidance(frequency)
+    assert guidance == infer_frequency_guidance(canonical)
+    assert guidance["supports_automatic_reminders"] is True
+    assert guidance["recommended_times_per_day"] == 1
+    assert guidance["recommended_days_per_week"] == 7
+    assert schedule_matches_frequency(
+        {"times_of_day": ["21:30"], "days_of_week": DAY_ORDER}, frequency
+    )
+    assert not schedule_matches_frequency(
+        {"times_of_day": ["08:00", "21:30"], "days_of_week": DAY_ORDER}, frequency
+    )
+
+
+@pytest.mark.parametrize(
+    "frequency", ["morning and night", "every other night", "at night as needed"]
+)
+def test_time_of_day_phrases_that_are_not_once_daily_stay_unclear(frequency):
+    assert infer_frequency_guidance(frequency)["supports_automatic_reminders"] is False
