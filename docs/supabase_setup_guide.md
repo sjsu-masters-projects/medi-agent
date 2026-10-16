@@ -151,6 +151,29 @@ write `care_teams.clinic_id`; apply first, merge after). The currently deployed 
 working once 065 is applied. After applying, confirm the ledger row and read the `NOTICE`
 count of clinicians without a clinic.
 
+### Sign in once (066, CLN-003 slice B) — written, not applied
+
+`066_clinic_sign_in_once.sql` requires 065. It adds the append-only
+`clinic_membership_audit_events` table (RLS on, no foreign keys, identifiers only; `service_role`
+has SELECT and INSERT, nobody has UPDATE, DELETE or TRUNCATE, and triggers refuse them even for
+the owner), `public.clinician_clinic_operation` (list memberships, join by open clinic code,
+change a member's role, remove a member; callable by `service_role` only), membership-aware
+`clinician_email_invitation_operation` (an address that belongs to another clinic can be invited;
+admin rights are read from the membership at the invitation's clinic), and care-conversation and
+notification checks that use the care-team link's clinic. `clinicians.clinic_id` stays the
+clinician's default clinic for legacy readers. It ends with a fail-closed verification block.
+
+It is not applied to any hosted project; applying it needs the requester's explicit
+authorization naming that action. **Order:** apply 066 before the backend from
+`feature/clinic-sign-in-once` deploys (apply first, merge after), because the new routes call
+`clinician_clinic_operation`. The deployed backend and portal keep working once 066 is applied:
+every replaced function keeps its signature. LOC-003's unmerged
+`066_care_plan_wording_back_translation.sql` is renumbered when it lands; the validator is
+unchanged. After applying, confirm the ledger row.
+
+**Supabase Auth dashboard changes: none.** Sign-in, MFA and email settings are unchanged; the
+service-role backend performs the membership operations.
+
 ### Appointment booking guards (042/043)
 
 Appointment Slice 5 is applied to the synthetic project. For a new environment, run the
