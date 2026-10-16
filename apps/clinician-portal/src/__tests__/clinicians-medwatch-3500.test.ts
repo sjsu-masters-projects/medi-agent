@@ -5,6 +5,8 @@ import {
     discardMedWatchDraft,
     downloadForm3500Pdf,
     fetchForm3500Preview,
+    fetchForm3500PreviewPdf,
+    fetchMedWatchDraft,
     fetchMedWatchDrafts,
     form3500PdfFilename,
     form3500TemplateInfo,
@@ -213,6 +215,31 @@ describe("MedWatch Form 3500 client", () => {
         expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer synthetic-token");
         expect(file.filename).toBe("fda-3500-abcdef12-not-submitted.pdf");
         expect(await file.blob.text()).toBe("%PDF-1.7");
+    });
+
+    it("fetches the watermarked preview with the bearer token and never as an export", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response("%PDF-1.7", { status: 200, headers: { "Content-Type": "application/pdf" } }),
+        );
+        vi.stubGlobal("fetch", fetchMock);
+        const blob = await fetchForm3500PreviewPdf(DRAFT_ID);
+        expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/${DRAFT_ID}/preview.pdf`);
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer synthetic-token");
+        expect(await blob.text()).toBe("%PDF-1.7");
+    });
+
+    it("reports a preview failure by code without server text", async () => {
+        stubFetch(json({ error: { code: "FORM_3500_RENDER_FAILED", message: "private server detail" } }, 502));
+        const failure = await fetchForm3500PreviewPdf(DRAFT_ID).catch((error: unknown) => error);
+        expect(failure).toMatchObject({ code: "FORM_3500_RENDER_FAILED", status: 502 });
+        expect((failure as Error).message).not.toContain("private server detail");
+    });
+
+    it("reads one draft by id and maps a 404 to the unavailable message", async () => {
+        stubFetch(json(draftResponse()));
+        expect((await fetchMedWatchDraft(DRAFT_ID)).id).toBe(DRAFT_ID);
+        stubFetch(json({ error: { code: "NOT_FOUND" } }, 404));
+        await expect(fetchMedWatchDraft(DRAFT_ID)).rejects.toMatchObject({ status: 404 });
     });
 
     it("falls back to the server's filename pattern without a readable header", () => {
