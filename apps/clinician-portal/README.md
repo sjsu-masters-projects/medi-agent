@@ -33,13 +33,41 @@ npm run test
 - That flow creates the clinic and provisions the initial clinic code
 - Clinic admins land in the clinician dashboard after successful auth
 
-### Clinician Login
+### Clinician Login (sign in once)
 
-1. User enters a clinic code on `/login`
-2. Frontend verifies the clinic through `POST /api/v1/clinics/resolve-code`
-3. Verified clinic context is stored locally and reused on refresh
-4. User chooses login and submits email/password through `POST /api/v1/auth/login`
-5. If MFA is required, the user completes TOTP verification before session hydration
+1. `/login` opens on **Sign in**: email and password through `POST /api/v1/auth/login`, with no
+   clinic code. The account must have an active clinic membership (`NO_ACTIVE_CLINIC` otherwise).
+2. If MFA is required, the user completes TOTP verification before session hydration.
+3. The clinician lands where they did before: the return path or `/dashboard`. There is no
+   "Choose a clinic" step, no header switcher and no global active clinic. Lists stay
+   clinician-wide through the care-team link.
+4. After sign-in the portal reads `GET /api/v1/clinicians/me/clinics` only to decide what the
+   sidebar shows: the clinic name when there is exactly one clinic, nothing otherwise.
+
+The clinic code is the **secondary path**, **Join a clinic** on `/login`:
+
+- verify the code (`POST /api/v1/clinics/resolve-code`), then choose
+  - **I already have an account**: sign in (and MFA), then `POST /api/v1/clinicians/me/clinics`
+    adds the clinic with a Provider or Nurse / MA role. The clinic is added only after the
+    second factor. A membership ended by that clinic's admin is refused (`MEMBERSHIP_INACTIVE`:
+    ask the admin to invite you again). If adding fails the clinician is signed in and can
+    continue to the dashboard.
+  - **Join this clinic (Provider / Nurse)**: create an account at `/signup` (an address that
+    already has an account is refused with `ACCOUNT_EXISTS`: sign in to add the clinic).
+  - **Create a clinic workspace**: `/signup/admin`.
+- An addressed email invitation adds a clinic from `/signup#invitation=...`. An account with
+  MFA and an active clinic must sign in first (`SIGN_IN_TO_ACCEPT`).
+
+### Clinic-scoped actions
+
+Staff, role changes and removals, email invitations, patient invite codes (and their history)
+and the clinic code shown in Settings belong to one clinic. The portal sends `clinic_id`
+automatically for a clinician with one clinic. With several, the server answers
+`CLINIC_REQUIRED` and Settings shows a small **Clinic for this page** picker (component
+`src/components/features/clinic-picker.tsx`); the choice applies only to those sections. Admin
+controls follow the role held at the chosen clinic, not a profile-wide role. Error copy for
+`CLINIC_REQUIRED`, `ACCOUNT_EXISTS`, `MEMBERSHIP_INACTIVE`, `NO_ACTIVE_CLINIC`,
+`SIGN_IN_TO_ACCEPT` and the clinic-code errors lives in `src/services/clinics.ts`.
 
 ### Clinician MFA
 
@@ -53,11 +81,12 @@ npm run test
 
 ## Invite-Code Behavior
 
-Invite history is intentionally role-sensitive:
+Invite codes belong to the clinic that issued them (the patient's care-team link takes that
+clinic). Invite history is intentionally role-sensitive, per clinic:
 
-- clinic admins can see clinic-wide invite history
-- admins also see who generated each code
-- non-admin clinicians only see invite codes they created
+- clinic admins can see that clinic's invite history, and who generated each code
+- non-admin clinicians only see invite codes they created at that clinic
+- an admin at one clinic sees nothing of another clinic's codes
 - revoke remains owner-scoped, so admins do not revoke peer-issued codes from the current UI
 
 ## Relevant Files
@@ -71,7 +100,9 @@ Invite history is intentionally role-sensitive:
 - settings / invite history: `src/app/(dashboard)/settings/page.tsx`
 - MFA setup: `src/app/(dashboard)/settings/mfa/page.tsx`
 - clinician API client: `src/services/clinicians.ts`
-- stored clinic context: `src/services/clinic-context.ts`
+- stored clinic context (sidebar display and the join path only): `src/services/clinic-context.ts`
+- clinic memberships, `clinic_id` helper and error copy: `src/services/clinics.ts`
+- clinic picker for clinic-scoped actions: `src/components/features/clinic-picker.tsx`
 
 ## Document review workflow
 

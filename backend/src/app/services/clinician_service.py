@@ -33,6 +33,7 @@ from app.core.exceptions import (
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
 from app.models.adr import ADRReviewDecisionRequest
+from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
 from app.pharmacovigilance import PATIENT_ANSWERABLE_NARANJO_QUESTIONS, NaranjoQuestion
@@ -79,11 +80,14 @@ class ClinicianService:
         if not clean:
             return await self.get_profile(clinician_id)
 
-        clinic_code = clean.pop("clinic_code", None)
-        if clinic_code:
-            clinic = await self._resolve_active_clinic(str(clinic_code))
-            clean["clinic_id"] = clinic["id"]
-            clean["clinic_name"] = clinic["display_name"]
+        # A profile update never changes clinics: a clinic is added by clinic code or
+        # invitation (CLN-003), and a free-text clinic name fed legacy peer matching.
+        if "clinic_code" in clean or "clinic_name" in clean:
+            raise ValidationError(
+                "Clinics are not changed from the profile. Use Join a clinic with a clinic "
+                "code, or accept an invitation.",
+                code="CLINIC_CHANGE_NOT_SUPPORTED",
+            )
 
         result = await self._execute(
             self.db.table("clinicians").update(clean).eq("id", str(clinician_id))
@@ -91,18 +95,6 @@ class ClinicianService:
         if not result.data:
             raise NotFoundError("Clinician", str(clinician_id))
         return result.data[0]
-
-    async def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
-        """Resolve clinic identity by code and enforce active status."""
-        clinics = await self.clinic_repo.find_matching_by_code_async(clinic_code)
-        if not clinics:
-            raise ValidationError("Clinic code is invalid")
-
-        clinic = clinics[0]
-        if clinic.get("status") != "active":
-            raise ValidationError("Clinic code is inactive")
-
-        return clinic
 
     # ── Patient List ────────────────────────────────────
 
@@ -226,26 +218,56 @@ class ClinicianService:
 
     # ── Invite Codes ────────────────────────────────────
 
-    async def generate_invite_code(self, clinician_id: UUID) -> Any:
+    async def _require_membership(
+        self, clinician_id: UUID, clinic_id: UUID | None
+    ) -> ClinicMembership:
+        """The membership an invite-code action runs under; fails closed without one.
+
+        Raises:
+            AuthorizationError: no active membership (at the named clinic, if one is named).
+            ValidationError: ``CLINIC_REQUIRED`` when no clinic is named and there are several.
+        """
+        membership = await self.memberships.acting_membership(clinician_id, clinic_id)
+        if membership is None:
+            raise AuthorizationError(
+                "You are not an active member of any clinic.",
+                reason_code=reasons.CLINIC_MEMBERSHIP_REQUIRED,
+                actor_id=str(clinician_id),
+                actor_role="clinician",
+                target_type="clinic",
+            )
+        return membership
+
+    async def _require_membership_any(self, clinician_id: UUID) -> None:
+        if not await self.memberships.active_memberships(clinician_id):
+            raise AuthorizationError(
+                "You are not an active member of any clinic.",
+                reason_code=reasons.CLINIC_MEMBERSHIP_REQUIRED,
+                actor_id=str(clinician_id),
+                actor_role="clinician",
+                target_type="clinic",
+            )
+
+    async def generate_invite_code(self, clinician_id: UUID, clinic_id: UUID | None = None) -> Any:
         """Create a pending care_team row with a unique invite code.
 
         The patient uses this code via POST /patients/me/care-team/join.
         Codes are 8-char uppercase alphanumeric for easy sharing. The code records
         the clinic that issued it, and the care-team link the patient's join creates
-        belongs to that clinic.
+        belongs to that clinic: the clinic named by the request (an active membership
+        is required), or the clinician's only clinic.
         """
         code = secrets.token_hex(4).upper()
         expires_at = (datetime.now(UTC) + timedelta(days=7)).isoformat()
-        membership = await self.memberships.acting_membership(clinician_id)
+        membership = await self._require_membership(clinician_id, clinic_id)
         invite: dict[str, Any] = {
             "clinician_id": str(clinician_id),
+            "clinic_id": str(membership.clinic_id),
             "invite_code": code,
             "invite_expires_at": expires_at,
             "status": "pending",
             "role": "provider",
         }
-        if membership is not None:
-            invite["clinic_id"] = str(membership.clinic_id)
 
         result = await self._execute(self.db.table("care_teams").insert(invite))
         if not result.data:
@@ -256,7 +278,9 @@ class ClinicianService:
             "care_team_id": cast(list[dict[str, Any]], result.data)[0]["id"],
         }
 
-    async def list_invite_codes(self, clinician_id: UUID) -> dict[str, Any]:
+    async def list_invite_codes(
+        self, clinician_id: UUID, clinic_id: UUID | None = None
+    ) -> dict[str, Any]:
         """List invite codes created by the clinician with lifecycle buckets.
 
         Lifecycle states:
@@ -264,8 +288,14 @@ class ClinicianService:
             - claimed: linked to a patient and active
             - inactive: revoked/expired/otherwise not actionable
         """
-        clinician_ids = await self._get_invite_scope_clinician_ids(clinician_id)
+        membership = await self._require_membership(clinician_id, clinic_id)
+        clinician_ids, admin_clinics = await self._get_invite_scope(membership)
         rows = await self.care_team_repo.list_invites_for_clinician_ids(clinician_ids)
+        rows = [
+            row
+            for row in rows
+            if self._invite_in_scope(row, str(clinician_id), membership.clinic_id, admin_clinics)
+        ]
 
         now = datetime.now(UTC)
         expired_pending_ids: list[str] = []
@@ -294,6 +324,7 @@ class ClinicianService:
             invites.append(
                 {
                     "care_team_id": invite_id,
+                    "clinic_id": row.get("clinic_id"),
                     "invite_code": row.get("invite_code"),
                     "status": status,
                     "role": row.get("role"),
@@ -330,38 +361,38 @@ class ClinicianService:
 
         return {"invites": invites, "counts": counts}
 
-    async def _get_invite_scope_clinician_ids(self, clinician_id: UUID) -> list[str]:
-        """Admins can see clinic-wide invite codes; others see only their own."""
-        context = await self.clinician_repo.get_context_async(str(clinician_id), include_role=True)
-        if not context:
-            raise NotFoundError("Clinician", str(clinician_id))
+    @staticmethod
+    def _invite_in_scope(
+        row: dict[str, Any],
+        clinician_id: str,
+        clinic_id: UUID | str,
+        admin_clinics: set[str],
+    ) -> bool:
+        """The clinic's codes: the clinician's own, and everyone's when they administer it."""
+        row_clinic = str(row.get("clinic_id") or "")
+        if row_clinic != str(clinic_id):
+            return False
+        if str(row.get("clinician_id") or "") == clinician_id:
+            return True
+        return row_clinic in admin_clinics
 
-        # The admin role and the clinic come from the clinician's membership; a clinician
-        # without one keeps the legacy row's values.
-        membership = await self.memberships.acting_membership(clinician_id)
-        role = membership.role.value if membership else context.get("role")
-        if role != "admin":
-            return [str(clinician_id)]
+    async def _get_invite_scope(self, membership: ClinicMembership) -> tuple[list[str], set[str]]:
+        """Return the creators whose codes may be listed and the clinics where the clinician
+        is an admin (only the clinic of ``membership``).
 
-        clinician_ids: set[str] = {str(clinician_id)}
-        clinic_name = str(context.get("clinic_name") or "")
-
-        if membership is not None:
+        The admin right is the role held in that membership, so an admin at one clinic never
+        sees another clinic's codes, and two clinics with the same name share nothing.
+        """
+        clinician_ids: set[str] = {str(membership.clinician_id)}
+        admin_clinics: set[str] = set()
+        if membership.role.value == "admin":
+            admin_clinics.add(str(membership.clinic_id))
             clinician_ids.update(await self.memberships.clinic_member_ids(membership.clinic_id))
-        elif context.get("clinic_id"):
-            clinician_ids.update(
-                await self.clinician_repo.list_ids_by_clinic_id_async(str(context["clinic_id"]))
-            )
-
-        if clinic_name:
-            clinician_ids.update(
-                await self.clinician_repo.list_ids_by_clinic_name_async(clinic_name)
-            )
-
-        return sorted(clinician_ids)
+        return sorted(clinician_ids), admin_clinics
 
     async def revoke_invite_code(self, clinician_id: UUID, care_team_id: UUID) -> dict[str, Any]:
-        """Revoke a pending invite code created by this clinician."""
+        """Revoke a pending invite code created by this clinician (active member required)."""
+        await self._require_membership_any(clinician_id)
         invite = await self.care_team_repo.find_invite_for_creator(
             str(care_team_id), str(clinician_id)
         )
@@ -383,14 +414,18 @@ class ClinicianService:
             "status": "inactive",
         }
 
-    async def get_current_invite_code(self, clinician_id: UUID) -> dict[str, str | None]:
-        """Return the latest pending invite code for this clinician.
+    async def get_current_invite_code(
+        self, clinician_id: UUID, clinic_id: UUID | None = None
+    ) -> dict[str, str | None]:
+        """Return the latest pending invite code for this clinician (at one clinic, if named).
 
         This is a read-only lookup used by settings screens so page load does
         not create additional pending invite rows.
         """
         now = datetime.now(UTC)
+        membership = await self._require_membership(clinician_id, clinic_id)
         rows = await self.care_team_repo.list_pending_invites_for_clinician(str(clinician_id))
+        rows = [row for row in rows if str(row.get("clinic_id") or "") == str(membership.clinic_id)]
         for row in rows:
             invite_code = row.get("invite_code")
             expires_at = row.get("invite_expires_at")

@@ -85,6 +85,20 @@ class ClinicRepository:
         code = clinic_data.get("code")
         return code if isinstance(code, str) and code else None
 
+    def get_identity_by_id(self, clinic_id: str) -> dict[str, Any] | None:
+        """Return a clinic's id, code, display name and status."""
+        result = execute_sync(
+            self.owner,
+            lambda db: db.table("clinics")
+            .select("id, code, display_name, status")
+            .eq("id", clinic_id)
+            .limit(1),
+            operation="clinic identity lookup",
+            retry_transient=True,
+        )
+        rows = self._as_rows(result.data)
+        return rows[0] if rows else None
+
     def list_codes_by_canonical_name(self, canonical_name: str) -> list[dict[str, Any]]:
         """List clinic code rows by canonical name."""
         result = execute_sync(

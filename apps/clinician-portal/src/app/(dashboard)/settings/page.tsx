@@ -6,10 +6,18 @@ import { useSelector } from "react-redux";
 import { Badge, Button, Card, CopyButton, Input } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { api } from "@/services/api";
+import {
+    clinicErrorMessage,
+    fetchMyClinics,
+    isClinicRequiredError,
+    withClinic,
+    type ClinicMembershipSummary,
+} from "@/services/clinics";
 import type { RootState } from "@/store/store";
 import { ClinicianRole } from "@/types";
 import { EmailPreferences } from "@/components/features/email-preferences";
 import { EmailInvitations } from "@/components/features/email-invitations";
+import { ClinicPicker } from "@/components/features/clinic-picker";
 import { CLINICIAN_LOCALE } from "@/utils/dates";
 import { CardHeader, IconTile, cardFooterClass } from "@/components/features/settings-card";
 
@@ -179,27 +187,81 @@ export default function SettingsPage() {
     const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
     // Presentational only: highlights the section navigator entry the user last chose.
     const [activeSection, setActiveSection] = useState<GeneralSectionId>("clinic-profile");
-    // Staff invitations are admin-only on the server; the loaded profile carries the role.
-    const isClinicAdmin = profile?.role === ClinicianRole.ADMIN;
+    // Clinic-scoped actions (staff, invitations, invite codes) belong to one clinic. With one
+    // membership the portal sends it automatically; with several the server answers
+    // CLINIC_REQUIRED and the picker below asks which one. Nothing else in the portal changes.
+    const [clinics, setClinics] = useState<ClinicMembershipSummary[]>([]);
+    const [clinicId, setClinicId] = useState<string | null>(null);
+    const [clinicsReady, setClinicsReady] = useState(false);
+    const [clinicRequired, setClinicRequired] = useState(false);
+    // Staff invitations are admin-only on the server. The right is the role held at the chosen
+    // clinic; the profile role is only a fallback when the clinic list could not be loaded.
+    const roleAtClinic = clinics.length > 0
+        ? clinics.find((clinic) => clinic.clinic_id === clinicId)?.role
+        : profile?.role;
+    const isClinicAdmin = roleAtClinic === ClinicianRole.ADMIN;
+
+    useEffect(() => {
+        if (!token) {
+            return;
+        }
+        let cancelled = false;
+        void (async () => {
+            try {
+                const result = await fetchMyClinics(token);
+                if (cancelled) {
+                    return;
+                }
+                setClinics(result.clinics);
+                const active = result.clinics.filter((clinic) => clinic.status === "active");
+                if (result.clinics.length === 1) {
+                    setClinicId(result.clinics[0].clinic_id);
+                } else if (active.some((clinic) => clinic.clinic_id === result.default_clinic_id)) {
+                    // Several clinics: start on the default so the Team tab is never empty.
+                    setClinicId(result.default_clinic_id);
+                }
+            } catch {
+                // The server still resolves a single clinic and asks for a choice otherwise.
+            } finally {
+                if (!cancelled) {
+                    setClinicsReady(true);
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [token]);
+
+    const handleClinicError = useCallback((e: unknown) => {
+        if (isClinicRequiredError(e)) {
+            setClinicRequired(true);
+            setError(null);
+            return;
+        }
+        setError(clinicErrorMessage(e, "Something went wrong. Please try again."));
+    }, []);
 
     const loadStaff = useCallback(async () => {
-        if (!token) {
+        if (!token || !clinicsReady) {
             return;
         }
         try {
             const result = await api.get<{ staff: StaffMember[]; clinic_name: string; clinic_code?: string | null }>(
-                "/api/v1/staff/",
+                withClinic("/api/v1/staff/", clinicId),
                 { token },
             );
+            setClinicRequired(false);
             setStaffList(result.staff);
             setClinicName(result.clinic_name);
             setClinicCode(result.clinic_code ?? null);
         } catch (e) {
-            setError((e as Error).message);
+            setStaffList([]);
+            handleClinicError(e);
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, [clinicId, clinicsReady, handleClinicError, token]);
 
     useEffect(() => {
         void loadStaff();
@@ -226,7 +288,7 @@ export default function SettingsPage() {
     }, [loadProfile]);
 
     const loadInviteCodes = useCallback(async () => {
-        if (!token) {
+        if (!token || !clinicsReady) {
             return;
         }
 
@@ -234,9 +296,10 @@ export default function SettingsPage() {
         setError(null);
 
         try {
-            const result = await api.get<InviteCodeListPayload>("/api/v1/clinicians/me/invite-codes", {
-                token,
-            });
+            const result = await api.get<InviteCodeListPayload>(
+                withClinic("/api/v1/clinicians/me/invite-codes", clinicId),
+                { token },
+            );
             const records = result.invites || [];
             setInviteRecords(records);
             const firstActiveCode = records.find(
@@ -244,11 +307,13 @@ export default function SettingsPage() {
             )?.invite_code;
             setInviteCode(firstActiveCode ?? "");
         } catch (e) {
-            setError((e as Error).message);
+            setInviteRecords([]);
+            setInviteCode("");
+            handleClinicError(e);
         } finally {
             setInviteCodeLoading(false);
         }
-    }, [token]);
+    }, [clinicId, clinicsReady, handleClinicError, token]);
 
     useEffect(() => {
         void loadInviteCodes();
@@ -263,15 +328,19 @@ export default function SettingsPage() {
         setError(null);
 
         try {
-            await api.post<InviteCodePayload>("/api/v1/clinicians/me/invite-code", {}, { token });
+            await api.post<InviteCodePayload>(
+                "/api/v1/clinicians/me/invite-code",
+                clinicId ? { clinic_id: clinicId } : {},
+                { token },
+            );
             await loadInviteCodes();
             setInviteStatus("New patient invite code generated");
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         } finally {
             setInviteCodeLoading(false);
         }
-    }, [loadInviteCodes, token]);
+    }, [clinicId, handleClinicError, loadInviteCodes, token]);
 
     const handleRevokeInviteCode = useCallback(
         async (careTeamId: string) => {
@@ -304,7 +373,7 @@ export default function SettingsPage() {
         try {
             const result = await api.post<{ status: string; email_sent?: boolean }>(
                 "/api/v1/staff/invite",
-                { email: inviteEmail, role: inviteRole },
+                { email: inviteEmail, role: inviteRole, ...(clinicId ? { clinic_id: clinicId } : {}) },
                 { token },
             );
             setInviteStatus(result.status === "already_pending"
@@ -315,7 +384,7 @@ export default function SettingsPage() {
             setInviteEmail("");
             void loadStaff();
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         }
     }
 
@@ -363,11 +432,15 @@ export default function SettingsPage() {
 
         setError(null);
         try {
-            await api.put(`/api/v1/staff/${memberId}/role`, { role: newRole }, { token });
+            await api.put(
+                `/api/v1/staff/${memberId}/role`,
+                { role: newRole, ...(clinicId ? { clinic_id: clinicId } : {}) },
+                { token },
+            );
             await loadStaff();
             setActionMenuId(null);
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         }
     }
 
@@ -383,11 +456,11 @@ export default function SettingsPage() {
 
         setError(null);
         try {
-            await api.delete(`/api/v1/staff/${memberId}`, { token });
+            await api.delete(withClinic(`/api/v1/staff/${memberId}`, clinicId), { token });
             await loadStaff();
             setActionMenuId(null);
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         }
     }
 
@@ -461,6 +534,10 @@ export default function SettingsPage() {
                     </button>
                 ))}
             </div>
+
+            {activeTab === "Team & Roles" || activeTab === "Patient Invites" ? (
+                <ClinicPicker clinics={clinics} onChange={setClinicId} required={clinicRequired} value={clinicId} />
+            ) : null}
 
             {error ? (
                 <p role="alert" className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink">
@@ -587,8 +664,8 @@ export default function SettingsPage() {
 
             {activeTab === "Team & Roles" ? (
                 <div className="ma-enter space-y-5">
-                    {token && isClinicAdmin ? <EmailInvitations token={token} revision={inviteStatus} /> : null}
-                    {profile && !isClinicAdmin ? (
+                    {token && isClinicAdmin ? <EmailInvitations clinicId={clinicId} token={token} revision={inviteStatus} /> : null}
+                    {profile && !isClinicAdmin && !clinicRequired ? (
                         <p role="note" className="rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
                             Only clinic admins can invite team members.
                         </p>
@@ -743,7 +820,7 @@ export default function SettingsPage() {
             {activeTab === "Patient Invites" ? (
                 <div className="ma-enter space-y-5">
                     <Card padding="none">
-                        <CardHeader icon="link" sub="Invite history shows codes created by your account.">
+                        <CardHeader icon="link" sub="Invite history shows codes created by your account at this clinic.">
                             <h3 className="text-[15px] font-semibold text-ink">Patient Invite Codes</h3>
                         </CardHeader>
                         <div className="space-y-4 px-5 py-5">

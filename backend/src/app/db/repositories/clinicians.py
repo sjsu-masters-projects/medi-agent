@@ -128,6 +128,29 @@ class ClinicianRepository:
         )
         return self._as_rows(result.data)
 
+    def list_staff_by_ids(self, clinician_ids: list[str]) -> list[dict[str, Any]]:
+        """List staff rows for the given clinicians (the members of one clinic)."""
+        if not clinician_ids:
+            return []
+        result = execute_sync(
+            self.owner,
+            lambda db: self.build_staff_list_query(db).in_("id", clinician_ids),
+            operation="staff list by membership",
+            retry_transient=True,
+        )
+        return self._as_rows(result.data)
+
+    def list_by_email_any_case(self, email: str) -> list[dict[str, Any]]:
+        """Find clinicians whose address matches, as typed or lower-cased."""
+        addresses = sorted({email.strip(), email.strip().lower()})
+        result = execute_sync(
+            self.owner,
+            lambda db: db.table("clinicians").select("id").in_("email", addresses),
+            operation="clinician address lookup",
+            retry_transient=True,
+        )
+        return self._as_rows(result.data)
+
     def list_staff_by_clinic_name(self, clinic_name: str) -> list[dict[str, Any]]:
         """List staff rows by legacy clinic name."""
         result = execute_sync(

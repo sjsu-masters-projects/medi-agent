@@ -101,9 +101,10 @@ def postgres():
 
 
 def apply_clinic_memberships(execute):
-    """Apply CLN-003 slice A (065), found by name like 063/064 above."""
-    for path in sorted(MIGRATIONS.glob("*_clinic_memberships.sql")):
-        execute(path.read_text())
+    """Apply CLN-003 slices A (065) and B (066), found by name like 063/064 above."""
+    for pattern in ("*_clinic_memberships.sql", "*_clinic_sign_in_once.sql"):
+        for path in sorted(MIGRATIONS.glob(pattern)):
+            execute(path.read_text())
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 # CLN-003 — Clinicians who work at more than one clinic
 
-**Status:** Slice A in progress (see [Slice A design](#slice-a-design-memberships-clinic-tagged-links-no-visible-change)); decisions made October 13. Raised by the project advisor at the
+**Status:** Slice A merged ([#176](https://github.com/sjsu-masters-projects/medi-agent/pull/176)); slice B in progress on `feature/clinic-sign-in-once` (see [Slice B design](#slice-b-design-sign-in-once-and-add-a-clinic-to-an-existing-account)); decisions made October 13. Raised by the project advisor at the
 October 13 checkpoint demo.
 
 ## Why
@@ -31,8 +31,10 @@ and keep one schedule across all of them. MediAgent models one clinic per clinic
 1. **One account, many memberships.** A clinician signs in once with email, password and
    MFA. Each membership has its own clinic, role and status. A clinic code or invitation
    adds a membership to the existing account instead of creating a new one.
-2. **"All clinics" by default, with a switcher.**
-   - The header shows the clinician's clinics. Today, Risk Radar, Patient Roster, Alerts,
+2. **"All clinics" by default.** (Agreed October 16: there is no header switcher and no
+   global active clinic; a clinic is chosen only inside an action that belongs to one clinic,
+   see slice B.)
+   - Today, Risk Radar, Patient Roster, Alerts,
      Review Queue, Messages and Appointments open on "All clinics".
    - Each patient row, visit and alert shows a clinic chip, and every list can be filtered
      to one clinic.
@@ -65,7 +67,7 @@ and keep one schedule across all of them. MediAgent models one clinic per clinic
   - keep `clinicians.clinic_id` for a transition period.
 - **Backend:** clinic-scoped services and routes, invitation acceptance onto an existing
   account, cross-clinic conflict checks, and a clinic tag on notifications, email and audit.
-- **Clinician portal:** sign-in without a mandatory clinic code, the switcher and filters,
+- **Clinician portal:** sign-in without a mandatory clinic code, filters,
   clinic chips, per-clinic settings and team pages, and a combined calendar.
 - **Patient portal:** clinic names on the care team, offers and visits.
 
@@ -115,9 +117,8 @@ has the overall picture needed to treat safely.
 
 ## Slice A design (memberships, clinic-tagged links, no visible change)
 
-**Status:** in progress on `feature/clinic-memberships`. Migration
-`065_clinic_memberships.sql` is written and tested in disposable PostgreSQL only; it is not
-applied to any hosted project.
+**Status:** merged in #176. Migration `065_clinic_memberships.sql` was written and tested in
+disposable PostgreSQL; applying it to a hosted project is the requester's action.
 
 ### Tables and constraints
 
@@ -206,8 +207,9 @@ working once 065 is applied (the trigger tags its new invite rows).
 - Staff listing, role changes, invitations and removal (`staff_service`,
   `ClinicianRepository`), email invitations (`057`/`058` SQL functions, which also read
   `clinicians.role = 'admin'`): slice D.
-- Care conversations (`048`: the thread's clinic and the active-clinic check), the
-  notification centre (`051`/`052`/`054`/`061` clinic names and active-clinic checks),
+- Care conversations (`048`: the thread's clinic; slice B moved the check to the link's
+  clinic), the notification centre (`051`/`052`/`054`/`061` clinic names; slice B moved the
+  checks to the link's clinic),
   MedWatch clinic names (`medwatch_service`), the denial classifier's clinic comparison
   (`authorization_denial_classifier`): slices C and F, which should read
   `care_teams.clinic_id`.
@@ -215,6 +217,182 @@ working once 065 is applied (the trigger tags its new invite rows).
   `ORDER BY created_at LIMIT 1` or a single-row `SELECT INTO` (care-plan approval in
   `040`/`042`/`045`/`049`, conversation `open` in `048`): correct while a pair has one link;
   they must take an explicit care team before a second clinic link can exist (slices C, H).
+
+## Slice B design (sign in once and add a clinic to an existing account)
+
+**Status:** in progress on `feature/clinic-sign-in-once`. Migration
+`066_clinic_sign_in_once.sql` is written and tested in disposable PostgreSQL only; it is not
+applied to any hosted project. The number 066 is also used by LOC-003's unmerged
+`066_care_plan_wording_back_translation.sql` (branch `feature/english-first-review`); the
+migration validator is unchanged (no exceptions or reservations), so whichever file lands
+second is renumbered before it merges. LOC-003's file is renumbered later. Never edit an
+existing migration.
+
+**Agreed scope (requester, October 16).** One sign-in (email, password, MFA) with no clinic
+code. The clinician lands on the same screens as today. There is no "Choose a clinic" step, no
+header switcher, no `PUT /active-clinic` and no global active clinic. Lists stay clinician-wide
+through the care-team link (clinic chips and filters are slice C). Clinic-scoped actions take an
+explicit `clinic_id`, validated against an active membership, with the role read from **that
+clinic's membership**, never `clinicians.role` or `clinicians.clinic_id`.
+
+### Sign-in
+
+- `/login` opens on **Sign in**: email, password, then the authenticator code when the account
+  has MFA. `POST /api/v1/auth/login` no longer needs `clinic_code`. A client that still sends
+  one (the deployed portal during rollout) must name a clinic the clinician actively belongs to;
+  clinics are compared by id, never by name.
+- A clinician with no active membership is refused: `INVITATION_ACCEPTANCE_REQUIRED` when the
+  account came from an invitation that was never claimed, otherwise `NO_ACTIVE_CLINIC`.
+- After sign-in the portal reads `GET /api/v1/clinicians/me/clinics` (MFA-gated) only to decide
+  whether the sidebar shows a clinic name (exactly one clinic).
+- The clinic code is the secondary path, **Join a clinic**: verify a code, then **I already have
+  an account** (sign in, then add the clinic), **Join this clinic (Provider / Nurse)**
+  (create an account, unchanged) or **Create a clinic workspace** (unchanged).
+
+### How each clinic-scoped action chooses its clinic
+
+`ClinicMembershipService.acting_membership(clinician, clinic_id)` resolves the clinic: the
+named clinic must be an active membership at an active clinic (`CLINIC_MEMBERSHIP_REQUIRED`,
+403, otherwise); with no clinic named, the only membership is used; with several the server
+answers `CLINIC_REQUIRED` (422) and the portal shows a small picker inside the action. A
+clinician with **no** membership is refused (fail closed): there is no `clinicians.role` or
+clinic-name fallback, and `StaffService._require_admin`, the `_is_same_clinic` name match and
+the name-based peer lookup in `ClinicianService._get_invite_scope` are gone, so two clinics with
+the same display name share nothing.
+
+| Endpoint | Clinic comes from | Role check |
+| --- | --- | --- |
+| `GET /api/v1/staff/?clinic_id=` | query, or the only membership | member of that clinic (any role) |
+| `POST /api/v1/staff/invite` | body `clinic_id`, or the only membership | admin at that clinic (service, and again in SQL) |
+| `PUT /api/v1/staff/{id}/role` | body `clinic_id`, or the only membership | admin at that clinic; runs in `clinician_clinic_operation` under lock |
+| `DELETE /api/v1/staff/{id}?clinic_id=` | query, or the only membership | admin at that clinic; same function |
+| `POST /api/v1/clinicians/me/invite-code` | body `clinic_id`, or the only membership | active member; the code and the care-team link carry that clinic |
+| `GET /api/v1/clinicians/me/invite-code?clinic_id=` | query, or the only membership | active member; that clinic's latest pending code |
+| `GET /api/v1/clinicians/me/invite-codes?clinic_id=` | query, or the only membership | own codes at that clinic; everyone's when admin there |
+| `POST /api/v1/clinicians/me/invite-codes/{id}/revoke` | the code's creator | active member of any clinic (owner-scoped as before) |
+| `GET /api/v1/email/invitations?clinic_id=` | query, or the only membership | admin at that clinic |
+| `POST /api/v1/email/invitations/{id}/revoke` | the invitation's own clinic (SQL) | admin at that clinic |
+| `GET /api/v1/clinicians/me/clinics` | the caller's own memberships | none needed |
+| `POST /api/v1/clinicians/me/clinics` | `clinic_code` in the body | open code: Provider or Nurse only |
+| `POST /api/v1/email/invitations/accept` | the invitation's clinic | the invitation's role, signed-in session |
+| `POST /api/v1/auth/invitations/accept` | the invitation's clinic | see "Adding a clinic" |
+
+"Clinic settings" in the portal is the Settings page's clinic code, team and invitation
+sections; those three reads and writes are the staff and invitation rows above, so there is no
+separate clinic-settings write to audit.
+
+### Adding a clinic to an existing account
+
+- **By clinic code:** `POST /api/v1/clinicians/me/clinics` with `clinic_code` and `role`
+  (`provider` or `nurse`; admin only by invitation) adds an active membership. The default
+  clinic (`clinicians.clinic_id`) is unchanged, except that a clinician with none gets this one.
+  An existing active membership is left as it is (`status: already_member`). A membership ended
+  by that clinic's admin is refused with `MEMBERSHIP_INACTIVE`; only that admin can bring the
+  person back, by invitation.
+- **By email invitation:** an admin can invite an address that belongs to another clinic; it is
+  refused only when that address is already an active member of the admin's clinic. Accepting
+  with a signed-in session (`/email/invitations/accept`) adds a membership with the invited
+  role. Accepting with the account password (`/auth/invitations/accept`) is refused with
+  `SIGN_IN_TO_ACCEPT` when the account has an active clinic and a verified authenticator, so
+  adding a clinic never skips the second factor: sign in, then open the link again. An MFA
+  account with no active clinic cannot sign in, so it gives its current code on that call
+  (`MFA_CODE_REQUIRED` asks for it; the code is verified against the account's factor).
+- **No duplicate accounts:** clinician signup first looks for a clinician with the same address
+  (`ACCOUNT_EXISTS`: sign in to add this clinic), and an Auth signup response with no identities
+  is treated as a duplicate without rolling anything back.
+- **Profile updates** (`PUT /clinicians/me`) no longer change the clinic: `clinic_code` and
+  `clinic_name` are refused with `CLINIC_CHANGE_NOT_SUPPORTED`.
+
+### Default clinic
+
+`clinicians.clinic_id`, `clinic_name` and `role` remain, as the clinician's **default clinic**
+(the first clinic joined), for legacy readers. Joining another clinic adds a membership and
+leaves them alone; when the default does change (removal from it), its role and name are taken
+from the membership of the new default. No authorization on a slice B path reads them.
+
+### Care conversations and notification checks
+
+066 makes them use the care-team link's clinic (`care_teams.clinic_id`) with an active
+membership there, so a patient's thread and alerts do not appear, vanish or split because of
+another clinic the clinician joins. Access is unchanged: patients are reached only through the
+clinician's own active care-team link, and no policy reads memberships.
+
+### Audit
+
+`clinic_membership_audit_events` is append-only: RLS on, `service_role` has SELECT and INSERT
+only, no browser role has anything, and triggers refuse UPDATE, DELETE and TRUNCATE even for the
+owner. Each row records actor, clinic, action, target, role and time; no email or name.
+
+| Action | Written by |
+| --- | --- |
+| `joined_at_signup` | trigger on `clinicians` insert with a clinic (signup by code, first admin) |
+| `joined_by_code` | `clinician_clinic_operation('join_code')` |
+| `joined_by_invitation` | `clinician_email_invitation_operation('accept')` |
+| `patient_invite_code_created` | trigger on `care_teams` insert of a pending code |
+| `member_role_changed`, `member_removed` | `clinician_clinic_operation`, same transaction as the change |
+| `email_invitation_created`, `email_invitation_revoked` | `clinician_email_invitation_operation`; a resend revokes the old invitation and creates a new one, so it writes both |
+
+### Error states
+
+| Code | When | Portal copy |
+| --- | --- | --- |
+| `CLINIC_REQUIRED` (422) | a clinic-scoped action with several memberships and no `clinic_id` | picker: "Choose which clinic this applies to." |
+| `AUTHORIZATION_ERROR` (403), reason `CLINIC_MEMBERSHIP_REQUIRED` | a named clinic without an active membership, or no membership at all | "You are not an active member of that clinic." |
+| `AUTHORIZATION_ERROR` (403), reason `ADMIN_SCOPE_ONLY` | staff or invitation action without admin at that clinic | "Only clinic admins can manage staff" |
+| `MEMBERSHIP_INACTIVE` (403) | joining by code a clinic whose admin removed you | "Ask that clinic's admin to invite you again." |
+| `CLINIC_CODE_INVALID`, `CLINIC_CODE_INACTIVE` (422) | unknown or suspended clinic code | as today |
+| `NO_ACTIVE_CLINIC` (401) | sign-in with no active membership | "Your account is not active at any clinic." |
+| `SIGN_IN_TO_ACCEPT` (401) | password-only invitation acceptance by an MFA account that has a clinic | "Sign in first, then open the invitation link again." |
+| `ACCOUNT_EXISTS` (422) | clinician signup with an address that already has an account | "Sign in to add this clinic to your account." |
+| `CLINIC_CHANGE_NOT_SUPPORTED` (422) | profile update naming a clinic | "Use Join a clinic" |
+
+### Migration 066 and deploy order
+
+`066_clinic_sign_in_once.sql` requires 065. It adds the audit table and its triggers,
+`public.clinician_clinic_operation` (`list`, `join_code`, `set_member_role`, `remove_member`),
+membership-aware `clinician_email_invitation_operation`, the default-clinic role rule,
+`private.lock_care_conversation_pair`, `public.care_conversation_operation`, notification checks
+reading the link's clinic, and a fail-closed verification block. **Order:** the requester
+applies 066 (on explicit authorization) before this backend deploys, because the new routes call
+`clinician_clinic_operation`. The deployed backend and portal keep working once 066 is applied:
+they still send a clinic code, and every replaced function keeps its signature. Supabase Auth
+dashboard changes: none.
+
+### Still on the legacy columns after slice B
+
+The MedWatch reporter clinic (slice F), notification `clinic_name` labels (slice F), the denial
+classifier's clinic comparison, care-plan SQL that picks "the" link for a pair (slices C and H),
+and per-clinic settings and invitation history pages (slice D).
+
+### Known limitations
+
+- Clinician signup returns `ACCOUNT_EXISTS` for an already registered email, which allows
+  account enumeration. Accepted for now because Supabase signup already discloses it and the
+  portal needs the copy to send the clinician to sign in. Follow-up: a neutral response plus an
+  email to the address.
+- Removing a member from their last clinic clears the default clinic and resets the legacy
+  `clinicians.role` to `provider`; the deployed backend's direct writes to `clinicians` are
+  mirrored into memberships but are not audited (no actor is available to the trigger).
+
+## Review and audit checklist (every CLN-003 slice)
+
+A slice is not ready for review until each invariant has a test that fails if it is broken.
+Slice B's tests are listed; later slices add theirs.
+
+| | Invariant | Slice B proof |
+| --- | --- | --- |
+| a | No patient data without an active care-team link | Docker: `test_access_is_still_the_care_team_link_and_membership_widens_nothing`, `test_no_policy_or_access_helper_reads_memberships` |
+| b | Clinic-scoped endpoints check the membership and role for the named clinic | service: `test_staff_service`, `test_clinician_service`; router: `test_staff_api`, `test_clinician_api`, `test_email_api`; Docker: `test_invitation_admin_rights_come_from_the_membership_at_that_clinic` |
+| c | No role or admin rights carry between clinics | `test_admin_rights_do_not_carry_between_clinics`, `test_an_admin_at_one_clinic_cannot_act_on_another` (Docker), `test_a_role_change_at_one_clinic_never_reaches_another` (Docker) |
+| d | No duplicate accounts per email | `test_clinician_signup_refuses_an_address_that_already_has_an_account` |
+| e | No MFA bypass | `test_invitation_password_accept_needs_sign_in_for_mfa_account_with_a_clinic`, `..._still_needs_the_code_for_mfa_without_a_clinic`; portal: add-clinic only after the second factor |
+| f | Audit coverage per action | Docker: `test_every_membership_change_and_clinic_action_is_audited` |
+| g | The audit table has no UPDATE or DELETE for any role | Docker: `test_the_audit_trail_is_append_only_for_every_role` (as `authenticated` and `service_role`, and the owner) |
+| h | Browser roles have no writes on `clinicians`, `clinic_memberships` or the audit table | Docker: `test_browser_roles_cannot_write_clinicians_memberships_or_the_audit` |
+
+Also check: no existing migration edited; the validator unchanged; the CI minimum for
+`test_clinic_memberships_postgres` raised to the new count; no email address or name in the
+audit rows, logs or fixtures; synthetic data only.
 
 ## Suggested slices
 
