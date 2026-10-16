@@ -364,6 +364,16 @@ The MedWatch reporter clinic (slice F), notification `clinic_name` labels (slice
 classifier's clinic comparison, care-plan SQL that picks "the" link for a pair (slices C and H),
 and per-clinic settings and invitation history pages (slice D).
 
+### Known limitations
+
+- Clinician signup returns `ACCOUNT_EXISTS` for an already registered email, which allows
+  account enumeration. Accepted for now because Supabase signup already discloses it and the
+  portal needs the copy to send the clinician to sign in. Follow-up: a neutral response plus an
+  email to the address.
+- Removing a member from their last clinic clears the default clinic and resets the legacy
+  `clinicians.role` to `provider`; the deployed backend's direct writes to `clinicians` are
+  mirrored into memberships but are not audited (no actor is available to the trigger).
+
 ## Review and audit checklist (every CLN-003 slice)
 
 A slice is not ready for review until each invariant has a test that fails if it is broken.

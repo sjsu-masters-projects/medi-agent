@@ -817,6 +817,39 @@ def test_removal_from_the_default_clinic_keeps_the_others(sql):
         sql(f"SELECT coalesce(clinic_id::text,'none') FROM clinicians WHERE id='{OTHER}'") == "none"
     )
     assert [m[2] for m in memberships(sql, OTHER)] == ["inactive", "inactive"]
+    # No default clinic means no clinic-scoped role: a stale admin never remains.
+    assert sql(f"SELECT role FROM clinicians WHERE id='{OTHER}'") == "provider"
+
+
+def test_removing_an_admin_from_their_last_clinic_resets_the_role(sql):
+    admin = new_clinician(sql, clinic=CLINIC, role="admin")
+    other_admin = new_clinician(sql, clinic=CLINIC, role="admin")
+    staff_op(sql, admin, "remove_member", CLINIC, other_admin)
+    assert (
+        sql(
+            f"SELECT coalesce(clinic_id::text,'none')||'|'||role FROM clinicians WHERE id='{other_admin}'"
+        )
+        == "none|provider"
+    )
+    assert sql("SELECT count(*) FROM clinicians WHERE clinic_id IS NULL AND role='admin'") == "0"
+
+
+def test_the_deployed_backends_direct_writes_still_keep_memberships_in_step(sql):
+    """The previous backend changes roles and removes staff by updating clinicians directly.
+
+    Those writes are mirrored into memberships. They are not audited: the trigger sees no
+    actor, and the audit trail records only the RPC paths and signup, so the count is unchanged.
+    """
+    staff = new_clinician(sql, clinic=CLINIC, role="nurse")
+    audited = sql("SELECT count(*) FROM clinic_membership_audit_events")
+
+    sql(f"SET ROLE service_role; UPDATE clinicians SET role='admin' WHERE id='{staff}';")
+    assert memberships(sql, staff) == [(CLINIC, "admin", "active")]
+
+    sql(f"SET ROLE service_role; UPDATE clinicians SET clinic_id=NULL WHERE id='{staff}';")
+    assert memberships(sql, staff) == [(CLINIC, "admin", "inactive")]
+
+    assert sql("SELECT count(*) FROM clinic_membership_audit_events") == audited
 
 
 # ── Slice B: the audit trail ───────────────────────────────────────────────────────────

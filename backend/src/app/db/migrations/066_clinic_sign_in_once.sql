@@ -301,7 +301,9 @@ BEGIN
     IF v_next IS NOT NULL THEN
       UPDATE public.clinicians SET clinic_id = v_next WHERE id = v_member;
     ELSE
-      UPDATE public.clinicians SET clinic_id = NULL, clinic_name = '_removed_' || cl.display_name
+      -- No default clinic remains, so no clinic-scoped role (admin in particular) may linger.
+      UPDATE public.clinicians SET clinic_id = NULL, role = 'provider',
+             clinic_name = '_removed_' || cl.display_name
        WHERE id = v_member;
     END IF;
   END IF;
@@ -562,6 +564,9 @@ BEGIN
           AND m.role = c.role)
   ) THEN
     RAISE EXCEPTION 'Every default clinic needs an active membership with the same role';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.clinicians c WHERE c.clinic_id IS NULL AND c.role = 'admin') THEN
+    RAISE EXCEPTION 'A clinician without a default clinic may not hold the admin role';
   END IF;
 END $$;
 
