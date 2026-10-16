@@ -112,6 +112,9 @@ def fill_template(template: Form3500Template, form: MedWatchFormDataV2) -> bytes
     if reader.is_encrypted and not reader.decrypt(""):
         raise TemplateMismatchError("the template no longer opens with an empty user password")
     writer = PdfWriter(clone_from=reader)
+    # Keep the template's version (1.7): pypdf writes "%PDF-1.3" by default, which is too
+    # old for the AES-256 encryption below.
+    writer.pdf_header = reader.pdf_header
     for page in writer.pages:
         if "/Annots" in page:
             writer.update_page_form_field_values(page, values.acroform, auto_regenerate=False)
