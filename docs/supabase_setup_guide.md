@@ -86,7 +86,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 76 SQL migration files, prefixes `001`–`064`. Some prefixes are
+The checkout contains 77 SQL migration files, prefixes `001`–`065`. Some prefixes are
 shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
 branches; they coexist because the ledger identifies migrations by full filename and
 checksum, not by prefix. Preserve applied names and bytes. The ledger in
@@ -126,6 +126,28 @@ function keeps its signature, so the currently deployed backend keeps working on
 applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
 are upgraded on read. After applying, verify with the ledger and with the read-only checks the
 fail-closed block already performs (it raises and rolls the migration back on any gap).
+
+### Clinic memberships (065, CLN-003 slice A) — written, not applied
+
+`065_clinic_memberships.sql` adds `clinic_memberships` (one row per clinician and clinic,
+with that clinic's role and an `active`/`inactive` status), backfilled from
+`clinicians.clinic_id` and `clinicians.role`; clinicians without a clinic get no membership
+and are counted in a `NOTICE`. It adds `care_teams.clinic_id`, backfilled from the link's
+clinician, and replaces `UNIQUE (patient_id, clinician_id)` with
+`UNIQUE (patient_id, clinician_id, clinic_id)` (a partial unique index keeps one link per pair
+for clinicians without a clinic). Triggers mirror `clinicians.clinic_id`/`role` into
+memberships during the compatibility period and give a new care-team row its clinician's clinic
+when none is sent. RLS: a clinician reads only their own memberships; only `service_role`
+writes them; nobody deletes them. `private.is_clinic_member(uuid)` is added for later slices
+and used by no policy; `is_assigned_clinician` and every existing policy are unchanged. It
+ends with a fail-closed verification block.
+
+It is not applied to any hosted project; applying it needs the requester's explicit
+authorization naming that action. **Order:** apply 065 before the backend from
+`feature/clinic-memberships` deploys (its invite-code paths read `clinic_memberships` and
+write `care_teams.clinic_id`; apply first, merge after). The currently deployed backend keeps
+working once 065 is applied. After applying, confirm the ledger row and read the `NOTICE`
+count of clinicians without a clinic.
 
 ### Appointment booking guards (042/043)
 

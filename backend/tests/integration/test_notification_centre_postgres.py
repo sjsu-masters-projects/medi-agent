@@ -100,8 +100,14 @@ def postgres():
         )
 
 
+def apply_clinic_memberships(execute):
+    """Apply CLN-003 slice A (065), found by name like 063/064 above."""
+    for path in sorted(MIGRATIONS.glob("*_clinic_memberships.sql")):
+        execute(path.read_text())
+
+
 @pytest.fixture
-def sql(postgres):
+def sql(postgres, request):
     database = "notification_" + uuid4().hex
     subprocess.run(
         postgres,
@@ -141,6 +147,7 @@ def sql(postgres):
         return process
 
     execute.start = start
+    execute.command = command
     execute("""CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
       CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;""")
     # Auth/platform bootstrap only is synthetic. Every application table and
@@ -222,6 +229,11 @@ def sql(postgres):
         for pattern in ("*_adr_information_loop_lifecycle.sql", "*_medwatch_form_3500.sql"):
             for path in sorted(MIGRATIONS.glob(pattern)):
                 execute(path.read_text())
+    # Clinic memberships (CLN-003 slice A, 065) apply last, so every suite on this fixture
+    # runs with them. A test marked before_clinic_memberships seeds pre-065 rows and applies
+    # 065 itself to check the backfill.
+    if request.node.get_closest_marker("before_clinic_memberships") is None:
+        apply_clinic_memberships(execute)
     try:
         yield execute
     finally:
@@ -1154,8 +1166,11 @@ def test_critical_alert_stops_being_work_when_the_document_is_rejected(sql):
     doc = document(sql)
     result(sql, doc)
     sql(f"UPDATE documents SET review_status='rejected' WHERE id='{doc}'")
-    rows = [row for row in clinician(sql)["items"] if row["source_id"] == doc
-            and row["event_type"] == "critical_result"]
+    rows = [
+        row
+        for row in clinician(sql)["items"]
+        if row["source_id"] == doc and row["event_type"] == "critical_result"
+    ]
     assert rows == [] or not rows[0]["actionable"]
 
 
@@ -1163,7 +1178,8 @@ def test_critical_result_is_open_work_until_acknowledged(sql):
     doc = document(sql)
     result(sql, doc)
     items = [
-        row for row in clinician(sql, "action_items")["items"]
+        row
+        for row in clinician(sql, "action_items")["items"]
         if row["event_type"] == "critical_result" and row["source_id"] == doc
     ]
     assert len(items) == 1 and items[0]["can_acknowledge"]
