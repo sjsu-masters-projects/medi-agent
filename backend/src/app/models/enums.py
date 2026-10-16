@@ -63,6 +63,11 @@ class ClinicStatus(StrEnum):
     SUSPENDED = "suspended"
 
 
+class ClinicMembershipStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
 # ── Care Team ─────────────────────────────────────
 
 

@@ -551,19 +551,34 @@ class TestGenerateInviteCode:
     def test_success(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
         """Successfully generate invite code."""
         care_team_id = uuid4()
+        clinic_id = str(uuid4())
         invite_code = "A1B2C3D4"
 
-        mock_supabase_db.table().insert().execute.return_value = MagicMock(
-            data=[
-                {
-                    "id": str(care_team_id),
-                    "clinician_id": str(clinician_id),
-                    "invite_code": invite_code,
-                    "status": "pending",
-                    "role": "provider",
-                }
-            ]
-        )
+        mock_supabase_db.table().execute.side_effect = [
+            # The clinician's one active clinic membership tags the code.
+            MagicMock(
+                data=[
+                    {
+                        "clinician_id": str(clinician_id),
+                        "clinic_id": clinic_id,
+                        "role": "provider",
+                        "status": "active",
+                    }
+                ]
+            ),
+            MagicMock(
+                data=[
+                    {
+                        "id": str(care_team_id),
+                        "clinician_id": str(clinician_id),
+                        "invite_code": invite_code,
+                        "status": "pending",
+                        "role": "provider",
+                        "clinic_id": clinic_id,
+                    }
+                ]
+            ),
+        ]
 
         response = client.post("/api/v1/clinicians/me/invite-code")
 
@@ -572,6 +587,7 @@ class TestGenerateInviteCode:
         assert "invite_code" in data
         assert "care_team_id" in data
         assert len(data["invite_code"]) == 8
+        assert mock_supabase_db.table().insert.call_args.args[0]["clinic_id"] == clinic_id
 
 
 class TestGetCurrentInviteCode:
@@ -615,7 +631,7 @@ class TestGetCurrentInviteCode:
 class TestListInviteCodes:
     """GET /api/v1/clinicians/me/invite-codes - Read invite lifecycle list."""
 
-    def test_success(self, client, override_auth, override_db, mock_supabase_db):
+    def test_success(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
         mock_supabase_db.table().execute.side_effect = [
             MagicMock(
                 data={
@@ -624,6 +640,16 @@ class TestListInviteCodes:
                     "clinic_name": "City Health",
                     "role": "provider",
                 }
+            ),
+            MagicMock(
+                data=[
+                    {
+                        "clinician_id": str(clinician_id),
+                        "clinic_id": str(uuid4()),
+                        "role": "provider",
+                        "status": "active",
+                    }
+                ]
             ),
             MagicMock(
                 data=[

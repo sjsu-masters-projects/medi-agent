@@ -162,6 +162,9 @@ def sql(postgres):
         execute(hardening.split("-- Public helper functions remain")[0])
         execute((MIGRATION.parent / "022_grant_service_role_seed_access.sql").read_text())
         execute(MIGRATION.read_text())
+        # Clinic memberships (065, CLN-003 slice A): the rows below go through its triggers.
+        for path in sorted(MIGRATION.parent.glob("*_clinic_memberships.sql")):
+            execute(path.read_text())
         execute(f"""
           INSERT INTO auth.users VALUES ('{PATIENT}'),('{CLINICIAN}'),('{OTHER}'),('{FOREIGN}');
           INSERT INTO patients(id,email,first_name,last_name,date_of_birth) VALUES

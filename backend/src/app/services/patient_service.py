@@ -150,7 +150,8 @@ class PatientService:
         """Join a clinician's care team using an invite code.
 
         Invite codes are stored in the care_teams table as pending rows
-        with a code column. The patient "claims" the row.
+        with a code column. The patient "claims" the row, so the link keeps the
+        clinic that issued the code (``care_teams.clinic_id``).
         """
         normalized_code = invite_code.strip().upper()
 
@@ -196,6 +197,9 @@ class PatientService:
         if invite.get("patient_id"):
             raise ValidationError("Invite code has already been claimed")
 
+        # Still one active link per clinician: a second link for another clinic waits
+        # until the SQL that picks "the" link for a patient and clinician takes an
+        # explicit care team (CLN-003 slices C and H).
         existing_link = (
             self.db.table("care_teams")
             .select("id")

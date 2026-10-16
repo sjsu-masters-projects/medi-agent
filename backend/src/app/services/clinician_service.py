@@ -36,6 +36,7 @@ from app.models.adr import ADRReviewDecisionRequest
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
 from app.pharmacovigilance import PATIENT_ANSWERABLE_NARANJO_QUESTIONS, NaranjoQuestion
+from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
 from app.services.notification_service import NotificationService
 from app.services.patient_wording import patient_text
@@ -54,6 +55,7 @@ class ClinicianService:
         self.clinic_repo = ClinicRepository(self)
         self.clinician_repo = ClinicianRepository(self)
         self.care_team_repo = CareTeamRepository(self)
+        self.memberships = ClinicMembershipService(self)
         self.document_workflows = ClinicianDocumentWorkflowService(
             db=db,
             care_team_repo=self.care_team_repo,
@@ -228,22 +230,24 @@ class ClinicianService:
         """Create a pending care_team row with a unique invite code.
 
         The patient uses this code via POST /patients/me/care-team/join.
-        Codes are 8-char uppercase alphanumeric for easy sharing.
+        Codes are 8-char uppercase alphanumeric for easy sharing. The code records
+        the clinic that issued it, and the care-team link the patient's join creates
+        belongs to that clinic.
         """
         code = secrets.token_hex(4).upper()
         expires_at = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+        membership = await self.memberships.acting_membership(clinician_id)
+        invite: dict[str, Any] = {
+            "clinician_id": str(clinician_id),
+            "invite_code": code,
+            "invite_expires_at": expires_at,
+            "status": "pending",
+            "role": "provider",
+        }
+        if membership is not None:
+            invite["clinic_id"] = str(membership.clinic_id)
 
-        result = await self._execute(
-            self.db.table("care_teams").insert(
-                {
-                    "clinician_id": str(clinician_id),
-                    "invite_code": code,
-                    "invite_expires_at": expires_at,
-                    "status": "pending",
-                    "role": "provider",
-                }
-            )
-        )
+        result = await self._execute(self.db.table("care_teams").insert(invite))
         if not result.data:
             raise ExternalServiceError("Supabase", "Failed to generate invite code")
 
@@ -332,16 +336,21 @@ class ClinicianService:
         if not context:
             raise NotFoundError("Clinician", str(clinician_id))
 
-        if context.get("role") != "admin":
+        # The admin role and the clinic come from the clinician's membership; a clinician
+        # without one keeps the legacy row's values.
+        membership = await self.memberships.acting_membership(clinician_id)
+        role = membership.role.value if membership else context.get("role")
+        if role != "admin":
             return [str(clinician_id)]
 
         clinician_ids: set[str] = {str(clinician_id)}
-        clinic_id = context.get("clinic_id")
         clinic_name = str(context.get("clinic_name") or "")
 
-        if clinic_id:
+        if membership is not None:
+            clinician_ids.update(await self.memberships.clinic_member_ids(membership.clinic_id))
+        elif context.get("clinic_id"):
             clinician_ids.update(
-                await self.clinician_repo.list_ids_by_clinic_id_async(str(clinic_id))
+                await self.clinician_repo.list_ids_by_clinic_id_async(str(context["clinic_id"]))
             )
 
         if clinic_name:

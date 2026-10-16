@@ -9,14 +9,27 @@ import pytest
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.models.adr import ADRReviewAction, ADRReviewDecisionRequest
+from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import PatientRiskData
-from app.models.enums import DocumentReviewStatus
+from app.models.enums import ClinicianRole, ClinicMembershipStatus, DocumentReviewStatus
 from app.pharmacovigilance import NaranjoQuestion
 from app.services.clinician_service import ClinicianService
 
 
 def _response(*, data=None, count=None):
     return SimpleNamespace(data=data, count=count)
+
+
+CLINIC_ID = "00000000-0000-0000-0000-0000000000c1"
+
+
+def _membership(clinician_id, role="provider"):
+    return ClinicMembership(
+        clinician_id=clinician_id,
+        clinic_id=CLINIC_ID,
+        role=ClinicianRole(role),
+        status=ClinicMembershipStatus.ACTIVE,
+    )
 
 
 @pytest.fixture
@@ -544,6 +557,9 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
             "role": "provider",
         }
     )
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(clinician_id)
+    )
     service.care_team_repo.list_invites_for_clinician_ids = AsyncMock(  # type: ignore[method-assign]
         return_value=[
             {
@@ -631,9 +647,13 @@ async def test_list_invite_codes_uses_clinic_scope_for_admin(service):
             "role": "admin",
         }
     )
-    service.clinician_repo.list_ids_by_clinic_id_async = AsyncMock(  # type: ignore[method-assign]
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(admin_id, "admin")
+    )
+    service.memberships.clinic_member_ids = AsyncMock(  # type: ignore[method-assign]
         return_value=[own_id, peer_id]
     )
+    service.clinician_repo.list_ids_by_clinic_id_async = AsyncMock()  # type: ignore[method-assign]
     service.clinician_repo.list_ids_by_clinic_name_async = AsyncMock(  # type: ignore[method-assign]
         return_value=[peer_id]
     )
@@ -667,6 +687,87 @@ async def test_list_invite_codes_uses_clinic_scope_for_admin(service):
     assert result["counts"] == {"active": 1, "claimed": 0, "inactive": 0}
     assert result["invites"][0]["created_by"]["id"] == peer_id
     assert result["invites"][0]["created_by"]["email"] == "taylor@example.com"
+    service.memberships.clinic_member_ids.assert_awaited_once()
+    assert str(service.memberships.clinic_member_ids.await_args.args[0]) == CLINIC_ID
+    service.clinician_repo.list_ids_by_clinic_id_async.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_invite_scope_uses_the_membership_role_over_the_legacy_row(service):
+    clinician_id = uuid4()
+    service.clinician_repo.get_context_async = AsyncMock(  # type: ignore[method-assign]
+        return_value={"clinic_id": CLINIC_ID, "clinic_name": "City Health", "role": "admin"}
+    )
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(clinician_id, "provider")
+    )
+
+    assert await service._get_invite_scope_clinician_ids(clinician_id) == [str(clinician_id)]
+
+
+@pytest.mark.asyncio
+async def test_invite_scope_falls_back_to_the_legacy_row_without_a_membership(service):
+    admin_id = uuid4()
+    peer_id = str(uuid4())
+    service.clinician_repo.get_context_async = AsyncMock(  # type: ignore[method-assign]
+        return_value={"clinic_id": None, "clinic_name": "City Health", "role": "admin"}
+    )
+    service.memberships.acting_membership = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    service.memberships.clinic_member_ids = AsyncMock()  # type: ignore[method-assign]
+    service.clinician_repo.list_ids_by_clinic_name_async = AsyncMock(  # type: ignore[method-assign]
+        return_value=[peer_id]
+    )
+
+    result = await service._get_invite_scope_clinician_ids(admin_id)
+
+    assert result == sorted([str(admin_id), peer_id])
+    service.memberships.clinic_member_ids.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_records_the_issuing_clinic(service, mock_db):
+    clinician_id = uuid4()
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(clinician_id)
+    )
+    mock_db.table.return_value.insert.return_value.execute.return_value = _response(
+        data=[{"id": "team-1"}]
+    )
+
+    result = await service.generate_invite_code(clinician_id)
+
+    payload = mock_db.table.return_value.insert.call_args.args[0]
+    mock_db.table.assert_called_with("care_teams")
+    assert payload["clinic_id"] == CLINIC_ID
+    assert payload["clinician_id"] == str(clinician_id)
+    assert payload["status"] == "pending"
+    assert result == {"invite_code": payload["invite_code"], "care_team_id": "team-1"}
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_without_a_clinic_leaves_the_clinic_to_the_database(
+    service, mock_db
+):
+    service.memberships.acting_membership = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    mock_db.table.return_value.insert.return_value.execute.return_value = _response(
+        data=[{"id": "team-1"}]
+    )
+
+    await service.generate_invite_code(uuid4())
+
+    assert "clinic_id" not in mock_db.table.return_value.insert.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_needs_a_clinic_choice_with_several(service, mock_db):
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        side_effect=ValidationError("Choose the clinic for this action")
+    )
+
+    with pytest.raises(ValidationError):
+        await service.generate_invite_code(uuid4())
+
+    mock_db.table.return_value.insert.assert_not_called()
 
 
 @pytest.mark.asyncio
