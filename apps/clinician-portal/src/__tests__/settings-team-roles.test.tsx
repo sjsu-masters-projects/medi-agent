@@ -88,9 +88,9 @@ describe("Settings team and roles", () => {
             readonly status = 422;
         }
 
-        function mockClinics(clinics: unknown[], profileRole = "admin") {
+        function mockClinics(clinics: unknown[], profileRole = "admin", defaultClinicId: string | null = null) {
             mocks.get.mockImplementation(async (path: string) => {
-                if (path === "/api/v1/clinicians/me/clinics") return { clinics, default_clinic_id: null };
+                if (path === "/api/v1/clinicians/me/clinics") return { clinics, default_clinic_id: defaultClinicId };
                 if (path.startsWith("/api/v1/staff/")) {
                     if (clinics.length > 1 && !path.includes("clinic_id=")) throw new ClinicRequired("Choose the clinic for this action.");
                     return { staff, clinic_name: path.includes("clinic-b") ? "Bay Clinic" : "City Health", clinic_code: "ABC123" };
@@ -115,7 +115,7 @@ describe("Settings team and roles", () => {
             expect(mocks.get).toHaveBeenCalledWith("/api/v1/staff/?clinic_id=clinic-a", { token: "session" });
             expect(mocks.get).toHaveBeenCalledWith("/api/v1/clinicians/me/invite-codes?clinic_id=clinic-a", { token: "session" });
             // One clinic: no picker.
-            expect(screen.queryByLabelText("Clinic for this page")).not.toBeInTheDocument();
+            expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
         });
 
         it("asks which clinic when the server requires a choice, then scopes every action to it", async () => {
@@ -123,13 +123,13 @@ describe("Settings team and roles", () => {
             mocks.post.mockResolvedValue({ status: "queued", email_sent: false });
             render(<SettingsPage />);
 
-            const picker = await screen.findByLabelText("Clinic for this page");
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            const picker = await screen.findByLabelText("Clinic");
             expect(await screen.findByText(/choose which one this applies to/i)).toBeInTheDocument();
             // The refusal is a prompt, not an error.
             expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
             fireEvent.change(picker, { target: { value: "clinic-a" } });
-            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
             await screen.findByText("Active Staff (2)");
             expect(mocks.get).toHaveBeenCalledWith("/api/v1/staff/?clinic_id=clinic-a", { token: "session" });
 
@@ -147,8 +147,8 @@ describe("Settings team and roles", () => {
         it("uses the role held at the chosen clinic, not the profile role", async () => {
             mockClinics([clinicA, clinicB], "admin");
             render(<SettingsPage />);
-            fireEvent.change(await screen.findByLabelText("Clinic for this page"), { target: { value: "clinic-b" } });
             fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            fireEvent.change(await screen.findByLabelText("Clinic"), { target: { value: "clinic-b" } });
             await screen.findByText("Active Staff (2)");
 
             // Admin at City Health, provider at Bay Clinic: no admin controls here.
@@ -156,12 +156,53 @@ describe("Settings team and roles", () => {
             expect(screen.queryByRole("button", { name: "Send Invite" })).not.toBeInTheDocument();
         });
 
+        it("starts on the default clinic when there are several", async () => {
+            mockClinics([clinicA, clinicB], "admin", "clinic-b");
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            await screen.findByText("Active Staff (2)");
+            expect(mocks.get).toHaveBeenCalledWith("/api/v1/staff/?clinic_id=clinic-b", { token: "session" });
+            expect(await screen.findByLabelText("Clinic")).toHaveValue("clinic-b");
+        });
+
+        it("shows the clinic picker only on the clinic-scoped tabs", async () => {
+            mockClinics([clinicA, clinicB], "admin", "clinic-a");
+            render(<SettingsPage />);
+            await screen.findByRole("button", { name: "Team & Roles" });
+            expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+            fireEvent.click(screen.getByRole("button", { name: "Patient Invites" }));
+            expect(await screen.findByLabelText("Clinic")).toBeInTheDocument();
+            fireEvent.click(screen.getByRole("button", { name: "Interoperability" }));
+            expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+        });
+
+        it("does not list a suspended clinic", async () => {
+            const suspended = { ...clinicB, clinic_id: "clinic-c", clinic_name: "Closed Clinic", status: "suspended" };
+            mockClinics([clinicA, clinicB, suspended], "admin", "clinic-a");
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            const picker = await screen.findByLabelText("Clinic");
+            expect(picker).toHaveTextContent("Bay Clinic");
+            expect(picker).not.toHaveTextContent("Closed Clinic");
+        });
+
+        it("follows the role at the selected clinic when switching", async () => {
+            mockClinics([clinicA, clinicB], "admin", "clinic-a");
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            expect(await screen.findByRole("button", { name: "Send Invite" })).toBeInTheDocument();
+            fireEvent.change(await screen.findByLabelText("Clinic"), { target: { value: "clinic-b" } });
+            await waitFor(() => expect(screen.queryByRole("button", { name: "Send Invite" })).not.toBeInTheDocument());
+            fireEvent.change(screen.getByLabelText("Clinic"), { target: { value: "clinic-a" } });
+            expect(await screen.findByRole("button", { name: "Send Invite" })).toBeInTheDocument();
+        });
+
         it("generates a patient invite code for the chosen clinic", async () => {
             mockClinics([clinicA, clinicB]);
             mocks.post.mockResolvedValue({ invite_code: "ABCD1234", care_team_id: "team-1" });
             render(<SettingsPage />);
-            fireEvent.change(await screen.findByLabelText("Clinic for this page"), { target: { value: "clinic-a" } });
             fireEvent.click(await screen.findByRole("button", { name: "Patient Invites" }));
+            fireEvent.change(await screen.findByLabelText("Clinic"), { target: { value: "clinic-a" } });
             fireEvent.click(await screen.findByRole("button", { name: /generate/i }));
             await waitFor(() =>
                 expect(mocks.post).toHaveBeenCalledWith(

@@ -22,14 +22,16 @@ interface ClinicPickerProps {
  * It is not a global switcher: nothing else in the portal changes when it does.
  */
 export function ClinicPicker({ clinics, onChange, required = false, value }: ClinicPickerProps) {
-    if (clinics.length < 2) {
+    // Suspended memberships cannot act, so they are not offered.
+    const active = clinics.filter((clinic) => clinic.status === "active");
+    if (active.length < 2) {
         return null;
     }
 
     return (
         <div className="rounded-xl border border-line bg-surface-2 px-4 py-3">
             <label className="block">
-                <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Clinic for this page</span>
+                <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Clinic</span>
                 <select
                     className="h-10 w-full max-w-sm rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink"
                     onChange={(event) => onChange(event.target.value)}
@@ -40,7 +42,7 @@ export function ClinicPicker({ clinics, onChange, required = false, value }: Cli
                             Choose a clinic
                         </option>
                     )}
-                    {clinics.map((clinic) => (
+                    {active.map((clinic) => (
                         <option key={clinic.clinic_id} value={clinic.clinic_id}>
                             {clinic.clinic_name} · {ROLE_LABELS[clinic.role] ?? clinic.role}
                         </option>

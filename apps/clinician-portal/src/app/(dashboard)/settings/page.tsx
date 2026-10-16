@@ -213,8 +213,12 @@ export default function SettingsPage() {
                     return;
                 }
                 setClinics(result.clinics);
+                const active = result.clinics.filter((clinic) => clinic.status === "active");
                 if (result.clinics.length === 1) {
                     setClinicId(result.clinics[0].clinic_id);
+                } else if (active.some((clinic) => clinic.clinic_id === result.default_clinic_id)) {
+                    // Several clinics: start on the default so the Team tab is never empty.
+                    setClinicId(result.default_clinic_id);
                 }
             } catch {
                 // The server still resolves a single clinic and asks for a choice otherwise.
@@ -514,8 +518,6 @@ export default function SettingsPage() {
                 {clinicName ? <p className="mt-1 text-sm text-muted">{clinicName}</p> : null}
             </div>
 
-            <ClinicPicker clinics={clinics} onChange={setClinicId} required={clinicRequired} value={clinicId} />
-
             <div role="group" aria-label="Settings views" className="flex h-11 max-w-full gap-6 overflow-x-auto border-b border-line-strong">
                 {settingsTabs.map((tab) => (
                     <button
@@ -532,6 +534,10 @@ export default function SettingsPage() {
                     </button>
                 ))}
             </div>
+
+            {activeTab === "Team & Roles" || activeTab === "Patient Invites" ? (
+                <ClinicPicker clinics={clinics} onChange={setClinicId} required={clinicRequired} value={clinicId} />
+            ) : null}
 
             {error ? (
                 <p role="alert" className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink">
