@@ -21,13 +21,41 @@ export function MedWatchStepper({
     const current = REPORT_STEPS.findIndex((candidate) => candidate.value === step);
     return (
         <nav aria-label="Report steps">
-            {/* Narrow screens: a one-line position and a progress bar. */}
+            {/* Narrow screens: a one-line position, previous/next controls and a progress bar. */}
             <div className="md:hidden">
-                <p className="text-[13px] font-medium text-ink">
-                    Step {current + 1} of {REPORT_STEPS.length}
-                    <span aria-hidden="true"> · </span>
-                    {REPORT_STEPS[current].label}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="text-[13px] font-medium text-ink">
+                        Step {current + 1} of {REPORT_STEPS.length}
+                        <span aria-hidden="true"> · </span>
+                        {REPORT_STEPS[current].label}
+                    </p>
+                    <div className="flex shrink-0 gap-1">
+                        {current > 0 ? (
+                            <button
+                                className="ma-press rounded-lg border border-line-strong px-2.5 py-1 text-xs font-medium text-ink-2 outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={disabled}
+                                aria-label={`Previous step: ${REPORT_STEPS[current - 1].label}`}
+                                onClick={() => onSelect(REPORT_STEPS[current - 1].value)}
+                                type="button"
+                            >
+                                <span aria-hidden="true">‹ </span>
+                                {REPORT_STEPS[current - 1].label}
+                            </button>
+                        ) : null}
+                        {current < REPORT_STEPS.length - 1 ? (
+                            <button
+                                className="ma-press rounded-lg border border-line-strong px-2.5 py-1 text-xs font-medium text-ink-2 outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={disabled}
+                                aria-label={`Next step: ${REPORT_STEPS[current + 1].label}`}
+                                onClick={() => onSelect(REPORT_STEPS[current + 1].value)}
+                                type="button"
+                            >
+                                {REPORT_STEPS[current + 1].label}
+                                <span aria-hidden="true"> ›</span>
+                            </button>
+                        ) : null}
+                    </div>
+                </div>
                 <div aria-hidden="true" className="mt-2 flex gap-1">
                     {REPORT_STEPS.map((candidate, index) => (
                         <span
