@@ -15,12 +15,15 @@ class StaffInviteRequest(BaseModel):
 
     email: EmailStr
     role: ClinicianRole = ClinicianRole.PROVIDER
+    # The clinic the invitation is for; optional only for an admin of a single clinic.
+    clinic_id: UUID | None = None
 
 
 class StaffUpdateRoleRequest(BaseModel):
-    """Update a team member's role."""
+    """Update a team member's role at one clinic."""
 
     role: ClinicianRole
+    clinic_id: UUID | None = None
 
 
 class StaffMember(BaseModel):
@@ -41,5 +44,6 @@ class StaffListResponse(BaseModel):
     """List of staff in the clinic."""
 
     staff: list[StaffMember]
+    clinic_id: UUID | None = None
     clinic_name: str
     clinic_code: str | None = None

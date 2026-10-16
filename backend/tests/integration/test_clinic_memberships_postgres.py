@@ -435,3 +435,461 @@ def test_a_signed_in_clinician_cannot_promote_or_move_themselves(sql):
     )
     assert sql(f"SELECT specialty FROM clinicians WHERE id='{CLINICIAN}'") == "Synthetic cardiology"
     assert memberships(sql, CLINICIAN) == [(CLINIC, "nurse", "active")]
+
+
+# ── Slice B (066): one account, several clinics ───────────────────────────────────────
+
+
+def clinic_op(sql, actor, action, payload=None, *, succeeds=True):
+    data = json.dumps(payload or {}).replace("'", "''")
+    out = sql(
+        f"SET ROLE service_role; SELECT clinician_clinic_operation('{actor}','{action}','{data}');",
+        succeeds=succeeds,
+    )
+    return json.loads(out) if succeeds else out
+
+
+def code_of(sql, clinic):
+    return sql(f"SELECT code FROM clinics WHERE id='{clinic}'")
+
+
+def join(sql, clinician, clinic, role="nurse", **kwargs):
+    payload = {"clinic_code": code_of(sql, clinic), "role": role}
+    return clinic_op(sql, clinician, "join_code", payload, **kwargs)
+
+
+def default_of(sql, clinician):
+    return sql(f"SELECT clinic_id||'|'||role FROM clinicians WHERE id='{clinician}'")
+
+
+def audit(sql, target):
+    rows = sql(
+        "SELECT clinic_id||'|'||action||'|'||coalesce(role::text,'-') "
+        f"FROM clinic_membership_audit_events WHERE target_id='{target}' ORDER BY created_at"
+    )
+    return rows.splitlines()
+
+
+def audit_full(sql, target):
+    rows = sql(
+        "SELECT actor_id||'|'||clinic_id||'|'||action||'|'||target_type||'|'||coalesce(role::text,'-') "
+        f"FROM clinic_membership_audit_events WHERE target_id='{target}' ORDER BY created_at"
+    )
+    return [tuple(row.split("|")) for row in rows.splitlines()]
+
+
+def as_service(statement):
+    return f"SET ROLE service_role; {statement}"
+
+
+def conversation(sql, actor, role, action, payload=None):
+    data = json.dumps(payload or {})
+    return json.loads(
+        sql(
+            as_service(
+                f"SELECT care_conversation_operation('{actor}','{role}','{action}','{data}');"
+            )
+        )
+    )
+
+
+def test_joining_by_code_adds_a_membership_and_keeps_the_default_clinic(sql):
+    second_clinic(sql)
+    sql(as_service(f"UPDATE clinicians SET role='admin' WHERE id='{CLINICIAN}';"))
+    code = code_of(sql, SECOND_CLINIC)
+
+    joined = clinic_op(
+        sql, CLINICIAN, "join_code", {"clinic_code": f" {code.lower()} ", "role": "nurse"}
+    )
+
+    assert joined["status"] == "joined" and joined["clinic_id"] == SECOND_CLINIC
+    assert joined["role"] == "nurse"
+    assert memberships(sql, CLINICIAN) == [
+        (CLINIC, "admin", "active"),
+        (SECOND_CLINIC, "nurse", "active"),
+    ]
+    # The default clinic and the role held there are unchanged.
+    assert default_of(sql, CLINICIAN) == f"{CLINIC}|admin"
+    assert audit(sql, CLINICIAN) == [f"{SECOND_CLINIC}|joined_by_code|nurse"]
+    listed = clinic_op(sql, CLINICIAN, "list")
+    assert listed["default_clinic_id"] == CLINIC
+    assert [(c["clinic_id"], c["role"]) for c in listed["clinics"]] == [
+        (SECOND_CLINIC, "nurse"),
+        (CLINIC, "admin"),
+    ]
+
+    # Already a member: nothing changes and nothing more is audited.
+    again = join(sql, CLINICIAN, SECOND_CLINIC, role="provider")
+    assert again["status"] == "already_member" and again["role"] == "nurse"
+    assert len(audit(sql, CLINICIAN)) == 1
+
+
+def test_an_open_code_never_grants_admin_or_reverses_a_removal(sql):
+    second_clinic(sql)
+
+    assert "invalid_role" in join(sql, CLINICIAN, SECOND_CLINIC, role="admin", succeeds=False)
+    assert "clinic_code_invalid" in clinic_op(
+        sql, CLINICIAN, "join_code", {"clinic_code": "NOPE0000", "role": "nurse"}, succeeds=False
+    )
+    sql(f"UPDATE clinics SET status='suspended' WHERE id='{SECOND_CLINIC}';")
+    assert "clinic_code_inactive" in join(sql, CLINICIAN, SECOND_CLINIC, succeeds=False)
+    sql(f"UPDATE clinics SET status='active' WHERE id='{SECOND_CLINIC}';")
+    join(sql, CLINICIAN, SECOND_CLINIC)
+    # The second clinic's admin removes the clinician; the open code cannot undo that.
+    sql(
+        as_service(
+            "UPDATE clinic_memberships SET status='inactive' "
+            f"WHERE clinician_id='{CLINICIAN}' AND clinic_id='{SECOND_CLINIC}';"
+        )
+    )
+    assert "membership_inactive" in join(sql, CLINICIAN, SECOND_CLINIC, succeeds=False)
+    assert [c["clinic_id"] for c in clinic_op(sql, CLINICIAN, "list")["clinics"]] == [CLINIC]
+    # A suspended clinic is not offered by clinic pickers.
+    sql(f"UPDATE clinics SET status='suspended' WHERE id='{CLINIC}';")
+    assert clinic_op(sql, CLINICIAN, "list")["clinics"] == []
+
+
+def test_a_first_clinic_joined_by_code_becomes_the_default(sql):
+    second_clinic(sql)
+    unattached = new_clinician(sql)
+
+    join(sql, unattached, SECOND_CLINIC)
+
+    assert default_of(sql, unattached) == f"{SECOND_CLINIC}|nurse"
+    assert memberships(sql, unattached) == [(SECOND_CLINIC, "nurse", "active")]
+    assert audit(sql, unattached) == [f"{SECOND_CLINIC}|joined_by_code|nurse"]
+
+
+def test_a_changed_default_clinic_takes_that_clinics_role(sql):
+    second_clinic(sql)
+    sql(as_service(f"UPDATE clinicians SET role='admin' WHERE id='{CLINICIAN}';"))
+    join(sql, CLINICIAN, SECOND_CLINIC)
+
+    # Removal from the default clinic moves the default to the remaining membership. Even a
+    # write that names the old role cannot carry admin rights to the other clinic.
+    sql(
+        as_service(
+            "UPDATE clinic_memberships SET status='inactive' "
+            f"WHERE clinician_id='{CLINICIAN}' AND clinic_id='{CLINIC}'; "
+            f"UPDATE clinicians SET clinic_id='{SECOND_CLINIC}', role='admin' "
+            f"WHERE id='{CLINICIAN}';"
+        )
+    )
+
+    assert default_of(sql, CLINICIAN) == f"{SECOND_CLINIC}|nurse"
+    assert (
+        sql(f"SELECT clinic_name FROM clinicians WHERE id='{CLINICIAN}'")
+        == "Second synthetic clinic"
+    )
+    assert memberships(sql, CLINICIAN) == [
+        (CLINIC, "admin", "inactive"),
+        (SECOND_CLINIC, "nurse", "active"),
+    ]
+
+
+def test_clinic_operations_and_their_audit_are_backend_only(sql):
+    signed_in(sql)
+    assert "permission denied" in sql(
+        as_user(CLINICIAN, f"SELECT clinician_clinic_operation('{CLINICIAN}','list','{{}}');"),
+        succeeds=False,
+    )
+    assert "permission denied" in sql(
+        as_user(CLINICIAN, "SELECT count(*) FROM clinic_membership_audit_events;"), succeeds=False
+    )
+    for statement in (
+        "DELETE FROM clinic_membership_audit_events;",
+        "UPDATE clinic_membership_audit_events SET role='admin';",
+    ):
+        assert "permission denied" in sql(as_service(statement), succeeds=False)
+
+
+def invitation(sql, actor, action, payload, *, succeeds=True):
+    data = json.dumps(payload).replace("'", "''")
+    who = "NULL" if actor is None else f"'{actor}'"
+    out = sql(
+        as_service(f"SELECT clinician_email_invitation_operation({who},'{action}','{data}');"),
+        succeeds=succeeds,
+    )
+    return json.loads(out) if succeeds else out
+
+
+def email_invite(sql, admin, email, *, clinic=None, token="slice-b-token", role="nurse", **kwargs):
+    payload = {"email": email, "role": role, "hash": token, "payload": {}}
+    if clinic:
+        payload["clinic_id"] = clinic
+    return invitation(sql, admin, "create", payload, **kwargs)
+
+
+def accept(sql, actor, email, token="slice-b-token"):
+    return invitation(sql, actor, "accept", {"hash": token, "account_email": email})
+
+
+def test_an_invitation_adds_a_clinic_to_an_account_that_has_one(sql):
+    second_clinic(sql)
+    admin = new_clinician(sql, clinic=SECOND_CLINIC, role="admin")
+    sql(f"UPDATE clinicians SET email='one@example.com' WHERE id='{CLINICIAN}';")
+
+    assert email_invite(sql, admin, "one@example.com", role="admin")["status"] == "queued"
+    preview = invitation(sql, None, "preview", {"hash": "slice-b-token"})
+    assert preview["clinic_name"] == "Second synthetic clinic"
+    accepted = accept(sql, CLINICIAN, "one@example.com")
+
+    assert accepted["status"] == "accepted" and accepted["clinic_id"] == SECOND_CLINIC
+    assert memberships(sql, CLINICIAN) == [
+        (CLINIC, "provider", "active"),
+        (SECOND_CLINIC, "admin", "active"),
+    ]
+    # The default clinic and the role held there are unchanged: admin only at the second.
+    assert default_of(sql, CLINICIAN) == f"{CLINIC}|provider"
+    assert audit(sql, CLINICIAN) == [f"{SECOND_CLINIC}|joined_by_invitation|admin"]
+    # Accepting again is idempotent; inviting a member again is refused.
+    assert accept(sql, CLINICIAN, "one@example.com")["status"] == "accepted"
+    assert len(audit(sql, CLINICIAN)) == 1
+    assert "already_member" in email_invite(
+        sql, admin, "one@example.com", token="again-token", succeeds=False
+    )
+
+
+def test_invitation_admin_rights_come_from_the_membership_at_that_clinic(sql):
+    second_clinic(sql)
+    # An admin at the second clinic only; the default clinic is the first.
+    sql(
+        as_service(
+            "INSERT INTO clinic_memberships(clinician_id,clinic_id,role) "
+            f"VALUES('{CLINICIAN}','{SECOND_CLINIC}','admin');"
+        )
+    )
+
+    # Without a clinic the default clinic is used, where they are a provider.
+    assert "admin_required" in email_invite(
+        sql, CLINICIAN, "a@example.com", token="t-1", succeeds=False
+    )
+    created = email_invite(sql, CLINICIAN, "a@example.com", clinic=SECOND_CLINIC, token="t-2")
+    assert created["status"] == "queued"
+    history = invitation(sql, CLINICIAN, "list", {"clinic_id": SECOND_CLINIC})["items"]
+    assert [item["email"] for item in history] == ["a@example.com"]
+    assert "admin_required" in invitation(
+        sql, CLINICIAN, "list", {"clinic_id": CLINIC}, succeeds=False
+    )
+    # The invitation is valid for its clinic whatever the inviter's default clinic is.
+    preview = invitation(sql, None, "preview", {"hash": "t-2"})
+    assert preview["clinic_name"] == "Second synthetic clinic"
+    # An admin of another clinic cannot revoke it and learns nothing about it.
+    other_admin = new_clinician(sql, clinic=CLINIC, role="admin")
+    assert "invitation_unavailable" in invitation(
+        sql, other_admin, "revoke", {"id": created["invitation_id"]}, succeeds=False
+    )
+    revoked = invitation(sql, CLINICIAN, "revoke", {"id": created["invitation_id"]})
+    assert revoked["status"] == "revoked"
+    # Losing the admin membership withdraws the right to invite there.
+    sql(
+        as_service(
+            "UPDATE clinic_memberships SET role='provider' "
+            f"WHERE clinician_id='{CLINICIAN}' AND clinic_id='{SECOND_CLINIC}';"
+        )
+    )
+    assert "admin_required" in invitation(
+        sql, CLINICIAN, "list", {"clinic_id": SECOND_CLINIC}, succeeds=False
+    )
+
+
+def test_a_second_clinic_link_has_its_own_clinic_tagged_conversation(sql):
+    second_clinic(sql)
+    join(sql, CLINICIAN, SECOND_CLINIC)
+    link(sql, CLINICIAN, patient=FOREIGN, clinic=SECOND_CLINIC)
+    recipient = {"recipient_id": CLINICIAN}
+
+    thread = conversation(sql, FOREIGN, "patient", "open", recipient)
+    recipients = conversation(sql, FOREIGN, "patient", "recipients")
+
+    # The thread and the recipient carry the link's clinic and the role held there.
+    assert thread["clinic_name"] == "Second synthetic clinic"
+    assert [(r["clinic_name"], r["role"]) for r in recipients] == [
+        ("Second synthetic clinic", "nurse")
+    ]
+    # One list holds the clinician's threads from both clinics.
+    first = conversation(sql, PATIENT, "patient", "open", recipient)
+    assert first["clinic_name"] == "Synthetic clinic"
+    listed = conversation(sql, CLINICIAN, "clinician", "list")
+    assert {t["id"] for t in listed} == {thread["id"], first["id"]}
+    # Removal from the second clinic closes only that clinic's thread.
+    sql(
+        as_service(
+            "UPDATE clinic_memberships SET status='inactive' "
+            f"WHERE clinician_id='{CLINICIAN}' AND clinic_id='{SECOND_CLINIC}';"
+        )
+    )
+    assert [t["id"] for t in conversation(sql, CLINICIAN, "clinician", "list")] == [first["id"]]
+
+
+# ── Slice B: admin actions run in the clinic named in the request ──────────────────────
+
+
+def staff_op(sql, actor, action, clinic, member, role=None, *, succeeds=True):
+    payload = {"clinic_id": clinic, "member_id": member}
+    if role:
+        payload["role"] = role
+    return clinic_op(sql, actor, action, payload, succeeds=succeeds)
+
+
+def two_clinic_admin(sql):
+    """CLINICIAN: provider by default at CLINIC, admin at SECOND_CLINIC; OTHER at both."""
+    second_clinic(sql)
+    sql(
+        as_service(
+            "INSERT INTO clinic_memberships(clinician_id,clinic_id,role) VALUES "
+            f"('{CLINICIAN}','{SECOND_CLINIC}','admin'),('{OTHER}','{SECOND_CLINIC}','nurse');"
+        )
+    )
+
+
+def test_an_admin_at_one_clinic_cannot_act_on_another(sql):
+    two_clinic_admin(sql)
+
+    # CLINICIAN is an admin at the second clinic only; at the first they are a provider.
+    for action, role in (("set_member_role", "admin"), ("remove_member", None)):
+        assert "admin_required" in staff_op(
+            sql, CLINICIAN, action, CLINIC, OTHER, role, succeeds=False
+        )
+    assert memberships(sql, OTHER) == [
+        (CLINIC, "provider", "active"),
+        (SECOND_CLINIC, "nurse", "active"),
+    ]
+    # A clinic the actor does not belong to, and a member who is not at that clinic.
+    third = str(uuid4())
+    sql(f"INSERT INTO clinics(id,display_name,canonical_name) VALUES('{third}','Third','third');")
+    assert "admin_required" in staff_op(
+        sql, CLINICIAN, "remove_member", third, OTHER, succeeds=False
+    )
+    stranger = new_clinician(sql, clinic=CLINIC)
+    assert "member_unavailable" in staff_op(
+        sql, CLINICIAN, "remove_member", SECOND_CLINIC, stranger, succeeds=False
+    )
+    assert "self_change" in staff_op(
+        sql, CLINICIAN, "set_member_role", SECOND_CLINIC, CLINICIAN, "nurse", succeeds=False
+    )
+    assert "clinic_unavailable" in staff_op(
+        sql, CLINICIAN, "remove_member", str(uuid4()), OTHER, succeeds=False
+    )
+
+
+def test_a_role_change_at_one_clinic_never_reaches_another(sql):
+    two_clinic_admin(sql)
+
+    result = staff_op(sql, CLINICIAN, "set_member_role", SECOND_CLINIC, OTHER, "admin")
+
+    assert result["role"] == "admin"
+    assert memberships(sql, OTHER) == [
+        (CLINIC, "provider", "active"),
+        (SECOND_CLINIC, "admin", "active"),
+    ]
+    # OTHER's default clinic is the first: their legacy role there is untouched.
+    assert default_of(sql, OTHER) == f"{CLINIC}|provider"
+    assert audit_full(sql, OTHER) == [
+        (CLINICIAN, SECOND_CLINIC, "member_role_changed", "clinician", "admin")
+    ]
+
+
+def test_removal_from_the_default_clinic_keeps_the_others(sql):
+    second_clinic(sql)
+    admin = new_clinician(sql, clinic=CLINIC, role="admin")
+    sql(
+        as_service(
+            "INSERT INTO clinic_memberships(clinician_id,clinic_id,role) "
+            f"VALUES('{OTHER}','{SECOND_CLINIC}','nurse');"
+        )
+    )
+
+    staff_op(sql, admin, "remove_member", CLINIC, OTHER)
+
+    assert memberships(sql, OTHER) == [
+        (CLINIC, "provider", "inactive"),
+        (SECOND_CLINIC, "nurse", "active"),
+    ]
+    # The remaining clinic becomes the default, with the role held there.
+    assert default_of(sql, OTHER) == f"{SECOND_CLINIC}|nurse"
+    assert audit_full(sql, OTHER) == [(admin, CLINIC, "member_removed", "clinician", "provider")]
+
+    # Removal from the last clinic leaves no default, as staff removal did before.
+    second_admin = new_clinician(sql, clinic=SECOND_CLINIC, role="admin")
+    staff_op(sql, second_admin, "remove_member", SECOND_CLINIC, OTHER)
+    assert (
+        sql(f"SELECT coalesce(clinic_id::text,'none') FROM clinicians WHERE id='{OTHER}'") == "none"
+    )
+    assert [m[2] for m in memberships(sql, OTHER)] == ["inactive", "inactive"]
+
+
+# ── Slice B: the audit trail ───────────────────────────────────────────────────────────
+
+
+def test_every_membership_change_and_clinic_action_is_audited(sql):
+    second_clinic(sql)
+    admin = new_clinician(sql, clinic=SECOND_CLINIC, role="admin")
+    # Signup with a clinic: the account itself is the actor.
+    assert audit_full(sql, admin) == [
+        (admin, SECOND_CLINIC, "joined_at_signup", "clinician", "admin")
+    ]
+    # A patient invite code: the issuing clinician and the code's clinic.
+    code_row = invite(sql, CLINICIAN, "AUDIT001")
+    assert audit_full(sql, code_row) == [
+        (CLINICIAN, CLINIC, "patient_invite_code_created", "care_team", "-")
+    ]
+    # Email invitations: create, then revoke.
+    created = email_invite(sql, admin, "audit@example.com", token="audit-token")
+    invitation(sql, admin, "revoke", {"id": created["invitation_id"]})
+    assert audit_full(sql, created["invitation_id"]) == [
+        (admin, SECOND_CLINIC, "email_invitation_created", "invitation", "nurse"),
+        (admin, SECOND_CLINIC, "email_invitation_revoked", "invitation", "-"),
+    ]
+    # No name or email address is stored anywhere in the trail.
+    columns = sql(
+        "SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.columns "
+        "WHERE table_name='clinic_membership_audit_events'"
+    )
+    assert columns == "action,actor_id,clinic_id,created_at,id,role,target_id,target_type"
+    assert "@" not in sql(
+        "SELECT string_agg(row_to_json(e)::text, '') FROM clinic_membership_audit_events e"
+    )
+
+
+def test_the_audit_trail_is_append_only_for_every_role(sql):
+    second_clinic(sql)
+    new_clinician(sql, clinic=SECOND_CLINIC)
+    signed_in(sql)
+
+    for statement in (
+        "UPDATE clinic_membership_audit_events SET role='admin';",
+        "DELETE FROM clinic_membership_audit_events;",
+        "TRUNCATE clinic_membership_audit_events;",
+    ):
+        # The service role has no such privilege; even the owner is stopped by the trigger.
+        assert "permission denied" in sql(as_service(statement), succeeds=False)
+        assert "append-only" in sql(statement, succeeds=False)
+        assert "permission denied" in sql(as_user(CLINICIAN, statement), succeeds=False)
+    insert = (
+        "INSERT INTO clinic_membership_audit_events(actor_id,clinic_id,action,target_type,target_id) "
+        f"VALUES('{CLINICIAN}','{CLINIC}','joined_by_code','clinician','{CLINICIAN}');"
+    )
+    for role in ("authenticated", "anon"):
+        assert "permission denied" in sql(f"SET ROLE {role}; {insert}", succeeds=False)
+        assert "permission denied" in sql(
+            f"SET ROLE {role}; SELECT count(*) FROM clinic_membership_audit_events;", succeeds=False
+        )
+    assert sql("SELECT count(*) FROM clinic_membership_audit_events") == "1"
+
+
+def test_browser_roles_cannot_write_clinicians_memberships_or_the_audit(sql):
+    signed_in(sql)
+    for role in ("anon", "authenticated"):
+        for table in ("clinicians", "clinic_memberships", "clinic_membership_audit_events"):
+            for privilege in ("INSERT", "UPDATE", "DELETE"):
+                assert (
+                    sql(f"SELECT has_table_privilege('{role}','{table}','{privilege}')") == "f"
+                ), (role, table, privilege)
+    assert "permission denied" in sql(
+        as_user(
+            CLINICIAN,
+            f"UPDATE clinic_memberships SET role='admin' WHERE clinician_id='{CLINICIAN}';",
+        ),
+        succeeds=False,
+    )
