@@ -731,3 +731,48 @@ describe("Grouped appointment offers", () => {
     expect(screen.getByRole("button", { name: "Accept" })).toBeInTheDocument();
   });
 });
+
+describe("Clinic on visits", () => {
+  it.each([
+    ["en-US", "at Harbor Clinic"],
+    ["es-MX", "en Harbor Clinic"],
+  ] as const)("shows the clinic under a visit card in %s", (locale, text) => {
+    settings.profile!.preferredLanguage = locale;
+    hookState.visits = [makeVisit({ clinicId: "c1", clinicName: "Harbor Clinic" })];
+    render(<VisitsPage />);
+    const line = screen.getByText(text);
+    expect(line.className).toContain("text-muted");
+    expect(line.className).toContain("break-words");
+  });
+  it.each([
+    ["en-US", "at Harbor Clinic"],
+    ["es-MX", "en Harbor Clinic"],
+  ] as const)("shows the clinic on an offer card in %s", (locale, text) => {
+    settings.profile!.preferredLanguage = locale;
+    hookState.visits = [
+      makeVisit({ id: "o1", proposalGroupId: "g", clinicName: "Harbor Clinic" }),
+      makeVisit({ id: "o2", proposalGroupId: "g", clinicName: "Harbor Clinic" }),
+    ];
+    render(<VisitsPage />);
+    expect(screen.getAllByText(text)).toHaveLength(1);
+  });
+  it("hides the clinic line when no clinic is known", () => {
+    hookState.visits = [
+      makeVisit(),
+      makeVisit({ id: "o1", proposalGroupId: "g" }),
+    ];
+    render(<VisitsPage />);
+    expect(screen.queryByText(/^at /)).not.toBeInTheDocument();
+  });
+  it("shows each card with its own clinic for a multi-clinic patient", () => {
+    hookState.visits = [
+      makeVisit({ id: "a", status: AppointmentStatus.CONFIRMED, clinicName: "North Clinic" }),
+      makeVisit({ id: "b", status: AppointmentStatus.CONFIRMED, clinicName: "South Clinic" }),
+    ];
+    render(<VisitsPage />);
+    const north = screen.getByText("at North Clinic").closest("article")!;
+    const south = screen.getByText("at South Clinic").closest("article")!;
+    expect(north).not.toBe(south);
+    expect(within(north).queryByText("at South Clinic")).not.toBeInTheDocument();
+  });
+});

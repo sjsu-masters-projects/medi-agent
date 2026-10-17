@@ -42,6 +42,11 @@ export function VisitOfferCard({
   return (
     <article className="border-b border-line px-[14px] py-[13px] last:border-b-0">
       <h3 className="text-[15px] font-semibold text-ink">{copy.offerTitle}</h3>
+      {first.clinicName ? (
+        <p className="mt-1 break-words text-sm text-muted">
+          {copy.atClinic(first.clinicName)}
+        </p>
+      ) : null}
       <p className="mt-2 text-sm text-muted">
         {copy.types[first.appointmentType]} · {first.durationMinutes}{" "}
         {copy.minutes}
