@@ -26,6 +26,12 @@ export interface CareConversationMessage {
   sender_name: string;
   body: string;
   created_at: string;
+  /** LOC-003: stored translation text, if available. */
+  translation?: string | null;
+  /** LOC-003: target locale of the translation. */
+  translation_locale?: string | null;
+  /** LOC-003: whether the LOC-001 guard passed (numbers/names preserved). */
+  translation_guard_passed?: boolean | null;
 }
 
 export interface ConversationMessagePage {

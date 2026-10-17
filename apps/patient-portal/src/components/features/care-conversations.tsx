@@ -259,6 +259,8 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
   const [error, setError] = useState<"loadError" | "denied" | "readError" | "savedRefreshError" | null>(null);
   const [confirmNewKey, setConfirmNewKey] = useState(false);
   const [readAttempt, setReadAttempt] = useState(0);
+  // LOC-003: message IDs whose original (pre-translation) text the patient chose to reveal.
+  const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
   const alive = useRef(false);
   const generation = useRef(0);
   const busy = useRef(false);
@@ -387,8 +389,18 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
     <ol className="flex flex-1 flex-col gap-3" aria-label={copy.threads}>
       {messages.map((message) => {
         const own = message.sender_role === "patient";
+        // LOC-003: a translation from the other party (e.g. the clinician's English reply
+        // rendered in the patient's Spanish). The original stays available behind a toggle.
+        const hasTranslation = !own && Boolean(message.translation);
+        const originalShown = showOriginal.has(message.id);
+        const displayBody = hasTranslation && !originalShown ? (message.translation ?? message.body) : message.body;
+        const translatedLabel = message.translation_locale === "es-MX" ? copy.translatedFromEnglish : copy.translatedFromSpanish;
         return <li key={message.id} className={`ma-bubble flex flex-col gap-1 ${own ? "items-end" : "items-start"}`}>
-          <p className={`whitespace-pre-wrap break-words text-[15px] leading-[1.45] [overflow-wrap:anywhere] ${own ? "max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand px-3.5 py-[11px] text-white" : "max-w-[88%] rounded-[20px_20px_20px_6px] bg-surface px-[15px] py-[13px] text-ink shadow-[0_1px_0_rgba(16,32,43,.04)]"}`}>{message.body}</p>
+          <p className={`whitespace-pre-wrap break-words text-[15px] leading-[1.45] [overflow-wrap:anywhere] ${own ? "max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand px-3.5 py-[11px] text-white" : "max-w-[88%] rounded-[20px_20px_20px_6px] bg-surface px-[15px] py-[13px] text-ink shadow-[0_1px_0_rgba(16,32,43,.04)]"}`}>{displayBody}</p>
+          {hasTranslation ? <p className={`max-w-[88%] px-1 text-[11px] text-muted`}>
+            {originalShown ? null : <span>{translatedLabel}{message.translation_guard_passed === false ? ` · ${copy.translationUncertain}` : ""} · </span>}
+            <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => setShowOriginal((current) => { const next = new Set(current); if (next.has(message.id)) next.delete(message.id); else next.add(message.id); return next; })}>{originalShown ? copy.showTranslation : copy.showOriginal}</button>
+          </p> : null}
           <p className={`max-w-[88%] break-words px-1 text-[11px] text-muted ${own ? "text-right" : ""}`}>{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{chatDisplayTime(message.created_at, locale)}</time></p>
         </li>;
       })}

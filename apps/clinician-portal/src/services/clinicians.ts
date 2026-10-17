@@ -690,6 +690,10 @@ export interface ExtractedDocumentFact {
     id: string;
     fact_type: string;
     value: Record<string, unknown>;
+    /** LOC-003: English display fields when the source is Spanish. */
+    display_value?: Record<string, unknown> | null;
+    /** LOC-003: Language the fact was originally extracted in. */
+    display_locale?: string | null;
     confidence_score?: number | null;
     confidence_band?: string;
     uncertainty?: string[];
@@ -1599,6 +1603,24 @@ export async function approveClinicianCarePlan(
         method: "POST",
         body: JSON.stringify({ note }),
     });
+}
+
+// ── LOC-003: Back-translation ─────────────────────────────────────────────
+
+export interface BackTranslationResult {
+    back_translation: { title: string; instructions: string; frequency: string };
+    guards: { numbers_match: boolean; medication_names_match: boolean };
+}
+
+/** LOC-003: Fetch an English back-translation of the Spanish wording for verification. */
+export async function fetchBackTranslation(
+    patientId: string,
+    planId: string,
+    itemId: string,
+): Promise<BackTranslationResult> {
+    return apiFetch<BackTranslationResult>(
+        `/api/v1/care-plans/clinician/patients/${patientId}/${planId}/items/${itemId}/back-translate`,
+    );
 }
 
 export async function retryClinicianCarePlanGeneration(patientId: string): Promise<{ status: string }> {

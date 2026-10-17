@@ -353,6 +353,38 @@ class CarePlanService:
         )
         return self._hydrate_plan(self._plan(plan_id, patient_id))
 
+    async def back_translate_item(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        plan_id: UUID,
+        item_id: UUID,
+    ) -> dict[str, Any]:
+        """LOC-003: Back-translate the Spanish wording of one item to English for verification."""
+        from app.services.care_plan_translation import back_translate_spanish
+
+        self._require_assignment(clinician_id, patient_id)
+        item = next((row for row in self._items(plan_id) if str(row["id"]) == str(item_id)), None)
+        if item is None or item.get("is_removed"):
+            raise NotFoundError("Care plan item", str(item_id))
+        wording = cast(dict[str, dict[str, str]], item.get("wording") or {})
+        spanish = wording.get("es-MX") or {}
+        english = wording.get("en-US") or {}
+        if not (spanish.get("title") or "").strip():
+            raise ValidationError("No Spanish wording to back-translate")
+        result = await back_translate_spanish(spanish, english, item)
+        return {
+            "back_translation": {
+                "title": result.title,
+                "instructions": result.instructions,
+                "frequency": result.frequency,
+            },
+            "guards": {
+                "numbers_match": result.numbers_match,
+                "medication_names_match": result.medication_names_match,
+            },
+        }
+
     def _store_translation(
         self,
         item: dict[str, Any],
