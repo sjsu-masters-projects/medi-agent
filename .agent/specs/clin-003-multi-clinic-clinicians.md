@@ -690,6 +690,35 @@ Also check: no existing migration edited; the validator unchanged; the CI minimu
 `test_clinic_memberships_postgres` raised to the new count; no email address or name in the
 audit rows, logs or fixtures; synthetic data only.
 
+## Decisions from the October 17 review
+
+- **Who may edit or export an appointment (decided).** The appointment's own clinician, or a
+  colleague who holds an *active link to that patient at the appointment's clinic*. A link to the
+  same patient at another clinic grants nothing: a clinician at clinic B cannot edit or export
+  clinic A's visit because both treat the same patient. Anyone else gets the existing
+  `AuthorizationError` with `NO_CARE_TEAM_ASSIGNMENT`. A patient reaches only their own visits.
+  Unit tests: `test_other_clinics_clinician_cannot_edit_or_export_the_visit`,
+  `test_same_clinic_colleague_with_a_link_may_access_the_visit`,
+  `test_the_appointments_own_clinician_needs_no_lookup`,
+  `test_patient_reaches_only_their_own_visit`.
+- **Clinician appointment list.** The patient and clinic filters are applied together after the
+  read: a visit is listed only when its (patient, clinic) pair is one of the caller's active
+  links, so visit "Z with P1 at clinic B" is hidden from a clinician linked to P1 at A and P2 at
+  B (`test_clinician_list_drops_visits_at_a_clinic_where_only_the_patient_is_shared`).
+- **The open clinic join code is for admins (decided October 17).** `GET /staff/` and
+  `GET /clinicians/me/clinics` return `clinic_code` only to an admin at that clinic; any other
+  member gets `null`, and an accepted email invitation no longer echoes it. The portal shows the
+  code and its Copy button (Settings clinic profile, "Your clinics") to admins only. A patient
+  invite code is unaffected: any member keeps creating their own
+  (`ClinicianService.generate_invite_code`, membership required, no admin). Tests:
+  `test_list_staff_hides_the_clinic_code_from_non_admins`,
+  `test_list_staff_gives_the_clinic_code_to_an_admin`,
+  `test_clinic_list_returns_the_open_code_only_for_clinics_where_the_caller_is_admin`,
+  `test_a_non_admin_member_can_still_generate_a_patient_invite_code`; portal
+  `shows the clinic code and its Copy button only to a clinic admin`.
+- **FHIR audit export.** An actor's clinic comes from an *active* link only; an ended link no
+  longer makes the clinic ambiguous or stale.
+
 ## Suggested slices
 
 | Slice | Scope |

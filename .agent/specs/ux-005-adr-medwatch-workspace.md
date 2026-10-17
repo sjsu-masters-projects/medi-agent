@@ -40,9 +40,22 @@ the clinician actually sends.
       and record dialogs.
 6. **The preview is the PDF.** Before approval the preview is watermarked
    "DRAFT – not for submission" and is not an export: it does not create an
-   export audit event or change draft state. The audited, unwatermarked
+   export record or change draft state. Each preview is audited as a separate
+   `preview_viewed` event with the actor (decided October 17; migration 070). The audited, unwatermarked
    download stays tied to approval. The field-table preview is kept only as
    the editing view.
+
+## UI review fixes (October 17)
+
+- The status filters on both lists are toggle buttons (`aria-pressed`) in a labelled group, not
+  a tab widget: they filter one list in place and have no separate panels. They show a visible
+  focus ring, and the chosen one scrolls into view on narrow screens.
+- Truncated names, products and events carry a `title` with the full text.
+- The stepper's buttons read "Previous: <step>" and "Next: <step>"; the visible text is the
+  accessible name.
+- The PDF preview keeps a visible "Open in new tab" link (at least 40 px tall) at every width,
+  because iOS often will not render a PDF inside an iframe.
+- Sort and filter controls are 40 px tall below the `md` breakpoint.
 
 ## Backend changes
 
@@ -71,9 +84,10 @@ the clinician actually sends.
   and no case expands inline.
 - A clinician can go queue → case → prepare draft → complete → PDF preview →
   approve → download without leaving the two sections.
-- The preview PDF is watermarked and creates no export audit row; the
+- The preview PDF is watermarked, writes one `preview_viewed` audit row and no
+  export row; the
   approved download is unwatermarked and audited as today.
 - Focused backend tests for the three endpoints (authorization, 404,
-  watermark, no export audit); portal tests for the queue, case page, report
+  watermark, one preview-viewed row and no export row); portal tests for the queue, case page, report
   stepper and redirects; lint, typecheck, build; deployed check in the
   clinician portal.

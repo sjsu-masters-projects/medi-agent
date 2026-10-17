@@ -96,3 +96,24 @@ Both uses are labelled as such.
    - **Safety and records use only the original text.** Urgent-symptom checks and
      escalation never depend on a translation, and a translation never becomes a clinical
      fact.
+
+## Decisions from the October 17 review
+
+4. **A translation that failed its guard is never shown by default.** When
+   `translation_guard_passed` is false, both portals show the original message as the main
+   text with a short note ("Automatic translation unavailable for this message"; es-MX below)
+   instead of the translated text. The clinician portal no longer shows the failed translation
+   in its "Translated" box either. The es-MX note is a **draft for LOC-001 review**, not
+   approved wording: `Traducción automática no disponible para este mensaje`.
+5. **Proper names are never translated.** Medication names, allergens and vaccine names are not
+   sent to the model; `display_value` omits those keys and the review screen keeps the printed
+   name. Condition, procedure and test names are still translated and keep the digit guard.
+   The reason: a model can alter or "correct" a drug name, which is a clinical-safety change the
+   number guard cannot see.
+6. **Ingestion translates only the document's own facts**, found through the document's
+   provenance, not the patient's 50 most recent untranslated facts.
+7. **Message translation reads are bounded.** A read translates at most ten messages that have
+   no stored translation, skips stored ones, logs failures without message text, and never
+   fails the read. Follow-ups, deliberately not done now: move on-the-fly translation to a
+   background job; detect the clinician's language (the existing locale helper assumes
+   clinician = en-US) so a Spanish-writing clinician is translated to English.
