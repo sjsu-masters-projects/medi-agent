@@ -101,8 +101,12 @@ def postgres():
 
 
 def apply_clinic_memberships(execute):
-    """Apply CLN-003 slices A (065) and B (066), found by name like 063/064 above."""
-    for pattern in ("*_clinic_memberships.sql", "*_clinic_sign_in_once.sql"):
+    """Apply CLN-003 slices A (065), B (066) and C+D (067), found by name like 063/064 above."""
+    for pattern in (
+        "*_clinic_memberships.sql",
+        "*_clinic_sign_in_once.sql",
+        "*_clinic_lists_and_roles.sql",
+    ):
         for path in sorted(MIGRATIONS.glob(pattern)):
             execute(path.read_text())
 
@@ -1189,3 +1193,48 @@ def test_critical_result_is_open_work_until_acknowledged(sql):
         row["source_id"] != doc or row["event_type"] != "critical_result"
         for row in clinician(sql, "action_items")["items"]
     )
+
+
+# ── CLN-003 slice C (067): the clinic filter and the link's clinic on each item ──────────
+
+SECOND_NOTIFICATION_CLINIC = "00000000-0000-0000-0000-0000000000a8"
+
+
+def test_clinic_filter_and_link_clinic_on_notification_items(sql):
+    first_clinic = sql(f"SELECT clinic_id FROM clinicians WHERE id='{CLINICIAN}'")
+    sql(
+        f"""INSERT INTO clinics(id,display_name,canonical_name)
+        VALUES('{SECOND_NOTIFICATION_CLINIC}','Second synthetic clinic','second synthetic clinic');
+      SET ROLE service_role;
+      INSERT INTO clinic_memberships(clinician_id,clinic_id,role)
+        VALUES('{CLINICIAN}','{SECOND_NOTIFICATION_CLINIC}','provider');
+      INSERT INTO care_teams(patient_id,clinician_id,role,clinic_id)
+        VALUES('{FOREIGN}','{CLINICIAN}','primary_care','{SECOND_NOTIFICATION_CLINIC}');"""
+    )
+    here = document(sql, patient=PATIENT)
+    there = document(sql, patient=FOREIGN)
+
+    everything = clinician(sql)["items"]
+    assert {r["source_id"] for r in everything} == {here, there}
+    # Each item names the clinic of the clinician's link, not the default clinic.
+    assert {r["source_id"]: r["clinic_id"] for r in everything} == {
+        here: first_clinic,
+        there: SECOND_NOTIFICATION_CLINIC,
+    }
+    assert {r["clinic_name"] for r in everything if r["source_id"] == there} == {
+        "Second synthetic clinic"
+    }
+
+    for action in ("list", "action_items"):
+        own = clinician(sql, action, {"clinic_id": SECOND_NOTIFICATION_CLINIC})["items"]
+        assert {r["source_id"] for r in own} == {there}, action
+        # A clinic the caller does not belong to, or that does not exist, is just empty.
+        for stranger in (str(uuid4()),):
+            assert clinician(sql, action, {"clinic_id": stranger})["items"] == [], action
+    sql(
+        f"SET ROLE service_role; UPDATE clinic_memberships SET status='inactive' "
+        f"WHERE clinician_id='{CLINICIAN}' AND clinic_id='{SECOND_NOTIFICATION_CLINIC}';"
+    )
+    assert clinician(sql, "list", {"clinic_id": SECOND_NOTIFICATION_CLINIC})["items"] == []
+    # Patients never take the filter.
+    assert call(sql, "list", {"clinic_id": str(uuid4())})["items"] is not None
