@@ -90,6 +90,10 @@ class EmailInvitationService:
             action_url=settings.clinician_portal_url.rstrip("/") + "/signup#invitation=" + token,
             action_label="Review clinic invitation",
             audience="clinician",
+            # The invitation's own clinic, on the header line like every other email; the
+            # subject already names it.
+            clinic=clinic,
+            clinic_in_subject=False,
         )
         result = await self.operation(
             actor,

@@ -79,3 +79,14 @@ export function formatSchedulingTime(value: string, timezone: string) {
     timeStyle: "short",
   }).format(date);
 }
+
+/** Clock time only (for example "9:00 AM") in the given timezone. */
+export function formatSchedulingClock(value: string, timezone: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "unavailable";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}

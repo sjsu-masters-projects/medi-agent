@@ -19,6 +19,8 @@ from app.services.clinical_fact_service import ClinicalFactService
 
 _FACT_IDENTIFIER_SYSTEM = "urn:mediagent:clinical-fact"
 _AUDIT_SUBTYPE_SYSTEM = "urn:mediagent:clinical-fact-audit"
+# CLN-003 slice F: the clinic of the actor's care-team link to the patient, when there is one.
+_CLINIC_EXTENSION_URL = "urn:mediagent:audit-clinic"
 _AUDIT_EVENT_TYPE_SYSTEM = "http://terminology.hl7.org/CodeSystem/audit-event-type"
 _AUDIT_EVENT_TYPE_CODE = "110110"
 _OBSERVER_REFERENCE = "Device/mediagent-backend"
@@ -56,10 +58,11 @@ class FhirAuditExportService:
         ).model_dump(mode="json", exclude_none=True)
 
         audit_rows = self._audit_rows(fact_id)
+        clinics = self._actor_clinics(patient_id, {str(event["actor_id"]) for event in audit_rows})
         audit_events = [
-            AuditEvent.model_validate(self._audit_payload(event, target)).model_dump(
-                mode="json", exclude_none=True
-            )
+            AuditEvent.model_validate(
+                self._audit_payload(event, target, clinics.get(str(event["actor_id"])))
+            ).model_dump(mode="json", exclude_none=True)
             for event in audit_rows
         ]
         return {"provenance": provenance, "audit_events": audit_events}
@@ -73,6 +76,28 @@ class FhirAuditExportService:
             .execute()
         )
         return cast(list[dict[str, Any]], result.data or [])
+
+    def _actor_clinics(self, patient_id: UUID, actors: set[str]) -> dict[str, str]:
+        """Actor -> clinic of their link to this patient, only where that clinic is unambiguous.
+
+        An event concerns a link when its actor holds one to the patient. The clinic is
+        ``care_teams.clinic_id``, never the actor's default clinic; an actor with links at two
+        clinics for the same patient, or with none, gets no clinic rather than a guess.
+        """
+        if not actors:
+            return {}
+        result = (
+            self.db.table("care_teams")
+            .select("clinician_id, clinic_id")
+            .eq("patient_id", str(patient_id))
+            .in_("clinician_id", sorted(actors))
+            .execute()
+        )
+        found: dict[str, set[str]] = {}
+        for link in cast(list[dict[str, Any]], result.data or []):
+            if link.get("clinic_id"):
+                found.setdefault(str(link["clinician_id"]), set()).add(str(link["clinic_id"]))
+        return {actor: next(iter(ids)) for actor, ids in found.items() if len(ids) == 1}
 
     @staticmethod
     def _fact_reference(fact_id: UUID) -> dict[str, Any]:
@@ -128,9 +153,11 @@ class FhirAuditExportService:
         return {"identifier": identifier}
 
     @staticmethod
-    def _audit_payload(event: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+    def _audit_payload(
+        event: dict[str, Any], target: dict[str, Any], clinic_id: str | None = None
+    ) -> dict[str, Any]:
         event_type = str(event["event_type"])
-        return {
+        payload: dict[str, Any] = {
             "resourceType": "AuditEvent",
             "type": {"system": _AUDIT_EVENT_TYPE_SYSTEM, "code": _AUDIT_EVENT_TYPE_CODE},
             "subtype": [{"system": _AUDIT_SUBTYPE_SYSTEM, "code": event_type}],
@@ -146,6 +173,9 @@ class FhirAuditExportService:
             "source": {"observer": {"reference": _OBSERVER_REFERENCE}},
             "entity": [{"what": target}],
         }
+        if clinic_id:
+            payload["extension"] = [{"url": _CLINIC_EXTENSION_URL, "valueString": clinic_id}]
+        return payload
 
     @staticmethod
     def _instant(value: Any) -> str:

@@ -24,6 +24,9 @@ class NotificationService:
             "body": str(data.get("body", "")).strip(),
             "action_url": data.get("action_url"),
         }
+        if isinstance(data.get("metadata"), dict):
+            # The clinic of the link the notice concerns (CLN-003 slice F).
+            payload["metadata"] = data["metadata"]
         result = await self._execute(self.db.table("notifications").insert(payload))
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         if not rows:

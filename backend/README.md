@@ -433,3 +433,25 @@ Triggers, auth, healthy-run signals and Cloud Logging queries:
 | [CODING_STANDARDS.md](../.agent/CODING_STANDARDS.md) | Code style rules |
 | [Supabase Setup Guide](../docs/supabase_setup_guide.md) | DB schema, migrations, RLS, auth hooks |
 | [workflows/new-agent.md](../.agent/workflows/new-agent.md) | How to add a new agent |
+
+## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
+
+Every appointment and offer group carries `clinic_id` (and `clinician_id`) copied from its care-team
+link by a database trigger, so it cannot disagree with the link. `GET /appointments/` rows and the
+propose/respond/update responses carry `clinic_id` and `clinic_name` for both roles; a clinician's list
+shows only visits at clinics where they hold a link. A clinician cannot hold overlapping
+`confirmed`/`scheduled` visits across all their clinics (exclusion constraint
+`appointments_clinician_no_overlap`, `[start, end)`). `POST /appointments/propose` (and a clinician's
+single `POST /appointments/`) checks every slot against that whole schedule first and refuses the whole
+offer with 422 `CLINICIAN_SCHEDULE_CONFLICT`, `details.conflicts[]` = `{slot, clinic_id, clinic_name,
+starts_at, ends_at}`; the message is "You already have an appointment at <clinic> from <time> to <time>."
+No patient of another clinic is read or returned, and the refusal is logged by count only. A patient's
+accept or a patient self-booking that meets a busy clinician gets the existing generic
+`APPOINTMENT_CONFLICT`. Calendar exports, appointment reminders (`cron_service`), the care-team list,
+Today's provider card and Nora's care-team context name the link's or appointment's clinic, never
+`clinicians.clinic_name`. Notice emails lead the subject with `<Clinic> · ` and add a header line for a
+recipient who belongs to more than one clinic (`EmailDeliveryService._clinic_label`); staff invitations
+name the invitation's clinic. `authorization_denial_events.clinic_id` and an `urn:mediagent:audit-clinic`
+extension on FHIR audit events record the clinic when an event concerns a link. Migration
+`069_clinic_scheduling_and_tags.sql` carries the SQL; apply it before deploying this backend, and run
+`scripts/appointment-clinician-overlap-preflight.sql` first (read-only) if the migration reports overlaps.

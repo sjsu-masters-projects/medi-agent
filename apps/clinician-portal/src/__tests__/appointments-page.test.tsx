@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Appointment } from "@/types";
+import { ApiClientError } from "@/services/api";
 const mocks = vi.hoisted(() => ({
   patients: vi.fn(),
   appointments: vi.fn(),
@@ -367,5 +368,82 @@ describe("clinician appointments page", () => {
     expect(
       screen.queryByLabelText("Option 1 (America/Los_Angeles)"),
     ).not.toBeInTheDocument();
+  });
+  it("shows a read-only Clinic row for the selected patient and updates it on change", async () => {
+    mocks.patients.mockResolvedValue([
+      { ...roster[0], clinic_id: "c1", clinic_name: "Synthetic Clinic North" },
+      { ...roster[1], clinic_id: "c2", clinic_name: "Synthetic Clinic South" },
+    ]);
+    render(<AppointmentsPage />);
+    await selectPatient("team1");
+    expect(await screen.findByText("Clinic: Synthetic Clinic North")).toBeInTheDocument();
+    await selectPatient("team2");
+    expect(await screen.findByText("Clinic: Synthetic Clinic South")).toBeInTheDocument();
+    expect(screen.queryByText("Clinic: Synthetic Clinic North")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("combobox").filter((el) => (el as HTMLSelectElement).name === "clinic")).toHaveLength(0);
+  });
+  describe("clinician schedule conflicts", () => {
+    function conflictError(conflicts: unknown[]) {
+      return new ApiClientError("raw server text", 422, {
+        error: { code: "CLINICIAN_SCHEDULE_CONFLICT", message: "raw server text", details: { conflicts } },
+      });
+    }
+    const first = {
+      slot: "2027-07-05T16:00:00.000Z",
+      clinic_id: "c2",
+      clinic_name: "Synthetic Clinic South",
+      starts_at: "2027-07-05T16:00:00Z",
+      ends_at: "2027-07-05T16:30:00Z",
+    };
+    const second = {
+      slot: "2027-07-06T21:00:00.000Z",
+      clinic_id: "c2",
+      clinic_name: "Synthetic Clinic South",
+      starts_at: "2027-07-06T20:30:00Z",
+      ends_at: "2027-07-06T21:15:00Z",
+    };
+    it("marks the offending slot, hides raw text and blocks submit until it changes", async () => {
+      mocks.propose.mockRejectedValueOnce(conflictError([first]));
+      render(<AppointmentsPage />);
+      await selectPatient();
+      await fillTimes();
+      submit();
+      const callout = await screen.findByRole("alert");
+      expect(callout).toHaveTextContent(
+        "You already have an appointment at Synthetic Clinic South from 9:00 AM to 9:30 AM.",
+      );
+      expect(screen.queryByText(/raw server text/)).not.toBeInTheDocument();
+      const option1 = screen.getByLabelText("Option 1 (America/Los_Angeles)");
+      expect(callout.parentElement).toContainElement(option1);
+      expect(screen.getByLabelText("Option 2 (America/Los_Angeles)").closest("div[class~='min-w-0']")).not.toContainElement(callout);
+      expect(option1).toHaveAttribute("aria-describedby", callout.id);
+      const send = screen.getByRole("button", { name: "Send appointment offer" });
+      expect(send).toBeDisabled();
+      fireEvent.change(option1, { target: { value: "2027-07-05T10:00" } });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(send).toBeEnabled();
+      mocks.propose.mockClear();
+      submit();
+      await waitFor(() => expect(mocks.propose).toHaveBeenCalledTimes(1));
+    });
+    it("shows a callout per conflicting slot and clears only the edited one", async () => {
+      mocks.propose.mockRejectedValueOnce(conflictError([first, second]));
+      render(<AppointmentsPage />);
+      await selectPatient();
+      await fillTimes();
+      submit();
+      await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
+      expect(screen.getAllByRole("alert")[1]).toHaveTextContent("from 1:30 PM to 2:15 PM.");
+      fireEvent.change(screen.getByLabelText("Option 1 (America/Los_Angeles)"), {
+        target: { value: "2027-07-05T10:00" },
+      });
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "Send appointment offer" })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText("Option 2 (America/Los_Angeles)"), {
+        target: { value: "2027-07-06T15:00" },
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Send appointment offer" })).toBeEnabled();
+    });
   });
 });
