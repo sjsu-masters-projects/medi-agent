@@ -37,6 +37,30 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("human conversations", () => {
+  it.each([
+    ["en-US", "Automatic translation unavailable for this message"],
+    ["es-MX", "Traducción automática no disponible para este mensaje"],
+  ])("shows the original, not a translation whose safety check failed (%s)", async (locale, note) => {
+    vi.mocked(careConversations.messages).mockResolvedValue({
+      items: [{ ...message("newest", "Take 5 mg daily"), translation: "Toma 50 mg al dia", translation_locale: "es-MX", translation_guard_passed: false }],
+      next_cursor: null,
+    });
+    render(<CareConversations compact locale={locale} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Dr. One · Clinic One/ }));
+    await screen.findByText("Take 5 mg daily");
+    expect(screen.queryByText("Toma 50 mg al dia")).not.toBeInTheDocument();
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ver original|Show original/ })).not.toBeInTheDocument();
+  });
+  it("shows a translation whose safety check passed as the main text", async () => {
+    vi.mocked(careConversations.messages).mockResolvedValue({
+      items: [{ ...message("newest", "Take 5 mg daily"), translation: "Toma 5 mg al dia", translation_locale: "es-MX", translation_guard_passed: true }],
+      next_cursor: null,
+    });
+    render(<CareConversations compact locale="es-MX" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Dr. One · Clinic One/ }));
+    await screen.findByText("Toma 5 mg al dia");
+  });
   it("opens only the exact addressed conversation from a notification", async () => {
     vi.mocked(careConversations.list).mockResolvedValue([thread, { ...thread, id: "thread-two", clinician_id: "clinician-two", clinician_name: "Dr. Two" }]);
     render(<CareConversations compact conversationId="thread-two" />);

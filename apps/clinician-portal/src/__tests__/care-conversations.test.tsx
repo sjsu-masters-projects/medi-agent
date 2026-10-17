@@ -37,6 +37,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("human conversations", () => {
+  it("hides a patient-message translation whose safety check failed and says why", async () => {
+    vi.mocked(careConversations.messages).mockResolvedValue({
+      items: [{ ...message("newest", "Tomo 5 mg al dia"), sender_role: "patient", translation: "I take 50 mg daily", translation_locale: "en-US", translation_guard_passed: false }],
+      next_cursor: null,
+    });
+    render(<CareConversations audience="clinician" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Synthetic Patient · Clinic One/ }));
+    await screen.findByText("Tomo 5 mg al dia");
+    expect(screen.queryByText("I take 50 mg daily")).not.toBeInTheDocument();
+    expect(screen.getByText("Automatic translation unavailable for this message")).toBeInTheDocument();
+  });
   it("selects only the exact linked conversation and reports unavailable targets", async () => {
     vi.mocked(careConversations.list).mockResolvedValue([thread, { ...thread, id: "second", clinician_name: "Dr. Two" }]);
     const view = render(<CareConversations conversationId="second" />);
