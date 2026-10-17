@@ -141,7 +141,10 @@ async def accept_invitation_with_password(
 ) -> InvitationAcceptResponse:
     response.headers["Cache-Control"] = "no-store"
     result = await service.accept_invitation_with_password(
-        email=body.email, password=body.password, invitation_token=body.invitation_token
+        email=body.email,
+        password=body.password,
+        invitation_token=body.invitation_token,
+        mfa_code=body.mfa_code,
     )
     return InvitationAcceptResponse(**result)
 

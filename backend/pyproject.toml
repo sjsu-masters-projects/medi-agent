@@ -68,7 +68,10 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=80"
 pythonpath = ["src"]
 asyncio_default_fixture_loop_scope = "function"
-markers = ["slow: long-running corpus tests, such as the Form 3500 PDF read-back"]
+markers = [
+    "slow: long-running corpus tests, such as the Form 3500 PDF read-back",
+    "before_clinic_memberships: the PostgreSQL fixture stops before 065 so the test checks its backfill",
+]
 timeout = 30
 timeout_method = "thread"
 session_timeout = 1200

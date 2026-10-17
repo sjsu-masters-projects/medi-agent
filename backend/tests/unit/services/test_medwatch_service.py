@@ -4,6 +4,7 @@ The service runs against ``FakeDB`` (tests/unit/services/medwatch_fake_db.py), a
 client whose RPCs follow migrations 048 and 064. Synthetic data only; nothing contacts FDA.
 """
 
+import copy
 import logging
 import re
 from datetime import date
@@ -619,6 +620,72 @@ async def test_pdf_export_is_audited_before_the_bytes_are_returned(caplog) -> No
     assert params["p_format"] == "pdf" and params["p_template_revision"] == "09/2025"
     assert re.fullmatch(r"[0-9a-f]{64}", params["p_template_sha256"])
     assert "Synthetic dizziness" not in caplog.text
+
+
+def _pdf_pages(content: bytes) -> list[bytes]:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(BytesIO(content))
+    assert reader.decrypt("")
+    pages = []
+    for page in reader.pages:
+        streams = page["/Contents"]
+        streams = streams if isinstance(streams, list) else [streams]
+        pages.append(b"".join(stream.get_object().get_data() for stream in streams))
+    return pages
+
+
+@pytest.mark.asyncio
+async def test_preview_pdf_is_watermarked_on_every_page_and_records_no_export() -> None:
+    for stored in (_draft_row(), _approved()):
+        db = seeded(medwatch_drafts=[stored])
+        before = copy.deepcopy(db.tables["medwatch_drafts"])
+        preview = await _service(db).preview_pdf(CLINICIAN, UUID(stored["id"]))
+        assert preview["content"].startswith(b"%PDF-1.7")
+        pages = _pdf_pages(preview["content"])
+        assert pages and all(b"MAWatermarkFont" in page for page in pages)
+        assert all(b"DRAFT \x96 not for submission" in page for page in pages)
+        assert db.rpc_calls == []
+        assert db.tables["medwatch_drafts"] == before
+
+
+@pytest.mark.asyncio
+async def test_approved_export_stays_unwatermarked_and_audited() -> None:
+    stored = _approved()
+    db = seeded(medwatch_drafts=[stored])
+    exported = await _service(db).export_pdf(CLINICIAN, UUID(stored["id"]))
+    assert all(b"MAWatermarkFont" not in page for page in _pdf_pages(exported["content"]))
+    assert [name for name, _ in db.rpc_calls] == ["record_medwatch_draft_export"]
+
+
+@pytest.mark.asyncio
+async def test_single_draft_read_and_preview_hide_unassigned_drafts_as_404() -> None:
+    stored = _draft_row()
+    service = _service(seeded(medwatch_drafts=[stored]))
+    item = await service.get_draft(CLINICIAN, UUID(stored["id"]))
+    assert item["id"] == stored["id"]
+    messages = set()
+    for call in (service.get_draft, service.preview_pdf):
+        for clinician, draft_id in (
+            (UUID(OTHER_CLINICIAN_ID), UUID(stored["id"])),
+            (CLINICIAN, uuid4()),
+        ):
+            with pytest.raises(NotFoundError) as error:
+                await call(clinician, draft_id)
+            messages.add(error.value.message.split("'")[0])
+    assert messages == {"MedWatch draft "}
+
+
+@pytest.mark.asyncio
+async def test_list_states_draft_and_approved_split_the_active_tab() -> None:
+    active, approved = _draft_row(), _approved()
+    service = _service(seeded(medwatch_drafts=[active, approved]))
+    drafts = (await service.list_drafts(CLINICIAN, "draft"))["items"]
+    approved_items = (await service.list_drafts(CLINICIAN, "approved"))["items"]
+    assert [i["id"] for i in drafts] == [active["id"]]
+    assert [i["id"] for i in approved_items] == [approved["id"]]
 
 
 @pytest.mark.asyncio

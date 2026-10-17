@@ -5,7 +5,29 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from app.core.exceptions import AuthenticationError, ExternalServiceError, ValidationError
+from app.models.clinic_membership import ClinicMembership
 from app.services.auth_service import AuthService
+
+CLINIC_A = "00000000-0000-0000-0000-0000000000a1"
+CLINIC_B = "00000000-0000-0000-0000-0000000000b2"
+
+
+def _membership(clinic_id: str = CLINIC_A, role: str = "provider") -> ClinicMembership:
+    return ClinicMembership(
+        clinician_id="00000000-0000-0000-0000-0000000000aa",
+        clinic_id=clinic_id,
+        role=role,
+        status="active",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _no_existing_clinician_account():
+    """Signup looks for an existing clinician with the address; none unless a test says so."""
+    with patch(
+        "app.services.auth_service.ClinicianRepository.list_by_email_any_case", return_value=[]
+    ):
+        yield
 
 
 @pytest.fixture
@@ -582,7 +604,7 @@ async def test_login_requires_mfa_for_clinician_with_verified_factor(
     mock_auth_response.session = mock_session
 
     mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
-    auth_service._assert_clinician_matches_clinic = MagicMock(return_value=None)  # type: ignore[method-assign]
+    auth_service._assert_clinician_can_sign_in = MagicMock(return_value=None)  # type: ignore[method-assign]
     auth_service._extract_aal = MagicMock(return_value="aal1")  # type: ignore[method-assign]
     auth_service._list_verified_mfa_factors = MagicMock(  # type: ignore[method-assign]
         return_value=[
@@ -603,7 +625,7 @@ async def test_login_requires_mfa_for_clinician_with_verified_factor(
 
 
 @pytest.mark.asyncio
-async def test_login_requires_clinic_code_for_clinicians(auth_service, mock_auth_client):
+async def test_login_without_clinic_code_needs_an_active_membership(auth_service, mock_auth_client):
     mock_user = Mock()
     mock_user.id = "clinician-123"
     mock_user.email = "doctor@example.com"
@@ -621,11 +643,36 @@ async def test_login_requires_clinic_code_for_clinicians(auth_service, mock_auth
 
     mock_auth_client.auth.sign_in_with_password.return_value = mock_auth_response
 
+    auth_service.clinician_repo.get_context = MagicMock(  # type: ignore[method-assign]
+        return_value={"clinic_id": CLINIC_A, "clinic_name": "Heart Health Clinic"}
+    )
+    auth_service.memberships.active_memberships_sync = MagicMock(return_value=[])  # type: ignore[method-assign]
+
     with pytest.raises(AuthenticationError) as exc_info:
         await auth_service.login(email="doctor@example.com", password="password123")
 
-    assert exc_info.value.message == "Clinic code is required for clinician login"
-    assert exc_info.value.code == "CLINIC_CONTEXT_INVALID"
+    assert exc_info.value.code == "NO_ACTIVE_CLINIC"
+
+
+@pytest.mark.asyncio
+async def test_clinician_signs_in_once_without_a_clinic_code(auth_service, mock_auth_client):
+    user = Mock(id="clinician-123", email="doctor@example.com", created_at="2024-01-01T00:00:00Z")
+    user.app_metadata = {"user_role": "clinician"}
+    session = Mock(access_token="a", refresh_token="r", expires_at=1234567890)
+    mock_auth_client.auth.sign_in_with_password.return_value = Mock(user=user, session=session)
+    auth_service.clinician_repo.get_context = MagicMock(  # type: ignore[method-assign]
+        return_value={"clinic_id": CLINIC_A, "clinic_name": "Heart Health Clinic"}
+    )
+    auth_service.memberships.active_memberships_sync = MagicMock(  # type: ignore[method-assign]
+        return_value=[_membership(CLINIC_A), _membership(CLINIC_B)]
+    )
+    auth_service._list_verified_mfa_factors = MagicMock(return_value=[])  # type: ignore[method-assign]
+    auth_service._extract_aal = MagicMock(return_value="aal1")  # type: ignore[method-assign]
+
+    result = await auth_service.login(email="doctor@example.com", password="password123")
+
+    assert result["user"]["id"] == "clinician-123"
+    assert result["mfa_required"] is False
 
 
 @pytest.mark.asyncio
@@ -638,27 +685,21 @@ async def test_assert_clinician_matches_clinic_rejects_different_clinic(
     clinic_query.execute.return_value = Mock(
         data=[
             {
-                "id": "clinic-1",
+                "id": CLINIC_A,
                 "code": "ABC123",
                 "display_name": "Heart Health Clinic",
                 "status": "active",
             }
         ]
     )
-
-    clinician_query = MagicMock()
-    clinician_query.select.return_value = clinician_query
-    clinician_query.eq.return_value = clinician_query
-    clinician_query.execute.return_value = Mock(
-        data=[
-            {
-                "clinic_id": "clinic-2",
-                "clinic_name": "Different Clinic",
-            }
-        ]
+    mock_supabase_client.table.side_effect = [clinic_query]
+    auth_service.clinician_repo.get_context = MagicMock(  # type: ignore[method-assign]
+        return_value={"clinic_id": CLINIC_B, "clinic_name": "Heart Health Clinic"}
     )
-
-    mock_supabase_client.table.side_effect = [clinic_query, clinician_query]
+    # A membership at another clinic with the same display name grants nothing here.
+    auth_service.memberships.active_memberships_sync = MagicMock(  # type: ignore[method-assign]
+        return_value=[_membership(CLINIC_B)]
+    )
 
     with pytest.raises(AuthenticationError) as exc_info:
         auth_service._assert_clinician_matches_clinic("clinician-123", "ABC123")
@@ -1177,6 +1218,7 @@ async def test_invitation_sign_in_accepts_and_ends_temporary_session(
     auth_service, mock_auth_client
 ):
     mock_auth_client.auth.sign_in_with_password.return_value = _clinician_session()
+    auth_service._list_verified_mfa_factors = MagicMock(return_value=[])  # type: ignore[method-assign]
     invitations = _invitation_service()
     with patch("app.services.auth_service.EmailInvitationService", return_value=invitations):
         result = await auth_service.accept_invitation_with_password(
@@ -1212,9 +1254,81 @@ def test_unassigned_clinician_login_points_to_invitation(auth_service, mock_supa
     clinician_query.single.return_value = clinician_query
     clinician_query.execute.return_value = Mock(data={"clinic_id": None, "clinic_name": None})
     mock_supabase_client.table.side_effect = [clinic_query, clinician_query]
+    auth_service.memberships.active_memberships_sync = MagicMock(return_value=[])  # type: ignore[method-assign]
     with pytest.raises(AuthenticationError) as raised:
         auth_service._assert_clinician_matches_clinic("clinician-123", "ABC123")
     assert raised.value.code == "INVITATION_ACCEPTANCE_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_clinician_signup_refuses_an_address_that_already_has_an_account(
+    auth_service, mock_supabase_client, mock_auth_client
+):
+    clinic_query = MagicMock()
+    clinic_query.select.return_value = clinic_query
+    clinic_query.eq.return_value = clinic_query
+    clinic_query.execute.return_value = Mock(
+        data=[{"id": CLINIC_A, "code": "ABC123", "display_name": "Clinic", "status": "active"}]
+    )
+    mock_supabase_client.table.side_effect = [clinic_query]
+    with (
+        patch(
+            "app.services.auth_service.ClinicianRepository.list_by_email_any_case",
+            return_value=[{"id": "existing"}],
+        ),
+        pytest.raises(ValidationError) as raised,
+    ):
+        await auth_service.signup_clinician(
+            email="doctor@example.com",
+            password="SecurePass123!",
+            first_name="Dana",
+            last_name="Doe",
+            specialty="Cardiology",
+            clinic_code="ABC123",
+        )
+    assert raised.value.code == "ACCOUNT_EXISTS"
+    mock_auth_client.auth.sign_up.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_invitation_password_accept_needs_sign_in_for_mfa_account_with_a_clinic(
+    auth_service, mock_auth_client
+):
+    mock_auth_client.auth.sign_in_with_password.return_value = _clinician_session()
+    auth_service._list_verified_mfa_factors = MagicMock(return_value=[{"id": "factor-1"}])  # type: ignore[method-assign]
+    auth_service.memberships.active_memberships_sync = MagicMock(  # type: ignore[method-assign]
+        return_value=[_membership(CLINIC_A)]
+    )
+    invitations = _invitation_service()
+    with (
+        patch("app.services.auth_service.EmailInvitationService", return_value=invitations),
+        pytest.raises(AuthenticationError) as raised,
+    ):
+        await auth_service.accept_invitation_with_password(
+            email="invitee@example.com", password="pw", invitation_token=INVITE_TOKEN
+        )
+    assert raised.value.code == "SIGN_IN_TO_ACCEPT"
+    invitations.accept.assert_not_awaited()
+    mock_auth_client.auth.sign_out.assert_called_once_with({"scope": "local"})
+
+
+@pytest.mark.asyncio
+async def test_invitation_password_accept_still_needs_the_code_for_mfa_without_a_clinic(
+    auth_service, mock_auth_client
+):
+    mock_auth_client.auth.sign_in_with_password.return_value = _clinician_session()
+    auth_service._list_verified_mfa_factors = MagicMock(return_value=[{"id": "factor-1"}])  # type: ignore[method-assign]
+    auth_service.memberships.active_memberships_sync = MagicMock(return_value=[])  # type: ignore[method-assign]
+    invitations = _invitation_service()
+    with (
+        patch("app.services.auth_service.EmailInvitationService", return_value=invitations),
+        pytest.raises(AuthenticationError) as raised,
+    ):
+        await auth_service.accept_invitation_with_password(
+            email="invitee@example.com", password="pw", invitation_token=INVITE_TOKEN
+        )
+    assert raised.value.code == "MFA_CODE_REQUIRED"
+    invitations.accept.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -748,6 +748,9 @@ class MedWatchService:
         query = self.db.table("medwatch_drafts").select("*").in_("patient_id", patient_ids)
         if state == "submitted":
             query = query.eq("status", MedWatchStatus.SUBMITTED.value)
+        elif state in ("draft", "approved"):
+            status = MedWatchStatus.DRAFT if state == "draft" else MedWatchStatus.REVIEWED
+            query = query.eq("status", status.value).is_("discarded_at", "null")
         elif state == "discarded":
             query = query.not_.is_("discarded_at", "null")
         else:
@@ -757,6 +760,28 @@ class MedWatchService:
         result = await self._execute(query.order("created_at", desc=True))
         items = await self._read_models(cast(list[dict[str, Any]], result.data or []))
         return {"items": items, "total": len(items)}
+
+    async def get_draft(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
+        """One draft, readable by exactly the clinicians who can list it.
+
+        An unknown id and an unassigned one are indistinguishable (the same 404).
+        """
+        draft = await self._get_readable_draft(clinician_id, draft_id)
+        return (await self._read_models([draft]))[0]
+
+    async def preview_pdf(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
+        """The filled Form 3500 stamped as a draft. Not an export: nothing is recorded."""
+        draft = await self._get_readable_draft(clinician_id, draft_id)
+        context = await self._context([draft])
+        form, _upgraded = self._form(draft, context)
+        if form.section_b.report_date is None and draft.get("approved_at"):
+            form.section_b.report_date = clinic_date_of(draft["approved_at"])
+        content = await asyncio.to_thread(render_form_3500, form, draft_id, watermark=True)
+        return {
+            "filename": f"fda-3500-{str(draft_id)[:8]}-draft-preview.pdf",
+            "media_type": "application/pdf",
+            "content": content,
+        }
 
     async def get_preview(self, clinician_id: UUID, draft_id: UUID) -> Form3500PreviewRead:
         """The read-only Form 3500 layout of a draft in any status."""
@@ -1207,6 +1232,12 @@ class MedWatchService:
         draft = dict(rows[0])
         await self._assert_assignment(clinician_id, UUID(str(draft["patient_id"])))
         return draft
+
+    async def _get_readable_draft(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
+        try:
+            return await self._get_authorized_draft(clinician_id, draft_id)
+        except AuthorizationError:
+            raise NotFoundError("MedWatch draft", str(draft_id)) from None
 
     async def _load_sources(
         self,

@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from supabase import Client
 
 from app.core.security import require_role
@@ -20,16 +20,20 @@ from app.services.email_invitation_service import EmailInvitationService
 from app.services.email_service import EmailService
 
 router = APIRouter()
+
 # Invitation management and acceptance are clinician-only and keep the MFA gate.
 _clinician = require_role("clinician")
 
 
 @router.get("/invitations")
 async def invitation_history(
-    response: Response, actor: CurrentUser = Depends(_clinician), db: Client = Depends(get_db)
+    response: Response,
+    clinic_id: UUID | None = Query(default=None),
+    actor: CurrentUser = Depends(_clinician),
+    db: Client = Depends(get_db),
 ) -> Any:
     response.headers["Cache-Control"] = "private, no-store"
-    return await EmailInvitationService(db).history(actor.id)
+    return await EmailInvitationService(db).history(actor.id, clinic_id)
 
 
 @router.post("/invitations/{invitation_id}/revoke")

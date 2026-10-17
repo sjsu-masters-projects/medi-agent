@@ -91,6 +91,7 @@ _ERRORS: dict[str, tuple[Callable[[str], MediAgentError], str]] = {
         _validation,
         "This clinician already belongs to a clinic. An invitation cannot move them.",
     ),
+    "already_member": (_validation, "This clinician already belongs to this clinic."),
     "synthetic_address": (_validation, "Demo login addresses cannot receive email."),
     "invalid_address": (_validation, "Enter a valid email address."),
 }

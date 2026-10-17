@@ -203,7 +203,7 @@ interface ADRReviewQueueResponse {
 export type MedWatchDraftStatus = "draft" | "reviewed" | "submitted";
 
 /** Which list the MedWatch page shows (`?state=`). */
-export type MedWatchDraftState = "active" | "submitted" | "discarded";
+export type MedWatchDraftState = "active" | "draft" | "approved" | "submitted" | "discarded";
 
 export type MedWatchFormData = MedWatchFormDataV2;
 export type { MedWatchGateIssue, MedWatchNameWarning } from "@/services/medwatch-form-3500";
@@ -1052,12 +1052,10 @@ export async function fetchDashboard(params?: DashboardQueryParams): Promise<Das
     return apiFetch<DashboardResponse>(`/api/v1/clinicians/me/dashboard${qs ? `?${qs}` : ""}`);
 }
 
-/** Fetch evidence-backed ADR assessments for the clinician's assigned patients. */
-export async function fetchADRReviewQueue(): Promise<ADRReviewQueueItem[]> {
-    const data = await apiFetch<ADRReviewQueueResponse>(
-        "/api/v1/clinicians/me/adr-assessments?status=draft",
-    );
-    return data.items.map((item) => ({
+type ADRReviewResponseItem = ADRReviewQueueResponse["items"][number];
+
+function mapADRReviewItem(item: ADRReviewResponseItem): ADRReviewQueueItem {
+    return {
         id: item.id,
         patientId: item.patient_id,
         patientFirstName: item.patient_first_name,
@@ -1085,7 +1083,34 @@ export async function fetchADRReviewQueue(): Promise<ADRReviewQueueItem[]> {
         patientResponses: item.patient_responses ?? [],
         patientRespondedAt: item.patient_responded_at,
         createdAt: item.created_at,
-    }));
+    };
+}
+
+export interface ADRReviewQueueFilter {
+    /** `draft` (the default) is the open queue; `all` lists every status. */
+    status?: ADRStatus | "all";
+    patientId?: string;
+}
+
+/** Fetch evidence-backed ADR assessments for the clinician's assigned patients. */
+export async function fetchADRReviewQueue(
+    filter: ADRReviewQueueFilter = {},
+): Promise<ADRReviewQueueItem[]> {
+    const search = new URLSearchParams({ status: filter.status ?? "draft", limit: "200" });
+    if (filter.patientId) search.set("patient_id", filter.patientId);
+    const data = await apiFetch<ADRReviewQueueResponse>(
+        `/api/v1/clinicians/me/adr-assessments?${search.toString()}`,
+    );
+    return data.items.map(mapADRReviewItem);
+}
+
+/** One assessment of any status; an unknown or unassigned id is a 404. */
+export async function fetchADRAssessment(assessmentId: string): Promise<ADRReviewQueueItem> {
+    return mapADRReviewItem(
+        await apiFetch<ADRReviewResponseItem>(
+            `/api/v1/clinicians/me/adr-assessments/${encodeURIComponent(assessmentId)}`,
+        ),
+    );
 }
 
 /** Persist an assigned clinician's auditable action on a draft ADR assessment. */
@@ -1153,6 +1178,15 @@ export async function fetchMedWatchDrafts(
         total: number;
     }>(`${MEDWATCH_BASE}?state=${encodeURIComponent(state)}`);
     return result.items.map(mapMedWatchDraft);
+}
+
+/** One draft the clinician can read; an unknown or unassigned id is a 404. */
+export async function fetchMedWatchDraft(draftId: string): Promise<MedWatchDraft> {
+    return medwatchCall(async () =>
+        mapMedWatchDraft(
+            await apiFetch<MedWatchDraftResponse>(`${MEDWATCH_BASE}/${encodeURIComponent(draftId)}`),
+        ),
+    );
 }
 
 /** Save all editable fields using optimistic revision control. */
@@ -1234,6 +1268,32 @@ export function form3500PdfFilename(draftId: string, contentDisposition?: string
     // Keep only a plain file name; never a path from the header.
     if (name && /^[\w.-]+\.pdf$/i.test(name)) return name;
     return `fda-3500-${draftId.slice(0, 8)}-not-submitted.pdf`;
+}
+
+/**
+ * The watermarked "DRAFT - not for submission" Form 3500 for the preview step. It is not an
+ * export: the server records nothing, so it can be fetched again freely.
+ */
+export async function fetchForm3500PreviewPdf(draftId: string): Promise<Blob> {
+    const token =
+        typeof window !== "undefined"
+            ? readStoredSession()?.accessToken ?? localStorage.getItem("access_token") ?? ""
+            : "";
+    if (!token) throw new MedWatchRequestError("AUTHENTICATION_ERROR", 401);
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE}${MEDWATCH_BASE}/${draftId}/preview.pdf`, {
+            headers: { Accept: "application/pdf", Authorization: `Bearer ${token}` },
+        });
+    } catch {
+        throw new MedWatchRequestError("NETWORK", 0);
+    }
+    if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: { code?: unknown } };
+        const code = typeof body?.error?.code === "string" ? body.error.code : "";
+        throw new MedWatchRequestError(code, response.status);
+    }
+    return response.blob();
 }
 
 /**

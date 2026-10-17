@@ -26,6 +26,8 @@ class InviteCreatorSummary(BaseModel):
 
 class InviteCodeRead(BaseModel):
     care_team_id: UUID
+    # The clinic that issued the code; the patient's care-team link belongs to it.
+    clinic_id: UUID | None = None
     invite_code: str | None = None
     status: str
     role: str | None = None

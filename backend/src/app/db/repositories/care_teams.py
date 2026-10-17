@@ -25,7 +25,7 @@ class CareTeamRepository:
             self.owner,
             lambda db: db.table("care_teams")
             .select(
-                "id, invite_code, status, role, patient_id, "
+                "id, invite_code, status, role, patient_id, clinician_id, clinic_id, "
                 "created_at, invite_expires_at, invite_claimed_at, "
                 "patients(id, first_name, last_name, email), "
                 "clinicians(id, first_name, last_name, email)"
@@ -79,7 +79,7 @@ class CareTeamRepository:
         result = await execute_async(
             self.owner,
             lambda db: db.table("care_teams")
-            .select("id, invite_code, created_at, invite_expires_at")
+            .select("id, invite_code, created_at, invite_expires_at, clinic_id")
             .eq("clinician_id", clinician_id)
             .eq("status", "pending")
             .order("created_at", desc=True),

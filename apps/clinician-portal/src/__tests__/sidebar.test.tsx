@@ -10,8 +10,9 @@ const { profileGetMock } = vi.hoisted(() => ({
     profileGetMock: vi.fn(),
 }));
 
+const pathnameRef = vi.hoisted(() => ({ value: "/dashboard" }));
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/dashboard",
+    usePathname: () => pathnameRef.value,
     useRouter: () => ({ replace: replaceMock }),
 }));
 
@@ -69,7 +70,8 @@ describe("Sidebar", () => {
         expect(screen.getByText("Patient Roster")).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("href", "/appointments");
         expect(screen.getByText("Review Queue")).toBeInTheDocument();
-        expect(screen.getByText("ADR Reviews")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "ADR Reviews" })).toHaveAttribute("href", "/adr-reviews");
+        expect(screen.getByRole("link", { name: "MedWatch" })).toHaveAttribute("href", "/medwatch");
         expect(screen.getByText("Messages")).toBeInTheDocument();
         expect(screen.getByText("Clinic Settings")).toBeInTheDocument();
         await waitFor(() => expect(profileGetMock).toHaveBeenCalled());
@@ -79,6 +81,22 @@ describe("Sidebar", () => {
         expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-rail-active");
         expect(screen.getByRole("link", { name: /risk radar/i })).toHaveAttribute("aria-current", "page");
         expect(screen.getByRole("navigation", { name: "Clinician navigation" })).toBeInTheDocument();
+    });
+
+    it.each([
+        ["/adr-reviews", "ADR Reviews", "MedWatch"],
+        ["/adr-reviews/adr-1", "ADR Reviews", "MedWatch"],
+        ["/medwatch", "MedWatch", "ADR Reviews"],
+        ["/medwatch/draft-1", "MedWatch", "ADR Reviews"],
+    ])("marks only the matching section active on %s", (path, active, inactive) => {
+        pathnameRef.value = path;
+        try {
+            render(<Provider store={store}><Sidebar /></Provider>);
+            expect(screen.getByRole("link", { name: active })).toHaveAttribute("aria-current", "page");
+            expect(screen.getByRole("link", { name: inactive })).not.toHaveAttribute("aria-current");
+        } finally {
+            pathnameRef.value = "/dashboard";
+        }
     });
 
     it("does not invent an invalid fallback email when the session is unavailable", () => {

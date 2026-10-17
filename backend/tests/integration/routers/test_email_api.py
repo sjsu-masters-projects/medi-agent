@@ -1,7 +1,7 @@
 """Recipient identity comes from authentication, never a browser-supplied ID."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -151,12 +151,35 @@ def test_clinician_accept_uses_auth_address_and_returns_clinic(client, invitatio
     assert params["p_payload"]["account_email"] == "invitee@example.com"
 
 
+def _admin_at(clinic_id):
+    return patch(
+        "app.services.email_invitation_service.ClinicMembershipService.acting_membership",
+        return_value=SimpleNamespace(clinic_id=clinic_id),
+    )
+
+
 def test_clinician_history_is_private(client, invitation_db):
     as_user("clinician")
+    clinic_id = uuid4()
     invitation_db.rpc.return_value.execute.return_value = Mock(data={"items": []})
-    response = client.get("/api/v1/email/invitations")
+    with _admin_at(clinic_id):
+        response = client.get(f"/api/v1/email/invitations?clinic_id={clinic_id}")
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "private, no-store"
+    assert invitation_db.rpc.call_args.args[1]["p_payload"] == {"clinic_id": str(clinic_id)}
+
+
+def test_history_is_refused_for_a_clinic_without_admin_membership(client, invitation_db):
+    from app.core.exceptions import AuthorizationError
+
+    as_user("clinician")
+    with patch(
+        "app.services.email_invitation_service.ClinicMembershipService.acting_membership",
+        side_effect=AuthorizationError("Only clinic admins can manage staff"),
+    ):
+        response = client.get(f"/api/v1/email/invitations?clinic_id={uuid4()}")
+    assert response.status_code == 403
+    invitation_db.rpc.assert_not_called()
 
 
 def test_missing_email_schema_is_503(client, invitation_db):
@@ -166,6 +189,7 @@ def test_missing_email_schema_is_503(client, invitation_db):
     invitation_db.rpc.return_value.execute.side_effect = APIError(
         {"code": "PGRST202", "message": "missing", "hint": None, "details": None}
     )
-    response = client.get("/api/v1/email/invitations")
+    with _admin_at(uuid4()):
+        response = client.get("/api/v1/email/invitations")
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "EMAIL_SETUP_PENDING"

@@ -19,7 +19,8 @@ const primaryNavigation: { href: string; icon: IconName; label: string }[] = [
     { href: "/patients", icon: "users", label: "Patient Roster" },
     { href: "/appointments", icon: "cal", label: "Appointments" },
     { href: "/review-queue", icon: "inbox", label: "Review Queue" },
-    { href: "/medwatch", icon: "alert", label: "ADR Reviews" },
+    { href: "/adr-reviews", icon: "alert", label: "ADR Reviews" },
+    { href: "/medwatch", icon: "file", label: "MedWatch" },
     { href: "/messages", icon: "chat", label: "Messages" },
     { href: "/alerts", icon: "bell", label: "Alerts" },
 ];
@@ -186,7 +187,7 @@ export function Sidebar() {
 
             <nav aria-label="Clinician navigation" className="flex gap-1 overflow-x-auto px-3 py-2 md:flex-1 md:flex-col md:gap-0.5 md:overflow-visible md:p-0">
                 {primaryNavigation.map((item) => (
-                    <NavItem key={item.href} {...item} active={isActive(item.href)} collapsed={collapsed} count={item.href === "/medwatch" ? pendingAdr : item.href === "/alerts" ? unreadAlerts : undefined} />
+                    <NavItem key={item.href} {...item} active={isActive(item.href)} collapsed={collapsed} count={item.href === "/adr-reviews" ? pendingAdr : item.href === "/alerts" ? unreadAlerts : undefined} />
                 ))}
 
                 <div className="flex shrink-0 md:block">

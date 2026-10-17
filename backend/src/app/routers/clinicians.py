@@ -13,7 +13,7 @@ New in Phase 6:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -25,6 +25,7 @@ from app.middleware.rate_limit import soap_note_rate_limiter
 from app.models.adr import (
     ADRReviewDecisionRequest,
     ADRReviewDecisionResponse,
+    ADRReviewQueueItem,
     ADRReviewQueueResponse,
     MedWatchDraftApprovalRequest,
     MedWatchDraftCreateRequest,
@@ -38,6 +39,12 @@ from app.models.adr import (
 )
 from app.models.auth import CurrentUser
 from app.models.care_plan import CarePlanVersionRead
+from app.models.clinic_membership import (
+    ClinicMembershipsResponse,
+    ClinicScopedRequest,
+    JoinClinicRequest,
+    JoinClinicResponse,
+)
 from app.models.clinician import ClinicianRead, ClinicianUpdate
 from app.models.clinician_message import (
     ClinicianMessageInboxItem,
@@ -108,6 +115,41 @@ async def update_my_profile(
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
     return await service.update_profile(user.id, data.model_dump(exclude_unset=True))
+
+
+@router.get(
+    "/me/clinics",
+    response_model=ClinicMembershipsResponse,
+    summary="List my clinics",
+    description=(
+        "The clinics the signed-in clinician belongs to (active memberships at active "
+        "clinics) with the role held at each, for clinic pickers inside clinic-scoped actions."
+    ),
+)
+async def list_my_clinics(
+    response: Response,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    response.headers["Cache-Control"] = "private, no-store"
+    return await service.memberships.clinics(user.id)
+
+
+@router.post(
+    "/me/clinics",
+    response_model=JoinClinicResponse,
+    summary="Join another clinic with a clinic code",
+    description=(
+        "Adds a provider or nurse membership at the clinic to the signed-in account; the "
+        "default clinic and other memberships are unchanged. Audited."
+    ),
+)
+async def join_clinic(
+    body: JoinClinicRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.memberships.join_by_code(user.id, body.clinic_code, body.role)
 
 
 @router.get(
@@ -201,10 +243,12 @@ async def list_all_messages(
     description="Creates a pending care_team row. Share the code with a patient.",
 )
 async def generate_invite_code(
+    body: ClinicScopedRequest | None = None,
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
 ) -> InviteCodeGenerateResponse:
-    payload = await service.generate_invite_code(user.id)
+    clinic_id = body.clinic_id if body else None
+    payload = await service.generate_invite_code(user.id, clinic_id)
     return InviteCodeGenerateResponse.model_validate(payload)
 
 
@@ -215,10 +259,11 @@ async def generate_invite_code(
     description="Returns the latest pending patient invite code for this clinician, if one exists.",
 )
 async def get_current_invite_code(
+    clinic_id: UUID | None = Query(default=None),
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
 ) -> CurrentInviteCodeResponse:
-    payload = await service.get_current_invite_code(user.id)
+    payload = await service.get_current_invite_code(user.id, clinic_id)
     return CurrentInviteCodeResponse.model_validate(payload)
 
 
@@ -232,10 +277,11 @@ async def get_current_invite_code(
     ),
 )
 async def list_invite_codes(
+    clinic_id: UUID | None = Query(default=None),
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
 ) -> InviteCodeListResponse:
-    payload = await service.list_invite_codes(user.id)
+    payload = await service.list_invite_codes(user.id, clinic_id)
     return InviteCodeListResponse.model_validate(payload)
 
 
@@ -353,7 +399,8 @@ async def get_dashboard(
     ),
 )
 async def list_adr_assessments(
-    status_filter: ADRStatus = Query(default=ADRStatus.DRAFT, alias="status"),
+    status_filter: ADRStatus | Literal["all"] = Query(default=ADRStatus.DRAFT, alias="status"),
+    patient_id: UUID | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
@@ -361,8 +408,23 @@ async def list_adr_assessments(
     return await service.list_adr_review_queue(
         user.id,
         status_filter=status_filter,
+        patient_id=patient_id,
         limit=limit,
     )
+
+
+@router.get(
+    "/me/adr-assessments/{assessment_id}",
+    response_model=ADRReviewQueueItem,
+    summary="Read one assigned-patient ADR assessment",
+    description="An unknown or unauthorised id returns the same 404.",
+)
+async def get_adr_assessment(
+    assessment_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.get_adr_review_item(user.id, assessment_id)
 
 
 @router.post(
@@ -425,6 +487,46 @@ async def get_medwatch_form_options(
     service: MedWatchService = Depends(_get_medwatch_service),
 ) -> Any:
     return service.form_options()
+
+
+@router.get(
+    "/me/medwatch-drafts/{draft_id}",
+    response_model=MedWatchDraftRead,
+    summary="Read one assigned-patient Form 3500 draft",
+    description="An unknown or unauthorised id returns the same 404.",
+)
+async def get_medwatch_draft(
+    draft_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Any:
+    return await service.get_draft(user.id, draft_id)
+
+
+@router.get(
+    "/me/medwatch-drafts/{draft_id}/preview.pdf",
+    response_class=Response,
+    summary="Watermarked Form FDA 3500 PDF preview of a draft",
+    description=(
+        "The filled form stamped 'DRAFT - not for submission'. It is not an export: no audit "
+        "event and no state change."
+    ),
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def preview_medwatch_draft_pdf(
+    draft_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedWatchService = Depends(_get_medwatch_service),
+) -> Response:
+    preview = await service.preview_pdf(user.id, draft_id)
+    return Response(
+        content=preview["content"],
+        media_type=preview["media_type"],
+        headers={
+            "Content-Disposition": f'inline; filename="{preview["filename"]}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get(

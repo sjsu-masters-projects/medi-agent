@@ -27,3 +27,13 @@ it("does not offer revocation for an accepted membership", async () => {
   await screen.findByText(/provider · Accepted/);
   expect(screen.queryByRole("button", { name: "Revoke invitation" })).not.toBeInTheDocument();
 });
+it("reads one clinic's invitation history when a clinic is named", async () => {
+  render(<EmailInvitations clinicId="clinic-a" token="session" revision={null} />);
+  await screen.findByText("Provider accepted — delivery not confirmed");
+  expect(mocks.get).toHaveBeenCalledWith("/api/v1/email/invitations?clinic_id=clinic-a", { token: "session" });
+});
+it("explains a refusal for a clinic where the clinician is not an admin", async () => {
+  mocks.get.mockRejectedValue(Object.assign(new Error("Only clinic admins can manage staff"), { status: 403, details: { error: { code: "AUTHORIZATION_ERROR" } } }));
+  render(<EmailInvitations clinicId="clinic-b" token="session" revision={null} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Only clinic admins can manage staff");
+});

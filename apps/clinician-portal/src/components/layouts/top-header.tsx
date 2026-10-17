@@ -10,7 +10,8 @@ const sections: Record<string, { title: string; icon: IconName }> = {
     "/patients": { title: "Patient roster", icon: "users" },
     "/appointments": { title: "Appointments", icon: "cal" },
     "/review-queue": { title: "Patient upload reviews", icon: "inbox" },
-    "/medwatch": { title: "ADR reviews", icon: "alert" },
+    "/adr-reviews": { title: "ADR reviews", icon: "alert" },
+    "/medwatch": { title: "MedWatch", icon: "file" },
     "/messages": { title: "Messages", icon: "chat" },
     "/alerts": { title: "Alerts", icon: "bell" },
     "/smart-import": { title: "External record import", icon: "download" },
@@ -20,7 +21,8 @@ const sections: Record<string, { title: string; icon: IconName }> = {
 
 export function TopHeader() {
     const pathname = usePathname();
-    const exact = sections[pathname];
+    const nested = ["/adr-reviews", "/medwatch"].find((root) => pathname.startsWith(`${root}/`));
+    const exact = sections[pathname] ?? (nested ? sections[nested] : undefined);
     const patientDetail = !exact && pathname.startsWith("/patients/");
     const title = exact?.title ?? (pathname.endsWith("/upload") ? "Document upload" : "Patient detail");
     return (

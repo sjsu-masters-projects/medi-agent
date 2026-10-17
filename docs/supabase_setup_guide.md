@@ -86,7 +86,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 76 SQL migration files, prefixes `001`–`064`. Some prefixes are
+The checkout contains 77 SQL migration files, prefixes `001`–`065`. Some prefixes are
 shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
 branches; they coexist because the ledger identifies migrations by full filename and
 checksum, not by prefix. Preserve applied names and bytes. The ledger in
@@ -126,6 +126,53 @@ function keeps its signature, so the currently deployed backend keeps working on
 applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
 are upgraded on read. After applying, verify with the ledger and with the read-only checks the
 fail-closed block already performs (it raises and rolls the migration back on any gap).
+
+### Clinic memberships (065, CLN-003 slice A) — written, not applied
+
+`065_clinic_memberships.sql` adds `clinic_memberships` (one row per clinician and clinic,
+with that clinic's role and an `active`/`inactive` status), backfilled from
+`clinicians.clinic_id` and `clinicians.role`; clinicians without a clinic get no membership
+and are counted in a `NOTICE`. It adds `care_teams.clinic_id`, backfilled from the link's
+clinician, and replaces `UNIQUE (patient_id, clinician_id)` with
+`UNIQUE (patient_id, clinician_id, clinic_id)` (a partial unique index keeps one link per pair
+for clinicians without a clinic). Triggers mirror `clinicians.clinic_id`/`role` into
+memberships during the compatibility period and give a new care-team row its clinician's clinic
+when none is sent. RLS: a clinician reads only their own memberships; only `service_role`
+writes them; nobody deletes them. It also revokes INSERT, UPDATE and DELETE on `clinicians`
+from `anon` and `authenticated` (SELECT unchanged), so a signed-in clinician cannot change
+their own role or clinic through the Data API. `private.is_clinic_member(uuid)` is added for later slices
+and used by no policy; `is_assigned_clinician` and every existing policy are unchanged. It
+ends with a fail-closed verification block.
+
+It is not applied to any hosted project; applying it needs the requester's explicit
+authorization naming that action. **Order:** apply 065 before the backend from
+`feature/clinic-memberships` deploys (its invite-code paths read `clinic_memberships` and
+write `care_teams.clinic_id`; apply first, merge after). The currently deployed backend keeps
+working once 065 is applied. After applying, confirm the ledger row and read the `NOTICE`
+count of clinicians without a clinic.
+
+### Sign in once (066, CLN-003 slice B) — written, not applied
+
+`066_clinic_sign_in_once.sql` requires 065. It adds the append-only
+`clinic_membership_audit_events` table (RLS on, no foreign keys, identifiers only; `service_role`
+has SELECT and INSERT, nobody has UPDATE, DELETE or TRUNCATE, and triggers refuse them even for
+the owner), `public.clinician_clinic_operation` (list memberships, join by open clinic code,
+change a member's role, remove a member; callable by `service_role` only), membership-aware
+`clinician_email_invitation_operation` (an address that belongs to another clinic can be invited;
+admin rights are read from the membership at the invitation's clinic), and care-conversation and
+notification checks that use the care-team link's clinic. `clinicians.clinic_id` stays the
+clinician's default clinic for legacy readers. It ends with a fail-closed verification block.
+
+It is not applied to any hosted project; applying it needs the requester's explicit
+authorization naming that action. **Order:** apply 066 before the backend from
+`feature/clinic-sign-in-once` deploys (apply first, merge after), because the new routes call
+`clinician_clinic_operation`. The deployed backend and portal keep working once 066 is applied:
+every replaced function keeps its signature. LOC-003's unmerged
+`066_care_plan_wording_back_translation.sql` is renumbered when it lands; the validator is
+unchanged. After applying, confirm the ledger row.
+
+**Supabase Auth dashboard changes: none.** Sign-in, MFA and email settings are unchanged; the
+service-role backend performs the membership operations.
 
 ### Appointment booking guards (042/043)
 
