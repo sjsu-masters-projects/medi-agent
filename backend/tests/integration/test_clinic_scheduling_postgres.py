@@ -386,3 +386,23 @@ def test_denial_events_gain_a_clinic_and_stay_append_only(sql):
             f"SET ROLE {role}; SELECT clinic_id FROM authorization_denial_events;", succeeds=False
         )
         assert "permission denied" in error
+
+
+@pytest.mark.before_clinic_scheduling
+def test_platform_default_grants_on_the_denial_trail_are_restored_before_verification(sql):
+    # Hosted projects keep the platform's default table grants, which 033 never revoked.
+    sql(
+        """GRANT ALL ON TABLE public.authorization_denial_events TO anon, authenticated, service_role"""
+    )
+
+    result = apply_scheduling(sql)
+
+    assert result.returncode == 0, result.stderr
+    granted = sql(
+        """SELECT r.role || ':' || p.privilege
+             FROM unnest(ARRAY['anon','authenticated','service_role']) r(role)
+             CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE']) p(privilege)
+            WHERE has_table_privilege(r.role, 'public.authorization_denial_events', p.privilege)
+            ORDER BY 1"""
+    ).splitlines()
+    assert granted == ["service_role:INSERT", "service_role:SELECT"]

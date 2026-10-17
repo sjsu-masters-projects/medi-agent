@@ -22,6 +22,13 @@
 -- the backend that calls the new conflict result deploys (apply first, merge after). The
 -- existing patient constraint, response function and grants are untouched. Synthetic data.
 
+-- 033 intended the denial trail to be insert/select for the backend only, but hosted
+-- projects keep the platform's default table grants (browser roles and service_role UPDATE/
+-- DELETE). Restore the intended privileges first, so the snapshot below records them.
+REVOKE ALL ON TABLE public.authorization_denial_events FROM PUBLIC, anon, authenticated;
+REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.authorization_denial_events FROM service_role;
+GRANT INSERT, SELECT ON TABLE public.authorization_denial_events TO service_role;
+
 -- Privileges before the change, compared again at the end ("grants unchanged").
 CREATE TEMP TABLE _069_grants AS
 SELECT 'table' AS kind, c.relname::text AS name, coalesce(c.relacl::text, '') AS acl
