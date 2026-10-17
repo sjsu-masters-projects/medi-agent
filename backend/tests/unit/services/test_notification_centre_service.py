@@ -62,3 +62,19 @@ async def test_read_through_rejects_oversized_or_foreign_views_before_rpc(servic
     with pytest.raises(ValidationError):
         await svc.read_through(issue_token(other, "read", [str(uuid4())]))
     db.rpc.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_clinic_filter_reaches_the_database_only_for_a_clinician(service):
+    svc, db = service
+    clinic = uuid4()
+    respond(db, {"items": [], "read_ids": [], "next_cursor": None})
+    await svc.page({"limit": 10, "clinic_id": clinic})
+    assert db.rpc.call_args.args[1]["p_payload"]["clinic_id"] == str(clinic)
+    await svc.action_items({"limit": 10, "clinic_id": clinic})
+    assert db.rpc.call_args.args[1]["p_payload"]["clinic_id"] == str(clinic)
+    await svc.page({"limit": 10})
+    assert "clinic_id" not in db.rpc.call_args.args[1]["p_payload"]
+    svc.actor.role = "patient"
+    await svc.page({"limit": 10, "clinic_id": clinic})
+    assert "clinic_id" not in db.rpc.call_args.args[1]["p_payload"]

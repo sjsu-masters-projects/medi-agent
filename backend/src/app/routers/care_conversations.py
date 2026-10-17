@@ -48,13 +48,19 @@ async def conversation_service(
 
 
 @router.get("/recipients", response_model=list[ConversationRecipient])
-async def recipients(service: CareConversationService = Depends(conversation_service)) -> Any:
-    return await service.recipients()
+async def recipients(
+    clinic_id: UUID | None = Query(default=None),
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    return await service.recipients(clinic_id)
 
 
 @router.get("/", response_model=list[ConversationSummary])
-async def conversations(service: CareConversationService = Depends(conversation_service)) -> Any:
-    return await service.list_conversations()
+async def conversations(
+    clinic_id: UUID | None = Query(default=None),
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    return await service.list_conversations(clinic_id)
 
 
 @router.post("/", response_model=ConversationSummary)

@@ -324,4 +324,5 @@ def present_item(row: dict[str, Any], role: str, locale: str) -> CentreItem:
         can_acknowledge=actionable and role == "clinician" and bool(row.get("can_acknowledge")),
         patient_name=_name(row.get("patient_name")) if role == "clinician" else None,
         clinic_name=_name(row.get("clinic_name")),
+        clinic_id=_identifier(row.get("clinic_id")) if role == "clinician" else None,
     )

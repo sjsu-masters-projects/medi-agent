@@ -10,6 +10,13 @@ from pydantic import BaseModel, Field
 from app.models.enums import ClinicianRole, ClinicMembershipStatus, ClinicStatus
 
 
+class ClinicTag(BaseModel):
+    """The clinic of the clinician's care-team link, on a list item (CLN-003 slice C)."""
+
+    clinic_id: UUID | None = None
+    clinic_name: str | None = None
+
+
 class ClinicMembership(BaseModel):
     """One clinic a clinician belongs to, with the role they hold there."""
 
@@ -62,3 +69,35 @@ class ClinicScopedRequest(BaseModel):
     """An action that belongs to one clinic; optional only for a single membership."""
 
     clinic_id: UUID | None = None
+
+
+class SetDefaultClinicRequest(BaseModel):
+    """Choose which of the caller's clinics is preselected."""
+
+    clinic_id: UUID
+
+
+class DefaultClinicResponse(BaseModel):
+    default_clinic_id: UUID
+    clinic_id: UUID
+    role: ClinicianRole
+
+
+class LeaveClinicResponse(BaseModel):
+    """The membership ended; ``links_ended`` patient links at that clinic ended with it."""
+
+    status: Literal["left"]
+    clinic_id: UUID
+    links_ended: int = Field(ge=0)
+    default_clinic_id: UUID | None = None
+
+
+class ClinicRenameRequest(BaseModel):
+    """An admin edits the display name of their clinic."""
+
+    display_name: str = Field(..., min_length=2, max_length=120)
+
+
+class ClinicRenameResponse(BaseModel):
+    clinic_id: UUID
+    clinic_name: str

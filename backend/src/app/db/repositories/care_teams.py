@@ -116,3 +116,17 @@ class CareTeamRepository:
             retry_transient=False,
         )
         return self._as_rows(result.data)
+
+    async def list_active_links(self, clinician_id: str) -> list[dict[str, Any]]:
+        """List a clinician's active patient links with each link's clinic (CLN-003)."""
+        result = await execute_async(
+            self.owner,
+            lambda db: db.table("care_teams")
+            .select("patient_id, clinic_id, clinics(display_name)")
+            .eq("clinician_id", clinician_id)
+            .eq("status", "active")
+            .not_.is_("patient_id", "null"),
+            operation="active link lookup",
+            retry_transient=False,
+        )
+        return self._as_rows(result.data)

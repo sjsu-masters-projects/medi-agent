@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.models.clinic_membership import ClinicTag
 from app.models.enums import MessageChannel
 
 
@@ -31,7 +32,7 @@ class ClinicianPatientMessageCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=5000)
 
 
-class ClinicianMessageInboxItem(ClinicianMessageRead):
+class ClinicianMessageInboxItem(ClinicianMessageRead, ClinicTag):
     """ClinicianMessageRead extended with the patient's name for inbox display."""
 
     patient_first_name: str | None = None

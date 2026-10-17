@@ -38,10 +38,17 @@ async def notifications(
     unread: bool = False,
     cursor: str | None = Query(default=None, max_length=4096),
     limit: int = Query(default=50, ge=1, le=100),
+    clinic_id: UUID | None = Query(default=None),
     service: NotificationCentreService = Depends(centre_service),
 ) -> CentrePage:
     return await service.page(
-        {"locale": locale, "unread": unread, "cursor": cursor, "limit": limit}
+        {
+            "locale": locale,
+            "unread": unread,
+            "cursor": cursor,
+            "limit": limit,
+            "clinic_id": clinic_id,
+        }
     )
 
 
@@ -56,9 +63,12 @@ async def action_items(
     | None = None,
     cursor: str | None = Query(default=None, max_length=4096),
     limit: int = Query(default=50, ge=1, le=100),
+    clinic_id: UUID | None = Query(default=None),
     service: NotificationCentreService = Depends(centre_service),
 ) -> CentrePage:
-    return await service.action_items({"category": category, "cursor": cursor, "limit": limit})
+    return await service.action_items(
+        {"category": category, "cursor": cursor, "limit": limit, "clinic_id": clinic_id}
+    )
 
 
 @router.post("/read-through", response_model=CentreReadThroughResult)

@@ -48,6 +48,7 @@ from app.models.medwatch_form_3500 import (
     MedWatchListState,
 )
 from app.pharmacovigilance import NaranjoQuestion
+from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.medwatch_3500.dates import (
     clinic_date_of,
     clinic_today,
@@ -576,8 +577,7 @@ class _ReadContext:
                 name
                 for name in (
                     _text(team, "clinic_name"),
-                    _text(clinician, "clinic_name"),
-                    self.clinic_names.get(str(clinician.get("clinic_id")), ""),
+                    self.clinic_names.get(str(team.get("clinic_id")), ""),
                 )
                 if name
             )
@@ -738,11 +738,17 @@ class MedWatchService:
         return (await self._read_models([row]))[0]
 
     async def list_drafts(
-        self, clinician_id: UUID, state: MedWatchListState = "active"
+        self,
+        clinician_id: UUID,
+        state: MedWatchListState = "active",
+        clinic_id: UUID | None = None,
     ) -> dict[str, Any]:
-        """List drafts for currently assigned patients: active, submitted or discarded."""
-        assignments = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
-        patient_ids = [str(row["patient_id"]) for row in assignments if row.get("patient_id")]
+        """List drafts for currently assigned patients: active, submitted or discarded.
+
+        Each draft carries the clinic of the clinician's link; ``clinic_id`` keeps one clinic.
+        """
+        scope = await ClinicMembershipService(self).link_scope(clinician_id, clinic_id)
+        patient_ids = scope.patient_ids
         if not patient_ids:
             return {"items": [], "total": 0}
         query = self.db.table("medwatch_drafts").select("*").in_("patient_id", patient_ids)
@@ -759,6 +765,7 @@ class MedWatchService:
             ).is_("discarded_at", "null")
         result = await self._execute(query.order("created_at", desc=True))
         items = await self._read_models(cast(list[dict[str, Any]], result.data or []))
+        items = [scope.annotate(item) for item in items]
         return {"items": items, "total": len(items)}
 
     async def get_draft(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
@@ -1166,7 +1173,7 @@ class MedWatchService:
         )
         teams = await self._rows(
             self.db.table("care_teams")
-            .select("patient_id, clinician_id, clinic_name")
+            .select("patient_id, clinician_id, clinic_id, clinic_name")
             .in_("patient_id", patient_ids)
             .eq("status", "active")
         )
@@ -1183,13 +1190,14 @@ class MedWatchService:
         clinicians = (
             await self._rows(
                 self.db.table("clinicians")
-                .select("id, first_name, last_name, clinic_name, clinic_id")
+                .select("id, first_name, last_name")
                 .in_("id", clinician_ids)
             )
             if clinician_ids
             else []
         )
-        clinic_ids = sorted({str(c["clinic_id"]) for c in clinicians if c.get("clinic_id")})
+        # The clinic of each link, not the clinician's default clinic (CLN-003).
+        clinic_ids = sorted({str(t["clinic_id"]) for t in teams if t.get("clinic_id")})
         clinics = (
             await self._rows(
                 self.db.table("clinics").select("id, display_name").in_("id", clinic_ids)

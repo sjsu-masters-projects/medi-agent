@@ -20,6 +20,7 @@ from app.core.exceptions import (
 from app.models.appointment import AppointmentCalendarExport, AppointmentRead
 from app.models.enums import AppointmentResponseAction, AppointmentStatus
 from app.services.appointment_calendar import CalendarLocale, render_appointment_calendar
+from app.services.clinic_membership_service import ClinicMembershipService
 
 # Patient responses to an appointment: the statuses each action may be applied
 # from, and the status it moves the appointment to. Actions only apply while the
@@ -77,7 +78,9 @@ class AppointmentService:
             raise _booking_error("stale")
         return render_appointment_calendar(AppointmentRead.model_validate(appointment), locale)
 
-    async def list_for_user(self, *, user_id: UUID, role: str) -> list[dict[str, Any]]:
+    async def list_for_user(
+        self, *, user_id: UUID, role: str, clinic_id: UUID | None = None
+    ) -> list[dict[str, Any]]:
         if role not in {"patient", "clinician"}:
             raise AuthorizationError(
                 "Unsupported role for appointments", reason_code=reasons.UNSUPPORTED_ROLE
@@ -95,7 +98,8 @@ class AppointmentService:
             return [row for row in (result.data or []) if isinstance(row, dict)]
 
         if role == "clinician":
-            assignments = await self._assigned_patient_ids(user_id)
+            scope = await ClinicMembershipService(self).link_scope(user_id, clinic_id)
+            assignments = scope.patient_ids
             if not assignments:
                 return []
             result = await self._execute(
@@ -104,7 +108,7 @@ class AppointmentService:
                 .in_("patient_id", assignments)
                 .order("scheduled_at")
             )
-            return [row for row in (result.data or []) if isinstance(row, dict)]
+            return [scope.annotate(row) for row in (result.data or []) if isinstance(row, dict)]
 
         raise AuthorizationError(
             "Unsupported role for appointments",
@@ -315,19 +319,6 @@ class AppointmentService:
             "You are not authorized to manage this appointment",
             reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
         )
-
-    async def _assigned_patient_ids(self, clinician_id: UUID) -> list[str]:
-        result = await self._execute(
-            self.db.table("care_teams")
-            .select("patient_id")
-            .eq("clinician_id", str(clinician_id))
-            .eq("status", "active")
-        )
-        return [
-            str(row.get("patient_id"))
-            for row in (result.data or [])
-            if isinstance(row, dict) and row.get("patient_id")
-        ]
 
     async def _get_care_team(self, care_team_id: str) -> dict[str, Any]:
         result = await self._execute(

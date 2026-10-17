@@ -14,6 +14,7 @@ from app.models.care_conversation import (
     ConversationReadMarker,
     ConversationSend,
 )
+from app.services.clinic_membership_service import ClinicMembershipService
 
 
 class CareConversationService:
@@ -21,11 +22,30 @@ class CareConversationService:
         self.db = db
         self.actor = actor
 
-    async def recipients(self) -> list[dict[str, Any]]:
-        return cast(list[dict[str, Any]], await self._call("recipients"))
+    async def recipients(self, clinic_id: UUID | None = None) -> list[dict[str, Any]]:
+        items = cast(list[dict[str, Any]], await self._call("recipients"))
+        return await self._clinician_view(items, "id", clinic_id)
 
-    async def list_conversations(self) -> list[dict[str, Any]]:
-        return cast(list[dict[str, Any]], await self._call("list"))
+    async def list_conversations(self, clinic_id: UUID | None = None) -> list[dict[str, Any]]:
+        items = cast(list[dict[str, Any]], await self._call("list"))
+        return await self._clinician_view(items, "patient_id", clinic_id)
+
+    async def _clinician_view(
+        self, items: list[dict[str, Any]], patient_key: str, clinic_id: UUID | None
+    ) -> list[dict[str, Any]]:
+        """Tag a clinician's items with the link's clinic and keep one clinic's, if asked.
+
+        Patients have no clinic filter. Each thread already belongs to one link, so its own
+        clinic is the link's clinic; a clinic the clinician does not belong to is empty.
+        """
+        if self.actor.role != "clinician":
+            return items
+        scope = await ClinicMembershipService(self).link_scope(self.actor.id, clinic_id)
+        kept = [item for item in items if str(item.get(patient_key)) in scope]
+        for item in kept:
+            tag = scope.tag(item.get(patient_key))
+            item["clinic_id"] = tag["clinic_id"]
+        return kept
 
     async def open_conversation(self, data: ConversationCreate) -> dict[str, Any]:
         return cast(dict[str, Any], await self._call("open", data.model_dump(mode="json")))

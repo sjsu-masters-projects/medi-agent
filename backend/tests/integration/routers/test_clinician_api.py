@@ -21,6 +21,7 @@ from app.main import app
 from app.middleware.rate_limit import RateLimitResult
 from app.models.auth import CurrentUser
 from app.routers.clinicians import _clinician_dep, _get_medwatch_service, _get_service
+from app.services.clinic_link_scope import ClinicLinkScope
 from app.services.medwatch_3500.pdf import Form3500RenderError
 from app.services.medwatch_3500.template import TemplateMismatchError
 from app.services.medwatch_service import MedWatchService
@@ -168,8 +169,13 @@ class TestGetMyPatients:
         mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(
             data=care_team_data
         )
+        scope = ClinicLinkScope({str(patient_id): ("clinic-1", "Synthetic clinic")})
 
-        response = client.get("/api/v1/clinicians/me/patients")
+        with patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.link_scope",
+            new=AsyncMock(return_value=scope),
+        ):
+            response = client.get("/api/v1/clinicians/me/patients")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -872,6 +878,7 @@ class TestADRReviewQueueRoutes:
             status_filter="draft",
             patient_id=None,
             limit=25,
+            clinic_id=None,
         )
 
     def test_list_accepts_all_statuses_and_a_patient_filter(
@@ -887,7 +894,7 @@ class TestADRReviewQueueRoutes:
 
         assert response.status_code == status.HTTP_200_OK
         override_service.list_adr_review_queue.assert_awaited_once_with(
-            clinician_id, status_filter="all", patient_id=patient_id, limit=100
+            clinician_id, status_filter="all", patient_id=patient_id, limit=100, clinic_id=None
         )
 
     def test_single_assessment_unknown_and_unassigned_share_one_404(
@@ -1670,6 +1677,55 @@ class TestMyClinics:
             response = client.post("/api/v1/clinicians/me/clinics", json={"clinic_code": "ABC123"})
         assert response.status_code == status.HTTP_200_OK
         join.assert_awaited_once_with(clinician_id, "ABC123", "provider")
+
+    def test_default_leave_and_rename_call_the_membership_service(
+        self, client, override_auth, override_db, clinician_id
+    ):
+        clinic_id = uuid4()
+        base = "app.services.clinic_membership_service.ClinicMembershipService"
+        default = AsyncMock(
+            return_value={
+                "default_clinic_id": str(clinic_id),
+                "clinic_id": str(clinic_id),
+                "role": "provider",
+            }
+        )
+        leave = AsyncMock(
+            return_value={"status": "left", "clinic_id": str(clinic_id), "links_ended": 2}
+        )
+        rename = AsyncMock(return_value={"clinic_id": str(clinic_id), "clinic_name": "New name"})
+        with (
+            patch(f"{base}.set_default", new=default),
+            patch(f"{base}.leave", new=leave),
+            patch(f"{base}.rename_clinic", new=rename),
+        ):
+            made = client.put(
+                "/api/v1/clinicians/me/default-clinic", json={"clinic_id": str(clinic_id)}
+            )
+            left = client.post(f"/api/v1/clinicians/me/clinics/{clinic_id}/leave")
+            renamed = client.put(
+                f"/api/v1/clinicians/me/clinics/{clinic_id}", json={"display_name": "New name"}
+            )
+        assert (made.status_code, left.status_code, renamed.status_code) == (200, 200, 200)
+        assert left.json()["links_ended"] == 2
+        default.assert_awaited_once_with(clinician_id, clinic_id)
+        leave.assert_awaited_once_with(clinician_id, clinic_id)
+        rename.assert_awaited_once_with(clinician_id, clinic_id, "New name")
+
+    def test_clinic_filter_reaches_every_clinician_list(
+        self, client, override_auth, override_db, clinician_id
+    ):
+        clinic_id = uuid4()
+        with patch(
+            "app.services.clinician_service.ClinicianService.get_patients",
+            new=AsyncMock(return_value=[]),
+        ) as patients:
+            client.get(f"/api/v1/clinicians/me/patients?clinic_id={clinic_id}")
+        patients.assert_awaited_once_with(clinician_id, clinic_id)
+        assert (
+            client.get("/api/v1/clinicians/me/patients?clinic_id=not-a-uuid").status_code
+            == status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
 
     def test_join_cannot_ask_for_admin(self, client, override_auth, override_db):
         response = client.post(

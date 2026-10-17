@@ -557,13 +557,52 @@ async def test_direct_write_booking_errors_are_sanitized(service, mock_db, sqlst
     assert "Private" not in caught.value.message
 
 
+def _linked(patient_ids, clinic="clinic-1"):
+    """The clinician's active links, all at one clinic."""
+    from contextlib import ExitStack
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.clinic_link_scope import ClinicLinkScope
+
+    scope = ClinicLinkScope({pid: (clinic, "Synthetic clinic") for pid in patient_ids})
+    stack = ExitStack()
+    stack.enter_context(
+        patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.link_scope",
+            new=AsyncMock(return_value=scope),
+        )
+    )
+    return stack
+
+
+@pytest.mark.asyncio
+async def test_clinician_appointments_carry_the_links_clinic(service, mock_db):
+    _chain(mock_db, results=[[{"id": "a1", "patient_id": "p-1"}]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked(["p-1"]):
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician")
+    assert rows[0]["clinic_id"] == "clinic-1"
+    assert rows[0]["clinic_name"] == "Synthetic clinic"
+
+
+@pytest.mark.asyncio
+async def test_clinician_appointments_for_an_unrelated_clinic_are_empty(service, mock_db):
+    chain = _chain(mock_db, results=[[{"id": "a1", "patient_id": "p-1"}]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked([]):
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician", clinic_id=uuid4())
+    assert rows == []
+    chain.execute.assert_not_called()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["patient", "clinician"])
 async def test_listing_persists_authorized_expiration_before_reading(service, mock_db, role):
     user = uuid4()
     chain = _chain(mock_db, results=[[]])
     mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 2})
-    assert await service.list_for_user(user_id=user, role=role) == []
+    with _linked(["p-1"]):
+        assert await service.list_for_user(user_id=user, role=role) == []
     mock_db.rpc.assert_called_once_with(
         "expire_appointment_proposals", {"p_actor_id": str(user), "p_actor_role": role}
     )

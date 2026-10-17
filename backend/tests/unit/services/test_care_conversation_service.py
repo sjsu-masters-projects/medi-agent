@@ -111,3 +111,37 @@ async def test_invalid_database_response_fails_closed(service, value):
     db.rpc.return_value.execute.return_value.data = value
     with pytest.raises(ExternalServiceError):
         await svc.recipients()
+
+
+@pytest.mark.asyncio
+async def test_clinician_conversations_are_tagged_and_filtered_by_link_clinic(service):
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.clinic_link_scope import ClinicLinkScope
+
+    svc, db = service
+    svc.actor.role = "clinician"
+    here, there = str(uuid4()), str(uuid4())
+    db.rpc.return_value.execute.return_value = SimpleNamespace(
+        data=[{"id": "t1", "patient_id": here}, {"id": "t2", "patient_id": there}]
+    )
+    both = ClinicLinkScope({here: ("c1", "One"), there: ("c2", "Two")})
+    only_one = ClinicLinkScope({here: ("c1", "One")})
+    path = "app.services.clinic_membership_service.ClinicMembershipService.link_scope"
+    with patch(path, new=AsyncMock(return_value=both)):
+        rows = await svc.list_conversations()
+    assert [(r["id"], r["clinic_id"]) for r in rows] == [("t1", "c1"), ("t2", "c2")]
+    db.rpc.return_value.execute.return_value = SimpleNamespace(
+        data=[{"id": "t1", "patient_id": here}, {"id": "t2", "patient_id": there}]
+    )
+    with patch(path, new=AsyncMock(return_value=only_one)):
+        assert [r["id"] for r in await svc.list_conversations(uuid4())] == ["t1"]
+    with patch(path, new=AsyncMock(return_value=ClinicLinkScope())):
+        assert await svc.list_conversations(uuid4()) == []
+
+
+@pytest.mark.asyncio
+async def test_patient_conversations_ignore_the_clinic_filter(service):
+    svc, db = service
+    db.rpc.return_value.execute.return_value = SimpleNamespace(data=[{"id": "t1"}])
+    assert await svc.list_conversations(uuid4()) == [{"id": "t1"}]
