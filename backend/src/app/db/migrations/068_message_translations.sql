@@ -23,10 +23,29 @@ CREATE TABLE IF NOT EXISTS public.message_translations (
   UNIQUE (source_table, source_message_id, target_locale)
 );
 
-CREATE INDEX message_translations_source
+CREATE INDEX IF NOT EXISTS message_translations_source
   ON public.message_translations(source_table, source_message_id);
 
 COMMENT ON TABLE public.message_translations IS
   'LOC-003: stored translations for care-team and chat messages. '
   'The original text is always the message of record. '
   'Safety checks use only the original, never a translation.';
+
+-- Backend-only: the service reads and writes translations; browser roles get nothing.
+-- Idempotent because some environments created this table under its earlier filename.
+ALTER TABLE public.message_translations ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.message_translations FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.message_translations TO service_role;
+
+DO $$
+BEGIN
+  IF NOT (SELECT relrowsecurity FROM pg_catalog.pg_class
+           WHERE oid = 'public.message_translations'::regclass) THEN
+    RAISE EXCEPTION 'message_translations must have row level security enabled';
+  END IF;
+  IF has_table_privilege('anon', 'public.message_translations', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.message_translations', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.message_translations', 'INSERT') THEN
+    RAISE EXCEPTION 'Browser roles must not access message_translations';
+  END IF;
+END $$;
