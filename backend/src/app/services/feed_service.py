@@ -205,12 +205,12 @@ class FeedService:
                     prescribed_by_care_team_id,
                     care_teams!prescribed_by_care_team_id(
                         id,
+                        clinics(display_name),
                         clinicians(
                             id,
                             first_name,
                             last_name,
-                            specialty,
-                            clinic_name
+                            specialty
                         )
                     )
                 """
@@ -245,12 +245,12 @@ class FeedService:
                     set_by_care_team_id,
                     care_teams!set_by_care_team_id(
                         id,
+                        clinics(display_name),
                         clinicians(
                             id,
                             first_name,
                             last_name,
-                            specialty,
-                            clinic_name
+                            specialty
                         )
                     )
                 """
@@ -673,7 +673,9 @@ class FeedService:
             "id": clinician["id"],
             "name": f"Dr. {clinician['first_name']} {clinician['last_name']}",
             "specialty": clinician["specialty"],
-            "clinic_name": clinician["clinic_name"],
+            # The clinic of the care-team link that prescribed or set this, not the
+            # clinician's default clinic (CLN-003 slice F).
+            "clinic_name": (care_teams.get("clinics") or {}).get("display_name") or "",
         }
 
     def _calculate_summary(self, tasks: list[dict[str, Any]]) -> dict[str, int]:

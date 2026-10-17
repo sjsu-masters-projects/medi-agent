@@ -184,7 +184,7 @@ class CarePlanPreviewService:
         previous_items = self.plans._items(UUID(str(previous["id"]))) if previous else []
         provider_result = (
             self.db.table("care_teams")
-            .select("id, clinicians(id, first_name, last_name, specialty, clinic_name)")
+            .select("id, clinics(display_name), clinicians(id, first_name, last_name, specialty)")
             .eq("patient_id", str(patient_id))
             .eq("clinician_id", str(clinician_id))
             .eq("status", "active")

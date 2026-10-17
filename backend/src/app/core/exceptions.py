@@ -48,8 +48,11 @@ class AuthorizationError(MediAgentError):
         actor_role: str | None = None,
         target_type: str | None = None,
         target_id: str | None = None,
+        clinic_id: str | None = None,
     ):
         super().__init__(message=message, code="AUTHORIZATION_ERROR")
+        # The clinic of the care-team link the refused action concerned, when there is one (CLN-003).
+        self.clinic_id = clinic_id
         self.reason_code = reason_code
         self.actor_id = actor_id
         self.actor_role = actor_role
