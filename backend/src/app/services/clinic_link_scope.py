@@ -24,6 +24,11 @@ class ClinicLinkScope:
     def patient_ids(self) -> list[str]:
         return list(self.links)
 
+    @property
+    def clinic_ids(self) -> list[str]:
+        """The clinics of the links in scope (each once), for items that carry their own clinic."""
+        return sorted({clinic for clinic, _ in self.links.values() if clinic})
+
     def __contains__(self, patient_id: object) -> bool:
         return str(patient_id) in self.links
 

@@ -71,6 +71,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "slow: long-running corpus tests, such as the Form 3500 PDF read-back",
     "before_clinic_memberships: the PostgreSQL fixture stops before 065 so the test checks its backfill",
+    "before_clinic_scheduling: the PostgreSQL fixture stops before 069 so the test checks its backfill",
 ]
 timeout = 30
 timeout_method = "thread"

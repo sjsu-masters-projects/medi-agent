@@ -400,8 +400,10 @@ def test_extract_provider_complete_data(feed_service):
             "first_name": "Jane",
             "last_name": "Smith",
             "specialty": "Primary Care",
-            "clinic_name": "Health Clinic",
+            # The clinician's default clinic is ignored; the link's clinic is the one shown.
+            "clinic_name": "Default Clinic",
         },
+        "clinics": {"display_name": "Health Clinic"},
     }
 
     result = feed_service._extract_provider(care_teams)

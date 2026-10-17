@@ -4,7 +4,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Card, Input } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { proposeAppointmentOffer } from "@/services/appointments";
-import { validateAppointmentTimes } from "@/utils/appointment-times";
+import {
+  appointmentTimeToUtc,
+  formatSchedulingClock,
+  validateAppointmentTimes,
+} from "@/utils/appointment-times";
+import { getScheduleConflicts, type ScheduleConflict } from "@/utils/appointment-conflicts";
 import type { Appointment } from "@/types";
 import { getAppointmentErrorCode } from "../../../../../packages/shared/src/utils/appointment-errors";
 
@@ -37,6 +42,9 @@ export function AppointmentOfferForm({
     previous?.appointmentType ?? "follow_up",
   );
   const [error, setError] = useState("");
+  // One entry per slot input; a non-null entry is that slot's unresolved schedule conflict.
+  const [conflicts, setConflicts] = useState<(ScheduleConflict | null)[]>([]);
+  const blocked = conflicts.some(Boolean);
   const [sending, setSending] = useState(false);
   const pending = useRef(false);
   const active = useRef(true);
@@ -49,7 +57,7 @@ export function AppointmentOfferForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (disabled || pending.current) return;
+    if (disabled || pending.current || blocked) return;
     setError("");
     let slots: string[];
     try {
@@ -81,7 +89,20 @@ export function AppointmentOfferForm({
       });
       if (active.current) onCreated(rows);
     } catch (failure) {
-      if (active.current)
+      const found = getScheduleConflicts(failure);
+      const matched = found
+        ? times.map((time) => {
+            try {
+              const utc = Date.parse(appointmentTimeToUtc(time, timezone));
+              return found.find((c) => Date.parse(c.slot) === utc) ?? null;
+            } catch {
+              return null;
+            }
+          })
+        : [];
+      if (active.current && matched.some(Boolean)) {
+        setConflicts(matched);
+      } else if (active.current)
         setError(
           getAppointmentErrorCode(failure) === "APPOINTMENT_PAST"
             ? "One of these times has passed. Your draft is preserved; choose future times and send again."
@@ -133,7 +154,8 @@ export function AppointmentOfferForm({
         >
           <div className="space-y-3">
             {times.map((time, index) => (
-              <div key={index} className="flex items-end gap-2">
+              <div key={index} className="min-w-0">
+              <div className="flex items-end gap-2">
                 <div className="min-w-0 flex-1">
                   <Input
                     label={`Option ${index + 1} (${timezone})`}
@@ -141,13 +163,17 @@ export function AppointmentOfferForm({
                     className="font-mono"
                     required
                     value={time}
-                    onChange={(event) =>
+                    aria-describedby={conflicts[index] ? `slot-conflict-${index}` : undefined}
+                    onChange={(event) => {
+                      setConflicts((current) =>
+                        current.map((value, i) => (i === index ? null : value)),
+                      );
                       setTimes((current) =>
                         current.map((value, i) =>
                           i === index ? event.target.value : value,
                         ),
-                      )
-                    }
+                      );
+                    }}
                   />
                 </div>
                 {times.length > 2 && (
@@ -155,15 +181,32 @@ export function AppointmentOfferForm({
                     variant="ghost"
                     className="h-[42px]"
                     aria-label={`Remove option ${index + 1}`}
-                    onClick={() =>
+                    onClick={() => {
+                      setConflicts((current) =>
+                        current.filter((_, i) => i !== index),
+                      );
                       setTimes((current) =>
                         current.filter((_, i) => i !== index),
-                      )
-                    }
+                      );
+                    }}
                   >
                     Remove
                   </Button>
                 )}
+              </div>
+              {conflicts[index] && (
+                <p
+                  id={`slot-conflict-${index}`}
+                  role="alert"
+                  aria-live="assertive"
+                  className="mt-2 flex items-start gap-2 rounded-xl border border-risk-line bg-risk-soft px-3 py-2 text-[13px] text-risk-ink"
+                >
+                  <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 break-words">
+                    {`You already have an appointment at ${conflicts[index].clinicName} from ${formatSchedulingClock(conflicts[index].startsAt, timezone)} to ${formatSchedulingClock(conflicts[index].endsAt, timezone)}.`}
+                  </span>
+                </p>
+              )}
               </div>
             ))}
             {times.length < 4 && (
@@ -217,7 +260,7 @@ export function AppointmentOfferForm({
               onChange={(event) => setReason(event.target.value)}
             />
           </div>
-          <Button type="submit" size="lg" fullWidth>
+          <Button type="submit" size="lg" fullWidth disabled={blocked}>
             <Icon name="send" className="h-4 w-4" />
             {sending ? "Sending offer…" : "Send appointment offer"}
           </Button>

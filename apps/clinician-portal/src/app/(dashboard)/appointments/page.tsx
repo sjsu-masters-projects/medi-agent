@@ -142,6 +142,8 @@ function PatientAppointments({
             </span>
           </div>
           <AppointmentOfferHistory
+            patientName={`${patient.first_name} ${patient.last_name}`}
+            showClinic={showClinic}
             appointmentId={appointmentId}
             token={token}
             appointments={appointments}
@@ -236,7 +238,8 @@ function SchedulingWorkspace({ token, appointmentId }: { token: string; appointm
             />
           ) : (
             <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-line bg-surface px-5 py-4 shadow-[var(--shadow-card)]">
-              <label className="block w-full max-w-md">
+              <div className="w-full max-w-md">
+              <label className="block">
                 <span className="mb-1.5 block text-[13px] font-medium text-ink-2">
                   Patient
                 </span>
@@ -258,6 +261,12 @@ function SchedulingWorkspace({ token, appointmentId }: { token: string; appointm
                   ))}
                 </select>
               </label>
+              {selected?.clinic_name && (
+                <p className="mt-1.5 text-[13px] text-muted">
+                  Clinic: {selected.clinic_name}
+                </p>
+              )}
+              </div>
               <p className="pb-2.5 text-[13px] text-muted">
                 <span className="font-mono">{patients.length}</span> assigned
               </p>

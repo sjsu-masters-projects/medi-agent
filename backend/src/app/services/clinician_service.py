@@ -157,6 +157,8 @@ class ClinicianService:
     ) -> dict[str, Any]:
         """Record a legacy in-app message; email notices use private conversations."""
         await self.get_patient_detail(clinician_id, patient_id)
+        # The clinic of this clinician's link to the patient names the notice (CLN-003 slice F).
+        clinic = (await self.memberships.link_scope(clinician_id)).tag(patient_id)
 
         channel = data.get("channel") or MessageChannel.IN_APP
         channel_value = channel.value if isinstance(channel, MessageChannel) else str(channel)
@@ -181,13 +183,17 @@ class ClinicianService:
 
         message = rows[0]
         notification_body = subject if subject else body[:160]
+        clinic_name = clinic.get("clinic_name")
         await NotificationService(self.db).create(
             str(patient_id),
             {
                 "notification_type": NotificationType.DOCTOR_MESSAGE.value,
                 "title": "New message from your care team",
-                "body": notification_body,
+                "body": f"{clinic_name} · {notification_body}"
+                if clinic_name
+                else notification_body,
                 "action_url": "/chat",
+                "metadata": {"clinic_id": clinic.get("clinic_id"), "clinic_name": clinic_name},
             },
         )
         return message

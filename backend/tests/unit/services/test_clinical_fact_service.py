@@ -255,3 +255,27 @@ def test_fhir_provenance_prefers_the_versioned_imported_resource_reference() -> 
     assert exported["provenance"]["entity"][0]["what"]["reference"] == (
         "MedicationRequest/med-123/_history/7"
     )
+
+
+def test_fhir_audit_events_carry_the_clinic_of_the_actors_link() -> None:
+    db = FakeDatabase()
+    facts = ClinicalFactService(db)  # type: ignore[arg-type]
+    fact = facts.create_candidate(candidate(), actor_id=ACTOR_ID)
+    facts.approve(UUID(fact["id"]), PATIENT_ID, reviewer_id=REVIEWER_ID, note="Reviewed")
+    clinic = str(uuid4())
+    db.store["care_teams"] = [
+        {"patient_id": str(PATIENT_ID), "clinician_id": str(REVIEWER_ID), "clinic_id": clinic},
+        # An actor with links at two clinics for one patient gets no guessed clinic.
+        {"patient_id": str(PATIENT_ID), "clinician_id": str(ACTOR_ID), "clinic_id": str(uuid4())},
+        {"patient_id": str(PATIENT_ID), "clinician_id": str(ACTOR_ID), "clinic_id": str(uuid4())},
+    ]
+
+    events = FhirAuditExportService(db).export_for_fact(  # type: ignore[arg-type]
+        fact_id=UUID(fact["id"]), patient_id=PATIENT_ID
+    )["audit_events"]
+
+    by_type = {e["subtype"][0]["code"]: e for e in events}
+    assert by_type["approved"]["extension"] == [
+        {"url": "urn:mediagent:audit-clinic", "valueString": clinic}
+    ]
+    assert "extension" not in by_type["created"]

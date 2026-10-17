@@ -92,6 +92,22 @@ filter and no new request parameter.
 - Messages filter the conversation list on the server; Alerts filter the loaded items by
   `clinic_id` (the notification cache is shared with the bell, so it is not refetched per clinic).
 
+### Appointments across clinics (CLN-003 slice E)
+
+- **Rows:** each appointment row in the Appointments history shows the time first and in bold,
+  then the patient name, then the clinic chip, then the status chip. The chip appears only for a
+  clinician with two or more clinics and uses the appointment's own clinic. At 390 px the first line
+  is time plus status and the second line is patient plus clinic; wider screens keep one row.
+- **Clinic row:** directly under the Patient selector a muted, read-only line "Clinic: &lt;name&gt;"
+  shows the selected patient's clinic. The clinic is never chosen here and the offer payload does
+  not carry one.
+- **Conflicts:** if a proposed slot overlaps a visit the clinician already has at any clinic, the
+  server refuses the whole offer (`CLINICIAN_SCHEDULE_CONFLICT`). A `risk-soft` callout under each
+  offending slot reads "You already have an appointment at &lt;clinic&gt; from &lt;time&gt; to
+  &lt;time&gt;." in the patient's timezone (server prose is never shown). Send stays disabled while
+  a callout remains; editing or removing a slot clears only its own callout. Nothing is saved for
+  a refused offer (no partial offers), and adjacent visits are not conflicts.
+
 ### Your clinics, default clinic and leaving (CLN-003 slice D)
 
 Settings -> General Profile has a **Your clinics** card

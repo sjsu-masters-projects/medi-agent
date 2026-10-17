@@ -25,7 +25,7 @@ def _chain(mock_db, *, results):
     """Make each successive `.execute()` return the next payload in `results`."""
     chain = MagicMock()
     chain.execute.side_effect = [SimpleNamespace(data=data) for data in results]
-    for method in ("select", "eq", "order", "insert", "update", "limit", "in_"):
+    for method in ("select", "eq", "order", "insert", "update", "limit", "in_", "gte", "lt"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
     return chain
@@ -50,6 +50,7 @@ async def test_clinician_created_appointment_is_proposed(service, mock_db):
                     "status": "active",
                 }
             ],
+            [],
             [{"first_name": "Elena", "last_name": "Park"}],
             [{"id": str(uuid4()), "status": "proposed"}],
         ],
@@ -577,12 +578,166 @@ def _linked(patient_ids, clinic="clinic-1"):
 
 @pytest.mark.asyncio
 async def test_clinician_appointments_carry_the_links_clinic(service, mock_db):
-    _chain(mock_db, results=[[{"id": "a1", "patient_id": "p-1"}]])
+    chain = _chain(
+        mock_db,
+        results=[
+            [
+                {
+                    "id": "a1",
+                    "patient_id": "p-1",
+                    "clinic_id": "clinic-1",
+                    "clinics": {"display_name": "Synthetic clinic"},
+                }
+            ]
+        ],
+    )
     mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
     with _linked(["p-1"]):
         rows = await service.list_for_user(user_id=uuid4(), role="clinician")
     assert rows[0]["clinic_id"] == "clinic-1"
     assert rows[0]["clinic_name"] == "Synthetic clinic"
+    assert "clinics" not in rows[0]
+    # Only visits at clinics where the caller holds a link are read.
+    chain.in_.assert_any_call("clinic_id", ["clinic-1"])
+
+
+@pytest.mark.asyncio
+async def test_patient_appointments_name_their_own_clinic(service, mock_db):
+    _chain(
+        mock_db,
+        results=[
+            [
+                {"id": "a1", "clinic_id": "c-1", "clinics": {"display_name": "North clinic"}},
+                {"id": "a2", "clinic_id": "c-2", "clinics": {"display_name": "South clinic"}},
+            ]
+        ],
+    )
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    rows = await service.list_for_user(user_id=uuid4(), role="patient")
+    assert [r["clinic_name"] for r in rows] == ["North clinic", "South clinic"]
+
+
+def _team(clinician_id, patient_id, team_id):
+    return {
+        "id": str(team_id),
+        "patient_id": str(patient_id),
+        "clinician_id": str(clinician_id),
+        "clinic_id": "clinic-2",
+        "clinics": {"display_name": "South clinic"},
+        "status": "active",
+    }
+
+
+@pytest.mark.asyncio
+async def test_offer_conflict_names_the_clinic_and_never_a_patient(service, mock_db, caplog):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    _chain(mock_db, results=[[_team(clinician, patient, team)]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(
+        data={
+            "error": "clinician_conflict",
+            "conflicts": [
+                {
+                    "slot": "2099-01-01T10:15:00+00:00",
+                    "clinic_id": "clinic-1",
+                    "clinic_name": "North clinic",
+                    "starts_at": "2099-01-01T10:00:00+00:00",
+                    "ends_at": "2099-01-01T10:30:00+00:00",
+                }
+            ],
+        }
+    )
+    with caplog.at_level("INFO"), pytest.raises(ValidationError) as caught:
+        await service.propose_for_user(
+            user_id=clinician,
+            role="clinician",
+            data={
+                "care_team_id": str(team),
+                "slots": ["2099-01-01T10:15:00+00:00", "2099-01-02T10:00:00+00:00"],
+            },
+        )
+    assert caught.value.code == "CLINICIAN_SCHEDULE_CONFLICT"
+    assert caught.value.message == (
+        "You already have an appointment at North clinic "
+        "from Jan 1, 2099 10:00 UTC to Jan 1, 2099 10:30 UTC."
+    )
+    assert caught.value.details["conflicts"][0]["clinic_name"] == "North clinic"
+    # The refusal is logged by count only: no patient, clinician or clinic identifier.
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert "1 slot(s)" in logged
+    for identifier in (str(patient), str(clinician), "clinic-1", "North clinic"):
+        assert identifier not in logged
+
+
+@pytest.mark.asyncio
+async def test_a_clear_offer_is_tagged_with_the_links_clinic(service, mock_db):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    _chain(mock_db, results=[[_team(clinician, patient, team)]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(
+        data={"appointments": [{"id": "a1", "clinic_id": "clinic-2"}]}
+    )
+    rows = await service.propose_for_user(
+        user_id=clinician,
+        role="clinician",
+        data={
+            "care_team_id": str(team),
+            "slots": ["2099-01-01T10:15:00+00:00", "2099-01-02T10:00:00+00:00"],
+        },
+    )
+    assert rows[0]["clinic_name"] == "South clinic"
+
+
+@pytest.mark.asyncio
+async def test_single_offered_time_runs_against_the_whole_schedule(service, mock_db):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    _chain(
+        mock_db,
+        results=[
+            [_team(clinician, patient, team)],
+            [
+                {
+                    "scheduled_at": "2099-01-01T10:00:00+00:00",
+                    "duration_minutes": 30,
+                    "clinic_id": "clinic-1",
+                    "clinics": {"display_name": "North clinic"},
+                }
+            ],
+        ],
+    )
+    with pytest.raises(ValidationError) as caught:
+        await service.create_for_user(
+            user_id=clinician,
+            role="clinician",
+            data={"care_team_id": str(team), "scheduled_at": "2099-01-01T10:15:00Z"},
+        )
+    assert caught.value.code == "CLINICIAN_SCHEDULE_CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_adjacent_single_offer_is_not_a_conflict(service, mock_db):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    chain = _chain(
+        mock_db,
+        results=[
+            [_team(clinician, patient, team)],
+            [
+                {
+                    "scheduled_at": "2099-01-01T09:30:00+00:00",
+                    "duration_minutes": 30,
+                    "clinic_id": "clinic-1",
+                    "clinics": {"display_name": "North clinic"},
+                }
+            ],
+            [{"first_name": "Elena", "last_name": "Park"}],
+            [{"id": "new", "status": "proposed"}],
+        ],
+    )
+    row = await service.create_for_user(
+        user_id=clinician,
+        role="clinician",
+        data={"care_team_id": str(team), "scheduled_at": "2099-01-01T10:00:00Z"},
+    )
+    assert row["clinic_name"] == "South clinic"
+    assert chain.insert.call_args.args[0]["clinic_id"] == "clinic-2"
 
 
 @pytest.mark.asyncio

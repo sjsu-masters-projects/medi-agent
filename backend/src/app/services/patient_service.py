@@ -89,6 +89,18 @@ def _patient_responses(value: object) -> list[dict[str, Any]]:
     return responses
 
 
+def _link_clinic_name(row: dict[str, Any]) -> str:
+    """The clinic of this care-team link (``care_teams.clinic_id``), not the clinician's default.
+
+    ``care_teams.clinic_name`` is only the link's own legacy text, used when the link has no
+    clinic reference.
+    """
+    clinic = row.pop("clinics", None)
+    if isinstance(clinic, dict) and clinic.get("display_name"):
+        return str(clinic["display_name"])
+    return str(row.get("clinic_name") or "")
+
+
 class PatientService:
     """Patient-scoped operations. All methods require the patient's user ID."""
 
@@ -130,7 +142,7 @@ class PatientService:
         """List all clinicians assigned to this patient, with their names."""
         result = (
             self.db.table("care_teams")
-            .select("*, clinicians(first_name, last_name, specialty, clinic_name)")
+            .select("*, clinics(display_name), clinicians(first_name, last_name, specialty)")
             .eq("patient_id", str(patient_id))
             .eq("status", "active")
             .execute()
@@ -142,7 +154,7 @@ class PatientService:
             row["clinician_first_name"] = clinician.get("first_name", "")
             row["clinician_last_name"] = clinician.get("last_name", "")
             row["specialty_context"] = clinician.get("specialty", "")
-            row["clinic_name"] = clinician.get("clinic_name", "")
+            row["clinic_name"] = _link_clinic_name(row)
             teams.append(row)
         return teams
 
@@ -231,7 +243,7 @@ class PatientService:
 
         joined = (
             self.db.table("care_teams")
-            .select("*, clinicians(first_name, last_name, specialty, clinic_name)")
+            .select("*, clinics(display_name), clinicians(first_name, last_name, specialty)")
             .eq("id", care_team_id)
             .single()
             .execute()
@@ -244,7 +256,7 @@ class PatientService:
         row["clinician_first_name"] = clinician.get("first_name", "")
         row["clinician_last_name"] = clinician.get("last_name", "")
         row["specialty_context"] = clinician.get("specialty", "")
-        row["clinic_name"] = clinician.get("clinic_name", "")
+        row["clinic_name"] = _link_clinic_name(row)
         return row
 
     # ── ADR information requests ────────────────────────

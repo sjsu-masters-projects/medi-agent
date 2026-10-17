@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -21,6 +22,13 @@ from app.models.appointment import AppointmentCalendarExport, AppointmentRead
 from app.models.enums import AppointmentResponseAction, AppointmentStatus
 from app.services.appointment_calendar import CalendarLocale, render_appointment_calendar
 from app.services.clinic_membership_service import ClinicMembershipService
+
+logger = logging.getLogger(__name__)
+
+# A clinician's offer ran into a booked visit of their own at any clinic (CLN-003 slice E).
+CLINICIAN_CONFLICT_CODE = "CLINICIAN_SCHEDULE_CONFLICT"
+
+_WITH_CLINIC = "*, clinics(display_name)"
 
 # Patient responses to an appointment: the statuses each action may be applied
 # from, and the status it moves the appointment to. Actions only apply while the
@@ -63,6 +71,57 @@ def _booking_error(reason: str) -> ValidationError:
     return ValidationError(message, code=code)
 
 
+def _utc_label(value: Any) -> str:
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return str(value)
+    return moment.astimezone(UTC).strftime("%b %-d, %Y %H:%M UTC")
+
+
+def _clinician_conflict(conflicts: list[dict[str, Any]]) -> ValidationError:
+    """The clinician's own schedule is in the way: name the clinic and the time, nothing else.
+
+    The database returns only the clinic and the interval of the visit in the way. A patient of
+    another clinic is never read, so there is nothing to leak; the log carries a count only.
+    """
+    clean = [
+        {
+            "slot": str(item.get("slot")),
+            "clinic_id": item.get("clinic_id"),
+            "clinic_name": str(item.get("clinic_name") or ""),
+            "starts_at": str(item.get("starts_at")),
+            "ends_at": str(item.get("ends_at")),
+        }
+        for item in conflicts
+        if isinstance(item, dict)
+    ]
+    logger.info(
+        "Appointment offer refused: %d slot(s) overlap the clinician's schedule", len(clean)
+    )
+    first = clean[0] if clean else {}
+    message = (
+        f"You already have an appointment at {first.get('clinic_name') or 'another clinic'} "
+        f"from {_utc_label(first.get('starts_at'))} to {_utc_label(first.get('ends_at'))}."
+    )
+    return ValidationError(message, code=CLINICIAN_CONFLICT_CODE, details={"conflicts": clean})
+
+
+def _clinic_ref(care_team: dict[str, Any]) -> str | None:
+    clinic = care_team.get("clinic_id")
+    return str(clinic) if clinic else None
+
+
+def _flatten_clinic(row: dict[str, Any]) -> dict[str, Any]:
+    """Turn the embedded ``clinics(display_name)`` into the ``clinic_name`` tag (in place)."""
+    clinic = row.pop("clinics", None)
+    if isinstance(clinic, dict):
+        row["clinic_name"] = clinic.get("display_name")
+    else:
+        row.setdefault("clinic_name", None)
+    return row
+
+
 class AppointmentService:
     """Patient/clinician appointment operations."""
 
@@ -91,11 +150,11 @@ class AppointmentService:
         if role == "patient":
             result = await self._execute(
                 self.db.table("appointments")
-                .select("*")
+                .select(_WITH_CLINIC)
                 .eq("patient_id", str(user_id))
                 .order("scheduled_at")
             )
-            return [row for row in (result.data or []) if isinstance(row, dict)]
+            return [_flatten_clinic(row) for row in (result.data or []) if isinstance(row, dict)]
 
         if role == "clinician":
             scope = await ClinicMembershipService(self).link_scope(user_id, clinic_id)
@@ -104,11 +163,14 @@ class AppointmentService:
                 return []
             result = await self._execute(
                 self.db.table("appointments")
-                .select("*")
+                .select(_WITH_CLINIC)
                 .in_("patient_id", assignments)
+                .in_("clinic_id", scope.clinic_ids)
                 .order("scheduled_at")
             )
-            return [scope.annotate(row) for row in (result.data or []) if isinstance(row, dict)]
+            # An appointment carries the clinic it was made under. A shared patient's visits at a
+            # clinic the caller has no link in are not theirs to see.
+            return [_flatten_clinic(row) for row in (result.data or []) if isinstance(row, dict)]
 
         raise AuthorizationError(
             "Unsupported role for appointments",
@@ -130,17 +192,28 @@ class AppointmentService:
             raise AuthorizationError(
                 "Patients can only create appointments for their own care team",
                 reason_code=reasons.PATIENT_SCOPE_SELF_ONLY,
+                clinic_id=_clinic_ref(care_team),
             )
         if role == "clinician" and clinician_id != str(user_id):
             raise AuthorizationError(
                 "Clinicians can only create appointments for assigned patients",
                 reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+                clinic_id=_clinic_ref(care_team),
             )
         if role not in {"patient", "clinician"}:
             raise AuthorizationError(
                 "Unsupported role for appointments",
                 reason_code=reasons.UNSUPPORTED_ROLE,
             )
+
+        if role == "clinician":
+            # A single offered time is an offer too: it runs against the whole schedule.
+            start = datetime.fromisoformat(str(data.get("scheduled_at")).replace("Z", "+00:00"))
+            conflicts = await self._schedule_conflicts(
+                clinician_id, [start], int(data.get("duration_minutes") or 30)
+            )
+            if conflicts:
+                raise _clinician_conflict(conflicts)
 
         clinician_name = await self._get_clinician_name(clinician_id)
         # A clinician offers a slot the patient must accept; a patient booking
@@ -151,6 +224,9 @@ class AppointmentService:
         payload = {
             "patient_id": patient_id,
             "care_team_id": str(data.get("care_team_id")),
+            # The link decides (a trigger enforces it); naming it keeps the insert explicit.
+            "clinic_id": care_team.get("clinic_id"),
+            "clinician_id": clinician_id,
             "clinician_name": clinician_name,
             "scheduled_at": data.get("scheduled_at"),
             "duration_minutes": data.get("duration_minutes", 30),
@@ -164,7 +240,7 @@ class AppointmentService:
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         if not rows:
             raise ExternalServiceError("Supabase", "Failed to create appointment")
-        return rows[0]
+        return self._tag_clinic(rows[0], care_team)
 
     async def propose_for_user(
         self, *, user_id: UUID, role: str, data: dict[str, Any]
@@ -179,6 +255,7 @@ class AppointmentService:
             raise AuthorizationError(
                 "Clinicians can only propose for assigned patients",
                 reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
+                clinic_id=_clinic_ref(care_team),
             )
         slots = [datetime.fromisoformat(value) for value in data["slots"]]
         if any(slot <= datetime.now(UTC) for slot in slots):
@@ -198,7 +275,53 @@ class AppointmentService:
         rows = result.get("appointments")
         if not isinstance(rows, list) or not rows:
             raise ExternalServiceError("Supabase", "Appointment offer could not be saved")
-        return [row for row in rows if isinstance(row, dict)]
+        return [self._tag_clinic(row, care_team) for row in rows if isinstance(row, dict)]
+
+    async def _schedule_conflicts(
+        self, clinician_id: str, slots: list[datetime], duration_minutes: int
+    ) -> list[dict[str, Any]]:
+        """Booked visits of this clinician, at any clinic, that overlap a proposed slot.
+
+        Intervals are ``[start, end)``: back-to-back visits do not conflict. Only the clinic and
+        the interval of the visit in the way are read; no patient is.
+        """
+        found: list[dict[str, Any]] = []
+        for slot in sorted(slots):
+            end = slot + timedelta(minutes=duration_minutes)
+            result = await self._execute(
+                self.db.table("appointments")
+                .select("scheduled_at, duration_minutes, clinic_id, clinics(display_name)")
+                .eq("clinician_id", clinician_id)
+                .in_("status", ["confirmed", "scheduled"])
+                .gte("scheduled_at", (slot - timedelta(minutes=480)).isoformat())
+                .lt("scheduled_at", end.isoformat())
+                .order("scheduled_at")
+            )
+            for booked in (row for row in (result.data or []) if isinstance(row, dict)):
+                begins = datetime.fromisoformat(str(booked["scheduled_at"]).replace("Z", "+00:00"))
+                finishes = begins + timedelta(minutes=int(booked.get("duration_minutes") or 30))
+                if begins < end and slot < finishes:
+                    clinic = booked.get("clinics")
+                    found.append(
+                        {
+                            "slot": slot.isoformat(),
+                            "clinic_id": booked.get("clinic_id"),
+                            "clinic_name": clinic.get("display_name")
+                            if isinstance(clinic, dict)
+                            else None,
+                            "starts_at": begins.isoformat(),
+                            "ends_at": finishes.isoformat(),
+                        }
+                    )
+                    break
+        return found
+
+    @staticmethod
+    def _tag_clinic(row: dict[str, Any], care_team: dict[str, Any]) -> dict[str, Any]:
+        """The clinic name of the link the appointment was made under (read-only in the portal)."""
+        clinic = care_team.get("clinics")
+        row["clinic_name"] = clinic.get("display_name") if isinstance(clinic, dict) else None
+        return row
 
     async def _appointment_rpc(self, name: str, params: dict[str, Any]) -> dict[str, Any]:
         result = await self._execute(self.db.rpc(name, params))
@@ -213,6 +336,9 @@ class AppointmentService:
             )
         if error == "not_found":
             raise NotFoundError("Appointment offer", "unavailable")
+        if error == "clinician_conflict":
+            conflicts = data.get("conflicts")
+            raise _clinician_conflict(conflicts if isinstance(conflicts, list) else [])
         if error in _BOOKING_ERRORS:
             raise _booking_error(error)
         if error:
@@ -261,7 +387,9 @@ class AppointmentService:
                 "p_note": note,
             },
         )
-        return dict(offer_result["appointment"])
+        response = dict(offer_result["appointment"])
+        response["clinic_name"] = appointment.get("clinic_name")
+        return response
 
     async def update_for_user(
         self,
@@ -293,6 +421,7 @@ class AppointmentService:
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         if not rows:
             raise ExternalServiceError("Supabase", "Failed to update appointment")
+        rows[0]["clinic_name"] = existing.get("clinic_name")
         return rows[0]
 
     async def _ensure_can_access(
@@ -323,7 +452,7 @@ class AppointmentService:
     async def _get_care_team(self, care_team_id: str) -> dict[str, Any]:
         result = await self._execute(
             self.db.table("care_teams")
-            .select("id, patient_id, clinician_id, status")
+            .select("id, patient_id, clinician_id, clinic_id, status, clinics(display_name)")
             .eq("id", care_team_id)
             .eq("status", "active")
             .limit(1)
@@ -335,12 +464,12 @@ class AppointmentService:
 
     async def _get_appointment(self, appointment_id: str) -> dict[str, Any]:
         result = await self._execute(
-            self.db.table("appointments").select("*").eq("id", appointment_id).limit(1)
+            self.db.table("appointments").select(_WITH_CLINIC).eq("id", appointment_id).limit(1)
         )
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         if not rows:
             raise NotFoundError("Appointment", appointment_id)
-        return rows[0]
+        return _flatten_clinic(rows[0])
 
     async def _get_clinician_name(self, clinician_id: str) -> str | None:
         result = await self._execute(

@@ -93,6 +93,8 @@ def render_email(
     audience: Audience,
     locale: str = "en-US",
     note: str = "",
+    clinic: str = "",
+    clinic_in_subject: bool = True,
 ) -> EmailContent:
     url = urlsplit(action_url)
     if url.scheme not in {"https", "http"} or not url.netloc or url.username or url.password:
@@ -122,6 +124,17 @@ def render_email(
         for p in paragraphs
     )
     safe_url = escape(action_url, quote=True)
+    # CLN-003 slice F: a person with several clinics must see which one this is from. The clinic
+    # leads the subject ("<Clinic> · …") and sits on its own line under the brand; one clinic
+    # means no clinic line, so existing mail is unchanged.
+    clinic = " ".join(clinic.split())
+    title = f"{clinic} · {subject}" if clinic and clinic_in_subject else subject
+    clinic_row = (
+        f'<tr><td class="body" style="padding:0 8px 14px;color:{brand.muted};font-size:14px;'
+        f'line-height:20px;font-weight:bold">{escape(clinic)}</td></tr>'
+        if clinic
+        else ""
+    )
     note_html = (
         f'<p class="note" style="padding:14px 16px;border-radius:12px;{brand.note};font-size:14px;line-height:21px">{escape(note)}</p>'
         if note
@@ -130,7 +143,7 @@ def render_email(
     html = f'''<!doctype html><html lang="{"es-MX" if spanish else "en-US"}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
-<meta name="x-apple-disable-message-reformatting"><title>{escape(subject)}</title>
+<meta name="x-apple-disable-message-reformatting"><title>{escape(title)}</title>
 <style>@media(max-width:620px){{.px{{padding:24px 22px!important}}.h1{{font-size:26px!important;line-height:32px!important}}}}
 @media(prefers-color-scheme:dark){{{brand.dark}}}</style></head>
 <body class="bg" style="margin:0;background:{brand.canvas};font-family:Arial,Helvetica,sans-serif">
@@ -138,7 +151,7 @@ def render_email(
 <!--[if mso]><table role="presentation" width="600"><tr><td><![endif]-->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
 {brand.header}
-<tr><td class="card px" bgcolor="{brand.card}" style="padding:36px 40px 28px;background:{brand.card};border:1px solid {brand.border};border-radius:20px">
+{clinic_row}<tr><td class="card px" bgcolor="{brand.card}" style="padding:36px 40px 28px;background:{brand.card};border:1px solid {brand.border};border-radius:20px">
 <h1 class="h1 ink" style="margin:0 0 18px;color:{brand.ink};font-size:30px;line-height:36px">{escape(subject)}</h1>{body}{note_html}
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 0"><tr><td bgcolor="{brand.action}" style="border-radius:12px;background:{brand.action}">
 <a href="{safe_url}" style="display:block;padding:15px 28px;font-size:16px;line-height:20px;font-weight:bold;color:#fff;text-decoration:none;border-radius:12px">{escape(action_label)}</a></td></tr></table></td></tr>
@@ -146,7 +159,7 @@ def render_email(
 <!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>'''
     text = "\n\n".join(
         [
-            subject,
+            title,
             *paragraphs,
             *([note] if note else []),
             f"{action_label}: {action_url}",
@@ -154,7 +167,7 @@ def render_email(
             prototype,
         ]
     )
-    return EmailContent(subject=" ".join(subject.split()), html=html, text=text)
+    return EmailContent(subject=" ".join(title.split()), html=html, text=text)
 
 
 def verification_email(
