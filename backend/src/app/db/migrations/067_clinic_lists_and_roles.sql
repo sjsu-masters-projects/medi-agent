@@ -292,6 +292,16 @@ BEGIN
     RETURN jsonb_build_object('id', v_member, 'role', v_role, 'clinic_id', cl.id);
   END IF;
   UPDATE public.clinic_memberships SET status = 'inactive' WHERE id = m.id;
+  -- Removal ends the member's access like leaving does: their own links and unused invite codes
+  -- at this clinic end, each audited with the admin as actor. Other clinicians' links and the
+  -- member's links at other clinics are untouched.
+  FOR v_link IN SELECT id, patient_id FROM public.care_teams
+                 WHERE clinician_id = v_member AND clinic_id = cl.id
+                   AND status IN ('active', 'pending') ORDER BY id FOR UPDATE LOOP
+    UPDATE public.care_teams SET status = 'inactive' WHERE id = v_link.id;
+    PERFORM private.clinic_audit(p_actor, cl.id, 'care_link_ended', 'care_team', v_link.id);
+    IF v_link.patient_id IS NOT NULL THEN v_ended := v_ended + 1; END IF;
+  END LOOP;
   IF t.clinic_id = cl.id THEN
     -- The earliest remaining clinic becomes the default (role and name from its membership,
     -- by the trigger above), or there is none.
@@ -309,7 +319,7 @@ BEGIN
     END IF;
   END IF;
   PERFORM private.clinic_audit(p_actor, cl.id, 'member_removed', 'clinician', v_member, m.role);
-  RETURN jsonb_build_object('id', v_member, 'status', 'removed', 'clinic_id', cl.id);
+  RETURN jsonb_build_object('id', v_member, 'status', 'removed', 'clinic_id', cl.id, 'links_ended', v_ended);
 END;
 $$;
 

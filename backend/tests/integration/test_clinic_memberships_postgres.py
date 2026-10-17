@@ -1024,6 +1024,35 @@ def test_leaving_ends_the_membership_and_only_the_callers_links_there(sql):
     )
 
 
+def test_removal_ends_the_removed_members_links_at_that_clinic_only(sql):
+    two_clinics(sql)
+    admin = new_clinician(sql, clinic=CLINIC, role="admin")
+    mine = link(sql, CLINICIAN, patient=FOREIGN, clinic=CLINIC)
+    elsewhere = link(sql, CLINICIAN, patient=PATIENT, clinic=SECOND_CLINIC)
+    colleague = link(sql, OTHER, patient=FOREIGN, clinic=CLINIC)
+    pending = str(uuid4())
+    sql(
+        f"""INSERT INTO care_teams(id,clinician_id,role,status,invite_code,clinic_id)
+      VALUES('{pending}','{CLINICIAN}','provider','pending','REMOVE001','{CLINIC}');"""
+    )
+
+    removed = staff_op(sql, admin, "remove_member", CLINIC, CLINICIAN)
+
+    assert removed["status"] == "removed" and removed["links_ended"] >= 1
+    status = lambda team: sql(f"SELECT status FROM care_teams WHERE id='{team}'")  # noqa: E731
+    assert (status(mine), status(pending)) == ("inactive", "inactive")
+    assert status(elsewhere) == "active" and status(colleague) == "active"
+    # The removed member's roster is what they still hold at their other clinic.
+    roster = sql(
+        f"SELECT string_agg(patient_id::text, ',') FROM care_teams WHERE clinician_id='{CLINICIAN}' "
+        "AND status='active' AND patient_id IS NOT NULL"
+    )
+    assert roster == PATIENT
+    ended = [a for a in audit_full(sql, mine) + audit_full(sql, pending) if a[2] == "care_link_ended"]
+    assert [a[0] for a in ended] == [admin, admin]
+    assert audit_full(sql, CLINICIAN)[-1][2] == "member_removed"
+
+
 def test_leaving_the_default_clinic_moves_the_default(sql):
     two_clinics(sql)
 

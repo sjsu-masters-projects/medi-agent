@@ -101,9 +101,8 @@ buttons: **Make default** (changes only which clinic is preselected; nothing end
 Leave opens a confirm dialog that says the clinician's patient links and unused invite codes at
 that clinic will end (nothing is deleted); the confirm button is destructive. Leave is disabled with
 a reason for the last clinic ("This is your only clinic.") and for the only admin of a clinic
-("You're the only admin here."). Clinic name editing (Clinic Profile) and the staff role-change and
-removal actions show only to an admin at the picked clinic. The Clinic picker also appears on
-General Profile, because that tab shows the picked clinic's profile.
+("You're the only admin here."). Clinic name editing (an Edit name button on the admin's row) and the staff role-change and
+removal actions show only to an admin at the picked clinic.
 
 ### Clinician MFA
 

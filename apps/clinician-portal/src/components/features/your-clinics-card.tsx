@@ -8,6 +8,7 @@ import {
     clinicErrorMessage,
     fetchMyClinics,
     leaveClinic,
+    renameClinic,
     setDefaultClinic,
     withClinic,
     type ClinicMembershipSummary,
@@ -43,6 +44,8 @@ export function YourClinicsCard({ onChanged, revision = 0, token }: YourClinicsC
     const [leaving, setLeaving] = useState<ClinicMembershipSummary | null>(null);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [nameDraft, setNameDraft] = useState("");
 
     const load = useCallback(async () => {
         try {
@@ -91,6 +94,23 @@ export function YourClinicsCard({ onChanged, revision = 0, token }: YourClinicsC
             onChanged();
         } catch (changeError) {
             setError(clinicErrorMessage(changeError, "Could not change your default clinic."));
+        } finally {
+            setBusyId(null);
+        }
+    }
+
+    async function saveName(clinic: ClinicMembershipSummary) {
+        setBusyId(clinic.clinic_id);
+        setError(null);
+        setMessage(null);
+        try {
+            await renameClinic(token, clinic.clinic_id, nameDraft);
+            setRenamingId(null);
+            setMessage("Clinic name updated.");
+            await load();
+            onChanged();
+        } catch (renameError) {
+            setError(clinicErrorMessage(renameError, "Could not update the clinic name."));
         } finally {
             setBusyId(null);
         }
@@ -147,6 +167,29 @@ export function YourClinicsCard({ onChanged, revision = 0, token }: YourClinicsC
                         return (
                             <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5" key={clinic.clinic_id}>
                                 <div className="min-w-0 space-y-1">
+                                    {renamingId === clinic.clinic_id ? (
+                                        <form
+                                            className="flex flex-wrap items-center gap-2"
+                                            onSubmit={(event) => {
+                                                event.preventDefault();
+                                                void saveName(clinic);
+                                            }}
+                                        >
+                                            <input
+                                                aria-label="Clinic name"
+                                                className="h-[34px] w-64 max-w-full rounded-[9px] border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]"
+                                                maxLength={120}
+                                                onChange={(event) => setNameDraft(event.target.value)}
+                                                value={nameDraft}
+                                            />
+                                            <Button disabled={busyId !== null || nameDraft.trim().length < 2} size="sm" type="submit">
+                                                Save
+                                            </Button>
+                                            <Button disabled={busyId !== null} onClick={() => setRenamingId(null)} size="sm" variant="ghost">
+                                                Cancel
+                                            </Button>
+                                        </form>
+                                    ) : null}
                                     <div className="flex flex-wrap items-center gap-2">
                                         <p className="min-w-0 break-words text-sm font-semibold text-ink">{clinic.clinic_name}</p>
                                         <span className="inline-flex items-center rounded-[7px] bg-[rgba(100,116,139,.1)] px-2 py-0.5 text-xs font-medium text-ink-2">
@@ -166,6 +209,20 @@ export function YourClinicsCard({ onChanged, revision = 0, token }: YourClinicsC
                                     {leaveReason ? <p className="text-xs text-muted">{leaveReason}</p> : null}
                                 </div>
                                 <div className="flex items-center gap-1.5">
+                                    {isAdmin && renamingId !== clinic.clinic_id ? (
+                                        <Button
+                                            aria-label={`Edit name of ${clinic.clinic_name}`}
+                                            disabled={busyId !== null}
+                                            onClick={() => {
+                                                setNameDraft(clinic.clinic_name);
+                                                setRenamingId(clinic.clinic_id);
+                                            }}
+                                            size="sm"
+                                            variant="ghost"
+                                        >
+                                            Edit name
+                                        </Button>
+                                    ) : null}
                                     {isDefault ? null : (
                                         <Button
                                             aria-label={`Make ${clinic.clinic_name} your default clinic`}

@@ -375,9 +375,7 @@ the settings and history UI.
   email to the address.
 - Slice C and D: Leave ends the clinician's own links and unused invite codes at the clinic, but
   there is no hand-off tool: reviews, drafts and appointments they held for those patients leave
-  their lists and nobody else is assigned. A clinic admin who removes a member (slice B) still
-  leaves that member's links active; making removal end the links the way Leave does is a
-  follow-up. Rejoining a clinic after leaving needs new patient links (a patient who held an
+  their lists and nobody else is assigned. Rejoining a clinic after leaving or removal needs new patient links (a patient who held an
   ended link to the same clinician and clinic cannot claim a second code for that triple).
 - Slice C: the Alerts page and the bell filter the already-loaded notification items in the
   browser; the server-side notification filter exists for other clients. The notification summary
@@ -473,6 +471,7 @@ user belongs to several clinics) and the new actions below. No 057/058 function 
 | Action | Rule | Audit event |
 | --- | --- | --- |
 | `set_default` | the caller holds an active membership at an active clinic; changes only `clinicians.clinic_id` (role and name follow the membership, by the 066 trigger) | `default_clinic_changed` |
+| `remove_member` (changed) | as in 066, and the removed member's own links and unused invite codes at that clinic end too (`care_link_ended` per row, actor = the admin, then `member_removed`) | see 066 |
 | `leave` | the caller leaves one clinic. Refused for the caller's last active clinic (`last_clinic`) and for the sole active admin of the clinic (`sole_admin`). Deactivates the membership; moves the default to the earliest remaining clinic when it was the default | `member_left`, plus one `care_link_ended` per care-team row ended |
 | `update_clinic` | admin at that clinic only; changes `clinics.display_name` and `canonical_name` (unique, `clinic_name_taken`) and the legacy `clinicians.clinic_name` of members whose default is that clinic | `clinic_renamed` |
 
@@ -513,12 +512,12 @@ buttons carry the reason.
 
 ### Staff, invitations and history in the portal
 
-- Settings -> Clinic section: with several clinics a "Clinic" select picks which one the staff
+- Settings -> Team & Roles and Patient Invites: with several clinics a "Clinic" select picks which one the staff
   list, clinic code, invitation history and patient invite-code history show (the history calls
   pass `clinic_id`). With one clinic nothing changes.
 - Staff role-change and remove actions render only when the caller is an admin **at the picked
   clinic** (the UX-003 remainder: non-admins used to see actions the server then rejected).
-- Clinic name editing: an admin sees "Edit clinic name" in that clinic's section;
+- Clinic name editing: an admin sees "Edit name" on that clinic's row in "Your clinics";
   `PUT /api/v1/clinicians/me/clinics/{clinic_id}` with `display_name`.
 - "Your clinics" card on Settings -> General Profile: one row per active clinic with name, role chip,
   a "Default" badge, the clinic code and Copy button for admins, and two text buttons, "Make

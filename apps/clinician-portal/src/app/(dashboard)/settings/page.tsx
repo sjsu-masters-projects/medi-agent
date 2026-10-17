@@ -10,7 +10,6 @@ import {
     clinicErrorMessage,
     fetchMyClinics,
     isClinicRequiredError,
-    renameClinic,
     withClinic,
     type ClinicMembershipSummary,
 } from "@/services/clinics";
@@ -198,9 +197,6 @@ export default function SettingsPage() {
     const [clinicsReady, setClinicsReady] = useState(false);
     const [clinicRequired, setClinicRequired] = useState(false);
     const [clinicsRevision, setClinicsRevision] = useState(0);
-    const [renaming, setRenaming] = useState(false);
-    const [clinicNameDraft, setClinicNameDraft] = useState("");
-    const [clinicNameSaving, setClinicNameSaving] = useState(false);
     // Staff invitations are admin-only on the server. The right is the role held at the chosen
     // clinic; the profile role is only a fallback when the clinic list could not be loaded.
     const roleAtClinic = clinics.length > 0
@@ -468,6 +464,17 @@ export default function SettingsPage() {
             return;
         }
 
+        const member = staffList.find((entry) => entry.id === memberId);
+        if (typeof window !== "undefined" && member) {
+            const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
+            const confirmed = window.confirm(
+                `Remove ${fullName} from ${clinicName || "this clinic"}? Their patient links at ${clinicName || "this clinic"} end; patients keep their other care-team members.`,
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
+
         setError(null);
         try {
             await api.delete(withClinic(`/api/v1/staff/${memberId}`, clinicId), { token });
@@ -506,24 +513,6 @@ export default function SettingsPage() {
             setError((e as Error).message);
         } finally {
             setProfileSaving(false);
-        }
-    }
-
-    async function handleSaveClinicName() {
-        if (!token || !clinicId) {
-            return;
-        }
-        setClinicNameSaving(true);
-        setError(null);
-        try {
-            await renameClinic(token, clinicId, clinicNameDraft);
-            setRenaming(false);
-            setInviteStatus("Clinic name updated");
-            setClinicsRevision((value) => value + 1);
-        } catch (e) {
-            setError(clinicErrorMessage(e, "Could not update the clinic name."));
-        } finally {
-            setClinicNameSaving(false);
         }
     }
 
@@ -567,7 +556,7 @@ export default function SettingsPage() {
                 ))}
             </div>
 
-            {activeTab === "General Profile" || activeTab === "Team & Roles" || activeTab === "Patient Invites" ? (
+            {activeTab === "Team & Roles" || activeTab === "Patient Invites" ? (
                 <ClinicPicker clinics={clinics} onChange={setClinicId} required={clinicRequired} value={clinicId} />
             ) : null}
 
@@ -610,47 +599,9 @@ export default function SettingsPage() {
                                     <h3 className="text-[15px] font-semibold text-ink">Clinic Profile</h3>
                                 </CardHeader>
                                 <div className="divide-y divide-line">
-                                    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-4">
                                         <p className="text-[13px] text-muted">Clinic Name</p>
-                                        {renaming ? (
-                                            <form
-                                                className="flex flex-wrap items-center gap-2"
-                                                onSubmit={(event) => {
-                                                    event.preventDefault();
-                                                    void handleSaveClinicName();
-                                                }}
-                                            >
-                                                <input
-                                                    aria-label="Clinic name"
-                                                    className="h-[34px] w-64 max-w-full rounded-[9px] border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]"
-                                                    maxLength={120}
-                                                    onChange={(event) => setClinicNameDraft(event.target.value)}
-                                                    value={clinicNameDraft}
-                                                />
-                                                <Button disabled={clinicNameSaving || clinicNameDraft.trim().length < 2} size="sm" type="submit">
-                                                    {clinicNameSaving ? "Saving…" : "Save"}
-                                                </Button>
-                                                <Button disabled={clinicNameSaving} onClick={() => setRenaming(false)} size="sm" variant="ghost">
-                                                    Cancel
-                                                </Button>
-                                            </form>
-                                        ) : (
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm font-medium text-ink">{clinicName || "—"}</p>
-                                                {isClinicAdmin && clinicId ? (
-                                                    <Button
-                                                        onClick={() => {
-                                                            setClinicNameDraft(clinicName);
-                                                            setRenaming(true);
-                                                        }}
-                                                        size="sm"
-                                                        variant="ghost"
-                                                    >
-                                                        Edit
-                                                    </Button>
-                                                ) : null}
-                                            </div>
-                                        )}
+                                        <p className="text-sm font-medium text-ink">{clinicName || "—"}</p>
                                     </div>
                                     <div className="space-y-2 px-5 py-4">
                                         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">

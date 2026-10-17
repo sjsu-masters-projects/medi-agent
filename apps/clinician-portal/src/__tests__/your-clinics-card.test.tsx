@@ -41,6 +41,24 @@ describe("Your clinics card", () => {
         expect(within(bay).queryByText("BBB222")).not.toBeInTheDocument();
     });
 
+    it("lets only that clinic's admin edit its name", async () => {
+        mockAccount([clinicA, clinicB], "clinic-a", 2);
+        mocks.put.mockResolvedValue({ clinic_id: "clinic-a", clinic_name: "City Health Group" });
+        render(<YourClinicsCard onChanged={vi.fn()} token="session" />);
+        await screen.findByText("City Health");
+        expect(screen.queryByRole("button", { name: "Edit name of Bay Clinic" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Edit name of City Health" }));
+        fireEvent.change(screen.getByLabelText("Clinic name"), { target: { value: "City Health Group" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        await waitFor(() =>
+            expect(mocks.put).toHaveBeenCalledWith(
+                "/api/v1/clinicians/me/clinics/clinic-a",
+                { display_name: "City Health Group" },
+                { token: "session" },
+            ),
+        );
+    });
+
     it("makes another clinic the default without leaving anything", async () => {
         mockAccount([clinicA, clinicB], "clinic-a", 2);
         mocks.put.mockResolvedValue({ clinic_id: "clinic-b", default_clinic_id: "clinic-b", role: "provider" });
