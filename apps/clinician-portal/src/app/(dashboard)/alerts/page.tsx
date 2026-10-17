@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { ClinicFilterField } from "@/components/features/clinic-chip";
 import { NotificationList } from "@/components/features/notification-centre";
 import { useNotificationCentre } from "@/components/features/notification-provider";
+import { useClinicFilter } from "@/hooks/use-clinic-filter";
 
-export default function AlertsPage() {
+function AlertsContent() {
+  const clinicFilter = useClinicFilter();
   const [view, setView] = useState<"actions" | "history">("actions");
   const { summary } = useNotificationCentre();
   return <div className="ma-page space-y-5">
@@ -18,7 +21,12 @@ export default function AlertsPage() {
     <div role="group" aria-label="Alerts views" className="inline-flex flex-wrap gap-1 rounded-lg border border-line bg-surface-2 p-1">
       {(["actions", "history"] as const).map((value) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={`min-h-9 rounded-md px-4 text-sm ${view === value ? "bg-surface font-medium text-ink shadow-sm" : "text-muted"}`}>{value === "actions" ? "Needs attention" : "History"}</button>)}
     </div>
-    <NotificationList key={view} actions={view === "actions"} />
+    {clinicFilter.multi ? <div className="flex justify-end"><ClinicFilterField filter={clinicFilter} /></div> : null}
+    <NotificationList key={view} actions={view === "actions"} clinicFilter={clinicFilter} />
 
   </div>;
+}
+
+export default function AlertsPage() {
+  return <Suspense fallback={<p role="status">Loading alerts…</p>}><AlertsContent /></Suspense>;
 }

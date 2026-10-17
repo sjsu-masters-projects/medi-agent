@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
+import { ClinicChip } from "@/components/features/clinic-chip";
 import { fetchAllSentMessages } from "@/services/clinicians";
 import type { ClinicianMessageInboxItem } from "@/services/clinicians";
 
@@ -32,7 +33,7 @@ function shortDate(iso: string): { short: string; full: string } {
  * One-way messages and system escalation notices saved before two-way conversations.
  * History only: nothing here is active work, and old urgency labels create no alerts.
  */
-export function EarlierMessages() {
+export function EarlierMessages({ clinicId = null, showClinic = false }: { clinicId?: string | null; showClinic?: boolean }) {
     const [messages, setMessages] = useState<ClinicianMessageInboxItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -41,13 +42,13 @@ export function EarlierMessages() {
         setLoading(true);
         setError(null);
         try {
-            setMessages(await fetchAllSentMessages());
+            setMessages(await fetchAllSentMessages(clinicId));
         } catch (loadError) {
             setError(loadError instanceof Error ? loadError.message : "Unable to load messages.");
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [clinicId]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -97,7 +98,7 @@ export function EarlierMessages() {
                                     </span>
                                     <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                                         <div className="flex items-start gap-2">
-                                            <p className="min-w-0 flex-1 text-sm font-semibold text-ink">{patientName(msg)}</p>
+                                            <p className="min-w-0 flex-1 text-sm font-semibold text-ink">{patientName(msg)}{showClinic && msg.clinicName ? <> <ClinicChip name={msg.clinicName} /></> : null}</p>
                                             <time dateTime={msg.createdAt} title={date.full} aria-label={date.full} className="shrink-0 font-mono text-xs text-muted">{date.short}</time>
                                         </div>
                                         {urgency ? (

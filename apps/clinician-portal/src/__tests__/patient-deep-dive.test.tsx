@@ -19,6 +19,7 @@ import type { SymptomReport } from "@/types";
 // ── Minimal recharts mock ────────────────────────────────────────────────────
 // Keep actual chart composition intact; only bypass container measurement.
 
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("recharts", async () => {
     const actual = await vi.importActual<typeof import("recharts")>("recharts");
     return {

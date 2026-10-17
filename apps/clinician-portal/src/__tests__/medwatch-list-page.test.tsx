@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MedWatchPage from "@/app/(dashboard)/medwatch/page";
+import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
 import { approvedDraft, makeDraft, submittedDraft } from "./fixtures/medwatch";
 
 const mocks = vi.hoisted(() => ({ fetchMedWatchDrafts: vi.fn(), replace: vi.fn() }));
 const query = vi.hoisted(() => ({ value: "" }));
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace: mocks.replace, push: vi.fn() }),
     useSearchParams: () => new URLSearchParams(query.value),
@@ -40,6 +42,29 @@ describe("MedWatch reports list", () => {
         mocks.fetchMedWatchDrafts.mockImplementation(async (state: string) => draftsFor(state));
         query.value = "";
         window.history.replaceState(null, "", "/medwatch");
+    });
+
+    it("tags reports with the clinic and filters by clinic only with several clinics", async () => {
+        mocks.fetchMedWatchDrafts.mockImplementation(async (state: string) =>
+            state === "active" ? [makeDraft({ clinicName: "Bay Clinic", clinicId: "clinic-b" })] : [],
+        );
+        resetClinicFilter();
+        const { unmount } = render(<MedWatchPage />);
+        await screen.findByRole("list", { name: "Drafts reports" });
+        expect(screen.queryByText("Bay Clinic")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+        unmount();
+
+        clinicFilterState.clinics = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        clinicFilterState.clinicId = "clinic-b";
+        render(<MedWatchPage />);
+        await screen.findByRole("list", { name: "Drafts reports" });
+        expect(screen.getAllByText("Bay Clinic", { selector: "span" }).length).toBeGreaterThan(0);
+        expect(mocks.fetchMedWatchDrafts).toHaveBeenCalledWith("active", "clinic-b");
+        resetClinicFilter();
     });
 
     it("tabs split active drafts from approved, submitted and discarded reports with counts", async () => {

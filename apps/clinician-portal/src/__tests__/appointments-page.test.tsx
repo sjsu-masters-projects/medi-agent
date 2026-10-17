@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   state: { auth: { accessToken: "clinician-token" as string | null } },
   query: "",
 }));
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(mocks.query) }));
 vi.mock("react-redux", () => ({
   useSelector: (selector: (state: typeof mocks.state) => unknown) =>
@@ -351,7 +352,7 @@ describe("clinician appointments page", () => {
     );
     expect(screen.queryByRole("form")).not.toBeInTheDocument();
     expect(screen.queryByText("Maya Patel")).not.toBeInTheDocument();
-    expect(mocks.patients).toHaveBeenLastCalledWith("new-token");
+    expect(mocks.patients).toHaveBeenLastCalledWith("new-token", null);
   });
   it("ignores a late profile response after switching patients", async () => {
     const pending = deferred<{ timezone: string }>();

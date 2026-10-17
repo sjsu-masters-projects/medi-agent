@@ -131,7 +131,9 @@ export function ListToolbar({
     sort,
     sortOptions,
     onSort,
+    extra,
 }: {
+    extra?: ReactNode;
     searchLabel: string;
     searchPlaceholder: string;
     search: string;
@@ -158,19 +160,22 @@ export function ListToolbar({
                     value={search}
                 />
             </label>
-            <CompactField className="self-start sm:self-auto" label={sortLabel}>
-                <select
-                    className={compactSelectClass}
-                    onChange={(event) => onSort(event.target.value)}
-                    value={sort}
-                >
-                    {sortOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
-            </CompactField>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                {extra}
+                <CompactField label={sortLabel}>
+                    <select
+                        className={compactSelectClass}
+                        onChange={(event) => onSort(event.target.value)}
+                        value={sort}
+                    >
+                        {sortOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </CompactField>
+            </div>
         </div>
     );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { LinkedAt } from "@/components/features/clinic-chip";
+import { useClinicMemberships } from "@/hooks/use-clinic-filter";
 import { Suspense, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
@@ -132,6 +134,7 @@ function formatReminderSchedule(
 function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string; enabled: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { clinics } = useClinicMemberships();
     const hasMounted = useSyncExternalStore(
         () => () => undefined,
         () => true,
@@ -234,6 +237,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                             </h1>
                             <RiskBadge level={patient.risk_level} />
                         </div>
+                        <LinkedAt name={clinics.length >= 2 ? patient.clinic_name : null} />
                         <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-[13px] text-muted">
                             {patient.date_of_birth ? <span>DOB {patient.date_of_birth}</span> : null}
                             {patient.date_of_birth ? <span aria-hidden="true">·</span> : null}

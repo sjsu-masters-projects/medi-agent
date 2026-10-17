@@ -9,6 +9,7 @@ import { ApiClientError } from "@/services/api";
 import type { CentreItem, CentrePage } from "@/types/notification-centre";
 
 const auth = vi.hoisted(() => ({ user: { id: "synthetic-clinician" } as { id: string } | null, accessToken: "token-one" as string | null }));
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("react-redux", () => ({ useSelector: (select: (state: unknown) => unknown) => select({ auth }) }));
 vi.mock("@/services/notification-centre", () => ({
   notificationCentre: { list: vi.fn(), summary: vi.fn(), read: vi.fn(), readThrough: vi.fn(), acknowledge: vi.fn() },

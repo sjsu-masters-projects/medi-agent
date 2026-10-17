@@ -65,9 +65,45 @@ and the clinic code shown in Settings belong to one clinic. The portal sends `cl
 automatically for a clinician with one clinic. With several, the server answers
 `CLINIC_REQUIRED` and Settings shows a small **Clinic for this page** picker (component
 `src/components/features/clinic-picker.tsx`); the choice applies only to those sections. Admin
-controls follow the role held at the chosen clinic, not a profile-wide role. Error copy for
+controls (invitations, staff role changes and removal, clinic name) follow the role held at the
+chosen clinic, not a profile-wide role. Error copy for
 `CLINIC_REQUIRED`, `ACCOUNT_EXISTS`, `MEMBERSHIP_INACTIVE`, `NO_ACTIVE_CLINIC`,
 `SIGN_IN_TO_ACCEPT` and the clinic-code errors lives in `src/services/clinics.ts`.
+
+### Clinic chips and the Clinic filter (CLN-003 slice C)
+
+Patient lists (Patient roster, Risk Radar, Patient Upload Review Queue, ADR Reviews, MedWatch,
+Messages, Appointments, Alerts) and the patient header show **which clinic a patient is linked at**,
+but only for a clinician with two or more clinics. A single-clinic clinician sees no chip, no
+filter and no new request parameter.
+
+- **Chip:** `ClinicChip` in `src/components/features/clinic-chip.tsx`: a small neutral pill (11 px,
+  medium weight, `bg-surface-2 text-ink-2 border-line`) with the clinic name, truncated with a
+  `title` tooltip. The same tone for every clinic; the meaning is the text. It follows the patient
+  name on wide rows and sits on a second line at 390 px. The patient header says "Linked at
+  &lt;clinic&gt;" (`LinkedAt`).
+- **Filter:** `ClinicFilterField`, a labelled **Clinic** select (All clinics first, then each active
+  clinic) on the right of the existing toolbar, never a tab row. State is the URL query parameter
+  `clinic` (default All clinics), so it survives reload and back navigation. Hook:
+  `src/hooks/use-clinic-filter.ts` (`useClinicFilter`; `useResolvedClinicFilter` for the work lists
+  that keep their own URL state). The portal sends `clinic_id` to the list endpoint only after a
+  clinic is picked; the server answers an empty list for a clinic the clinician does not belong to.
+- **Empty filtered list:** "No patients at &lt;clinic&gt; match" with a **Show all clinics** text button.
+- Messages filter the conversation list on the server; Alerts filter the loaded items by
+  `clinic_id` (the notification cache is shared with the bell, so it is not refetched per clinic).
+
+### Your clinics, default clinic and leaving (CLN-003 slice D)
+
+Settings -> General Profile has a **Your clinics** card
+(`src/components/features/your-clinics-card.tsx`): one row per clinic with the name, a role chip, a
+**Default** badge, and, for admins, the clinic code with the Copy button. Row actions are two text
+buttons: **Make default** (changes only which clinic is preselected; nothing ends) and **Leave**.
+Leave opens a confirm dialog that says the clinician's patient links and unused invite codes at
+that clinic will end (nothing is deleted); the confirm button is destructive. Leave is disabled with
+a reason for the last clinic ("This is your only clinic.") and for the only admin of a clinic
+("You're the only admin here."). Clinic name editing (Clinic Profile) and the staff role-change and
+removal actions show only to an admin at the picked clinic. The Clinic picker also appears on
+General Profile, because that tab shows the picked clinic's profile.
 
 ### Clinician MFA
 

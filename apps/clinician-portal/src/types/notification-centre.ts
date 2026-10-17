@@ -14,6 +14,7 @@ export interface CentreItem {
   can_acknowledge: boolean;
   patient_name?: string | null;
   clinic_name?: string | null;
+  clinic_id?: string | null;
 }
 
 export interface CentrePage {

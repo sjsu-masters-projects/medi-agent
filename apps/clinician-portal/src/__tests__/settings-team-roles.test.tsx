@@ -106,6 +106,51 @@ describe("Settings team and roles", () => {
             });
         }
 
+        it("shows staff role and removal actions only to an admin at the picked clinic", async () => {
+            mockClinics([clinicA, clinicB], "admin", "clinic-a");
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            await screen.findByText("Active Staff (2)");
+            // Admin at City Health: actions on the other member.
+            expect(screen.getByRole("button", { name: "Actions for Ada Admin" })).toBeInTheDocument();
+
+            // Provider at Bay Clinic: the server would refuse them, so they are not offered.
+            fireEvent.change(screen.getByLabelText("Clinic"), { target: { value: "clinic-b" } });
+            await screen.findByRole("note");
+            expect(screen.queryByRole("button", { name: /^Actions for/ })).not.toBeInTheDocument();
+            expect(screen.getByText("admin@example.com")).toBeInTheDocument();
+        });
+
+        it("hides staff actions from a provider who is the only clinic's member", async () => {
+            mockClinics([{ ...clinicA, role: "provider" }], "provider");
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            await screen.findByText("Active Staff (2)");
+            expect(screen.queryByRole("button", { name: /^Actions for/ })).not.toBeInTheDocument();
+        });
+
+        it("lets only that clinic's admin edit its name", async () => {
+            mockClinics([clinicA, clinicB], "admin", "clinic-a");
+            mocks.put.mockResolvedValue({ clinic_id: "clinic-a", clinic_name: "City Health Group" });
+            render(<SettingsPage />);
+            await screen.findByText("ABC123");
+            fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+            fireEvent.change(screen.getByLabelText("Clinic name"), { target: { value: "City Health Group" } });
+            fireEvent.click(screen.getByRole("button", { name: "Save" }));
+            await waitFor(() =>
+                expect(mocks.put).toHaveBeenCalledWith(
+                    "/api/v1/clinicians/me/clinics/clinic-a",
+                    { display_name: "City Health Group" },
+                    { token: "session" },
+                ),
+            );
+
+            // Provider at the other clinic: no edit control.
+            fireEvent.change(screen.getByLabelText("Clinic"), { target: { value: "clinic-b" } });
+            await screen.findByText("Bay Clinic", { selector: "p" });
+            expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+        });
+
         it("sends the only clinic automatically", async () => {
             mockClinics([clinicA]);
             render(<SettingsPage />);
@@ -169,7 +214,8 @@ describe("Settings team and roles", () => {
             mockClinics([clinicA, clinicB], "admin", "clinic-a");
             render(<SettingsPage />);
             await screen.findByRole("button", { name: "Team & Roles" });
-            expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+            // The General Profile tab shows the picked clinic's profile, so it has the picker too.
+            expect(await screen.findByLabelText("Clinic")).toBeInTheDocument();
             fireEvent.click(screen.getByRole("button", { name: "Patient Invites" }));
             expect(await screen.findByLabelText("Clinic")).toBeInTheDocument();
             fireEvent.click(screen.getByRole("button", { name: "Interoperability" }));

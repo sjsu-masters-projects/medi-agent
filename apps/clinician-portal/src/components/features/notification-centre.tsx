@@ -5,6 +5,8 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Icon, type IconName } from "@/components/ui/icons";
+import { ClinicFilterEmpty } from "@/components/features/clinic-chip";
+import type { ClinicFilter } from "@/hooks/use-clinic-filter";
 import { useNotificationCentre } from "@/components/features/notification-provider";
 import { notificationTarget } from "@/services/notification-centre";
 import type { CentreItem, NotificationCategory } from "@/types/notification-centre";
@@ -88,7 +90,7 @@ function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAc
   </>;
 }
 
-export function NotificationList({ actions = false, compact = false, onNavigate }: { actions?: boolean; compact?: boolean; onNavigate?: () => void }) {
+export function NotificationList({ actions = false, clinicFilter, compact = false, onNavigate }: { actions?: boolean; clinicFilter?: ClinicFilter; compact?: boolean; onNavigate?: () => void }) {
   const centre = useNotificationCentre();
   const [unread, setUnread] = useState(false);
   const [category, setCategory] = useState("");
@@ -97,7 +99,8 @@ export function NotificationList({ actions = false, compact = false, onNavigate 
   const feed = actions ? "actions" : "history";
   const resource = centre[feed];
   const selectedCategory = actions ? centre.actionsCategory : category;
-  const items = resource.data?.items.filter((item) => (!unread || !item.is_read) && (!selectedCategory || item.category === selectedCategory)) ?? [];
+  const clinicId = clinicFilter?.clinicId ?? null;
+  const items = resource.data?.items.filter((item) => (!unread || !item.is_read) && (!selectedCategory || item.category === selectedCategory) && (!clinicId || item.clinic_id === clinicId)) ?? [];
   return <section ref={listRef} aria-label={actions ? "Needs attention" : "Notification history"} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -120,7 +123,7 @@ export function NotificationList({ actions = false, compact = false, onNavigate 
     {!actions && centre.skipped > 0 && <p role="status" className="border-b border-line px-4 py-2 text-sm text-muted">{centre.skipped === 1 ? "1 notification is no longer available and was skipped." : `${centre.skipped} notifications are no longer available and were skipped.`}</p>}
     {acknowledged && <p role="status" className="px-4 py-2 text-sm text-ok-ink">Acknowledgement recorded. Clinical review and resolution remain separate.</p>}
     {!resource.data && !resource.error && <p role="status" className="p-5 text-sm text-muted">Loading alerts…</p>}
-    {resource.data && !items.length && <p className="p-5 text-sm text-muted">{actions ? "No items need attention in this view." : "No notifications in this view."}</p>}
+    {resource.data && !items.length && <p className="p-5 text-sm text-muted">{clinicId && clinicFilter ? <ClinicFilterEmpty filter={clinicFilter} noun="alerts" /> : actions ? "No items need attention in this view." : "No notifications in this view."}</p>}
     {!actions && (category || unread) && <p className="px-4 py-2 text-xs text-muted">Mark all loaded read includes all categories in the loaded pages.{resource.data?.next_cursor ? " Load more to include earlier history." : ""}</p>}
     <NotificationRows items={items} onNavigate={onNavigate} allowAcknowledge={actions} allowRead={!actions} onAcknowledged={() => { setAcknowledged(true); listRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }} />
     {resource.data?.next_cursor && <div className="border-t border-line p-3"><Button variant="secondary" disabled={centre.busy} onClick={() => void centre.more(feed)}>Load more</Button></div>}
