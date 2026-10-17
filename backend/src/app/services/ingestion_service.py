@@ -226,7 +226,7 @@ class IngestionService:
         )
 
         # LOC-003: translate Spanish fact display fields to English at ingestion time.
-        await self._translate_spanish_facts(patient_id, registered)
+        await self._translate_spanish_facts(patient_id, document_id, registered)
 
         # The patient explanation is deliberately not generated here. Ingestion owns the
         # clinical result; the explanation is an optional convenience built afterwards from
@@ -276,7 +276,9 @@ class IngestionService:
         result, invalid_items = parse_model_extraction(self._parse_json(response))
         return result, telemetry.model, invalid_items
 
-    async def _translate_spanish_facts(self, patient_id: UUID, registered: Any) -> None:
+    async def _translate_spanish_facts(
+        self, patient_id: UUID, document_id: UUID, registered: Any
+    ) -> None:
         """LOC-003: Write English display fields for facts extracted from Spanish documents."""
         from app.services.fact_display_translation import (
             is_spanish_fact,
@@ -286,18 +288,16 @@ class IngestionService:
         if not getattr(registered, "created", 0):
             return
         try:
-            facts = cast(
-                list[dict[str, Any]],
-                self.db.table("clinical_facts")
-                .select("id, fact_type, value, display_locale")
-                .eq("patient_id", str(patient_id))
-                .is_("display_locale", "null")
-                .order("created_at", desc=True)
-                .limit(50)
-                .execute()
-                .data
-                or [],
-            )
+            # Only the facts this document supports, never other documents' facts.
+            from app.services.clinical_fact_service import ClinicalFactService
+
+            facts = [
+                fact
+                for fact in ClinicalFactService(self.db).list_facts_for_document(
+                    document_id, patient_id
+                )
+                if fact.get("display_locale") is None
+            ]
         except Exception:
             logger.warning("LOC-003: could not load facts for translation", exc_info=True)
             return

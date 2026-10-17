@@ -35,6 +35,15 @@ _TRANSLATABLE_KEYS: dict[str, set[str]] = {
     "appointment": {"description", "location", "provider"},
 }
 
+# Proper product names. A model can alter, "correct" or localize a drug, allergen or vaccine
+# name, which is a clinical-safety change, so these keys are never sent for translation and the
+# review screen keeps the name exactly as printed in the source document.
+_PROPER_NAME_KEYS: dict[str, set[str]] = {
+    "medication": {"name"},
+    "allergy": {"allergen"},
+    "immunization": {"vaccine"},
+}
+
 # Fields that must NEVER be translated (numeric values, units, dates, flags).
 _NEVER_TRANSLATE: set[str] = {
     "value",
@@ -106,7 +115,7 @@ def _all_numbers(fields: dict[str, str]) -> Counter[str]:
 
 def translatable_fields(fact_type: str, value: dict[str, Any]) -> dict[str, str]:
     """Extract only the fields that should be translated for a given fact type."""
-    keys = _TRANSLATABLE_KEYS.get(fact_type, set())
+    keys = _TRANSLATABLE_KEYS.get(fact_type, set()) - _PROPER_NAME_KEYS.get(fact_type, set())
     result: dict[str, str] = {}
     for key in keys:
         text = value.get(key)
@@ -117,10 +126,16 @@ def translatable_fields(fact_type: str, value: dict[str, Any]) -> dict[str, str]
 
 def is_spanish_fact(value: dict[str, Any], fact_type: str) -> bool:
     """Check if a fact's translatable fields are written in Spanish."""
-    fields = translatable_fields(fact_type, value)
-    if not fields:
+    # Names are not translated, but they still help recognise the language of the fact.
+    keys = _TRANSLATABLE_KEYS.get(fact_type, set())
+    texts = [
+        text.strip()
+        for key in sorted(keys)
+        if isinstance(text := value.get(key), str) and text.strip()
+    ]
+    if not texts:
         return False
-    text = " ".join(fields.values())
+    text = " ".join(texts)
     detected = detect_locale(text)
     return detected == "es-MX"
 
