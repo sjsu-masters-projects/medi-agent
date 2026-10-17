@@ -204,6 +204,11 @@ class FakeDB:
         self.audit(row["id"], "exported", {"format": p.get("p_format", "json")})
         return row
 
+    def _record_medwatch_draft_preview_viewed(self, p: dict[str, Any]) -> dict[str, Any]:
+        row = self.draft(p["p_draft_id"])
+        self.audit(row["id"], "preview_viewed", {"actor_id": p["p_actor_id"]})
+        return row
+
     def _discard_medwatch_draft(self, p: dict[str, Any]) -> dict[str, Any]:
         row = self.draft(p["p_draft_id"])
         self._revision(row, p["p_expected_revision"])
