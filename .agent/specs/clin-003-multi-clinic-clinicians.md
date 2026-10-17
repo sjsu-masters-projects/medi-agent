@@ -206,13 +206,14 @@ working once 065 is applied (the trigger tags its new invite rows).
   (`clinician_service.update_profile`): slice B.
 - Staff listing, role changes, invitations and removal (`staff_service`,
   `ClinicianRepository`), email invitations (`057`/`058` SQL functions, which also read
-  `clinicians.role = 'admin'`): slice D.
+  `clinicians.role = 'admin'`): membership-based since slice B; slice D adds the history and
+  picker UI and the per-clinic settings.
 - Care conversations (`048`: the thread's clinic; slice B moved the check to the link's
   clinic), the notification centre (`051`/`052`/`054`/`061` clinic names; slice B moved the
   checks to the link's clinic),
   MedWatch clinic names (`medwatch_service`), the denial classifier's clinic comparison
-  (`authorization_denial_classifier`): slices C and F, which should read
-  `care_teams.clinic_id`.
+  (`authorization_denial_classifier`): moved to `care_teams.clinic_id` in slice C (the
+  classifier compares the actor's active memberships with the links' clinics).
 - SQL functions that pick "the" active link for a (patient, clinician) pair with
   `ORDER BY created_at LIMIT 1` or a single-row `SELECT INTO` (care-plan approval in
   `040`/`042`/`045`/`049`, conversation `open` in `048`): correct while a pair has one link;
@@ -362,7 +363,9 @@ dashboard changes: none.
 
 The MedWatch reporter clinic (slice F), notification `clinic_name` labels (slice F), the denial
 classifier's clinic comparison, care-plan SQL that picks "the" link for a pair (slices C and H),
-and per-clinic settings and invitation history pages (slice D).
+and per-clinic settings and invitation history pages (slice D). Slice C moved the notification
+centre labels, the classifier and MedWatch's identifier scrub to the link's clinic; slice D added
+the settings and history UI.
 
 ### Known limitations
 
@@ -370,9 +373,178 @@ and per-clinic settings and invitation history pages (slice D).
   account enumeration. Accepted for now because Supabase signup already discloses it and the
   portal needs the copy to send the clinician to sign in. Follow-up: a neutral response plus an
   email to the address.
+- Slice C and D: Leave ends the clinician's own links and unused invite codes at the clinic, but
+  there is no hand-off tool: reviews, drafts and appointments they held for those patients leave
+  their lists and nobody else is assigned. A clinic admin who removes a member (slice B) still
+  leaves that member's links active; making removal end the links the way Leave does is a
+  follow-up. Rejoining a clinic after leaving needs new patient links (a patient who held an
+  ended link to the same clinician and clinic cannot claim a second code for that triple).
+- Slice C: the Alerts page and the bell filter the already-loaded notification items in the
+  browser; the server-side notification filter exists for other clients. The notification summary
+  counts stay clinician-wide. The Messages page filters threads on the server, but a clinic's
+  thread list already printed the clinic name inline (unchanged for single-clinic users).
 - Removing a member from their last clinic clears the default clinic and resets the legacy
   `clinicians.role` to `provider`; the deployed backend's direct writes to `clinicians` are
   mirrored into memberships but are not audited (no actor is available to the trigger).
+
+## Slice C design ("All clinics" lists with clinic chips and filters)
+
+**Status:** in progress on `feature/clinic-lists-and-roles` (slices C and D ship as one branch).
+Migration `067_clinic_lists_and_roles.sql` (see slice D) carries the one SQL change slice C needs.
+
+**Rule (unchanged from the agreed scope).** There is no global active clinic and no switcher.
+A clinician's lists show every patient they hold an active care-team link to. The clinic of an
+item is the clinic of **that clinician's link** (`care_teams.clinic_id`), never
+`clinicians.clinic_id`. `UNIQUE (patient_id, clinician_id)` stays on the pair (slice H's job), so
+each patient-clinician pair has exactly one clinic and a patient appears once per clinician.
+
+### Backend
+
+- `ClinicMembershipService.link_scope(clinician_id, clinic_id=None)` returns a `ClinicLinkScope`:
+  the clinician's active links as `patient_id -> (clinic_id, clinic_name)`, built from one read of
+  `care_teams` (`status = 'active'`, patient set, clinic's `display_name` embedded). With
+  `clinic_id` it keeps only the links at that clinic **and only when the clinician holds an active
+  membership there**; any other clinic (unknown, suspended, or one the caller does not belong to)
+  gives the same empty scope, so the response neither errors nor reveals whether the clinic
+  exists. Without `clinic_id` the scope is every active link, as before.
+- Every clinician list builds its patient set from the scope and tags each item with `clinic_id`
+  and `clinic_name`. The tags are new optional fields; the default response is the same rows.
+
+| List | Route | Filter and tag |
+| --- | --- | --- |
+| Patient roster | `GET /api/v1/clinicians/me/patients` | scope patients; tags on each row |
+| Patient header | `GET /api/v1/clinicians/me/patients/{id}` | tags from the caller's link (no filter) |
+| Risk Radar | `GET /api/v1/clinicians/me/dashboard?clinic_id=` | rows, totals, pending ADR and MedWatch counts all follow the scope |
+| Document review queue | `GET .../me/document-review-queue?clinic_id=` | scope patients |
+| ADR assessments | `GET .../me/adr-assessments?clinic_id=` | scope patients |
+| MedWatch drafts | `GET .../me/medwatch-drafts?clinic_id=` | scope patients |
+| Sent messages | `GET .../me/messages?clinic_id=` | scope patients |
+| Care conversations and recipients | `GET /api/v1/care-conversations/` and `/recipients?clinic_id=` | clinician callers only; scope patients |
+| Appointments | `GET /api/v1/appointments/?clinic_id=` | clinician callers only; scope patients |
+| Notification centre and action items | `GET /api/v1/notification-centre?clinic_id=` and `/action-items?clinic_id=` | SQL: the clinician's visible patients are narrowed to the clinic's links; the portal filters its shared cache by `clinic_id` instead |
+
+  The notification centre pages by cursor inside `notification_centre_operation`, so a filter
+  applied after the page would leave short or empty pages with a cursor. 067 narrows the patient
+  array inside the function instead, and `notification_row` returns the link's `clinic_id` and
+  `clinic_name` (it returned the clinician's default clinic's name). The summary counts stay
+  clinician-wide (the bell does not follow a page filter).
+- The denial classifier compares the clinics of the actor's **active memberships** with the clinics
+  of the patient's active links (`care_teams.clinic_id`); `clinicians.clinic_id` is no longer read.
+  MedWatch's identifier scrub uses the clinic names of the patient's active links
+  (`care_teams.clinic_id` -> `clinics.display_name`) plus the link's own legacy `clinic_name`.
+- Patient-facing lists are unchanged (patients have no clinic filter).
+
+### Portal
+
+- The portal assumes the new backend. Chips and the filter appear only when the caller has two or
+  more active memberships (`GET /me/clinics`). A single-clinic clinician sees no chip, no filter
+  and no new request parameter.
+- The filter is the URL query parameter `clinic` (default: All clinics), so it survives a reload
+  and back navigation. The portal sends `clinic_id` only after the user picks a clinic.
+- Layout: see "Clinic chips and the Clinic filter" in the portal README. A neutral pill after the patient name
+  (second line on narrow screens), a labelled "Clinic" select on the right of the toolbar, and
+  "Linked at <clinic>" under the patient header name. An empty filtered list says "No patients at
+  <clinic> match" with a "Show all clinics" text button.
+
+### Still on the legacy columns after slice C
+
+Sign-in's default-clinic mirror columns and the `clinicians.clinic_name` fallback; care-plan SQL
+that picks "the" link for a pair (slice H); notification and email clinic labels outside the centre
+(slice F); cross-clinic scheduling (slice E).
+
+## Slice D design (per-clinic roles, settings and invitations)
+
+**Status:** in progress on the same branch as slice C. Migration `067_clinic_lists_and_roles.sql`
+is written and tested in disposable PostgreSQL only; applying it to a hosted project is the
+requester's action. LOC-003's unmerged work-in-progress migration (branch
+`feature/english-first-review`) must renumber to the next free number after 067.
+
+### What slice B already made membership-based
+
+Staff listing, role changes and removal (`clinician_clinic_operation`), invitation create, list,
+revoke and resend (`clinician_email_invitation_operation`: 066 checks `clinic_memberships.role =
+'admin'` at the invitation's clinic, not `clinicians.role`), invitation history and patient
+invite-code history per clinic. Slice D adds the missing UI (history, clinic picker where the
+user belongs to several clinics) and the new actions below. No 057/058 function reads
+`clinicians.role` any more; 067's verification block asserts it.
+
+### New actions in `clinician_clinic_operation` (same signature)
+
+| Action | Rule | Audit event |
+| --- | --- | --- |
+| `set_default` | the caller holds an active membership at an active clinic; changes only `clinicians.clinic_id` (role and name follow the membership, by the 066 trigger) | `default_clinic_changed` |
+| `leave` | the caller leaves one clinic. Refused for the caller's last active clinic (`last_clinic`) and for the sole active admin of the clinic (`sole_admin`). Deactivates the membership; moves the default to the earliest remaining clinic when it was the default | `member_left`, plus one `care_link_ended` per care-team row ended |
+| `update_clinic` | admin at that clinic only; changes `clinics.display_name` and `canonical_name` (unique, `clinic_name_taken`) and the legacy `clinicians.clinic_name` of members whose default is that clinic | `clinic_renamed` |
+
+All three run under the same lock order as 066 (clinic, clinician rows by id, memberships) and
+write the audit row in the same transaction. The audit table's `action` and `target_type` checks
+gain the new values; the table stays append-only (067 does not touch its triggers or grants and
+re-checks them).
+
+**Make default** changes only which clinic is preselected and the legacy mirror columns. The 065
+mirror trigger used to mark the old default's membership inactive when `clinicians.clinic_id`
+changed; 067 skips that when the new clinic is already an active membership of the same
+clinician, so a switch of default never ends a membership. A legacy move to a clinic with no
+active membership behaves as before.
+
+### Decision: what Leave does to the clinician's patient links there
+
+**Chosen: leaving ends the caller's own active and pending care-team links at that clinic**
+(`care_teams.status = 'inactive'`, the same status an expired or revoked patient invite code
+gets), in the same transaction, each recorded as a `care_link_ended` audit event. The confirm
+dialog says so in plain words. Other clinicians' links, the patients, their records and the
+clinic's other data are untouched; nothing is deleted.
+
+Why not "links stay but are hidden": access is the active link (invariant a), so a link that
+stays active but is hidden from lists would leave a former member with data access through direct
+requests and the patient's alerts and messages routed to someone no longer at the clinic. Hiding
+needs the same status change to be safe, so the simpler honest rule is to make it. Why not "block
+leaving while active links exist": there is no hand-off or transfer tool yet, so the block would
+trap anyone who ever linked a patient, and the only exit would be an admin removing them (which
+today leaves their links active). Ending the links is reversible by the patient (a new invite code
+from the same or another clinician) and is disclosed before the user confirms. Follow-up (not in
+this slice): a hand-off flow so a clinic can reassign open work first. Open work the clinician
+held for those patients (reviews, drafts, appointments) disappears from their lists; the records
+remain.
+
+Refusals: last clinic (they would have no clinic; they delete the account elsewhere), and sole
+active admin (the clinic would have no one to manage staff; promote someone first). Disabled
+buttons carry the reason.
+
+### Staff, invitations and history in the portal
+
+- Settings -> Clinic section: with several clinics a "Clinic" select picks which one the staff
+  list, clinic code, invitation history and patient invite-code history show (the history calls
+  pass `clinic_id`). With one clinic nothing changes.
+- Staff role-change and remove actions render only when the caller is an admin **at the picked
+  clinic** (the UX-003 remainder: non-admins used to see actions the server then rejected).
+- Clinic name editing: an admin sees "Edit clinic name" in that clinic's section;
+  `PUT /api/v1/clinicians/me/clinics/{clinic_id}` with `display_name`.
+- "Your clinics" card on Settings -> General Profile: one row per active clinic with name, role chip,
+  a "Default" badge, the clinic code and Copy button for admins, and two text buttons, "Make
+  default" and "Leave".
+
+### Endpoints added
+
+| Endpoint | Clinic comes from | Rule |
+| --- | --- | --- |
+| `PUT /api/v1/clinicians/me/default-clinic` | body `clinic_id` | active member |
+| `POST /api/v1/clinicians/me/clinics/{clinic_id}/leave` | path | active member; refusals above |
+| `PUT /api/v1/clinicians/me/clinics/{clinic_id}` | path | admin at that clinic |
+
+A clinic where the caller has no active membership answers `AUTHORIZATION_ERROR` (403, reason
+`CLINIC_MEMBERSHIP_REQUIRED`) for these writes, as every clinic-scoped action does.
+
+### Migration 067 and deploy order
+
+`067_clinic_lists_and_roles.sql` requires 066. It extends the audit constraints, replaces
+`clinician_clinic_operation` (three actions added, same signature, same grants),
+`private.mirror_legacy_clinic_membership` (switching default is not leaving), `private.notification_row`
+and `public.notification_centre_operation` (clinic filter, link's clinic) and keeps the fail-closed
+checks. **Order:** the requester applies 067 before this backend deploys, because the new routes
+call the new actions; the currently deployed backend keeps working once 067 is applied (every
+replaced function keeps its signature and behaviour for the old payloads). The product is not live, so a few
+minutes of portal and backend mismatch after a merge is accepted (no old-shape fallbacks).
 
 ## Review and audit checklist (every CLN-003 slice)
 
@@ -390,6 +562,20 @@ Slice B's tests are listed; later slices add theirs.
 | g | The audit table has no UPDATE or DELETE for any role | Docker: `test_the_audit_trail_is_append_only_for_every_role` (as `authenticated` and `service_role`, and the owner) |
 | h | Browser roles have no writes on `clinicians`, `clinic_memberships` or the audit table | Docker: `test_browser_roles_cannot_write_clinicians_memberships_or_the_audit` |
 
+Slices C and D add these proofs (backend unit/router, Docker PostgreSQL, portal):
+
+| | Invariant | Slice C and D proof |
+| --- | --- | --- |
+| a | No patient data without an active care-team link; Leave ends the links it should | Docker: `test_leaving_ends_the_membership_and_only_the_callers_links_there`; unit: `test_patient_roster_tags_filters_and_hides_other_clinics`, `test_clinic_without_membership_returns_empty_even_when_links_exist`, `test_link_scope_for_a_clinic_without_membership_is_empty_not_an_error` |
+| b | Clinic-scoped endpoints check membership and role for the named clinic | Docker: `test_only_that_clinics_admin_can_rename_it`, `test_make_default_ends_no_membership_and_is_audited` (non-member clinic refused); router: `test_default_leave_and_rename_call_the_membership_service`; portal: `Settings team and roles` admin-at-picked-clinic tests |
+| c | No role or admin rights carry between clinics | Docker: `test_invitation_admin_rights_do_not_read_clinicians_role`; portal: `shows staff role and removal actions only to an admin at the picked clinic` |
+| e | No MFA bypass | unchanged (no sign-in path touched) |
+| f | Audit coverage per action | Docker: the make-default, leave (`member_left` + one `care_link_ended` per row) and rename tests assert the rows |
+| g | The audit table has no UPDATE or DELETE for any role | Docker: `test_the_new_audit_actions_keep_the_trail_append_only_and_backend_only`; 067's verification block re-checks triggers and grants |
+| h | Browser roles have no writes | Docker: `test_browser_roles_cannot_write_clinicians_memberships_or_the_audit` (067 applied) and the new operations are refused to `authenticated` |
+| i | A list never shows another clinic's data for a clinic the caller lacks, and never reveals it | unit: per-list tests (own, other, non-member, no filter) in `test_clinician_service`, `test_appointment_service`, `test_care_conversation_service`, `test_medwatch_service`; Docker: `test_clinic_filter_and_link_clinic_on_notification_items` |
+| j | Single-clinic users see no chip and no filter | portal: `shows no clinic chip and no clinic filter for a single-clinic clinician` and the per-page tests |
+
 Also check: no existing migration edited; the validator unchanged; the CI minimum for
 `test_clinic_memberships_postgres` raised to the new count; no email address or name in the
 audit rows, logs or fixtures; synthetic data only.
@@ -400,8 +586,8 @@ audit rows, logs or fixtures; synthetic data only.
 | --- | --- |
 | A | Memberships, backfill and RLS (no visible change) |
 | B | Sign-in once and add a clinic to an existing account |
-| C | "All clinics" lists with clinic chips and filters |
-| D | Per-clinic roles, settings and invitations |
+| C | "All clinics" lists with clinic chips and filters (branch `feature/clinic-lists-and-roles`) |
+| D | Per-clinic roles, settings and invitations (same branch) |
 | E | Cross-clinic scheduling and conflict checks |
 | F | Clinic tags in notifications, email and audit |
 | G | Shared clinical core (medications, allergies, conditions, critical alerts) with per-team ownership of everything else, and the patient's visibility control |
