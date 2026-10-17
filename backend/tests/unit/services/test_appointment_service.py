@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.models.enums import AppointmentResponseAction
 from app.services.appointment_service import AppointmentService
@@ -784,3 +785,91 @@ async def test_already_expired_visit_has_expiry_code(service, mock_db):
         )
     assert caught.value.code == "APPOINTMENT_EXPIRED"
     mock_db.rpc.assert_not_called()
+
+
+# ── Appointment access is scoped to the appointment's own clinic (CLN-003) ──
+
+
+def _visit(*, clinician, clinic="clinic-A", patient="p-1"):
+    return {
+        "id": "a1",
+        "patient_id": patient,
+        "clinician_id": str(clinician),
+        "clinic_id": clinic,
+        "clinics": {"display_name": "Clinic"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_other_clinics_clinician_cannot_edit_or_export_the_visit(service, mock_db):
+    # The caller is linked to the patient, but at a different clinic, so the scoped lookup is empty.
+    chain = _chain(mock_db, results=[[]])
+    appointment = _visit(clinician=uuid4())
+    caller = uuid4()
+    with pytest.raises(AuthorizationError) as caught:
+        await service._ensure_can_access(user_id=caller, role="clinician", appointment=appointment)
+    assert caught.value.reason_code == reasons.NO_CARE_TEAM_ASSIGNMENT
+    chain.eq.assert_any_call("clinic_id", "clinic-A")
+
+
+@pytest.mark.asyncio
+async def test_same_clinic_colleague_with_a_link_may_access_the_visit(service, mock_db):
+    chain = _chain(mock_db, results=[[{"id": "link-1"}]])
+    await service._ensure_can_access(
+        user_id=uuid4(), role="clinician", appointment=_visit(clinician=uuid4())
+    )
+    chain.eq.assert_any_call("clinic_id", "clinic-A")
+
+
+@pytest.mark.asyncio
+async def test_the_appointments_own_clinician_needs_no_lookup(service, mock_db):
+    me = uuid4()
+    chain = _chain(mock_db, results=[])
+    await service._ensure_can_access(user_id=me, role="clinician", appointment=_visit(clinician=me))
+    chain.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_patient_reaches_only_their_own_visit(service, mock_db):
+    me = uuid4()
+    await service._ensure_can_access(
+        user_id=me, role="patient", appointment=_visit(clinician=uuid4(), patient=str(me))
+    )
+    with pytest.raises(AuthorizationError):
+        await service._ensure_can_access(
+            user_id=uuid4(), role="patient", appointment=_visit(clinician=uuid4(), patient="other")
+        )
+
+
+@pytest.mark.asyncio
+async def test_clinician_list_drops_visits_at_a_clinic_where_only_the_patient_is_shared(
+    service, mock_db
+):
+    # X is linked to P1 at clinic A and P2 at clinic B. Z's visit with P1 at clinic B matches both
+    # IN filters but is not on any of X's links.
+    _chain(
+        mock_db,
+        results=[
+            [
+                {"id": "ok-1", "patient_id": "p-1", "clinic_id": "A", "clinics": None},
+                {"id": "ok-2", "patient_id": "p-2", "clinic_id": "B", "clinics": None},
+                {"id": "leak", "patient_id": "p-1", "clinic_id": "B", "clinics": None},
+            ]
+        ],
+    )
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    from contextlib import ExitStack
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.clinic_link_scope import ClinicLinkScope
+
+    scope = ClinicLinkScope({"p-1": ("A", "A"), "p-2": ("B", "B")})
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch(
+                "app.services.clinic_membership_service.ClinicMembershipService.link_scope",
+                new=AsyncMock(return_value=scope),
+            )
+        )
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician")
+    assert [r["id"] for r in rows] == ["ok-1", "ok-2"]

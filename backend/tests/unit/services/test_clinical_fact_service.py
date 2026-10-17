@@ -263,11 +263,14 @@ def test_fhir_audit_events_carry_the_clinic_of_the_actors_link() -> None:
     fact = facts.create_candidate(candidate(), actor_id=ACTOR_ID)
     facts.approve(UUID(fact["id"]), PATIENT_ID, reviewer_id=REVIEWER_ID, note="Reviewed")
     clinic = str(uuid4())
+    link = {"patient_id": str(PATIENT_ID), "status": "active"}
     db.store["care_teams"] = [
-        {"patient_id": str(PATIENT_ID), "clinician_id": str(REVIEWER_ID), "clinic_id": clinic},
+        {**link, "clinician_id": str(REVIEWER_ID), "clinic_id": clinic},
+        # An ended link at another clinic must not make the reviewer's clinic ambiguous.
+        {**link, "clinician_id": str(REVIEWER_ID), "clinic_id": str(uuid4()), "status": "ended"},
         # An actor with links at two clinics for one patient gets no guessed clinic.
-        {"patient_id": str(PATIENT_ID), "clinician_id": str(ACTOR_ID), "clinic_id": str(uuid4())},
-        {"patient_id": str(PATIENT_ID), "clinician_id": str(ACTOR_ID), "clinic_id": str(uuid4())},
+        {**link, "clinician_id": str(ACTOR_ID), "clinic_id": str(uuid4())},
+        {**link, "clinician_id": str(ACTOR_ID), "clinic_id": str(uuid4())},
     ]
 
     events = FhirAuditExportService(db).export_for_fact(  # type: ignore[arg-type]

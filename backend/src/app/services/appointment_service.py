@@ -168,9 +168,16 @@ class AppointmentService:
                 .in_("clinic_id", scope.clinic_ids)
                 .order("scheduled_at")
             )
-            # An appointment carries the clinic it was made under. A shared patient's visits at a
-            # clinic the caller has no link in are not theirs to see.
-            return [_flatten_clinic(row) for row in (result.data or []) if isinstance(row, dict)]
+            # An appointment carries the clinic it was made under. The two IN filters above are a
+            # cross product, so keep only visits whose (patient, clinic) is one of the caller's
+            # links: a shared patient's visit at a clinic where the caller has no link to that
+            # patient is not theirs to see.
+            return [
+                _flatten_clinic(row)
+                for row in (result.data or [])
+                if isinstance(row, dict)
+                and (str(row.get("patient_id")), str(row.get("clinic_id"))) in scope.pairs
+            ]
 
         raise AuthorizationError(
             "Unsupported role for appointments",
@@ -434,11 +441,16 @@ class AppointmentService:
         if role == "patient" and str(appointment.get("patient_id")) == str(user_id):
             return
         if role == "clinician":
+            # The appointment's own clinician, or a colleague whose active link to this patient is
+            # at the appointment's clinic. A link at another clinic grants nothing here.
+            if str(appointment.get("clinician_id")) == str(user_id):
+                return
             assignment = await self._execute(
                 self.db.table("care_teams")
                 .select("id")
                 .eq("clinician_id", str(user_id))
                 .eq("patient_id", str(appointment.get("patient_id")))
+                .eq("clinic_id", str(appointment.get("clinic_id")))
                 .eq("status", "active")
                 .limit(1)
             )
