@@ -545,6 +545,103 @@ call the new actions; the currently deployed backend keeps working once 067 is a
 replaced function keeps its signature and behaviour for the old payloads). The product is not live, so a few
 minutes of portal and backend mismatch after a merge is accepted (no old-shape fallbacks).
 
+## Slice E design (cross-clinic scheduling and conflict checks)
+
+**Status:** in progress on `feature/clinic-scheduling-and-tags` (slices E and F ship as one branch).
+Migration `069_clinic_scheduling_and_tags.sql` is written and tested in disposable PostgreSQL only;
+applying it to a hosted project is the requester's action, before this backend deploys.
+
+**Rule.** No global active clinic and no switcher. Access is the active care-team link, and each
+patient-clinician pair has one link and so one clinic. An appointment (and every slot of an offer
+group) carries the clinic of the link it was made under.
+
+### Schema (069)
+
+- `appointments.clinic_id` (→ `clinics`) and `appointments.clinician_id` (→ `clinicians`, cascade),
+  backfilled from `care_teams`, then `NOT NULL`. `BEFORE INSERT OR UPDATE OF care_team_id, clinic_id,
+  clinician_id` trigger `appointments_link_guard` overwrites both from the link whatever the writer
+  sent, and refuses a link with no clinic. `AFTER UPDATE OF clinic_id, clinician_id` trigger on
+  `care_teams` carries a moved link's appointments with it (and fails the whole statement if that would
+  double-book the new clinician).
+- **Fail closed, counts only.** Before changing anything the migration counts appointments that cannot
+  be matched to exactly one link that has a clinic and a clinician (the foreign key makes "exactly one"
+  by primary key; the clinic-less link is the real case) and existing confirmed/scheduled overlap pairs
+  per clinician. Either aborts with a message of counts only, nothing changed, nothing cancelled. The
+  read-only `backend/scripts/appointment-clinician-overlap-preflight.sql` lists the pairs for review.
+- **Constraint.** `appointments_clinician_no_overlap`: `EXCLUDE USING gist (clinician_id WITH =,
+  appointment_booking_window(scheduled_at, duration_minutes) WITH &&) WHERE status IN ('confirmed',
+  'scheduled')`, the same `[start, end)` window as the patient constraint from 043, across every clinic.
+  Proposed options do not reserve time. The patient constraint and `respond_to_appointment_offer` are
+  unchanged: a lost race on accept is the existing safe `conflict` result.
+- **Offers.** `propose_appointment_slots` (same signature and grants) takes a per-clinician advisory
+  lock, checks every slot against the clinician's whole schedule and returns `clinician_conflict` with
+  one entry per conflicting slot: `slot`, the other visit's `clinic_id`, `clinic_name`, `starts_at`,
+  `ends_at`. It reads no patient. Nothing is saved when any slot conflicts (no partial offers: an offer
+  needs 2-4 slots).
+- `authorization_denial_events.clinic_id` (nullable) and the notification centre's clinic label for
+  appointment items and appointment reminders now follow the appointment's own clinic (a reminder
+  carried no clinician, so a patient with two clinics could be shown the other clinic).
+- 069's verification block asserts both constraints, no NULL clinic, appointment equals link,
+  `NOT NULL`, browser roles cannot execute the offer functions or guards, the denial trail is still
+  append-only and backend-only, and that table and function privileges are identical before and after.
+
+### Backend
+
+`GET /appointments/` rows carry the appointment's own `clinic_id`/`clinic_name` for both roles; a
+clinician's list reads only visits at clinics where they hold a link (a shared patient's visits at an
+unrelated clinic are not shown). `POST /appointments/propose` and a clinician's single
+`POST /appointments/` refuse with 422 `CLINICIAN_SCHEDULE_CONFLICT`, `details.conflicts[]`, message "You
+already have an appointment at <clinic> from <time> to <time>." (UTC in the server text; the portal
+renders local times from `details`). A patient's accept or self-booking that meets a busy clinician gets
+the existing generic `APPOINTMENT_CONFLICT`. The refusal is logged by count only. Calendar/ICS location,
+summary and description name the appointment's clinic.
+
+### Portals
+
+Clinician: rows are time (bold), patient, clinic chip (two or more memberships only), status chip; at
+390 px time + status on line 1, patient + chip on line 2. The offer form shows a read-only muted "Clinic:
+X" from the selected patient's link (no picker), and each conflicting slot gets an inline `risk-soft`
+callout with the sentence above; submit stays disabled until each conflicting slot is changed or removed.
+Patient: visit and offer cards show "at <Clinic>" / "en <Clínica>" under the date; notification items show
+the clinic as small secondary text under the title.
+
+## Slice F design (clinic tags in notifications, email and audit)
+
+Everything outside the notification centre that labelled a clinic from `clinicians.clinic_name` or
+`clinicians.clinic_id` now reads the link's or the appointment's clinic.
+
+| Surface | Clinic comes from |
+| --- | --- |
+| Appointment reminders (scheduled job) | the appointment; body "Clinic: X." and `metadata.clinic_id/clinic_name` |
+| Message notice to a patient (`clinician_messages`) | the sender's link to the patient; body prefix and metadata |
+| Notice emails (message, appointment offered/changed/response, ADR information request, document review, care-plan draft, critical result) | the appointment, or the link between patient and the clinician the notice concerns; shown only to a recipient who belongs to two or more clinics: subject `<Clinic> · …`, plus a header line under the brand. Notices with no single link (care plan published, document failed) carry none. A failed lookup defers the row for retry rather than sending it untagged |
+| Staff invitation email | the invitation's clinic, header line (subject already names it) |
+| Care-team list, Today provider card, plan preview provider, Nora care-team context | the link (`care_teams.clinic_id` → `clinics.display_name`) |
+| Authorization denials | `authorization_denial_events.clinic_id`, set when the refusal concerns a link (appointment raise sites) |
+| FHIR audit events | `AuditEvent.extension` `urn:mediagent:audit-clinic` = the clinic of the actor's single link to the patient; none when the actor has no link or links at two clinics |
+| MedWatch | Section G (reporter) never carried a clinic. The identifier scrub already used the patient's links' clinics (slice C) |
+
+Bilingual: the clinic name is data, so email and notification tags add no wording. New Spanish wording
+(drafts, not approved): "en {clinic}" on patient cards and "Clínica" in the calendar export.
+
+### Still on legacy columns after slice F (what remains)
+
+- `clinicians.clinic_id`/`clinic_name`/`role` as the default-clinic mirror (065/066/067 triggers) and
+  sign-in's default clinic.
+- `care_teams.clinic_name` (the link's own legacy text): last-resort label for a link with no clinic in
+  the care-team list, the MedWatch identifier scrub (extra caution, a superset of the clinic names),
+  and the notification centre's `coalesce(cl.display_name, ct.clinic_name)` fallback.
+- `notification_authorized` (066) and care-plan SQL that picks "the" link for a pair (slice H).
+
+### Known limitations (E and F)
+
+- A clinician's own colleagues at the same clinic still see each other's visits for a shared patient
+  (unchanged); other clinics' visits are hidden. Other clinics see no "busy" blocks yet: only the owner
+  sees the conflict, which names the clinic.
+- Editing a confirmed visit's time into a clash returns the generic conflict, not the clinic sentence.
+- Notices for a patient with two links to the same clinician at different clinics name no clinic.
+- Email clinic names reveal the clinic to the mailbox; recipients with one clinic see no tag.
+
 ## Review and audit checklist (every CLN-003 slice)
 
 A slice is not ready for review until each invariant has a test that fails if it is broken.
@@ -575,6 +672,20 @@ Slices C and D add these proofs (backend unit/router, Docker PostgreSQL, portal)
 | i | A list never shows another clinic's data for a clinic the caller lacks, and never reveals it | unit: per-list tests (own, other, non-member, no filter) in `test_clinician_service`, `test_appointment_service`, `test_care_conversation_service`, `test_medwatch_service`; Docker: `test_clinic_filter_and_link_clinic_on_notification_items` |
 | j | Single-clinic users see no chip and no filter | portal: `shows no clinic chip and no clinic filter for a single-clinic clinician` and the per-page tests |
 
+
+Slices E and F add these proofs:
+
+| | Invariant | Slice E and F proof |
+| --- | --- | --- |
+| a | Nothing is visible without an active link; appointments of other clinics stay hidden | unit: `test_clinician_appointments_carry_the_links_clinic` (reads only the caller's clinics), `test_clinician_appointments_for_an_unrelated_clinic_are_empty` |
+| b | Clinic-scoped writes check the clinic | the offer RPC requires the caller's own active link; Docker `test_offer_checks_the_whole_schedule_and_names_only_the_clinic` |
+| c | Clinician conflicts cross clinics, not clinicians | Docker: `test_same_clinician_cannot_overlap_across_two_clinics`, `test_back_to_back_visits_and_other_clinicians_are_allowed`, `test_proposed_options_do_not_reserve_time` |
+| f | Audit: refusals are logged without other clinics' patients | unit: `test_offer_conflict_names_the_clinic_and_never_a_patient` (counts-only log), `test_a_denial_that_concerns_a_link_records_its_clinic`, `test_fhir_audit_events_carry_the_clinic_of_the_actors_link` |
+| g | The denial trail stays append-only | Docker: `test_denial_events_gain_a_clinic_and_stay_append_only`; 069's verification block |
+| h | Browser roles and grants unchanged | Docker: `test_constraint_present_and_no_appointment_without_a_clinic`; 069's before/after privilege comparison |
+| i | Backfill and fail-closed | Docker: `test_backfill_tags_each_appointment_with_its_links_clinic_and_clinician`, `..._stops_when_a_link_has_no_clinic_and_changes_nothing`, `..._stops_on_existing_clinician_overlap_and_reports_counts_only` |
+| j | Clinic tags are right for multi-clinic people | Docker: `test_reminder_and_appointment_items_name_the_appointments_clinic`; unit: email `test_every_notice_names_the_clinic_when_given_and_is_unchanged_without` (en-US, es-MX, clinician), `test_clinic_label_only_for_recipients_with_several_clinics`, cron, calendar; portals: per-card and per-row tests |
+
 Also check: no existing migration edited; the validator unchanged; the CI minimum for
 `test_clinic_memberships_postgres` raised to the new count; no email address or name in the
 audit rows, logs or fixtures; synthetic data only.
@@ -587,7 +698,7 @@ audit rows, logs or fixtures; synthetic data only.
 | B | Sign-in once and add a clinic to an existing account |
 | C | "All clinics" lists with clinic chips and filters (branch `feature/clinic-lists-and-roles`) |
 | D | Per-clinic roles, settings and invitations (same branch) |
-| E | Cross-clinic scheduling and conflict checks |
-| F | Clinic tags in notifications, email and audit |
+| E | Cross-clinic scheduling and conflict checks (branch `feature/clinic-scheduling-and-tags`) |
+| F | Clinic tags in notifications, email and audit (same branch) |
 | G | Shared clinical core (medications, allergies, conditions, critical alerts) with per-team ownership of everything else, and the patient's visibility control |
 | H | Care plans per care team (PLAN-002) |
