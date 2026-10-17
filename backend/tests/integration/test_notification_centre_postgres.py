@@ -100,12 +100,13 @@ def postgres():
         )
 
 
-def apply_clinic_memberships(execute):
-    """Apply CLN-003 slices A (065), B (066) and C+D (067), found by name like 063/064 above."""
+def apply_clinic_memberships(execute, *, scheduling=True):
+    """Apply CLN-003 slices A (065), B (066), C+D (067) and E+F (069), found by name like 063/064."""
     for pattern in (
         "*_clinic_memberships.sql",
         "*_clinic_sign_in_once.sql",
         "*_clinic_lists_and_roles.sql",
+        *(("*_clinic_scheduling_and_tags.sql",) if scheduling else ()),
     ):
         for path in sorted(MIGRATIONS.glob(pattern)):
             execute(path.read_text())
@@ -169,6 +170,7 @@ def sql(postgres, request):
         "017_clinical_facts_provenance.sql",
         "019_clinical_action_approvals.sql",
         "022_grant_service_role_seed_access.sql",
+        "033_authorization_denial_audit.sql",
         "038_appointment_proposal_lifecycle.sql",
         "039_appointment_patient_changes.sql",
         "040_clinician_approved_care_plans.sql",
@@ -238,7 +240,11 @@ def sql(postgres, request):
     # runs with them. A test marked before_clinic_memberships seeds pre-065 rows and applies
     # 065 itself to check the backfill.
     if request.node.get_closest_marker("before_clinic_memberships") is None:
-        apply_clinic_memberships(execute)
+        # before_clinic_scheduling stops short of 069 so a test can seed appointments the way
+        # the deployed schema holds them and check the backfill and its fail-closed checks.
+        apply_clinic_memberships(
+            execute, scheduling=request.node.get_closest_marker("before_clinic_scheduling") is None
+        )
     try:
         yield execute
     finally:
