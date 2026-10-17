@@ -262,3 +262,20 @@ async def test_new_refusals_have_public_codes(hint, code):
     with pytest.raises(ValidationError) as raised:
         await service.leave("c-1", CLINIC_A)
     assert raised.value.code == code
+
+
+@pytest.mark.asyncio
+async def test_clinic_list_returns_the_open_code_only_for_clinics_where_the_caller_is_admin():
+    service, _db = _rpc_service(
+        data={
+            "clinics": [
+                {"clinic_id": CLINIC_A, "clinic_code": "AAA111", "role": "admin"},
+                {"clinic_id": "other", "clinic_code": "BBB222", "role": "provider"},
+                {"clinic_id": "third", "clinic_code": "CCC333", "role": "nurse"},
+            ],
+            "default_clinic_id": CLINIC_A,
+        }
+    )
+    result = await service.clinics("clinician-1")
+    assert [c["clinic_code"] for c in result["clinics"]] == ["AAA111", None, None]
+    assert result["default_clinic_id"] == CLINIC_A

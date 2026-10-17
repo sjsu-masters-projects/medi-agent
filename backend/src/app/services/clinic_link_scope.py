@@ -19,6 +19,13 @@ class ClinicLinkScope:
     """Patient id -> (clinic id, clinic name) for the links a list may show."""
 
     links: Mapping[str, tuple[str | None, str | None]] = field(default_factory=dict)
+    # Every (patient id, clinic id) link, including a patient's links at several clinics.
+    extra_pairs: frozenset[tuple[str, str]] = frozenset()
+
+    @property
+    def pairs(self) -> frozenset[tuple[str, str]]:
+        own = {(patient, clinic) for patient, (clinic, _) in self.links.items() if clinic}
+        return frozenset(own) | self.extra_pairs
 
     @property
     def patient_ids(self) -> list[str]:
@@ -27,7 +34,7 @@ class ClinicLinkScope:
     @property
     def clinic_ids(self) -> list[str]:
         """The clinics of the links in scope (each once), for items that carry their own clinic."""
-        return sorted({clinic for clinic, _ in self.links.values() if clinic})
+        return sorted({clinic for _, clinic in self.pairs})
 
     def __contains__(self, patient_id: object) -> bool:
         return str(patient_id) in self.links
@@ -54,6 +61,7 @@ def scope_from_links(
     if wanted is not None and wanted not in allowed:
         return ClinicLinkScope()
     links: dict[str, tuple[str | None, str | None]] = {}
+    pairs: set[tuple[str, str]] = set()
     for row in rows:
         patient = row.get("patient_id")
         if not patient:
@@ -61,7 +69,9 @@ def scope_from_links(
         clinic = str(row["clinic_id"]) if row.get("clinic_id") else None
         if wanted is not None and clinic != wanted:
             continue
+        if clinic:
+            pairs.add((str(patient), clinic))
         clinic_row = row.get("clinics")
         name = clinic_row.get("display_name") if isinstance(clinic_row, dict) else None
         links.setdefault(str(patient), (clinic, name))
-    return ClinicLinkScope(links)
+    return ClinicLinkScope(links, frozenset(pairs))

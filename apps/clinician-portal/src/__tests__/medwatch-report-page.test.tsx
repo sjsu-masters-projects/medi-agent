@@ -204,10 +204,10 @@ describe("MedWatch report workspace", () => {
     it("lets a narrow screen step back from Download to the PDF preview", async () => {
         mocks.fetchMedWatchDraft.mockResolvedValue(approvedDraft());
         render(<MedWatchReportPage />);
-        fireEvent.click(await screen.findByRole("button", { name: "Previous step: Approve" }));
-        fireEvent.click(await screen.findByRole("button", { name: "Previous step: Preview" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Previous: Approve" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Previous: Preview" }));
         await waitFor(() => expect(mocks.fetchForm3500PreviewPdf).toHaveBeenCalledWith(DRAFT_ID));
-        expect(screen.getByRole("button", { name: "Next step: Approve" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Next: Approve" })).toBeInTheDocument();
     });
 
     it("records a submission and shows the report as submitted", async () => {

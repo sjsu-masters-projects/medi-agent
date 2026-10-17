@@ -71,16 +71,24 @@ describe("MedWatch reports list", () => {
         render(<MedWatchPage />);
         const list = await screen.findByRole("list", { name: "Drafts reports" });
         expect(within(list).getAllByRole("listitem")).toHaveLength(2);
-        expect(screen.getByRole("tab", { name: /Drafts\s*2/ })).toHaveAttribute("aria-selected", "true");
-        expect(screen.getByRole("tab", { name: /Approved\s*1/ })).toBeInTheDocument();
-        expect(screen.getByRole("tab", { name: /Submitted\s*1/ })).toBeInTheDocument();
-        expect(screen.getByRole("tab", { name: /Discarded\s*1/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Drafts\s*2/ })).toHaveAttribute("aria-pressed", "true");
+        expect(screen.getByRole("button", { name: /Approved\s*1/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Submitted\s*1/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Discarded\s*1/ })).toBeInTheDocument();
         expect(within(list).getAllByText("SP-K7QD").length).toBeGreaterThan(0);
+        // Truncated text keeps its full value available on hover.
+        for (const element of within(list).getAllByText("fluticasone/salmeterol inhaler")) {
+            expect(element).toHaveAttribute("title", "fluticasone/salmeterol inhaler");
+        }
+        for (const element of within(list).getAllByText("SP-K7QD")) {
+            expect(element).toHaveAttribute("title", "SP-K7QD");
+        }
+        expect(screen.getByRole("group", { name: /./ })).toBeInTheDocument();
         expect(within(list).getAllByText("fluticasone/salmeterol inhaler").length).toBeGreaterThan(0);
         expect(within(list).getAllByText("1 to complete").length).toBeGreaterThan(0);
         expect(within(list).getAllByRole("link")[0].getAttribute("href")).toMatch(/^\/medwatch\/[0-9a-f-]{36}/);
 
-        fireEvent.click(screen.getByRole("tab", { name: /Approved/ }));
+        fireEvent.click(screen.getByRole("button", { name: /Approved/ }));
         expect(window.location.search).toBe("?tab=approved");
         const approved = await screen.findByRole("list", { name: "Approved reports" });
         expect(within(approved).getAllByText("Approved").length).toBeGreaterThan(0);

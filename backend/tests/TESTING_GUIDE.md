@@ -69,11 +69,21 @@ These run real migrations against disposable PostgreSQL 16 and skip unless enabl
 | `integration/test_care_conversation_postgres.py` | `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` (official `postgres:16` image) |
 | `integration/test_notification_centre_postgres.py` | `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` (official `postgres:16` image) |
 | `integration/test_adr_loop_postgres.py`, `integration/test_medwatch_3500_postgres.py`, `integration/test_clinic_memberships_postgres.py` | `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` (same fixture) |
+| `integration/test_public_grants_postgres.py` | `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` (same fixture) |
 | `integration/test_email_postgres.py` | `EMAIL_TEST_POSTGRES_DOCKER=1` (same fixture) |
 | `integration/test_care_plan_postgres.py` | `CARE_PLAN_TEST_POSTGRES=1` (local `initdb`/`pg_ctl`), plus `CARE_PLAN_TEST_POSTGRES_DOCKER=1` to use Docker instead |
 | `integration/test_appointment_offer_transactions.py` | Runs when PostgreSQL server binaries are on `PATH`; skips otherwise |
 
 Run them for any migration with functions or triggers; mocked RPC tests cannot see SQL bugs.
+
+Every suite starts from hosted Supabase's default grants (`integration/supabase_roles.py`): new
+`public` tables, sequences and functions are granted to `anon`, `authenticated` and `service_role`,
+set in the connected database and in `template1` so per-test databases inherit them. A migration
+must therefore enable RLS or revoke what it does not intend to expose;
+`integration/test_public_grants_postgres.py` fails when a public table without RLS is open to a
+browser role. Do not hand-grant table privileges to browser roles in a test. Unit and router tests
+cannot reach a real model provider (autouse `no_real_model_calls` in `tests/conftest.py`), whatever
+credentials the machine has.
 
 ## Testing Patterns
 

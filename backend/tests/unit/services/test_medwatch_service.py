@@ -639,6 +639,7 @@ def _pdf_pages(content: bytes) -> list[bytes]:
 
 @pytest.mark.asyncio
 async def test_preview_pdf_is_watermarked_on_every_page_and_records_no_export() -> None:
+    """The preview is audited as a view, never as an export, and changes no draft state."""
     for stored in (_draft_row(), _approved()):
         db = seeded(medwatch_drafts=[stored])
         before = copy.deepcopy(db.tables["medwatch_drafts"])
@@ -647,7 +648,10 @@ async def test_preview_pdf_is_watermarked_on_every_page_and_records_no_export() 
         pages = _pdf_pages(preview["content"])
         assert pages and all(b"MAWatermarkFont" in page for page in pages)
         assert all(b"DRAFT \x96 not for submission" in page for page in pages)
-        assert db.rpc_calls == []
+        assert [name for name, _ in db.rpc_calls] == ["record_medwatch_draft_preview_viewed"]
+        assert db.rpc_calls[0][1] == {"p_draft_id": stored["id"], "p_actor_id": str(CLINICIAN)}
+        events = [e["event_type"] for e in db.tables["medwatch_draft_audit_events"]]
+        assert events == ["preview_viewed"]
         assert db.tables["medwatch_drafts"] == before
 
 
@@ -658,6 +662,7 @@ async def test_approved_export_stays_unwatermarked_and_audited() -> None:
     exported = await _service(db).export_pdf(CLINICIAN, UUID(stored["id"]))
     assert all(b"MAWatermarkFont" not in page for page in _pdf_pages(exported["content"]))
     assert [name for name, _ in db.rpc_calls] == ["record_medwatch_draft_export"]
+    assert [e["event_type"] for e in db.tables["medwatch_draft_audit_events"]] == ["exported"]
 
 
 @pytest.mark.asyncio

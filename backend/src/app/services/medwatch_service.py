@@ -777,13 +777,23 @@ class MedWatchService:
         return (await self._read_models([draft]))[0]
 
     async def preview_pdf(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
-        """The filled Form 3500 stamped as a draft. Not an export: nothing is recorded."""
+        """The filled Form 3500 stamped as a draft. Not an export.
+
+        It changes no draft state and creates no export record. Each successful render records
+        one separate ``preview_viewed`` audit event with the actor.
+        """
         draft = await self._get_readable_draft(clinician_id, draft_id)
         context = await self._context([draft])
         form, _upgraded = self._form(draft, context)
         if form.section_b.report_date is None and draft.get("approved_at"):
             form.section_b.report_date = clinic_date_of(draft["approved_at"])
         content = await asyncio.to_thread(render_form_3500, form, draft_id, watermark=True)
+        await self._rpc(
+            "record_medwatch_draft_preview_viewed",
+            {"p_draft_id": str(draft_id), "p_actor_id": str(clinician_id)},
+            failure="MedWatch preview could not be recorded",
+            resource=("MedWatch draft", draft_id),
+        )
         return {
             "filename": f"fda-3500-{str(draft_id)[:8]}-draft-preview.pdf",
             "media_type": "application/pdf",

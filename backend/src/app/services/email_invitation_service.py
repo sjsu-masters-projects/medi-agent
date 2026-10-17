@@ -136,7 +136,8 @@ class EmailInvitationService:
             "status": "accepted",
             "clinic": {
                 "clinic_id": result.get("clinic_id"),
-                "clinic_code": result.get("clinic_code"),
+                # The open join code is for admins; an invitee gets it from the clinic list if so.
+                "clinic_code": None,
                 "clinic_name": result.get("clinic_name"),
                 "status": result.get("clinic_status") or "active",
             },

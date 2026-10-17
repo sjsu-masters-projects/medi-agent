@@ -126,7 +126,7 @@ record is 404, an unassigned clinician 403):
 | `GET /api/v1/clinicians/me/adr-assessments/{id}` | One assessment of any status; an unknown or unassigned id is the same 404 |
 | `GET /api/v1/clinicians/me/medwatch-drafts?state=active\|draft\|approved\|submitted\|discarded` | List; each item has `missing_for_approval`, `name_warnings`, `pdf_available`, `current_submission`, `submission_history` (newest first), `attestation`, `template` |
 | `GET .../medwatch-drafts/{id}` | One draft (same shape as a list item); an unknown or unassigned id is the same 404 |
-| `GET .../medwatch-drafts/{id}/preview.pdf` | Filled Form 3500 stamped "DRAFT – not for submission" on every page, `Content-Disposition: inline`, `Cache-Control: no-store`. Not an export: no audit event, no state change |
+| `GET .../medwatch-drafts/{id}/preview.pdf` | Filled Form 3500 stamped "DRAFT – not for submission" on every page, `Content-Disposition: inline`, `Cache-Control: no-store`. Not an export: no export record and no state change; one `preview_viewed` audit event with the actor |
 | `GET .../medwatch-drafts/form-3500-options` | Option lists for the editor (units, routes, frequencies, occupations, countries, ...) |
 | `PUT .../medwatch-drafts/{id}` | Save `{form_data (v2), expected_revision}` |
 | `POST .../medwatch-drafts/{id}/approve` | `{approval_note, expected_revision, attested, attestation_version: "medwatch-3500-approval-v1", non_serious_attested, acknowledged_warnings}` |

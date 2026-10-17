@@ -230,7 +230,12 @@ class ClinicMembershipService:
 
     async def clinics(self, clinician_id: UUID | str) -> dict[str, Any]:
         """List the clinics the clinician can act in, and their default clinic."""
-        return await self._operation(clinician_id, "list", {})
+        result = await self._operation(clinician_id, "list", {})
+        # The open clinic code lets anyone who has it join, so only an admin at that clinic gets it.
+        for entry in result.get("clinics") or []:
+            if isinstance(entry, dict) and entry.get("role") != "admin":
+                entry["clinic_code"] = None
+        return result
 
     async def join_by_code(
         self, clinician_id: UUID | str, clinic_code: str, role: str

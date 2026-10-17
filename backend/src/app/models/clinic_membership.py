@@ -30,7 +30,8 @@ class ClinicMembershipRead(BaseModel):
     """A clinic the signed-in clinician can act in, for clinic pickers."""
 
     clinic_id: UUID
-    clinic_code: str
+    # Only an admin at the clinic receives the open join code.
+    clinic_code: str | None = None
     clinic_name: str
     status: ClinicStatus
     role: ClinicianRole

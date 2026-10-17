@@ -175,7 +175,7 @@ function ClinicianLoginPageContent() {
             const { clinics } = await fetchMyClinics(accessToken);
             if (clinics.length === 1) {
                 writeStoredClinicContext({
-                    clinicCode: clinics[0].clinic_code,
+                    clinicCode: clinics[0].clinic_code ?? "",
                     clinicId: clinics[0].clinic_id,
                     clinicName: clinics[0].clinic_name,
                     status: clinics[0].status,

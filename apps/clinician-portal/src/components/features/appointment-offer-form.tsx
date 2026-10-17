@@ -260,7 +260,12 @@ export function AppointmentOfferForm({
               onChange={(event) => setReason(event.target.value)}
             />
           </div>
-          <Button type="submit" size="lg" fullWidth disabled={blocked}>
+          {blocked ? (
+            <p className="mb-2 text-[13px] text-muted" id="offer-blocked-help">
+              Change the conflicting time to send.
+            </p>
+          ) : null}
+          <Button aria-describedby={blocked ? "offer-blocked-help" : undefined} type="submit" size="lg" fullWidth disabled={blocked}>
             <Icon name="send" className="h-4 w-4" />
             {sending ? "Sending offer…" : "Send appointment offer"}
           </Button>

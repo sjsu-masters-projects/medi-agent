@@ -364,6 +364,7 @@ class CarePlanService:
         from app.services.care_plan_translation import back_translate_spanish
 
         self._require_assignment(clinician_id, patient_id)
+        self._plan(plan_id, patient_id)  # same 404 for an unknown or another patient's plan
         item = next((row for row in self._items(plan_id) if str(row["id"]) == str(item_id)), None)
         if item is None or item.get("is_removed"):
             raise NotFoundError("Care plan item", str(item_id))
@@ -372,7 +373,12 @@ class CarePlanService:
         english = wording.get("en-US") or {}
         if not (spanish.get("title") or "").strip():
             raise ValidationError("No Spanish wording to back-translate")
-        result = await back_translate_spanish(spanish, english, item)
+        try:
+            result = await back_translate_spanish(spanish, english, item)
+        except (GenerationProviderError, ValueError):
+            raise ValidationError(
+                "The back-translation is unavailable right now. Try again in a moment."
+            ) from None
         return {
             "back_translation": {
                 "title": result.title,

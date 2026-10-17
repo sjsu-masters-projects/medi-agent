@@ -1,6 +1,7 @@
 """Authenticated human messages: all authorization and writes share a DB transaction."""
 
 import asyncio
+import logging
 from typing import Any, cast
 from uuid import UUID
 
@@ -15,6 +16,12 @@ from app.models.care_conversation import (
     ConversationSend,
 )
 from app.services.clinic_membership_service import ClinicMembershipService
+
+logger = logging.getLogger(__name__)
+
+# A read may translate at most this many messages that have no stored translation; the rest
+# stay in the original language until a later read. (Follow-up: move this to a background job.)
+MAX_ON_THE_FLY_TRANSLATIONS = 10
 
 
 class CareConversationService:
@@ -155,7 +162,8 @@ class CareConversationService:
                 message["translation_locale"] = target_locale
                 message["translation_guard_passed"] = result.get("guard_passed", True)
         except Exception:
-            pass  # Translation is optional; never fail the send.
+            # Translation is optional; never fail the send. Log the failure, never the text.
+            logger.warning("Message translation after send failed", exc_info=False)
 
     async def _attach_translations(self, page: dict[str, Any]) -> None:
         """LOC-003: Attach stored translations to messages, translating on the fly if needed."""
@@ -177,6 +185,7 @@ class CareConversationService:
                 message_ids=message_ids,
                 target_locale=target_locale,
             )
+            on_the_fly = 0
             for msg in items:
                 msg_id = str(msg.get("id") or "")
                 tr = translations.get(msg_id)
@@ -200,17 +209,26 @@ class CareConversationService:
                     ) or (self.actor.role == "patient" and detected == "en-US")
                     if not needs_translation:
                         continue
+                    if on_the_fly >= MAX_ON_THE_FLY_TRANSLATIONS:
+                        break
+                    on_the_fly += 1
                     source_locale = detected or ("es-MX" if target_locale == "en-US" else "en-US")
-                    result = await service.translate_and_store(
-                        source_table="care_team_conversation_messages",
-                        source_message_id=msg_id,
-                        text=body,
-                        source_locale=source_locale,
-                        target_locale=target_locale,
-                    )
+                    try:
+                        result = await service.translate_and_store(
+                            source_table="care_team_conversation_messages",
+                            source_message_id=msg_id,
+                            text=body,
+                            source_locale=source_locale,
+                            target_locale=target_locale,
+                        )
+                    except Exception:
+                        # One failed message must not hide the others; log the id, never the text.
+                        logger.warning("Message translation failed for message %s", msg_id)
+                        continue
                     if result:
                         msg["translation"] = result.get("translated_text")
                         msg["translation_locale"] = target_locale
                         msg["translation_guard_passed"] = result.get("guard_passed", True)
         except Exception:
-            pass  # Translations are optional; never fail the read.
+            # Translations are optional; never fail the read. Log the failure, never the text.
+            logger.warning("Attaching message translations failed", exc_info=False)

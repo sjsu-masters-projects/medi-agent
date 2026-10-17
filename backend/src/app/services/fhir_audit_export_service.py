@@ -80,7 +80,7 @@ class FhirAuditExportService:
     def _actor_clinics(self, patient_id: UUID, actors: set[str]) -> dict[str, str]:
         """Actor -> clinic of their link to this patient, only where that clinic is unambiguous.
 
-        An event concerns a link when its actor holds one to the patient. The clinic is
+        An event concerns a link when its actor holds an active one to the patient. The clinic is
         ``care_teams.clinic_id``, never the actor's default clinic; an actor with links at two
         clinics for the same patient, or with none, gets no clinic rather than a guess.
         """
@@ -90,6 +90,7 @@ class FhirAuditExportService:
             self.db.table("care_teams")
             .select("clinician_id, clinic_id")
             .eq("patient_id", str(patient_id))
+            .eq("status", "active")
             .in_("clinician_id", sorted(actors))
             .execute()
         )

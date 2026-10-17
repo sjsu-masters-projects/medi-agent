@@ -74,11 +74,11 @@ function ReportRow({ draft, from, showClinic }: { draft: MedWatchDraft; from: st
             <Link className={rowLinkClass} href={href}>
                 <div className="hidden items-center gap-4 md:grid" style={{ gridTemplateColumns: COLUMNS }}>
                     <div className="flex min-w-0 items-center gap-2">
-                        <p className="truncate font-mono text-sm font-semibold text-ink">{code}</p>
+                        <p className="truncate font-mono text-sm font-semibold text-ink" title={code}>{code}</p>
                         {showClinic ? <ClinicChip name={draft.clinicName} /> : null}
                     </div>
-                    <p className="truncate text-sm text-ink-2">{product}</p>
-                    <p className="truncate text-sm text-ink-2">{event}</p>
+                    <p className="truncate text-sm text-ink-2" title={product}>{product}</p>
+                    <p className="truncate text-sm text-ink-2" title={event}>{event}</p>
                     <div>
                         <StatusChip draft={draft} />
                     </div>
@@ -87,12 +87,12 @@ function ReportRow({ draft, from, showClinic }: { draft: MedWatchDraft; from: st
                 </div>
                 <div className="space-y-1 md:hidden">
                     <div className="flex items-center justify-between gap-3">
-                        <p className="min-w-0 truncate font-mono text-sm font-semibold text-ink">{code}</p>
+                        <p className="min-w-0 truncate font-mono text-sm font-semibold text-ink" title={code}>{code}</p>
                         <StatusChip draft={draft} />
                     </div>
                     {showClinic ? <ClinicChip name={draft.clinicName} /> : null}
                     <div className="flex items-center justify-between gap-3">
-                        <p className="min-w-0 truncate text-[13px] text-ink-2">
+                        <p className="min-w-0 truncate text-[13px] text-ink-2" title={`${product} · ${event}`}>
                             {product} · {event}
                         </p>
                         <p className="shrink-0 font-mono text-xs text-muted">{updated}</p>

@@ -145,3 +145,67 @@ async def test_patient_conversations_ignore_the_clinic_filter(service):
     svc, db = service
     db.rpc.return_value.execute.return_value = SimpleNamespace(data=[{"id": "t1"}])
     assert await svc.list_conversations(uuid4()) == [{"id": "t1"}]
+
+
+# ── LOC-003 translation reads are bounded, logged, and never fail the read ──
+
+
+def _translating_service(role: str = "clinician"):
+    db = MagicMock()
+    actor = CurrentUser(id=uuid4(), email="synthetic@example.com", role=role)
+    return CareConversationService(db, actor)
+
+
+def _spanish_page(count: int) -> dict:
+    return {
+        "items": [
+            {
+                "id": f"m-{i}",
+                "sender_role": "patient",
+                "body": "Hola doctora, no me siento bien y tengo mucho dolor hoy.",
+            }
+            for i in range(count)
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_on_the_fly_translation_is_bounded_and_skips_stored(monkeypatch):
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import care_conversation_service as module
+
+    fake = MagicMock()
+    fake.get_translations_for_messages.return_value = {
+        "m-0": {"translated_text": "stored", "guard_passed": True}
+    }
+    fake.translate_and_store = AsyncMock(
+        return_value={"translated_text": "x", "guard_passed": True}
+    )
+    svc = _translating_service()
+    page = _spanish_page(module.MAX_ON_THE_FLY_TRANSLATIONS + 5)
+    with patch("app.services.message_translation.MessageTranslationService", return_value=fake):
+        await svc._attach_translations(page)
+    assert fake.translate_and_store.await_count == module.MAX_ON_THE_FLY_TRANSLATIONS
+    called = {c.kwargs["source_message_id"] for c in fake.translate_and_store.await_args_list}
+    assert "m-0" not in called
+    assert page["items"][0]["translation"] == "stored"
+
+
+@pytest.mark.asyncio
+async def test_translation_failure_is_logged_without_message_text(caplog):
+    from unittest.mock import AsyncMock, patch
+
+    fake = MagicMock()
+    fake.get_translations_for_messages.return_value = {}
+    fake.translate_and_store = AsyncMock(side_effect=RuntimeError("provider down"))
+    svc = _translating_service()
+    page = _spanish_page(2)
+    with (
+        patch("app.services.message_translation.MessageTranslationService", return_value=fake),
+        caplog.at_level("WARNING"),
+    ):
+        await svc._attach_translations(page)  # must not raise
+    assert "translation" in caplog.text.lower()
+    assert "dolor" not in caplog.text
+    assert "translation" not in page["items"][0]

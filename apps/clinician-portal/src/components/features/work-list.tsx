@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Badge, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
@@ -88,25 +88,32 @@ export function StatusTabs<T extends string>({
     value: T;
     onChange: (value: T) => void;
 }) {
+    const activeRef = useRef<HTMLButtonElement | null>(null);
+    useEffect(() => {
+        // On a narrow screen the chosen filter can sit off-screen; bring it into view.
+        activeRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    }, [value]);
+    // Filters that change a list in place are toggle buttons in a labelled group, not a tab
+    // widget: there are no separate panels to control and no arrow-key model to maintain.
     return (
         <div
             aria-label={label}
             className="flex gap-1 overflow-x-auto border-b border-line-strong"
-            role="tablist"
+            role="group"
         >
             {tabs.map((tab) => {
                 const active = tab.value === value;
                 return (
                     <button
-                        aria-selected={active}
-                        className={`ma-press -mb-px flex h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-[13px] font-medium transition-colors ${
+                        aria-pressed={active}
+                        className={`ma-press -mb-px flex h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                             active
                                 ? "border-primary text-ink"
                                 : "border-transparent text-muted hover:text-ink"
                         }`}
                         key={tab.value}
                         onClick={() => onChange(tab.value)}
-                        role="tab"
+                        ref={active ? activeRef : undefined}
                         type="button"
                     >
                         {tab.label}

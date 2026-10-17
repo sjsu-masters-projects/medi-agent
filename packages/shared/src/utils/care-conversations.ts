@@ -93,6 +93,7 @@ export function getConversationCopy(locale: string) {
     confirmWarning: "El mensaje anterior puede ya existir. Preparar un nuevo envío permite crear otro mensaje y podría duplicarlo. Esta acción no lo envía.",
     translatedFromEnglish: "Traducido del inglés", translatedFromSpanish: "Traducido del español",
     showOriginal: "Ver original", showTranslation: "Ver traducción", translationUncertain: "las cifras pueden diferir",
+    translationUnavailable: "Traducción automática no disponible para este mensaje",
   } : {
     recipient: "Choose recipient", choose: "Select a person", open: "Open conversation",
     threads: "Conversations", empty: "No conversations yet.", noRecipients: "No linked recipients available.",
@@ -110,6 +111,7 @@ export function getConversationCopy(locale: string) {
     confirmWarning: "The previous message may already exist. Preparing a new send permits another message and could duplicate it. This action does not send it.",
     translatedFromEnglish: "Translated from English", translatedFromSpanish: "Translated from Spanish",
     showOriginal: "Show original", showTranslation: "Show translation", translationUncertain: "numbers may differ",
+    translationUnavailable: "Automatic translation unavailable for this message",
   };
 }
 

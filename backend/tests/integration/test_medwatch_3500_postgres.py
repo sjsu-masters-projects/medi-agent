@@ -339,6 +339,38 @@ def test_a_submitted_draft_is_read_only_but_still_exportable(sql):
     ) == (f"pdf,09/2025,{SHA}")
 
 
+def test_a_preview_view_writes_one_audit_row_and_no_export(sql):
+    """The preview is audited as a view: no export row, no draft change, service role only."""
+    draft_id = form_draft(sql, assessment(sql))
+    approve(sql, draft_id)
+    before = sql(
+        f"SELECT revision::text||status::text||export_version::text FROM medwatch_drafts WHERE id='{draft_id}'"
+    )
+    sql(rpc("record_medwatch_draft_preview_viewed", q(draft_id), q(CLINICIAN)))
+    assert audit(sql, draft_id, "preview_viewed") == "1"
+    assert audit(sql, draft_id, "exported") == "0"
+    assert (
+        sql(
+            f"SELECT actor_id FROM medwatch_draft_audit_events WHERE medwatch_draft_id='{draft_id}' AND event_type='preview_viewed'"
+        )
+        == CLINICIAN
+    )
+    assert before == sql(
+        f"SELECT revision::text||status::text||export_version::text FROM medwatch_drafts WHERE id='{draft_id}'"
+    )
+    # An unassigned clinician cannot record (or fetch) a preview of someone else's draft.
+    assert "42501" in fails(sql, rpc("record_medwatch_draft_preview_viewed", q(draft_id), q(OTHER)))
+    for role in ("authenticated", "anon"):
+        assert "permission denied" in fails(
+            sql,
+            f"SET ROLE {role}; SELECT 1 FROM record_medwatch_draft_preview_viewed('{draft_id}','{CLINICIAN}');",
+        )
+    # An export still writes its own export row.
+    sql(rpc("record_medwatch_draft_export", q(draft_id), q(CLINICIAN), "'json'", "NULL", "NULL"))
+    assert audit(sql, draft_id, "exported") == "1"
+    assert audit(sql, draft_id, "preview_viewed") == "1"
+
+
 def test_submission_history_is_append_only(sql):
     """R22.4, R24.2, R24.4: no role updates, deletes, truncates or inserts directly."""
     draft_id = form_draft(sql, assessment(sql))

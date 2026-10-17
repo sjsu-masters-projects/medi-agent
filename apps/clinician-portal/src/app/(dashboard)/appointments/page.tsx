@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
-import { ClinicFilterEmpty, ClinicFilterField, LinkedAt } from "@/components/features/clinic-chip";
+import { ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { AppointmentOfferForm } from "@/components/features/appointment-offer-form";
 import { AppointmentOfferHistory } from "@/components/features/appointment-offer-history";
 import { Button, EmptyState, ErrorState, Skeleton } from "@/components/ui";
@@ -26,9 +26,7 @@ function PatientAppointments({
   onCreated,
   onSendingChange,
   appointmentId,
-  showClinic = false,
 }: {
-  showClinic?: boolean;
   token: string;
   patient: AssignedSchedulingPatient;
   appointments: Appointment[];
@@ -135,7 +133,6 @@ function PatientAppointments({
               <p className="mt-0.5 text-[13px] text-muted">
                 {patient.first_name} {patient.last_name}
               </p>
-              <LinkedAt name={showClinic ? patient.clinic_name : null} />
             </div>
             <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
               {settings.timezone}
@@ -143,7 +140,6 @@ function PatientAppointments({
           </div>
           <AppointmentOfferHistory
             patientName={`${patient.first_name} ${patient.last_name}`}
-            showClinic={showClinic}
             appointmentId={appointmentId}
             token={token}
             appointments={appointments}
@@ -278,7 +274,6 @@ function SchedulingWorkspace({ token, appointmentId }: { token: string; appointm
           {selected && (
             <PatientAppointments
               appointmentId={appointmentId}
-              showClinic={clinicFilter.multi}
               key={selected.care_team_id}
               token={token}
               patient={selected}

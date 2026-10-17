@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSelector } from "react-redux";
-import { Badge, Button, Card, CopyButton, Input } from "@/components/ui";
+import { Badge, Button, Card, CopyButton, Input, Modal } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { api } from "@/services/api";
 import {
@@ -165,10 +165,15 @@ function getPatientLabel(record: InviteCodeRecord) {
     return fullName || record.patient.email || "—";
 }
 
+type PendingStaffAction =
+    | { kind: "grant" | "demote"; member: StaffMember; newRole: ClinicianRole }
+    | { kind: "remove"; member: StaffMember };
+
 export default function SettingsPage() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [clinicName, setClinicName] = useState("");
+    const [pendingAction, setPendingAction] = useState<PendingStaffAction | null>(null);
     const [clinicCode, setClinicCode] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [inviteEmail, setInviteEmail] = useState("");
@@ -419,25 +424,18 @@ export default function SettingsPage() {
             return;
         }
 
-        if (typeof window !== "undefined") {
-            const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
-            if (newRole === ClinicianRole.ADMIN) {
-                const confirmed = window.confirm(
-                    `Grant Clinic Admin access to ${fullName}? This allows full staff and clinic management.`,
-                );
-                if (!confirmed) {
-                    return;
-                }
-            }
+        if (newRole === ClinicianRole.ADMIN || member.role === ClinicianRole.ADMIN) {
+            // Granting or removing Clinic Admin is confirmed in a modal before it is sent.
+            setPendingAction({ kind: newRole === ClinicianRole.ADMIN ? "grant" : "demote", member, newRole });
+            return;
+        }
 
-            if (member.role === ClinicianRole.ADMIN && newRole !== ClinicianRole.ADMIN) {
-                const confirmed = window.confirm(
-                    `Remove Clinic Admin access from ${fullName}? They will lose admin permissions.`,
-                );
-                if (!confirmed) {
-                    return;
-                }
-            }
+        await applyRoleChange(memberId, newRole);
+    }
+
+    async function applyRoleChange(memberId: string, newRole: ClinicianRole) {
+        if (!token) {
+            return;
         }
 
         setError(null);
@@ -465,14 +463,17 @@ export default function SettingsPage() {
         }
 
         const member = staffList.find((entry) => entry.id === memberId);
-        if (typeof window !== "undefined" && member) {
-            const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
-            const confirmed = window.confirm(
-                `Remove ${fullName} from ${clinicName || "this clinic"}? Their patient links at ${clinicName || "this clinic"} end; patients keep their other care-team members.`,
-            );
-            if (!confirmed) {
-                return;
-            }
+        if (member) {
+            setPendingAction({ kind: "remove", member });
+            return;
+        }
+
+        await applyRemove(memberId);
+    }
+
+    async function applyRemove(memberId: string) {
+        if (!token) {
+            return;
         }
 
         setError(null);
@@ -603,6 +604,8 @@ export default function SettingsPage() {
                                         <p className="text-[13px] text-muted">Clinic Name</p>
                                         <p className="text-sm font-medium text-ink">{clinicName || "—"}</p>
                                     </div>
+                                    {/* The open join code is shown to admins only; the server sends it to no one else. */}
+                                    {isClinicAdmin ? (
                                     <div className="space-y-2 px-5 py-4">
                                         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
                                             <p className="text-[13px] text-muted">Clinic Code</p>
@@ -619,6 +622,7 @@ export default function SettingsPage() {
                                             New clinicians can join with this clinic code. Sending an invite is optional.
                                         </p>
                                     </div>
+                                    ) : null}
                                 </div>
                             </div>
                         </Card>
@@ -1003,6 +1007,36 @@ export default function SettingsPage() {
                     </Card>
                 </div>
             ) : null}
+            {pendingAction ? (() => {
+                const { member } = pendingAction;
+                const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
+                const clinicLabel = clinicName || "this clinic";
+                const copy = pendingAction.kind === "grant"
+                    ? { title: `Make ${fullName} a Clinic Admin?`, body: `${fullName} will be able to manage staff, invitations and settings at ${clinicLabel}.`, confirm: "Grant Clinic Admin", destructive: false }
+                    : pendingAction.kind === "demote"
+                        ? { title: `Remove Clinic Admin from ${fullName}?`, body: `${fullName} will lose admin permissions at ${clinicLabel} but stays on the team.`, confirm: "Remove admin access", destructive: true }
+                        : { title: `Remove ${fullName} from ${clinicLabel}?`, body: `Their patient links at ${clinicLabel} end; patients keep their other care-team members.`, confirm: `Remove ${fullName}`, destructive: true };
+                const close = () => setPendingAction(null);
+                const confirm = () => {
+                    const action = pendingAction;
+                    setPendingAction(null);
+                    void (action.kind === "remove" ? applyRemove(action.member.id) : applyRoleChange(action.member.id, action.newRole));
+                };
+                return (
+                    <Modal onClose={close} open title={copy.title}>
+                        <p className="text-sm text-ink-2">{copy.body}</p>
+                        <div className="mt-5 flex flex-wrap justify-end gap-2">
+                            <Button onClick={close} variant="secondary">Cancel</Button>
+                            <Button
+                                className={copy.destructive ? "!border-risk-strong !bg-risk-strong !text-white hover:!bg-risk" : undefined}
+                                onClick={confirm}
+                            >
+                                {copy.confirm}
+                            </Button>
+                        </div>
+                    </Modal>
+                );
+            })() : null}
         </div>
     );
 }

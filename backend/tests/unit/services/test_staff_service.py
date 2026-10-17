@@ -67,7 +67,31 @@ async def test_list_staff_returns_members_with_the_role_held_at_the_clinic(servi
     }
     assert result["clinic_id"] == CLINIC_A
     assert result["clinic_name"] == "City Health"
-    assert result["clinic_code"] == "ABC123"
+    # The open join code is for admins only; this caller is a provider there.
+    assert result["clinic_code"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["provider", "nurse"])
+async def test_list_staff_hides_the_clinic_code_from_non_admins(service, role):
+    me = uuid4()
+    _memberships(service, _membership(me, role=role))
+    service.memberships.repo.list_active_for_clinic = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"clinician_id": str(me), "role": role}]
+    )
+    service.clinician_repo.list_staff_by_ids = MagicMock(return_value=[{"id": str(me)}])  # type: ignore[method-assign]
+    assert (await service.list_staff(me))["clinic_code"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_staff_gives_the_clinic_code_to_an_admin(service):
+    me = uuid4()
+    _memberships(service, _membership(me, role="admin"))
+    service.memberships.repo.list_active_for_clinic = AsyncMock(  # type: ignore[method-assign]
+        return_value=[{"clinician_id": str(me), "role": "admin"}]
+    )
+    service.clinician_repo.list_staff_by_ids = MagicMock(return_value=[{"id": str(me)}])  # type: ignore[method-assign]
+    assert (await service.list_staff(me))["clinic_code"] == "ABC123"
 
 
 @pytest.mark.asyncio
