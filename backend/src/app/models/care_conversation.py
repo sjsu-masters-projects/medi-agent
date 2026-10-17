@@ -56,6 +56,10 @@ class ConversationMessage(BaseModel):
     sender_name: str
     body: str
     created_at: datetime
+    # LOC-003: optional stored translation
+    translation: str | None = None
+    translation_locale: str | None = None
+    translation_guard_passed: bool | None = None
 
 
 class ConversationMessagePage(BaseModel):

@@ -84,6 +84,8 @@ export function getConversationCopy(locale: string) {
     invalid: "El mensaje fue rechazado. Tu texto se conserva; revísalo o edítalo antes de volver a enviarlo.",
     prepareNew: "Preparar un nuevo envío", confirmNew: "Confirmar: preparar un nuevo envío", cancel: "Cancelar",
     confirmWarning: "El mensaje anterior puede ya existir. Preparar un nuevo envío permite crear otro mensaje y podría duplicarlo. Esta acción no lo envía.",
+    translatedFromEnglish: "Traducido del inglés", translatedFromSpanish: "Traducido del español",
+    showOriginal: "Ver original", showTranslation: "Ver traducción", translationUncertain: "las cifras pueden diferir",
   } : {
     recipient: "Choose recipient", choose: "Select a person", open: "Open conversation",
     threads: "Conversations", empty: "No conversations yet.", noRecipients: "No linked recipients available.",
@@ -99,6 +101,8 @@ export function getConversationCopy(locale: string) {
     invalid: "The message was rejected. Your text is preserved; review or edit it before sending again.",
     prepareNew: "Prepare a new send", confirmNew: "Confirm: prepare a new send", cancel: "Cancel",
     confirmWarning: "The previous message may already exist. Preparing a new send permits another message and could duplicate it. This action does not send it.",
+    translatedFromEnglish: "Translated from English", translatedFromSpanish: "Translated from Spanish",
+    showOriginal: "Show original", showTranslation: "Show translation", translationUncertain: "numbers may differ",
   };
 }
 

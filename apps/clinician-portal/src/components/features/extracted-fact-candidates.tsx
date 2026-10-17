@@ -108,13 +108,26 @@ export function factFields(
     fact: ExtractedDocumentFact,
     exclude: ReadonlySet<string> = new Set(),
 ): Array<{ key: string; label: string; value: string }> {
+    /* LOC-003: prefer English display_value fields when available (Spanish source). */
+    const displayValue = fact.display_value ?? {};
     return Object.entries(fact.value)
         .filter(([key, value]) => !DERIVED_KEYS.has(key) && !exclude.has(key) && isPresent(value))
-        .map(([key, value]) => ({
-            key,
-            label: factFieldLabel(fact.fact_type, key),
-            value: formatFactField(value),
-        }));
+        .map(([key, value]) => {
+            const englishOverride = displayValue[key];
+            const displayText = typeof englishOverride === "string" && englishOverride.trim()
+                ? englishOverride
+                : formatFactField(value);
+            return {
+                key,
+                label: factFieldLabel(fact.fact_type, key),
+                value: displayText,
+            };
+        });
+}
+
+/** LOC-003: True when this fact was extracted from a Spanish document and has English display fields. */
+export function isFactTranslatedFromSpanish(fact: ExtractedDocumentFact): boolean {
+    return fact.display_locale === "es-MX" && fact.display_value != null && Object.keys(fact.display_value).length > 0;
 }
 
 export type FactReviewEntry =
@@ -283,6 +296,7 @@ function FactCandidate({ fact, selected, onSelect }: FactCandidateProps) {
     const action = fact.fact_type === "medication" ? textValue(fact.value.medication_action).toLowerCase() : "";
     const consistency = textValue(fact.value.consistency);
     const citation = fact.citations?.[0];
+    const translated = isFactTranslatedFromSpanish(fact);
     return (
         <button
             aria-pressed={selected}
@@ -295,6 +309,7 @@ function FactCandidate({ fact, selected, onSelect }: FactCandidateProps) {
                     <div className="flex flex-wrap items-center gap-1.5">
                         <p className="text-sm font-semibold text-ink">{factTypeHeading(fact.fact_type)}</p>
                         {action ? <MedicationActionBadge action={action} /> : null}
+                        {translated ? <span className="inline-flex items-center gap-1 rounded-md bg-ai-tint px-1.5 py-0.5 text-[10px] font-medium text-ai-ink">Translated from Spanish</span> : null}
                     </div>
                     <p className="mt-1 text-xs font-medium text-warn-ink">{candidateState(fact)}</p>
                 </div>

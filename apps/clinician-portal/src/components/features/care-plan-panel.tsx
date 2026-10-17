@@ -36,6 +36,16 @@ interface CarePlanPanelProps {
 type EditableItem = CarePlanItem & { clinician_confirmed: boolean };
 type ActiveMedication = CarePlanReviewContext["active_medications"][number];
 const SOURCE_TITLE_REVIEW = "Source title exceeds the draft limit; replace it after reviewing the full evidence.";
+
+/** Always show English titles in the clinician portal, falling back to the source title. */
+function englishTitle(item: CarePlanItem | EditableItem): string {
+    return item.wording?.["en-US"]?.title?.trim() || item.title;
+}
+
+/** True when the English title shown to the clinician is a translation of a Spanish source. */
+function isTranslatedFromSpanish(item: CarePlanItem | EditableItem): boolean {
+    return item.source_locale === "es-MX" && Boolean(item.wording?.["en-US"]?.title?.trim());
+}
 const MEDICATION_ROUTES = ["oral", "topical", "inhaled", "iv", "im", "subcutaneous"];
 
 function distinctSources(item: CarePlanItem) {
@@ -336,7 +346,8 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                     {isDraft && overlapping.has(item.id) ? <span className="rounded-md bg-warn-tint px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-warn-ink">Overlap</span> : null}
                     {item.is_removed ? <span className="rounded-md bg-sunken px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-muted">Removed</span> : null}
                 </div>
-                <h3 id={`care-plan-item-${item.id}`} className="break-words text-xl font-semibold leading-snug tracking-[-0.01em] text-ink">{item.title}</h3>
+                <h3 id={`care-plan-item-${item.id}`} className="break-words text-xl font-semibold leading-snug tracking-[-0.01em] text-ink">{englishTitle(item)}</h3>
+                {isTranslatedFromSpanish(item) ? <p className="flex items-center gap-1.5 text-xs text-ai-ink"><Icon name="spark" className="h-3 w-3" />English translated from Spanish source</p> : null}
                 {isDraft && overlapping.has(item.id) ? <p className="text-sm text-warn-ink">Overlapping proposals — review before choosing. Compare their sources and keep one reviewed proposal per activity or medication.</p> : null}
             </header>
 
@@ -365,11 +376,11 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                     <p className="text-[13px] font-medium text-ink-2">Patient-facing wording · English and Spanish</p>
                     <p className="text-xs text-muted">Today shows the patient&apos;s chosen language exactly as written</p>
                 </div>
-                <BilingualWording busy={saving} fieldClass={fieldClass} item={item} patientLocale={patientLocale} unsaved={hasUnsavedChanges}
+                <BilingualWording busy={saving} fieldClass={fieldClass} item={item} patientLocale={patientLocale} unsaved={hasUnsavedChanges} patientId={patientId} planId={plan?.id}
                     onChange={(locale, field, value) => editWording(item, locale, field, value)}
                     onTranslate={(fromLocale) => void translate(item, fromLocale)}
                     onWriteManually={(sourceLocale) => writeManually(item, sourceLocale)} />
-            </div> : <ApprovedWording item={item} />}
+            </div> : <ApprovedWording item={item} patientLocale={patientLocale} />}
 
             {isDraft && item.category === "medication" && !item.is_removed ? <div className="space-y-3 rounded-xl border border-line bg-surface p-3.5 text-sm text-ink-2">
                 <div>
@@ -383,7 +394,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
 
             {item.blocker_reason && !item.is_removed ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn-line bg-warn-soft px-3.5 py-3"><p className="flex items-start gap-2 text-sm text-warn-ink"><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />{item.blocker_reason}</p>{isDraft ? <label className="flex items-center gap-2 text-sm font-medium text-ink-2"><input checked={item.clinician_confirmed} className="h-4 w-4 accent-[var(--color-primary)]" type="checkbox" onChange={(event) => patchItem(item.id, { clinician_confirmed: event.target.checked })} /> Confirm after review</label> : null}</div> : null}
 
-            {isDraft && !item.is_removed ? <label className={`flex items-start gap-3 rounded-xl border p-3.5 text-[13px] leading-relaxed transition-colors duration-[160ms] ${!wordingComplete(item) ? "cursor-not-allowed border-line bg-surface-2 text-muted" : item.wording_verified ? "border-ok-line bg-ok-soft text-ok-ink" : "border-line-strong bg-surface text-ink-2 hover:border-primary-line"}`}><input checked={Boolean(item.wording_verified) && wordingComplete(item)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]" disabled={!wordingComplete(item)} type="checkbox" onChange={(event) => patchItem(item.id, { wording_verified: event.target.checked })} /><span>I checked the title, instructions, frequency and medication wording in English and Spanish against the source.{!wordingComplete(item) ? " Complete both languages first." : ""}</span></label> : null}
+            {isDraft && !item.is_removed ? <label className={`flex items-start gap-3 rounded-xl border p-3.5 text-[13px] leading-relaxed transition-colors duration-[160ms] ${!wordingComplete(item) ? "cursor-not-allowed border-line bg-surface-2 text-muted" : item.wording_verified ? "border-ok-line bg-ok-soft text-ok-ink" : "border-line-strong bg-surface text-ink-2 hover:border-primary-line"}`}><input checked={Boolean(item.wording_verified) && wordingComplete(item)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]" disabled={!wordingComplete(item)} type="checkbox" onChange={(event) => patchItem(item.id, { wording_verified: event.target.checked })} /><span>I verified the English wording against the source and confirmed the Spanish through its back-translation and automated safety checks (numbers, doses, medication names).{!wordingComplete(item) ? " Complete both languages first." : ""}</span></label> : null}
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-ink-2">
                 <span className="font-mono font-medium">{item.confidence_score == null ? "Extraction confidence unavailable" : `${Math.round(item.confidence_score * 100)}% extraction confidence`}</span>
@@ -431,7 +442,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                     <div className="flex flex-wrap gap-x-5 gap-y-1">
                         <details className="ma-disclosure"><summary className="min-h-8 py-1 font-medium text-primary">Documents linked to proposed items ({sourceDocuments.length})</summary>
                             {sourceDocuments.length ? <ul className="mt-1.5 space-y-1 pl-6 text-ink-2">{sourceDocuments.map(([id, name]) => <li className="flex min-w-0 items-start gap-1.5" key={id}><SourceFileIcon className="mt-px" name={name} /><span className="min-w-0 break-all">{name}</span></li>)}</ul> : <p className="mt-1 pl-6">No source document is linked to these items.</p>}</details>
-                        {activePlan ? <details className="ma-disclosure"><summary className="min-h-8 py-1 font-medium text-primary">View currently approved version {activePlan.version_number}</summary><ul className="mt-1 list-disc space-y-0.5 pl-9 text-ink-2">{activePlan.items.filter((item) => !item.is_removed).map((item) => <li key={item.id}>{item.title} · {item.frequency}</li>)}</ul></details> : null}
+                        {activePlan ? <details className="ma-disclosure"><summary className="min-h-8 py-1 font-medium text-primary">View currently approved version {activePlan.version_number}</summary><ul className="mt-1 list-disc space-y-0.5 pl-9 text-ink-2">{activePlan.items.filter((item) => !item.is_removed).map((item) => <li key={item.id}>{englishTitle(item)} · {item.frequency}</li>)}</ul></details> : null}
                     </div>
                 </div> : null}
                 {plan.status === "approved" && generation && generation.status !== "completed" ? <div className="flex items-start gap-3 rounded-xl border border-primary-line bg-primary-tint px-4 py-3 text-sm text-ink-2">
@@ -502,8 +513,8 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                                     className={`flex w-full items-start gap-2.5 rounded-[10px] border p-2.5 text-left transition-colors duration-[160ms] ${selected ? "border-[rgba(96,165,250,.35)] bg-[rgba(96,165,250,.1)]" : "border-transparent hover:bg-surface-2"} ${item.is_removed ? "opacity-60" : ""}`}>
                                     <span className="mt-0.5">{statusBox(state)}</span>
                                     <span className="flex min-w-0 flex-col">
-                                        <span className={`line-clamp-2 break-words text-sm text-ink ${selected ? "font-semibold" : "font-medium"} ${item.is_removed ? "line-through decoration-[#94A3B8]" : ""}`}>{item.title}</span>
-                                        <span className={`mt-0.5 truncate text-xs ${state === "blocker" ? "text-warn-ink" : "text-muted"}`}>{itemSub(item)}</span>
+                                        <span className={`line-clamp-2 break-words text-sm text-ink ${selected ? "font-semibold" : "font-medium"} ${item.is_removed ? "line-through decoration-[#94A3B8]" : ""}`}>{englishTitle(item)}</span>
+                                        <span className={`mt-0.5 flex flex-wrap items-center gap-1.5 text-xs ${state === "blocker" ? "text-warn-ink" : "text-muted"}`}>{itemSub(item)}{isTranslatedFromSpanish(item) ? <span className="rounded bg-ai-tint px-1 py-0.5 text-[10px] font-medium text-ai-ink">Translated from Spanish</span> : null}</span>
                                     </span>
                                 </button>
                             </li>;
@@ -538,7 +549,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             <section className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
                 <h3 className="font-semibold text-ink">Proposed publication summary</h3>
                 <p className="mt-1 text-sm text-muted">Retained plan instructions are listed below. Use Preview Today to include existing activities and patient reminder settings.</p>
-                <details className="ma-disclosure mt-2"><summary className="min-h-9 py-1 text-sm font-medium text-ink-2">Review retained instructions ({items.filter((item) => !item.is_removed).length})</summary><ul className="mt-2 list-disc space-y-1 pl-9 text-sm text-ink-2">{items.filter((item) => !item.is_removed).map((item) => <li key={item.id}>{item.title}{item.title.trim().replace(/\s+/g, " ") === item.instructions.trim().replace(/\s+/g, " ") ? "" : ` — ${item.instructions}`} · {item.frequency}{item.category === "medication" ? ` · ${medicationText(item.medication.decision) || "no medication decision"}` : ""}</li>)}</ul></details>
+                <details className="ma-disclosure mt-2"><summary className="min-h-9 py-1 text-sm font-medium text-ink-2">Review retained instructions ({items.filter((item) => !item.is_removed).length})</summary><ul className="mt-2 list-disc space-y-1 pl-9 text-sm text-ink-2">{items.filter((item) => !item.is_removed).map((item) => <li key={item.id}>{englishTitle(item)}{englishTitle(item).trim().replace(/\s+/g, " ") === (item.wording?.["en-US"]?.instructions?.trim().replace(/\s+/g, " ") || item.instructions.trim().replace(/\s+/g, " ")) ? "" : ` — ${item.wording?.["en-US"]?.instructions?.trim() || item.instructions}`} · {item.wording?.["en-US"]?.frequency?.trim() || item.frequency}{item.category === "medication" ? ` · ${medicationText(item.medication.decision) || "no medication decision"}` : ""}</li>)}</ul></details>
             </section>
         </div> : null}
 

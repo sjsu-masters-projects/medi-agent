@@ -31,7 +31,7 @@ class CareConversationService:
         return cast(dict[str, Any], await self._call("open", data.model_dump(mode="json")))
 
     async def messages(self, conversation: UUID, options: dict[str, Any]) -> dict[str, Any]:
-        return cast(
+        result = cast(
             dict[str, Any],
             await self._call(
                 "messages",
@@ -41,9 +41,12 @@ class CareConversationService:
                 },
             ),
         )
+        # LOC-003: Attach stored translations to messages.
+        await self._attach_translations(result)
+        return result
 
     async def send(self, conversation: UUID, data: ConversationSend) -> dict[str, Any]:
-        return cast(
+        result = cast(
             dict[str, Any],
             await self._call(
                 "send",
@@ -53,6 +56,9 @@ class CareConversationService:
                 },
             ),
         )
+        # LOC-003: Translate the sent message asynchronously and store the translation.
+        await self._translate_message(result)
+        return result
 
     async def mark_read(self, conversation: UUID, data: ConversationReadMarker) -> dict[str, Any]:
         return cast(
@@ -104,3 +110,87 @@ class CareConversationService:
             actor_role=self.actor.role,
             target_type="care_conversation",
         )
+
+    async def _translate_message(self, message: dict[str, Any]) -> None:
+        """LOC-003: Translate a newly sent message and store the translation."""
+        try:
+            from app.services.message_translation import MessageTranslationService
+
+            body = str(message.get("body") or "").strip()
+            message_id = str(message.get("id") or "")
+            sender_role = str(message.get("sender_role") or self.actor.role)
+            if not body or not message_id:
+                return
+            service = MessageTranslationService(self.db)
+            source_locale, target_locale = service.detect_and_get_target_locale(body, sender_role)
+            result = await service.translate_and_store(
+                source_table="care_team_conversation_messages",
+                source_message_id=message_id,
+                text=body,
+                source_locale=source_locale,
+                target_locale=target_locale,
+            )
+            if result:
+                message["translation"] = result.get("translated_text")
+                message["translation_locale"] = target_locale
+                message["translation_guard_passed"] = result.get("guard_passed", True)
+        except Exception:
+            pass  # Translation is optional; never fail the send.
+
+    async def _attach_translations(self, page: dict[str, Any]) -> None:
+        """LOC-003: Attach stored translations to messages, translating on the fly if needed."""
+        try:
+            from app.services.message_translation import MessageTranslationService
+            from app.utils.localization import detect_locale
+
+            items = page.get("items") or []
+            if not items:
+                return
+            # Determine the viewer's target locale: clinician sees English, patient sees their language.
+            target_locale = "en-US" if self.actor.role == "clinician" else "es-MX"
+            message_ids = [str(msg["id"]) for msg in items if msg.get("id")]
+            if not message_ids:
+                return
+            service = MessageTranslationService(self.db)
+            translations = service.get_translations_for_messages(
+                source_table="care_team_conversation_messages",
+                message_ids=message_ids,
+                target_locale=target_locale,
+            )
+            for msg in items:
+                msg_id = str(msg.get("id") or "")
+                tr = translations.get(msg_id)
+                if tr:
+                    msg["translation"] = tr.get("translated_text")
+                    msg["translation_locale"] = target_locale
+                    msg["translation_guard_passed"] = tr.get("guard_passed", True)
+                else:
+                    # No stored translation — translate on the fly for messages from the
+                    # other party (clinician sees patient's Spanish, patient sees clinician's English).
+                    body = str(msg.get("body") or "").strip()
+                    sender_role = str(msg.get("sender_role") or "")
+                    is_other_party = (
+                        self.actor.role == "clinician" and sender_role == "patient"
+                    ) or (self.actor.role == "patient" and sender_role == "clinician")
+                    if not is_other_party or not body:
+                        continue
+                    detected = detect_locale(body)
+                    needs_translation = (
+                        self.actor.role == "clinician" and detected == "es-MX"
+                    ) or (self.actor.role == "patient" and detected == "en-US")
+                    if not needs_translation:
+                        continue
+                    source_locale = detected or ("es-MX" if target_locale == "en-US" else "en-US")
+                    result = await service.translate_and_store(
+                        source_table="care_team_conversation_messages",
+                        source_message_id=msg_id,
+                        text=body,
+                        source_locale=source_locale,
+                        target_locale=target_locale,
+                    )
+                    if result:
+                        msg["translation"] = result.get("translated_text")
+                        msg["translation_locale"] = target_locale
+                        msg["translation_guard_passed"] = result.get("guard_passed", True)
+        except Exception:
+            pass  # Translations are optional; never fail the read.
