@@ -81,10 +81,10 @@ describe("ADR review queue", () => {
         expect(mocks.fetchADRReviewQueue).toHaveBeenCalledWith({ status: "all", clinicId: null });
         expect(within(list).getAllByRole("listitem")).toHaveLength(10);
         expect(screen.queryByText("Never shown in the list.")).not.toBeInTheDocument();
-        expect(screen.getByRole("tab", { name: /Awaiting review\s*25/ })).toHaveAttribute("aria-selected", "true");
-        expect(screen.getByRole("tab", { name: /Information requested\s*1/ })).toBeInTheDocument();
-        expect(screen.getByRole("tab", { name: /Reviewed\s*1/ })).toBeInTheDocument();
-        expect(screen.getByRole("tab", { name: /Dismissed\s*1/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Awaiting review\s*25/ })).toHaveAttribute("aria-pressed", "true");
+        expect(screen.getByRole("button", { name: /Information requested\s*1/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Reviewed\s*1/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Dismissed\s*1/ })).toBeInTheDocument();
         expect(screen.getByText(/Scores are decision support, not a verdict/)).toBeInTheDocument();
         expect(screen.getByText("1–10")).toBeInTheDocument();
     });
@@ -106,7 +106,7 @@ describe("ADR review queue", () => {
         fireEvent.click(screen.getByRole("button", { name: "Next" }));
         expect(window.location.search).toBe("?page=2");
         expect(screen.getByText("11–20")).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("tab", { name: /Reviewed/ }));
+        fireEvent.click(screen.getByRole("button", { name: /Reviewed/ }));
         expect(window.location.search).toBe("?tab=reviewed");
         expect((await screen.findAllByText("Done Synthetic")).length).toBeGreaterThan(0);
         view.unmount();
@@ -114,7 +114,7 @@ describe("ADR review queue", () => {
         query.value = "tab=dismissed";
         render(<ADRReviewsPage />);
         expect((await screen.findAllByText("Dropped Synthetic")).length).toBeGreaterThan(0);
-        expect(screen.getByRole("tab", { name: /Dismissed/ })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByRole("button", { name: /Dismissed/ })).toHaveAttribute("aria-pressed", "true");
     });
 
     it("shows the information-requested tab, missing counts and an empty-tab sentence", async () => {
@@ -122,7 +122,7 @@ describe("ADR review queue", () => {
         query.value = "tab=information";
         render(<ADRReviewsPage />);
         expect((await screen.findAllByText("Waiting Synthetic")).length).toBeGreaterThan(0);
-        fireEvent.click(screen.getByRole("tab", { name: /Awaiting review/ }));
+        fireEvent.click(screen.getByRole("button", { name: /Awaiting review/ }));
         expect(await screen.findByText("No assessments are waiting for your review.")).toBeInTheDocument();
     });
 

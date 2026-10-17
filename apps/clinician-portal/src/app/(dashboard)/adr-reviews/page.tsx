@@ -61,12 +61,12 @@ function QueueRow({ item, from, showClinic }: { item: ADRReviewQueueItem; from: 
                     style={{ gridTemplateColumns: COLUMNS }}
                 >
                     <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-ink">{name}</p>
+                        <p className="truncate text-sm font-semibold text-ink" title={name}>{name}</p>
                         <p className="truncate text-xs text-muted">Severity {item.severity}/10</p>
                         {showClinic ? <ClinicChip className="mt-0.5" name={item.clinicName} /> : null}
                     </div>
-                    <p className="truncate text-sm text-ink-2">{item.symptom}</p>
-                    <p className="truncate text-sm text-ink-2">{item.suspectMedicationName}</p>
+                    <p className="truncate text-sm text-ink-2" title={item.symptom}>{item.symptom}</p>
+                    <p className="truncate text-sm text-ink-2" title={item.suspectMedicationName}>{item.suspectMedicationName}</p>
                     <div>
                         <CausalityPill band={item.causality} score={item.naranjoScore} />
                     </div>
@@ -78,12 +78,12 @@ function QueueRow({ item, from, showClinic }: { item: ADRReviewQueueItem; from: 
                 </div>
                 <div className="space-y-1 md:hidden">
                     <div className="flex items-center justify-between gap-3">
-                        <p className="min-w-0 truncate text-sm font-semibold text-ink">{name}</p>
+                        <p className="min-w-0 truncate text-sm font-semibold text-ink" title={name}>{name}</p>
                         <CausalityPill band={item.causality} score={item.naranjoScore} />
                     </div>
                     {showClinic ? <ClinicChip name={item.clinicName} /> : null}
                     <div className="flex items-center justify-between gap-3">
-                        <p className="min-w-0 truncate text-[13px] text-ink-2">
+                        <p className="min-w-0 truncate text-[13px] text-ink-2" title={`${item.symptom} · ${item.suspectMedicationName}`}>
                             {item.symptom} · {item.suspectMedicationName}
                         </p>
                         <p className="shrink-0 font-mono text-xs text-muted">

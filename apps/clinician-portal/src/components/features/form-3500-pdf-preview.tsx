@@ -78,7 +78,7 @@ function PreviewBody({
                 </p>
                 {state.kind === "ready" ? (
                     <a
-                        className="inline-flex items-center gap-1.5 rounded-md text-[13px] font-semibold text-primary hover:text-primary-hover"
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-md px-2 text-[13px] font-semibold text-primary outline-none hover:text-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
                         href={state.url}
                         rel="noreferrer"
                         target="_blank"

@@ -34,23 +34,21 @@ export function MedWatchStepper({
                             <button
                                 className="ma-press rounded-lg border border-line-strong px-2.5 py-1 text-xs font-medium text-ink-2 outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
                                 disabled={disabled}
-                                aria-label={`Previous step: ${REPORT_STEPS[current - 1].label}`}
                                 onClick={() => onSelect(REPORT_STEPS[current - 1].value)}
                                 type="button"
                             >
                                 <span aria-hidden="true">‹ </span>
-                                {REPORT_STEPS[current - 1].label}
+                                Previous: {REPORT_STEPS[current - 1].label}
                             </button>
                         ) : null}
                         {current < REPORT_STEPS.length - 1 ? (
                             <button
                                 className="ma-press rounded-lg border border-line-strong px-2.5 py-1 text-xs font-medium text-ink-2 outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
                                 disabled={disabled}
-                                aria-label={`Next step: ${REPORT_STEPS[current + 1].label}`}
                                 onClick={() => onSelect(REPORT_STEPS[current + 1].value)}
                                 type="button"
                             >
-                                {REPORT_STEPS[current + 1].label}
+                                Next: {REPORT_STEPS[current + 1].label}
                                 <span aria-hidden="true"> ›</span>
                             </button>
                         ) : null}

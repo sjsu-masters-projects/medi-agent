@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Appointment } from "@/types";
 import { ApiClientError } from "@/services/api";
+import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
 const mocks = vi.hoisted(() => ({
   patients: vi.fn(),
   appointments: vi.fn(),
@@ -382,6 +383,24 @@ describe("clinician appointments page", () => {
     expect(screen.queryByText("Clinic: Synthetic Clinic North")).not.toBeInTheDocument();
     expect(screen.getAllByRole("combobox").filter((el) => (el as HTMLSelectElement).name === "clinic")).toHaveLength(0);
   });
+  it("names the clinic once next to a multi-clinic patient, not again in the header or history", async () => {
+    mocks.patients.mockResolvedValue([
+      { ...roster[0], clinic_id: "c1", clinic_name: "Synthetic Clinic North" },
+      { ...roster[1], clinic_id: "c2", clinic_name: "Synthetic Clinic South" },
+    ]);
+    mocks.appointments.mockResolvedValue([appointment({ clinicName: "Synthetic Clinic North" } as Partial<Appointment>)]);
+    clinicFilterState.clinics = [
+      { clinic_id: "c1", clinic_code: "A", clinic_name: "Synthetic Clinic North", role: "admin", status: "active" },
+      { clinic_id: "c2", clinic_code: "B", clinic_name: "Synthetic Clinic South", role: "provider", status: "active" },
+    ] as never;
+    render(<AppointmentsPage />);
+    await selectPatient("team1");
+    await screen.findByText("Clinic: Synthetic Clinic North");
+    // Once in the Clinic row; the patient picker option carries it to tell two links apart.
+    const outsidePicker = screen.queryAllByText(/Synthetic Clinic North/).filter((el) => el.tagName !== "OPTION");
+    expect(outsidePicker).toHaveLength(1);
+    resetClinicFilter();
+  });
   describe("clinician schedule conflicts", () => {
     function conflictError(conflicts: unknown[]) {
       return new ApiClientError("raw server text", 422, {
@@ -419,8 +438,11 @@ describe("clinician appointments page", () => {
       expect(option1).toHaveAttribute("aria-describedby", callout.id);
       const send = screen.getByRole("button", { name: "Send appointment offer" });
       expect(send).toBeDisabled();
+      const help = screen.getByText("Change the conflicting time to send.");
+      expect(send).toHaveAttribute("aria-describedby", help.id);
       fireEvent.change(option1, { target: { value: "2027-07-05T10:00" } });
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.queryByText("Change the conflicting time to send.")).not.toBeInTheDocument();
       expect(send).toBeEnabled();
       mocks.propose.mockClear();
       submit();
