@@ -72,3 +72,37 @@ def reset_process_limits() -> None:
     password_reset_client_limiter._events.clear()
     password_reset_email_limiter._events.clear()
     ResendClient._status_unavailable = False
+
+
+class _OfflineProvider:
+    """A text provider that refuses every call, so a test can never spend a real model call."""
+
+    async def generate(self, *_args: Any, **_kwargs: Any) -> Any:
+        from app.models.generation import GenerationErrorCode, GenerationProviderError
+
+        raise GenerationProviderError(
+            GenerationErrorCode.CONFIGURATION, "Model calls are disabled in tests"
+        )
+
+
+@pytest.fixture(autouse=True)
+def no_real_model_calls(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reaches a real model, whatever credentials (ADC, keys, HOME) the machine has.
+
+    Tests that need model output patch the provider, router or workload function themselves;
+    those patches are applied later and take precedence over these refusals.
+    """
+    # These modules assert how the real provider builders construct clients (no network).
+    if request.module.__name__.rsplit(".", 1)[-1] in {"test_adk_models", "test_provider_factory"}:
+        return
+    from app.adk.models import factory
+
+    monkeypatch.setattr(factory, "build_maas_provider", lambda *_a, **_k: _OfflineProvider())
+    monkeypatch.setattr(factory, "build_genai_provider", lambda *_a, **_k: _OfflineProvider())
+
+    def refuse(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("Model clients are disabled in tests")
+
+    from google import genai
+
+    monkeypatch.setattr(genai, "Client", refuse)
