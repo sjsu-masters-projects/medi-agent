@@ -3,7 +3,8 @@ import type { ClinicianRole } from "@/types";
 
 /** A clinic the signed-in clinician belongs to, with the role held there. */
 export interface ClinicMembershipSummary {
-    clinic_code: string;
+    /** The open join code; the server sends it only to an admin at that clinic. */
+    clinic_code: string | null;
     clinic_id: string;
     clinic_name: string;
     role: ClinicianRole;

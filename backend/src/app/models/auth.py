@@ -131,7 +131,7 @@ class InvitationClinic(BaseModel):
     """Clinic context returned once an invitation has granted membership."""
 
     clinic_id: UUID
-    clinic_code: str
+    clinic_code: str | None = None
     clinic_name: str
     status: Literal["active", "suspended"] = "active"
 

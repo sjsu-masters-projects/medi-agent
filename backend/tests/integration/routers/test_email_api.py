@@ -145,7 +145,8 @@ def test_clinician_accept_uses_auth_address_and_returns_clinic(client, invitatio
     )
     response = client.post("/api/v1/email/invitations/accept", json={"token": TOKEN})
     assert response.status_code == 200
-    assert response.json()["clinic"]["clinic_code"] == "ABC123"
+    # The open join code is for admins; accepting an invitation does not echo it.
+    assert response.json()["clinic"]["clinic_code"] is None
     params = invitation_db.rpc.call_args.args[1]
     assert params["p_actor"] == str(user.id)
     assert params["p_payload"]["account_email"] == "invitee@example.com"

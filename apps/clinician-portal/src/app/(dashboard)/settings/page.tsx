@@ -604,6 +604,8 @@ export default function SettingsPage() {
                                         <p className="text-[13px] text-muted">Clinic Name</p>
                                         <p className="text-sm font-medium text-ink">{clinicName || "—"}</p>
                                     </div>
+                                    {/* The open join code is shown to admins only; the server sends it to no one else. */}
+                                    {isClinicAdmin ? (
                                     <div className="space-y-2 px-5 py-4">
                                         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
                                             <p className="text-[13px] text-muted">Clinic Code</p>
@@ -620,6 +622,7 @@ export default function SettingsPage() {
                                             New clinicians can join with this clinic code. Sending an invite is optional.
                                         </p>
                                     </div>
+                                    ) : null}
                                 </div>
                             </div>
                         </Card>

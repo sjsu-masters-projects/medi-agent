@@ -63,8 +63,18 @@ describe("Settings team and roles", () => {
         expect(mocks.get.mock.calls.map(([path]) => path)).not.toContain("/api/v1/email/invitations");
     });
 
-    it("copies the clinic code and says so next to the button", async () => {
+    it("shows the clinic code and its Copy button only to a clinic admin", async () => {
         mockSignedInAs("provider");
+        render(<SettingsPage />);
+        await screen.findByRole("heading", { name: "Clinic Profile" });
+        await screen.findAllByText("City Health");
+        expect(screen.queryByText("Clinic Code")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Copy clinic code" })).not.toBeInTheDocument();
+        expect(screen.queryByText("ABC123")).not.toBeInTheDocument();
+    });
+
+    it("copies the clinic code and says so next to the button", async () => {
+        mockSignedInAs("admin");
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
         try {

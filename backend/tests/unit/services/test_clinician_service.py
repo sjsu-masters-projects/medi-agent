@@ -859,6 +859,20 @@ async def test_generate_invite_code_records_the_issuing_clinic(service, mock_db)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["nurse", "provider"])
+async def test_a_non_admin_member_can_still_generate_a_patient_invite_code(service, mock_db, role):
+    clinician_id = uuid4()
+    service.memberships.active_memberships = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_membership(clinician_id, role)]
+    )
+    mock_db.table.return_value.insert.return_value.execute.return_value = _response(
+        data=[{"id": "team-1"}]
+    )
+    result = await service.generate_invite_code(clinician_id)
+    assert result["care_team_id"] == "team-1"
+
+
+@pytest.mark.asyncio
 async def test_generate_invite_code_without_a_membership_fails_closed(service, mock_db):
     service.memberships.active_memberships = AsyncMock(return_value=[])  # type: ignore[method-assign]
 

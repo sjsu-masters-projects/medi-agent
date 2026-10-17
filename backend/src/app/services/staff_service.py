@@ -60,7 +60,8 @@ class StaffService:
         return {
             "clinic_id": clinic_key,
             "clinic_name": str(clinic.get("display_name") or ""),
-            "clinic_code": clinic.get("code"),
+            # The open join code is for admins at this clinic only.
+            "clinic_code": clinic.get("code") if membership.role.value == "admin" else None,
             "role": membership.role.value,
         }
 
