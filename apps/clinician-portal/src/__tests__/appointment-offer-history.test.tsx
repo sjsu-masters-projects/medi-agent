@@ -46,7 +46,7 @@ describe("expired offer history", () => {
         onRepropose={onRepropose}
       />,
     );
-    expect(screen.getByText("Expired")).toBeInTheDocument();
+    expect(screen.getAllByText("Expired").length).toBeGreaterThan(0);
     expect(screen.getByText(/As written/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Offer new times" }));
     expect(onRepropose).toHaveBeenCalledWith(visit);
@@ -68,7 +68,7 @@ describe("expired offer history", () => {
         onRepropose={vi.fn()}
       />,
     );
-    expect(screen.getByText("Awaiting patient response")).toBeInTheDocument();
+    expect(screen.getAllByText("Awaiting patient response").length).toBeGreaterThan(0);
     expect(screen.getByText(/Available until.*9:00/)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Offer new times" }),
@@ -91,9 +91,43 @@ describe("expired offer history", () => {
         onRepropose={vi.fn()}
       />,
     );
-    expect(screen.getByText("Confirmed")).toBeInTheDocument();
+    expect(screen.getAllByText("Confirmed").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", { name: "Offer new times" }),
     ).not.toBeInTheDocument();
+  });
+  it("shows time first, then patient and clinic chip, then status for a multi-clinic clinician", () => {
+    render(
+      <AppointmentOfferHistory
+        appointments={[{ ...visit, status: "confirmed", clinicId: "c1", clinicName: "Synthetic Clinic North" }]}
+        timezone="UTC"
+        disabled={false}
+        patientName="Maya Patel"
+        showClinic
+        onRepropose={vi.fn()}
+      />,
+    );
+    const row = document.getElementById("appointment-synthetic-slot")!;
+    const line = row.firstElementChild as HTMLElement;
+    const [time, group, status] = Array.from(line.children) as HTMLElement[];
+    expect(time).toHaveTextContent("Oct 5, 2026, 4:00 PM");
+    expect(time.querySelector(".font-semibold")).not.toBeNull();
+    expect(group).toHaveTextContent("Maya PatelSynthetic Clinic North");
+    expect(group).toHaveClass("basis-full", "sm:basis-auto");
+    expect(status).toHaveTextContent("Confirmed");
+    expect(line).toHaveClass("flex-wrap");
+  });
+  it("shows no clinic chip for a single-clinic clinician", () => {
+    render(
+      <AppointmentOfferHistory
+        appointments={[{ ...visit, clinicName: "Synthetic Clinic North" }]}
+        timezone="UTC"
+        disabled={false}
+        patientName="Maya Patel"
+        onRepropose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Synthetic Clinic North")).not.toBeInTheDocument();
+    expect(screen.getByText("Maya Patel")).toBeInTheDocument();
   });
 });
