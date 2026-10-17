@@ -162,12 +162,10 @@ permissions.
 
 Database: `048_medwatch_draft_lifecycle.sql` (applied to `mediagent-staging`) and
 `064_medwatch_form_3500.sql`, which requires `063_adr_information_loop_lifecycle.sql`. **063 and
-064 are written and validated locally but not applied anywhere.** This branch ships as one pull
-request, and its backend calls 063 and 064 objects (the 6-argument create, 5-argument approve
-and export, discard and submission RPCs, the submission table and the discard columns), so
-**apply 063 then 064 before the backend from this branch deploys**; merging deploys the
-backend. The deployed backend keeps working after 064 because every 048 function keeps its
-signature. Verify with:
+064 were applied to the hosted project by the requester on October 13** and the backend that
+calls them (the 6-argument create, 5-argument approve and export, discard and submission RPCs,
+the submission table and the discard columns) is deployed. In a fresh environment apply 063
+then 064 before that backend. Verify with:
 
 ```bash
 python scripts/validate_migrations.py
@@ -340,8 +338,7 @@ New clinic-scoped writes, all through `clinician_clinic_operation` and all audit
 the last clinic, `LAST_CLINIC`, and the only admin, `SOLE_ADMIN`; ends the caller's own care-team
 links and unused invite codes at that clinic), and `PUT /clinicians/me/clinics/{clinic_id}` (clinic
 display name, admin at that clinic only, `CLINIC_NAME_TAKEN`). Migration
-`067_clinic_lists_and_roles.sql` carries the SQL; apply it before deploying the backend that calls
-it. See `.agent/specs/clin-003-multi-clinic-clinicians.md` for the design and decisions.
+`067_clinic_lists_and_roles.sql` carries the SQL (applied October 17). See `.agent/specs/clin-003-multi-clinic-clinicians.md` for the design and decisions.
 
 ## Database Migrations
 
@@ -453,5 +450,6 @@ Today's provider card and Nora's care-team context name the link's or appointmen
 recipient who belongs to more than one clinic (`EmailDeliveryService._clinic_label`); staff invitations
 name the invitation's clinic. `authorization_denial_events.clinic_id` and an `urn:mediagent:audit-clinic`
 extension on FHIR audit events record the clinic when an event concerns a link. Migration
-`069_clinic_scheduling_and_tags.sql` carries the SQL; apply it before deploying this backend, and run
-`scripts/appointment-clinician-overlap-preflight.sql` first (read-only) if the migration reports overlaps.
+`069_clinic_scheduling_and_tags.sql` carries the SQL (applied October 17; the read-only
+`scripts/appointment-clinician-overlap-preflight.sql` returned 0 rows first). In a fresh or other
+environment run the preflight before applying if the migration reports overlaps.
