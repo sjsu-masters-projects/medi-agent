@@ -174,7 +174,7 @@ clinic). Invite history is intentionally role-sensitive, per clinic:
 | `/medwatch/[draftId]` | Report stepper: Complete (gate issues first, link to each field; Form 3500 sections collapsed) → Preview (the watermarked PDF inline) → Approve (attestation dialog) → Download and record submission. |
 
 - The preview is `GET /api/v1/clinicians/me/medwatch-drafts/{id}/preview.pdf` fetched with the bearer token and shown from a blob URL that is revoked on leaving the step. It is watermarked "DRAFT – not for submission", is not an export, and records no audit event. Continuing from Complete saves pending edits first so the PDF matches the screen. The audited, unwatermarked download stays on the Download step after approval.
-- Layouts: below 768 px the tables become stacked rows and the stepper reads "Step N of 4"; from 768 px a grid table and a numbered stepper. Neither page scrolls horizontally at 390 px or 1280 px.
+- Layouts: below 768 px the tables become stacked rows and the stepper reads "Step N of 4" with previous and next step buttons (#180); from 768 px a grid table and a numbered stepper. Neither page scrolls horizontally at 390 px or 1280 px.
 
 ## ADR Review Workflow
 
