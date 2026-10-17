@@ -3,9 +3,9 @@
 -- stays as evidence. Values, units, ranges and dates are never translated.
 
 ALTER TABLE public.clinical_facts
-  ADD COLUMN display_locale text
+  ADD COLUMN IF NOT EXISTS display_locale text
     CHECK (display_locale IS NULL OR display_locale IN ('en-US', 'es-MX')),
-  ADD COLUMN display_value jsonb
+  ADD COLUMN IF NOT EXISTS display_value jsonb
     CHECK (display_value IS NULL OR jsonb_typeof(display_value) = 'object');
 
 COMMENT ON COLUMN public.clinical_facts.display_locale IS

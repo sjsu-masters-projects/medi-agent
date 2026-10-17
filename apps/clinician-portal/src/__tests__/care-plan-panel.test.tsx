@@ -50,7 +50,7 @@ describe("CarePlanPanel", () => {
         expect(await screen.findByText(/Patient reads Español \(México\)/)).toBeInTheDocument();
         expect(screen.getByText(/wording in one language only/)).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /Español \(México\) · draft English \(US\)/ })).toBeEnabled();
-        expect(screen.getByRole("checkbox", { name: /I checked the title/ })).toBeDisabled();
+        expect(screen.getByRole("checkbox", { name: /I verified the English wording/ })).toBeDisabled();
         expect(screen.getByRole("textbox", { name: "Instructions" })).toHaveValue(instruction);
         expect(screen.getByRole("textbox", { name: "Instructions" }).tagName).toBe("TEXTAREA");
         expect(screen.getByText("100% extraction confidence")).toBeInTheDocument();
@@ -353,7 +353,7 @@ describe("CarePlanPanel", () => {
         expect(screen.getByText(/Choose whether each medication/)).toBeInTheDocument();
         expect(screen.getByRole("option", { name: /Update Metformin/ })).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText("Publication decision"), { target: { value: "update:med-1" } });
-        expect(screen.getByRole("checkbox", { name: /I checked the title/ })).toBeDisabled();
+        expect(screen.getByRole("checkbox", { name: /I verified the English wording/ })).toBeDisabled();
         expect(approve).toBeDisabled();
         expect(screen.getByText(/Save your edits before approving/)).toBeInTheDocument();
     });
@@ -371,8 +371,8 @@ describe("CarePlanPanel", () => {
 
         expect(await screen.findByText("From source")).toBeInTheDocument();
         expect(screen.getByText(/AI translation · check it/)).toBeInTheDocument();
-        expect(screen.getByText("Patient's language")).toBeInTheDocument();
-        const check = screen.getByRole("checkbox", { name: /I checked the title/ });
+        expect(screen.getByText("Shown in patient's Today")).toBeInTheDocument();
+        const check = screen.getByRole("checkbox", { name: /I verified the English wording/ });
         fireEvent.click(check);
         expect(check).toBeChecked();
         fireEvent.change(screen.getByDisplayValue("Walk 20 minutes (es)"), { target: { value: "Camine 20 minutos" } });

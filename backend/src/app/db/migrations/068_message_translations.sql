@@ -2,7 +2,7 @@
 -- message of record; translations are for display convenience only. Safety
 -- checks and escalation use only the original text.
 
-CREATE TABLE public.message_translations (
+CREATE TABLE IF NOT EXISTS public.message_translations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   -- The source message. For care_team_conversation_messages the ID is inside the
   -- RPC result; for chat_messages it is the chat_messages.id row.

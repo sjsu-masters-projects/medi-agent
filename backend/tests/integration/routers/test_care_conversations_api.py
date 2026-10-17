@@ -39,6 +39,10 @@ def conversation():
         "sender_name": "Synthetic Patient",
         "body": "Synthetic message",
         "created_at": "2026-10-09T12:00:00Z",
+        # LOC-003: optional stored-translation metadata, null when no translation exists.
+        "translation": None,
+        "translation_locale": None,
+        "translation_guard_passed": None,
     }
     db = MagicMock()
     db.rpc.return_value.execute.return_value = SimpleNamespace(data=thread)
