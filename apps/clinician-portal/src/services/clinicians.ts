@@ -79,6 +79,8 @@ export interface DashboardQueryParams {
     maxLastActivityDays?: number;
     page?: number;
     pageSize?: number;
+    /** Keep one clinic's patients (a clinic the clinician belongs to). */
+    clinicId?: string | null;
 }
 
 export interface PatientRiskData {
@@ -91,6 +93,9 @@ export interface PatientRiskData {
     active_med_count: number;
     recent_symptom_severity: number;
     last_activity: string;
+    /** The clinic of the clinician's link to this patient. */
+    clinic_id?: string | null;
+    clinic_name?: string | null;
 }
 
 export interface DashboardResponse {
@@ -114,6 +119,8 @@ export interface ADRReviewEvidence {
 }
 
 export interface ADRReviewQueueItem {
+    clinicId?: string | null;
+    clinicName?: string | null;
     id: string;
     patientId: string;
     patientFirstName: string;
@@ -169,6 +176,8 @@ export interface ADRReviewDecisionResult {
 
 interface ADRReviewQueueResponse {
     items: Array<{
+        clinic_id?: string | null;
+        clinic_name?: string | null;
         id: string;
         patient_id: string;
         patient_first_name: string;
@@ -304,6 +313,8 @@ export function form3500TemplateInfo(
 }
 
 export interface MedWatchDraft {
+    clinicId?: string | null;
+    clinicName?: string | null;
     id: string;
     adrAssessmentId: string;
     patientId: string;
@@ -333,6 +344,8 @@ export interface MedWatchDraft {
 }
 
 interface MedWatchDraftResponse {
+    clinic_id?: string | null;
+    clinic_name?: string | null;
     id: string;
     adr_assessment_id: string;
     patient_id: string;
@@ -384,6 +397,8 @@ function mapMedWatchDraft(draft: MedWatchDraftResponse): MedWatchDraft {
     const current = draft.current_submission ? mapSubmission(draft.current_submission) : null;
     const history = (draft.submission_history ?? []).map(mapSubmission);
     return {
+        clinicId: draft.clinic_id ?? null,
+        clinicName: draft.clinic_name ?? null,
         id: draft.id,
         adrAssessmentId: draft.adr_assessment_id,
         patientId: draft.patient_id,
@@ -625,6 +640,9 @@ export interface AdherenceDataPoint {
 }
 
 export interface PatientDeepDive {
+    /** The clinic of the clinician's link to this patient. */
+    clinic_id?: string | null;
+    clinic_name?: string | null;
     patient_id: string;
     first_name: string;
     last_name: string;
@@ -824,6 +842,8 @@ interface PatientDeepDiveResponse
 }
 
 interface DocumentReviewQueueItemResponse {
+    clinic_id?: string | null;
+    clinic_name?: string | null;
     id: string;
     patient_id: string;
     patient_first_name: string;
@@ -1009,8 +1029,10 @@ function normalizePatientDocument(
 
 function normalizeDocumentReviewQueueItem(
     item: DocumentReviewQueueItemResponse,
-): DocumentReviewQueueItem {
+): ClinicReviewQueueItem {
     return {
+        clinicId: item.clinic_id ?? null,
+        clinicName: item.clinic_name ?? null,
         id: item.id,
         patientId: item.patient_id,
         patientFirstName: item.patient_first_name,
@@ -1047,6 +1069,7 @@ export async function fetchDashboard(params?: DashboardQueryParams): Promise<Das
     }
     if (params?.page !== undefined) search.set("page", String(params.page));
     if (params?.pageSize !== undefined) search.set("page_size", String(params.pageSize));
+    if (params?.clinicId) search.set("clinic_id", params.clinicId);
 
     const qs = search.toString();
     return apiFetch<DashboardResponse>(`/api/v1/clinicians/me/dashboard${qs ? `?${qs}` : ""}`);
@@ -1056,6 +1079,8 @@ type ADRReviewResponseItem = ADRReviewQueueResponse["items"][number];
 
 function mapADRReviewItem(item: ADRReviewResponseItem): ADRReviewQueueItem {
     return {
+        clinicId: item.clinic_id ?? null,
+        clinicName: item.clinic_name ?? null,
         id: item.id,
         patientId: item.patient_id,
         patientFirstName: item.patient_first_name,
@@ -1090,6 +1115,7 @@ export interface ADRReviewQueueFilter {
     /** `draft` (the default) is the open queue; `all` lists every status. */
     status?: ADRStatus | "all";
     patientId?: string;
+    clinicId?: string | null;
 }
 
 /** Fetch evidence-backed ADR assessments for the clinician's assigned patients. */
@@ -1098,6 +1124,7 @@ export async function fetchADRReviewQueue(
 ): Promise<ADRReviewQueueItem[]> {
     const search = new URLSearchParams({ status: filter.status ?? "draft", limit: "200" });
     if (filter.patientId) search.set("patient_id", filter.patientId);
+    if (filter.clinicId) search.set("clinic_id", filter.clinicId);
     const data = await apiFetch<ADRReviewQueueResponse>(
         `/api/v1/clinicians/me/adr-assessments?${search.toString()}`,
     );
@@ -1172,11 +1199,13 @@ export async function createMedWatchDraft(
 /** Fetch the active (default), submitted or discarded drafts for assigned patients. */
 export async function fetchMedWatchDrafts(
     state: MedWatchDraftState = "active",
+    clinicId?: string | null,
 ): Promise<MedWatchDraft[]> {
+    const clinic = clinicId ? `&clinic_id=${encodeURIComponent(clinicId)}` : "";
     const result = await apiFetch<{
         items: MedWatchDraftResponse[];
         total: number;
-    }>(`${MEDWATCH_BASE}?state=${encodeURIComponent(state)}`);
+    }>(`${MEDWATCH_BASE}?state=${encodeURIComponent(state)}${clinic}`);
     return result.items.map(mapMedWatchDraft);
 }
 
@@ -1432,9 +1461,18 @@ export async function fetchPatientDeepDive(patientId: string): Promise<PatientDe
     };
 }
 
-export async function fetchDocumentReviewQueue(): Promise<DocumentReviewQueueItem[]> {
+/** A pending upload with the clinic of the clinician's link to its patient. */
+export type ClinicReviewQueueItem = DocumentReviewQueueItem & {
+    clinicId?: string | null;
+    clinicName?: string | null;
+};
+
+export async function fetchDocumentReviewQueue(
+    clinicId?: string | null,
+): Promise<ClinicReviewQueueItem[]> {
+    const clinic = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : "";
     const data = await apiFetch<DocumentReviewQueueItemResponse[]>(
-        "/api/v1/clinicians/me/document-review-queue",
+        `/api/v1/clinicians/me/document-review-queue${clinic}`,
     );
     return data.map((item) => normalizeDocumentReviewQueueItem(item));
 }
@@ -1685,11 +1723,15 @@ interface ClinicianMessageResponse {
 }
 
 interface ClinicianMessageInboxResponse extends ClinicianMessageResponse {
+    clinic_id?: string | null;
+    clinic_name?: string | null;
     patient_first_name?: string | null;
     patient_last_name?: string | null;
 }
 
 export interface ClinicianMessageInboxItem extends ClinicianMessage {
+    clinicId?: string | null;
+    clinicName?: string | null;
     patientFirstName?: string | null;
     patientLastName?: string | null;
 }
@@ -1712,6 +1754,8 @@ function normalizeInboxItem(msg: ClinicianMessageInboxResponse): ClinicianMessag
         ...normalizeClinicianMessage(msg),
         patientFirstName: msg.patient_first_name,
         patientLastName: msg.patient_last_name,
+        clinicId: msg.clinic_id ?? null,
+        clinicName: msg.clinic_name ?? null,
     };
 }
 
@@ -1724,9 +1768,12 @@ export async function fetchPatientMessages(patientId: string): Promise<Clinician
 }
 
 /** List all messages sent by this clinician (inbox). */
-export async function fetchAllSentMessages(): Promise<ClinicianMessageInboxItem[]> {
+export async function fetchAllSentMessages(
+    clinicId?: string | null,
+): Promise<ClinicianMessageInboxItem[]> {
+    const clinic = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : "";
     const data = await apiFetch<ClinicianMessageInboxResponse[]>(
-        "/api/v1/clinicians/me/messages",
+        `/api/v1/clinicians/me/messages${clinic}`,
     );
     return data.map(normalizeInboxItem);
 }

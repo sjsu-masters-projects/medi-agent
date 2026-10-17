@@ -277,6 +277,7 @@ def seeded(**tables: list[dict[str, Any]]) -> FakeDB:
                 "id": "team-1",
                 "patient_id": PATIENT_ID,
                 "clinician_id": CLINICIAN_ID,
+                "clinic_id": CLINIC_ID,
                 "clinic_name": None,
                 "status": "active",
             }

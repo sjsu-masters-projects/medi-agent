@@ -609,6 +609,9 @@ export interface Appointment {
     patientId: string;
     careTeamId: string;
     clinicianName?: string;
+    /** The clinic of the clinician's care-team link (clinician lists only). */
+    clinicId?: string;
+    clinicName?: string;
     scheduledAt: string;
     durationMinutes: number;
     appointmentType: AppointmentType;

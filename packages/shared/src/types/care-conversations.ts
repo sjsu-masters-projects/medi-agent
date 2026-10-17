@@ -1,5 +1,6 @@
 export interface ConversationRecipient {
   id: string;
+  clinic_id?: string | null;
   name: string;
   role: string;
   clinic_name: string;
@@ -7,6 +8,7 @@ export interface ConversationRecipient {
 
 export interface CareConversation {
   id: string;
+  clinic_id?: string | null;
   patient_id: string;
   clinician_id: string;
   patient_name: string;

@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/services/api", () => ({ api: { get: vi.fn(), post: vi.fn() } }));
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn() }));
+vi.mock("@/services/api", () => ({ api }));
 
-import { apiErrorCode, clinicErrorMessage, isClinicRequiredError, withClinic } from "@/services/clinics";
+import {
+    apiErrorCode,
+    clinicErrorMessage,
+    isClinicRequiredError,
+    leaveClinic,
+    renameClinic,
+    setDefaultClinic,
+    withClinic,
+} from "@/services/clinics";
 
 function apiError(message: string, code: string) {
     return Object.assign(new Error(message), { details: { error: { code } }, status: 422 });
@@ -36,5 +45,26 @@ describe("clinic helpers", () => {
     it("falls back to the server message, then the fallback", () => {
         expect(clinicErrorMessage(new Error("Server said no"), "fallback")).toBe("Server said no");
         expect(clinicErrorMessage(null, "fallback")).toBe("fallback");
+    });
+});
+
+describe("clinic membership actions", () => {
+    it("sends make default, leave and rename to the clinic-scoped endpoints", async () => {
+        api.put.mockResolvedValue({});
+        api.post.mockResolvedValue({});
+        await setDefaultClinic("t", "c 1");
+        await leaveClinic("t", "c 1");
+        await renameClinic("t", "c 1", "New name");
+        expect(api.put).toHaveBeenCalledWith("/api/v1/clinicians/me/default-clinic", { clinic_id: "c 1" }, { token: "t" });
+        expect(api.post).toHaveBeenCalledWith("/api/v1/clinicians/me/clinics/c%201/leave", {}, { token: "t" });
+        expect(api.put).toHaveBeenCalledWith("/api/v1/clinicians/me/clinics/c%201", { display_name: "New name" }, { token: "t" });
+    });
+
+    it.each([
+        ["LAST_CLINIC", /only clinic/i],
+        ["SOLE_ADMIN", /only admin here/i],
+        ["CLINIC_NAME_TAKEN", /already uses that name/i],
+    ])("explains %s", (code, expected) => {
+        expect(clinicErrorMessage(apiError("server text", code), "fallback")).toMatch(expected);
     });
 });

@@ -322,9 +322,30 @@ The legacy patient `/notifications` endpoints remain compatible. No new push,
 email or SMS channel is introduced. Merged in #148/#149 and deployed; migrations
 `051_notification_centre.sql` and 052–056 are applied to the synthetic project.
 
+## Clinic lists, roles and settings (CLN-003 slices C and D)
+
+Every clinician list that returns patients or patient work takes an optional `clinic_id` query
+parameter and tags each item with `clinic_id` and `clinic_name` (the clinic of that clinician's
+care-team link, `care_teams.clinic_id`): `GET /clinicians/me/patients`, `.../dashboard`,
+`.../document-review-queue`, `.../adr-assessments`, `.../medwatch-drafts`, `.../messages`,
+`GET /care-conversations/` and `/recipients`, `GET /appointments/`, and the notification centre
+list and action items (`/notification-centre`, `/notification-centre/action-items`). The patient
+header (`GET /clinicians/me/patients/{id}`) and the patient deep dive carry the tags too. Without
+`clinic_id` nothing is filtered. A clinic where the caller has no active membership returns an
+empty result (never an error that distinguishes it from a clinic with no matches). The shared
+logic is `ClinicMembershipService.link_scope` (`app/services/clinic_link_scope.py`).
+
+New clinic-scoped writes, all through `clinician_clinic_operation` and all audited:
+`PUT /clinicians/me/default-clinic`, `POST /clinicians/me/clinics/{clinic_id}/leave` (refused for
+the last clinic, `LAST_CLINIC`, and the only admin, `SOLE_ADMIN`; ends the caller's own care-team
+links and unused invite codes at that clinic), and `PUT /clinicians/me/clinics/{clinic_id}` (clinic
+display name, admin at that clinic only, `CLINIC_NAME_TAKEN`). Migration
+`067_clinic_lists_and_roles.sql` carries the SQL; apply it before deploying the backend that calls
+it. See `.agent/specs/clin-003-multi-clinic-clinicians.md` for the design and decisions.
+
 ## Database Migrations
 
-Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`064`. Some
+Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`067`. Some
 prefixes are shared by independent files; the migration ledger records full filenames and
 checksums, so do not maintain a second migration inventory here. New-environment order for
 the appointment booking guards (042/043) is in the setup guide.

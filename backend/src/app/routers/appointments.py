@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from supabase import Client
 
 from app.core.security import get_current_user
@@ -42,12 +42,14 @@ async def export_appointment_calendar(
 
 @router.get("/", response_model=list[AppointmentRead])
 async def list_appointments(
+    clinic_id: UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(get_current_user),
     db: Client = Depends(get_db),
 ) -> Any:
     return await AppointmentService(db).list_for_user(
         user_id=current_user.id,
         role=current_user.role,
+        clinic_id=clinic_id,
     )
 
 

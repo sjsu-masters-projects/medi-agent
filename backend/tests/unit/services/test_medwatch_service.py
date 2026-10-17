@@ -473,7 +473,7 @@ async def test_property_12_approval_enforces_the_list_the_draft_shows() -> None:
 
 @pytest.mark.asyncio
 async def test_approval_needs_the_current_revision_and_acknowledged_warnings() -> None:
-    payload = _ready_payload(section_b__narrative="Lucía felt dizzy at Synthetic Valley Clinic.")
+    payload = _ready_payload(section_b__narrative="Lucía felt dizzy at Synthetic Valley Health.")
     stored = _draft_row(form_data=payload)
     db = seeded(medwatch_drafts=[stored])
     service = _service(db)
@@ -1247,3 +1247,43 @@ def test_future_and_reversed_medication_dates_are_not_used() -> None:
         None,
         None,
     )
+
+
+@pytest.mark.asyncio
+async def test_list_drafts_tags_the_links_clinic_and_filters_by_clinic() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+
+    from app.db.repositories.care_teams import CareTeamRepository
+    from app.models.enums import ClinicianRole, ClinicMembershipStatus
+    from app.services.medwatch_3500 import dates  # noqa: F401
+
+    stored = _draft_row(form_data=_ready_payload())
+    service = _service(seeded(medwatch_drafts=[stored]))
+    links = [
+        {
+            "patient_id": stored["patient_id"],
+            "clinic_id": CLINIC_A,
+            "clinics": {"display_name": "Synthetic Valley Health"},
+        }
+    ]
+    member = SimpleNamespace(
+        clinic_id=UUID(CLINIC_A), role=ClinicianRole.PROVIDER, status=ClinicMembershipStatus.ACTIVE
+    )
+    with (
+        patch.object(CareTeamRepository, "list_active_links", AsyncMock(return_value=links)),
+        patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.active_memberships",
+            new=AsyncMock(return_value=[member]),
+        ),
+    ):
+        everything = await service.list_drafts(CLINICIAN)
+        own = await service.list_drafts(CLINICIAN, clinic_id=UUID(CLINIC_A))
+        other = await service.list_drafts(CLINICIAN, clinic_id=UUID(CLINIC_B))
+    assert everything["items"][0]["clinic_name"] == "Synthetic Valley Health"
+    assert len(own["items"]) == 1
+    assert other == {"items": [], "total": 0}
+
+
+CLINIC_A = "00000000-0000-0000-0000-00000000000a"
+CLINIC_B = "00000000-0000-0000-0000-00000000000b"

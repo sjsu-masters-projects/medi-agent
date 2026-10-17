@@ -29,10 +29,12 @@ from app.core.exceptions import (
     ServiceUnavailableError,
     ValidationError,
 )
+from app.db.repositories.care_teams import CareTeamRepository
 from app.db.repositories.clinic_memberships import ClinicMembershipRepository
 from app.db.supabase_execute import HasSupabaseClient
 from app.models.clinic_membership import ClinicMembership
 from app.models.enums import ClinicianRole
+from app.services.clinic_link_scope import ClinicLinkScope, scope_from_links
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,19 @@ def _hint_error(hint: str, clinician_id: str) -> MediAgentError | None:
         return NotFoundError("Staff member", "in this clinic")
     if hint == "self_change":
         return ValidationError("You cannot change your own role or remove yourself.")
+    if hint == "last_clinic":
+        return ValidationError(
+            "This is your only clinic, so you cannot leave it.", code="LAST_CLINIC"
+        )
+    if hint == "sole_admin":
+        return ValidationError(
+            "You are the only admin here. Make someone else an admin before you leave.",
+            code="SOLE_ADMIN",
+        )
+    if hint == "clinic_name_taken":
+        return ValidationError("Another clinic already uses that name.", code="CLINIC_NAME_TAKEN")
+    if hint == "invalid_name":
+        return ValidationError("Enter a clinic name of 2 to 120 characters.", code="INVALID_NAME")
     if hint == "clinician_required":
         return AuthorizationError(
             "A clinician profile is required.",
@@ -165,6 +180,21 @@ class ClinicMembershipService:
             )
         return match
 
+    async def link_scope(
+        self, clinician_id: UUID | str, clinic_id: UUID | str | None = None
+    ) -> ClinicLinkScope:
+        """The patients a clinician's list shows, tagged with the clinic of each link.
+
+        Without ``clinic_id``: every active link. With it: the links at that clinic, and only
+        when the clinician holds an active membership there; any other clinic yields an empty
+        scope, so the answer never reveals whether the clinic exists.
+        """
+        rows = await CareTeamRepository(self.owner).list_active_links(str(clinician_id))
+        allowed: set[str] = set()
+        if clinic_id is not None:
+            allowed = {str(m.clinic_id) for m in await self.active_memberships(clinician_id)}
+        return scope_from_links(rows, str(clinic_id) if clinic_id is not None else None, allowed)
+
     async def clinic_member_ids(self, clinic_id: UUID | str) -> list[str]:
         """Return the clinicians with an active membership at the clinic."""
         return await self.repo.list_active_clinician_ids(str(clinic_id))
@@ -228,4 +258,24 @@ class ClinicMembershipService:
         """End a member's membership at one clinic (admin there; audited)."""
         return await self._operation(
             admin_id, "remove_member", {"clinic_id": str(clinic_id), "member_id": str(member_id)}
+        )
+
+    # ── Default clinic, leaving and clinic settings (067) ─────
+
+    async def set_default(self, clinician_id: UUID | str, clinic_id: UUID | str) -> dict[str, Any]:
+        """Choose the preselected clinic. Ends no membership (audited)."""
+        return await self._operation(clinician_id, "set_default", {"clinic_id": str(clinic_id)})
+
+    async def leave(self, clinician_id: UUID | str, clinic_id: UUID | str) -> dict[str, Any]:
+        """Leave one clinic; the caller's links and unused codes there end (audited)."""
+        return await self._operation(clinician_id, "leave", {"clinic_id": str(clinic_id)})
+
+    async def rename_clinic(
+        self, clinician_id: UUID | str, clinic_id: UUID | str, display_name: str
+    ) -> dict[str, Any]:
+        """An admin of that clinic edits its display name (audited)."""
+        return await self._operation(
+            clinician_id,
+            "update_clinic",
+            {"clinic_id": str(clinic_id), "display_name": display_name},
         )

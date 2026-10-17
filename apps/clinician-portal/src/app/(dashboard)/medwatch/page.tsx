@@ -17,6 +17,8 @@ import {
     rowLinkClass,
     useListUrlState,
 } from "@/components/features/work-list";
+import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
+import { useResolvedClinicFilter } from "@/hooks/use-clinic-filter";
 import {
     eventSummary,
     patientCode,
@@ -61,7 +63,7 @@ function StatusChip({ draft }: { draft: MedWatchDraft }) {
     );
 }
 
-function ReportRow({ draft, from }: { draft: MedWatchDraft; from: string }) {
+function ReportRow({ draft, from, showClinic }: { draft: MedWatchDraft; from: string; showClinic: boolean }) {
     const href = `/medwatch/${draft.id}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
     const code = patientCode(draft);
     const product = productName(draft);
@@ -71,7 +73,10 @@ function ReportRow({ draft, from }: { draft: MedWatchDraft; from: string }) {
         <div role="listitem">
             <Link className={rowLinkClass} href={href}>
                 <div className="hidden items-center gap-4 md:grid" style={{ gridTemplateColumns: COLUMNS }}>
-                    <p className="truncate font-mono text-sm font-semibold text-ink">{code}</p>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <p className="truncate font-mono text-sm font-semibold text-ink">{code}</p>
+                        {showClinic ? <ClinicChip name={draft.clinicName} /> : null}
+                    </div>
                     <p className="truncate text-sm text-ink-2">{product}</p>
                     <p className="truncate text-sm text-ink-2">{event}</p>
                     <div>
@@ -85,6 +90,7 @@ function ReportRow({ draft, from }: { draft: MedWatchDraft; from: string }) {
                         <p className="min-w-0 truncate font-mono text-sm font-semibold text-ink">{code}</p>
                         <StatusChip draft={draft} />
                     </div>
+                    {showClinic ? <ClinicChip name={draft.clinicName} /> : null}
                     <div className="flex items-center justify-between gap-3">
                         <p className="min-w-0 truncate text-[13px] text-ink-2">
                             {product} · {event}
@@ -110,7 +116,11 @@ function useLegacyRedirect() {
 
 function ReportsContent() {
     const redirecting = useLegacyRedirect();
-    const { state, update, query } = useListUrlState({ tab: "drafts", q: "", sort: "updated", page: "1" });
+    const { state, update, query } = useListUrlState({ tab: "drafts", q: "", sort: "updated", page: "1", clinic: "" });
+    const clinicFilter = useResolvedClinicFilter(state.clinic || null, (clinic) =>
+        update({ clinic: clinic ?? "", page: "1" }),
+    );
+    const { clinicId, ready } = clinicFilter;
     const tab = (TABS.some((candidate) => candidate.value === state.tab) ? state.tab : "drafts") as ReportTab;
     const sort = (SORT_OPTIONS.some((candidate) => candidate.value === state.sort) ? state.sort : "updated") as ReportSort;
     const [drafts, setDrafts] = useState<MedWatchDraft[]>([]);
@@ -122,9 +132,9 @@ function ReportsContent() {
         setError(false);
         try {
             const [active, submitted, discarded] = await Promise.all([
-                fetchMedWatchDrafts("active"),
-                fetchMedWatchDrafts("submitted"),
-                fetchMedWatchDrafts("discarded"),
+                fetchMedWatchDrafts("active", clinicId),
+                fetchMedWatchDrafts("submitted", clinicId),
+                fetchMedWatchDrafts("discarded", clinicId),
             ]);
             setDrafts([...active, ...submitted, ...discarded]);
         } catch {
@@ -132,11 +142,11 @@ function ReportsContent() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [clinicId]);
 
     useEffect(() => {
-        if (!redirecting) void load();
-    }, [load, redirecting]);
+        if (!redirecting && ready) void load();
+    }, [load, ready, redirecting]);
 
     const counts = useMemo(() => {
         const result: Record<ReportTab, number> = { drafts: 0, approved: 0, submitted: 0, discarded: 0 };
@@ -185,6 +195,7 @@ function ReportsContent() {
                 search={state.q}
                 searchLabel="Search reports"
                 searchPlaceholder="Search patient code, product or event"
+                extra={<ClinicFilterField filter={clinicFilter} />}
                 sort={sort}
                 sortLabel="Sort"
                 sortOptions={SORT_OPTIONS}
@@ -198,11 +209,17 @@ function ReportsContent() {
                 />
             ) : null}
             {!loading && !error && visible.length === 0 ? (
-                <EmptyState
-                    description={state.q.trim() ? "No reports match this search." : EMPTY_COPY[tab]}
-                    icon={<Icon name="file" />}
-                    title={state.q.trim() ? "No matching reports" : "No reports here"}
-                />
+                clinicId && drafts.length === 0 ? (
+                    <p className="rounded-2xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-2">
+                        <ClinicFilterEmpty filter={clinicFilter} noun="reports" />
+                    </p>
+                ) : (
+                    <EmptyState
+                        description={state.q.trim() ? "No reports match this search." : EMPTY_COPY[tab]}
+                        icon={<Icon name="file" />}
+                        title={state.q.trim() ? "No matching reports" : "No reports here"}
+                    />
+                )
             ) : null}
             {!loading && !error && rows.length > 0 ? (
                 <>
@@ -212,7 +229,7 @@ function ReportsContent() {
                         label={`${TABS.find((candidate) => candidate.value === tab)?.label} reports`}
                     >
                         {rows.map((draft) => (
-                            <ReportRow draft={draft} from={query} key={draft.id} />
+                            <ReportRow draft={draft} from={query} key={draft.id} showClinic={clinicFilter.multi} />
                         ))}
                     </ListTable>
                     <Pagination

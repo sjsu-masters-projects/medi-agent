@@ -30,6 +30,7 @@ class ConversationReadMarker(BaseModel):
 
 class ConversationRecipient(BaseModel):
     id: UUID
+    clinic_id: UUID | None = None
     name: str
     role: str
     clinic_name: str
@@ -37,6 +38,7 @@ class ConversationRecipient(BaseModel):
 
 class ConversationSummary(BaseModel):
     id: UUID
+    clinic_id: UUID | None = None
     patient_id: UUID
     clinician_id: UUID
     patient_name: str

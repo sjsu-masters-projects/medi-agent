@@ -926,3 +926,258 @@ def test_browser_roles_cannot_write_clinicians_memberships_or_the_audit(sql):
         ),
         succeeds=False,
     )
+
+
+# ── Slice D (067): default clinic, leaving a clinic, and clinic settings ─────────────────
+
+
+def two_clinics(sql, role_at_second="nurse"):
+    """CLINICIAN is a provider at CLINIC (the default) and holds ``role_at_second`` at the other."""
+    second_clinic(sql)
+    sql(
+        as_service(
+            "INSERT INTO clinic_memberships(clinician_id,clinic_id,role) "
+            f"VALUES ('{CLINICIAN}','{SECOND_CLINIC}','{role_at_second}');"
+        )
+    )
+
+
+def test_make_default_ends_no_membership_and_is_audited(sql):
+    two_clinics(sql)
+
+    made = clinic_op(sql, CLINICIAN, "set_default", {"clinic_id": SECOND_CLINIC})
+
+    assert made["default_clinic_id"] == SECOND_CLINIC and made["role"] == "nurse"
+    # The role and name follow the membership; the old default stays an active membership.
+    assert default_of(sql, CLINICIAN) == f"{SECOND_CLINIC}|nurse"
+    assert memberships(sql, CLINICIAN) == [
+        (CLINIC, "provider", "active"),
+        (SECOND_CLINIC, "nurse", "active"),
+    ]
+    assert audit_full(sql, CLINICIAN) == [
+        (CLINICIAN, SECOND_CLINIC, "default_clinic_changed", "clinician", "nurse")
+    ]
+    # Choosing the current default again changes and audits nothing.
+    clinic_op(sql, CLINICIAN, "set_default", {"clinic_id": SECOND_CLINIC})
+    assert len(audit(sql, CLINICIAN)) == 1
+    # A clinic without an active membership cannot be made the default.
+    third = str(uuid4())
+    sql(f"INSERT INTO clinics(id,display_name,canonical_name) VALUES('{third}','Third','third');")
+    assert "clinic_unavailable" in clinic_op(
+        sql, CLINICIAN, "set_default", {"clinic_id": third}, succeeds=False
+    )
+    assert default_of(sql, CLINICIAN) == f"{SECOND_CLINIC}|nurse"
+
+
+def test_a_legacy_move_of_the_default_still_ends_the_old_membership(sql):
+    second_clinic(sql)
+
+    sql(f"UPDATE clinicians SET clinic_id='{SECOND_CLINIC}' WHERE id='{CLINICIAN}';")
+
+    assert memberships(sql, CLINICIAN) == [
+        (CLINIC, "provider", "inactive"),
+        (SECOND_CLINIC, "provider", "active"),
+    ]
+
+
+def test_leaving_ends_the_membership_and_only_the_callers_links_there(sql):
+    two_clinics(sql)
+    mine = link(sql, CLINICIAN, patient=FOREIGN, clinic=SECOND_CLINIC)
+    pending = str(uuid4())
+    sql(
+        f"""INSERT INTO care_teams(id,clinician_id,role,status,invite_code,clinic_id)
+      VALUES('{pending}','{CLINICIAN}','provider','pending','LEAVE001','{SECOND_CLINIC}');"""
+    )
+    colleague = link(sql, OTHER, patient=FOREIGN, clinic=CLINIC)
+    default_link = sql(
+        f"SELECT id FROM care_teams WHERE clinician_id='{CLINICIAN}' AND clinic_id='{CLINIC}' "
+        "AND patient_id IS NOT NULL"
+    )
+
+    left = clinic_op(sql, CLINICIAN, "leave", {"clinic_id": SECOND_CLINIC})
+
+    assert left["status"] == "left" and left["links_ended"] == 1
+    assert memberships(sql, CLINICIAN) == [
+        (CLINIC, "provider", "active"),
+        (SECOND_CLINIC, "nurse", "inactive"),
+    ]
+    status = lambda team: sql(f"SELECT status FROM care_teams WHERE id='{team}'")  # noqa: E731
+    assert (status(mine), status(pending)) == ("inactive", "inactive")
+    # Another clinician's link at the clinic, and the caller's links elsewhere, are untouched.
+    assert status(colleague) == "active" and status(default_link) == "active"
+    # Nothing is deleted.
+    assert sql("SELECT count(*) FROM patients") == "2"
+    ended = [
+        a[2:] for a in audit_full(sql, mine) + audit_full(sql, pending) if a[2] == "care_link_ended"
+    ]
+    assert ended == [("care_link_ended", "care_team", "-")] * 2
+    assert audit_full(sql, CLINICIAN)[-1] == (
+        CLINICIAN,
+        SECOND_CLINIC,
+        "member_left",
+        "clinician",
+        "nurse",
+    )
+    # Leaving a clinic again, or one never joined, is refused.
+    assert "clinic_unavailable" in clinic_op(
+        sql, CLINICIAN, "leave", {"clinic_id": SECOND_CLINIC}, succeeds=False
+    )
+
+
+def test_removal_ends_the_removed_members_links_at_that_clinic_only(sql):
+    two_clinics(sql)
+    admin = new_clinician(sql, clinic=CLINIC, role="admin")
+    mine = link(sql, CLINICIAN, patient=FOREIGN, clinic=CLINIC)
+    elsewhere = link(sql, CLINICIAN, patient=PATIENT, clinic=SECOND_CLINIC)
+    colleague = link(sql, OTHER, patient=FOREIGN, clinic=CLINIC)
+    pending = str(uuid4())
+    sql(
+        f"""INSERT INTO care_teams(id,clinician_id,role,status,invite_code,clinic_id)
+      VALUES('{pending}','{CLINICIAN}','provider','pending','REMOVE001','{CLINIC}');"""
+    )
+
+    removed = staff_op(sql, admin, "remove_member", CLINIC, CLINICIAN)
+
+    assert removed["status"] == "removed" and removed["links_ended"] >= 1
+    status = lambda team: sql(f"SELECT status FROM care_teams WHERE id='{team}'")  # noqa: E731
+    assert (status(mine), status(pending)) == ("inactive", "inactive")
+    assert status(elsewhere) == "active" and status(colleague) == "active"
+    # The removed member's roster is what they still hold at their other clinic.
+    roster = sql(
+        f"SELECT string_agg(patient_id::text, ',') FROM care_teams WHERE clinician_id='{CLINICIAN}' "
+        "AND status='active' AND patient_id IS NOT NULL"
+    )
+    assert roster == PATIENT
+    ended = [a for a in audit_full(sql, mine) + audit_full(sql, pending) if a[2] == "care_link_ended"]
+    assert [a[0] for a in ended] == [admin, admin]
+    assert audit_full(sql, CLINICIAN)[-1][2] == "member_removed"
+
+
+def test_leaving_the_default_clinic_moves_the_default(sql):
+    two_clinics(sql)
+
+    clinic_op(sql, CLINICIAN, "leave", {"clinic_id": CLINIC})
+
+    assert default_of(sql, CLINICIAN) == f"{SECOND_CLINIC}|nurse"
+    assert memberships(sql, CLINICIAN) == [
+        (CLINIC, "provider", "inactive"),
+        (SECOND_CLINIC, "nurse", "active"),
+    ]
+
+
+def test_the_last_clinic_and_the_sole_admin_cannot_leave(sql):
+    second_clinic(sql)
+    # One clinic only.
+    assert "last_clinic" in clinic_op(
+        sql, CLINICIAN, "leave", {"clinic_id": CLINIC}, succeeds=False
+    )
+    # The sole admin of a clinic, who belongs to another clinic as well.
+    admin = new_clinician(sql, clinic=CLINIC, role="admin")
+    sql(
+        as_service(
+            f"INSERT INTO clinic_memberships(clinician_id,clinic_id,role) "
+            f"VALUES ('{admin}','{SECOND_CLINIC}','provider');"
+        )
+    )
+    assert "sole_admin" in clinic_op(sql, admin, "leave", {"clinic_id": CLINIC}, succeeds=False)
+    # With a second admin they may leave.
+    sql(
+        as_service(
+            f"UPDATE clinic_memberships SET role='admin' WHERE clinician_id='{CLINICIAN}' "
+            f"AND clinic_id='{CLINIC}';"
+        )
+    )
+    clinic_op(sql, admin, "leave", {"clinic_id": CLINIC})
+    assert (CLINIC, "admin", "inactive") in memberships(sql, admin)
+    assert default_of(sql, admin) == f"{SECOND_CLINIC}|provider"
+    # Refusals audit nothing.
+    assert [a[2] for a in audit_full(sql, admin)].count("member_left") == 1
+
+
+def test_only_that_clinics_admin_can_rename_it(sql):
+    two_clinics(sql, role_at_second="admin")
+    other_name = "Another synthetic clinic"
+    sql(
+        f"INSERT INTO clinics(id,display_name,canonical_name) "
+        f"VALUES('{uuid4()}','{other_name}','{other_name.lower()}');"
+    )
+
+    renamed = clinic_op(
+        sql,
+        CLINICIAN,
+        "update_clinic",
+        {"clinic_id": SECOND_CLINIC, "display_name": "  Renamed   Clinic "},
+    )
+
+    assert renamed["clinic_name"] == "Renamed Clinic"
+    assert sql(
+        f"SELECT display_name||'|'||canonical_name FROM clinics WHERE id='{SECOND_CLINIC}'"
+    ) == ("Renamed Clinic|renamed clinic")
+    assert audit_full(sql, SECOND_CLINIC) == [
+        (CLINICIAN, SECOND_CLINIC, "clinic_renamed", "clinic", "admin")
+    ]
+    # A provider at the first clinic cannot rename it; neither can a non-member.
+    assert "admin_required" in clinic_op(
+        sql,
+        CLINICIAN,
+        "update_clinic",
+        {"clinic_id": CLINIC, "display_name": "Nope"},
+        succeeds=False,
+    )
+    assert "clinic_unavailable" in clinic_op(
+        sql,
+        new_clinician(sql, clinic=CLINIC),
+        "update_clinic",
+        {"clinic_id": SECOND_CLINIC, "display_name": "Nope"},
+        succeeds=False,
+    )
+    assert "clinic_name_taken" in clinic_op(
+        sql,
+        CLINICIAN,
+        "update_clinic",
+        {"clinic_id": SECOND_CLINIC, "display_name": other_name.upper()},
+        succeeds=False,
+    )
+    assert "invalid_name" in clinic_op(
+        sql,
+        CLINICIAN,
+        "update_clinic",
+        {"clinic_id": SECOND_CLINIC, "display_name": " x "},
+        succeeds=False,
+    )
+
+
+def test_the_new_audit_actions_keep_the_trail_append_only_and_backend_only(sql):
+    two_clinics(sql)
+    clinic_op(sql, CLINICIAN, "set_default", {"clinic_id": SECOND_CLINIC})
+    signed_in(sql)
+    for statement in (
+        "UPDATE clinic_membership_audit_events SET role='admin';",
+        "DELETE FROM clinic_membership_audit_events;",
+    ):
+        assert "append-only" in sql(statement, succeeds=False)
+        assert "permission denied" in sql(as_user(CLINICIAN, statement), succeeds=False)
+    # An action outside the vocabulary is still refused by the table.
+    assert "violates check constraint" in sql(
+        "INSERT INTO clinic_membership_audit_events(actor_id,clinic_id,action,target_type,target_id) "
+        f"VALUES('{CLINICIAN}','{CLINIC}','made_up','clinic','{CLINIC}');",
+        succeeds=False,
+    )
+    for name in ("set_default", "leave", "update_clinic"):
+        assert "permission denied" in sql(
+            f"SET ROLE authenticated; SELECT clinician_clinic_operation('{CLINICIAN}','{name}','{{}}');",
+            succeeds=False,
+        )
+
+
+def test_invitation_admin_rights_do_not_read_clinicians_role(sql):
+    """Admin at a non-default clinic invites there while the legacy role says provider."""
+    two_clinics(sql, role_at_second="admin")
+    assert sql(f"SELECT role FROM clinicians WHERE id='{CLINICIAN}'") == "provider"
+
+    created = email_invite(sql, CLINICIAN, "member-admin@example.com", clinic=SECOND_CLINIC)
+
+    assert created["status"] == "queued"
+    assert "admin_required" in email_invite(
+        sql, CLINICIAN, "member-two@example.com", clinic=CLINIC, token="t2", succeeds=False
+    )

@@ -21,6 +21,7 @@ class NotificationCentreService:
 
     async def page(self, options: dict[str, Any]) -> CentrePage:
         payload = {"limit": options.get("limit", 50), "unread": options.get("unread", False)}
+        self._add_clinic_filter(payload, options)
         if options.get("cursor"):
             payload["before"] = read_token(self.actor, "cursor", options["cursor"])
         result = cast(dict[str, Any], await self._call("list", payload))
@@ -41,6 +42,7 @@ class NotificationCentreService:
     async def action_items(self, options: dict[str, Any]) -> CentrePage:
         self._clinician_only()
         payload = {"category": options.get("category"), "limit": options.get("limit", 50)}
+        self._add_clinic_filter(payload, options)
         if options.get("cursor"):
             payload["before"] = read_token(self.actor, "action_cursor", options["cursor"])
         result = cast(dict[str, Any], await self._call("action_items", payload))
@@ -69,6 +71,11 @@ class NotificationCentreService:
     async def acknowledge(self, item_id: UUID, note: str | None) -> Any:
         self._clinician_only()
         return await self._call("acknowledge", {"id": str(item_id), "note": note})
+
+    def _add_clinic_filter(self, payload: dict[str, Any], options: dict[str, Any]) -> None:
+        """A clinician's clinic filter; the database answers empty for a clinic they lack."""
+        if self.actor.role == "clinician" and options.get("clinic_id"):
+            payload["clinic_id"] = str(options["clinic_id"])
 
     def _clinician_only(self) -> None:
         if self.actor.role != "clinician":

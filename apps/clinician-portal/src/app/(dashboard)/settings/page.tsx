@@ -18,6 +18,7 @@ import { ClinicianRole } from "@/types";
 import { EmailPreferences } from "@/components/features/email-preferences";
 import { EmailInvitations } from "@/components/features/email-invitations";
 import { ClinicPicker } from "@/components/features/clinic-picker";
+import { YourClinicsCard } from "@/components/features/your-clinics-card";
 import { CLINICIAN_LOCALE } from "@/utils/dates";
 import { CardHeader, IconTile, cardFooterClass } from "@/components/features/settings-card";
 
@@ -105,6 +106,7 @@ function getRoleTone(role: ClinicianRole) {
 
 const GENERAL_SECTIONS = [
     { id: "clinic-profile", label: "Clinic Profile" },
+    { id: "your-clinics", label: "Your clinics" },
     { id: "my-profile", label: "My Profile" },
     { id: "security", label: "Security" },
     { id: "email-notices", label: "Email notices" },
@@ -194,6 +196,7 @@ export default function SettingsPage() {
     const [clinicId, setClinicId] = useState<string | null>(null);
     const [clinicsReady, setClinicsReady] = useState(false);
     const [clinicRequired, setClinicRequired] = useState(false);
+    const [clinicsRevision, setClinicsRevision] = useState(0);
     // Staff invitations are admin-only on the server. The right is the role held at the chosen
     // clinic; the profile role is only a fallback when the clinic list could not be loaded.
     const roleAtClinic = clinics.length > 0
@@ -214,12 +217,19 @@ export default function SettingsPage() {
                 }
                 setClinics(result.clinics);
                 const active = result.clinics.filter((clinic) => clinic.status === "active");
-                if (result.clinics.length === 1) {
-                    setClinicId(result.clinics[0].clinic_id);
-                } else if (active.some((clinic) => clinic.clinic_id === result.default_clinic_id)) {
-                    // Several clinics: start on the default so the Team tab is never empty.
-                    setClinicId(result.default_clinic_id);
-                }
+                // Keep the picked clinic while it is still one of ours (after leaving a clinic it
+                // is not); otherwise the only clinic, or the default so the Team tab is never empty.
+                setClinicId((current) => {
+                    if (current && active.some((clinic) => clinic.clinic_id === current)) {
+                        return current;
+                    }
+                    if (result.clinics.length === 1) {
+                        return result.clinics[0].clinic_id;
+                    }
+                    return active.some((clinic) => clinic.clinic_id === result.default_clinic_id)
+                        ? result.default_clinic_id
+                        : null;
+                });
             } catch {
                 // The server still resolves a single clinic and asks for a choice otherwise.
             } finally {
@@ -231,7 +241,7 @@ export default function SettingsPage() {
         return () => {
             cancelled = true;
         };
-    }, [token]);
+    }, [clinicsRevision, token]);
 
     const handleClinicError = useCallback((e: unknown) => {
         if (isClinicRequiredError(e)) {
@@ -454,6 +464,17 @@ export default function SettingsPage() {
             return;
         }
 
+        const member = staffList.find((entry) => entry.id === memberId);
+        if (typeof window !== "undefined" && member) {
+            const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
+            const confirmed = window.confirm(
+                `Remove ${fullName} from ${clinicName || "this clinic"}? Their patient links at ${clinicName || "this clinic"} end; patients keep their other care-team members.`,
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
+
         setError(null);
         try {
             await api.delete(withClinic(`/api/v1/staff/${memberId}`, clinicId), { token });
@@ -601,6 +622,17 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                         </Card>
+
+                        {token ? (
+                            <YourClinicsCard
+                                onChanged={() => {
+                                    setClinicsRevision((value) => value + 1);
+                                    void loadProfile();
+                                }}
+                                revision={clinicsRevision}
+                                token={token}
+                            />
+                        ) : null}
 
                         <Card padding="none">
                             <div className="scroll-mt-24" id="my-profile">
@@ -769,7 +801,8 @@ export default function SettingsPage() {
                                     {profile?.id && member.id === profile.id ? (
                                         <span className="text-xs font-medium text-muted">You</span>
                                     ) : null}
-                                    <button
+                                    {/* Role changes and removal are admin-only at this clinic; the server rejects the rest. */}
+                                    {isClinicAdmin ? <button
                                         aria-label={`Actions for ${member.first_name} ${member.last_name}`}
                                         aria-expanded={actionMenuId === member.id}
                                         className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-transparent"
@@ -779,8 +812,8 @@ export default function SettingsPage() {
                                         type="button"
                                     >
                                         <Icon aria-hidden="true" name="more" className="h-4 w-4" />
-                                    </button>
-                                    {actionMenuId === member.id ? (
+                                    </button> : null}
+                                    {isClinicAdmin && actionMenuId === member.id ? (
                                         <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-[var(--shadow-pop)]">
                                             {ROLE_OPTIONS.filter((r) => r.value !== member.role).map((option) => (
                                                 <button

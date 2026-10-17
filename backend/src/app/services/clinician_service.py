@@ -98,8 +98,15 @@ class ClinicianService:
 
     # ── Patient List ────────────────────────────────────
 
-    async def get_patients(self, clinician_id: UUID) -> Any:
-        """List all patients assigned to this clinician via active care teams."""
+    async def get_patients(self, clinician_id: UUID, clinic_id: UUID | None = None) -> Any:
+        """List all patients assigned to this clinician via active care teams.
+
+        Each patient carries the clinic of the clinician's link. ``clinic_id`` keeps one
+        clinic's links; a clinic the clinician does not belong to gives an empty list.
+        """
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        if not scope.links:
+            return []
         result = await self._execute(
             self.db.table("care_teams")
             .select("*, patients(id, email, first_name, last_name, date_of_birth, avatar_url)")
@@ -109,10 +116,10 @@ class ClinicianService:
         patients = []
         for row in cast(list[dict[str, Any]], result.data or []):
             patient = cast(dict[str, Any], row.pop("patients", {}) or {})
-            if patient:
+            if patient and str(patient.get("id")) in scope.links:
                 patient["care_team_id"] = row["id"]
                 patient["role"] = row.get("role", "")
-                patients.append(patient)
+                patients.append(scope.annotate(patient, "id"))
         return patients
 
     async def get_patient_detail(self, clinician_id: UUID, patient_id: UUID) -> Any:
@@ -134,6 +141,13 @@ class ClinicianService:
         if not result.data:
             raise NotFoundError("Patient", str(patient_id))
         return result.data
+
+    async def get_patient_header(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any]:
+        """Patient detail plus the clinic of this clinician's link (shown on the header)."""
+        patient = dict(await self.get_patient_detail(clinician_id, patient_id))
+        scope = await self.memberships.link_scope(clinician_id)
+        patient.update(scope.tag(patient_id))
+        return patient
 
     async def send_patient_message(
         self,
@@ -199,8 +213,17 @@ class ClinicianService:
     async def list_all_sent_messages(
         self,
         clinician_id: UUID,
+        clinic_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
-        """List all messages sent by this clinician across all assigned patients."""
+        """List all messages sent by this clinician across all assigned patients.
+
+        Each message carries the clinic of the clinician's link to its patient;
+        ``clinic_id`` keeps one clinic. Messages to patients no longer linked are not listed
+        once a clinic is named.
+        """
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        if clinic_id is not None and not scope.links:
+            return []
         result = await self._execute(
             self.db.table("clinician_messages")
             .select("*, patients(first_name, last_name)")
@@ -214,7 +237,9 @@ class ClinicianService:
             if patient:
                 row["patient_first_name"] = patient.get("first_name")
                 row["patient_last_name"] = patient.get("last_name")
-        return rows
+        if clinic_id is not None:
+            return scope.keep(rows)
+        return [scope.annotate(row) for row in rows]
 
     # ── Invite Codes ────────────────────────────────────
 
@@ -464,8 +489,9 @@ class ClinicianService:
         max_last_activity_days: int | None = None,
         page: int = 1,
         page_size: int = 50,
+        clinic_id: UUID | None = None,
     ) -> Any:
-        """Aggregate risk data for all assigned patients.
+        """Aggregate risk data for all assigned patients (or one clinic's, with ``clinic_id``).
 
         Delegates per-patient risk calculation to RiskScoreService.
         Returns DashboardResponse-compatible dict.
@@ -473,7 +499,8 @@ class ClinicianService:
         from app.services.risk_score_service import RiskScoreService
 
         risk_service = RiskScoreService(self.db)
-        patient_ids = await self._get_assigned_patient_ids(clinician_id)
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        patient_ids = [UUID(pid) for pid in scope.patient_ids]
         pending_adr_reviews, medwatch_count = await asyncio.gather(
             self._get_pending_adr_review_count(patient_ids),
             self._get_pending_medwatch_count(patient_ids),
@@ -492,7 +519,7 @@ class ClinicianService:
                     exc_info=result,
                 )
                 continue
-            risk_data.append(result.model_dump())
+            risk_data.append(scope.annotate(result.model_dump()))
 
         if risk_filter:
             risk_data = [p for p in risk_data if p["risk_level"] == risk_filter]
@@ -564,13 +591,15 @@ class ClinicianService:
         status_filter: ADRStatus | Literal["all"] = ADRStatus.DRAFT,
         patient_id: UUID | None = None,
         limit: int = 100,
+        clinic_id: UUID | None = None,
     ) -> dict[str, Any]:
         """Return evidence-backed ADR assessments for the clinician's assigned patients.
 
         ``status_filter="all"`` lists every status; ``patient_id`` narrows to one patient
         and, when that patient is not assigned, yields an empty list.
         """
-        patient_ids = await self._get_assigned_patient_ids(clinician_id)
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        patient_ids = [UUID(pid) for pid in scope.patient_ids]
         if patient_id is not None:
             patient_ids = [pid for pid in patient_ids if pid == patient_id]
         if not patient_ids:
@@ -590,9 +619,11 @@ class ClinicianService:
         rows = cast(list[dict[str, Any]], result.data or [])
         latest_requests = await self._latest_information_requests(rows)
         items = [
-            self._normalize_adr_review_item(
-                row,
-                latest_request=latest_requests.get(str(row["id"])),
+            scope.annotate(
+                self._normalize_adr_review_item(
+                    row,
+                    latest_request=latest_requests.get(str(row["id"])),
+                )
             )
             for row in rows
         ]
@@ -868,7 +899,9 @@ class ClinicianService:
             risk_level = "unknown"
             adherence_score = 0.0
 
+        link = (await self.memberships.link_scope(clinician_id)).tag(patient_id)
         return {
+            **link,
             "patient_id": pid,
             "first_name": patient.get("first_name", ""),
             "last_name": patient.get("last_name", ""),
@@ -891,9 +924,18 @@ class ClinicianService:
             "obligation_completion_rate": obligation_completion_rate,
         }
 
-    async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
-        """List pending patient-uploaded documents for assigned patients."""
-        return await self.document_workflows.list_document_review_queue(clinician_id)
+    async def list_document_review_queue(
+        self, clinician_id: UUID, clinic_id: UUID | None = None
+    ) -> list[dict[str, Any]]:
+        """List pending patient-uploaded documents for assigned patients.
+
+        Each item carries the clinic of the clinician's link; ``clinic_id`` keeps one clinic.
+        """
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        if not scope.links:
+            return []
+        items = await self.document_workflows.list_document_review_queue(clinician_id)
+        return scope.keep(items)
 
     async def approve_document_review(
         self,

@@ -8,7 +8,11 @@ import {
 } from "@/services/appointments";
 import type { Appointment } from "@/types";
 
-export function useAppointmentScheduling(token: string) {
+export function useAppointmentScheduling(
+  token: string,
+  clinicId: string | null = null,
+  ready = true,
+) {
   const [patients, setPatients] = useState<AssignedSchedulingPatient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,10 +20,11 @@ export function useAppointmentScheduling(token: string) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (!ready) return;
     let active = true;
     void Promise.all([
-      fetchSchedulingPatients(token),
-      fetchSchedulingAppointments(token),
+      fetchSchedulingPatients(token, clinicId),
+      fetchSchedulingAppointments(token, clinicId),
     ])
       .then(([roster, visits]) => {
         if (active) {
@@ -36,7 +41,7 @@ export function useAppointmentScheduling(token: string) {
     return () => {
       active = false;
     };
-  }, [token, attempt]);
+  }, [token, attempt, clinicId, ready]);
 
   function addOffer(rows: Appointment[]) {
     setAppointments((current) => {

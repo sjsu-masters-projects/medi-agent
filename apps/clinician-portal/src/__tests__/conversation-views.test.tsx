@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import MessagesPage from "@/app/(dashboard)/messages/page";
 
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("@/components/features/care-conversations", () => ({
   CareConversations: ({ conversationId }: { conversationId: string | null }) => <p>Human conversations {conversationId}</p>,
 }));

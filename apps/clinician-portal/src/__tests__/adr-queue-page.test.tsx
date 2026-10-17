@@ -2,9 +2,11 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ADRReviewsPage from "@/app/(dashboard)/adr-reviews/page";
 import { ageLabel } from "@/components/features/work-list";
+import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
 
 const mocks = vi.hoisted(() => ({ fetchADRReviewQueue: vi.fn() }));
 const query = vi.hoisted(() => ({ value: "" }));
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(query.value) }));
 vi.mock("@/services/clinicians", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/services/clinicians")>()),
@@ -52,10 +54,31 @@ describe("ADR review queue", () => {
         window.history.replaceState(null, "", "/adr-reviews");
     });
 
+    it("shows the clinic chip and filter only with several clinics, and filters on the server", async () => {
+        mocks.fetchADRReviewQueue.mockResolvedValue([makeCase(1, { clinicId: "clinic-b", clinicName: "Bay Clinic" })]);
+        resetClinicFilter();
+        const { unmount } = render(<ADRReviewsPage />);
+        await screen.findByRole("list", { name: "Awaiting review cases" });
+        expect(screen.queryByText("Bay Clinic")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+        unmount();
+
+        clinicFilterState.clinics = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        clinicFilterState.clinicId = "clinic-b";
+        render(<ADRReviewsPage />);
+        await screen.findByRole("list", { name: "Awaiting review cases" });
+        expect(screen.getAllByText("Bay Clinic", { selector: "span" }).length).toBeGreaterThan(0);
+        expect(mocks.fetchADRReviewQueue).toHaveBeenLastCalledWith({ status: "all", clinicId: "clinic-b" });
+        resetClinicFilter();
+    });
+
     it("lists 25+ cases as one compact page of rows with tab counts and no evidence", async () => {
         render(<ADRReviewsPage />);
         const list = await screen.findByRole("list", { name: "Awaiting review cases" });
-        expect(mocks.fetchADRReviewQueue).toHaveBeenCalledWith({ status: "all" });
+        expect(mocks.fetchADRReviewQueue).toHaveBeenCalledWith({ status: "all", clinicId: null });
         expect(within(list).getAllByRole("listitem")).toHaveLength(10);
         expect(screen.queryByText("Never shown in the list.")).not.toBeInTheDocument();
         expect(screen.getByRole("tab", { name: /Awaiting review\s*25/ })).toHaveAttribute("aria-selected", "true");

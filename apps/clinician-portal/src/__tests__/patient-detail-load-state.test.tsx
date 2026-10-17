@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     tab: null as string | null,
     fetch: vi.fn(), soap: vi.fn(), push: vi.fn(),
 }));
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: mocks.patientId }),
     useSearchParams: () => ({ get: () => mocks.tab }),

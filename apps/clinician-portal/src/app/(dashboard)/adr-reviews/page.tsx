@@ -17,6 +17,8 @@ import {
     rowLinkClass,
     useListUrlState,
 } from "@/components/features/work-list";
+import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
+import { useResolvedClinicFilter } from "@/hooks/use-clinic-filter";
 import { missingCount, queueTabOf, type QueueTab } from "@/components/features/adr-queue";
 import { fetchADRReviewQueue, type ADRReviewQueueItem } from "@/services/clinicians";
 
@@ -45,7 +47,7 @@ const EMPTY_COPY: Record<QueueTab, string> = {
 const COLUMNS =
     "minmax(0,1.3fr) minmax(0,1.4fr) minmax(0,1.2fr) 150px 90px 56px 20px";
 
-function QueueRow({ item, from }: { item: ADRReviewQueueItem; from: string }) {
+function QueueRow({ item, from, showClinic }: { item: ADRReviewQueueItem; from: string; showClinic: boolean }) {
     const name = `${item.patientFirstName} ${item.patientLastName}`.trim();
     const missing = missingCount(item);
     const href = `/adr-reviews/${item.id}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
@@ -61,6 +63,7 @@ function QueueRow({ item, from }: { item: ADRReviewQueueItem; from: string }) {
                     <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-ink">{name}</p>
                         <p className="truncate text-xs text-muted">Severity {item.severity}/10</p>
+                        {showClinic ? <ClinicChip className="mt-0.5" name={item.clinicName} /> : null}
                     </div>
                     <p className="truncate text-sm text-ink-2">{item.symptom}</p>
                     <p className="truncate text-sm text-ink-2">{item.suspectMedicationName}</p>
@@ -78,6 +81,7 @@ function QueueRow({ item, from }: { item: ADRReviewQueueItem; from: string }) {
                         <p className="min-w-0 truncate text-sm font-semibold text-ink">{name}</p>
                         <CausalityPill band={item.causality} score={item.naranjoScore} />
                     </div>
+                    {showClinic ? <ClinicChip name={item.clinicName} /> : null}
                     <div className="flex items-center justify-between gap-3">
                         <p className="min-w-0 truncate text-[13px] text-ink-2">
                             {item.symptom} · {item.suspectMedicationName}
@@ -99,7 +103,12 @@ function QueueContent() {
         q: "",
         sort: "score",
         page: "1",
+        clinic: "",
     });
+    const clinicFilter = useResolvedClinicFilter(state.clinic || null, (clinic) =>
+        update({ clinic: clinic ?? "", page: "1" }),
+    );
+    const { clinicId, ready } = clinicFilter;
     const tab = (TABS.some((candidate) => candidate.value === state.tab) ? state.tab : "awaiting") as QueueTab;
     const sort = (SORT_OPTIONS.some((candidate) => candidate.value === state.sort) ? state.sort : "score") as QueueSort;
     const [items, setItems] = useState<ADRReviewQueueItem[]>([]);
@@ -110,17 +119,19 @@ function QueueContent() {
         setLoading(true);
         setError(false);
         try {
-            setItems(await fetchADRReviewQueue({ status: "all" }));
+            setItems(await fetchADRReviewQueue({ status: "all", clinicId }));
         } catch {
             setError(true);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [clinicId]);
 
     useEffect(() => {
-        void load();
-    }, [load]);
+        if (ready) {
+            void load();
+        }
+    }, [load, ready]);
 
     const counts = useMemo(() => {
         const result: Record<QueueTab, number> = { awaiting: 0, information: 0, reviewed: 0, dismissed: 0 };
@@ -167,6 +178,7 @@ function QueueContent() {
                 search={state.q}
                 searchLabel="Search by patient or medicine"
                 searchPlaceholder="Search patient or medicine"
+                extra={<ClinicFilterField filter={clinicFilter} />}
                 sort={sort}
                 sortLabel="Sort"
                 sortOptions={SORT_OPTIONS}
@@ -180,11 +192,17 @@ function QueueContent() {
                 />
             ) : null}
             {!loading && !error && visible.length === 0 ? (
-                <EmptyState
-                    description={state.q.trim() ? "No cases match this search." : EMPTY_COPY[tab]}
-                    icon={<Icon name="inbox" />}
-                    title={state.q.trim() ? "No matching cases" : "Nothing here"}
-                />
+                clinicId && items.length === 0 ? (
+                    <p className="rounded-2xl border border-line bg-surface px-6 py-12 text-center text-sm text-ink-2">
+                        <ClinicFilterEmpty filter={clinicFilter} noun="cases" />
+                    </p>
+                ) : (
+                    <EmptyState
+                        description={state.q.trim() ? "No cases match this search." : EMPTY_COPY[tab]}
+                        icon={<Icon name="inbox" />}
+                        title={state.q.trim() ? "No matching cases" : "Nothing here"}
+                    />
+                )
             ) : null}
             {!loading && !error && rows.length > 0 ? (
                 <>
@@ -194,7 +212,7 @@ function QueueContent() {
                         label={`${TABS.find((candidate) => candidate.value === tab)?.label} cases`}
                     >
                         {rows.map((item) => (
-                            <QueueRow from={query} item={item} key={item.id} />
+                            <QueueRow from={query} item={item} key={item.id} showClinic={clinicFilter.multi} />
                         ))}
                     </ListTable>
                     <Pagination

@@ -106,6 +106,43 @@ describe("Settings team and roles", () => {
             });
         }
 
+        it("shows staff role and removal actions only to an admin at the picked clinic", async () => {
+            mockClinics([clinicA, clinicB], "admin", "clinic-a");
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            await screen.findByText("Active Staff (2)");
+            // Admin at City Health: actions on the other member.
+            expect(screen.getByRole("button", { name: "Actions for Ada Admin" })).toBeInTheDocument();
+
+            // Provider at Bay Clinic: the server would refuse them, so they are not offered.
+            fireEvent.change(screen.getByLabelText("Clinic"), { target: { value: "clinic-b" } });
+            await screen.findByRole("note");
+            expect(screen.queryByRole("button", { name: /^Actions for/ })).not.toBeInTheDocument();
+            expect(screen.getByText("admin@example.com")).toBeInTheDocument();
+        });
+
+        it("warns that removal ends the member's patient links at that clinic", async () => {
+            mockClinics([clinicA, clinicB], "admin", "clinic-a");
+            mocks.delete.mockResolvedValue({});
+            const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            await screen.findByText("Active Staff (2)");
+            fireEvent.click(screen.getByRole("button", { name: "Actions for Ada Admin" }));
+            fireEvent.click(screen.getByRole("button", { name: "Remove from clinic" }));
+            expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Their patient links at City Health end; patients keep their other care-team members."));
+            expect(mocks.delete).not.toHaveBeenCalled();
+            confirm.mockRestore();
+        });
+
+        it("hides staff actions from a provider who is the only clinic's member", async () => {
+            mockClinics([{ ...clinicA, role: "provider" }], "provider");
+            render(<SettingsPage />);
+            fireEvent.click(await screen.findByRole("button", { name: "Team & Roles" }));
+            await screen.findByText("Active Staff (2)");
+            expect(screen.queryByRole("button", { name: /^Actions for/ })).not.toBeInTheDocument();
+        });
+
         it("sends the only clinic automatically", async () => {
             mockClinics([clinicA]);
             render(<SettingsPage />);
@@ -169,6 +206,8 @@ describe("Settings team and roles", () => {
             mockClinics([clinicA, clinicB], "admin", "clinic-a");
             render(<SettingsPage />);
             await screen.findByRole("button", { name: "Team & Roles" });
+            // The picker is only for the Team and Patient Invites tabs; General Profile's
+            // Your clinics card scopes each action per row.
             expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
             fireEvent.click(screen.getByRole("button", { name: "Patient Invites" }));
             expect(await screen.findByLabelText("Clinic")).toBeInTheDocument();

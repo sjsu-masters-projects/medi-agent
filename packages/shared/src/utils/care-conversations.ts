@@ -14,10 +14,17 @@ const root = "/api/v1/care-conversations";
 
 export function createConversationService(api: ConversationTransport) {
   return {
-    recipients: (token: string, signal?: AbortSignal) =>
-      api.get<ConversationRecipient[]>(`${root}/recipients`, { token, signal }),
-    list: (token: string, signal?: AbortSignal) =>
-      api.get<CareConversation[]>(`${root}/`, { token, signal }),
+    // `clinicId` is a clinician-only filter on the clinic of the care-team link.
+    recipients: (token: string, signal?: AbortSignal, clinicId?: string | null) =>
+      api.get<ConversationRecipient[]>(
+        `${root}/recipients${clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : ""}`,
+        { token, signal },
+      ),
+    list: (token: string, signal?: AbortSignal, clinicId?: string | null) =>
+      api.get<CareConversation[]>(
+        `${root}/${clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : ""}`,
+        { token, signal },
+      ),
     open: (token: string, recipientId: string) =>
       api.post<CareConversation>(`${root}/`, { recipient_id: recipientId }, { token }),
     messages: (token: string, id: string, before?: string, signal?: AbortSignal) =>

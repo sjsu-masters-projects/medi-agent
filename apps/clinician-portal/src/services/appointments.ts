@@ -6,6 +6,8 @@ export interface AssignedSchedulingPatient {
   first_name: string;
   last_name: string;
   care_team_id: string;
+  clinic_id?: string | null;
+  clinic_name?: string | null;
 }
 
 export interface AppointmentOfferDraft {
@@ -27,6 +29,8 @@ interface AppointmentRecord {
   status: Appointment["status"];
   created_at: string;
   clinician_name?: string | null;
+  clinic_id?: string | null;
+  clinic_name?: string | null;
   proposal_group_id?: string | null;
   proposal_expires_at?: string | null;
   patient_note?: string | null;
@@ -45,6 +49,8 @@ function mapAppointment(row: AppointmentRecord): Appointment {
     status: row.status,
     createdAt: row.created_at,
     clinicianName: row.clinician_name ?? undefined,
+    clinicId: row.clinic_id ?? undefined,
+    clinicName: row.clinic_name ?? undefined,
     proposalGroupId: row.proposal_group_id ?? undefined,
     proposalExpiresAt: row.proposal_expires_at ?? undefined,
     patientNote: row.patient_note ?? undefined,
@@ -53,9 +59,9 @@ function mapAppointment(row: AppointmentRecord): Appointment {
   };
 }
 
-export function fetchSchedulingPatients(token: string) {
+export function fetchSchedulingPatients(token: string, clinicId?: string | null) {
   return api.get<AssignedSchedulingPatient[]>(
-    "/api/v1/clinicians/me/patients",
+    `/api/v1/clinicians/me/patients${clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : ""}`,
     { token },
   );
 }
@@ -69,8 +75,10 @@ export function fetchSchedulingProfile(token: string, patientId: string) {
 
 export async function fetchSchedulingAppointments(
   token: string,
+  clinicId?: string | null,
 ): Promise<Appointment[]> {
-  const rows = await api.get<AppointmentRecord[]>("/api/v1/appointments/", {
+  const clinic = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : "";
+  const rows = await api.get<AppointmentRecord[]>(`/api/v1/appointments/${clinic}`, {
     token,
   });
   return rows.map(mapAppointment);

@@ -310,13 +310,13 @@ jobs:
         include:
           - name: notifications-and-email
             files: tests/integration/test_notification_centre_postgres.py tests/integration/test_email_postgres.py
-            minimums: test_notification_centre_postgres=54 test_email_postgres=31
+            minimums: test_notification_centre_postgres=55 test_email_postgres=31
           - name: adr-and-medwatch
             files: tests/integration/test_adr_loop_postgres.py tests/integration/test_medwatch_3500_postgres.py
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=13
           - name: care-conversations
             files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py
-            minimums: test_care_conversation_postgres=33 test_clinic_memberships_postgres=29
+            minimums: test_care_conversation_postgres=33 test_clinic_memberships_postgres=38
     defaults:
       run:
         working-directory: backend

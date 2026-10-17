@@ -175,3 +175,90 @@ async def test_a_suspended_clinic_is_not_an_acting_clinic():
     service, _db, _chain = _service(rows)
     memberships = await service.active_memberships(clinician_id)
     assert [str(m.clinic_id) for m in memberships] == [CLINIC_B]
+
+
+# ── List scope: the clinic of each link (CLN-003 slice C) ───────────────────────────────
+
+
+def _links():
+    return [
+        {"patient_id": "p-a", "clinic_id": CLINIC_A, "clinics": {"display_name": "Clinic A"}},
+        {"patient_id": "p-b", "clinic_id": CLINIC_B, "clinics": {"display_name": "Clinic B"}},
+        {"patient_id": None, "clinic_id": CLINIC_A, "clinics": {"display_name": "Clinic A"}},
+    ]
+
+
+def _scope_service(memberships):
+    from unittest.mock import AsyncMock, patch
+
+    service, _db, _chain = _service([])
+    service.active_memberships = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(clinic_id=clinic, role=ClinicianRole.PROVIDER) for clinic in memberships
+        ]
+    )
+    patcher = patch(
+        "app.services.clinic_membership_service.CareTeamRepository.list_active_links",
+        new=AsyncMock(return_value=_links()),
+    )
+    return service, patcher
+
+
+@pytest.mark.asyncio
+async def test_link_scope_without_a_filter_is_every_active_link_with_its_clinic():
+    service, patcher = _scope_service([CLINIC_A, CLINIC_B])
+    with patcher:
+        scope = await service.link_scope("c-1")
+    assert scope.patient_ids == ["p-a", "p-b"]
+    assert scope.tag("p-b") == {"clinic_id": CLINIC_B, "clinic_name": "Clinic B"}
+
+
+@pytest.mark.asyncio
+async def test_link_scope_for_own_clinic_keeps_only_that_clinics_links():
+    service, patcher = _scope_service([CLINIC_A, CLINIC_B])
+    with patcher:
+        scope = await service.link_scope("c-1", CLINIC_A)
+    assert scope.patient_ids == ["p-a"]
+
+
+@pytest.mark.asyncio
+async def test_link_scope_for_a_clinic_without_membership_is_empty_not_an_error():
+    service, patcher = _scope_service([CLINIC_A])
+    with patcher:
+        other = await service.link_scope("c-1", CLINIC_B)
+        unknown = await service.link_scope("c-1", str(uuid4()))
+    assert other.patient_ids == [] and unknown.patient_ids == []
+
+
+# ── Default clinic, leave and rename (067) ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_default_leave_and_rename_send_their_actions():
+    service, db = _rpc_service(data={"status": "left"})
+    await service.set_default("c-1", CLINIC_A)
+    await service.leave("c-1", CLINIC_A)
+    await service.rename_clinic("c-1", CLINIC_A, "New name")
+    sent = [(c.args[1]["p_action"], c.args[1]["p_payload"]) for c in db.rpc.call_args_list]
+    assert sent == [
+        ("set_default", {"clinic_id": CLINIC_A}),
+        ("leave", {"clinic_id": CLINIC_A}),
+        ("update_clinic", {"clinic_id": CLINIC_A, "display_name": "New name"}),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hint", "code"),
+    [
+        ("last_clinic", "LAST_CLINIC"),
+        ("sole_admin", "SOLE_ADMIN"),
+        ("clinic_name_taken", "CLINIC_NAME_TAKEN"),
+        ("invalid_name", "INVALID_NAME"),
+    ],
+)
+async def test_new_refusals_have_public_codes(hint, code):
+    service, _db = _rpc_service(error=_api_error(hint, code="22023"))
+    with pytest.raises(ValidationError) as raised:
+        await service.leave("c-1", CLINIC_A)
+    assert raised.value.code == code
