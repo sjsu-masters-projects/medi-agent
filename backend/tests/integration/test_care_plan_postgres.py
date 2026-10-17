@@ -15,6 +15,7 @@ from uuid import uuid4
 import pytest
 
 from app.services.care_plan_service import CarePlanService
+from tests.integration.supabase_roles import create_roles_sql
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("CARE_PLAN_TEST_POSTGRES") != "1",
@@ -157,8 +158,8 @@ def sql(tmp_path: Path):
     execute.start = start
 
     try:
+        execute(create_roles_sql(service_role_bypasses_rls=False))
         execute("""
-          CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
           CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
           CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
             SELECT (nullif(current_setting('request.jwt.claims', true), '')::jsonb->>'sub')::uuid;

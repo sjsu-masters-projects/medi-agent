@@ -12,6 +12,8 @@ from uuid import uuid4
 
 import pytest
 
+from tests.integration.supabase_roles import create_roles_sql
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER") != "1",
     reason="explicit opt-in disposable Docker PostgreSQL contract check",
@@ -82,7 +84,7 @@ def postgres():
         ]
         subprocess.run(
             command,
-            input="CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;",
+            input=create_roles_sql(),
             check=True,
             capture_output=True,
             text=True,
@@ -101,12 +103,16 @@ def postgres():
 
 
 def apply_clinic_memberships(execute, *, scheduling=True):
-    """Apply CLN-003 slices A (065), B (066), C+D (067) and E+F (069), found by name like 063/064."""
+    """Apply CLN-003 slices A (065), B (066), C+D (067), E+F (069) and 070, found by name like 063/064."""
     for pattern in (
         "*_clinic_memberships.sql",
         "*_clinic_sign_in_once.sql",
         "*_clinic_lists_and_roles.sql",
-        *(("*_clinic_scheduling_and_tags.sql",) if scheduling else ()),
+        *(
+            ("*_clinic_scheduling_and_tags.sql", "*_browser_grants_and_medwatch_preview_audit.sql")
+            if scheduling
+            else ()
+        ),
     ):
         for path in sorted(MIGRATIONS.glob(pattern)):
             execute(path.read_text())

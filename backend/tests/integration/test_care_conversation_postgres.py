@@ -12,6 +12,8 @@ from uuid import uuid4
 
 import pytest
 
+from tests.integration.supabase_roles import create_roles_sql
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("CARE_CONVERSATION_TEST_POSTGRES_DOCKER") != "1",
     reason="explicitly opt-in disposable Docker PostgreSQL contract check",
@@ -87,7 +89,7 @@ def postgres():
         ]
         subprocess.run(
             command,
-            input="CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;",
+            input=create_roles_sql(),
             check=True,
             capture_output=True,
             text=True,

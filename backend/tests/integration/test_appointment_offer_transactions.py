@@ -12,6 +12,8 @@ from uuid import uuid4
 
 import pytest
 
+from tests.integration.supabase_roles import create_roles_sql
+
 MIGRATIONS = Path(__file__).resolve().parents[2] / "src/app/db/migrations"
 
 
@@ -90,7 +92,7 @@ def offer_db(tmp_path_factory):
             )
         )
         sql(f"""
-            CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
+            {create_roles_sql()}
             CREATE SCHEMA auth;
             CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('test.actor', true), '')::uuid $$;
             CREATE SCHEMA private;

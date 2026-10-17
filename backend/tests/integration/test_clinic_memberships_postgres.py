@@ -79,11 +79,10 @@ def as_user(user, query):
 
 
 def signed_in(sql):
-    """Read auth.uid() from JWT claims and give browser roles hosted-default table grants."""
+    """Read auth.uid() from JWT claims. Table grants come from the harness's hosted defaults."""
     sql("""CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
         SELECT (nullif(current_setting('request.jwt.claims', true), '')::jsonb->>'sub')::uuid $$;
-      GRANT USAGE ON SCHEMA auth TO authenticated;
-      GRANT SELECT ON patients, care_teams, medications, clinicians TO authenticated;""")
+      GRANT USAGE ON SCHEMA auth TO authenticated;""")
 
 
 # ── Backfill ───────────────────────────────────────────────────────────────────────────
@@ -385,9 +384,8 @@ def test_memberships_are_written_only_by_the_service_role(sql):
 
 @pytest.mark.before_clinic_memberships
 def test_a_signed_in_clinician_cannot_promote_or_move_themselves(sql):
-    # Hosted Supabase grants browser roles table privileges by default; 065 itself must take
-    # the write privileges back.
-    sql("GRANT INSERT, UPDATE, DELETE ON clinicians TO authenticated, anon;")
+    # The harness starts from hosted Supabase's default grants; 065 itself must take the write
+    # privileges back.
     apply_clinic_memberships(sql)
     signed_in(sql)
     second_clinic(sql)
@@ -1048,7 +1046,9 @@ def test_removal_ends_the_removed_members_links_at_that_clinic_only(sql):
         "AND status='active' AND patient_id IS NOT NULL"
     )
     assert roster == PATIENT
-    ended = [a for a in audit_full(sql, mine) + audit_full(sql, pending) if a[2] == "care_link_ended"]
+    ended = [
+        a for a in audit_full(sql, mine) + audit_full(sql, pending) if a[2] == "care_link_ended"
+    ]
     assert [a[0] for a in ended] == [admin, admin]
     assert audit_full(sql, CLINICIAN)[-1][2] == "member_removed"
 
