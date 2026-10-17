@@ -1,6 +1,6 @@
 # LOC-003 — English-first clinician review of Spanish content
 
-**Status:** Backlog; design and decisions agreed October 13. Raised at the October 13
+**Status:** Merged ([#181](https://github.com/sjsu-masters-projects/medi-agent/pull/181), Jeevan); migrations renumbered to 067/068 and applied October 17 (first applied under their earlier filenames; re-runnable, so they reapplied cleanly); deployed check pending (see the board). Design and decisions agreed October 13. Raised at the October 13
 checkpoint demo.
 
 ## Principle

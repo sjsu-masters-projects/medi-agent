@@ -1,7 +1,20 @@
 # CLN-003 — Clinicians who work at more than one clinic
 
-**Status:** Slice A merged ([#176](https://github.com/sjsu-masters-projects/medi-agent/pull/176)); slice B in progress on `feature/clinic-sign-in-once` (see [Slice B design](#slice-b-design-sign-in-once-and-add-a-clinic-to-an-existing-account)); decisions made October 13. Raised by the project advisor at the
+**Status:** Slices A–F merged and their migrations applied (see the table below); G and H remain. Decisions made October 13. Raised by the project advisor at the
 October 13 checkpoint demo.
+
+| Slice | Scope | Status |
+| --- | --- | --- |
+| A | Memberships, clinic-tagged care-team links (065) | Done, [#176](https://github.com/sjsu-masters-projects/medi-agent/pull/176), applied October 16 |
+| B | Sign in once, add a clinic to an existing account (066) | Done, [#178](https://github.com/sjsu-masters-projects/medi-agent/pull/178), applied October 16 |
+| C | "All clinics" lists with clinic chips and filters | Done, [#182](https://github.com/sjsu-masters-projects/medi-agent/pull/182), applied October 17 (067) |
+| D | Per-clinic roles, settings and invitations, Your clinics | Done, [#182](https://github.com/sjsu-masters-projects/medi-agent/pull/182), applied October 17 (067) |
+| E | Cross-clinic scheduling and conflict checks | Done, [#183](https://github.com/sjsu-masters-projects/medi-agent/pull/183), applied October 17 (069) |
+| F | Clinic tags in notifications, email and audit | Done, [#183](https://github.com/sjsu-masters-projects/medi-agent/pull/183), applied October 17 (069) |
+| G | Shared clinical core | Remaining |
+| H | Care plans per care-team link (PLAN-002, Jeevan) | Remaining |
+
+Deployed checks for A–F are tracked on the board (`.agent/TASKS.md`, CLN-003).
 
 ## Why
 
@@ -200,7 +213,7 @@ working once 065 is applied (the trigger tags its new invite rows).
   (admin role and clinic peers come from active memberships; a clinician with no membership
   falls back to the legacy row, and the `clinic_name` fallback is unchanged).
 
-### Reads still on `clinicians.clinic_id` (later slices)
+### Reads still on `clinicians.clinic_id` (after slice A; superseded: the current list is [after slice F](#still-on-legacy-columns-after-slice-f-what-remains))
 
 - Sign-in clinic check and registration (`auth_service`), profile clinic change
   (`clinician_service.update_profile`): slice B.
@@ -221,13 +234,8 @@ working once 065 is applied (the trigger tags its new invite rows).
 
 ## Slice B design (sign in once and add a clinic to an existing account)
 
-**Status:** in progress on `feature/clinic-sign-in-once`. Migration
-`066_clinic_sign_in_once.sql` is written and tested in disposable PostgreSQL only; it is not
-applied to any hosted project. The number 066 is also used by LOC-003's unmerged
-`066_care_plan_wording_back_translation.sql` (branch `feature/english-first-review`); the
-migration validator is unchanged (no exceptions or reservations), so whichever file lands
-second is renumbered before it merges. LOC-003's file is renumbered later. Never edit an
-existing migration.
+**Status:** merged ([#178](https://github.com/sjsu-masters-projects/medi-agent/pull/178)); migration `066_clinic_sign_in_once.sql` applied October 16.
+LOC-003's earlier `066` file was renumbered (see LOC-003). Never edit an applied migration.
 
 **Agreed scope (requester, October 16).** One sign-in (email, password, MFA) with no clinic
 code. The clinician lands on the same screens as today. There is no "Choose a clinic" step, no
@@ -359,7 +367,7 @@ applies 066 (on explicit authorization) before this backend deploys, because the
 they still send a clinic code, and every replaced function keeps its signature. Supabase Auth
 dashboard changes: none.
 
-### Still on the legacy columns after slice B
+### Still on the legacy columns after slice B (superseded by [after slice F](#still-on-legacy-columns-after-slice-f-what-remains))
 
 The MedWatch reporter clinic (slice F), notification `clinic_name` labels (slice F), the denial
 classifier's clinic comparison, care-plan SQL that picks "the" link for a pair (slices C and H),
@@ -387,8 +395,8 @@ the settings and history UI.
 
 ## Slice C design ("All clinics" lists with clinic chips and filters)
 
-**Status:** in progress on `feature/clinic-lists-and-roles` (slices C and D ship as one branch).
-Migration `067_clinic_lists_and_roles.sql` (see slice D) carries the one SQL change slice C needs.
+**Status:** merged with slice D in [#182](https://github.com/sjsu-masters-projects/medi-agent/pull/182); migration `067_clinic_lists_and_roles.sql` (see slice D)
+applied October 17.
 
 **Rule (unchanged from the agreed scope).** There is no global active clinic and no switcher.
 A clinician's lists show every patient they hold an active care-team link to. The clinic of an
@@ -444,7 +452,7 @@ each patient-clinician pair has exactly one clinic and a patient appears once pe
   "Linked at <clinic>" under the patient header name. An empty filtered list says "No patients at
   <clinic> match" with a "Show all clinics" text button.
 
-### Still on the legacy columns after slice C
+### Still on the legacy columns after slice C (superseded by [after slice F](#still-on-legacy-columns-after-slice-f-what-remains))
 
 Sign-in's default-clinic mirror columns and the `clinicians.clinic_name` fallback; care-plan SQL
 that picks "the" link for a pair (slice H); notification and email clinic labels outside the centre
@@ -452,10 +460,8 @@ that picks "the" link for a pair (slice H); notification and email clinic labels
 
 ## Slice D design (per-clinic roles, settings and invitations)
 
-**Status:** in progress on the same branch as slice C. Migration `067_clinic_lists_and_roles.sql`
-is written and tested in disposable PostgreSQL only; applying it to a hosted project is the
-requester's action. LOC-003's unmerged work-in-progress migration (branch
-`feature/english-first-review`) must renumber to the next free number after 067.
+**Status:** merged with slice C in [#182](https://github.com/sjsu-masters-projects/medi-agent/pull/182). Migration `067_clinic_lists_and_roles.sql` applied
+October 17. LOC-003's migrations were renumbered to 067/068 in [#181](https://github.com/sjsu-masters-projects/medi-agent/pull/181) and are also applied.
 
 ### What slice B already made membership-based
 
@@ -547,9 +553,8 @@ minutes of portal and backend mismatch after a merge is accepted (no old-shape f
 
 ## Slice E design (cross-clinic scheduling and conflict checks)
 
-**Status:** in progress on `feature/clinic-scheduling-and-tags` (slices E and F ship as one branch).
-Migration `069_clinic_scheduling_and_tags.sql` is written and tested in disposable PostgreSQL only;
-applying it to a hosted project is the requester's action, before this backend deploys.
+**Status:** merged with slice F in [#183](https://github.com/sjsu-masters-projects/medi-agent/pull/183). Migration `069_clinic_scheduling_and_tags.sql`
+applied October 17 (read-only overlap preflight returned 0 rows; 38 appointments backfilled).
 
 **Rule.** No global active clinic and no switcher. Access is the active care-team link, and each
 patient-clinician pair has one link and so one clinic. An appointment (and every slot of an offer
