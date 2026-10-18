@@ -50,6 +50,7 @@ class Table:
     def update(self, payload: dict[str, Any]) -> Table:
         self.payload = payload
         return self
+
     def execute(self) -> Result:
         rows = self.store.setdefault(self.name, [])
         matched = [row for row in rows if all(str(row.get(k)) == v for k, v in self.filters)]
@@ -60,7 +61,10 @@ class Table:
                 for row in matched:
                     row.update(self.payload)
                 return Result(matched)
-            if self.name not in {"clinical_recommendations", "action_envelopes"} or not self.filters:
+            if (
+                self.name not in {"clinical_recommendations", "action_envelopes"}
+                or not self.filters
+            ):
                 row = {
                     "id": str(uuid4()),
                     "created_at": "2026-08-20T00:00:00Z",
@@ -74,16 +78,35 @@ class Table:
 
 class Database:
     def __init__(self) -> None:
-        self.store: dict[str, list[dict[str, Any]]] = {"care_teams": [
-            {"id": "care-proposer", "clinician_id": str(PROPOSER), "patient_id": str(PATIENT), "status": "active"},
-            {"id": "care-reviewer", "clinician_id": str(REVIEWER), "patient_id": str(PATIENT), "status": "active"},
-        ]}
+        self.store: dict[str, list[dict[str, Any]]] = {
+            "care_teams": [
+                {
+                    "id": "care-proposer",
+                    "clinician_id": str(PROPOSER),
+                    "patient_id": str(PATIENT),
+                    "status": "active",
+                },
+                {
+                    "id": "care-reviewer",
+                    "clinician_id": str(REVIEWER),
+                    "patient_id": str(PATIENT),
+                    "status": "active",
+                },
+            ]
+        }
+
     def table(self, name: str) -> Table:
         return Table(name, self.store)
 
 
 def recommendation() -> ClinicalRecommendationCreate:
-    return ClinicalRecommendationCreate(patient_id=PATIENT, action_type="routine_message", proposed_payload={"body": "Check in"}, evidence=[{"source": "fact-1"}], rationale="Follow-up is due.")
+    return ClinicalRecommendationCreate(
+        patient_id=PATIENT,
+        action_type="routine_message",
+        proposed_payload={"body": "Check in"},
+        evidence=[{"source": "fact-1"}],
+        rationale="Follow-up is due.",
+    )
 
 
 def test_requires_independent_assigned_review_and_deduplicates_execution() -> None:
@@ -93,12 +116,24 @@ def test_requires_independent_assigned_review_and_deduplicates_execution() -> No
     recommendation_id = UUID(proposed["id"])
 
     with pytest.raises(AuthorizationError, match="own"):
-        service.decide(recommendation_id, reviewer_id=PROPOSER, decision=ApprovalDecisionCreate(decision="approve", note="ok"))
-    approved = service.decide(recommendation_id, reviewer_id=REVIEWER, decision=ApprovalDecisionCreate(decision="approve", note="Reviewed"))
+        service.decide(
+            recommendation_id,
+            reviewer_id=PROPOSER,
+            decision=ApprovalDecisionCreate(decision="approve", note="ok"),
+        )
+    approved = service.decide(
+        recommendation_id,
+        reviewer_id=REVIEWER,
+        decision=ApprovalDecisionCreate(decision="approve", note="Reviewed"),
+    )
     assert approved["state"] == "approved"
     key = "request-00000001"
-    first = service.get_or_create_envelope(recommendation_id, clinician_id=REVIEWER, envelope=ActionEnvelopeCreate(idempotency_key=key))
-    second = service.get_or_create_envelope(recommendation_id, clinician_id=REVIEWER, envelope=ActionEnvelopeCreate(idempotency_key=key))
+    first = service.get_or_create_envelope(
+        recommendation_id, clinician_id=REVIEWER, envelope=ActionEnvelopeCreate(idempotency_key=key)
+    )
+    second = service.get_or_create_envelope(
+        recommendation_id, clinician_id=REVIEWER, envelope=ActionEnvelopeCreate(idempotency_key=key)
+    )
     assert first["id"] == second["id"]
 
 
@@ -107,14 +142,28 @@ def test_unassigned_clinician_and_unapproved_execution_are_rejected() -> None:
     service = ClinicalActionService(db)  # type: ignore[arg-type]
     proposed = service.propose(recommendation(), actor_id=PROPOSER)
     with pytest.raises(AuthorizationError, match="not assigned"):
-        service.decide(UUID(proposed["id"]), reviewer_id=uuid4(), decision=ApprovalDecisionCreate(decision="approve", note="No access"))
+        service.decide(
+            UUID(proposed["id"]),
+            reviewer_id=uuid4(),
+            decision=ApprovalDecisionCreate(decision="approve", note="No access"),
+        )
     with pytest.raises(ValidationError, match="approved"):
-        service.get_or_create_envelope(UUID(proposed["id"]), clinician_id=REVIEWER, envelope=ActionEnvelopeCreate(idempotency_key="request-00000002"))
+        service.get_or_create_envelope(
+            UUID(proposed["id"]),
+            clinician_id=REVIEWER,
+            envelope=ActionEnvelopeCreate(idempotency_key="request-00000002"),
+        )
 
 
 def unclassified_recommendation() -> ClinicalRecommendationCreate:
     """An action type nobody has assigned a tier, which fails closed to the top tier."""
-    return ClinicalRecommendationCreate(patient_id=PATIENT, action_type="adjust_anticoagulant_dose", proposed_payload={"dose": "5mg"}, evidence=[{"source": "fact-2"}], rationale="INR is out of range.")
+    return ClinicalRecommendationCreate(
+        patient_id=PATIENT,
+        action_type="adjust_anticoagulant_dose",
+        proposed_payload={"dose": "5mg"},
+        evidence=[{"source": "fact-2"}],
+        rationale="INR is out of range.",
+    )
 
 
 def test_a_model_may_not_propose_an_unclassified_action() -> None:

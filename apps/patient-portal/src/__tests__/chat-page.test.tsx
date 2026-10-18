@@ -306,6 +306,109 @@ describe("Patient chat page", () => {
         });
     });
 
+    it("keeps the live socket and streamed reply across a silent token refresh and history refresh", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Still streaming" });
+        });
+        const sockets = MockWebSocket.instances.length;
+        await act(async () => {
+            store.dispatch(hydrateSession({
+                accessToken: "refreshed-token",
+                expiresAt: 9999999999,
+                refreshToken: "refresh-token-2",
+                user: { email: "patient@example.com", id: "patient-1", role: "patient" },
+            }));
+            socket.emitMessage({ type: "chat_history", messages: [] });
+        });
+        expect(MockWebSocket.instances).toHaveLength(sockets);
+        expect(socket.readyState).toBe(1);
+        expect(screen.getByText(/Still streaming/)).toBeInTheDocument();
+    });
+
+    const turnRow = (status: string, extra: Record<string, unknown> = {}) => ({
+        client_message_id: "other-tab", status, attempt: 1, retryable: false, document_id: null,
+        user_message: { id: "saved-first", patient_id: "patient-1", content: "Explain my recent results", role: "user", language: "en-US", created_at: "2026-10-17T10:00:00Z" },
+        ...extra,
+    });
+    const savedReply = { id: "saved-reply", patient_id: "patient-1", role: "assistant", content: "Your results are stable.", language: "en-US", created_at: "2026-10-17T10:01:00Z" };
+
+    it("shows another tab's in-flight reply, polls only while it is in flight and then shows the saved reply", async () => {
+        vi.useFakeTimers();
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing")] }); });
+        expect(screen.getByText("Nora is preparing your reply")).toBeInTheDocument();
+        const recovers = () => socket.sent.filter((text) => JSON.parse(text).type === "recover_turns").length;
+        await act(async () => { vi.advanceTimersByTime(5_000); });
+        expect(recovers()).toBe(1);
+        await act(async () => {
+            socket.emitMessage({ type: "chat_history", messages: [savedReply] });
+            socket.emitMessage({ type: "chat_turns", turns: [turnRow("completed")] });
+        });
+        expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
+        expect(screen.queryByText("Nora is preparing your reply")).not.toBeInTheDocument();
+        await act(async () => { vi.advanceTimersByTime(30_000); });
+        expect(recovers()).toBe(1);
+        vi.useRealTimers();
+    });
+
+    it("clears a streamed draft as soon as the turn is reported interrupted", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Draft that never saves" });
+        });
+        expect(screen.getByText(/Draft that never saves/)).toBeInTheDocument();
+        await act(async () => { socket.emitMessage({ type: "chat_turns", turns: [turnRow("interrupted", { retryable: true })] }); });
+        expect(screen.queryByText(/Draft that never saves/)).not.toBeInTheDocument();
+        expect(screen.getByText("The reply was interrupted")).toBeInTheDocument();
+    });
+
+    it("clears a streamed draft when its socket closes", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_chunk", content: "Cut off mid reply" });
+        });
+        expect(screen.getByText(/Cut off mid reply/)).toBeInTheDocument();
+        await act(async () => { socket.close(); });
+        expect(screen.queryByText(/Cut off mid reply/)).not.toBeInTheDocument();
+    });
+
+    it("reconciles a reply whose completion confirmation was lost", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Explain my recent results" } });
+        fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+        const id = JSON.parse(socket.sent[0]).client_message_id;
+        await act(async () => {
+            socket.emitMessage({ type: "error", code: "CHAT_TURN_UNAVAILABLE", client_message_id: id, message: "Chat recovery is required." });
+            socket.emitMessage({ type: "chat_history", messages: [savedReply] });
+            socket.emitMessage({ type: "chat_turns", turns: [turnRow("completed", { client_message_id: id })] });
+        });
+        expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
+        expect(screen.queryByText("The reply was interrupted")).not.toBeInTheDocument();
+    });
+
+    it("explains a completed turn whose reply is no longer available", async () => {
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("failed", { failure_code: "reply_unavailable" })] }); });
+        expect(screen.getByText(getChatRecoveryCopy(Language.EN).replyUnavailable)).toBeInTheDocument();
+    });
+
     it("renders assistant chunks progressively before completion", async () => {
         renderPage();
 

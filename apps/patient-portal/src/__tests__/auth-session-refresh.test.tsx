@@ -131,4 +131,21 @@ describe("useAuthSessionRefresh (patient portal)", () => {
         });
         expect(redirectToLogin).toHaveBeenCalledWith({ reason: "session_expired" });
     });
+
+    it("does not chain refreshes when the new token is itself inside the early window", async () => {
+        const shortLived = {
+            accessToken: "short",
+            refreshToken: "next",
+            expiresAt: Math.floor(Date.now() / 1000) + 600,
+            user: { id: "patient-1", email: "patient@example.com", role: "patient" },
+        };
+        refreshPatientSession.mockResolvedValue(shortLived);
+        const view = render(<TestHarness />);
+        await waitFor(() => expect(refreshPatientSession).toHaveBeenCalledTimes(1));
+        // The store now holds the short-lived session; the effect re-runs on the change.
+        setAuthState({ expiresAt: shortLived.expiresAt, refreshToken: "next" });
+        view.rerender(<TestHarness />);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(refreshPatientSession).toHaveBeenCalledTimes(1);
+    });
 });

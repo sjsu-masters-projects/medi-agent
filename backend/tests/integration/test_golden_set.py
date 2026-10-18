@@ -185,9 +185,7 @@ class TestExtractContentWithFixture:
             ("diagnostic_report.txt", "diagnostic_report_expected.json"),
         ],
     )
-    async def test_extract_with_golden_response(
-        self, fixture_txt: str, fixture_json: str
-    ) -> None:
+    async def test_extract_with_golden_response(self, fixture_txt: str, fixture_json: str) -> None:
         """Simulate LLM returning the golden-set JSON given fixture text."""
         raw_content = _load_fixture(fixture_txt)
         expected = _load_expected(fixture_json)

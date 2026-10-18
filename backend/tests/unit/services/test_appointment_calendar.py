@@ -95,9 +95,10 @@ def test_calendar_uses_the_appointments_clinic_in_both_locales():
 
 
 def test_calendar_location_is_the_clinic_when_the_visit_has_none_or_already_names_it():
-    assert "LOCATION:North clinic\r\n" in render_appointment_calendar(
-        appointment(clinic_name="North clinic"), "en-US"
-    ).content
+    assert (
+        "LOCATION:North clinic\r\n"
+        in render_appointment_calendar(appointment(clinic_name="North clinic"), "en-US").content
+    )
     named = render_appointment_calendar(
         appointment(clinic_name="North clinic", location="North Clinic, room 3"), "en-US"
     ).content
