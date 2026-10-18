@@ -1,5 +1,6 @@
 """Durable websocket execution keeps saved replies independent of socket delivery."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -13,7 +14,12 @@ from app.routers import chat
 from app.safety import TRIAGE_COPY
 from app.services.chat_service import ChatService
 from app.services.chat_turn_execution import TurnChatService
-from app.services.chat_turn_service import ChatTurnService, TurnExecution, public_turn
+from app.services.chat_turn_service import (
+    ChatTurnService,
+    TurnExecution,
+    public_turn,
+    turn_budget,
+)
 from app.utils.localization import resolve_locale_resource
 
 
@@ -309,3 +315,109 @@ def test_public_turn_serializes_the_user_message_like_history():
         {"id": "t", "status": "failed", "user_message": {"content": "x", "junk": 1}}
     )
     assert partial["user_message"] == {"content": "x"}
+
+
+def test_turn_budget_leaves_save_time_after_the_processing_budget():
+    assert turn_budget(30.0) == (40, 70)
+    assert turn_budget(0.0) == (10, 40)
+    # Never beyond the database's 120 second lease limit, whatever the setting.
+    assert turn_budget(500.0) == (90, 120)
+
+
+@pytest.mark.asyncio
+async def test_lease_outlasts_the_processing_budget(monkeypatch, turn_runtime):
+    turns, service, socket, context, _, _ = turn_runtime
+    monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(side_effect=TimeoutError))
+    await chat._process_durable_message(socket, service, context, {})
+    processing, lease = turn_budget(chat.settings.chat_turn_timeout_seconds)
+    assert turns.begin.call_args.args[1] == lease > processing
+
+
+@pytest.mark.asyncio
+async def test_slow_save_after_a_finished_reply_is_not_cut_off(monkeypatch, turn_runtime):
+    """The model used almost the whole budget: its reply still gets its own save call."""
+    turns, service, socket, context, _, saved = turn_runtime
+    monkeypatch.setattr(chat, "turn_budget", lambda _: (0.3, 5))
+    base = turns.call.side_effect
+
+    async def slow_call(action, payload=None):
+        if action == "complete":
+            await asyncio.sleep(0.6)
+        return base(action, payload)
+
+    turns.call = AsyncMock(side_effect=slow_call)
+
+    async def process(emitter, staged, ctx):
+        await asyncio.sleep(0.2)
+        message = await staged.save_message(
+            ctx["patient_id"], {"role": "assistant", "content": "Late reply", "language": "en-US"}
+        )
+        await emitter.send_json({"type": "assistant_complete", "message": message})
+        return {}
+
+    monkeypatch.setattr(chat, "_process_chat_message", process)
+    await chat._process_durable_message(socket, service, context, {})
+    actions = [call.args[0] for call in turns.call.call_args_list]
+    assert "complete" in actions
+    assert "interrupted" not in actions and "failed" not in actions
+    assert socket.send_json.call_args_list[-2].args[0]["message"]["id"] == saved["id"]
+
+
+@pytest.mark.asyncio
+async def test_slow_model_interrupts_the_turn_so_it_can_be_retried(monkeypatch, turn_runtime):
+    turns, service, socket, context, _, _ = turn_runtime
+    monkeypatch.setattr(chat, "turn_budget", lambda _: (0.05, 5))
+
+    async def never_answers(*_args):
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(chat, "_process_chat_message", never_answers)
+    await chat._process_durable_message(socket, service, context, {})
+    assert turns.call.call_args_list[0].args[0] == "interrupted"
+    sent = [call.args[0] for call in socket.send_json.call_args_list]
+    assert any(event["type"] == "chat_turns" for event in sent)
+
+
+@pytest.mark.asyncio
+async def test_expired_completion_reports_its_own_code_and_recovers(monkeypatch, turn_runtime):
+    turns, service, socket, context, _, _ = turn_runtime
+    base = turns.call.side_effect
+    turns.call = AsyncMock(
+        side_effect=lambda action, payload=None: {"accepted": False}
+        if action == "complete"
+        else base(action, payload)
+    )
+
+    async def process(emitter, staged, ctx):
+        message = await staged.save_message(
+            ctx["patient_id"], {"role": "assistant", "content": "Reply", "language": "en-US"}
+        )
+        await emitter.send_json({"type": "assistant_complete", "message": message})
+        return {}
+
+    monkeypatch.setattr(chat, "_process_chat_message", process)
+    await chat._process_durable_message(socket, service, context, {})
+    sent = [call.args[0] for call in socket.send_json.call_args_list]
+    error = next(event for event in sent if event["type"] == "error")
+    assert error["code"] == "CHAT_TURN_EXPIRED"
+    assert "try again" in error["message"]
+    assert sent[-1]["type"] == "chat_turns"
+
+
+@pytest.mark.asyncio
+async def test_finished_reply_is_kept_when_only_the_deadline_had_passed(turn_runtime, caplog):
+    turns, _, _, _, record, saved = turn_runtime
+    turns.call = AsyncMock(return_value={"accepted": True, "late": True, "message": saved})
+    with caplog.at_level("WARNING"):
+        message = await TurnExecution(turns, record).finish({"content": "Synthetic reply"})
+    assert message == saved
+    assert "after its turn lease lapsed" in caplog.text
+    assert "Synthetic reply" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_replaced_lease_still_refuses_the_old_reply(turn_runtime):
+    turns, _, _, _, record, _ = turn_runtime
+    turns.call = AsyncMock(return_value={"accepted": False})
+    with pytest.raises(ValidationError, match="CHAT_TURN_EXPIRED"):
+        await TurnExecution(turns, record).finish({"content": "Synthetic reply"})

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { NOTIFICATION_POLL_MS, NotificationProvider, useNotificationCentre } from "@/components/features/notification-provider";
+import { NOTIFICATION_MIN_GAP_MS, NOTIFICATION_POLL_MS, NotificationProvider, useNotificationCentre } from "@/components/features/notification-provider";
 import { NotificationBell, NotificationList } from "@/components/features/notification-centre";
 import AlertsPage from "@/app/(dashboard)/alerts/page";
 import { notificationCentre } from "@/services/notification-centre";
@@ -187,6 +187,38 @@ describe("clinician notification centre", () => {
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS); });
     expect(notificationCentre.summary).toHaveBeenCalledTimes(3);
+    visibility.mockRestore();
+  });
+
+  it("keeps the last alerts without a banner when background polls fail, then backs off", async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(<NotificationProvider><Probe /><NotificationList /></NotificationProvider>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(notificationCentre.summary).toHaveBeenCalledTimes(1);
+    vi.mocked(notificationCentre.list).mockRejectedValue(new ApiClientError("Unavailable", 502, null));
+    vi.mocked(notificationCentre.summary).mockRejectedValue(new ApiClientError("Unavailable", 502, null));
+    await act(async () => { await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS); });
+    expect(notificationCentre.summary).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Could not refresh alerts/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Patient reported a barrier").length).toBeGreaterThan(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS); });
+    expect(notificationCentre.summary).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS); });
+    expect(notificationCentre.summary).toHaveBeenCalledTimes(3);
+    visibility.mockRestore();
+  });
+
+  it("answers a burst of focus and visibility events with one refresh", async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(<NotificationProvider><Probe /></NotificationProvider>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
+    expect(notificationCentre.summary).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(NOTIFICATION_MIN_GAP_MS + 1); });
+    await act(async () => { window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
+    expect(notificationCentre.summary).toHaveBeenCalledTimes(2);
     visibility.mockRestore();
   });
 
