@@ -35,7 +35,7 @@ from app.services.care_plan_classification import (
 )
 from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_reconciliation import overlaps
-from app.services.care_plan_translation import draft_translations
+from app.services.care_plan_translation import draft_translations, validate_draft
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_intelligence.grounding import (
     INACTIVE_MEDICATION_ACTIONS,
@@ -201,6 +201,13 @@ class CarePlanService:
                     # Review must remain saveable before reconciliation is complete.
                     # Publication validates the decision independently and still rejects it.
                     medication_error = str(exc)
+            verified = bool(
+                item.wording_verified
+                and not item.is_removed
+                and self._wording_complete({**item.model_dump(), **wording_fields})
+            )
+            if verified:
+                self._require_wording_guards({**item.model_dump(), **wording_fields})
             blocker = self._blocker(
                 category=str(original["category"]),
                 title=item.title,
@@ -235,11 +242,7 @@ class CarePlanService:
                             or item.title.strip() == str(original["title"]).strip()
                         ],
                         **wording_fields,
-                        "wording_verified": bool(
-                            item.wording_verified
-                            and not item.is_removed
-                            and self._wording_complete({**item.model_dump(), **wording_fields})
-                        ),
+                        "wording_verified": verified,
                     },
                 )
             )
@@ -291,6 +294,32 @@ class CarePlanService:
         if source_locale and source_locale in wording:
             origin.setdefault(source_locale, "source")
         return {"source_locale": source_locale, "wording": wording, "wording_origin": origin}
+
+    @staticmethod
+    def _require_wording_guards(item: dict[str, Any]) -> None:
+        """Reject verification of wording whose two languages disagree on a checked fact.
+
+        The browser asks for the same checks, but the API must not be a way around them.
+        The stored English and Spanish wording is compared directly (numbers with units,
+        negation, medication name); a model is not called on a save or an approval.
+        """
+        wording = cast(dict[str, dict[str, str]], item.get("wording") or {})
+        source_locale = item.get("source_locale")
+        if source_locale not in PATIENT_LOCALES:
+            return
+        other = "es-MX" if source_locale == "en-US" else "en-US"
+        reason = validate_draft(wording.get(source_locale) or {}, wording.get(other) or {}, item)
+        if reason:
+            labels = {
+                "numbers_changed": "numbers or units differ between the languages",
+                "negation_changed": "a negation (no, not, never, without) differs between the languages",
+                "medication_name_changed": "a medication name differs between the languages",
+                "field_missing": "a field is empty in one language",
+            }
+            raise ValidationError(
+                f"The wording cannot be marked verified: {labels.get(reason, reason)}. "
+                "Fix the wording and check it again."
+            )
 
     @staticmethod
     def _wording_complete(item: dict[str, Any]) -> bool:
@@ -496,6 +525,7 @@ class CarePlanService:
                 raise ValidationError(
                     "Check the English and Spanish wording of every patient-facing item"
                 )
+            self._require_wording_guards(item)
             if item["category"] == "medication":
                 self._validate_medication_decision(item.get("medication") or {}, medications)
                 if (
