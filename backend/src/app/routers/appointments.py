@@ -35,6 +35,7 @@ async def my_schedule(
     start: datetime = Query(alias="from"),
     end: datetime = Query(alias="to"),
     clinic_id: UUID | None = Query(default=None),
+    include_cancelled: bool = Query(default=False),
     current_user: CurrentUser = Depends(get_current_user),
     db: Client = Depends(get_db),
 ) -> Any:
@@ -45,6 +46,7 @@ async def my_schedule(
         start=start,
         end=end,
         clinic_id=clinic_id,
+        include_cancelled=include_cancelled,
     )
 
 

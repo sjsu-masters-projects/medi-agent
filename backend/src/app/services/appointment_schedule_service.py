@@ -79,6 +79,7 @@ class AppointmentScheduleService:
         start: datetime,
         end: datetime,
         clinic_id: UUID | None = None,
+        include_cancelled: bool = False,
     ) -> dict[str, Any]:
         self._require_clinician(role)
         self._check_range(start, end)
@@ -96,7 +97,7 @@ class AppointmentScheduleService:
 
         visits = await execute(
             own(self.db.table("appointments").select(_WITH_PATIENT))
-            .in_("status", BOOKED)
+            .in_("status", [*BOOKED, "cancelled"] if include_cancelled else BOOKED)
             .gte("scheduled_at", start.isoformat())
             .lt("scheduled_at", end.isoformat())
             .order("scheduled_at")

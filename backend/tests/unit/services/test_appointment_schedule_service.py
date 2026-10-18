@@ -136,3 +136,21 @@ async def test_busy_times_carry_intervals_and_clinics_never_patients():
     chain.eq.assert_any_call("clinician_id", str(me))
     selected = chain.select.call_args.args[0]
     assert "patient" not in selected
+
+
+@pytest.mark.asyncio
+async def test_cancelled_visits_are_listed_only_when_asked_for():
+    service, chain = _service([], [], [])
+    await service.schedule(user_id=uuid4(), role="clinician", start=NOW, end=NOW + timedelta(1))
+    assert ["confirmed", "scheduled"] in [c.args[1] for c in chain.in_.call_args_list]
+    service, chain = _service([], [], [])
+    await service.schedule(
+        user_id=uuid4(),
+        role="clinician",
+        start=NOW,
+        end=NOW + timedelta(1),
+        include_cancelled=True,
+    )
+    assert ["confirmed", "scheduled", "cancelled"] in [c.args[1] for c in chain.in_.call_args_list]
+    # The next visit and the busy times never count a cancelled visit.
+    assert chain.in_.call_args_list[-1].args[1] == ["confirmed", "scheduled"]
