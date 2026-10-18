@@ -78,6 +78,8 @@ class ScheduleVisit(AppointmentRead):
     """A visit on the clinician's own schedule, with the patient's name."""
 
     patient_name: str | None = None
+    # Times are shown in the patient's timezone (the one the offer was made in).
+    patient_timezone: str | None = None
 
 
 class ScheduleNeedsAction(ClinicTag):

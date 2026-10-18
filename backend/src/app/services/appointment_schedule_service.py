@@ -24,7 +24,7 @@ MAX_RANGE = timedelta(days=45)
 EXPIRED_WINDOW = timedelta(days=14)
 EXPIRING_SOON = timedelta(hours=48)
 BOOKED = ["confirmed", "scheduled"]
-_WITH_PATIENT = "*, clinics(display_name), patients(first_name, last_name)"
+_WITH_PATIENT = "*, clinics(display_name), patients(first_name, last_name, timezone)"
 _KINDS = {
     "proposed": "awaiting_reply",
     "alternative_requested": "change_request",
@@ -122,6 +122,8 @@ class AppointmentScheduleService:
 
     @staticmethod
     def _visit(row: dict[str, Any]) -> dict[str, Any]:
+        patient = row.get("patients")
+        row["patient_timezone"] = patient.get("timezone") if isinstance(patient, dict) else None
         row["patient_name"] = _patient_name(row)
         return _flatten_clinic(row)
 
