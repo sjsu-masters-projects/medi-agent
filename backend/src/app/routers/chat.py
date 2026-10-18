@@ -563,6 +563,20 @@ async def _process_durable_message(
         timeout = min(100, max(10, int(settings.chat_turn_timeout_seconds) + 10))
         result = await turns.begin({**request, "language": incoming.language.value}, timeout + 5)
         record = result["turn"]
+        # Label the conversation now, not after completion, so an interrupted first
+        # turn is still findable. Only an empty title is written (idempotent).
+        if result.get("execute") and result.get("user_message"):
+            try:
+                await service.set_conversation_title(
+                    str(context["patient_id"]),
+                    context["session_id"],
+                    conversation_title(str(result["user_message"].get("content") or "")),
+                )
+            except Exception as exc:  # a missing label must never fail the turn
+                logger.warning(
+                    "Nora conversation title was not saved at turn start: %s",
+                    type(exc).__name__,
+                )
         await _send_terminal_event(
             websocket,
             {

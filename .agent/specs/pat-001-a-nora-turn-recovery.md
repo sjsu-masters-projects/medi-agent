@@ -149,3 +149,20 @@ copy is reused unchanged from the existing reviewed resources.
 | unavailable / Chat unavailable | Nora no está disponible en este momento. No se enviará ningún mensaje hasta que el chat vuelva a conectarse. Puedes reintentar la conexión. |
 | reconnect / Reconnect chat | Volver a conectar |
 | documentUnavailable / Dismiss unavailable context | Este documento no está disponible o cambió. Desvincúlalo antes de hacer una pregunta sobre el resto de tu expediente. |
+
+### Past-conversations list wording drafts — not approved
+
+Source: `apps/patient-portal/src/components/features/nora-conversations.tsx`. Draft; pending LOC-001 bilingual review.
+
+| Copy key / English intent | es-MX draft |
+| --- | --- |
+| unfinished / Reply unfinished | Respuesta incompleta |
+| replying / Nora is replying… | Nora está respondiendo… |
+
+## Cross-tab discovery
+
+`GET /chat/conversations/{patient_id}` merges `chat_conversation_states` with the patient's
+`chat_turns` sessions (two patient-scoped queries, merged by session id, ordered by latest
+activity). A session whose latest, non-dismissed turn is processing, failed or interrupted
+returns `status: "needs_attention"` (`reply_in_progress` while still within its deadline).
+The title falls back to the first user message and is also set at turn begin.

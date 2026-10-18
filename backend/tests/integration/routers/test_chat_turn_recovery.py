@@ -49,6 +49,7 @@ def turn_runtime(monkeypatch):
     service = MagicMock()
     service.get_history = AsyncMock(return_value=[user])
     service.update_conversation_state = AsyncMock()
+    service.set_conversation_title = AsyncMock()
     websocket = MagicMock()
     websocket.application_state = WebSocketState.CONNECTED
     websocket.send_json = AsyncMock()
@@ -228,3 +229,23 @@ def test_reviewed_emergency_guidance_survives_deadline_and_reload(locale, status
     assert (
         public_turn(record)["safety_guidance"] == resolve_locale_resource(locale, TRIAGE_COPY)[key]
     )
+
+
+@pytest.mark.asyncio
+async def test_turn_start_labels_the_conversation_before_the_reply(monkeypatch, turn_runtime):
+    turns, service, socket, context, record, saved = turn_runtime
+    monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(return_value={}))
+    await chat._process_durable_message(socket, service, context, {})
+    service.set_conversation_title.assert_awaited_once_with(
+        context["patient_id"], "chat-test", "Synthetic question"
+    )
+
+
+@pytest.mark.asyncio
+async def test_title_failure_does_not_fail_the_turn(monkeypatch, turn_runtime):
+    turns, service, socket, context, record, saved = turn_runtime
+    service.set_conversation_title.side_effect = RuntimeError("down")
+    pipeline = AsyncMock(return_value={})
+    monkeypatch.setattr(chat, "_process_chat_message", pipeline)
+    await chat._process_durable_message(socket, service, context, {})
+    pipeline.assert_awaited_once()

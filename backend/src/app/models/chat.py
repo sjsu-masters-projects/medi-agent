@@ -1,6 +1,6 @@
 """Chat message schemas."""
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -38,3 +38,6 @@ class ChatConversation(BaseModel):
     language: Language = Language.EN
     created_at: str
     updated_at: str
+    # Set when the latest saved turn is unfinished and the patient can recover it.
+    status: Literal["needs_attention"] | None = None
+    reply_in_progress: bool = False
