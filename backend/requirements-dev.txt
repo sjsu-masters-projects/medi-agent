@@ -20,7 +20,6 @@ anyio==4.14.2
     # via
     #   google-genai
     #   httpx
-    #   langsmith
     #   openai
     #   starlette
     #   watchfiles
@@ -102,7 +101,6 @@ deprecation==2.1.0
 distro==1.9.0
     # via
     #   google-genai
-    #   langsmith
     #   openai
 dnspython==2.8.0
     # via email-validator
@@ -124,8 +122,6 @@ filelock==3.32.3
     # via
     #   huggingface-hub
     #   tldextract
-filetype==1.2.0
-    # via langchain-google-genai
 frozenlist==1.8.0
     # via
     #   aiohttp
@@ -185,7 +181,6 @@ google-genai==2.24.0
     #   -r requirements.in
     #   google-adk
     #   google-cloud-aiplatform
-    #   langchain-google-genai
 google-generativeai==0.8.6 ; python_full_version < '3.14'
     # via -r requirements.in
 google-resumable-media==2.10.1
@@ -238,9 +233,6 @@ httpx==0.28.1
     #   google-adk
     #   google-genai
     #   huggingface-hub
-    #   langchain-core
-    #   langgraph-sdk
-    #   langsmith
     #   litellm
     #   openai
     #   postgrest
@@ -277,43 +269,12 @@ jmespath==1.1.0
     #   botocore
 joserfc==1.7.5
     # via authlib
-jsonpatch==1.33
-    # via langchain-core
-jsonpointer==3.1.1
-    # via jsonpatch
 jsonschema==4.26.0
     # via
     #   google-adk
     #   litellm
 jsonschema-specifications==2025.9.1
     # via jsonschema
-langchain-core==1.6.0
-    # via
-    #   langchain-google-genai
-    #   langgraph
-    #   langgraph-checkpoint
-    #   langgraph-prebuilt
-    #   langgraph-sdk
-langchain-google-genai==4.3.4
-    # via -r requirements.in
-langchain-protocol==0.0.18
-    # via
-    #   langchain-core
-    #   langgraph-sdk
-langgraph==1.2.11
-    # via -r requirements.in
-langgraph-checkpoint==4.2.0
-    # via
-    #   langgraph
-    #   langgraph-prebuilt
-langgraph-prebuilt==1.1.0
-    # via langgraph
-langgraph-sdk==0.4.5
-    # via
-    #   -r requirements.in
-    #   langgraph
-langsmith==0.11.1
-    # via langchain-core
 litellm==1.101.0
     # via -r requirements.in
 markdown-it-py==4.2.0
@@ -353,12 +314,6 @@ opentelemetry-sdk==1.42.1
     # via google-adk
 opentelemetry-semantic-conventions==0.63b1
     # via opentelemetry-sdk
-orjson==3.12.0
-    # via
-    #   langgraph-sdk
-    #   langsmith
-ormsgpack==1.12.2
-    # via langgraph-checkpoint
 packaging==26.3
     # via
     #   deprecation
@@ -366,8 +321,6 @@ packaging==26.3
     #   google-cloud-aiplatform
     #   google-cloud-bigquery
     #   huggingface-hub
-    #   langchain-core
-    #   langsmith
     #   pytesseract
     #   pytest
     #   spacy
@@ -443,10 +396,6 @@ pydantic==2.13.4
     #   google-cloud-aiplatform
     #   google-genai
     #   google-generativeai
-    #   langchain-core
-    #   langchain-google-genai
-    #   langgraph
-    #   langsmith
     #   litellm
     #   openai
     #   postgrest
@@ -512,7 +461,6 @@ pyyaml==6.0.3
     # via
     #   google-adk
     #   huggingface-hub
-    #   langchain-core
     #   presidio-analyzer
     #   uvicorn
 realtime==2.31.0
@@ -533,17 +481,13 @@ requests==2.34.2
     #   google-cloud-bigquery
     #   google-cloud-storage
     #   google-genai
-    #   langsmith
     #   requests-file
-    #   requests-toolbelt
     #   resend
     #   spacy
     #   tiktoken
     #   tldextract
 requests-file==3.0.1
     # via tldextract
-requests-toolbelt==1.0.0
-    # via langsmith
 resend==2.37.0
     # via -r requirements.in
 rich==15.0.0
@@ -573,7 +517,6 @@ smart-open==8.0.1
 sniffio==1.3.1
     # via
     #   google-genai
-    #   langsmith
     #   openai
 spacy==3.8.15
     # via
@@ -608,7 +551,6 @@ tenacity==9.1.4
     # via
     #   google-adk
     #   google-genai
-    #   langchain-core
 thinc==8.3.13
     # via spacy
 tiktoken==0.14.0
@@ -640,9 +582,6 @@ typing-extensions==4.16.0
     #   google-generativeai
     #   grpcio
     #   huggingface-hub
-    #   langchain-core
-    #   langchain-protocol
-    #   langsmith
     #   mypy
     #   openai
     #   opentelemetry-api
@@ -669,10 +608,6 @@ urllib3==2.8.0
     #   botocore
     #   requests
     #   sentry-sdk
-uuid-utils==0.17.0
-    # via
-    #   langchain-core
-    #   langsmith
 uvicorn==0.52.4
     # via
     #   -r requirements.in
@@ -695,16 +630,10 @@ websockets==15.0.1
     #   deepgram-sdk
     #   google-adk
     #   google-genai
-    #   langgraph-sdk
-    #   langsmith
     #   realtime
     #   uvicorn
 wrapt==2.3.0
     # via smart-open
-xxhash==4.0.1
-    # via
-    #   langgraph
-    #   langsmith
 yarl==1.24.5
     # via
     #   aiohttp
@@ -714,5 +643,3 @@ yarl==1.24.5
     #   supabase-functions
 zipp==4.1.0
     # via importlib-metadata
-zstandard==0.25.0
-    # via langsmith
