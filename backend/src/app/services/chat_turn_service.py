@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 from typing import Any, cast
 from uuid import UUID
 
@@ -14,6 +15,8 @@ from app.models.enums import coerce_locale
 from app.safety import TRIAGE_COPY, deterministic_safety_floor
 from app.services.explanation_service import normalize_patient_summary
 from app.utils.localization import resolve_locale_resource
+
+logger = logging.getLogger(__name__)
 
 
 class ChatTurnService:
@@ -37,6 +40,7 @@ class ChatTurnService:
                 timeout=10,
             )
         except TimeoutError:
+            logger.warning("Chat turn RPC %s timed out", action)
             # The underlying request may still commit: callers must retain its identity.
             raise ExternalServiceError(
                 "Chat", "Saved chat recovery is temporarily unavailable."
@@ -50,6 +54,11 @@ class ChatTurnService:
                 "CHAT_DOCUMENT_CHANGED",
             }
             code = str(exc.message)
+            # Postgres code and RPC action only: enough to tell a missing column from a
+            # permission error in plain-text logs, without row values.
+            logger.warning(
+                "Chat turn RPC %s failed: %s", action, getattr(exc, "code", None) or "unknown"
+            )
             if code in codes:
                 raise ValidationError(code) from None
             raise ExternalServiceError(

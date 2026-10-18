@@ -249,3 +249,42 @@ async def test_title_failure_does_not_fail_the_turn(monkeypatch, turn_runtime):
     monkeypatch.setattr(chat, "_process_chat_message", pipeline)
     await chat._process_durable_message(socket, service, context, {})
     pipeline.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_state_refresh_retries_after_a_concurrent_write_without_lowering_turn_count():
+    service = MagicMock()
+    calls = []
+
+    async def update(patient, updates, expected_updated_at=None):
+        calls.append((updates["turn_count"], expected_updated_at))
+        if len(calls) == 1:
+            raise chat.ConversationStateConflictError("changed")
+        return {}
+
+    service.update_conversation_state = update
+    service.get_or_create_conversation_state = AsyncMock(
+        return_value={"updated_at": "v2", "turn_count": 4}
+    )
+    assert await chat._refresh_conversation_state(service, "p", {"turn_count": 2}, "v1")
+    assert calls == [(2, "v1"), (5, "v2")]
+
+
+@pytest.mark.asyncio
+async def test_state_refresh_failure_is_logged_with_its_category(caplog):
+    service = MagicMock()
+    service.update_conversation_state = AsyncMock(side_effect=RuntimeError("secret text"))
+    with caplog.at_level("WARNING"):
+        assert not await chat._refresh_conversation_state(service, "p", {"turn_count": 1}, None)
+    assert "RuntimeError" in caplog.text
+    assert "secret text" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_turn_failure_category_is_in_the_log_message(monkeypatch, turn_runtime, caplog):
+    turns, service, socket, context, _, _ = turn_runtime
+    monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(side_effect=KeyError("patient")))
+    with caplog.at_level("WARNING"):
+        await chat._process_durable_message(socket, service, context, {})
+    assert "Durable chat turn did not complete: KeyError" in caplog.text
+    assert "patient" not in caplog.text.replace("patient_id", "")

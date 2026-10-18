@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any, cast
 from uuid import UUID
 
@@ -45,6 +46,7 @@ from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_STATE_REFRESH_ATTEMPTS = 3
 
 # The outermost fallback: triage itself could not be reached. Every other tier is
 # localized through TRIAGE_COPY, so this one is too — a patient who wrote in Spanish
@@ -247,6 +249,63 @@ def _closed_websocket_error(error: BaseException) -> bool:
         "close message has been sent" in str(error)
         or "websocket is not connected" in str(error).lower()
     )
+
+
+def _failure_label(exc: BaseException) -> str:
+    """Exception type plus a safe machine code, never message text that could hold PHI."""
+    code = getattr(exc, "code", None)
+    if isinstance(exc, ValidationError):
+        code = exc.message
+    cause = type(exc.__cause__).__name__ if exc.__cause__ else ""
+    parts = [type(exc).__name__]
+    if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_]{1,40}", code):
+        parts.append(code)
+    if cause:
+        parts.append(f"cause={cause}")
+    return "/".join(parts)
+
+
+async def _refresh_conversation_state(
+    service: ChatService,
+    patient_id: str,
+    pending: dict[str, Any],
+    version: str | None,
+) -> bool:
+    """Persist turn_count/title/summary after a saved reply; the reply is never lost.
+
+    A concurrent writer (a second tab, a document dismissal) changes `updated_at`, which
+    used to skip this refresh silently. On conflict it re-reads the row and retries, never
+    lowering the turn count the other writer saved.
+    """
+    updates = dict(pending)
+    for _attempt in range(_STATE_REFRESH_ATTEMPTS):
+        try:
+            async with asyncio.timeout(5):
+                await service.update_conversation_state(
+                    patient_id, updates, expected_updated_at=version
+                )
+            return True
+        except ConversationStateConflictError:
+            try:
+                async with asyncio.timeout(5):
+                    fresh = await service.get_or_create_conversation_state(
+                        patient_id, {"session_id": updates.get("session_id")}
+                    )
+            except Exception as exc:
+                logger.warning("Conversation state re-read failed: %s", _failure_label(exc))
+                return False
+            version = str(fresh.get("updated_at") or "") or None
+            updates["turn_count"] = max(
+                int(updates.get("turn_count") or 0), int(fresh.get("turn_count") or 0) + 1
+            )
+        except Exception as exc:
+            logger.warning(
+                "Saved chat reply retained; conversation metadata refresh failed: %s",
+                "timeout" if isinstance(exc, TimeoutError) else _failure_label(exc),
+            )
+            return False
+    logger.warning("Saved chat reply retained; conversation metadata kept conflicting")
+    return False
 
 
 async def _send_terminal_event(websocket: WebSocket, payload: dict[str, Any]) -> bool:
@@ -627,15 +686,12 @@ async def _process_durable_message(
             )
             saved = await staged.complete()
         if staged.pending_state:
-            try:
-                async with asyncio.timeout(5):
-                    await service.update_conversation_state(
-                        str(context["patient_id"]),
-                        staged.pending_state,
-                        expected_updated_at=staged.pending_state_version,
-                    )
-            except Exception:
-                logger.warning("Saved chat reply retained; conversation metadata refresh failed")
+            await _refresh_conversation_state(
+                service,
+                str(context["patient_id"]),
+                staged.pending_state,
+                staged.pending_state_version,
+            )
         event = emitter.complete_event or {"type": "assistant_complete"}
         await send({**event, "message": _serialize_chat_message(saved)})
         await send({"type": "chat_turn", "turn": public_turn({**record, "status": "completed"})})
@@ -644,18 +700,26 @@ async def _process_durable_message(
         if execution:
             try:
                 await asyncio.shield(execution.fail(interrupted=True))
-            except Exception:
-                logger.warning("Cancelled chat turn will reconcile from its saved deadline")
+            except Exception as exc:
+                logger.warning(
+                    "Cancelled chat turn will reconcile from its saved deadline: %s",
+                    _failure_label(exc),
+                )
         raise
     except Exception as exc:
         if execution:
             try:
                 await execution.fail(interrupted=isinstance(exc, TimeoutError))
-            except Exception:
-                logger.warning("Chat turn will reconcile from its saved deadline")
+            except Exception as fail_exc:
+                logger.warning(
+                    "Chat turn will reconcile from its saved deadline: %s",
+                    _failure_label(fail_exc),
+                )
         code = exc.message if isinstance(exc, ValidationError) else "CHAT_TURN_UNAVAILABLE"
         logger.warning(
-            "Durable chat turn did not complete", extra={"failure_category": type(exc).__name__}
+            "Durable chat turn did not complete: %s",
+            _failure_label(exc),
+            extra={"failure_category": type(exc).__name__},
         )
         await _send_terminal_event(
             websocket,
@@ -676,8 +740,10 @@ async def _process_durable_message(
                 websocket,
                 {"type": "chat_turns", "turns": [public_turn(row) for row in recovered["items"]]},
             )
-        except Exception:
-            logger.warning("Saved chat status temporarily unavailable")
+        except Exception as recover_exc:
+            logger.warning(
+                "Saved chat status temporarily unavailable: %s", _failure_label(recover_exc)
+            )
         return cast(dict[str, Any], context["conversation_state"])
 
 
