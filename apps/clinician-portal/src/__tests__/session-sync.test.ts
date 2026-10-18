@@ -171,6 +171,28 @@ describe("adopting a session", () => {
     });
 });
 
+describe("missing expiry", () => {
+    it("derives expiresAt from the token's exp claim instead of clearing the session", async () => {
+        const exp = Math.floor(Date.now() / 1000) + 3600;
+        const tab = makeTab();
+        window.localStorage.setItem(
+            KEY,
+            JSON.stringify({ ...makeSession({ accessToken: jwt({ exp }), expiresAt: 0 }), signedInAt: Date.now() }),
+        );
+        const refreshSession = vi.fn();
+        expect(tab.readStoredSession()?.expiresAt).toBe(exp);
+        const restored = await tab.restoreStoredSession({ refreshSession });
+        expect(restored?.expiresAt).toBe(exp);
+        expect(refreshSession).not.toHaveBeenCalled();
+    });
+
+    it("rejects a session with no expiry anywhere", () => {
+        const tab = makeTab();
+        window.localStorage.setItem(KEY, JSON.stringify(makeSession({ accessToken: "opaque", expiresAt: 0 })));
+        expect(tab.readStoredSession()).toBeNull();
+    });
+});
+
 describe("cross-tab sync", () => {
     it("hydrates from a storage event carrying a new session", () => {
         const tab = makeTab();

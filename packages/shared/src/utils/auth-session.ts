@@ -1,4 +1,4 @@
-import { getEffectiveSessionExpiresAt } from "./jwt-expiry";
+import { getEffectiveSessionExpiresAt, getJwtExpiresAt } from "./jwt-expiry";
 import {
     evaluateSessionLimits,
     type SessionLimitReason,
@@ -133,18 +133,16 @@ export function createAuthSessionStorage<
                 "refreshToken" in parsed &&
                 "expiresAt" in parsed
             ) {
-                if (
-                    !parsed.accessToken ||
-                    !parsed.refreshToken ||
-                    !parsed.expiresAt
-                ) {
+                // A missing or zero expiry is recovered from the token's own `exp` claim.
+                const expiresAt = parsed.expiresAt || getJwtExpiresAt(parsed.accessToken);
+                if (!parsed.accessToken || !parsed.refreshToken || !expiresAt) {
                     return null;
                 }
 
                 return {
                     ...parsed,
                     accessToken: parsed.accessToken,
-                    expiresAt: parsed.expiresAt,
+                    expiresAt,
                     refreshToken: parsed.refreshToken,
                     signedInAt:
                         typeof parsed.signedInAt === "number" ? parsed.signedInAt : undefined,
@@ -152,13 +150,14 @@ export function createAuthSessionStorage<
                 } as Session;
             }
 
-            if (!parsed.token || !parsed.refreshToken || !parsed.expiresAt) {
+            const legacyExpiresAt = parsed.expiresAt || getJwtExpiresAt(parsed.token);
+            if (!parsed.token || !parsed.refreshToken || !legacyExpiresAt) {
                 return null;
             }
 
             return {
                 accessToken: parsed.token,
-                expiresAt: parsed.expiresAt,
+                expiresAt: legacyExpiresAt,
                 refreshToken: parsed.refreshToken,
                 user,
             } as Session;
