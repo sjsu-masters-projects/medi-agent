@@ -42,11 +42,11 @@ export function ScheduleAgenda({
               return (
                 <li key={visit.id}>
                   <button
-                    className="grid min-h-14 w-full grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 px-4 py-2 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:grid-cols-[5.5rem_minmax(0,1fr)_auto_auto]"
+                    className={`grid min-h-14 w-full ${visit.status === "cancelled" ? "opacity-60" : ""} grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 px-4 py-2 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:grid-cols-[5.5rem_minmax(0,1fr)_auto_auto]`}
                     onClick={() => onOpen(visit)}
                     type="button"
                   >
-                    <span className="font-mono text-sm font-semibold text-ink">
+                    <span className={`font-mono text-sm font-semibold text-ink ${visit.status === "cancelled" ? "line-through" : ""}`}>
                       {visitTimeLabel(visit)}
                       {zone && <span className="block text-[11px] font-normal text-muted">{zone}</span>}
                     </span>

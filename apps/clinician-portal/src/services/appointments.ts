@@ -36,6 +36,11 @@ interface AppointmentRecord {
   patient_note?: string | null;
   location?: string | null;
   reason?: string | null;
+  notes?: string | null;
+  cancelled_by?: "patient" | "clinician" | null;
+  cancel_reason_code?: Appointment["cancelReasonCode"] | null;
+  cancel_reason?: string | null;
+  cancelled_at?: string | null;
 }
 
 function mapAppointment(row: AppointmentRecord): Appointment {
@@ -56,7 +61,50 @@ function mapAppointment(row: AppointmentRecord): Appointment {
     patientNote: row.patient_note ?? undefined,
     location: row.location ?? undefined,
     reason: row.reason ?? undefined,
+    notes: row.notes ?? undefined,
+    cancelledBy: row.cancelled_by ?? undefined,
+    cancelReasonCode: row.cancel_reason_code ?? undefined,
+    cancelReason: row.cancel_reason ?? undefined,
+    cancelledAt: row.cancelled_at ?? undefined,
   };
+}
+
+export type CancelReasonCode = NonNullable<Appointment["cancelReasonCode"]>;
+
+export interface VisitDetailsPatch {
+  appointment_type?: Appointment["appointmentType"];
+  location?: string;
+  reason?: string;
+  notes?: string;
+}
+
+/** Change a visit's type, location, reason or notes. A booked visit's time is never changed here. */
+export async function updateVisitDetails(token: string, id: string, patch: VisitDetailsPatch) {
+  return mapAppointment(
+    await api.put<AppointmentRecord>(`/api/v1/appointments/${encodeURIComponent(id)}`, patch, { token }),
+  );
+}
+
+export async function cancelVisit(
+  token: string,
+  id: string,
+  body: { reason_code: CancelReasonCode; reason?: string },
+) {
+  return mapAppointment(
+    await api.post<AppointmentRecord>(`/api/v1/appointments/${encodeURIComponent(id)}/cancel`, body, { token }),
+  );
+}
+
+export async function completeVisit(token: string, id: string) {
+  return mapAppointment(
+    await api.post<AppointmentRecord>(`/api/v1/appointments/${encodeURIComponent(id)}/complete`, {}, { token }),
+  );
+}
+
+export async function markVisitNoShow(token: string, id: string) {
+  return mapAppointment(
+    await api.post<AppointmentRecord>(`/api/v1/appointments/${encodeURIComponent(id)}/no-show`, {}, { token }),
+  );
 }
 
 export function fetchSchedulingPatients(token: string, clinicId?: string | null) {
@@ -150,9 +198,11 @@ export async function fetchMySchedule(
   from: string,
   to: string,
   clinicId?: string | null,
+  includeCancelled = false,
 ): Promise<MySchedule> {
   const query = new URLSearchParams({ from, to });
   if (clinicId) query.set("clinic_id", clinicId);
+  if (includeCancelled) query.set("include_cancelled", "true");
   const body = await api.get<{
     visits: ScheduleVisitRecord[];
     needs_action: {

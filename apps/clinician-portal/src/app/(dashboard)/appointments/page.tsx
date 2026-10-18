@@ -37,6 +37,7 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
   const searchParams = useSearchParams();
   const clinicFilter = useClinicFilter();
   const [mode, setMode] = useState<AgendaMode>("day");
+  const [showCancelled, setShowCancelled] = useState(false);
   const [schedule, setSchedule] = useState<MySchedule | null>(null);
   const [roster, setRoster] = useState<AssignedSchedulingPatient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +55,7 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
     const current = new Date(Date.now());
     const { from, to } = agendaRange(mode, current);
     void Promise.all([
-      fetchMySchedule(token, from.toISOString(), to.toISOString(), clinicId),
+      fetchMySchedule(token, from.toISOString(), to.toISOString(), clinicId, showCancelled),
       fetchSchedulingPatients(token, clinicId).catch(() => null),
     ])
       .then(([result, people]) => {
@@ -73,7 +74,7 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
     return () => {
       live = false;
     };
-  }, [token, mode, clinicId, ready, attempt]);
+  }, [token, mode, clinicId, ready, attempt, showCancelled]);
 
   function refresh() {
     setLoading(true);
@@ -216,15 +217,26 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
             onOpen={(item) => openVisit(item.appointmentId)}
             showClinic={clinicFilter.multi}
           />
-          <SegmentedControl
-            label="Schedule range"
-            onChange={setMode}
-            options={[
-              { value: "day", label: "Today" },
-              { value: "week", label: "This week" },
-            ]}
-            value={mode}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <SegmentedControl
+              label="Schedule range"
+              onChange={setMode}
+              options={[
+                { value: "day", label: "Today" },
+                { value: "week", label: "This week" },
+              ]}
+              value={mode}
+            />
+            <label className="flex min-h-9 cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+              <input
+                checked={showCancelled}
+                className="h-4 w-4 accent-[var(--color-primary)]"
+                onChange={(event) => setShowCancelled(event.target.checked)}
+                type="checkbox"
+              />
+              Show cancelled
+            </label>
+          </div>
           {visits.length ? (
             <ScheduleAgenda
               now={now}
@@ -286,6 +298,7 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
             setOfferFor({ previous: visit });
           }}
           patientId={target.patientId}
+          onChanged={refresh}
           patientName={target.patientName}
           showClinic={clinicFilter.multi}
           token={token}

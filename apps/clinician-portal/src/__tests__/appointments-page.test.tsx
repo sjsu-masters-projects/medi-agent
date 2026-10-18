@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   propose: vi.fn(),
   patientRows: vi.fn(),
   allRows: vi.fn(),
+  update: vi.fn(),
+  cancel: vi.fn(),
+  complete: vi.fn(),
+  noShow: vi.fn(),
   replace: vi.fn(),
   state: { auth: { accessToken: "clinician-token" as string | null } },
   query: "",
@@ -33,6 +37,10 @@ vi.mock("@/services/appointments", () => ({
   proposeAppointmentOffer: mocks.propose,
   fetchPatientAppointments: mocks.patientRows,
   fetchSchedulingAppointments: mocks.allRows,
+  updateVisitDetails: mocks.update,
+  cancelVisit: mocks.cancel,
+  completeVisit: mocks.complete,
+  markVisitNoShow: mocks.noShow,
 }));
 import AppointmentsPage from "@/app/(dashboard)/appointments/page";
 
@@ -325,6 +333,128 @@ describe("My schedule", () => {
       mocks.query = "appointmentId=missing";
       render(<AppointmentsPage />);
       await screen.findByText("The linked appointment is unavailable.");
+    });
+  });
+
+  describe("visit management", () => {
+    async function openVisit(row: Partial<Appointment>) {
+      mocks.query = "appointmentId=v1";
+      mocks.schedule.mockResolvedValue(schedule({ visits: [visit()] }));
+      mocks.patientRows.mockResolvedValue([offer({ id: "v1", status: "confirmed", scheduledAt: "2026-10-20T16:00:00Z", ...row })]);
+      render(<AppointmentsPage />);
+      const panel = await screen.findByRole("dialog", { name: "Visit" });
+      await within(panel).findByRole("button", { name: "More actions" });
+      return panel;
+    }
+    const openMenu = (panel: HTMLElement) => fireEvent.click(within(panel).getByRole("button", { name: "More actions" }));
+
+    it("offers 'Offer new times' first for an upcoming visit and keeps the rest in the menu", async () => {
+      const panel = await openVisit({});
+      expect(within(panel).getByRole("button", { name: "Offer new times" })).toBeInTheDocument();
+      expect(within(panel).queryByRole("button", { name: "Mark completed" })).not.toBeInTheDocument();
+      openMenu(panel);
+      const items = within(panel).getAllByRole("menuitem").map((item) => item.textContent);
+      expect(items).toEqual(["Edit details", "Cancel visit"]); // no no-show before the visit ends
+    });
+
+    it("offers 'Mark completed' first once the visit has ended, and no-show in the menu", async () => {
+      mocks.complete.mockResolvedValue(offer({ id: "v1", status: "completed", scheduledAt: "2026-10-16T16:00:00Z" }));
+      const panel = await openVisit({ scheduledAt: "2026-10-16T16:00:00Z" });
+      expect(within(panel).queryByRole("button", { name: "Offer new times" })).not.toBeInTheDocument();
+      openMenu(panel);
+      expect(within(panel).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Edit details", "Mark no-show", "Cancel visit"]);
+      fireEvent.click(within(panel).getByRole("button", { name: "Mark completed" }));
+      await waitFor(() => expect(mocks.complete).toHaveBeenCalledWith("clinician-token", "v1"));
+      await waitFor(() => expect(within(panel).queryByRole("button", { name: "More actions" })).not.toBeInTheDocument());
+    });
+
+    it("confirms a no-show before recording it", async () => {
+      mocks.noShow.mockResolvedValue(offer({ id: "v1", status: "no_show", scheduledAt: "2026-10-16T16:00:00Z" }));
+      const panel = await openVisit({ scheduledAt: "2026-10-16T16:00:00Z" });
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Mark no-show" }));
+      const dialog = await screen.findByRole("dialog", { name: "Mark as no-show?" });
+      expect(mocks.noShow).not.toHaveBeenCalled();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Mark no-show" }));
+      await waitFor(() => expect(mocks.noShow).toHaveBeenCalledWith("clinician-token", "v1"));
+    });
+
+    it("needs a reason before cancelling, then cancels and shows it", async () => {
+      mocks.cancel.mockResolvedValue(offer({ id: "v1", status: "cancelled", cancelledBy: "clinician", cancelReasonCode: "other", cancelReason: "Water leak" }));
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Cancel visit" }));
+      const dialog = await screen.findByRole("dialog", { name: "Cancel this visit?" });
+      const confirm = within(dialog).getByRole("button", { name: "Cancel visit" });
+      expect(confirm).toBeDisabled();
+      fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "other" } });
+      expect(confirm).toBeDisabled(); // "Other" needs text
+      fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Water leak" } });
+      expect(confirm).toBeEnabled();
+      fireEvent.click(confirm);
+      await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith("clinician-token", "v1", { reason_code: "other", reason: "Water leak" }));
+      expect(await within(panel).findByRole("note")).toHaveTextContent("Cancelled by your team. Other — Water leak");
+      expect(mocks.schedule.mock.calls.length).toBeGreaterThan(1); // the agenda reloads
+    });
+
+    it("keeps the dialog and says so when the cancel fails or the visit changed", async () => {
+      mocks.cancel.mockRejectedValue(Object.assign(new Error("x"), { details: { error: { code: "APPOINTMENT_UNAVAILABLE" } } }));
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Cancel visit" }));
+      const dialog = await screen.findByRole("dialog", { name: "Cancel this visit?" });
+      fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "clinic_closed" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel visit" }));
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("This visit changed in the meantime");
+    });
+
+    it("closes only the dialog on Escape, not the panel behind it", async () => {
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Cancel visit" }));
+      await screen.findByRole("dialog", { name: "Cancel this visit?" });
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Cancel this visit?" })).not.toBeInTheDocument());
+      expect(screen.getByRole("dialog", { name: "Visit" })).toBeInTheDocument();
+    });
+
+    it("edits details without a time field and refreshes the schedule", async () => {
+      mocks.update.mockResolvedValue(offer({ id: "v1", status: "confirmed", location: "Suite 3", appointmentType: "routine" }));
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Edit details" }));
+      const dialog = await screen.findByRole("dialog", { name: "Edit details" });
+      expect(within(dialog).getByText(/offer new times so the patient can agree/)).toBeInTheDocument();
+      expect(within(dialog).queryByLabelText(/time|date/i)).not.toBeInTheDocument();
+      fireEvent.change(within(dialog).getByLabelText("Location"), { target: { value: "Suite 3" } });
+      fireEvent.change(within(dialog).getByLabelText("Appointment type"), { target: { value: "routine" } });
+      fireEvent.submit(within(dialog).getByRole("form", { name: "Edit visit details" }));
+      await waitFor(() => expect(mocks.update).toHaveBeenCalledWith("clinician-token", "v1", expect.objectContaining({ location: "Suite 3", appointment_type: "routine" })));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit details" })).not.toBeInTheDocument());
+    });
+
+    it("lets an open offer be edited but not cancelled or completed", async () => {
+      const panel = await openVisit({ status: "proposed" });
+      expect(within(panel).queryByRole("button", { name: /Offer new times|Mark completed/ })).not.toBeInTheDocument();
+      openMenu(panel);
+      expect(within(panel).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Edit details"]);
+    });
+  });
+
+  describe("cancelled visits on the agenda", () => {
+    it("hides them until asked, then shows them muted with a Cancelled chip", async () => {
+      mocks.schedule.mockImplementation(async (_t, _f, _to, _c, includeCancelled) =>
+        schedule({ visits: [visit(), ...(includeCancelled ? [visit({ id: "v2", patientName: "Hannah Brooks", status: "cancelled", scheduledAt: "2026-10-17T20:00:00Z" })] : [])] }),
+      );
+      render(<AppointmentsPage />);
+      await screen.findByText("Maya Patel");
+      expect(screen.queryByText("Hannah Brooks")).not.toBeInTheDocument();
+      expect(mocks.schedule.mock.calls[0]![4]).toBe(false);
+      fireEvent.click(screen.getByRole("checkbox", { name: "Show cancelled" }));
+      const row = (await screen.findByText("Hannah Brooks")).closest("button")!;
+      expect(row).toHaveClass("opacity-60");
+      expect(within(row).getByText("Cancelled")).toBeInTheDocument();
+      expect(mocks.schedule.mock.calls.at(-1)![4]).toBe(true);
     });
   });
 });

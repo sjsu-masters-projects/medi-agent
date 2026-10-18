@@ -16,6 +16,7 @@ import {
   STATUS_TONES,
 } from "./appointment-offer-history";
 import { ClinicChip } from "./clinic-chip";
+import { CANCEL_REASONS, VisitActions } from "./visit-actions";
 
 interface Props {
   token: string;
@@ -25,6 +26,8 @@ interface Props {
   showClinic: boolean;
   onClose: () => void;
   onRepropose: (visit: Appointment) => void;
+  /** A change was saved (cancel, complete, no-show or edit): refresh what shows it. */
+  onChanged?: () => void;
 }
 
 /** One visit or offer: who, where, when, its status, the offer and response history, actions. */
@@ -36,7 +39,9 @@ export function VisitDetailPanel({
   showClinic,
   onClose,
   onRepropose,
+  onChanged,
 }: Props) {
+  const [now] = useState(() => Date.now());
   const [rows, setRows] = useState<Appointment[] | null>(null);
   const [timezone, setTimezone] = useState<string>("UTC");
   const [failed, setFailed] = useState(false);
@@ -61,6 +66,10 @@ export function VisitDetailPanel({
   }, [token, patientId, attempt]);
 
   const current = rows?.find((row) => row.id === appointmentId);
+  function changed(row: Appointment) {
+    setRows((existing) => existing?.map((item) => (item.id === row.id ? { ...item, ...row } : item)) ?? existing);
+    onChanged?.();
+  }
   return (
     <Modal contentClassName="!p-0" onClose={onClose} open placement="side" title="Visit">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -84,6 +93,23 @@ export function VisitDetailPanel({
             </p>
           )}
         </div>
+        {current && (
+          <VisitActions
+            now={now}
+            onChanged={changed}
+            onRepropose={onRepropose}
+            token={token}
+            visit={current}
+          />
+        )}
+        {current?.status === "cancelled" && (
+          <p className="mx-5 mt-3 rounded-xl bg-sunken px-3.5 py-2.5 text-[13px] text-ink-2" role="note">
+            {current.cancelledBy === "clinician" ? "Cancelled by your team." : "Cancelled by the patient."}
+            {current.cancelReasonCode
+              ? ` ${CANCEL_REASONS.find((reason) => reason.value === current.cancelReasonCode)?.label ?? ""}${current.cancelReason ? ` — ${current.cancelReason}` : ""}`
+              : ""}
+          </p>
+        )}
         {failed ? (
           <div className="px-5 py-5">
             <ErrorState

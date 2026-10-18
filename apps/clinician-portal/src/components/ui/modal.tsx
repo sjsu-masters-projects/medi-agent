@@ -4,6 +4,9 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
+// Open modals, outermost first. A dialog opened over a side panel owns Escape and Tab alone.
+const openModals: symbol[] = [];
+
 interface ModalProps {
     open: boolean;
     onClose: () => void;
@@ -24,6 +27,8 @@ export function Modal({ children, contentClassName, onClose, open, placement = "
     useEffect(() => { closeRef.current = onClose; }, [onClose]);
     useEffect(() => {
         if (!open) return;
+        const id = Symbol("modal");
+        openModals.push(id);
         const previousFocus = document.activeElement;
         const previousOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
@@ -39,6 +44,7 @@ export function Modal({ children, contentClassName, onClose, open, placement = "
         });
         focusable()[0]?.focus();
         function handleKey(event: KeyboardEvent) {
+            if (openModals[openModals.length - 1] !== id) return;
             if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
             if (event.key !== "Tab") return;
             const elements = focusable();
@@ -53,6 +59,7 @@ export function Modal({ children, contentClassName, onClose, open, placement = "
         document.addEventListener("keydown", handleKey);
         return () => {
             document.removeEventListener("keydown", handleKey);
+            openModals.splice(openModals.indexOf(id), 1);
             document.body.style.overflow = previousOverflow;
             if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
         };
