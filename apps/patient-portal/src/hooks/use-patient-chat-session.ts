@@ -929,6 +929,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         setDocumentContext(null);
         setDocumentDismissed(false);
         setDocumentUnavailable(false);
+        setSafetyNotice(null);
         setSessionId(nextSessionId);
     }
 

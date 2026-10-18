@@ -16,7 +16,14 @@ import { conversationAccessDenied, conversationRoleLabel, conversationSendFailur
 
 const button = chatButton;
 const input = "min-h-[52px] w-full rounded-2xl border border-line-strong bg-surface px-4 py-2 text-base font-normal text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
-type Presentation = { compact?: boolean; conversationId?: string | null; recipientId?: string | null; onThreadPresentationChange?: (id: string | null) => void };
+type Presentation = {
+  compact?: boolean;
+  conversationId?: string | null;
+  recipientId?: string | null;
+  /** Patient tasks that belong to the care-team inbox, never the Nora thread. */
+  inboxLead?: ReactNode;
+  onThreadPresentationChange?: (id: string | null) => void;
+};
 
 export function CareConversations({ locale = "en-US", audience = "patient", visible = true, ...presentation }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean } & Presentation) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
@@ -24,7 +31,7 @@ export function CareConversations({ locale = "en-US", audience = "patient", visi
   return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} {...presentation} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, onThreadPresentationChange }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
+function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, inboxLead, onThreadPresentationChange }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
@@ -192,6 +199,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
       </div>
       <Modal open={showRecipient} onClose={() => setShowRecipient(false)} title={newLabel} closeLabel={copy.cancel}>{recipientForm}</Modal>
     </> : recipientForm}
+    {compact && inboxLead ? <div hidden={focused} className="empty:hidden">{inboxLead}</div> : null}
     {error && <p role="alert" className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-3 text-sm text-danger-ink"><Icon name="alert" className="h-[18px] w-[18px] shrink-0" />{copy[error]}</p>}
     {pollFailed && <p role="alert" className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-3 text-sm text-danger-ink"><Icon name="alert" className="h-[18px] w-[18px] shrink-0" />{copy.loadError}</p>}
     {loading ? <p role="status" className={compact ? "flex items-center gap-3 rounded-[22px] bg-surface px-4 py-4 text-muted" : undefined}>{compact ? <span aria-hidden="true" className="ma-skeleton h-12 w-12 shrink-0 rounded-full" /> : null}{copy.loading}</p> : <>

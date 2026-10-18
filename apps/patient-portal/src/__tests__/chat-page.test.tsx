@@ -43,6 +43,11 @@ vi.mock("@/contexts/patient-shell-context", () => ({
 
 vi.mock("@/services/care-conversations", () => ({
     careConversations: { recipients: vi.fn().mockResolvedValue([]), list: vi.fn().mockResolvedValue([]) },
+    getConversationCopy: (locale: string) => ({
+        notice: locale === "es-MX"
+            ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911."
+            : "Messages are not continuously monitored. For an emergency, call 911.",
+    }),
 }));
 
 let searchParamsValue = new URLSearchParams();
@@ -566,6 +571,45 @@ describe("Patient chat page", () => {
         await waitFor(() => {
             expect(screen.queryByRole("alert")).not.toBeInTheDocument();
         });
+    });
+
+    it("clears a prior conversation safety notice when starting a new chat", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const oldSocket = MockWebSocket.instances[0];
+        await act(async () => {
+            oldSocket.emitOpen();
+            oldSocket.emitMessage({
+                type: "assistant_complete",
+                escalation_required: true,
+                urgency: "urgent",
+                message: {
+                    audio_url: null,
+                    content: "Please contact your care team today.",
+                    created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-urgent-old-session",
+                    intent: "symptom",
+                    language: "en",
+                    patient_id: "patient-1",
+                    role: "assistant",
+                },
+            });
+        });
+        expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+        await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+
+        await act(async () => {
+            oldSocket.emitMessage({
+                type: "escalation_recommended",
+                urgency: "urgent",
+                message: "Old session escalation",
+                delivery_state: "delivered",
+                clinicians_notified: 1,
+            });
+        });
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
     it("hydrates document context into chat from the records bridge", async () => {
@@ -1220,16 +1264,19 @@ describe("Patient chat page", () => {
             expect(screen.queryByRole("heading", { name: "Your care team" })).not.toBeInTheDocument();
             expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
         });
-        it.each([Language.EN, Language.ES])("shows the caution strip, localized back button and focused heading (%s)", (locale) => {
+        it.each([Language.EN, Language.ES])("shows the care-team notice, localized back button and focused heading (%s)", (locale) => {
             profile.preferredLanguage = locale;
             renderFollowUp(`view=follow-up&request=${requestId}`);
-            const caution = getChatControlsCopy(locale).caution;
+            const caution = locale === Language.ES
+                ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911."
+                : "Messages are not continuously monitored. For an emergency, call 911.";
             expect(screen.getByText(caution)).toBeInTheDocument();
+            expect(screen.queryByText(getChatControlsCopy(locale).caution)).not.toBeInTheDocument();
             expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
             expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(locale === Language.ES ? "Preguntas de tu equipo de atención" : "Questions from your care team");
             expect(lastViewProps()).toMatchObject({ locale });
             fireEvent.click(screen.getByRole("button", { name: locale === Language.ES ? "Volver a mensajes" : "Back to messages" }));
-            expect(replace).toHaveBeenCalledWith("/chat");
+            expect(replace).toHaveBeenCalledWith("/chat?view=care-team");
         });
         it("keeps the bottom navigation hidden by marking the conversation open", () => {
             renderFollowUp(`view=follow-up&request=${requestId}`);
@@ -1245,7 +1292,7 @@ describe("Patient chat page", () => {
         it("leaves follow-up mode through the view's own back action", () => {
             renderFollowUp("view=follow-up");
             lastViewProps().onBack();
-            expect(replace).toHaveBeenCalledWith("/chat");
+            expect(replace).toHaveBeenCalledWith("/chat?view=care-team");
         });
         it("ignores request and assessment outside follow-up mode", () => {
             renderFollowUp(`request=${requestId}&assessment=${assessmentId}`);
@@ -1271,29 +1318,29 @@ describe("Patient chat page", () => {
             [Language.EN, 2, "2 requests are waiting for your answers"],
             [Language.ES, 1, "1 solicitud espera tus respuestas"],
             [Language.ES, 2, "2 solicitudes esperan tus respuestas"],
-        ])("shows the inbox row after the Nora card for %s with %i pending", (locale, count, text) => {
+        ])("shows the inbox row inside Care team messages for %s with %i pending", (locale, count, text) => {
             profile.preferredLanguage = locale;
             pending.count = count;
             renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
-            const row = screen.getByRole("link", { name: rowName(locale) });
+            const careTeam = screen.getByRole("region", {
+                name: getPatientChatCopy(locale).careTeamLabel,
+            });
+            const row = within(careTeam).getByRole("link", { name: rowName(locale) });
             expect(row).toHaveAttribute("href", "/chat?view=follow-up");
             expect(row).toHaveTextContent(text);
             expect(row).toHaveAttribute("lang", locale);
-            const nora = screen.getByRole("heading", { name: "Nora AI" });
-            expect(nora.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         });
-        it("shows the row in the open Nora thread only while a request is pending", () => {
+        it("keeps the clinician request out of Nora and exposes it only in Care team messages", () => {
             pending.count = 1;
             renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
             fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
             expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
-            expect(screen.getByRole("link", { name: rowName(Language.EN) })).toHaveAttribute("href", "/chat?view=follow-up");
-            renderedPage.unmount();
-            pending.count = 0;
-            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
-            fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
-            expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
             expect(screen.queryByRole("link", { name: rowName(Language.EN) })).not.toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+            const careTeam = screen.getByRole("region", { name: "Care team messages" });
+            expect(within(careTeam).getByRole("link", { name: rowName(Language.EN) }))
+                .toHaveAttribute("href", "/chat?view=follow-up");
         });
     });
 });

@@ -27,7 +27,11 @@ flowchart LR
     Draft --> Preview[Answers + record context + summary]
     Preview --> Consent[Explicit consent and preview hash]
     Consent --> Report[One immutable report and audit]
-    Report --> Clinician[Assigned clinician review]
+    Report --> ADR{Patient reported a product concern}
+    ADR -->|matched active medication| Task[Atomic report-keyed task]
+    Task --> Review[Clinician ADR draft]
+    ADR -->|no product concern| Clinician[Assigned clinician summary]
+    Review --> Clinician
     Safety -->|emergency| Direction[Reviewed direction]
     Direction --> Alert[Independent durable alert and retry]
 ```
@@ -57,12 +61,40 @@ append-only audit. Replays and concurrent keys recover that report. Corrections 
 preview/hash. Cancellation creates no report. New direct report inserts fail closed;
 historical rows remain `legacy_unconfirmed`. SOAP, risk, MCP, chat context and cron
 select confirmed reports. Delegated symptom tasks check confirmation and replace payload
-testimony with the canonical owned report at submission/working transitions. No new
-causality verdict, automatic ADR task, PR #136 follow-up, or PAT-002-C timeline is added.
+testimony with the canonical owned report at submission/working transitions. A confirmed
+patient-reported product concern now starts one report-keyed pharmacovigilance task when
+the approved preview context contains the matching active medication. That task creates
+an auditable draft for clinician review; it does not create a causality verdict or a
+MedWatch submission. An unlisted product remains preserved as patient testimony but does
+not receive another patient's medication ID. PAT-002-C's timeline is not added.
 
 The existing assigned-clinician patient detail view shows confirmed testimony and
 labels legacy history. Unknown severity is labelled and a chart gap, never zero/mild.
 A confirmed report is available for review; the UI does not claim an alert was delivered.
+
+## October 17 defect follow-up
+
+Local end-to-end testing found two integration defects. A safety notice from one Nora
+conversation survived the **New chat** transition, and explicit confirmation stopped
+after saving the report instead of invoking the existing pharmacovigilance boundary.
+The patient hook now clears the notice as part of every conversation switch and ignores
+late events from the disconnected socket. Confirmation reads the canonical owned report,
+recognizes only the patient's explicit product-concern answer, and submits an idempotent
+task keyed by the confirmed report UUID. Medication linkage comes only from the bounded
+active-medication context already shown in the confirmed preview. Migration 076 creates
+the submitted task in the report-confirmation transaction; the existing worker now claims
+never-started tasks as well as scheduled retries. Repeated/concurrent confirmation cannot
+reopen completed work or reset a clinician-reviewed assessment to `draft`.
+
+Focused verification on October 17 passed: 38 backend service/intake tests, 63 patient
+chat tests, Ruff on all changed Python files, mypy on both changed backend services,
+patient-portal ESLint/typecheck and the 79-file migration validator. The monolithic backend
+run reached 3,169 passed and 318 skipped before the repository session-timeout hook stopped
+it at 95%; all remaining files passed separately (169 tests, including the partly run file).
+The Docker PostgreSQL suite could not run on this host because Docker and a PostgreSQL
+server are unavailable; its new confirmation-to-outbox case remains an opt-in CI check.
+No remote migration was applied. The default-off activation decision, conversational
+one-question-at-a-time redesign, and unlisted-medication review linkage remain open.
 
 ## Endpoint and recovery contract
 
@@ -209,9 +241,10 @@ and check that loading and failure are distinct. Repeat at 320/375 pixels.
 C can consume confirmed reports with `report_schema_version`, immutable
 `confirmed_content`, `intake_id`, patient confirmation actor/time and nullable severity.
 The private draft is not a timeline source. Preserve unknown/declined/not-applicable
-states, source attribution and legacy labels. The B clinician change is only the existing
-summary; the full patient timeline and expanded detail are C. PR #136's ADR follow-up
-implementation remains outside this branch's scope.
+states, source attribution and legacy labels. The B clinician change retains the existing
+summary; the full patient timeline and expanded detail are C. An eligible confirmed product
+concern now invokes the existing PR #136 pharmacovigilance boundary to create its
+clinician-review draft; it does not submit MedWatch.
 
 ## Rebase onto October 12 main
 
@@ -494,3 +527,29 @@ but those scenarios were not newly performed end to end here. PR peer/safety rev
 required CI and clean locked install evidence, merge, deployed configuration and
 deployed acceptance remain separate. No additional remote migration, reset/seed,
 deployment or merge was performed.
+
+## ADR-to-MedWatch routing follow-up — October 18
+
+The patient portal now presents a pending clinician-authored ADR information request
+under **Care team messages**, never inside the Nora conversation. The exact request
+notification still opens the structured follow-up form directly; Back returns to
+`/chat?view=care-team`, and the form uses the human-message monitoring/911 notice
+instead of Nora's AI warning. Today keeps its pending-task entry.
+
+The database contract is unchanged: patient answers update the ADR assessment and
+produce the clinician `adr_information_answered` event whose action points to the
+MedWatch assessment. The request is intentionally not duplicated as a plain
+`care_conversation_messages` row, which avoids a second message notification and
+keeps the bounded ADR questionnaire as the authoritative response path.
+
+Local verification in the isolated PR #159 worktree:
+
+- Patient focused component tests: **131 passed** (`chat-page`, ADR follow-up view,
+  care conversations).
+- Full patient suite: **696/696 passed** after fixing the Node 24/jsdom storage spy
+  to target the actual storage prototype.
+- Patient TypeScript check passed.
+- ADR/MedWatch backend unit set passed **273/273**; confirmed-report handoff and
+  retry-worker set passed **46/46**.
+- Migration validation passed for the pre-merge local set. Migration 076 remains local and
+  unapplied; no remote database, deployment or FDA submission was touched.

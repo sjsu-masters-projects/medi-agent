@@ -86,7 +86,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 76 SQL migration files, prefixes `001`–`064`. Some prefixes are
+The checkout contains 79 SQL migration files, prefixes `001`–`065`. Some prefixes are
 shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
 branches; they coexist because the ledger identifies migrations by full filename and
 checksum, not by prefix. Preserve applied names and bytes. The ledger in
@@ -126,6 +126,23 @@ function keeps its signature, so the currently deployed backend keeps working on
 applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
 are upgraded on read. After applying, verify with the ledger and with the read-only checks the
 fail-closed block already performs (it raises and rolls the migration back on any gap).
+
+### Confirmed symptom ADR handoff (065, PAT-002-B) — written, not applied
+
+`076_confirmed_symptom_adr_handoff.sql` requires the already-applied confirmed-intake
+migration 060. It normalizes exact active-medication name matching and creates one
+report-keyed `submitted` A2A task in the same transaction as an eligible patient-confirmed
+product concern. The trigger does not assign causality, create an FDA submission or invent
+a medication link for an unlisted product. `A2A_RETRY_WORKER_ENABLED=true` is required so a
+task left unclaimed by an interrupted request is recovered.
+
+Migration 076 has SHA-256
+`92566fd505a586913ec0d2feb1a554944cc98f73bd1049b4581eb03016c274a7` and is not applied
+to any hosted project. Apply it through the ledger only after explicit authorization and
+before deploying the backend that depends on its atomic-outbox guarantee. Because 063 and
+064 sort before 065 and are also recorded here as pending, do not run the all-pending
+migration script for a 065-only authorization; coordinate the full authorized migration
+set first.
 
 ### Appointment booking guards (042/043)
 
@@ -292,6 +309,7 @@ The deployed backend setting and deployed acceptance remain separate.
 | --- | --- |
 | `059_chat_safety_alerts.sql` | `9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5` |
 | `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
+| `076_confirmed_symptom_adr_handoff.sql` | `92566fd505a586913ec0d2feb1a554944cc98f73bd1049b4581eb03016c274a7` |
 
 Before an authorized rollout, drain old direct symptom-report writers, including
 old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct

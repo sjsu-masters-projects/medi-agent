@@ -61,10 +61,11 @@ Deployed October 12 (migrations 057/058); production status and open items are i
 
 PAT-002-B's source audit and confirmation contract are recorded in the
 [confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md).
-Current implementation and activation prerequisites are described below. The
-unpublished migrations are 059/060; they follow main's 058 and reuse the chat-session
-column owned by 051. The ordinary initial Nora utterance retains existing clinician
-transcript visibility; subsequent intake form answers are patient-private.
+Current implementation and activation prerequisites are described below. Migrations
+059/060 are applied; migration 076 is written but not applied and adds the durable
+confirmed-report ADR handoff. These migrations reuse the chat-session column owned by
+051. The ordinary initial Nora utterance retains existing clinician transcript visibility;
+subsequent intake form answers are patient-private.
 
 Only these four work boundaries are supported by the product direction:
 
@@ -213,8 +214,15 @@ commit one immutable patient-confirmed report with append-only audit. Unknown se
 is null. New direct inserts fail closed; historical rows stay `legacy_unconfirmed`.
 Clinical consumers select confirmed reports; the existing clinician detail view labels
 legacy history and confirmed testimony separately. Delegated symptom tasks canonicalize
-report input at submission/working transitions. No new clinical verdict or automatic
-ADR follow-up is added. PAT-002-C's timeline remains separate.
+report input at submission/working transitions. When the confirmed answers explicitly
+identify a product concern and the bounded preview contains that patient's matching active
+medication, confirmation starts one report-keyed pharmacovigilance task and clinician ADR
+draft. Migration 076 creates the task atomically with the confirmed report, and the A2A
+worker claims never-started or retryable work without reopening completed work or resetting
+a clinician-reviewed assessment. The task is decision support, not a causality verdict or
+MedWatch submission.
+Unlisted product testimony is retained without fabricating a medication foreign key.
+PAT-002-C's timeline remains separate.
 
 See [the contract and acceptance evidence](../docs/pat-002-b-acceptance-2026-10-12.md)
 for exact endpoints, recovery behavior and rollout prerequisites.

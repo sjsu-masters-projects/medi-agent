@@ -12,6 +12,7 @@ import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-r
 import { ADRFollowUpView } from "@/components/features/adr-follow-up-view";
 import { getADRFollowUpCopy } from "@/content/adr-follow-up-copy";
 import { todayConversationId } from "@/services/chat-api";
+import { getConversationCopy } from "@/services/care-conversations";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
 import { ChatTextarea } from "@/components/features/chat-presentation";
@@ -53,6 +54,7 @@ export default function ChatPage() {
     const scrollSessionRef = useRef<string | null>(null);
     const headingRef = useRef<HTMLHeadingElement | null>(null);
     const noraOpenRef = useRef<HTMLButtonElement | null>(null);
+    const careTeamRegionRef = useRef<HTMLDivElement | null>(null);
     const previousInbox = useRef(inbox);
     const wasFollowUp = useRef(false);
     const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
@@ -81,9 +83,12 @@ export default function ChatPage() {
 
     useEffect(() => {
         if (followUpMode) headingRef.current?.focus();
-        else if (wasFollowUp.current) noraOpenRef.current?.focus();
+        else if (wasFollowUp.current) {
+            if (careTeamDestination) careTeamRegionRef.current?.focus();
+            else noraOpenRef.current?.focus();
+        }
         wasFollowUp.current = followUpMode;
-    }, [followUpMode]);
+    }, [careTeamDestination, followUpMode]);
 
     useEffect(() => {
         if (previousInbox.current !== inbox) {
@@ -115,7 +120,8 @@ export default function ChatPage() {
     const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
     if (followUpMode) {
         const followUpCopy = getADRFollowUpCopy(locale);
-        const leaveFollowUp = () => { setInbox(true); setCareTeamOpened(true); router.replace("/chat"); };
+        const careTeamCopy = getConversationCopy(locale);
+        const leaveFollowUp = () => { setInbox(true); setCareTeamOpened(true); router.replace("/chat?view=care-team"); };
         return <div className="flex min-h-dvh w-full flex-col gap-3 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] text-ink" lang={locale}>
             <header className="sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md">
                 <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface" aria-label={back} onClick={leaveFollowUp}><Icon name="back" className="h-[22px] w-[22px]" /></button>
@@ -123,7 +129,7 @@ export default function ChatPage() {
                     <h1 ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold leading-tight outline-none">{followUpCopy.entry.title}</h1>
                 </div>
             </header>
-            <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
+            <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{careTeamCopy.notice}</p>
             <ADRFollowUpView locale={profile ? locale : undefined} timeZone={profile?.timezone} requestId={followUpRequestId} assessmentId={followUpAssessmentId} onBack={leaveFollowUp} />
         </div>;
     }
@@ -158,10 +164,9 @@ export default function ChatPage() {
             <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15" onClick={() => openNora()}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}<Icon name="arrow" className="h-4 w-4" /></button>
             </div>
         </section> : null}
-        {inbox && <div hidden={Boolean(humanThreadId)} className="empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>}
         {inbox && !humanThreadId && <NoraConversations locale={locale} activeSessionId={sessionId} onOpen={openNora} />}
-        {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-3">
-            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
+        {(inbox || careTeamOpened) && <div ref={careTeamRegionRef} role="region" aria-label={copy.careTeamLabel} tabIndex={-1} hidden={!inbox && conversation !== "care-team"} className="space-y-3 outline-none">
+            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} inboxLead={<ADRFollowUpEntryRow locale={locale} />} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
             {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="overflow-hidden rounded-[22px] bg-surface">
                 <button className="flex min-h-14 w-full items-center gap-3 px-[14px] py-3 text-left hover:bg-[#FBF7F0]" type="button" aria-expanded={showHistory}
                     onClick={() => setShowHistory((current) => !current)}>
@@ -185,7 +190,6 @@ export default function ChatPage() {
                 }} className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             <SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId={visibleMessages.findLast((message) => message.role === ChatRole.USER)?.id} />
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
-            <div className="empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>
             {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
                 <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">

@@ -225,7 +225,7 @@ export function ADRFollowUpView({
                 {copy.back}
               </Button>
             ) : (
-              <Link className={backAction} href="/chat" prefetch={false}>
+              <Link className={backAction} href="/chat?view=care-team" prefetch={false}>
                 <Icon className="h-4 w-4" name="back" />
                 {copy.back}
               </Link>

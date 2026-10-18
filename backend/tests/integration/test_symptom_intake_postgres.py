@@ -84,6 +84,7 @@ def sql(postgres):
         "051_health_knowledge_and_chat_sessions.sql",
         "059_chat_safety_alerts.sql",
         "060_confirmed_symptom_intake.sql",
+        "076_confirmed_symptom_adr_handoff.sql",
     ):
         execute((MIGRATIONS / name).read_text())
     execute(f"""
@@ -289,6 +290,81 @@ def confirmation(v, identity=None):
     }
 
 
+def ready_with_product_concern(sql):
+    medication = str(uuid4())
+    sql(
+        f"INSERT INTO medications(id,patient_id,name,dosage,frequency) VALUES"
+        f"('{medication}','{PATIENT}','Metformin','500 mg','once daily');"
+    )
+    v = start(sql)
+    for q in (
+        "description",
+        "location",
+        "onset",
+        "duration",
+        "course",
+        "severity",
+        "associated",
+        "red_flags",
+        "product",
+        "concomitant",
+        "history",
+        "outcome",
+    ):
+        value = (
+            "Nausea"
+            if q == "description"
+            else 4
+            if q == "severity"
+            else {"concern": True, "name": "metformin"}
+            if q == "product"
+            else None
+        )
+        v = json.loads(
+            sql(
+                call_sql(
+                    "answer",
+                    {
+                        "intake_id": v["id"],
+                        "expected_revision": v["revision"],
+                        "mutation_id": str(uuid4()),
+                        "answer": {
+                            "question_id": q,
+                            "state": "answered" if value is not None else "unknown",
+                            "value": value,
+                            "locale": "en-US",
+                            "wording": "",
+                        },
+                    },
+                )
+            )
+        )
+    context = json.loads(sql(f"SELECT symptom_intake_context('{PATIENT}','{v['id']}');"))
+    assert len(context["medications"]) == 1
+    assert context["medications"][0]["source_id"] == medication
+    assert context["medications"][0]["name"] == "Metformin"
+    snapshot = {
+        "schema_version": "symptom-report/1",
+        "answers": v["answers"],
+        "context": context,
+        "summary": "Synthetic product concern",
+        "locale": v["locale"],
+        "timezone": v["timezone"],
+        "library_version": v["library_version"],
+        "library_hash": v["library_hash"],
+        "source_message_id": TURN,
+        "session_id": "default",
+    }
+    return json.loads(
+        sql(
+            call_sql(
+                "preview",
+                {"intake_id": v["id"], "expected_revision": v["revision"], "preview": snapshot},
+            )
+        )
+    )
+
+
 def test_confirm_once_retry_conflict_unknown_and_immutable(sql):
     v = ready(sql)
     request = confirmation(v)
@@ -314,6 +390,21 @@ def test_confirm_once_retry_conflict_unknown_and_immutable(sql):
     sql("UPDATE symptom_reports SET symptom='Rewritten';", succeeds=False)
     sql("DELETE FROM symptom_reports;", succeeds=False)
     sql(call_sql("report", {"report_id": report["id"]}, OTHER), succeeds=False)
+
+
+def test_confirmed_product_concern_atomically_enqueues_one_report_task(sql):
+    v = ready_with_product_concern(sql)
+    saved = json.loads(sql(call_sql("confirm", confirmation(v))))
+    json.loads(sql(call_sql("confirm", confirmation(v))))
+
+    assert sql("SELECT count(*) FROM symptom_reports;") == "1"
+    assert sql("SELECT count(*) FROM a2a_tasks;") == "1"
+    assert sql("SELECT status FROM a2a_tasks;") == "submitted"
+    assert sql("SELECT symptom_event_id::text FROM a2a_tasks;") == saved["confirmed_report_id"]
+    assert (
+        sql("SELECT input_payload->'symptom_report'->>'confirmation_state' FROM a2a_tasks;")
+        == "patient_confirmed"
+    )
 
 
 def test_stale_preview_and_revoked_library_cannot_confirm(sql):

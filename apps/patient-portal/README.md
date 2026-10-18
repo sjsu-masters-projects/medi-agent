@@ -141,16 +141,18 @@ three retrospective questions about a prior clinician-directed dose change, a pr
 similar prior reaction. The form says not to restart, stop, or change a medicine to answer, asks for
 a description of known yes/no answers, and requires a final confirmation before sending.
 
-**Route.** `/chat?view=follow-up` opens the follow-up view without a thread or recipient step. The
+**Route.** `/chat?view=follow-up` opens the structured Care Team follow-up view without a thread or recipient step. The
 optional `request` parameter opens one request in any state and wins over `assessment`, which opens
 the newest request for that assessment. With neither, the view lists every pending request.
 Notifications link here by assessment (or by request), and the entry rows link to the bare route.
-The view carries the same emergency and "not continuously monitored" caution as chat. Signed-out
+Back returns to **Care team messages**. The view carries the human-message emergency and "not
+continuously monitored" notice; it does not use Nora's AI warning. Signed-out
 visits follow the normal sign-in redirect and return to the same URL.
 
-**Entry rows.** A row appears in the chat inbox, in an open Nora thread and on Today, only while at
-least one request is pending. It is hidden while loading, on a load error, or when nothing is
-pending, because the view itself reports errors. The count refreshes on focus and does not poll.
+**Entry rows.** A row appears under **Care team messages** in the chat inbox and on Today, only while
+at least one request is pending. It is never rendered as Nora content. It is hidden while loading,
+on a load error, or when nothing is pending, because the view itself reports errors. The count
+refreshes on focus and does not poll.
 
 **Endpoints.**
 - `GET /api/v1/patients/me/adr-information-requests` lists pending requests (used by the entry rows).
