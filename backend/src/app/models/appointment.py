@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 from app.models.clinic_membership import ClinicTag
 from app.models.enums import AppointmentResponseAction, AppointmentStatus, AppointmentType
@@ -39,10 +39,30 @@ class AppointmentProposal(BaseModel):
 class AppointmentUpdate(BaseModel):
     scheduled_at: AwareDatetime | None = None
     duration_minutes: int | None = Field(default=None, ge=5, le=480)
+    appointment_type: AppointmentType | None = None
     location: str | None = None
     reason: str | None = None
     notes: str | None = None
     status: AppointmentStatus | None = None
+
+
+CancelReasonCode = Literal[
+    "clinician_unavailable", "clinic_closed", "patient_request", "scheduling_error", "other"
+]
+
+
+class AppointmentCancel(BaseModel):
+    """A clinician cancels a booked visit: a reason from the list, plus text for "other"."""
+
+    reason_code: CancelReasonCode
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def other_needs_text(self) -> "AppointmentCancel":
+        self.reason = (self.reason or "").strip() or None
+        if self.reason_code == "other" and not self.reason:
+            raise ValueError("Say why the visit is cancelled")
+        return self
 
 
 class AppointmentResponse(BaseModel):
@@ -71,6 +91,11 @@ class AppointmentRead(ClinicTag):
     proposal_group_id: UUID | None = None
     proposal_expires_at: datetime | None = None
     source_document_id: UUID | None = None  # parsed from "return in 2 weeks"
+    # Set when the visit was cancelled; a patient's own cancel leaves cancelled_by empty.
+    cancelled_by: Literal["patient", "clinician"] | None = None
+    cancel_reason_code: CancelReasonCode | None = None
+    cancel_reason: str | None = None
+    cancelled_at: datetime | None = None
     created_at: str
 
 

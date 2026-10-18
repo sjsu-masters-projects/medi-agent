@@ -76,7 +76,7 @@ def render_appointment_calendar(
         f"DTSTAMP:{_utc(datetime.now(UTC))}",
         f"DTSTART:{_utc(start)}",
         f"DTEND:{_utc(end)}",
-        "STATUS:CONFIRMED",
+        f"STATUS:{'CANCELLED' if appointment.status == 'cancelled' else 'CONFIRMED'}",
         "CLASS:PRIVATE",
         # The appointment's own clinic, so a patient with several clinics can tell them apart.
         f"SUMMARY;LANGUAGE={locale}:{_escape(f'{title} · {clinic}' if clinic else title)}",

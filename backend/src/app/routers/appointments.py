@@ -16,7 +16,12 @@ from app.models import (
     AppointmentResponse,
     AppointmentUpdate,
 )
-from app.models.appointment import AppointmentCalendarExport, BusyInterval, ScheduleRead
+from app.models.appointment import (
+    AppointmentCalendarExport,
+    AppointmentCancel,
+    BusyInterval,
+    ScheduleRead,
+)
 from app.models.auth import CurrentUser
 from app.services.appointment_calendar import CalendarLocale
 from app.services.appointment_schedule_service import AppointmentScheduleService
@@ -125,6 +130,52 @@ async def respond_to_appointment(
         appointment_id=appointment_id,
         action=data.action,
         note=data.note,
+    )
+
+
+@router.post("/{appointment_id}/cancel", response_model=AppointmentRead)
+async def cancel_appointment(
+    appointment_id: UUID,
+    data: AppointmentCancel,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    """A clinician cancels a confirmed or scheduled visit, with a reason; the patient is told."""
+    return await AppointmentService(db).manage_for_user(
+        user_id=current_user.id,
+        role=current_user.role,
+        appointment_id=appointment_id,
+        action="cancel",
+        reason_code=data.reason_code,
+        reason=data.reason,
+    )
+
+
+@router.post("/{appointment_id}/complete", response_model=AppointmentRead)
+async def complete_appointment(
+    appointment_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    return await AppointmentService(db).manage_for_user(
+        user_id=current_user.id,
+        role=current_user.role,
+        appointment_id=appointment_id,
+        action="complete",
+    )
+
+
+@router.post("/{appointment_id}/no-show", response_model=AppointmentRead)
+async def mark_appointment_no_show(
+    appointment_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    return await AppointmentService(db).manage_for_user(
+        user_id=current_user.id,
+        role=current_user.role,
+        appointment_id=appointment_id,
+        action="no_show",
     )
 
 

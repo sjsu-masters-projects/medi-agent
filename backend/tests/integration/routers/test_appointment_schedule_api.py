@@ -76,3 +76,19 @@ def test_range_must_be_bounded(client, caller):
         ).status_code
         == 422
     )
+
+
+@pytest.mark.parametrize("path", ["cancel", "complete", "no-show"])
+def test_patients_cannot_use_the_clinician_visit_actions(client, caller, path):
+    caller("patient")
+    body = {"reason_code": "clinic_closed"} if path == "cancel" else None
+    response = client.post(f"/api/v1/appointments/{uuid4()}/{path}", json=body)
+    assert response.status_code == 403
+
+
+def test_cancelling_needs_a_reason_from_the_list(client, caller):
+    caller("clinician")
+    url = f"/api/v1/appointments/{uuid4()}/cancel"
+    assert client.post(url, json={}).status_code == 422
+    assert client.post(url, json={"reason_code": "bored"}).status_code == 422
+    assert client.post(url, json={"reason_code": "other"}).status_code == 422
