@@ -154,6 +154,50 @@ def test_public_turn_never_exposes_snapshot_or_execution_lease():
 
 
 @pytest.mark.asyncio
+async def test_busy_claim_explains_an_existing_reply_and_recovers_it(turn_runtime):
+    turns, service, socket, context, record, _ = turn_runtime
+    turns.begin.side_effect = ValidationError("CHAT_TURN_BUSY")
+    turns.call.side_effect = None
+    turns.call.return_value = {
+        "items": [{**record, "user_message": {"content": "Earlier synthetic question"}}]
+    }
+    await chat._process_durable_message(
+        socket, service, context, {"client_message_id": str(uuid4())}
+    )
+    events = [call.args[0] for call in socket.send_json.call_args_list]
+    assert events[0]["code"] == "CHAT_TURN_BUSY"
+    assert "already in progress" in events[0]["message"]
+    assert events[1]["turns"][0]["client_message_id"] == record["client_message_id"]
+
+
+@pytest.mark.asyncio
+async def test_document_execution_uses_the_existing_summary_cleanup():
+    service = ChatTurnService(MagicMock(), str(uuid4()), "chat-test")
+    service.call = AsyncMock(
+        return_value={
+            "turn": {
+                "document_context": {
+                    "id": "doc",
+                    "context_version": "version",
+                    "summary": "```# **Synthetic**\nsummary```",
+                }
+            }
+        }
+    )
+    result = await service.begin(
+        {
+            "client_message_id": str(uuid4()),
+            "content": "Synthetic",
+            "document_id": str(uuid4()),
+            "language": "en-US",
+        },
+        30,
+    )
+    assert result["turn"]["document_context"]["summary"] == "Synthetic\n\nsummary"
+    assert result["turn"]["document_context"]["context_version"] == "version"
+
+
+@pytest.mark.asyncio
 async def test_expired_lease_cannot_start_a_clinical_write(monkeypatch, turn_runtime):
     turns, service, _, _, record, _ = turn_runtime
     turns.call.return_value = {"accepted": False}

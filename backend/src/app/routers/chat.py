@@ -649,7 +649,11 @@ async def _process_durable_message(
                 "type": "error",
                 "code": code,
                 "client_message_id": request.get("client_message_id"),
-                "message": "Chat recovery is required.",
+                "message": (
+                    "A reply is already in progress in this conversation. Recovering it now."
+                    if code == "CHAT_TURN_BUSY"
+                    else "Chat recovery is required."
+                ),
             },
         )
         try:

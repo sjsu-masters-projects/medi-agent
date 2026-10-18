@@ -12,6 +12,7 @@ from supabase import Client
 from app.core.exceptions import ExternalServiceError, ValidationError
 from app.models.enums import coerce_locale
 from app.safety import TRIAGE_COPY, deterministic_safety_floor
+from app.services.explanation_service import normalize_patient_summary
 from app.utils.localization import resolve_locale_resource
 
 
@@ -83,7 +84,7 @@ class ChatTurnService:
         fingerprint = hashlib.sha256(
             json.dumps(stable, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
-        return await self.call(
+        result = await self.call(
             "begin",
             {
                 **stable,
@@ -92,6 +93,10 @@ class ChatTurnService:
                 "timeout_seconds": timeout,
             },
         )
+        document = (result.get("turn") or {}).get("document_context")
+        if isinstance(document, dict) and "summary" in document:
+            document["summary"] = normalize_patient_summary(str(document["summary"]))
+        return result
 
 
 class TurnExecution:

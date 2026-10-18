@@ -156,6 +156,7 @@ interface PatientChatSessionState {
 }
 
 interface PatientChatSessionActions {
+    reconnectChat: () => void;
     retryTurn: (id: string) => void;
     dismissTurn: (id: string) => void;
     dismissDocumentContext: () => void;
@@ -252,6 +253,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const recovery = useChatTurnRecovery(`${user?.id ?? ""}:${sessionId}`, socketRef);
     const receiveTurns = useEffectEvent((rows: ChatTurnApi[], snapshot = false) => {
         recovery.accept(rows, snapshot);
+        if (error === "CHAT_TURN_BUSY" && !rows.some((row) => row.status === "processing")) dispatch(setChatError(null));
         if (snapshot || rows.some((row) => row.status !== "processing")) {
             setAssistantDraft("");
             setAssistantDraftStartedAt(null);
@@ -260,7 +262,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     });
     const rejectTurn = useEffectEvent((id: string) => {
         const content = recovery.reject(id);
-        if (content) setInput((current) => current || content);
+        if (content) setInput((current) => !current || current === content ? content : `${content}\n\n${current}`);
     });
     const voiceSocketRef = useRef<WebSocket | null>(null);
     const reconnectRef = useRef<{
@@ -311,7 +313,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         }
 
         if (!durableReadyRef.current || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-            dispatch(setChatError("Chat is reconnecting. Try sending in a moment."));
+            dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
+            voiceRefs.current.autoPlayNextAssistantMessage = false;
+            setInput((current) => current || trimmedContent);
             setVoiceStatus("idle");
             return;
         }
@@ -712,7 +716,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         durableReadyRef.current = false;
         let durableReady = false;
         const handshakeTimer = window.setTimeout(() => {
-            if (isMounted && !durableReady) socket.close();
+            if (isMounted && !durableReady) {
+                dispatch(setConnectionStatus("error"));
+                dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
+                socket.close();
+            }
         }, 15000);
 
         socket.onopen = () => {
@@ -721,7 +729,6 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             clearChatReconnectTimer();
-            reconnectRef.current.attempts = 0;
             // A socket opening alone does not prove the backend supports safe retries.
             // Keep sending disabled until its durable recovery handshake arrives.
             dispatch(setChatError(null));
@@ -746,6 +753,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 case "chat_turns":
                     durableReady = true;
                     durableReadyRef.current = true;
+                    reconnectRef.current.attempts = 0;
                     window.clearTimeout(handshakeTimer);
                     dispatch(setConnectionStatus("connected"));
                     receiveTurns(payload.turns, true);
@@ -867,7 +875,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     if (["CHAT_DOCUMENT_UNAVAILABLE", "CHAT_DOCUMENT_CHANGED"].includes(payload.code ?? "")) setDocumentUnavailable(true);
                     resetAssistantDraft();
                     dispatch(setTyping(false));
-                    dispatch(setChatError(payload.message || "Chat request failed."));
+                    dispatch(setChatError(payload.code === "CHAT_TURN_BUSY" ? "CHAT_TURN_BUSY" : payload.message || "Chat request failed."));
+                    if (payload.code === "CHAT_TURN_BUSY" && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: "recover_turns" }));
+                    }
                     // A backend error mid-turn invalidates pending auto-play
                     // but does NOT take the mic offline; user can retry.
                     voiceRefs.current.autoPlayNextAssistantMessage = false;
@@ -899,6 +910,12 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             durableReadyRef.current = false;
+            if (!durableReady) {
+                dispatch(setConnectionStatus("error"));
+                dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
+                dispatch(setTyping(false));
+                return;
+            }
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setTyping(false));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
@@ -1156,6 +1173,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     }
 
     return {
+        reconnectChat: () => { clearChatReconnectTimer(); reconnectRef.current.attempts = 0; setReconnectSignal((current) => current + 1); },
         recoveryTurns: recovery.turns,
         turnBusy: recovery.turnBusy,
         retryTurn: (id: string) => { if (durableReadyRef.current && recovery.retry(id)) { dispatch(setTyping(true)); dispatch(setChatError(null)); } },

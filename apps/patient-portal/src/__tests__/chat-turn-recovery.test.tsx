@@ -5,6 +5,7 @@ import { ChatTurnRecovery } from "@/components/features/chat-turn-recovery";
 import type { ChatTurnApi } from "@/services/chat-api";
 import { ChatRole } from "@/types";
 import { chatSlice, addMessage } from "@/store/slices/chat-slice";
+import { getChatRecoveryCopy } from "@/content/chat-copy";
 
 const row: ChatTurnApi = { client_message_id: "test-key", status: "interrupted", retryable: true,
     attempt: 1, document_id: "doc-1", user_message: { id: "user-1", patient_id: "patient-1",
@@ -94,5 +95,14 @@ describe("saved Nora turn recovery", () => {
     it("keeps server-reviewed safety guidance visible on an interrupted reply", () => {
         render(<ChatTurnRecovery turns={[{ ...row, safety_guidance: "Reviewed synthetic safety guidance" }]} locale="en-US" connected onRetry={vi.fn()} onDismiss={vi.fn()} />);
         expect(screen.getByRole("alert")).toHaveTextContent("Reviewed synthetic safety guidance");
+    });
+
+    it.each(["en-US", "es-MX"] as const)("explains a disabled retry (%s)", (locale) => {
+        const copy = getChatRecoveryCopy(locale);
+        const view = render(<ChatTurnRecovery turns={[row]} locale={locale} connected={false} onRetry={vi.fn()} onDismiss={vi.fn()} />);
+        expect(screen.getByRole("button", { name: copy.retry })).toHaveAccessibleDescription(copy.reconnectBeforeRetry);
+        view.rerender(<ChatTurnRecovery turns={[row, { ...row, client_message_id: "another", status: "processing", retryable: false }]} locale={locale} connected onRetry={vi.fn()} onDismiss={vi.fn()} />);
+        expect(screen.getByRole("button", { name: copy.retry })).toBeDisabled();
+        expect(screen.getByRole("button", { name: copy.retry })).toHaveAccessibleDescription(copy.waitBeforeRetry);
     });
 });

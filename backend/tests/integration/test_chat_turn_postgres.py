@@ -23,7 +23,7 @@ def turn_sql(sql):
         "050_document_display_titles.sql",
         "051_health_knowledge_and_chat_sessions.sql",
         "062_chat_message_attachments.sql",
-        "071_nora_turn_recovery.sql",
+        "072_nora_turn_recovery.sql",
     ):
         sql((MIGRATIONS / name).read_text())
     return sql
@@ -81,6 +81,75 @@ def test_saved_message_and_claim_are_atomic_and_duplicate_safe(turn_sql):
     assert first["user_message"]["id"] == again["user_message"]["id"]
     assert turn_sql("SELECT count(*) FROM chat_messages;") == "1"
     assert "CHAT_TURN_BUSY" in call(turn_sql, payload=request(), succeeds=False)
+
+
+def test_migration_rerun_preserves_turns_and_repairs_browser_grants(turn_sql):
+    data = request()
+    first = call(turn_sql, payload=data)
+    turn_sql(
+        "ALTER TABLE chat_turns DISABLE ROW LEVEL SECURITY; GRANT ALL ON chat_turns TO anon,authenticated; GRANT EXECUTE ON FUNCTION chat_turn_operation(uuid,text,text,jsonb) TO anon;"
+    )
+    migration = (MIGRATIONS / "072_nora_turn_recovery.sql").read_text()
+    turn_sql(migration)
+    turn_sql(migration)
+    assert call(turn_sql, payload=data)["user_message"]["id"] == first["user_message"]["id"]
+    assert turn_sql("SELECT relrowsecurity FROM pg_class WHERE oid='chat_turns'::regclass;") == "t"
+    assert turn_sql("SELECT has_table_privilege('anon','chat_turns','SELECT');") == "f"
+    assert (
+        turn_sql(
+            "SELECT has_function_privilege('authenticated','chat_turn_operation(uuid,text,text,jsonb)','EXECUTE');"
+        )
+        == "f"
+    )
+
+
+@pytest.mark.parametrize(
+    "statement,expected",
+    [
+        (
+            "GRANT SELECT ON public.chat_turns TO anon;",
+            "chat_turns must not be open to a browser role",
+        ),
+        (
+            "ALTER TABLE public.chat_turns DISABLE ROW LEVEL SECURITY;",
+            "chat_turns must have row level security enabled",
+        ),
+        (
+            "GRANT EXECUTE ON FUNCTION public.chat_turn_operation(uuid,text,text,jsonb) TO authenticated;",
+            "chat_turn_operation must be executable by the service role only",
+        ),
+    ],
+)
+def test_final_verification_rejects_accidentally_restored_browser_access(
+    turn_sql, statement, expected
+):
+    migration = (MIGRATIONS / "072_nora_turn_recovery.sql").read_text()
+    migration = migration.replace(
+        "-- Fail closed if hosted default grants",
+        statement + "\n-- Fail closed if hosted default grants",
+    )
+    assert expected in turn_sql(migration, succeeds=False)
+
+
+def test_three_attempt_limit_never_creates_another_user_message(turn_sql):
+    data = request()
+    for attempt in range(1, 4):
+        claimed = call(turn_sql, payload=data)
+        assert claimed["execute"] and claimed["turn"]["attempt"] == attempt
+        call(turn_sql, "failed", claimed["turn"])
+    exhausted = call(turn_sql, payload=data)
+    assert not exhausted["execute"] and exhausted["turn"]["attempt"] == 3
+    assert turn_sql("SELECT count(*) FROM chat_messages;") == "1"
+
+
+def test_malformed_privileged_source_rows_fail_closed_in_recovery_and_replay(turn_sql):
+    data = request()
+    call(turn_sql, payload=data)
+    turn_sql(
+        f"UPDATE chat_messages SET patient_id='{FOREIGN}',content='Foreign synthetic content';"
+    )
+    assert call(turn_sql, "recover")["items"] == []
+    assert "CHAT_TURN_UNAVAILABLE" in call(turn_sql, payload=data, succeeds=False)
 
 
 def test_conflicting_reuse_does_not_change_saved_message(turn_sql):
@@ -159,9 +228,13 @@ def test_document_is_authorized_and_bound_to_the_turn(turn_sql):
     record = call(turn_sql, payload=data)["turn"]
     assert record["document_context"]["id"] == doc
     assert "file_url" not in record["document_context"]
+    assert record["document_context"]["summary"] == "Synthetic summary"
+    assert turn_sql("SELECT document_context ? 'summary' FROM chat_turns;") == "f"
     call(turn_sql, "failed", record)
     turn_sql(f"UPDATE documents SET ai_summary='Changed synthetic summary' WHERE id='{doc}';")
     assert "CHAT_DOCUMENT_CHANGED" in call(turn_sql, payload=data, succeeds=False)
+    turn_sql(f"DELETE FROM documents WHERE id='{doc}';")
+    assert turn_sql("SELECT document_context ? 'summary' FROM chat_turns;") == "f"
     assert "CHAT_DOCUMENT_UNAVAILABLE" in call(
         turn_sql, payload=request(document_id=str(uuid4())), succeeds=False
     )

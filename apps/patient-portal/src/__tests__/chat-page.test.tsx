@@ -7,7 +7,7 @@ import { clearChatState, setMessages } from "@/store/slices/chat-slice";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
-import { getChatControlsCopy, getPatientChatCopy } from "@/content/chat-copy";
+import { getChatControlsCopy, getPatientChatCopy, getChatRecoveryCopy } from "@/content/chat-copy";
 
 const {
     buildChatWebSocketUrl,
@@ -580,6 +580,41 @@ describe("Patient chat page", () => {
         fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Synthetic question" } });
         expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
         expect(MockWebSocket.instances[0].sent).toEqual([]);
+    });
+
+    it.each([Language.EN, Language.ES])("stops a missing handshake and offers explicit reconnect (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        vi.useFakeTimers();
+        renderPage();
+        await act(async () => { MockWebSocket.instances[0].onopen?.(); vi.advanceTimersByTime(15_000); });
+        expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).unavailable);
+        expect(screen.getByRole("button", { name: getChatControlsCopy(locale).send })).toBeDisabled();
+        await act(async () => { vi.advanceTimersByTime(120_000); });
+        expect(MockWebSocket.instances).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", { name: getChatRecoveryCopy(locale).reconnect }));
+        expect(MockWebSocket.instances).toHaveLength(2);
+        await act(async () => { MockWebSocket.instances[1].emitOpen(); });
+        expect(screen.queryByText(getChatRecoveryCopy(locale).unavailable)).not.toBeInTheDocument();
+        vi.useRealTimers();
+    });
+
+    it.each([Language.EN, Language.ES])("explains another tab's in-progress turn and recovers it without resending (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: getChatControlsCopy(locale).message }), { target: { value: "New synthetic question" } });
+        fireEvent.click(screen.getByRole("button", { name: getChatControlsCopy(locale).send }));
+        const request = JSON.parse(socket.sent[0]);
+        await act(async () => {
+            socket.emitMessage({ type: "error", code: "CHAT_TURN_BUSY", client_message_id: request.client_message_id, message: "Chat recovery is required." });
+            socket.emitMessage({ type: "chat_turns", turns: [{ client_message_id: "other-tab", status: "processing", attempt: 1, retryable: false, document_id: null, user_message: { id: "saved-first", patient_id: "patient-1", content: "Earlier synthetic question", role: "user", language: locale, created_at: new Date().toISOString() } }] });
+        });
+        expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).busy);
+        expect(screen.getByDisplayValue("New synthetic question")).toBeInTheDocument();
+        expect(screen.getByText("Earlier synthetic question")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: getChatControlsCopy(locale).send })).toBeDisabled();
+        expect(socket.sent.map((text) => JSON.parse(text).type)).toEqual(["user_message", "recover_turns"]);
     });
 
     it("replaces the focused document in an open conversation without losing the unsent draft", async () => {

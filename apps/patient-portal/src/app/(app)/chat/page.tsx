@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
-import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
+import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy, getChatRecoveryCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
@@ -27,6 +27,7 @@ export default function ChatPage() {
     const locale = profile?.preferredLanguage ?? DEFAULT_LOCALE;
     const copy = getPatientChatCopy(locale);
     const controls = getChatControlsCopy(locale);
+    const recoveryCopy = getChatRecoveryCopy(locale);
     const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
     const [careTeamOpened, setCareTeamOpened] = useState(false);
     const searchParams = useSearchParams();
@@ -63,7 +64,7 @@ export default function ChatPage() {
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
-        startNewConversation, recoveryTurns, retryTurn, dismissTurn, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
+        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
     const newChat = locale === "es-MX" ? "Nueva conversación" : "New chat";
     const openNora = (conversationId: string = todayConversationId()) => {
         openConversation(conversationId);
@@ -181,7 +182,10 @@ export default function ChatPage() {
             </section>}
             {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
             <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} onRetry={retryTurn} onDismiss={dismissTurn} />
-            {error && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.chatError}</p>}
+            {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
+                <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
+                {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
+            </div>}
             {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <Icon name="alert" className="mt-px h-5 w-5 shrink-0" />
                 <p className="flex-1 font-medium">{copy.escalationNotice}</p>

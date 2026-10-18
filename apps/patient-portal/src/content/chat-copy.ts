@@ -99,6 +99,41 @@ export function getPatientChatCopy(locale: Locale): PatientChatCopy {
   return resolveLocaleResource(locale, PATIENT_CHAT_COPY);
 }
 
+/** PAT-001-A interface wording; es-MX candidates are tracked for bilingual review. */
+export function getChatRecoveryCopy(locale: Locale) {
+  return locale === "es-MX" ? {
+    preparing: "Nora está preparando tu respuesta",
+    checking: "Comprobando el estado de tu mensaje",
+    interrupted: "La respuesta quedó incompleta",
+    uncertain: "Es posible que se haya registrado una acción. No la repetiremos automáticamente. Si necesitas ayuda, contacta a tu equipo de atención.",
+    returnLater: "Puedes volver a esta conversación. La respuesta se mostrará cuando esté guardada.",
+    safeRetry: "Puedes reintentar el mismo mensaje sin enviarlo dos veces.",
+    noRetry: "No volveremos a ejecutar este mensaje. Puedes continuar con una pregunta nueva.",
+    retry: "Reintentar mensaje",
+    leaveUnfinished: "Dejar esta respuesta incompleta",
+    reconnectBeforeRetry: "Vuelve a conectar el chat para reintentar este mensaje.",
+    waitBeforeRetry: "Espera a que termine la respuesta en curso antes de reintentar este mensaje.",
+    busy: "Ya hay una respuesta en curso en esta conversación, posiblemente en otra pestaña. Estamos recuperándola. Tu nuevo mensaje sigue en el cuadro de texto.",
+    unavailable: "Nora no está disponible en este momento. No se enviará ningún mensaje hasta que el chat vuelva a conectarse. Puedes reintentar la conexión.",
+    reconnect: "Volver a conectar",
+  } : {
+    preparing: "Nora is preparing your reply",
+    checking: "Checking your message status",
+    interrupted: "The reply was interrupted",
+    uncertain: "An action may already have been recorded. We will not repeat it automatically. Contact your care team if you need help.",
+    returnLater: "You can return to this conversation. The reply will appear when it is saved.",
+    safeRetry: "You can retry the same message without sending it twice.",
+    noRetry: "We will not rerun this message. You can continue with a new question.",
+    retry: "Retry message",
+    leaveUnfinished: "Leave this reply unfinished",
+    reconnectBeforeRetry: "Reconnect chat before retrying this message.",
+    waitBeforeRetry: "Wait for the reply in progress to finish before retrying this message.",
+    busy: "A reply is already in progress in this conversation, possibly in another tab. We are recovering it. Your new message is still in the composer.",
+    unavailable: "Nora is temporarily unavailable. No message will be sent until chat reconnects. You can retry the connection.",
+    reconnect: "Reconnect chat",
+  };
+}
+
 export function getChatControlsCopy(locale: Locale) {
   return locale === "es-MX" ? {
     connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión" },
