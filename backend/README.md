@@ -72,6 +72,38 @@ See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing d
 
 ## Runtime configuration ownership
 
+### Demo follow-ups: activity review and evaluation
+
+COM-002 adds optional `care_plan_item_id` to private conversation sends. Only a
+patient may attach an item from their current approved plan. The backend stores
+the reference atomically with the message; retries compare body, thread and
+activity identity. Reads include `activity_context` with approved wording and a
+current/historical indicator. UUIDs remain link identities, not patient-facing copy.
+
+`POST /api/v1/care-conversations/{conversation_id}/messages/{message_id}/activity-review`
+is an explicit clinician action. It rechecks the exact private thread, active
+assignment and approved source, then creates/reuses a draft and returns
+`{patient_id, plan_id, item_id}` for the editor. It audits the message/source/target
+link. Ambiguous or removed matches in an existing draft are rejected; no duplicate
+activity is appended. Neither messaging nor opening review publishes or changes
+medications, reminders or adherence history. All existing publication and bilingual
+verification gates still apply. `ACTIVITY_CONTEXT_UNAVAILABLE` is a safe rejection,
+not raw database text.
+
+Apply reviewed `073_care_conversation_activity_review.sql` **before** deploying
+this backend; application needs separate requester authorization. The migration is
+rerunnable, retains prior data and verifies backend-only function access and RLS.
+No remote application is recorded by this PR. The existing generic conversation
+RPC remains compatible for older deployments during rollout.
+
+SOAP uses the registry with `SOAP_AI_ENABLED=true` and an optional
+`SOAP_GENERATION_TIMEOUT_SECONDS=90` operational ceiling. Defaults need no deployed
+environment change. Failure or disabled generation writes no invented note.
+Synthetic evaluation commands, paired cases and raw-final-response reporting are
+documented in [the demo evaluation guide](../docs/demo-ai-evaluation.md).
+
+### Environment ownership
+
 `app/config.py` supplies defaults; real process environment variables override
 those defaults. Local startup may also load the repository-root `.env` (or CWD
 `.env` if that file is absent). Never copy credentials into documentation or test

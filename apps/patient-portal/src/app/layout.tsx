@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { StoreProvider } from "@/store/provider";
+import { cookies, headers } from "next/headers";
+import { PatientLocaleProvider } from "@/contexts/patient-locale-context";
+import { PATIENT_LOCALE_COOKIE, PATIENT_LOCALE_HEADER, supportedPatientLocale } from "@/content/patient-locale";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });
@@ -37,15 +40,17 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = supportedPatientLocale((await headers()).get(PATIENT_LOCALE_HEADER))
+    ?? supportedPatientLocale((await cookies()).get(PATIENT_LOCALE_COOKIE)?.value);
   return (
-    <html lang="en-US" className={`${geist.variable} ${geistMono.variable}`}>
+    <html lang={locale ?? "en-US"} className={`${geist.variable} ${geistMono.variable}`}>
       <body className="antialiased">
-        <StoreProvider>{children}</StoreProvider>
+        <PatientLocaleProvider initialLocale={locale}><StoreProvider>{children}</StoreProvider></PatientLocaleProvider>
       </body>
     </html>
   );

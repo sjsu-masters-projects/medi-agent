@@ -47,6 +47,7 @@ def conversation():
         "translation_locale": None,
         "translation_guard_passed": None,
         "translation_pending": False,
+        "activity_context": None,
     }
     db = MagicMock()
     db.rpc.return_value.execute.return_value = SimpleNamespace(data=thread)
@@ -133,6 +134,46 @@ def test_invalid_or_impersonated_send_rejected_before_database(client, conversat
     _, thread, _, db = conversation
     assert client.post(ROOT + f"/{thread['id']}/messages", json=payload).status_code == 422
     db.rpc.assert_not_called()
+
+
+def test_activity_attachment_uses_authenticated_atomic_rpc(client, conversation):
+    actor, thread, message, db = conversation
+    item = str(uuid4())
+    db.rpc.return_value.execute.return_value.data = message
+    response = client.post(
+        ROOT + f"/{thread['id']}/messages",
+        json={
+            "body": "Question about approved frequency",
+            "client_message_id": str(uuid4()),
+            "care_plan_item_id": item,
+        },
+    )
+    assert response.status_code == 200
+    name, payload = db.rpc.call_args.args
+    assert name == "care_conversation_activity_operation"
+    assert payload["p_actor_id"] == str(actor.id)
+    assert payload["p_payload"]["care_plan_item_id"] == item
+
+
+def test_patient_cannot_open_activity_review(client, conversation):
+    _, thread, _, db = conversation
+    response = client.post(ROOT + f"/{thread['id']}/messages/{uuid4()}/activity-review")
+    assert response.status_code == 403
+    db.rpc.assert_not_called()
+
+
+def test_clinician_review_routes_only_to_authorized_rpc(client, conversation):
+    actor, thread, message, db = conversation
+    actor.role = "clinician"
+    result = {"patient_id": thread["patient_id"], "plan_id": str(uuid4()), "item_id": str(uuid4())}
+    db.rpc.return_value.execute.return_value.data = result
+    response = client.post(ROOT + f"/{thread['id']}/messages/{message['id']}/activity-review")
+    assert response.status_code == 200
+    assert response.json() == result
+    name, payload = db.rpc.call_args.args
+    assert name == "care_conversation_activity_operation"
+    assert payload["p_action"] == "review"
+    assert payload["p_payload"] == {"conversation_id": thread["id"], "message_id": message["id"]}
 
 
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "before=not-uuid"])

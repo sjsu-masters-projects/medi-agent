@@ -11,6 +11,7 @@ function Entry() {
   return <><output aria-label="Interface language">{locale}</output><AuthEntryLanguage locale={locale} onChange={setLocale} /></>;
 }
 beforeEach(() => {
+  document.cookie = "patient-portal.locale=; Path=/; Max-Age=0";
   window.localStorage.clear();
   window.history.replaceState({}, "", "/login");
   context.profile = null;

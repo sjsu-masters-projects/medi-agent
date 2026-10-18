@@ -30,6 +30,20 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("patient notification centre", () => {
+  it("localizes load and uncertain write feedback in Spanish while retaining original content", async () => {
+    session.profile.preferredLanguage = "es-MX";
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    await screen.findByText("Care team one");
+    vi.mocked(notifications.read).mockRejectedValueOnce(new Error("Internal English write detail"));
+    fireEvent.click(screen.getByRole("button", { name: "Marcar como leída: Care team one" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo confirmar la lectura");
+    expect(screen.getByText(/Keep this clinical text intact/)).toBeInTheDocument();
+    vi.mocked(notifications.list).mockRejectedValueOnce(new Error("Internal English load detail"));
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron actualizar"));
+    expect(screen.queryByText(/Internal English/)).not.toBeInTheDocument();
+    expect(screen.getByText("Care team one")).toBeInTheDocument();
+  });
   it.each([401, 403])("forgets snapshots, bulk capability and loaded depth on denied refresh (%s)", async (status) => {
     vi.mocked(notifications.list).mockImplementation(async (_token, _locale, _unread, cursor) => cursor ? page([item("two")], null, "snapshot-two") : page([item()], "cursor-two"));
     render(<NotificationProvider><NotificationCentre /><SnapshotProbe /></NotificationProvider>);

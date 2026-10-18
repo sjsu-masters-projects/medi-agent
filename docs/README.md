@@ -17,7 +17,8 @@ spring-2026 meeting records. Neither is current implementation guidance.
 | Visual design and app icons | `../.agent/DESIGN_SYSTEM.md` and [app icons](brand-icons.md) |
 | Current implementation and delivery boundaries | `../.agent/ARCHITECTURE.md` |
 | Model routing, safety controls, and evaluation limits | [AI runtime decision](decisions/ai-runtime-2026-09.md) and the [AI-005 agent quality plan](../.agent/specs/ai-005-agent-quality.md) |
-| Nora's reference knowledge, document answers and conversations | [NORA-002 specification](../.agent/specs/nora-002-grounded-answers.md) |
+| Nora's reference knowledge, document answers and conversations | [NORA-002 specification](../.agent/specs/nora-002-grounded-answers.md) and [durable recovery/document-focus contract, evidence and pending wording](../.agent/specs/pat-001-a-nora-turn-recovery.md) |
+| Patient locale continuity, activity-message review and bounded AI demo checks | [Combined acceptance contract](../.agent/specs/demo-care-loop-followups.md) and [repeatable evaluation guide](demo-ai-evaluation.md) |
 | In-app notifications, clinician Alerts and their database contract | [NOT-001 specification](../.agent/specs/not-001-notification-centre.md) |
 | Account recovery, email preferences, invitations and event email | [EMAIL-001 specification](../.agent/specs/email-001-email-flows.md) and [email templates](email-templates/README.md) |
 | Document ingestion design and Cloud Run Job operation | [Document intelligence decision](document-intelligence-assessment.md) and [worker guide](document-ingestion-worker.md) |

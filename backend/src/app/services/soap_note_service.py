@@ -9,11 +9,9 @@ generation returns no note and writes no row; the endpoint reports the failure. 
 worth stating plainly because the triage and follow-up paths both had to be corrected for
 exactly the opposite behaviour, and it would be easy to assume this one shared it.
 
-SOAP has no entry in `app/adk/registry.py`. The registry records a primary, a fallback, a
-measured latency budget and a deterministic path per workload, and none of those numbers
-have been measured for this model on this task. Rather than invent them, this keeps the
-configured Pro model it has always used. Adding a routed workload here is a decision that
-should follow a measurement, not precede one.
+SOAP uses the registry's structured background-generation path. Its configured Pro model
+is retained without a model fallback. The timeout and output ceiling are operational
+limits, not measured SOAP performance or clinical qualification.
 """
 
 from __future__ import annotations
@@ -25,8 +23,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from app.clients.gemini import GeminiClient
-from app.config import settings
+from app.adk.background_generation import generate_for_workload
+from app.adk.registry import Workload, route_for
 from app.core.llm_failures import categorize_llm_failure
 from app.models.dashboard import SoapNote
 from app.services.soap_note_prompts import SOAP_SYSTEM_INSTRUCTION, build_soap_prompt
@@ -198,20 +196,24 @@ class SoapNoteService:
     async def compose(self, patient_context: dict[str, Any]) -> SoapNote | None:
         """Ask the model to document the record, or return None if it could not."""
         try:
-            client = GeminiClient(model=settings.gemini_pro_model, max_retries=2, timeout=90)
-            return await client.generate_structured(
+            response = await generate_for_workload(
+                Workload.SOAP,
                 prompt=build_soap_prompt(patient_context),
-                response_model=SoapNote,
+                response_schema=SoapNote.model_json_schema(),
                 system_instruction=SOAP_SYSTEM_INSTRUCTION,
-                # Low, for clinical consistency rather than variety. Note that Gemini 3.x
-                # ignores this; it is kept because the configured model here is a 3.1 Pro
-                # preview and the intent should stay legible if that changes.
                 temperature=0.3,
             )
+            note = SoapNote.model_validate_json(response.text)
+            if not all(
+                value.strip()
+                for value in (note.subjective, note.objective, note.assessment, note.plan)
+            ):
+                return None
+            return note
         except Exception as exc:
             logger.error(
                 "SOAP note generation failed: %s",
-                exc,
+                type(exc).__name__,
                 extra={"failure_reason": categorize_llm_failure(exc)},
             )
             return None
@@ -227,7 +229,7 @@ class SoapNoteService:
             "objective": note.objective,
             "assessment": note.assessment,
             "plan": note.plan,
-            "model_used": settings.gemini_pro_model,
+            "model_used": route_for(Workload.SOAP).primary.model_id,
             "generated_at": datetime.now(UTC).isoformat(),
         }
 

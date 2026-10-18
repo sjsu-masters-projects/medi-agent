@@ -33,11 +33,16 @@ export function createConversationService(api: ConversationTransport) {
         `${root}/${encodeURIComponent(id)}/messages?limit=50${before ? `&before=${encodeURIComponent(before)}` : ""}`,
         { token, signal },
       ),
-    send: (token: string, id: string, body: string, clientMessageId: string) =>
+    send: (token: string, id: string, body: string, clientMessageId: string, carePlanItemId?: string) =>
       api.post<CareConversationMessage>(
         `${root}/${encodeURIComponent(id)}/messages`,
-        { body: body.trim(), client_message_id: clientMessageId },
+        { body: body.trim(), client_message_id: clientMessageId, ...(carePlanItemId ? { care_plan_item_id: carePlanItemId } : {}) },
         { token },
+      ),
+    reviewActivity: (token: string, id: string, messageId: string) =>
+      api.post<{ patient_id: string; plan_id: string; item_id: string }>(
+        `${root}/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/activity-review`,
+        {}, { token },
       ),
     // Translates ONE message into the viewer's language (stored once on the server).
     translate: (token: string, id: string, messageId: string, signal?: AbortSignal) =>
@@ -63,12 +68,13 @@ export function conversationAccessDenied(error: unknown): boolean {
   return status === 401 || status === 403 || status === 404;
 }
 
-export function conversationSendFailure(error: unknown): "uncertain" | "mismatch" | "invalid" {
+export function conversationSendFailure(error: unknown): "uncertain" | "mismatch" | "invalid" | "activityUnavailable" {
   if (typeof error !== "object" || error === null || !("status" in error) || error.status !== 422)
     return "uncertain";
   const details = "details" in error ? error.details : null;
   const envelope = typeof details === "object" && details !== null && "error" in details ? details.error : null;
   const code = typeof envelope === "object" && envelope !== null && "code" in envelope ? envelope.code : null;
+  if (code === "ACTIVITY_CONTEXT_UNAVAILABLE") return "activityUnavailable";
   return code === "MESSAGE_IDEMPOTENCY_MISMATCH" ? "mismatch" : "invalid";
 }
 
@@ -144,6 +150,7 @@ export function getConversationCopy(locale: string) {
     locked: "Reintenta el envío pendiente antes de editar este mensaje.",
     mismatch: "El reintento fue rechazado porque no coincide con el envío original. El mensaje anterior puede ya existir. Actualiza y revisa el historial antes de preparar otro envío.",
     invalid: "El mensaje fue rechazado. Tu texto se conserva; revísalo o edítalo antes de volver a enviarlo.",
+    activityUnavailable: "La actividad adjunta ya no está disponible. Conservamos tu texto. Quita la actividad o vuelve a cargar las actividades antes de enviar.",
     prepareNew: "Preparar un nuevo envío", confirmNew: "Confirmar: preparar un nuevo envío", cancel: "Cancelar",
     confirmWarning: "El mensaje anterior puede ya existir. Preparar un nuevo envío permite crear otro mensaje y podría duplicarlo. Esta acción no lo envía.",
     translatedFromEnglish: "Traducido del inglés", translatedFromSpanish: "Traducido del español",
@@ -164,6 +171,7 @@ export function getConversationCopy(locale: string) {
     locked: "Retry the pending send before editing this message.",
     mismatch: "The retry was rejected because it does not match the original send. The previous message may already exist. Refresh and review the history before preparing a new send.",
     invalid: "The message was rejected. Your text is preserved; review or edit it before sending again.",
+    activityUnavailable: "The attached activity is no longer available. Your text is preserved. Remove it or reload activities before sending.",
     prepareNew: "Prepare a new send", confirmNew: "Confirm: prepare a new send", cancel: "Cancel",
     confirmWarning: "The previous message may already exist. Preparing a new send permits another message and could duplicate it. This action does not send it.",
     translatedFromEnglish: "Translated from English", translatedFromSpanish: "Translated from Spanish",

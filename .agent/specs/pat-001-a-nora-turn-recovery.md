@@ -1,6 +1,11 @@
 # PAT-001-A / PAT-004 — Durable Nora turns and document focus
 
-Status: implemented and locally verified October 17, 2026; PR/CI and authorized rollout remain.
+Status: **Verify deployed**. [#188](https://github.com/sjsu-masters-projects/medi-agent/pull/188)
+merged as `6026647` on October 17, 2026 (Pacific); PR checks passed. The requester
+confirmed migration **072** applied. Backend deployment and both Vercel deployment
+statuses and main CI succeeded for the merge commit.
+Live acceptance and bilingual wording review below remain unrecorded. Current release
+status belongs in [TASKS.md](../TASKS.md), not a duplicate rollout log here.
 
 ## Scope
 
@@ -49,9 +54,9 @@ Send once → interrupt/reload → recover saved turn → retry when safe → on
 answer and no duplicate action. Repeat with a document, then switch/dismiss it and
 confirm a later general question cannot inherit the previous document.
 
-## Local implementation and review checkpoint — October 17
+## Implementation and verification evidence — October 17
 
-Implemented on `codex/nora-turn-recovery`: server-owned turn claims, bounded leases,
+Implemented in #188: server-owned turn claims, bounded leases,
 safe duplicate replay, per-turn document snapshots, patient recovery controls and
 conversation URLs. An interrupted reply may be left unfinished; that dismissal does
 not complete clinical work. Recovery refreshes every five seconds while there is
@@ -67,7 +72,8 @@ work to an older backend. Legacy sockets
 keep their old behavior, without a durable-retry guarantee. New sockets do not fall
 back to legacy execution if the migration/store is unavailable. Rollout order is
 reviewed migration **072** → merge/backend → patient portal. 071 belongs to visit
-management. No remote step has been run.
+management. Application of 072 is requester-confirmed; no independent remote ledger
+audit was performed for this reconciliation.
 
 Local checks:
 
@@ -88,8 +94,9 @@ Local checks:
   environment. `SENTRY_AUTH_TOKEN='' npm run build -- --webpack`: passes, with no
   application configuration change or deployment.
 
-Still required before Done: PR review/CI, an authorized migration/rollout, and the
-synthetic deployed acceptance path above. Actual authenticated mobile screenshots,
+Still required before Done: the synthetic deployed acceptance path above, including
+two-tab busy recovery, plus bilingual review of the Spanish drafts below.
+Actual authenticated mobile screenshots,
 keyboard/reduced-motion review, and a browser-disconnect check have not been recorded
 locally. Human messaging, LOC-003 and PAT-002-B are untouched.
 

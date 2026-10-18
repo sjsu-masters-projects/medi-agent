@@ -19,6 +19,7 @@ and provenance rules run independently of a model response.
 | Care-plan categorization | Gemini 3.8 Flash / LOW | None | Preserve approved plan; draft remains retryable |
 | Care-plan translation (second language for clinician review) | Gemini 3.8 Flash / LOW | None | Item stays untranslated; clinician retries or writes it |
 | Record titles (uses the document-explanation route) | Gemini 3.8 Flash / MEDIUM | Gemini 3.5 Flash / MEDIUM | Cleaned file name shown; bounded retries |
+| SOAP draft | Configured Pro / LOW | None | Return failure; write no note |
 
 The authoritative route definitions, output ceilings, thinking levels, kill switches, and
 latency budgets are in `backend/src/app/adk/registry.py`.
@@ -63,6 +64,29 @@ documented in `.env.example`; do not commit a real `.env` file.
     is exposed. It must not be silently presented as successful routine triage.
 
 ## Evidence and limits
+
+### AI-006 / bounded EVA-001 — October 17 local implementation
+
+SOAP retains `GEMINI_PRO_MODEL` and now uses `generate_for_workload(Workload.SOAP)`.
+`SOAP_AI_ENABLED` controls availability; `SOAP_GENERATION_TIMEOUT_SECONDS` defaults
+to 90 seconds (valid range greater than zero through 300). The route allows 4096
+output tokens and LOW thinking. These are operational limits, not measured SOAP
+latency, quality, or clinical performance. No backup model is qualified here.
+Structured output must validate and all four SOAP sections must contain text;
+disabled, timed-out, failed, truncated, malformed or empty generation writes no note.
+The stored model attribution follows the single configured route. Failure logs
+contain a safe category/type rather than raw provider exceptions.
+
+Coordinator/responder instructions permit bounded everyday wellness education.
+Medication/condition facts still require retrieved sources, and patient-specific
+facts still require the record. Mild stable symptoms and low mood may be routine
+when the stated context supports it; significant new/worsening symptoms, suspected
+medication reactions and unsafe-dose/held-medication scenarios retain escalation.
+No urgency-lowering heuristic or deterministic floor change was introduced.
+
+The bounded demo suite and offline evidence are described in
+[demo AI evaluation](../demo-ai-evaluation.md). Prompt changes are not proof of
+model behavior: real-provider and deployed checks remain unperformed in this lane.
 
 ### Capacity controls — 2026-10-03 (deployed; merged #127)
 

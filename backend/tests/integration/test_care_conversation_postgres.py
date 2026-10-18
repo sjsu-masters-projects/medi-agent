@@ -683,3 +683,216 @@ def test_concurrent_read_then_send_leaves_arrival_unread(sql):
 def test_stale_transaction_isolation_fails_closed(sql):
     error = sql("BEGIN ISOLATION LEVEL REPEATABLE READ; " + operation("list"), succeeds=False)
     assert "requires read committed" in error
+
+
+@pytest.fixture
+def activity_sql(sql):
+    # Install actual care-plan table/wording definitions. Clinical-source tables
+    # are prerequisites only; no approval/projection function is replaced here.
+    sql("""
+      CREATE TABLE clinical_recommendations(id uuid PRIMARY KEY);
+      CREATE TABLE clinical_facts(id uuid PRIMARY KEY);
+    """)
+    sql(
+        (MIGRATION.parent / "040_clinician_approved_care_plans.sql")
+        .read_text()
+        .split("ALTER TABLE public.medications")[0]
+    )
+    sql(
+        (MIGRATION.parent / "049_bilingual_care_plan_wording.sql")
+        .read_text()
+        .split("-- Projection copies")[0]
+    )
+    gate = (MIGRATION.parent / "048_patient_upload_care_plan_review_gate.sql").read_text()
+    sql(gate.split("CREATE FUNCTION private.care_plan_fact_is_eligible")[0])
+    sql("""
+      GRANT SELECT,INSERT,UPDATE ON care_plan_versions,care_plan_items,care_plan_audit_events TO service_role;
+      ALTER TABLE care_plan_versions ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE care_plan_items ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE care_plan_audit_events ENABLE ROW LEVEL SECURITY;
+      REVOKE ALL ON care_plan_items FROM PUBLIC,anon,authenticated;
+      REVOKE ALL ON FUNCTION private.lock_care_plan_evidence(uuid,boolean) FROM PUBLIC,anon,authenticated;
+      GRANT EXECUTE ON FUNCTION private.lock_care_plan_evidence(uuid,boolean) TO service_role;
+    """)
+    migration = (MIGRATION.parent / "073_care_conversation_activity_review.sql").read_text()
+    sql(migration)
+    sql(migration)  # rerun safety, including grants and final assertions
+    plan, item = str(uuid4()), str(uuid4())
+    sql(f"""
+      INSERT INTO care_plan_versions(id,patient_id,version_number,status,approved_by,approved_at)
+        VALUES('{plan}','{PATIENT}',1,'approved','{CLINICIAN}',now());
+      INSERT INTO care_plan_items(id,plan_version_id,category,title,instructions,frequency)
+        VALUES('{item}','{plan}','hydration','Synthetic activity','Approved source instruction','daily');
+    """)
+    return sql, plan, item
+
+
+def activity_operation(action, payload, *, actor=PATIENT, role="patient"):
+    return operation(action, payload, actor=actor, role=role).replace(
+        "public.care_conversation_operation(", "public.care_conversation_activity_operation("
+    )
+
+
+def attached_message(sql, item):
+    thread = open_thread(sql)
+    payload = {
+        "conversation_id": thread["id"],
+        "body": "Question about frequency",
+        "client_message_id": str(uuid4()),
+        "care_plan_item_id": item,
+    }
+    message = json.loads(sql(activity_operation("send", payload)))
+    return thread, payload, message
+
+
+def test_activity_send_replay_and_context_mismatch(activity_sql):
+    sql, _, item = activity_sql
+    _, payload, message = attached_message(sql, item)
+    assert message["activity_context"]["item_id"] == item
+    assert json.loads(sql(activity_operation("send", payload)))["id"] == message["id"]
+    error = sql(activity_operation("send", {**payload, "care_plan_item_id": None}), succeeds=False)
+    assert "idempotency mismatch" in error
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "1"
+
+
+def test_activity_draft_reuses_items_and_never_publishes(activity_sql):
+    sql, plan, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    payload = {"conversation_id": thread["id"], "message_id": message["id"]}
+    first = json.loads(
+        sql(activity_operation("review", payload, actor=CLINICIAN, role="clinician"))
+    )
+    second = json.loads(
+        sql(activity_operation("review", payload, actor=CLINICIAN, role="clinician"))
+    )
+    assert first == second
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{plan}'") == "approved"
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{first['plan_id']}'") == "draft"
+    assert (
+        sql(f"SELECT review_source_item_id FROM care_plan_items WHERE id='{first['item_id']}'")
+        == item
+    )
+    assert sql("SELECT count(*) FROM care_plan_items") == "2"
+    assert (
+        sql("SELECT count(*) FROM care_plan_audit_events WHERE event_type='message_review_opened'")
+        == "1"
+    )
+    assert sql("SELECT count(*) FROM medications") == "0"
+    assert sql("SELECT count(*) FROM obligations") == "0"
+
+
+@pytest.mark.parametrize(
+    "actor,role", [(PATIENT, "patient"), (OTHER, "clinician"), (FOREIGN, "patient")]
+)
+def test_activity_review_does_not_cross_private_threads(activity_sql, actor, role):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    sql(
+        activity_operation(
+            "review",
+            {"conversation_id": thread["id"], "message_id": message["id"]},
+            actor=actor,
+            role=role,
+        ),
+        succeeds=False,
+    )
+    assert sql("SELECT count(*) FROM care_plan_versions WHERE status='draft'") == "0"
+
+
+def test_activity_source_replacement_blocks_new_sends_and_review(activity_sql):
+    sql, plan, item = activity_sql
+    thread, payload, message = attached_message(sql, item)
+    sql(f"UPDATE care_plan_versions SET status='superseded' WHERE id='{plan}'")
+    # Same saved request remains recoverable; no new send or draft from stale data.
+    assert json.loads(sql(activity_operation("send", payload)))["id"] == message["id"]
+    sql(activity_operation("send", {**payload, "client_message_id": str(uuid4())}), succeeds=False)
+    sql(
+        activity_operation(
+            "review",
+            {"conversation_id": thread["id"], "message_id": message["id"]},
+            actor=CLINICIAN,
+            role="clinician",
+        ),
+        succeeds=False,
+    )
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "1"
+
+
+def test_activity_foreign_item_rolls_back_message_and_audit(activity_sql):
+    sql, plan, item = activity_sql
+    sql(f"UPDATE care_plan_versions SET patient_id='{FOREIGN}' WHERE id='{plan}'")
+    thread = open_thread(sql)
+    sql(
+        activity_operation(
+            "send",
+            {
+                "conversation_id": thread["id"],
+                "body": "Synthetic",
+                "client_message_id": str(uuid4()),
+                "care_plan_item_id": item,
+            },
+        ),
+        succeeds=False,
+    )
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "0"
+    assert sql("SELECT count(*) FROM care_conversation_audit_events WHERE action='sent'") == "0"
+
+
+def test_activity_revocation_and_browser_roles_fail_closed(activity_sql):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    sql(f"UPDATE care_teams SET status='inactive' WHERE id='{TEAM}'")
+    payload = {"conversation_id": thread["id"], "message_id": message["id"]}
+    sql(activity_operation("review", payload, actor=CLINICIAN, role="clinician"), succeeds=False)
+    for role in ("anon", "authenticated"):
+        sql(
+            f"SET ROLE {role}; SELECT public.care_conversation_activity_operation('{PATIENT}','patient','send','{{}}');",
+            succeeds=False,
+        )
+
+
+def test_activity_concurrent_draft_review_is_idempotent(activity_sql):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    request = activity_operation(
+        "review",
+        {"conversation_id": thread["id"], "message_id": message["id"]},
+        actor=CLINICIAN,
+        role="clinician",
+    )
+    first = sql.start("BEGIN; " + request + " SELECT pg_sleep(0.4); COMMIT;", "activity-first")
+    wait_event(sql, "activity-first", "PgSleep")
+    second = sql.start(request, "activity-second")
+    wait_event(sql, "activity-second", "Lock")
+    finish(first)
+    finish(second)
+    assert sql("SELECT count(*) FROM care_plan_versions WHERE status='draft'") == "1"
+    assert sql("SELECT count(*) FROM care_plan_items") == "2"
+
+
+def test_activity_review_waits_before_publication_row_locks(activity_sql):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    request = activity_operation(
+        "review",
+        {"conversation_id": thread["id"], "message_id": message["id"]},
+        actor=CLINICIAN,
+        role="clinician",
+    )
+    draft = json.loads(sql(request))
+    # Reproduce publication's actual evidence -> draft -> patient lock footprint.
+    publication = sql.start(
+        f"""BEGIN; SET ROLE service_role;
+      SELECT private.lock_care_plan_evidence('{PATIENT}',true);
+      SELECT id FROM care_plan_versions WHERE id='{draft["plan_id"]}' FOR UPDATE;
+      SELECT pg_sleep(0.4);
+      SELECT id FROM patients WHERE id='{PATIENT}' FOR UPDATE;
+      COMMIT;""",
+        "publication-locks",
+    )
+    wait_event(sql, "publication-locks", "PgSleep")
+    review = sql.start(request, "activity-after-publication")
+    wait_event(sql, "activity-after-publication", "Lock")
+    finish(publication)
+    finish(review)
+    assert sql("SELECT count(*) FROM care_plan_versions WHERE status='draft'") == "1"

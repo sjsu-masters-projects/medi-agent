@@ -94,6 +94,13 @@ filter and no new request parameter.
 
 ### Message translation (LOC-003)
 
+Patient-linked activity messages show the approved activity separately from the
+human text. **Review activity in draft** is an explicit action, not a reply: the
+server rechecks authorization and source currency, creates/reuses the draft and
+opens its exact item. Historical activity references cannot start a new review.
+Failures leave the conversation intact. All bilingual review and publication gates
+remain; a reply never changes the active plan or reminders (COM-002).
+
 A conversation read returns originals and stored translations only; messages that still need one carry
 `translation_pending`. The portal then asks `POST /care-conversations/{id}/messages/{message_id}/translation`
 for each, three at a time, shows "Translating…" and swaps the text in per the display rules. Typing and

@@ -59,6 +59,18 @@ approved in that language (LOC-001); it never machine-translates clinical instru
 historical messages. Failed saves
 retain the prior preference. Guest entry screens carry a separate language choice
 until a profile exists; chat has no competing persisted language setting.
+The locale-only `patient-portal.locale` cookie supplies the server document language.
+The request proxy accepts supported `lang` queries on entry routes and carries that
+locale into the same response, including `html lang`. Existing guest choices stored
+only in local storage resolve before translated content is shown and then populate
+the cookie. Authentication remains in local storage; authenticated screens wait for
+the saved patient profile before rendering. A loaded profile and successful language
+saves refresh the cookie; failed saves retain the existing preference. This cookie
+is a presentation hint, never an identity or authorization source. First visits
+without a hint briefly defer content until the browser locale is resolved.
+Today stores stable failure keys and resolves feedback in the current language,
+including after a language switch; backend error prose is not displayed. Notification
+load/write feedback already follows the same localized-key pattern.
 Today's symptom shortcut opens Nora directly, without an intermediate timeline.
 The existing Symptoms URL remains a compact mobile-friendly handoff and explicitly
 says that patient symptom history is not connected; it must not display invented
@@ -75,6 +87,13 @@ Enter-to-send and Shift+Enter for a new line; human conversation input retains i
 existing multiline behavior.
 
 ## Care team conversations
+
+**Ask about a plan activity** opens an optional approved-activity picker in the
+private composer. It does not choose a clinician or send automatically. The
+attachment stays bound to an uncertain-send retry; it clears after a confirmed
+send. Saved messages show the referenced approved wording separately from human
+text and label replaced activities as historical. Neither the question nor the
+clinician's reply changes the plan or reminder schedule (COM-002).
 
 In Chat, choose **Care team messages**, then explicitly select a linked clinician.
 Each clinician has a separate thread labelled with their clinic. Nora remains a

@@ -104,13 +104,30 @@ class CareConversationService:
             ),
         )
 
+    async def review_activity(self, conversation: UUID, message: UUID) -> dict[str, Any]:
+        """Explicit clinician action creates/reuses a draft, never publishes."""
+        if self.actor.role != "clinician":
+            raise self._denial()
+        return cast(
+            dict[str, Any],
+            await self._call(
+                "review",
+                {
+                    "conversation_id": str(conversation),
+                    "message_id": str(message),
+                },
+            ),
+        )
+
     async def _call(self, action: str, payload: dict[str, Any] | None = None) -> Any:
         if self.actor.role not in {"patient", "clinician"}:
             raise self._denial()
         try:
             result = await asyncio.to_thread(
                 self.db.rpc(
-                    "care_conversation_operation",
+                    "care_conversation_activity_operation"
+                    if action in {"send", "review"}
+                    else "care_conversation_operation",
                     {
                         "p_actor_id": str(self.actor.id),
                         "p_actor_role": self.actor.role,
@@ -122,7 +139,17 @@ class CareConversationService:
         except APIError as exc:
             if exc.code == "42501":
                 raise self._denial() from None
+            if action == "review" and exc.code in {"23505", "40001"}:
+                raise ValidationError(
+                    "The care-plan draft changed. Reload before opening this activity.",
+                    code="CARE_PLAN_REVIEW_CONFLICT",
+                ) from None
             if exc.code == "22023":
+                if action == "review" or (payload or {}).get("care_plan_item_id"):
+                    raise ValidationError(
+                        "This activity cannot be opened from this message. Reload the current care plan.",
+                        code="ACTIVITY_CONTEXT_UNAVAILABLE",
+                    ) from None
                 raise ValidationError("Invalid conversation request") from None
             if exc.code == "23505":
                 raise ValidationError(

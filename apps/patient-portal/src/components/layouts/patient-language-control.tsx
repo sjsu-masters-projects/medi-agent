@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { Icon } from "@/components/ui/icons";
 import { usePatientProfileState } from "@/hooks/use-patient-profile";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
-import { normalizeLocale, type Locale } from "@/types";
+import { getLocaleLabel, SUPPORTED_LOCALES, normalizeLocale, type Locale } from "@/types";
+import { rememberPatientLocale } from "@/content/patient-locale";
+import { useInitialPatientLocale } from "@/contexts/patient-locale-context";
 
 export function PatientLanguageControl({ visible = true }: { visible?: boolean }) {
   const { profile, updateProfile, loading, error, refresh } = usePatientProfileState();
@@ -14,10 +16,11 @@ export function PatientLanguageControl({ visible = true }: { visible?: boolean }
   const currentToken = useRef(token);
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
-  const locale = normalizeLocale(profile?.preferredLanguage);
+  const initialLocale = useInitialPatientLocale();
+  const locale = normalizeLocale(profile?.preferredLanguage ?? initialLocale);
   const spanish = locale === "es-MX";
   useEffect(() => { currentToken.current = token; setSaving(false); setFailed(false); }, [token]);
-  useEffect(() => { document.documentElement.lang = locale; }, [locale]);
+  useLayoutEffect(() => { if (profile) rememberPatientLocale(locale); }, [locale, profile]);
 
   async function changeLanguage(next: Locale) {
     if (!token || !profile || saving || next === locale) return;
@@ -45,7 +48,7 @@ export function PatientLanguageControl({ visible = true }: { visible?: boolean }
       <select id="portal-language" aria-busy={saving} disabled={!profile || loading || saving}
         className="min-h-[52px] w-full max-w-full rounded-2xl border border-line-strong bg-surface px-4 py-3 text-base font-medium text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15 disabled:opacity-60"
         value={locale} onChange={(event) => void changeLanguage(event.target.value as Locale)}>
-        <option value="en-US">English</option><option value="es-MX">Español</option>
+        {SUPPORTED_LOCALES.map((value) => <option key={value} value={value}>{getLocaleLabel(value)}</option>)}
       </select>
     </div>
     {saving ? <p role="status" className="flex items-center gap-2 text-sm text-muted"><span aria-hidden="true" className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand/30 border-t-brand" />{spanish ? "Guardando idioma…" : "Saving language…"}</p> : null}

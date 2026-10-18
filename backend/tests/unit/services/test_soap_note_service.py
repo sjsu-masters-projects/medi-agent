@@ -17,7 +17,14 @@ from uuid import uuid4
 
 import pytest
 
+from app.adk.registry import Workload, route_for
 from app.models.dashboard import SoapNote
+from app.models.generation import (
+    GenerationErrorCode,
+    GenerationProviderError,
+    GenerationResponse,
+    GenerationTelemetry,
+)
 from app.services.soap_note_prompts import build_soap_prompt
 from app.services.soap_note_service import (
     SoapNoteService,
@@ -31,6 +38,15 @@ NOTE = SoapNote(
     assessment="Medication adherence concern",
     plan="1. Review medication schedule",
 )
+
+
+def response(text: str) -> GenerationResponse:
+    return GenerationResponse(
+        text=text,
+        telemetry=GenerationTelemetry(
+            provider="soap_pro", model=route_for(Workload.SOAP).primary.model_id, latency_ms=1
+        ),
+    )
 
 
 @pytest.fixture
@@ -217,24 +233,97 @@ class TestCompose:
     @pytest.mark.asyncio
     async def test_a_note_is_returned(self, mock_db) -> None:
         with patch(
-            "app.services.soap_note_service.GeminiClient.generate_structured",
-            new=AsyncMock(return_value=NOTE),
-        ):
+            "app.services.soap_note_service.generate_for_workload",
+            new=AsyncMock(return_value=response(NOTE.model_dump_json())),
+        ) as generate:
             note = await SoapNoteService(mock_db).compose({"patient_info": {}})
 
         assert note is not None
         assert note.plan == "1. Review medication schedule"
+        assert generate.await_args.args == (Workload.SOAP,)
+        assert generate.await_args.kwargs["response_schema"] == SoapNote.model_json_schema()
 
     @pytest.mark.asyncio
     async def test_a_failed_call_returns_nothing_rather_than_an_empty_note(self, mock_db) -> None:
         """An empty note would be stored and read as a clinician-reviewed document."""
         with patch(
-            "app.services.soap_note_service.GeminiClient.generate_structured",
+            "app.services.soap_note_service.generate_for_workload",
             new=AsyncMock(side_effect=RuntimeError("model unavailable")),
         ):
             note = await SoapNoteService(mock_db).compose({"patient_info": {}})
 
         assert note is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "not JSON",
+            "{}",
+            '{"subjective":""}',
+            NOTE.model_copy(update={"plan": "  "}).model_dump_json(),
+        ],
+    )
+    async def test_invalid_or_empty_note_never_reaches_storage(
+        self, mock_db, patient_id, clinician_id, text
+    ) -> None:
+        service = SoapNoteService(mock_db)
+        with (
+            patch(
+                "app.services.soap_note_service.generate_for_workload",
+                AsyncMock(return_value=response(text)),
+            ),
+            patch.object(service, "store", AsyncMock()) as store,
+        ):
+            result = await service.generate(patient_id=patient_id, clinician_id=clinician_id)
+        assert result.status == "error"
+        assert result.soap_note is None
+        store.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_disabled_route_calls_no_provider_and_stores_no_note(
+        self, mock_db, patient_id, clinician_id
+    ) -> None:
+        service = SoapNoteService(mock_db)
+        with (
+            patch("app.config.settings.soap_ai_enabled", False),
+            patch("app.adk.background_generation.provider_for") as provider,
+            patch("app.adk.background_generation.schedule_generation_record"),
+            patch.object(service, "store", AsyncMock()) as store,
+        ):
+            result = await service.generate(patient_id=patient_id, clinician_id=clinician_id)
+        assert result.status == "error"
+        provider.assert_not_called()
+        store.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            TimeoutError("secret provider detail"),
+            GenerationProviderError(GenerationErrorCode.RATE_LIMITED, "secret provider detail"),
+            GenerationProviderError(GenerationErrorCode.TRUNCATED, "secret provider detail"),
+        ],
+    )
+    async def test_routed_failure_stores_nothing_and_logs_no_raw_error(
+        self, mock_db, patient_id, clinician_id, failure, caplog
+    ) -> None:
+        service = SoapNoteService(mock_db)
+        provider = MagicMock(generate=AsyncMock(side_effect=failure))
+        with (
+            patch("app.adk.background_generation.provider_for", return_value=provider) as factory,
+            patch("app.adk.background_generation.schedule_generation_record"),
+            patch.object(service, "store", AsyncMock()) as store,
+        ):
+            result = await service.generate(patient_id=patient_id, clinician_id=clinician_id)
+        assert result.status == "error"
+        assert result.soap_note_id is None
+        store.assert_not_awaited()
+        factory.assert_called_once_with(
+            route_for(Workload.SOAP).primary,
+            timeout_seconds=route_for(Workload.SOAP).budget_seconds,
+        )
+        assert "secret provider detail" not in caplog.text
 
 
 class TestStore:
@@ -252,6 +341,10 @@ class TestStore:
 
         assert stored is not None
         assert stored["plan"] == "Plan"
+        assert (
+            query.insert.call_args.args[0]["model_used"]
+            == route_for(Workload.SOAP).primary.model_id
+        )
 
     @pytest.mark.asyncio
     async def test_an_insert_returning_nothing_is_not_a_stored_note(

@@ -10,12 +10,14 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from scripts.run_ai_eval import (
     DEFAULT_SCENARIOS,
     ProviderSpec,
     _error_type,
+    _google_adc_bearer,
     _select,
     parse_args,
     parse_provider_spec,
@@ -30,6 +32,20 @@ FIXTURE_ROOT = Path(__file__).resolve().parent.parent.parent / "fixtures" / "eva
 
 def test_default_scenario_directory_is_the_committed_fixture_set() -> None:
     assert DEFAULT_SCENARIOS == FIXTURE_ROOT
+
+
+def test_adc_refresh_cast_preserves_lazy_refresh_contract_without_credentials() -> None:
+    credentials = MagicMock(valid=False, token="synthetic-token")
+
+    def refreshed(_request: object) -> None:
+        credentials.valid = True
+
+    credentials.refresh.side_effect = refreshed
+    with patch("google.auth.default", return_value=(credentials, "synthetic-project")):
+        token = _google_adc_bearer()
+        assert token() == "synthetic-token"
+        assert token() == "synthetic-token"
+    credentials.refresh.assert_called_once()
 
 
 def test_provider_spec_parses_with_and_without_a_key() -> None:

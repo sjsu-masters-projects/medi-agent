@@ -1,4 +1,5 @@
 import { normalizeLocale, type Locale } from "@/types";
+import { isAuthEntryPath, readLocaleCookie, supportedPatientLocale } from "@/content/patient-locale";
 
 export const GUEST_LOCALE_STORAGE_KEY = "patient-portal.guest.locale";
 
@@ -49,7 +50,8 @@ export function getAuthEntryCopy(locale: Locale) {
 export function authEntryLocale(): Locale {
   if (typeof window === "undefined") return "en-US";
   try {
-    return normalizeLocale(new URLSearchParams(window.location.search).get("lang") ?? window.localStorage.getItem(GUEST_LOCALE_STORAGE_KEY) ?? window.navigator.language);
+    return (isAuthEntryPath(window.location.pathname) ? supportedPatientLocale(new URLSearchParams(window.location.search).get("lang")) : null) ?? readLocaleCookie()
+      ?? normalizeLocale(window.localStorage.getItem(GUEST_LOCALE_STORAGE_KEY) ?? window.navigator.language);
   } catch {
     return normalizeLocale(window.navigator.language);
   }

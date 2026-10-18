@@ -38,6 +38,7 @@ vi.mock("@/services/api", () => ({
 
 describe("Patient onboarding page", () => {
     beforeEach(() => {
+        document.cookie = "patient-portal.locale=; Path=/; Max-Age=0";
         window.localStorage.clear();
         window.history.replaceState({}, "", "/");
         replace.mockReset();

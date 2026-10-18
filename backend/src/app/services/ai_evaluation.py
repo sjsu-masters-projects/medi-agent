@@ -22,7 +22,10 @@ from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from app.adk.agents.care_coordinator.prompts import CARE_COORDINATOR_INSTRUCTION
+from app.adk.agents.care_coordinator.prompts import (
+    CARE_COORDINATOR_INSTRUCTION,
+    CARE_RESPONDER_INSTRUCTION,
+)
 from app.agents.ingestion.prompts import (
     EXTRACT_CONTENT_SYSTEM,
     GENERATE_SUMMARY_SYSTEM,
@@ -579,6 +582,17 @@ def _build_explanation_request(
     scenario: EvalScenario, _variant: PromptVariant
 ) -> GenerationRequest:
     inputs = scenario.inputs
+    if "care_responder" in scenario.tags:
+        return GenerationRequest(
+            prompt=json.dumps(
+                {"locale": scenario.locale, "message": inputs["message"], "notes": inputs["notes"]},
+                ensure_ascii=False,
+            ),
+            system_instruction=CARE_RESPONDER_INSTRUCTION,
+            temperature=0.2,
+            max_tokens=2048,
+            task=scenario.workload.value,
+        )
     prompt = summary_prompt(inputs)
     system = GENERATE_SUMMARY_SYSTEM
     if scenario.locale == "es-MX":

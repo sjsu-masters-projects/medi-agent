@@ -16,6 +16,7 @@ class ConversationSend(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: str = Field(min_length=1, max_length=4000)
     client_message_id: UUID
+    care_plan_item_id: UUID | None = None
 
     @field_validator("body", mode="before")
     @classmethod
@@ -65,6 +66,7 @@ class ConversationMessage(BaseModel):
     # True when the viewer needs a translation that is not stored yet: ask for it with
     # POST .../messages/{id}/translation (a read never calls the model).
     translation_pending: bool = False
+    activity_context: dict[str, object] | None = None
 
 
 class MessageTranslationResult(BaseModel):

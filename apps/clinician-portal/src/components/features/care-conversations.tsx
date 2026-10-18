@@ -6,6 +6,7 @@ import type { RootState } from "@/store/store";
 import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { careConversations } from "@/services/care-conversations";
+import { ConversationActivityReview } from "./conversation-activity";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
@@ -347,7 +348,7 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
         const failureKind = conversationSendFailure(failure);
         onDraft({
           body: draft.body,
-          clientMessageId: failureKind === "invalid" ? undefined : clientMessageId,
+          clientMessageId: failureKind === "invalid" || failureKind === "activityUnavailable" ? undefined : clientMessageId,
           failure: failureKind,
         });
       }
@@ -376,6 +377,7 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
           // A clinician reads English: only a translation into English is ever shown.
           const sourceLabel = own ? undefined : (translationLocale === "en-US" ? "Translated from Spanish" : undefined);
           return <li key={message.id} className={`ma-bubble flex max-w-[78%] flex-col gap-1 ${own ? "items-end self-end" : "items-start self-start"}`}>
+            {message.activity_context ? <ConversationActivityReview activity={message.activity_context} token={token} conversationId={thread.id} messageId={message.id} /> : null}
             <p className="px-1 text-[11px] text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
             <p className={`whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm ${own ? "rounded-[18px_18px_6px_18px] bg-primary text-white" : "rounded-[18px_18px_18px_6px] bg-surface-2 text-ink"}`}>{message.body}</p>
             {message.translation_pending && !own ? <p role="status" className="px-1 text-[11px] text-muted">{copy.translating}</p> : null}
