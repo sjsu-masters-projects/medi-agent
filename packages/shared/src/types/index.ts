@@ -730,6 +730,9 @@ export interface SymptomIntake {
     timezone: string;
     timezone_fallback: boolean;
     answers: Record<string, IntakeAnswer>;
+    suggestions?: Record<string, string | number>;
+    existing_draft?: boolean;
+    review_requested?: boolean;
     questions?: IntakeQuestion[];
     current_question: IntakeQuestion | null;
     progress?: { resolved: number; budget: number };

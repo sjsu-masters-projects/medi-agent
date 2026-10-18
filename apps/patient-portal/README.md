@@ -207,7 +207,7 @@ reports. This does not activate guided intake. Initial draft-read failures
 offer reload feedback; only an uncertain mutation uses the action/save recovery
 message. Loading a draft does not imply that a report was submitted.
 
-Nora mounts the private intake panel; human message threads do not. The panel recovers
+Nora places the private intake panel after the latest chat turn; human message threads do not mount it. The panel recovers
 the latest owned state for the selected Nora conversation by REST on authentication/reconnect signals, asks paired-locale
 library questions, and supports unknown/declined, corrections, cancellation, review
 and consent-based confirmation. It stores pending action identities only in memory;
@@ -216,9 +216,22 @@ A lost write response retains its exact identity for reload/retry. Account switc
 abort pending reads and reject stale responses. Controls use localized labels,
 44-pixel button targets and focus the next unanswered field without stealing chat focus.
 
-A real approved library and authorized schema rollout are required to activate this
-screen. With the current pending-review manifest, start fails closed without saving a
-report. Follow [the synthetic journey and verification record](../../docs/pat-002-b-acceptance-2026-10-12.md).
+Answer the current question in Nora's main composer by typing or dictation. In
+hands-free mode prompts are read aloud and listening resumes after playback;
+local pause detection ends an answer after speech and 1.8 seconds of silence when
+Web Audio is available (15 seconds of initial silence; 60-second recording limit).
+The microphone button remains a manual stop. No analysis samples are stored;
+unknown/skip and explicitly accepting a source suggestion are supported. Ambiguous
+numbers need clarification. Private STT recordings are not stored as chat audio;
+private TTS has no chat message ID. Late recordings cannot answer a different
+revision. Detailed fields remain available as a fallback. Read the preview, select
+consent and press **Confirm and share**; spoken assent never submits it.
+
+Approved `candidate-1` remains active. Revised `candidate-2` wording/applicability is
+pending genuine review and cannot activate yet. Migration 076 adds durable ADR and
+review notices; the existing retry worker must run. Follow the
+[October 17 verification record](../../docs/pat-002-b-acceptance-2026-10-17.md) and
+[coordinated rollout](../../docs/pat-002-b-rollout.md).
 The saved patient symptom timeline remains PAT-002-C.
 
 Chat results card: an assistant message may carry `attachments` of type `document_results`, built by the server from the cited document's extracted results (never from the reply text). The chat shows them under the reply: critical results first with a contact-your-care-team line, out-of-range results with chips, the rest behind a toggle, and a link to the document in Records.

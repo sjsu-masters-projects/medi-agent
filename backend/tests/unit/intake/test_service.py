@@ -120,6 +120,7 @@ async def test_context_withdrawal_masks_snapshot_and_blocks_confirmation(monkeyp
     svc = service()
     row = resolved_row()
     row.update(status="ready_for_confirmation", preview={"context": {}})
+    svc._source = AsyncMock(return_value={"content": "A synthetic symptom"})
     svc.library = MagicMock(return_value=synthetic_bundle())
     monkeypatch.setattr(
         "app.services.symptom_intake_service.verify_context", AsyncMock(return_value=False)

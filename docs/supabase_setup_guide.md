@@ -128,15 +128,16 @@ fail-closed block already performs (it raises and rolls the migration back on an
 
 ### Confirmed symptom ADR handoff (076, PAT-002-B) — written, not applied
 
-`076_confirmed_symptom_adr_handoff.sql` requires the already-applied confirmed-intake
-migration 060. It normalizes exact active-medication name matching and creates one
-report-keyed `submitted` A2A task in the same transaction as an eligible patient-confirmed
-product concern. The trigger does not assign causality, create an FDA submission or invent
-a medication link for an unlisted product. `A2A_RETRY_WORKER_ENABLED=true` is required so a
-task left unclaimed by an interrupted request is recovered.
+`076_confirmed_symptom_handoff.sql` requires the already-applied confirmed-intake
+migration 060 and migration 065 clinic memberships. It normalizes exact active-medication
+name matching, queues one report-keyed `retrying` ADR screen in the same confirmation
+transaction and sends minimal notices to active assigned clinic members. An unlisted
+patient-named product remains testimony and never receives a fabricated medication link.
+The trigger does not assign causality or create an FDA submission.
+`A2A_RETRY_WORKER_ENABLED=true` is required so interrupted work is recovered.
 
 Migration 076 has SHA-256
-`92566fd505a586913ec0d2feb1a554944cc98f73bd1049b4581eb03016c274a7` and is not applied
+`a5aa9136fe4191d12ef0d9c886db382ce53aee8ca72900135adfecaa139040e0` and is not applied
 to any hosted project. Apply it through the ledger only after explicit authorization and
 before deploying the backend that depends on its atomic-outbox guarantee. The hosted ledger
 already contains the migrations through 075 described below; 076 is the only new migration
@@ -402,7 +403,7 @@ The deployed backend setting and deployed acceptance remain separate.
 | --- | --- |
 | `059_chat_safety_alerts.sql` | `9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5` |
 | `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
-| `076_confirmed_symptom_adr_handoff.sql` | `92566fd505a586913ec0d2feb1a554944cc98f73bd1049b4581eb03016c274a7` |
+| `076_confirmed_symptom_handoff.sql` | `a5aa9136fe4191d12ef0d9c886db382ce53aee8ca72900135adfecaa139040e0` |
 
 Before an authorized rollout, drain old direct symptom-report writers, including
 old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct
@@ -424,3 +425,12 @@ Rollback disables intake and its ordinary writes while preserving drafts, confir
 reports and durable safety-alert retry. It must not restore automatic unconfirmed
 report insertion. See [the acceptance record](pat-002-b-acceptance-2026-10-12.md) for
 local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
+
+
+The October 17 handoff work is now the migration 076 described above because current
+main already owns migration 071. Keep applied 059/060 names and checksums unchanged.
+The exact prerequisites, authorization state and read-only
+`preflight_symptom_intake.py` procedure are in the
+[PAT-002-B rollout](pat-002-b-rollout.md). Do not run unrelated pending migrations as
+part of this change. Candidate-2 remains pending genuine review; neither SQL nor a
+passing test approves a question bundle.

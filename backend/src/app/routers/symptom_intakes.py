@@ -14,6 +14,7 @@ from app.models.symptom_intake import (
     IntakeConfirm,
     IntakeMutation,
     IntakePreview,
+    IntakeReply,
     IntakeStart,
 )
 from app.services.symptom_intake_service import SymptomIntakeService
@@ -53,6 +54,13 @@ async def answer(
     intake_id: UUID, data: IntakeAnswer, service: SymptomIntakeService = Depends(intake_service)
 ) -> Any:
     return await service.answer(intake_id, data)
+
+
+@router.post("/symptom-intakes/{intake_id}/reply")
+async def reply(
+    intake_id: UUID, data: IntakeReply, service: SymptomIntakeService = Depends(intake_service)
+) -> Any:
+    return await service.reply(intake_id, data)
 
 
 @router.post("/symptom-intakes/{intake_id}/cancel")

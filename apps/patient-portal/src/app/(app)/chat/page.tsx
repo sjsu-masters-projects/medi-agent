@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy, getChatRecoveryCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
-import { SymptomIntakePanel } from "@/components/features/symptom-intake-panel";
+import { SymptomIntakePanel, type IntakeComposerState } from "@/components/features/symptom-intake-panel";
 import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
 import { ADRFollowUpView } from "@/components/features/adr-follow-up-view";
 import { getADRFollowUpCopy } from "@/content/adr-follow-up-copy";
@@ -18,7 +18,7 @@ import { Icon } from "@/components/ui/icons";
 import { ChatTextarea } from "@/components/features/chat-presentation";
 import { ChatTurnRecovery } from "@/components/features/chat-turn-recovery";
 import { ProcessingDots } from "@/components/ui/motion";
-import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
+import { usePatientChatSession, type PrivateReplyHandler } from "@/hooks/use-patient-chat-session";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { usePatientShell } from "@/contexts/patient-shell-context";
 import { ChatRole, DEFAULT_LOCALE } from "@/types";
@@ -65,11 +65,25 @@ export default function ChatPage() {
     const careTeamRegionRef = useRef<HTMLDivElement | null>(null);
     const previousInbox = useRef(inbox);
     const wasFollowUp = useRef(false);
+    const privateReply = useRef<PrivateReplyHandler | null>(null);
+    const registerPrivateReply = useCallback((handler: PrivateReplyHandler | null) => { privateReply.current = handler; }, []);
+    const routePrivateReply = useCallback<PrivateReplyHandler>((text, mode) => privateReply.current?.(text, mode) ?? "unhandled", []);
+    const [intakeComposer, setIntakeComposer] = useState<IntakeComposerState>({ active: false, busy: false, revision: "" });
+    const updateIntakeComposer = useCallback((next: IntakeComposerState) => {
+        setIntakeComposer((previous) => previous.active === next.active && previous.busy === next.busy && previous.revision === next.revision && previous.locale === next.locale && previous.accepting === next.accepting ? previous : next);
+    }, []);
     const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
-        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
+        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, turnBusy,
+        voiceError, voiceStatus } = usePatientChatSession(
+            intakeComposer.active ? intakeComposer.locale ?? locale : locale,
+            routePrivateReply,
+            intakeComposer.active,
+            Boolean(intakeComposer.accepting && !intakeComposer.busy),
+            intakeComposer.revision,
+        );
     const newChat = locale === "es-MX" ? "Nueva conversación" : "New chat";
     const openNora = (conversationId: string = todayConversationId()) => {
         openConversation(conversationId);
@@ -123,7 +137,7 @@ export default function ChatPage() {
         if (!loading && followLatestRef.current && !container.contains(document.activeElement)) {
             container.scrollTo({ top: container.scrollHeight, behavior: "instant" });
         }
-    }, [assistantDraft, isTyping, messages, assistantThread, sessionId, loading]);
+    }, [assistantDraft, isTyping, messages, assistantThread, sessionId, loading, intakeComposer]);
 
     const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
     if (followUpMode) {
@@ -196,7 +210,6 @@ export default function ChatPage() {
                     const container = event.currentTarget;
                     followLatestRef.current = container.scrollHeight - container.clientHeight - container.scrollTop <= 80;
                 }} className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-            <SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId={visibleMessages.findLast((message) => message.role === ChatRole.USER)?.id} />
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
             {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
                 <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
@@ -231,6 +244,9 @@ export default function ChatPage() {
                 {assistantDraft && <ChatBubble content={assistantDraft} isStreaming language={locale} locale={locale}
                     role="assistant" timestamp={assistantDraftStartedAt ?? new Date().toISOString()} />}
                 {isTyping && !assistantDraft && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
+                <SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId={visibleMessages.findLast((message) => message.role === ChatRole.USER)?.id}
+                    registerReply={registerPrivateReply} onComposerState={updateIntakeComposer} onRestoreInput={setInput} handsFree={handsFreeMode}
+                    onReadAloud={(text, language) => handlePlayAssistantMessage({ content: text, language })} />
             </div>
             </div>
             <form className="shrink-0 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={(event) => { followLatestRef.current = true; handleSend(event); }}>
@@ -240,18 +256,18 @@ export default function ChatPage() {
                         onKeyDown={(event) => {
                             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                                 event.preventDefault();
-                                if (input.trim() && connectionStatus === "connected" && profile)
+                                if (input.trim() && (intakeComposer.active || connectionStatus === "connected") && !intakeComposer.busy && profile)
                                     event.currentTarget.form?.requestSubmit();
                             }
                         }}
                         placeholder={voiceStatus === "listening" ? controls.listening : voiceStatus === "processing" ? controls.transcribing : copy.inputPlaceholder} value={input} />
                     <button className={`ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
-                        disabled={turnBusy || documentUnavailable || voiceStatus === "unsupported" || voiceStatus === "processing" || !profile} onClick={handleMicClick} type="button">
+                        disabled={turnBusy || (!intakeComposer.active && documentUnavailable) || voiceStatus === "unsupported" || voiceStatus === "processing" || intakeComposer.busy || !profile} onClick={handleMicClick} type="button">
                         {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
                     </button>
                     </div>
                     <button className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
-                        aria-label={controls.send} disabled={turnBusy || documentUnavailable || !input.trim() || connectionStatus !== "connected" || !profile} type="submit"><Icon name="send" /></button>
+                        aria-label={controls.send} disabled={turnBusy || (!intakeComposer.active && documentUnavailable) || !input.trim() || (!intakeComposer.active && connectionStatus !== "connected") || intakeComposer.busy || !profile} type="submit"><Icon name="send" /></button>
                 </div>
                 {handsFreeMode && <p className="px-2 text-xs text-brand-ink">{controls.autoPlay}</p>}
                 {!profile && <p className="px-2 text-sm text-muted" role="status">{controls.profileRequired}</p>}

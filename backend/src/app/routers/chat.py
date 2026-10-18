@@ -1011,9 +1011,11 @@ async def _process_chat_message(
                 }
             )
             assistant_content = (
-                "Tu borrador privado está abierto. Revisa el formulario antes de compartirlo."
+                "Tu borrador privado está abierto. Puedes responder a Nora por texto o voz. "
+                "Revisa y confirma antes de compartirlo."
                 if incoming.language == Language.ES
-                else "Your private draft is open. Review the form before sharing it."
+                else "Your private draft is open. You can answer Nora by text or voice. "
+                "Review and confirm before sharing."
             )
         except Exception:
             # If the guided form or its schema is unavailable, do not imply that a

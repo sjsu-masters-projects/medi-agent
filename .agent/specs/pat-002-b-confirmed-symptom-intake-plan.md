@@ -1126,3 +1126,31 @@ for exact observations and remaining denial/outage/touch/deployed checks.
 This checkpoint supersedes the historical pending-library and missing-migration
 statements above. The scope remains PAT-002-B: no PAT-002-C timeline or PR #136
 ADR follow-up implementation was added.
+
+## 25. October 17 review closure — authorized conversation and voice answers
+
+The requester explicitly selected chat questions and typed/voice answers with a
+separate **Confirm and share** button. This supersedes the earlier text-form-only
+presentation scope. A transcript or spoken assent cannot submit a report. Reuse
+the existing voice transport; private answers never enter ordinary chat history.
+
+Acceptance: the latest Nora turn presents one pinned question at a time, offers
+source-quoted suggestions for explicit acceptance, accepts typed/spoken answers
+and unknown/skip, reads prompts and preview aloud, preserves revision/retry state,
+and shows a plain-language review without database IDs/JSON. Correction invalidates
+consent. The canonical report transaction durably queues existing ADR screening and
+assigned-clinician review notice; emergency and urgent handling stay independent.
+Unlisted products remain labelled patient testimony and never modify medications.
+Reuse the existing ADR workspace; do not implement its separate follow-up lifecycle.
+
+`candidate-1` remains immutable. `candidate-2` is a pending-review draft that asks
+about concomitant products for every symptom and adds severity anchors. Its exact
+paired wording/hash needs genuine approval before live activation. Applied 059/060
+filenames/checksums remain fixed; additional SQL is additive and tested locally.
+
+Run owning API/service, real PostgreSQL transaction/permission and portal tests,
+then authenticated bilingual browser journeys with refresh, cancellation, access
+denial and connectivity interruption. Record actual evidence and remaining release
+gates. Prepare a concrete rollout preflight before asking for exact migration,
+configuration/deployment and merge authorization; never treat a green CI run as
+peer review or deployed acceptance.

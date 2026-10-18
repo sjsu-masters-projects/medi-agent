@@ -8,8 +8,15 @@ import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
 import { getChatControlsCopy, getPatientChatCopy, getChatRecoveryCopy } from "@/content/chat-copy";
+import { fetchActiveIntake, mutateIntake } from "@/services/symptom-intakes";
+import type { SymptomIntake } from "@/types";
 
-vi.mock("@/services/symptom-intakes", () => ({ fetchActiveIntake: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/services/symptom-intakes", () => ({ fetchActiveIntake: vi.fn().mockResolvedValue(null), mutateIntake: vi.fn() }));
+
+const privateDraft: SymptomIntake = { intake_id: "private-draft", status: "collecting", revision: 3,
+    locale: "en-US", timezone: "America/Los_Angeles", timezone_fallback: false, answers: {},
+    current_question: { id: "severity", answer_type: "rating", wording: { "en-US": "Choose your severity", "es-MX": "Elige tu intensidad" } },
+    library_available: true, can_review: false, can_confirm: false };
 
 const {
     buildChatWebSocketUrl,
@@ -28,7 +35,7 @@ const {
     fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
-    playAssistantVoiceResponse: vi.fn(() => null),
+    playAssistantVoiceResponse: vi.fn((_options: { onEnd?: () => void; onStart?: () => void }) => null),
     replace: vi.fn(),
     setConversationOpen: vi.fn(),
     shell: { conversationOpen: false },
@@ -155,6 +162,8 @@ function renderPage() {
 
 describe("Patient chat page", () => {
     beforeEach(() => {
+        vi.mocked(fetchActiveIntake).mockReset().mockResolvedValue(null);
+        vi.mocked(mutateIntake).mockReset().mockResolvedValue({ ...privateDraft, revision: 4 });
         profile.preferredLanguage = Language.EN;
         buildChatWebSocketUrl.mockReset();
         fetchChatHistory.mockReset();
@@ -1255,7 +1264,9 @@ describe("Patient chat page", () => {
         expect(screen.getByText("Keep this reply during recovery")).toBeInTheDocument();
     });
 
-    it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {
+    it.each(["ordinary", "private", "cancelled"])("routes dictated audio through its own boundary (%s)", async (scenario) => {
+        const privateIntake = scenario !== "ordinary";
+        if (privateIntake) vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
         getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
         const trackStop = vi.fn();
         const getUserMedia = vi.fn().mockResolvedValue({
@@ -1329,6 +1340,66 @@ describe("Patient chat page", () => {
             false,
         );
         expect(trackStop).toHaveBeenCalled();
+        expect(voiceSocket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "audio_start").private_intake).toBe(privateIntake);
+        if (scenario === "cancelled") {
+            vi.mocked(mutateIntake).mockResolvedValue({ ...privateDraft, status: "cancelled", revision: 4 });
+            fireEvent.click(screen.getByRole("button", { name: "Cancel draft" }));
+            await screen.findByRole("heading", { name: /^Draft cancelled\./ });
+            fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+            expect(mutateIntake).toHaveBeenCalledTimes(1);
+            expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("cancel");
+            expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+            return;
+        }
+        if (privateIntake) {
+            fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+            await waitFor(() => expect(mutateIntake).toHaveBeenCalled());
+            expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("reply");
+            expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: "I feel dizzy", input_mode: "voice", question_id: "severity" });
+            expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+        }
+    });
+
+    it("speaks a private question without attaching it to chat and resumes private recording", async () => {
+        vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
+        vi.mocked(mutateIntake).mockResolvedValue({ ...privateDraft, revision: 4, current_question: {
+            id: "location", answer_type: "text", wording: { "en-US": "Where is it?", "es-MX": "¿Dónde?" } } });
+        getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
+        const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] });
+        vi.stubGlobal("navigator", { ...window.navigator, mediaDevices: { getUserMedia } });
+        class Recorder {
+            static isTypeSupported = () => true;
+            state = "inactive";
+            ondataavailable: ((event: { data: Blob }) => void) | null = null;
+            onstop: (() => void) | null = null;
+            start() { this.state = "recording"; }
+            stop() { this.state = "inactive"; this.onstop?.(); }
+        }
+        vi.stubGlobal("MediaRecorder", Recorder);
+        let finishAudio: (() => void) | undefined;
+        playAssistantVoiceResponse.mockImplementation((options) => { finishAudio = options.onEnd; options.onStart?.(); return null; });
+        renderPage();
+        await screen.findAllByText("Choose your severity");
+        fireEvent.click(screen.getByRole("button", { name: /Turn on hands-free mode/ }));
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+        const voiceSocket = MockWebSocket.instances[1];
+        await act(async () => voiceSocket.emitOpen());
+        const tts = voiceSocket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "tts_request");
+        expect(tts.text).toContain("Choose your severity");
+        expect(tts).not.toHaveProperty("message_id");
+        await act(async () => voiceSocket.emitMessage({ type: "assistant_audio_ready", audio_base64: "YXVkaW8=", mime_type: "audio/mpeg", language: "en-US", encoding: "mp3" }));
+        await act(async () => finishAudio?.());
+        await waitFor(() => expect(getUserMedia).toHaveBeenCalled());
+        expect(voiceSocket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "audio_start")).toMatchObject({ private_intake: true });
+        fireEvent.click(screen.getByRole("button", { name: /Stop voice recording/ }));
+        await act(async () => {
+            voiceSocket.emitMessage({ type: "transcript_final", transcript: "five", language: "en-US", model: "test" });
+            voiceSocket.emitMessage({ type: "audio_stream_complete" });
+        });
+        await waitFor(() => expect(mutateIntake).toHaveBeenCalled());
+        expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: "five", input_mode: "voice" });
+        expect(MockWebSocket.instances[0].sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+        await screen.findAllByText("Where is it?");
     });
 
     it("auto-sends and auto-plays when hands-free mode is enabled", async () => {

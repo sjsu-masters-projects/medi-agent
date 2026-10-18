@@ -491,15 +491,28 @@ revision plus stable mutation identity; confirm requires preview hash and explic
 consent. `GET /api/v1/patients/me/symptom-reports/{id}` reads an owned confirmed report.
 
 `SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 060 does not approve a library.
-The packaged candidate is pending review; genuine paired-locale safety approval and
-matching immutable database eligibility are activation prerequisites. Unavailability
+The approved `candidate-1` is pinned in the manifest; revised `candidate-2` is pending
+genuine paired-locale review. Matching immutable database eligibility is required. Unavailability
 never restores automatic report insertion. Source binding requires a new backend-saved
 Nora user turn with a session ID; old unbound transcript rows remain readable.
 
 Run the [acceptance commands and synthetic journey](../docs/pat-002-b-acceptance-2026-10-12.md).
 No model is needed for question selection or preview. Exact patient-named product
 context is limited to 4 medications, 5 approved facts and 2 cited 500-character excerpts.
-Confirmation and audit share a transaction; safety alert delivery retries independently.
+`POST /{intake_id}/reply` accepts a current question, revision, mutation identity,
+locale and typed/voice text. It conservatively parses explicit values after the
+safety gate; it cannot consent or confirm. Answers are not ordinary chat messages.
+Source suggestions are quotes that require separate patient acceptance.
+
+Migration 076 keeps confirmation, audit, the existing `symptom_adr_screen` queue and
+active assigned-clinician notices in one transaction. Only an exact unique active
+medication name supplies its FK; unlisted products stay unverified testimony. The
+existing worker creates an ADR draft for eligible products; retries preserve
+clinician review. High severity (the existing >=8 threshold) queues a separate
+minimal urgent notice even for cancelled drafts. Emergency alerts remain separate.
+Both require `A2A_RETRY_WORKER_ENABLED=true`; no new ADR follow-up is implemented.
+See [October 17 acceptance](../docs/pat-002-b-acceptance-2026-10-17.md) and the
+[read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
 
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
 
