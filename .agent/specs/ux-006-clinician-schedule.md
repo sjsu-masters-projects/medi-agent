@@ -1,0 +1,66 @@
+# UX-006 — Clinician schedule and multi-clinic consistency
+
+Status: accepted design (October 17, 2026). Owner: Rajeev. Builds on SCH-001 (appointment
+offers), CLN-003 slices A–F (unified multi-clinic view) and UX-005 (queue + detail pattern).
+
+## Problem
+
+Production review on October 17 with a two-clinic clinician (Elena Park: Cedar Grove + Willow
+Terrace) showed the unified view works but reads as messy:
+
+- Appointments is patient-first: pick a patient, then an offer form and that patient's history.
+  There is no view of the clinician's own day or week across clinics, so a clash is discovered
+  only when the server refuses a slot.
+- Page headers name one arbitrary clinic (Risk Radar showed Willow Terrace for a Cedar Grove
+  default). Settings shows the clinic twice, a default-clinic "Role", and sits under
+  "Administration" for every role.
+- Counts disagree (Appointments "5 assigned" vs Roster 4 patients).
+
+## Decisions
+
+1. **Appointments becomes "My schedule"** (`/appointments`):
+   - Agenda as the default view: Today and This week (Day / Week toggle), grouped by day; each row
+     shows time (bold), patient, clinic chip, visit type, status chip; whole row opens the visit.
+   - "Needs action" strip above the agenda: offers awaiting the patient's answer (expiring within
+     48 h highlighted), patient change requests, and expired-unanswered offers. Each item links to
+     its visit or offer.
+   - Clinic filter (`?clinic=`), hidden for single-clinic users, same placement as other lists.
+   - Empty states: "No visits today" with the next upcoming visit, and a "New offer" action.
+2. **New offer is a side panel** opened by a primary "New offer" button (and from a patient
+   record): patient picker (clinic shown read-only, derived from the link), 2–4 slots, duration,
+   type, location, reason. When a date is chosen, the clinician's existing confirmed/scheduled
+   visits that day (all clinics) are listed as busy times beside the slot inputs, so clashes are
+   avoided before sending. The server conflict check stays as the authority.
+3. **A visit detail** (drawer or page) shows the patient, clinic, time, status, history of the
+   offer and responses, and the existing actions (edit, cancel, calendar export) with today's
+   authorization rules.
+4. **Per-patient appointment history moves to the patient record** as an "Appointments" tab, which
+   also offers "New offer" for that patient.
+5. **Consistent multi-clinic chrome** on every clinician page: header shows "All clinics" or the
+   filtered clinic, never an arbitrary one; one filter placement; chips never truncate (own line
+   under the name when space is short); single-clinic users see no clinic chrome.
+6. **Counts agree**: "assigned" and roster counts use the same definition (active care-team links,
+   distinct patients); fix whichever differs.
+
+## Backend
+
+- A clinician schedule read: the caller's own confirmed/scheduled visits in a date range across
+  all their clinics, plus open offers and change requests, each with clinic tag; scoped to the
+  caller's own appointments or links per the October 17 access rule. Reuse existing list
+  endpoints with date-range parameters if they can express this; add one endpoint only if not.
+- A "busy times" read for a date (the caller's own visits that day, all clinics) returning only
+  intervals and clinic names — never other patients' names.
+
+## Must not change
+
+- Offer, respond, expiry, reminders, ICS, the cross-clinic exclusion constraint and conflict
+  messages; authorization; audit; patient-portal visit flows.
+
+## Acceptance
+
+- A two-clinic clinician sees today's and this week's visits from both clinics on one agenda,
+  with a "Needs action" strip, and can create an offer from a side panel that shows busy times.
+- Patient record shows its Appointments tab; the old patient-first page is gone.
+- Headers, filters and chips are consistent on every list; Settings is consolidated.
+- 390 px and 1280 px without horizontal scroll; tests for agenda, needs-action, side panel with
+  busy times, patient tab and counts; deployed check with Elena Park.
