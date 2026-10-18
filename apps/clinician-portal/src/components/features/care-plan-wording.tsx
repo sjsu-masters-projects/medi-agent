@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icons";
 import type { CarePlanItem, CarePlanLocale, CarePlanWording, CarePlanWordingOrigin } from "@/services/clinicians";
 import { fetchBackTranslation, type BackTranslationResult } from "@/services/clinicians";
@@ -60,32 +60,86 @@ function PatientVisibilityLabel({ locale, patientLocale }: { locale: CarePlanLoc
 
 /* ── LOC-003: Back-translation panel ──────────────────────────────────────── */
 
-/** Shows an English back-translation of the Spanish wording plus guard results. */
-function BackTranslationPanel({ patientId, planId, itemId, spanishWording }: {
-    patientId?: string; planId?: string; itemId: string;
-    spanishWording: { title: string; instructions: string; frequency: string };
-}) {
-    const [result, setResult] = useState<BackTranslationResult | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+type SpanishWording = { title: string; instructions: string; frequency: string };
 
-    const load = useCallback(async () => {
-        if (!patientId || !planId || !spanishWording.title.trim()) return;
+/** A stable key for the Spanish wording, so a check is tied to the exact text it covered. */
+export function spanishKey(wording?: Partial<SpanishWording> | null): string {
+    return JSON.stringify(FIELDS.map((field) => (wording?.[field] ?? "").trim()));
+}
+
+/** What the attestation needs to know about the back-translation of an item's SAVED Spanish. */
+export interface BackCheck {
+    state: "loading" | "error" | "ready";
+    /** Numbers and medication names guards both passed. Meaningful only when state is "ready". */
+    guardsOk: boolean;
+    /** The Spanish wording (see spanishKey) the check covers. */
+    key: string;
+}
+
+/**
+ * Why the "I verified ..." box cannot be ticked yet, or null when it can. The back-translation
+ * must be of the SAVED Spanish wording, loaded, with both guards passed, and nothing unsaved.
+ */
+export function verificationBlocker(item: CarePlanItem, check: BackCheck | undefined, unsaved: boolean): string | null {
+    if (!wordingComplete(item)) return "Complete both languages first.";
+    if (unsaved) return "Save your changes first";
+    if (!check || check.key !== spanishKey(item.wording?.["es-MX"]) || check.state === "loading") return "Back-translation is loading";
+    if (check.state === "error") return "Back-translation unavailable — retry";
+    if (!check.guardsOk) return "Numbers or medication names differ — fix the Spanish";
+    return null;
+}
+
+/**
+ * Shows an English back-translation of the SAVED Spanish wording plus guard results. The server
+ * back-translates what is stored, so this fetches on mount and after a save, never per keystroke;
+ * "Check again" repeats it on demand. A slower, older response is ignored.
+ */
+export function BackTranslationPanel({ patientId, planId, itemId, spanishWording, unsaved = false, onCheck }: {
+    patientId?: string; planId?: string; itemId: string;
+    spanishWording: SpanishWording; unsaved?: boolean;
+    onCheck?: (itemId: string, check: BackCheck) => void;
+}) {
+    const currentKey = spanishKey(spanishWording);
+    // The version the server holds: it follows the visible text only while nothing is unsaved.
+    const [savedKey, setSavedKey] = useState(currentKey);
+    useEffect(() => { if (!unsaved) setSavedKey(currentKey); }, [unsaved, currentKey]);
+
+    const [result, setResult] = useState<{ key: string; data: BackTranslationResult } | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(false);
+    const latest = useRef(0);
+    const hasWording = Boolean(spanishWording.title.trim());
+
+    const load = useCallback(async (key: string) => {
+        if (!patientId || !planId || !hasWording) return;
+        const request = ++latest.current;
+        setResult(null);
+        setError(false);
         setLoading(true);
-        setError(null);
         try {
             const data = await fetchBackTranslation(patientId, planId, itemId);
-            setResult(data);
+            if (!data?.guards || !data.back_translation) throw new Error("Unexpected back-translation response");
+            if (request === latest.current) setResult({ key, data });
         } catch {
-            setError("Back-translation unavailable right now.");
+            if (request === latest.current) setError(true);
         } finally {
-            setLoading(false);
+            if (request === latest.current) setLoading(false);
         }
-    }, [patientId, planId, itemId, spanishWording.title]);
+    }, [patientId, planId, itemId, hasWording]);
 
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => {
+        void load(savedKey);
+        return () => { latest.current += 1; };
+    }, [load, savedKey]);
 
-    if (!spanishWording.title.trim()) return null;
+    const state: BackCheck["state"] = error ? "error" : result && result.key === savedKey ? "ready" : "loading";
+    const guardsOk = Boolean(result?.data.guards.numbers_match && result.data.guards.medication_names_match);
+    useEffect(() => {
+        if (hasWording) onCheck?.(itemId, { state, guardsOk, key: savedKey });
+    }, [hasWording, itemId, state, guardsOk, savedKey, onCheck]);
+
+    if (!hasWording) return null;
+    const data = result?.data;
     return (
         <div className="mt-3 space-y-2 rounded-lg border border-line bg-surface p-3">
             <div className="flex items-center justify-between gap-2">
@@ -93,22 +147,25 @@ function BackTranslationPanel({ patientId, planId, itemId, spanishWording }: {
                     <Icon name="spark" className="h-3 w-3 text-ai-ink" />
                     English back-translation
                 </p>
-                {result ? (
-                    <span className="flex items-center gap-2 text-[11px]">
-                        {result.guards.numbers_match ? <span className="text-ok-ink">✓ Numbers match</span> : <span className="text-risk-ink">✗ Numbers differ</span>}
-                        {result.guards.medication_names_match ? <span className="text-ok-ink">✓ Med names match</span> : <span className="text-risk-ink">✗ Med names differ</span>}
-                    </span>
-                ) : null}
+                <button className="ma-press h-7 rounded-md px-2 text-[11px] font-semibold text-primary hover:bg-primary-tint disabled:cursor-not-allowed disabled:opacity-50" disabled={loading} onClick={() => void load(savedKey)} type="button">Check again</button>
             </div>
-            {loading ? <p className="text-xs text-muted">Loading back-translation…</p> : null}
-            {error ? <p className="text-xs text-warn-ink">{error}</p> : null}
-            {result ? (
-                <div className="space-y-1 text-sm text-ink-2" lang="en-US">
-                    <p><span className="text-xs font-medium text-muted">Title:</span> {result.back_translation.title}</p>
-                    <p><span className="text-xs font-medium text-muted">Instructions:</span> {result.back_translation.instructions}</p>
-                    <p><span className="text-xs font-medium text-muted">Frequency:</span> {result.back_translation.frequency}</p>
-                </div>
-            ) : null}
+            <div aria-live="polite" role="status" className="space-y-2">
+                {loading ? <p className="text-xs text-muted">Loading back-translation…</p> : null}
+                {error ? <p className="flex flex-wrap items-center gap-2 text-xs text-warn-ink">Back-translation unavailable right now.
+                    <button className="font-semibold underline underline-offset-2" onClick={() => void load(savedKey)} type="button">Retry</button></p> : null}
+                {data ? <>
+                    <p className="flex flex-wrap items-center gap-x-3 text-[11px]">
+                        {data.guards.numbers_match ? <span className="text-ok-ink">✓ Numbers match</span> : <span className="text-risk-ink">✗ Numbers differ</span>}
+                        {data.guards.medication_names_match ? <span className="text-ok-ink">✓ Med names match</span> : <span className="text-risk-ink">✗ Med names differ</span>}
+                    </p>
+                    <div className="space-y-1 text-sm text-ink-2" lang="en-US">
+                        <p><span className="text-xs font-medium text-muted">Title:</span> {data.back_translation.title}</p>
+                        <p><span className="text-xs font-medium text-muted">Instructions:</span> {data.back_translation.instructions}</p>
+                        <p><span className="text-xs font-medium text-muted">Frequency:</span> {data.back_translation.frequency}</p>
+                    </div>
+                </> : null}
+                {unsaved ? <p className="text-[11px] font-medium text-warn-ink">Translation shown is for the saved version. Save your changes to check the new Spanish.</p> : null}
+            </div>
             <p className="text-[11px] text-muted">Compare this with the English wording above. If they match, the Spanish is faithful.</p>
         </div>
     );
@@ -124,6 +181,7 @@ interface BilingualWordingProps {
     unsaved: boolean;
     patientId?: string;
     planId?: string;
+    onBackCheck?: (itemId: string, check: BackCheck) => void;
     onChange: (locale: CarePlanLocale, field: keyof CarePlanWording, value: string) => void;
     onTranslate: (fromLocale: CarePlanLocale) => void;
     onWriteManually: (sourceLocale: CarePlanLocale) => void;
@@ -134,7 +192,7 @@ interface BilingualWordingProps {
  * the wording the evidence was written in; the other is an AI draft the clinician checks
  * or rewrites. The patient sees whichever language they choose, so both are reviewed.
  */
-export function BilingualWording({ item, patientLocale, fieldClass, busy, unsaved, patientId, planId, onChange, onTranslate, onWriteManually }: BilingualWordingProps) {
+export function BilingualWording({ item, patientLocale, fieldClass, busy, unsaved, patientId, planId, onBackCheck, onChange, onTranslate, onWriteManually }: BilingualWordingProps) {
     const source = item.source_locale ?? null;
     if (!source) {
         return <div className="space-y-3 rounded-xl border border-warn-line bg-warn-soft/60 p-3.5">
@@ -179,7 +237,7 @@ export function BilingualWording({ item, patientLocale, fieldClass, busy, unsave
                         {unsaved ? <span className="text-xs text-muted">Save first to re-translate.</span> : null}
                     </div> : null}
                     {/* LOC-003: Back-translation panel on the Spanish card */}
-                    {isSpanish && text.title.trim() ? <BackTranslationPanel patientId={patientId} planId={planId} itemId={item.id} spanishWording={text} /> : null}
+                    {isSpanish && text.title.trim() ? <BackTranslationPanel patientId={patientId} planId={planId} itemId={item.id} spanishWording={text} unsaved={unsaved} onCheck={onBackCheck} /> : null}
                 </fieldset>;
             })}
         </div></div>

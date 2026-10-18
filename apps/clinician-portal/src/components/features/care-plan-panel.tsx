@@ -10,7 +10,7 @@ import { Icon } from "@/components/ui/icons";
 import { Popover } from "@/components/ui/popover";
 import { SourceFileIcon } from "@/components/features/source-file";
 import { formatClinicianDateTime } from "@/utils/dates";
-import { ApprovedWording, BilingualWording, LOCALE_LABEL, otherLocale, wordingComplete } from "@/components/features/care-plan-wording";
+import { ApprovedWording, BilingualWording, LOCALE_LABEL, otherLocale, verificationBlocker, wordingComplete, type BackCheck } from "@/components/features/care-plan-wording";
 import {
     approveClinicianCarePlan,
     fetchClinicianCarePlanReviewContext,
@@ -96,6 +96,13 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const [activeMedications, setActiveMedications] = useState<ActiveMedication[]>([]);
     const [generation, setGeneration] = useState<CarePlanGeneration | null>(null);
     const [items, setItems] = useState<EditableItem[]>([]);
+    const [backChecks, setBackChecks] = useState<Record<string, BackCheck>>({});
+    const recordBackCheck = useCallback((itemId: string, check: BackCheck) => {
+        setBackChecks((current) => {
+            const before = current[itemId];
+            return before && before.state === check.state && before.guardsOk === check.guardsOk && before.key === check.key ? current : { ...current, [itemId]: check };
+        });
+    }, []);
     const [note, setNote] = useState("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -376,7 +383,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                     <p className="text-[13px] font-medium text-ink-2">Patient-facing wording · English and Spanish</p>
                     <p className="text-xs text-muted">Today shows the patient&apos;s chosen language exactly as written</p>
                 </div>
-                <BilingualWording busy={saving} fieldClass={fieldClass} item={item} patientLocale={patientLocale} unsaved={hasUnsavedChanges} patientId={patientId} planId={plan?.id}
+                <BilingualWording busy={saving} fieldClass={fieldClass} item={item} patientLocale={patientLocale} unsaved={hasUnsavedChanges} patientId={patientId} planId={plan?.id} onBackCheck={recordBackCheck}
                     onChange={(locale, field, value) => editWording(item, locale, field, value)}
                     onTranslate={(fromLocale) => void translate(item, fromLocale)}
                     onWriteManually={(sourceLocale) => writeManually(item, sourceLocale)} />
@@ -394,7 +401,11 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
 
             {item.blocker_reason && !item.is_removed ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn-line bg-warn-soft px-3.5 py-3"><p className="flex items-start gap-2 text-sm text-warn-ink"><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />{item.blocker_reason}</p>{isDraft ? <label className="flex items-center gap-2 text-sm font-medium text-ink-2"><input checked={item.clinician_confirmed} className="h-4 w-4 accent-[var(--color-primary)]" type="checkbox" onChange={(event) => patchItem(item.id, { clinician_confirmed: event.target.checked })} /> Confirm after review</label> : null}</div> : null}
 
-            {isDraft && !item.is_removed ? <label className={`flex items-start gap-3 rounded-xl border p-3.5 text-[13px] leading-relaxed transition-colors duration-[160ms] ${!wordingComplete(item) ? "cursor-not-allowed border-line bg-surface-2 text-muted" : item.wording_verified ? "border-ok-line bg-ok-soft text-ok-ink" : "border-line-strong bg-surface text-ink-2 hover:border-primary-line"}`}><input checked={Boolean(item.wording_verified) && wordingComplete(item)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]" disabled={!wordingComplete(item)} type="checkbox" onChange={(event) => patchItem(item.id, { wording_verified: event.target.checked })} /><span>I verified the English wording against the source and confirmed the Spanish through its back-translation and automated safety checks (numbers, doses, medication names).{!wordingComplete(item) ? " Complete both languages first." : ""}</span></label> : null}
+            {isDraft && !item.is_removed ? (() => {
+                const blocker = verificationBlocker(item, backChecks[item.id], hasUnsavedChanges);
+                const checked = Boolean(item.wording_verified) && wordingComplete(item);
+                return <label className={`flex items-start gap-3 rounded-xl border p-3.5 text-[13px] leading-relaxed transition-colors duration-[160ms] ${blocker && !checked ? "cursor-not-allowed border-line bg-surface-2 text-muted" : item.wording_verified ? "border-ok-line bg-ok-soft text-ok-ink" : "border-line-strong bg-surface text-ink-2 hover:border-primary-line"}`}><input checked={checked} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]" disabled={Boolean(blocker) && !checked} type="checkbox" onChange={(event) => patchItem(item.id, { wording_verified: event.target.checked })} /><span>I verified the English wording against the source and confirmed the Spanish through its back-translation and automated safety checks (numbers, doses, medication names).{blocker ? <span className="mt-1 block font-medium" role="status">{blocker}</span> : null}</span></label>;
+            })() : null}
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-ink-2">
                 <span className="font-mono font-medium">{item.confidence_score == null ? "Extraction confidence unavailable" : `${Math.round(item.confidence_score * 100)}% extraction confidence`}</span>

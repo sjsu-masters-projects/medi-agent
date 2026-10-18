@@ -99,11 +99,12 @@ describe("clinic filter", () => {
 describe("clinic chip", () => {
     afterEach(cleanup);
 
-    it("is a neutral truncated pill with the full name as a tooltip", () => {
+    it("is a neutral pill that wraps instead of truncating, with the full name as a tooltip", () => {
         render(<ClinicChip name="City Health Group of Northern California" />);
         const chip = screen.getByText("City Health Group of Northern California");
         expect(chip).toHaveAttribute("title", "City Health Group of Northern California");
-        expect(chip.className).toContain("truncate");
+        expect(chip.className).not.toContain("truncate");
+        expect(chip.className).toContain("break-words");
         expect(chip.className).toContain("bg-surface-2");
         expect(chip.className).toContain("text-[11px]");
     });
