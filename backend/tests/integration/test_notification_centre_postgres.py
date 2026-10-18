@@ -103,13 +103,17 @@ def postgres():
 
 
 def apply_clinic_memberships(execute, *, scheduling=True):
-    """Apply CLN-003 slices A (065), B (066), C+D (067), E+F (069) and 070, found by name like 063/064."""
+    """Apply CLN-003 slices A (065), B (066), C+D (067), E+F (069), 070 and 071, found by name like 063/064."""
     for pattern in (
         "*_clinic_memberships.sql",
         "*_clinic_sign_in_once.sql",
         "*_clinic_lists_and_roles.sql",
         *(
-            ("*_clinic_scheduling_and_tags.sql", "*_browser_grants_and_medwatch_preview_audit.sql")
+            (
+                "*_clinic_scheduling_and_tags.sql",
+                "*_browser_grants_and_medwatch_preview_audit.sql",
+                "*_clinician_visit_management.sql",
+            )
             if scheduling
             else ()
         ),

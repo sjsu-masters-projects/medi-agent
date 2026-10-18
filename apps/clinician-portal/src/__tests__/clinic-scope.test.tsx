@@ -16,18 +16,16 @@ const filter = (clinics: unknown[], clinicId: string | null = null, ready = true
 
 describe("clinicScopeLabel", () => {
     const two = [clinic("a", "Cedar Grove"), clinic("b", "Willow Terrace")];
-    it("says All clinics for a multi-clinic clinician with no filter, ignoring the stored clinic", () => {
-        expect(clinicScopeLabel(filter(two), "Cedar Grove")).toBe("All clinics");
+    it("says All clinics for a multi-clinic clinician with no filter", () => {
+        expect(clinicScopeLabel(filter(two))).toBe("All clinics");
     });
     it("names the selected clinic when filtered", () => {
-        expect(clinicScopeLabel(filter(two, "b"), "Cedar Grove")).toBe("Willow Terrace");
+        expect(clinicScopeLabel(filter(two, "b"))).toBe("Willow Terrace");
     });
-    it("names the only clinic for a single-clinic clinician", () => {
-        expect(clinicScopeLabel(filter([clinic("a", "Cedar Grove")]), null)).toBe("Cedar Grove");
-    });
-    it("uses the stored clinic only until the list has loaded", () => {
-        expect(clinicScopeLabel(filter([], null, false), "Cedar Grove")).toBe("Cedar Grove");
-        expect(clinicScopeLabel(filter([], null, true), "Cedar Grove")).toBeNull();
+    it("names nothing for a single-clinic clinician or before the clinics load", () => {
+        expect(clinicScopeLabel(filter([clinic("a", "Cedar Grove")]))).toBeNull();
+        expect(clinicScopeLabel(filter([], null, false))).toBeNull();
+        expect(clinicScopeLabel(filter([], null, true))).toBeNull();
     });
 });
 

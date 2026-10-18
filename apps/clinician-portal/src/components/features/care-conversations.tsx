@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { careConversations } from "@/services/care-conversations";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
-import { conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages } from "../../../../../packages/shared/src/utils/care-conversations";
+import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
 const button = "ma-press inline-flex h-[34px] shrink-0 items-center justify-center gap-2 rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface";
 const smallButton = "ma-press inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-xs font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface";
@@ -288,6 +288,20 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [load, visible]);
 
+  // LOC-003: translations are requested one message at a time after the read, three at most in
+  // parallel, so reading, typing and sending never wait for a model. The original shows first.
+  const requestedTranslations = useRef(new Set<string>());
+  useEffect(() => {
+    if (!messages.some((message) => message.translation_pending && !requestedTranslations.current.has(message.id))) return;
+    void requestPendingTranslations(
+      messages,
+      requestedTranslations.current,
+      (messageId) => careConversations.translate(token, thread.id, messageId),
+      (messageId, result) => setMessages((current) => current.map((message) => message.id === messageId ? applyTranslationResult(message, result) : message)),
+      () => alive.current,
+    );
+  }, [messages, token, thread.id]);
+
   // Runs after rendering: the marker is the newest displayed message, never a server clock.
   const lastId = messages.at(-1)?.id;
   useEffect(() => {
@@ -364,6 +378,7 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
           return <li key={message.id} className={`ma-bubble flex max-w-[78%] flex-col gap-1 ${own ? "items-end self-end" : "items-start self-start"}`}>
             <p className="px-1 text-[11px] text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
             <p className={`whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm ${own ? "rounded-[18px_18px_6px_18px] bg-primary text-white" : "rounded-[18px_18px_18px_6px] bg-surface-2 text-ink"}`}>{message.body}</p>
+            {message.translation_pending && !own ? <p role="status" className="px-1 text-[11px] text-muted">{copy.translating}</p> : null}
             {translation && sourceLabel && guardPassed === false ? <p className="px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
             {translation && sourceLabel && guardPassed !== false ? <div className="mt-0.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">
               <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted"><Icon name="spark" className="h-3 w-3" />{sourceLabel}</p>

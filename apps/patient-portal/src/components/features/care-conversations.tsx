@@ -12,7 +12,7 @@ import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { ChatTextarea, chatButton, chatDisplayTime } from "./chat-presentation";
 import { normalizeLocale } from "@/types";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
-import { conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages } from "../../../../../packages/shared/src/utils/care-conversations";
+import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
 const button = chatButton;
 const input = "min-h-[52px] w-full rounded-2xl border border-line-strong bg-surface px-4 py-2 text-base font-normal text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
@@ -312,6 +312,20 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [load, visible]);
 
+  // LOC-003: translations are requested one message at a time after the read, three at most in
+  // parallel, so reading, typing and sending never wait for a model. The original shows first.
+  const requestedTranslations = useRef(new Set<string>());
+  useEffect(() => {
+    if (!messages.some((message) => message.translation_pending && !requestedTranslations.current.has(message.id))) return;
+    void requestPendingTranslations(
+      messages,
+      requestedTranslations.current,
+      (messageId) => careConversations.translate(token, thread.id, messageId),
+      (messageId, result) => setMessages((current) => current.map((message) => message.id === messageId ? applyTranslationResult(message, result) : message)),
+      () => alive.current,
+    );
+  }, [messages, token, thread.id]);
+
   // Runs after rendering: the marker is the newest displayed message, never a server clock.
   const lastId = messages.at(-1)?.id;
   useEffect(() => {
@@ -401,6 +415,7 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
         const translatedLabel = message.translation_locale === "es-MX" ? copy.translatedFromEnglish : copy.translatedFromSpanish;
         return <li key={message.id} className={`ma-bubble flex flex-col gap-1 ${own ? "items-end" : "items-start"}`}>
           <p className={`whitespace-pre-wrap break-words text-[15px] leading-[1.45] [overflow-wrap:anywhere] ${own ? "max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand px-3.5 py-[11px] text-white" : "max-w-[88%] rounded-[20px_20px_20px_6px] bg-surface px-[15px] py-[13px] text-ink shadow-[0_1px_0_rgba(16,32,43,.04)]"}`}>{displayBody}</p>
+          {message.translation_pending && !own ? <p role="status" className="max-w-[88%] px-1 text-[11px] text-muted">{copy.translating}</p> : null}
           {guardFailed ? <p className="max-w-[88%] px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
           {hasTranslation ? <p className={`max-w-[88%] px-1 text-[11px] text-muted`}>
             {originalShown ? null : <span>{translatedLabel} · </span>}

@@ -29,6 +29,9 @@ _COPY = {
     "message_received": ("New care-team messages", "Nuevos mensajes del equipo de atención"),
     "appointment_offered": ("Appointment choices available", "Horarios de cita disponibles"),
     "appointment_changed": ("Appointment updated", "Cita actualizada"),
+    # A clinician's cancel is an appointment_changed event whose status is cancelled (UX-006).
+    # The Spanish subject is a draft for native-speaker review (see .agent/TASKS.md).
+    "appointment_cancelled": ("Appointment cancelled", "Cita cancelada"),
     "appointment_response": ("Appointment response received", "Respuesta a la cita recibida"),
     "care_plan_published": ("Your care plan was updated", "Tu plan de cuidado se actualizó"),
     "document_failed": ("A document needs your attention", "Un documento necesita tu atención"),
@@ -372,6 +375,13 @@ class EmailDeliveryService:
             return cast(dict[str, Any], row["payload"])
         event = row.get("event") or {}
         kind = event.get("event_type")
+        event_metadata = event.get("metadata")
+        if (
+            kind == "appointment_changed"
+            and isinstance(event_metadata, dict)
+            and event_metadata.get("status") == "cancelled"
+        ):
+            kind = "appointment_cancelled"
         if kind not in _COPY:
             raise ValueError("Unsupported email event")
         role = row["role"]

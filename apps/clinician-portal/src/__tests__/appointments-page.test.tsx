@@ -1,471 +1,460 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Appointment } from "@/types";
-import { ApiClientError } from "@/services/api";
+import type { MySchedule, ScheduleVisit } from "@/services/appointments";
 import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
+
 const mocks = vi.hoisted(() => ({
+  schedule: vi.fn(),
   patients: vi.fn(),
-  appointments: vi.fn(),
   profile: vi.fn(),
+  busy: vi.fn(),
   propose: vi.fn(),
+  patientRows: vi.fn(),
+  allRows: vi.fn(),
+  update: vi.fn(),
+  cancel: vi.fn(),
+  complete: vi.fn(),
+  noShow: vi.fn(),
+  replace: vi.fn(),
   state: { auth: { accessToken: "clinician-token" as string | null } },
   query: "",
 }));
 vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(mocks.query) }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(mocks.query),
+  usePathname: () => "/appointments",
+  useRouter: () => ({ replace: mocks.replace, push: mocks.replace }),
+}));
 vi.mock("react-redux", () => ({
-  useSelector: (selector: (state: typeof mocks.state) => unknown) =>
-    selector(mocks.state),
+  useSelector: (selector: (state: typeof mocks.state) => unknown) => selector(mocks.state),
 }));
 vi.mock("@/services/appointments", () => ({
+  fetchMySchedule: mocks.schedule,
   fetchSchedulingPatients: mocks.patients,
-  fetchSchedulingAppointments: mocks.appointments,
   fetchSchedulingProfile: mocks.profile,
+  fetchBusyTimes: mocks.busy,
   proposeAppointmentOffer: mocks.propose,
+  fetchPatientAppointments: mocks.patientRows,
+  fetchSchedulingAppointments: mocks.allRows,
+  updateVisitDetails: mocks.update,
+  cancelVisit: mocks.cancel,
+  completeVisit: mocks.complete,
+  markVisitNoShow: mocks.noShow,
 }));
 import AppointmentsPage from "@/app/(dashboard)/appointments/page";
 
 const roster = [
-  { id: "p1", care_team_id: "team1", first_name: "Maya", last_name: "Patel" },
-  {
-    id: "p2",
-    care_team_id: "team2",
-    first_name: "Hannah",
-    last_name: "Brooks",
-  },
+  { id: "p1", care_team_id: "team1", first_name: "Maya", last_name: "Patel", clinic_name: "Cedar Grove Community Health" },
+  { id: "p2", care_team_id: "team2", first_name: "Hannah", last_name: "Brooks", clinic_name: "Willow Terrace" },
 ];
-function appointment(overrides: Partial<Appointment> = {}): Appointment {
+const TWO = [
+  { clinic_id: "c1", clinic_code: "A", clinic_name: "Cedar Grove Community Health", role: "provider", status: "active" },
+  { clinic_id: "c2", clinic_code: "B", clinic_name: "Willow Terrace", role: "provider", status: "active" },
+] as never;
+
+function visit(overrides: Partial<ScheduleVisit> = {}): ScheduleVisit {
   return {
-    id: "a1",
+    id: "v1",
     patientId: "p1",
     careTeamId: "team1",
-    proposalGroupId: "g1",
-    scheduledAt: "2027-07-05T16:00Z",
+    patientName: "Maya Patel",
+    patientTimezone: "America/Los_Angeles",
+    clinicName: "Cedar Grove Community Health",
+    scheduledAt: "2026-10-17T16:30:00Z",
     durationMinutes: 30,
     appointmentType: "follow_up",
-    status: "proposed",
-    createdAt: "2026-09-28T00:00Z",
+    status: "confirmed",
+    createdAt: "2026-10-10T00:00:00Z",
     ...overrides,
   };
 }
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
+function schedule(overrides: Partial<MySchedule> = {}): MySchedule {
+  return { visits: [], needsAction: [], nextVisit: null, ...overrides };
 }
-async function selectPatient(value = "team1") {
-  await screen.findByRole("combobox", { name: "Patient" });
-  fireEvent.change(screen.getByRole("combobox", { name: "Patient" }), {
-    target: { value },
-  });
-}
-async function fillTimes() {
-  fireEvent.change(
-    await screen.findByLabelText("Option 1 (America/Los_Angeles)"),
-    { target: { value: "2027-07-05T09:00" } },
-  );
-  fireEvent.change(screen.getByLabelText("Option 2 (America/Los_Angeles)"), {
-    target: { value: "2027-07-06T14:00" },
-  });
-}
-function submit() {
-  fireEvent.submit(screen.getByRole("form", { name: "Appointment offer" }));
+function offer(overrides: Partial<Appointment> = {}): Appointment {
+  return {
+    id: "o1",
+    patientId: "p1",
+    careTeamId: "team1",
+    scheduledAt: "2026-10-20T16:00:00Z",
+    durationMinutes: 30,
+    appointmentType: "follow_up",
+    status: "proposed",
+    proposalGroupId: "g1",
+    createdAt: "2026-10-15T00:00:00Z",
+    ...overrides,
+  };
 }
 
-describe("clinician appointments page", () => {
-  it("selects the exact appointment's assigned patient and focuses its row", async () => {
-    mocks.query = "appointmentId=a2";
-    mocks.patients.mockResolvedValue(roster);
-    mocks.appointments.mockResolvedValue([appointment(), appointment({ id: "a2", patientId: "p2", careTeamId: "team2", proposalGroupId: "g2" })]);
-    render(<AppointmentsPage />);
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Patient" })).toHaveValue("team2"));
-    await waitFor(() => expect(document.getElementById("appointment-a2")).toHaveFocus());
-    expect(document.getElementById("appointment-a1")).toBeNull();
-  });
-  it("reports an unavailable appointment without selecting another patient", async () => {
-    mocks.query = "appointmentId=missing";
-    render(<AppointmentsPage />);
-    await screen.findByText(/The linked appointment is unavailable/);
-    expect(screen.getByRole("combobox", { name: "Patient" })).toHaveValue("");
-  });
+describe("My schedule", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-28T00:00:00Z"));
+    resetClinicFilter();
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-17T15:00:00Z"));
     mocks.state.auth.accessToken = "clinician-token";
     mocks.query = "";
+    mocks.schedule.mockResolvedValue(schedule());
     mocks.patients.mockResolvedValue(roster);
-    mocks.appointments.mockResolvedValue([]);
     mocks.profile.mockResolvedValue({ timezone: "America/Los_Angeles" });
-    mocks.propose.mockResolvedValue([
-      appointment(),
-      appointment({ id: "a2", scheduledAt: "2027-07-06T21:00Z" }),
-    ]);
+    mocks.busy.mockResolvedValue([]);
+    mocks.patientRows.mockResolvedValue([offer()]);
+    mocks.allRows.mockResolvedValue([]);
+    mocks.propose.mockResolvedValue([offer()]);
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("does not load scheduling data without a clinician session", () => {
+  it("does not load anything without a clinician session", () => {
     mocks.state.auth.accessToken = null;
     render(<AppointmentsPage />);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Sign in as a clinician",
-    );
-    expect(mocks.patients).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Sign in as a clinician");
+    expect(mocks.schedule).not.toHaveBeenCalled();
   });
 
-  it("retries an initial load failure without showing raw server messages", async () => {
-    mocks.patients.mockRejectedValueOnce(new Error("Raw authorization detail"));
-    render(<AppointmentsPage />);
-    await screen.findByRole("alert");
-    expect(
-      screen.queryByText("Raw authorization detail"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("form")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Patient" })).toBeEnabled(),
-    );
-    expect(
-      screen.getByRole("option", { name: "Maya Patel" }),
-    ).toBeInTheDocument();
-  });
-  it("supplies the selected care-team ID and timezone-correct slots automatically", async () => {
-    render(<AppointmentsPage />);
-    await selectPatient();
-    await fillTimes();
-    submit();
-    await screen.findByText(/Appointment offer sent/);
-    expect(mocks.propose).toHaveBeenCalledWith(
-      "clinician-token",
-      expect.objectContaining({
-        care_team_id: "team1",
-        slots: ["2027-07-05T16:00:00.000Z", "2027-07-06T21:00:00.000Z"],
-        duration_minutes: 30,
+  it("shows both clinics' visits on one agenda, grouped by day, with clinic chips", async () => {
+    clinicFilterState.clinics = TWO;
+    mocks.schedule.mockResolvedValue(
+      schedule({
+        visits: [
+          visit(),
+          visit({ id: "v2", patientName: "Hannah Brooks", clinicName: "Willow Terrace", scheduledAt: "2026-10-17T20:00:00Z", status: "scheduled" }),
+          visit({ id: "v3", patientName: "Maya Patel", scheduledAt: "2026-10-19T17:00:00Z" }),
+        ],
       }),
     );
-    expect(screen.getByLabelText("Appointment history")).toHaveTextContent(
-      "Jul 5, 2027, 9:00 AM",
-    );
-    expect(screen.getByLabelText("Option 1 (America/Los_Angeles)")).toHaveValue(
-      "",
-    );
-  });
-  it("waits for settings and retries profile failure without exposing server text", async () => {
-    const pending = deferred<{ timezone: string }>();
-    mocks.profile.mockReturnValueOnce(pending.promise);
     render(<AppointmentsPage />);
-    await selectPatient();
-    expect(
-      screen.getByText(/Loading the patient's timezone/),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("form")).not.toBeInTheDocument();
-    await act(async () => pending.resolve({ timezone: "UTC" }));
-    expect(await screen.findByLabelText("Option 1 (UTC)")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "Patient" }), {
-      target: { value: "team2" },
-    });
-    mocks.profile.mockRejectedValueOnce(new Error("private server detail"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Patient" }), {
-      target: { value: "team1" },
-    });
-    await screen.findByText("Could not load the patient's timezone");
-    expect(screen.queryByText("private server detail")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await screen.findByLabelText("Option 1 (America/Los_Angeles)");
+    expect(await screen.findByRole("heading", { name: "Today · Sat Oct 17" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mon Oct 19" })).toBeInTheDocument();
+    expect(screen.getByText("9:30 AM")).toBeInTheDocument(); // the visit's own timezone
+    const agenda = screen.getByLabelText("Agenda");
+    expect(within(agenda).getAllByText("Cedar Grove Community Health")).toHaveLength(2);
+    expect(within(agenda).getByText("Willow Terrace")).toBeInTheDocument();
+    expect(within(agenda).getAllByText("Confirmed")).toHaveLength(2);
+    expect(screen.getByText("Your visits and appointment offers · All clinics")).toBeInTheDocument();
+    expect(screen.getByLabelText("Clinic")).toBeInTheDocument();
+    const [from, to] = mocks.schedule.mock.calls[0]!.slice(1, 3) as string[];
+    expect(Date.parse(to!) - Date.parse(from!)).toBeLessThanOrEqual(25 * 3_600_000); // Today
   });
-  it.each([undefined, "Invalid/Zone"])(
-    "labels fallback %s as UTC",
-    async (timezone) => {
-      mocks.profile.mockResolvedValue({ timezone });
+
+  it("shows a week on request and passes the clinic filter to the server", async () => {
+    clinicFilterState.clinics = TWO;
+    clinicFilterState.clinicId = "c2";
+    render(<AppointmentsPage />);
+    await screen.findByText("Your visits and appointment offers · Willow Terrace");
+    fireEvent.click(screen.getByRole("radio", { name: "This week" }));
+    await waitFor(() => expect(mocks.schedule).toHaveBeenCalledTimes(2));
+    const call = mocks.schedule.mock.calls[1]!;
+    expect(call[3]).toBe("c2");
+    expect(Date.parse(call[2] as string) - Date.parse(call[1] as string)).toBeGreaterThan(6 * 86_400_000);
+  });
+
+  it("shows no clinic chrome to a single-clinic clinician", async () => {
+    mocks.schedule.mockResolvedValue(schedule({ visits: [visit()] }));
+    render(<AppointmentsPage />);
+    await screen.findByText("Maya Patel");
+    expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cedar Grove Community Health")).not.toBeInTheDocument();
+    expect(screen.getByText("Your visits and appointment offers")).toBeInTheDocument();
+  });
+
+  it("opens a visit from its row", async () => {
+    mocks.schedule.mockResolvedValue(schedule({ visits: [visit()] }));
+    render(<AppointmentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Maya Patel/ }));
+    expect(mocks.replace).toHaveBeenCalledWith("/appointments?appointmentId=v1", { scroll: false });
+  });
+
+  it("summarises what needs action and opens the item", async () => {
+    mocks.schedule.mockResolvedValue(
+      schedule({
+        needsAction: [
+          { kind: "awaiting_reply", appointmentId: "o1", patientId: "p1", patientName: "Maya Patel", slotCount: 2, firstSlotAt: "2026-10-20T16:00:00Z", expiresAt: "2026-10-18T15:00:00Z", expiringSoon: true },
+          { kind: "awaiting_reply", appointmentId: "o2", patientId: "p2", patientName: "Hannah Brooks", slotCount: 3, firstSlotAt: "2026-10-22T16:00:00Z", expiresAt: "2026-10-24T15:00:00Z", expiringSoon: false },
+          { kind: "change_request", appointmentId: "o3", patientId: "p2", patientName: "Hannah Brooks", slotCount: 2, firstSlotAt: "2026-10-23T16:00:00Z", expiringSoon: false },
+        ],
+      }),
+    );
+    render(<AppointmentsPage />);
+    const strip = await screen.findByRole("region", { name: "Needs action" });
+    expect(within(strip).getByText("expiring soon")).toBeInTheDocument();
+    expect(within(strip).getByText("change request")).toBeInTheDocument();
+    fireEvent.click(within(strip).getByRole("button", { name: "2 awaiting reply" }));
+    const list = within(strip).getByRole("list", { name: "Items that need action" });
+    expect(within(list).getAllByRole("button")).toHaveLength(2);
+    expect(list).toHaveTextContent("Expiring soon");
+    fireEvent.click(within(list).getAllByRole("button")[0]!);
+    expect(mocks.replace).toHaveBeenCalledWith("/appointments?appointmentId=o1", { scroll: false });
+  });
+
+  it("explains an empty day, names the next visit and offers a new offer", async () => {
+    mocks.schedule.mockResolvedValue(schedule({ nextVisit: visit({ id: "v9", scheduledAt: "2026-10-19T17:00:00Z" }) }));
+    render(<AppointmentsPage />);
+    expect(await screen.findByText("No visits today")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Next visit: Mon Oct 19, 10:00 AM · Maya Patel/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "New offer" }).length).toBeGreaterThan(0);
+  });
+
+  it("reports a load failure with a retry and no raw server text", async () => {
+    mocks.schedule.mockRejectedValueOnce(new Error("Raw authorization detail"));
+    render(<AppointmentsPage />);
+    await screen.findByText("Your schedule is unavailable");
+    expect(screen.queryByText("Raw authorization detail")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]!);
+    expect(await screen.findByText("No visits today")).toBeInTheDocument();
+  });
+
+  describe("New offer panel", () => {
+    async function openPanel() {
       render(<AppointmentsPage />);
-      await selectPatient();
-      await screen.findByLabelText("Option 1 (UTC)");
-      expect(screen.getByText(/no valid saved timezone/)).toBeInTheDocument();
-    },
-  );
-  it("preserves a failed offer draft and visible history", async () => {
-    mocks.appointments.mockResolvedValue([
-      appointment({ status: "confirmed", reason: "Existing visit" }),
-    ]);
-    mocks.propose.mockRejectedValue(new Error("Raw English failure"));
-    render(<AppointmentsPage />);
-    await selectPatient();
-    await fillTimes();
-    submit();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Your draft is preserved",
-    );
-    expect(screen.getByText("Existing visit")).toBeInTheDocument();
-    expect(screen.getByLabelText("Option 1 (America/Los_Angeles)")).toHaveValue(
-      "2027-07-05T09:00",
-    );
-    expect(screen.queryByText("Raw English failure")).not.toBeInTheDocument();
-  });
-  it("disables patient changes, refresh, and duplicate submissions while sending", async () => {
-    const pending = deferred<Appointment[]>();
-    mocks.propose.mockReturnValue(pending.promise);
-    render(<AppointmentsPage />);
-    await selectPatient();
-    await fillTimes();
-    submit();
-    submit();
-    expect(mocks.propose).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("combobox", { name: "Patient" })).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Refresh appointments" }),
-    ).toBeDisabled();
-    await act(async () => pending.resolve([appointment()]));
-    await screen.findByText(/Appointment offer sent/);
-  });
-  it("refreshes persisted responses and excludes another patient's/clinician's records", async () => {
-    mocks.appointments.mockResolvedValueOnce([
-      appointment(),
-      appointment({ id: "a2" }),
-      appointment({ id: "foreign", patientId: "p2", reason: "Other patient" }),
-      appointment({
-        id: "other-team",
-        careTeamId: "other",
-        reason: "Other clinician",
-      }),
-    ]);
-    render(<AppointmentsPage />);
-    await selectPatient();
-    await screen.findByRole("form");
-    expect(screen.queryByText("Other patient")).not.toBeInTheDocument();
-    expect(screen.queryByText("Other clinician")).not.toBeInTheDocument();
-    mocks.appointments.mockResolvedValue([
-      appointment({
-        status: "confirmed",
-        patientNote: "Gracias, works for me",
-      }),
-      appointment({ id: "a2", status: "withdrawn" }),
-    ]);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Refresh appointments" }),
-    );
-    await screen.findByText(/Gracias, works for me/);
-    const history = screen.getByLabelText("Appointment history");
-    expect(history).toHaveTextContent("Confirmed");
-    expect(history).toHaveTextContent("Withdrawn");
-  });
-  it.each(["declined", "alternative_requested"] as const)(
-    "re-proposes after %s while preserving history and note",
-    async (status) => {
-      mocks.appointments.mockResolvedValue([
-        appointment({
-          status,
-          patientNote: "Please offer afternoons",
-          reason: "Original reason",
-          location: "Telehealth",
-        }),
-      ]);
-      render(<AppointmentsPage />);
-      await selectPatient();
-      await screen.findByRole("form");
-      fireEvent.click(screen.getByRole("button", { name: "Offer new times" }));
-      expect(screen.getByLabelText("Reason (optional)")).toHaveValue(
-        "Original reason",
-      );
-      expect(screen.getByLabelText("Location (optional)")).toHaveValue(
-        "Telehealth",
-      );
-      await fillTimes();
-      mocks.propose.mockResolvedValue([
-        appointment({ id: "new", proposalGroupId: "g2" }),
-      ]);
-      submit();
-      await screen.findByText(/Appointment offer sent/);
-      const history = screen.getByLabelText("Appointment history");
-      expect(history).toHaveTextContent("Please offer afternoons");
-      expect(
-        within(history).getAllByText("Awaiting patient response").length,
-      ).toBeGreaterThan(0);
-      expect(mocks.propose.mock.calls[0]?.[1]).not.toHaveProperty(
-        "proposal_group_id",
-      );
-    },
-  );
-  it("preserves loaded appointments when refresh fails, and retries", async () => {
-    mocks.appointments
-      .mockResolvedValueOnce([appointment({ reason: "Keep visible" })])
-      .mockRejectedValueOnce(new Error("private details"));
-    render(<AppointmentsPage />);
-    await selectPatient();
-    await screen.findByText("Keep visible");
-    fireEvent.click(
-      screen.getByRole("button", { name: "Refresh appointments" }),
-    );
-    await screen.findByRole("alert");
-    expect(screen.getByText("Keep visible")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Send appointment offer" }),
-    ).toBeDisabled();
-    mocks.appointments.mockResolvedValue([
-      appointment({ reason: "Keep visible" }),
-    ]);
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
-    );
-  });
-  it("supports 2–4 options and blocks duplicates and past dates before POST", async () => {
-    render(<AppointmentsPage />);
-    await selectPatient();
-    await fillTimes();
-    fireEvent.click(screen.getByRole("button", { name: "Add another time" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add another time" }));
-    expect(
-      screen.queryByRole("button", { name: "Add another time" }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Remove option 4" }));
-    fireEvent.click(screen.getByRole("button", { name: "Remove option 3" }));
-    fireEvent.change(screen.getByLabelText("Option 2 (America/Los_Angeles)"), {
-      target: { value: "2027-07-05T09:00" },
-    });
-    submit();
-    expect(screen.getByRole("alert")).toHaveTextContent("distinct");
-    expect(mocks.propose).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("Option 2 (America/Los_Angeles)"), {
-      target: { value: "2020-07-05T09:00" },
-    });
-    submit();
-    expect(screen.getByRole("alert")).toHaveTextContent("future");
-  });
-  it("clears selections/drafts/history between sessions and ignores old responses", async () => {
-    const oldProfile = deferred<{ timezone: string }>();
-    mocks.profile.mockReturnValueOnce(oldProfile.promise);
-    const view = render(<AppointmentsPage />);
-    await selectPatient();
-    mocks.state.auth.accessToken = "new-token";
-    mocks.patients.mockResolvedValue([]);
-    mocks.appointments.mockResolvedValue([]);
-    view.rerender(<AppointmentsPage />);
-    await screen.findByText("No assigned patients");
-    await act(async () =>
-      oldProfile.resolve({ timezone: "America/Los_Angeles" }),
-    );
-    expect(screen.queryByRole("form")).not.toBeInTheDocument();
-    expect(screen.queryByText("Maya Patel")).not.toBeInTheDocument();
-    expect(mocks.patients).toHaveBeenLastCalledWith("new-token", null);
-  });
-  it("ignores a late profile response after switching patients", async () => {
-    const pending = deferred<{ timezone: string }>();
-    mocks.profile
-      .mockReturnValueOnce(pending.promise)
-      .mockResolvedValueOnce({ timezone: "UTC" });
-    render(<AppointmentsPage />);
-    await selectPatient();
-    await selectPatient("team2");
-    await screen.findByLabelText("Option 1 (UTC)");
-    await act(async () => pending.resolve({ timezone: "America/Los_Angeles" }));
-    expect(
-      screen.queryByLabelText("Option 1 (America/Los_Angeles)"),
-    ).not.toBeInTheDocument();
-  });
-  it("shows a read-only Clinic row for the selected patient and updates it on change", async () => {
-    mocks.patients.mockResolvedValue([
-      { ...roster[0], clinic_id: "c1", clinic_name: "Synthetic Clinic North" },
-      { ...roster[1], clinic_id: "c2", clinic_name: "Synthetic Clinic South" },
-    ]);
-    render(<AppointmentsPage />);
-    await selectPatient("team1");
-    expect(await screen.findByText("Clinic: Synthetic Clinic North")).toBeInTheDocument();
-    await selectPatient("team2");
-    expect(await screen.findByText("Clinic: Synthetic Clinic South")).toBeInTheDocument();
-    expect(screen.queryByText("Clinic: Synthetic Clinic North")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("combobox").filter((el) => (el as HTMLSelectElement).name === "clinic")).toHaveLength(0);
-  });
-  it("names the clinic once next to a multi-clinic patient, not again in the header or history", async () => {
-    mocks.patients.mockResolvedValue([
-      { ...roster[0], clinic_id: "c1", clinic_name: "Synthetic Clinic North" },
-      { ...roster[1], clinic_id: "c2", clinic_name: "Synthetic Clinic South" },
-    ]);
-    mocks.appointments.mockResolvedValue([appointment({ clinicName: "Synthetic Clinic North" } as Partial<Appointment>)]);
-    clinicFilterState.clinics = [
-      { clinic_id: "c1", clinic_code: "A", clinic_name: "Synthetic Clinic North", role: "admin", status: "active" },
-      { clinic_id: "c2", clinic_code: "B", clinic_name: "Synthetic Clinic South", role: "provider", status: "active" },
-    ] as never;
-    render(<AppointmentsPage />);
-    await selectPatient("team1");
-    await screen.findByText("Clinic: Synthetic Clinic North");
-    // Once in the Clinic row; the patient picker option carries it to tell two links apart.
-    const outsidePicker = screen.queryAllByText(/Synthetic Clinic North/).filter((el) => el.tagName !== "OPTION");
-    expect(outsidePicker).toHaveLength(1);
-    resetClinicFilter();
-  });
-  describe("clinician schedule conflicts", () => {
-    function conflictError(conflicts: unknown[]) {
-      return new ApiClientError("raw server text", 422, {
-        error: { code: "CLINICIAN_SCHEDULE_CONFLICT", message: "raw server text", details: { conflicts } },
-      });
+      const button = await screen.findByRole("button", { name: "New offer" });
+      await waitFor(() => expect(button).toBeEnabled());
+      fireEvent.click(button);
+      return screen.findByRole("dialog", { name: "New offer" });
     }
-    const first = {
-      slot: "2027-07-05T16:00:00.000Z",
-      clinic_id: "c2",
-      clinic_name: "Synthetic Clinic South",
-      starts_at: "2027-07-05T16:00:00Z",
-      ends_at: "2027-07-05T16:30:00Z",
-    };
-    const second = {
-      slot: "2027-07-06T21:00:00.000Z",
-      clinic_id: "c2",
-      clinic_name: "Synthetic Clinic South",
-      starts_at: "2027-07-06T20:30:00Z",
-      ends_at: "2027-07-06T21:15:00Z",
-    };
-    it("marks the offending slot, hides raw text and blocks submit until it changes", async () => {
-      mocks.propose.mockRejectedValueOnce(conflictError([first]));
-      render(<AppointmentsPage />);
-      await selectPatient();
-      await fillTimes();
-      submit();
-      const callout = await screen.findByRole("alert");
-      expect(callout).toHaveTextContent(
-        "You already have an appointment at Synthetic Clinic South from 9:00 AM to 9:30 AM.",
-      );
-      expect(screen.queryByText(/raw server text/)).not.toBeInTheDocument();
-      const option1 = screen.getByLabelText("Option 1 (America/Los_Angeles)");
-      expect(callout.parentElement).toContainElement(option1);
-      expect(screen.getByLabelText("Option 2 (America/Los_Angeles)").closest("div[class~='min-w-0']")).not.toContainElement(callout);
-      expect(option1).toHaveAttribute("aria-describedby", callout.id);
-      const send = screen.getByRole("button", { name: "Send appointment offer" });
-      expect(send).toBeDisabled();
-      const help = screen.getByText("Change the conflicting time to send.");
-      expect(send).toHaveAttribute("aria-describedby", help.id);
-      fireEvent.change(option1, { target: { value: "2027-07-05T10:00" } });
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-      expect(screen.queryByText("Change the conflicting time to send.")).not.toBeInTheDocument();
-      expect(send).toBeEnabled();
-      mocks.propose.mockClear();
-      submit();
-      await waitFor(() => expect(mocks.propose).toHaveBeenCalledTimes(1));
+    async function choosePatient(panel: HTMLElement, value = "team1") {
+      fireEvent.change(within(panel).getByRole("combobox", { name: "Patient" }), { target: { value } });
+      await within(panel).findByLabelText("Option 1 (America/Los_Angeles)");
+    }
+
+    it("derives the clinic from the link, read-only and once", async () => {
+      clinicFilterState.clinics = TWO;
+      const panel = await openPanel();
+      await choosePatient(panel);
+      expect(within(panel).getByText("Clinic:", { exact: false })).toHaveTextContent("Clinic: Cedar Grove Community Health");
+      expect(within(panel).getAllByText("Cedar Grove Community Health")).toHaveLength(1);
+      expect(within(panel).queryByLabelText("Clinic")).not.toBeInTheDocument();
     });
-    it("shows a callout per conflicting slot and clears only the edited one", async () => {
-      mocks.propose.mockRejectedValueOnce(conflictError([first, second]));
+
+    it("lists the clinician's busy times for the chosen date, with clinics and no patients", async () => {
+      clinicFilterState.clinics = TWO;
+      mocks.busy.mockResolvedValue([
+        { startsAt: "2026-10-20T16:00:00Z", endsAt: "2026-10-20T16:30:00Z", clinicId: "c1", clinicName: "Cedar Grove Community Health" },
+      ]);
+      const panel = await openPanel();
+      await choosePatient(panel);
+      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
+      const busy = await within(panel).findByLabelText("Your booked times on 2026-10-20");
+      expect(busy).toHaveTextContent("9:00–9:30 AM · Cedar Grove Community Health");
+      expect(busy).not.toHaveTextContent("Maya");
+      expect(mocks.busy).toHaveBeenCalledTimes(1);
+    });
+
+    it("names no clinic beside busy times for a single-clinic clinician", async () => {
+      mocks.busy.mockResolvedValue([{ startsAt: "2026-10-20T16:00:00Z", endsAt: "2026-10-20T16:30:00Z", clinicName: "Only Clinic" }]);
+      const panel = await openPanel();
+      await choosePatient(panel);
+      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
+      const busy = await within(panel).findByLabelText("Your booked times on 2026-10-20");
+      expect(busy).toHaveTextContent("9:00–9:30 AM");
+      expect(busy).not.toHaveTextContent("Only Clinic");
+    });
+
+    it("sends the offer from the sticky footer and refreshes the schedule", async () => {
+      const panel = await openPanel();
+      await choosePatient(panel);
+      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 2 (America/Los_Angeles)"), { target: { value: "2026-10-21T14:00" } });
+      fireEvent.submit(within(panel).getByRole("form", { name: "Appointment offer" }));
+      await screen.findByText(/Appointment offer sent/);
+      expect(mocks.propose).toHaveBeenCalledWith(
+        "clinician-token",
+        expect.objectContaining({ care_team_id: "team1", slots: ["2026-10-20T16:00:00.000Z", "2026-10-21T21:00:00.000Z"] }),
+      );
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(mocks.schedule).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the server conflict callout and blocks sending until the time changes", async () => {
+      mocks.propose.mockRejectedValue(
+        Object.assign(new Error("conflict"), {
+          details: { error: { code: "CLINICIAN_SCHEDULE_CONFLICT", details: { conflicts: [{ slot: "2026-10-20T16:00:00.000Z", clinic_name: "Willow Terrace", starts_at: "2026-10-20T15:45:00Z", ends_at: "2026-10-20T16:15:00Z" }] } } },
+        }),
+      );
+      const panel = await openPanel();
+      await choosePatient(panel);
+      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 2 (America/Los_Angeles)"), { target: { value: "2026-10-21T14:00" } });
+      fireEvent.submit(within(panel).getByRole("form", { name: "Appointment offer" }));
+      expect(await within(panel).findByRole("alert")).toHaveTextContent("You already have an appointment at Willow Terrace");
+      expect(within(panel).getByText("Change the conflicting time to send.")).toBeInTheDocument();
+      expect(within(panel).getByRole("button", { name: "Send offer" })).toBeDisabled();
+    });
+
+    it("disables the picker and refuses a second submit while sending", async () => {
+      let resolve!: (rows: Appointment[]) => void;
+      mocks.propose.mockReturnValue(new Promise<Appointment[]>((done) => { resolve = done; }));
+      const panel = await openPanel();
+      await choosePatient(panel);
+      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 2 (America/Los_Angeles)"), { target: { value: "2026-10-21T14:00" } });
+      const form = within(panel).getByRole("form", { name: "Appointment offer" });
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+      expect(mocks.propose).toHaveBeenCalledTimes(1);
+      expect(within(panel).getByRole("combobox", { name: "Patient" })).toBeDisabled();
+      resolve([offer()]);
+      await screen.findByText(/Appointment offer sent/);
+    });
+
+    it("retries a timezone failure without exposing server text", async () => {
+      mocks.profile.mockRejectedValueOnce(new Error("private server detail"));
+      const panel = await openPanel();
+      fireEvent.change(within(panel).getByRole("combobox", { name: "Patient" }), { target: { value: "team1" } });
+      await within(panel).findByText("Could not load the patient's timezone");
+      expect(screen.queryByText("private server detail")).not.toBeInTheDocument();
+      fireEvent.click(within(panel).getByRole("button", { name: "Try again" }));
+      await within(panel).findByLabelText("Option 1 (America/Los_Angeles)");
+    });
+  });
+
+  describe("visit detail", () => {
+    it("opens the visit from the link with the patient, clinic, status and history", async () => {
+      clinicFilterState.clinics = TWO;
+      mocks.query = "appointmentId=v1";
+      mocks.schedule.mockResolvedValue(schedule({ visits: [visit()] }));
+      mocks.patientRows.mockResolvedValue([
+        { ...offer({ id: "v1", status: "confirmed", clinicName: "Cedar Grove Community Health", patientNote: "Works for me" }) },
+      ]);
       render(<AppointmentsPage />);
-      await selectPatient();
-      await fillTimes();
-      submit();
-      await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
-      expect(screen.getAllByRole("alert")[1]).toHaveTextContent("from 1:30 PM to 2:15 PM.");
-      fireEvent.change(screen.getByLabelText("Option 1 (America/Los_Angeles)"), {
-        target: { value: "2027-07-05T10:00" },
-      });
-      expect(screen.getAllByRole("alert")).toHaveLength(1);
-      expect(screen.getByRole("button", { name: "Send appointment offer" })).toBeDisabled();
-      fireEvent.change(screen.getByLabelText("Option 2 (America/Los_Angeles)"), {
-        target: { value: "2027-07-06T15:00" },
-      });
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Send appointment offer" })).toBeEnabled();
+      const panel = await screen.findByRole("dialog", { name: "Visit" });
+      expect(await within(panel).findByText(/Works for me/)).toBeInTheDocument();
+      expect(within(panel).getByRole("link", { name: "Maya Patel" })).toHaveAttribute("href", "/patients/p1");
+      expect(within(panel).getAllByText("Confirmed").length).toBeGreaterThan(0);
+      expect(mocks.patientRows).toHaveBeenCalledWith("clinician-token", "p1");
+    });
+
+    it("looks up a linked appointment outside the loaded range, or says it is unavailable", async () => {
+      mocks.query = "appointmentId=far";
+      mocks.allRows.mockResolvedValue([offer({ id: "far" })]);
+      mocks.patientRows.mockResolvedValue([offer({ id: "far" })]);
+      const first = render(<AppointmentsPage />);
+      await screen.findByRole("dialog", { name: "Visit" });
+      first.unmount();
+      mocks.query = "appointmentId=missing";
+      render(<AppointmentsPage />);
+      await screen.findByText("The linked appointment is unavailable.");
+    });
+  });
+
+  describe("visit management", () => {
+    async function openVisit(row: Partial<Appointment>) {
+      mocks.query = "appointmentId=v1";
+      mocks.schedule.mockResolvedValue(schedule({ visits: [visit()] }));
+      mocks.patientRows.mockResolvedValue([offer({ id: "v1", status: "confirmed", scheduledAt: "2026-10-20T16:00:00Z", ...row })]);
+      render(<AppointmentsPage />);
+      const panel = await screen.findByRole("dialog", { name: "Visit" });
+      await within(panel).findByRole("button", { name: "More actions" });
+      return panel;
+    }
+    const openMenu = (panel: HTMLElement) => fireEvent.click(within(panel).getByRole("button", { name: "More actions" }));
+
+    it("offers 'Offer new times' first for an upcoming visit and keeps the rest in the menu", async () => {
+      const panel = await openVisit({});
+      expect(within(panel).getByRole("button", { name: "Offer new times" })).toBeInTheDocument();
+      expect(within(panel).queryByRole("button", { name: "Mark completed" })).not.toBeInTheDocument();
+      openMenu(panel);
+      const items = within(panel).getAllByRole("menuitem").map((item) => item.textContent);
+      expect(items).toEqual(["Edit details", "Cancel visit"]); // no no-show before the visit ends
+    });
+
+    it("offers 'Mark completed' first once the visit has ended, and no-show in the menu", async () => {
+      mocks.complete.mockResolvedValue(offer({ id: "v1", status: "completed", scheduledAt: "2026-10-16T16:00:00Z" }));
+      const panel = await openVisit({ scheduledAt: "2026-10-16T16:00:00Z" });
+      expect(within(panel).queryByRole("button", { name: "Offer new times" })).not.toBeInTheDocument();
+      openMenu(panel);
+      expect(within(panel).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Edit details", "Mark no-show", "Cancel visit"]);
+      fireEvent.click(within(panel).getByRole("button", { name: "Mark completed" }));
+      await waitFor(() => expect(mocks.complete).toHaveBeenCalledWith("clinician-token", "v1"));
+      await waitFor(() => expect(within(panel).queryByRole("button", { name: "More actions" })).not.toBeInTheDocument());
+    });
+
+    it("confirms a no-show before recording it", async () => {
+      mocks.noShow.mockResolvedValue(offer({ id: "v1", status: "no_show", scheduledAt: "2026-10-16T16:00:00Z" }));
+      const panel = await openVisit({ scheduledAt: "2026-10-16T16:00:00Z" });
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Mark no-show" }));
+      const dialog = await screen.findByRole("dialog", { name: "Mark as no-show?" });
+      expect(mocks.noShow).not.toHaveBeenCalled();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Mark no-show" }));
+      await waitFor(() => expect(mocks.noShow).toHaveBeenCalledWith("clinician-token", "v1"));
+    });
+
+    it("needs a reason before cancelling, then cancels and shows it", async () => {
+      mocks.cancel.mockResolvedValue(offer({ id: "v1", status: "cancelled", cancelledBy: "clinician", cancelReasonCode: "other", cancelReason: "Water leak" }));
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Cancel visit" }));
+      const dialog = await screen.findByRole("dialog", { name: "Cancel this visit?" });
+      const confirm = within(dialog).getByRole("button", { name: "Cancel visit" });
+      expect(confirm).toBeDisabled();
+      fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "other" } });
+      expect(confirm).toBeDisabled(); // "Other" needs text
+      fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Water leak" } });
+      expect(confirm).toBeEnabled();
+      fireEvent.click(confirm);
+      await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith("clinician-token", "v1", { reason_code: "other", reason: "Water leak" }));
+      expect(await within(panel).findByRole("note")).toHaveTextContent("Cancelled by your team. Other — Water leak");
+      expect(mocks.schedule.mock.calls.length).toBeGreaterThan(1); // the agenda reloads
+    });
+
+    it("keeps the dialog and says so when the cancel fails or the visit changed", async () => {
+      mocks.cancel.mockRejectedValue(Object.assign(new Error("x"), { details: { error: { code: "APPOINTMENT_UNAVAILABLE" } } }));
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Cancel visit" }));
+      const dialog = await screen.findByRole("dialog", { name: "Cancel this visit?" });
+      fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "clinic_closed" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel visit" }));
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("This visit changed in the meantime");
+    });
+
+    it("closes only the dialog on Escape, not the panel behind it", async () => {
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Cancel visit" }));
+      await screen.findByRole("dialog", { name: "Cancel this visit?" });
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Cancel this visit?" })).not.toBeInTheDocument());
+      expect(screen.getByRole("dialog", { name: "Visit" })).toBeInTheDocument();
+    });
+
+    it("edits details without a time field and refreshes the schedule", async () => {
+      mocks.update.mockResolvedValue(offer({ id: "v1", status: "confirmed", location: "Suite 3", appointmentType: "routine" }));
+      const panel = await openVisit({});
+      openMenu(panel);
+      fireEvent.click(within(panel).getByRole("menuitem", { name: "Edit details" }));
+      const dialog = await screen.findByRole("dialog", { name: "Edit details" });
+      expect(within(dialog).getByText(/offer new times so the patient can agree/)).toBeInTheDocument();
+      expect(within(dialog).queryByLabelText(/time|date/i)).not.toBeInTheDocument();
+      fireEvent.change(within(dialog).getByLabelText("Location"), { target: { value: "Suite 3" } });
+      fireEvent.change(within(dialog).getByLabelText("Appointment type"), { target: { value: "routine" } });
+      fireEvent.submit(within(dialog).getByRole("form", { name: "Edit visit details" }));
+      await waitFor(() => expect(mocks.update).toHaveBeenCalledWith("clinician-token", "v1", expect.objectContaining({ location: "Suite 3", appointment_type: "routine" })));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit details" })).not.toBeInTheDocument());
+    });
+
+    it("lets an open offer be edited but not cancelled or completed", async () => {
+      const panel = await openVisit({ status: "proposed" });
+      expect(within(panel).queryByRole("button", { name: /Offer new times|Mark completed/ })).not.toBeInTheDocument();
+      openMenu(panel);
+      expect(within(panel).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Edit details"]);
+    });
+  });
+
+  describe("cancelled visits on the agenda", () => {
+    it("hides them until asked, then shows them muted with a Cancelled chip", async () => {
+      mocks.schedule.mockImplementation(async (_t, _f, _to, _c, includeCancelled) =>
+        schedule({ visits: [visit(), ...(includeCancelled ? [visit({ id: "v2", patientName: "Hannah Brooks", status: "cancelled", scheduledAt: "2026-10-17T20:00:00Z" })] : [])] }),
+      );
+      render(<AppointmentsPage />);
+      await screen.findByText("Maya Patel");
+      expect(screen.queryByText("Hannah Brooks")).not.toBeInTheDocument();
+      expect(mocks.schedule.mock.calls[0]![4]).toBe(false);
+      fireEvent.click(screen.getByRole("checkbox", { name: "Show cancelled" }));
+      const row = (await screen.findByText("Hannah Brooks")).closest("button")!;
+      expect(row).toHaveClass("opacity-60");
+      expect(within(row).getByText("Cancelled")).toBeInTheDocument();
+      expect(mocks.schedule.mock.calls.at(-1)![4]).toBe(true);
     });
   });
 });

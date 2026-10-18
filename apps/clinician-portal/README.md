@@ -92,6 +92,13 @@ filter and no new request parameter.
 - Messages filter the conversation list on the server; Alerts filter the loaded items by
   `clinic_id` (the notification cache is shared with the bell, so it is not refetched per clinic).
 
+### Message translation (LOC-003)
+
+A conversation read returns originals and stored translations only; messages that still need one carry
+`translation_pending`. The portal then asks `POST /care-conversations/{id}/messages/{message_id}/translation`
+for each, three at a time, shows "Translating…" and swaps the text in per the display rules. Typing and
+sending never wait. The patient portal does the same in the patient's language.
+
 ### Appointments across clinics (CLN-003 slice E)
 
 - **Rows:** each appointment row in the Appointments history shows the time first and in bold,
@@ -293,12 +300,27 @@ scheduled-dose denominator, and patient-reported side effects are not clinician-
 
 ## Appointments workflow
 
-Use **Appointments** in the sidebar to select an assigned patient and offer 2–4
-future appointment times. The roster supplies the care-team ID automatically.
+**My schedule** (`/appointments`, UX-006) is the clinician's own agenda: Today / This week, grouped by
+day with a sticky day header; each row shows the time (in the visit's timezone), patient, clinic chip
+(multi-clinic only), type and status, and opens the visit (`?appointmentId=`, which alerts also use). A
+"Needs action" strip counts offers awaiting a reply (expiring within 48 h highlighted), change requests
+and expired offers. `?clinic=` filters it. **New offer** (top right) opens a side panel (full screen on a
+phone): patient picker, the clinic read-only, 2–4 times, and, under each chosen date, the clinician's own
+booked times that day across all clinics (no patient names). A patient record's **Appointments** tab lists
+that patient's visits and offers and opens the same panel.
+
+The visit detail has an action row: a primary action that fits the status ("Offer new times" for an
+upcoming booked visit, "Mark completed" after it ends) and a "More actions" menu: **Edit details**
+(type, location, reason, notes; never the time of a booked visit), **Mark no-show** (after the visit
+ends, with a confirm dialog) and **Cancel visit** (destructive; a reason from a list, free text required
+for "Other"; the patient is told in the app and by email). The agenda hides cancelled visits behind
+**Show cancelled**, and shows them muted with a "Cancelled" chip.
+
+The patient picker supplies the care-team ID automatically.
 The patient profile supplies the explicitly labelled timezone for entry and display;
 missing/invalid values use UTC, and profile failures require retry before entry.
 
-History shows grouped choices, patient responses, and notes. **Refresh appointments**
+History shows grouped choices, patient responses, and notes. **Refresh**
 loads persisted responses. **Offer new times** creates a fresh offer after a decline
 or request for alternatives while preserving prior history. Time conversion rejects
 DST gaps and repeated hours rather than guessing. Failed writes preserve the draft;
