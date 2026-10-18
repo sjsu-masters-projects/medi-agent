@@ -1,0 +1,164 @@
+"""Durable websocket execution keeps saved replies independent of socket delivery."""
+
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
+
+import pytest
+from starlette.websockets import WebSocketState
+
+from app.core.exceptions import ValidationError
+from app.models.chat import ChatMessageCreate
+from app.models.enums import ChatRole, Language
+from app.routers import chat
+from app.services.chat_service import ChatService
+from app.services.chat_turn_execution import TurnChatService
+from app.services.chat_turn_service import ChatTurnService, TurnExecution, public_turn
+
+
+@pytest.fixture
+def turn_runtime(monkeypatch):
+    patient = str(uuid4())
+    user = {
+        "id": str(uuid4()),
+        "patient_id": patient,
+        "session_id": "chat-test",
+        "role": "user",
+        "language": "en-US",
+        "content": "Synthetic question",
+        "created_at": "2026-10-17T10:00:00Z",
+    }
+    record = {
+        "id": str(uuid4()),
+        "client_message_id": str(uuid4()),
+        "lease": str(uuid4()),
+        "status": "processing",
+        "attempt": 1,
+        "document_context": {"id": str(uuid4()), "summary": "Selected synthetic record"},
+    }
+    saved = {**user, "id": str(uuid4()), "role": "assistant", "content": "Synthetic reply"}
+    turns = MagicMock()
+    turns.begin = AsyncMock(return_value={"execute": True, "turn": record, "user_message": user})
+    turns.call = AsyncMock(
+        side_effect=lambda action, payload=None: {"items": []}
+        if action == "recover"
+        else {"accepted": True, "message": saved}
+    )
+    monkeypatch.setattr(chat, "ChatTurnService", lambda *_: turns)
+    service = MagicMock()
+    service.get_history = AsyncMock(return_value=[user])
+    service.update_conversation_state = AsyncMock()
+    websocket = MagicMock()
+    websocket.application_state = WebSocketState.CONNECTED
+    websocket.send_json = AsyncMock()
+    context = {
+        "patient_id": patient,
+        "session_id": "chat-test",
+        "incoming": ChatMessageCreate(
+            content=user["content"], role=ChatRole.USER, language=Language.EN
+        ),
+        "conversation_state": {},
+        "document_context": {"id": "wrong-connection-document"},
+    }
+    return turns, service, websocket, context, record, saved
+
+
+@pytest.mark.asyncio
+async def test_completed_retry_replays_without_running_the_pipeline(monkeypatch, turn_runtime):
+    turns, service, socket, context, record, saved = turn_runtime
+    turns.begin.return_value.update(execute=False, assistant_message=saved)
+    record["status"] = "completed"
+    pipeline = AsyncMock()
+    monkeypatch.setattr(chat, "_process_chat_message", pipeline)
+    await chat._process_durable_message(socket, service, context, {})
+    pipeline.assert_not_awaited()
+    assert socket.send_json.call_args_list[-1].args[0]["message"]["id"] == saved["id"]
+
+
+@pytest.mark.asyncio
+async def test_disconnected_socket_does_not_discard_reply_and_uses_turn_document(
+    monkeypatch, turn_runtime
+):
+    turns, service, socket, context, record, saved = turn_runtime
+    socket.send_json.side_effect = RuntimeError(
+        'Cannot call "send" once a close message has been sent.'
+    )
+
+    async def process(emitter, staged, ctx):
+        assert ctx["document_context"] == record["document_context"]
+        assert ctx["conversation_history"] == []
+        message = await staged.save_message(
+            ctx["patient_id"],
+            {"role": "assistant", "content": "Synthetic reply", "language": "en-US"},
+        )
+        await emitter.send_json({"type": "assistant_complete", "message": message})
+        return {}
+
+    monkeypatch.setattr(chat, "_process_chat_message", process)
+    await chat._process_durable_message(socket, service, context, {})
+    assert any(call.args[0] == "complete" for call in turns.call.call_args_list)
+    assert not any(call.args[0] in {"failed", "interrupted"} for call in turns.call.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_deadline_failure_is_persisted_and_recovers_without_exposing_provider_error(
+    monkeypatch, turn_runtime
+):
+    turns, service, socket, context, _, _ = turn_runtime
+    monkeypatch.setattr(
+        chat,
+        "_process_chat_message",
+        AsyncMock(side_effect=TimeoutError("private provider detail")),
+    )
+    await chat._process_durable_message(socket, service, context, {})
+    assert turns.call.call_args_list[0].args[0] == "interrupted"
+    errors = [
+        call.args[0] for call in socket.send_json.call_args_list if call.args[0]["type"] == "error"
+    ]
+    assert errors[0]["code"] == "CHAT_TURN_UNAVAILABLE"
+    assert "private" not in str(errors)
+
+
+@pytest.mark.asyncio
+async def test_turn_request_identity_binds_language_content_and_document():
+    service = ChatTurnService(MagicMock(), str(uuid4()), "chat-test")
+    service.call = AsyncMock(return_value={})
+    request = {
+        "client_message_id": str(uuid4()),
+        "content": "Synthetic",
+        "language": "en-US",
+        "document_id": None,
+    }
+    await service.begin(request, 30)
+    first = service.call.call_args.args[1]["request_hash"]
+    await service.begin(dict(request), 30)
+    assert service.call.call_args.args[1]["request_hash"] == first
+    await service.begin({**request, "document_id": str(uuid4())}, 30)
+    assert service.call.call_args.args[1]["request_hash"] != first
+
+
+def test_public_turn_never_exposes_snapshot_or_execution_lease():
+    record = {
+        "id": str(uuid4()),
+        "lease": "private",
+        "request_hash": "private",
+        "document_context": {"id": "doc", "summary": "private"},
+        "status": "interrupted",
+        "attempt": 1,
+        "actions_started": True,
+    }
+    result = public_turn(record)
+    assert result["document_id"] == "doc" and not result["retryable"]
+    assert "private" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_expired_lease_cannot_start_a_clinical_write(monkeypatch, turn_runtime):
+    turns, service, _, _, record, _ = turn_runtime
+    turns.call.return_value = {"accepted": False}
+    turns.call.side_effect = None
+    write = AsyncMock()
+    monkeypatch.setattr(ChatService, "save_symptom_report", write)
+    staged = TurnChatService(service, TurnExecution(turns, record), {})
+    with pytest.raises(ValidationError):
+        await staged.save_symptom_report("patient", {"synthetic": True})
+    write.assert_not_awaited()

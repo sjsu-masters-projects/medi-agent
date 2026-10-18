@@ -43,6 +43,10 @@ const ASSISTANT_ROW = {
 };
 
 describe("chat API helpers", () => {
+    it("opts into durable turns explicitly without changing the legacy socket URL", () => {
+        expect(new URL(buildChatWebSocketUrl("patient", { durableTurns: true })).searchParams.get("turn_protocol")).toBe("1");
+        expect(new URL(buildChatWebSocketUrl("patient")).searchParams.has("turn_protocol")).toBe(false);
+    });
     it("maps snake_case chat rows to shared camelCase contract", () => {
         const mapped = mapChatMessageFromApi({
             audio_url: "https://cdn/audio.mp3",

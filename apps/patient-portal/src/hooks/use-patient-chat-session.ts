@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { getPatientChatCopy } from "@/content/chat-copy";
+import { useChatTurnRecovery, type RecoverableTurn } from "@/hooks/use-chat-turn-recovery";
 import {
     createSpeechRecognitionController,
     getVoiceCapabilities,
@@ -28,6 +29,7 @@ import {
     mapClinicianMessageFromApi,
     mapChatMessageFromApi,
     type ChatDocumentContextApi,
+    type ChatTurnApi,
 } from "@/services/chat-api";
 import {
     buildVoiceAudioDataUrl,
@@ -149,9 +151,13 @@ interface PatientChatSessionState {
     voiceError: string | null;
     voiceInterimTranscript: string;
     voiceStatus: VoiceStatus;
+    recoveryTurns: RecoverableTurn[];
+    turnBusy: boolean;
 }
 
 interface PatientChatSessionActions {
+    retryTurn: (id: string) => void;
+    dismissTurn: (id: string) => void;
     dismissDocumentContext: () => void;
     dismissSafetyNotice: () => void;
     handleHandsFreeToggle: () => void;
@@ -180,7 +186,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     );
     // Today's conversation by default; a question about a document starts its own.
     const [sessionId, setSessionId] = useState<string>(() =>
-        searchParams.get("document") ? newConversationId() : todayConversationId(),
+        /^[A-Za-z0-9_-]{1,64}$/.test(searchParams.get("session") ?? "")
+            ? searchParams.get("session")!
+            : searchParams.get("document") ? newConversationId() : todayConversationId(),
     );
     const [voiceCapabilities] = useState(getVoiceCapabilities);
     const [input, setInput] = useState(
@@ -202,7 +210,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
     // A dismissal travels with the next connection so the server stops restoring the
     // document it saved for this conversation; clearing it here alone brought it back.
-    const [documentDismissed, setDocumentDismissed] = useState(false);
+    const [documentDismissed, setDocumentDismissed] = useState(searchParams.get("focus") === "none");
     const [documentUnavailable, setDocumentUnavailable] = useState(false);
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
     const [reconnectSignal, setReconnectSignal] = useState(0);
@@ -240,6 +248,19 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         handsFreeMode: resolveInitialHandsFree(),
     });
     const socketRef = useRef<WebSocket | null>(null);
+    const recovery = useChatTurnRecovery(`${user?.id ?? ""}:${sessionId}`, socketRef);
+    const receiveTurns = useEffectEvent((rows: ChatTurnApi[], snapshot = false) => {
+        recovery.accept(rows, snapshot);
+        if (snapshot || rows.some((row) => row.status !== "processing")) {
+            setAssistantDraft("");
+            setAssistantDraftStartedAt(null);
+            dispatch(setTyping(rows.some((row) => row.status === "processing")));
+        }
+    });
+    const rejectTurn = useEffectEvent((id: string) => {
+        const content = recovery.reject(id);
+        if (content) setInput((current) => current || content);
+    });
     const voiceSocketRef = useRef<WebSocket | null>(null);
     const reconnectRef = useRef<{
         attempts: number;
@@ -294,14 +315,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             return;
         }
 
-        socketRef.current.send(
-            JSON.stringify({
-                type: "user_message",
-                content: trimmedContent,
-                language: voiceRefs.current.selectedLanguage,
-                audio_url: audioUrl ?? null,
-            }),
-        );
+        if (documentUnavailable || !recovery.send(trimmedContent,
+            voiceRefs.current.selectedLanguage, activeDocumentId, audioUrl)) return;
 
         // Feedback must begin when the user sends, not after the model has classified the turn.
         // `assistant_complete`, socket errors, and socket close all clear this state.
@@ -603,14 +618,44 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         voiceRefs.current.selectedLanguage = selectedLanguage;
     }, [selectedLanguage]);
 
-    useEffect(() => {
-        const documentId = searchParams.get("document");
-        if (!documentId) {
+    const applyDocumentRoute = useEffectEvent(() => {
+        const requestedSession = searchParams.get("session");
+        if (requestedSession && /^[A-Za-z0-9_-]{1,64}$/.test(requestedSession) && requestedSession !== sessionId) {
+            setSessionId(requestedSession);
+            setDocumentContext(null);
+            setActiveDocumentId(searchParams.get("document"));
+            setDocumentDismissed(searchParams.get("focus") === "none");
+            setDocumentUnavailable(false);
             return;
         }
+        const documentId = searchParams.get("document")?.trim();
+        if (!documentId) return;
+        if (documentId !== activeDocumentId) {
+            const next = resolveInitialDocumentContext(documentId);
+            setActiveDocumentId(documentId);
+            setDocumentContext(next);
+            setDocumentDismissed(false);
+            setDocumentUnavailable(false);
+            if (next?.suggestedQuestion) setInput((draft) => draft || next.suggestedQuestion || "");
+        }
+        if (searchParams.get("session") !== sessionId) {
+            router.replace(`/chat?session=${encodeURIComponent(sessionId)}&document=${encodeURIComponent(documentId)}`);
+        }
+    });
+    useEffect(() => { applyDocumentRoute(); }, [searchParams]);
 
-        router.replace("/chat");
-    }, [router, searchParams]);
+    // A new socket can recover a reply still being saved by the previous connection.
+    useEffect(() => {
+        if (!recovery.turns.length) return;
+        const recover = () => {
+            if (document.visibilityState === "visible" && socketRef.current?.readyState === WebSocket.OPEN)
+                socketRef.current.send(JSON.stringify({ type: "recover_turns" }));
+        };
+        const timer = window.setInterval(recover, 5000);
+        document.addEventListener("visibilitychange", recover);
+        window.addEventListener("focus", recover);
+        return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", recover); window.removeEventListener("focus", recover); };
+    }, [recovery.turns.length, sessionId]);
 
     useEffect(() => {
         if (!accessToken || !user) {
@@ -618,12 +663,13 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         }
 
         let isMounted = true;
+        let socketHistoryReceived = false;
         dispatch(clearChatState());
         dispatch(setLoading(true));
 
         fetchChatHistory(user.id, accessToken, sessionId)
             .then((history) => {
-                if (!isMounted) {
+                if (!isMounted || socketHistoryReceived) {
                     return;
                 }
 
@@ -636,7 +682,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 );
             })
             .catch(() => {
-                if (!isMounted) {
+                if (!isMounted || socketHistoryReceived) {
                     return;
                 }
 
@@ -654,6 +700,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         const socket = new WebSocket(
             buildChatWebSocketUrl(user.id, {
+                durableTurns: true,
                 documentId: activeDocumentId,
                 sessionId,
                 ...(documentDismissed && !activeDocumentId ? { documentDismissed: true } : {}),
@@ -674,6 +721,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         };
 
         socket.onmessage = (event) => {
+            if (!isMounted) return;
             let payload: unknown;
 
             try {
@@ -687,7 +735,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             switch (payload.type) {
+                case "chat_turn": receiveTurns([payload.turn]); return;
+                case "chat_turns": receiveTurns(payload.turns, true); return;
                 case "chat_history": {
+                    socketHistoryReceived = true;
                     const incomingHistory = payload.messages.map(mapChatMessageFromApi);
                     dispatch(
                         setMessages(
@@ -714,7 +765,6 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 case "chat_context_unavailable":
                     // Nora would otherwise answer from the general chart while the card
                     // still named a document she cannot read.
-                    setActiveDocumentId(null);
                     setDocumentContext(null);
                     setDocumentUnavailable(true);
                     return;
@@ -798,6 +848,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     setSafetyNotice(getPatientChatCopy(voiceRefs.current.selectedLanguage).escalationNotice);
                     return;
                 case "error":
+                    if (payload.client_message_id && ["CHAT_TURN_BUSY", "CHAT_TURN_CONFLICT", "CHAT_TURN_INVALID", "CHAT_DOCUMENT_UNAVAILABLE", "CHAT_DOCUMENT_CHANGED"].includes(payload.code ?? "")) {
+                        rejectTurn(payload.client_message_id);
+                    }
+                    if (["CHAT_DOCUMENT_UNAVAILABLE", "CHAT_DOCUMENT_CHANGED"].includes(payload.code ?? "")) setDocumentUnavailable(true);
                     resetAssistantDraft();
                     dispatch(setTyping(false));
                     dispatch(setChatError(payload.message || "Chat request failed."));
@@ -865,9 +919,14 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         setActiveDocumentId(null);
         setDocumentContext(null);
         setDocumentDismissed(true);
+        setDocumentUnavailable(false);
+        router.replace(`/chat?session=${encodeURIComponent(sessionId)}&focus=none`);
     }
 
     function openConversation(nextSessionId: string): void {
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(nextSessionId)) return;
+        router.replace(`/chat?session=${encodeURIComponent(nextSessionId)}`);
+        if (nextSessionId === sessionId) return;
         setActiveDocumentId(null);
         setDocumentContext(null);
         setDocumentDismissed(false);
@@ -1081,6 +1140,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     }
 
     return {
+        recoveryTurns: recovery.turns,
+        turnBusy: recovery.turnBusy,
+        retryTurn: (id: string) => { if (recovery.retry(id)) { dispatch(setTyping(true)); dispatch(setChatError(null)); } },
+        dismissTurn: recovery.dismiss,
         assistantDraft,
         assistantDraftStartedAt,
         canPlayAssistantAudio,
