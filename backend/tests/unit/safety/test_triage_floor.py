@@ -180,6 +180,76 @@ class TestTheFloor:
         assert not contains_medication_error_signal(message)
         assert deterministic_safety_floor(message) is None
 
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "I took my metformin twice by mistake, I feel fine",
+            "I took a double dose of my lisinopril",
+            "I took an extra pill this morning",
+            "I took too many of my pills",
+            "I think I took too much insulin",
+            "I doubled my dose of warfarin",
+            "I changed my dose on my own",
+            "I took my metformin again, forgot I had already taken it",
+            "I'm still taking aspirin even though my doctor said to stop",
+            "I didn't realize I took a double dose",
+            "me tomé la metformina dos veces",
+            "tomé una pastilla extra",
+            "tomé de más",
+            "tomé demasiadas pastillas",
+            "tomé el doble de mi medicina",
+            "cambié mi dosis por mi cuenta",
+            "seguí tomando la aspirina aunque el médico dijo que la suspendiera",
+        ],
+    )
+    def test_more_medication_error_phrasings_are_urgent(self, message: str) -> None:
+        verdict = deterministic_safety_floor(message)
+
+        assert verdict is not None
+        assert verdict.safety_rule == "urgent_medication_error"
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "I didn't take it twice",
+            "I did not take a double dose",
+            "I never took too many pills",
+            "What is a double dose?",
+            "I take my pill twice a day as prescribed",
+            "no me tomé dos veces la pastilla",
+            "no tomé una dosis doble",
+            "Tomo la pastilla dos veces al día",
+        ],
+    )
+    def test_denied_or_routine_dosing_does_not_trip_the_medication_floor(
+        self, message: str
+    ) -> None:
+        assert not contains_medication_error_signal(message)
+        assert deterministic_safety_floor(message) is None
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "I took a double dose and I can't breathe",
+            "Tomé una dosis doble y me desmayé",
+        ],
+    )
+    def test_medication_error_with_severe_symptoms_is_an_emergency(self, message: str) -> None:
+        verdict = deterministic_safety_floor(message)
+
+        assert verdict is not None
+        assert verdict.urgency == "emergency"
+
+    @pytest.mark.parametrize(
+        "message", ["I can't go on", "I can't go on anymore.", "no puedo más", "Ya no puedo más."]
+    )
+    def test_hopelessness_phrases_reach_the_crisis_floor(self, message: str) -> None:
+        verdict = deterministic_safety_floor(message)
+
+        assert verdict is not None
+        assert verdict.intent == "mental_health"
+        assert verdict.urgency == "emergency"
+
     def test_severe_symptoms_outrank_a_medication_error(self) -> None:
         verdict = deterministic_safety_floor(
             "I accidentally took two doses and now I have chest pain."
