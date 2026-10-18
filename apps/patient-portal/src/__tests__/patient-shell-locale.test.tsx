@@ -12,6 +12,7 @@ vi.mock("@/hooks/use-patient-profile", () => ({
 vi.mock("@/components/layouts", () => ({
   ProtectedRoute: ({ children }: { children: ReactNode }) => children,
   BottomNav: () => <nav>{state.language}</nav>,
+  PatientLoadingSkeleton: () => <div role="status">Loading</div>,
 }));
 vi.mock("@/components/layouts/patient-language-control", () => ({ PatientLanguageControl: () => null }));
 vi.mock("@/contexts/notifications-context", () => ({ NotificationProvider: ({ children }: { children: ReactNode }) => children }));
@@ -29,6 +30,7 @@ describe("authenticated first language render", () => {
     const view = render(<AppLayout><Screen /></AppLayout>);
     expect(mounted).not.toHaveBeenCalled();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
     state.loading = false;
     state.language = "es-MX";
     view.rerender(<AppLayout><Screen /></AppLayout>);

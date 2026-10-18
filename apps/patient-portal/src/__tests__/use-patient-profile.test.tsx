@@ -32,6 +32,15 @@ beforeEach(() => {
   get.mockReset();
 });
 describe("patient profile state", () => {
+  it("seeds the locale cookie from the saved profile preference", async () => {
+    document.cookie = "patient-portal.locale=; Path=/; Max-Age=0";
+    get.mockResolvedValueOnce(raw);
+    const { result } = renderHook(usePatientProfileState);
+    await waitFor(() => expect(result.current.profile).not.toBeNull());
+    expect(document.cookie).toContain("patient-portal.locale=es-MX");
+    expect(document.documentElement.lang).toBe("es-MX");
+  });
+
   it("keeps a saved preference when the refreshed GET arrives after the save", async () => {
     get.mockResolvedValueOnce(raw);
     const refresh = deferred<typeof raw>();
