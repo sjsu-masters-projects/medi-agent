@@ -62,7 +62,10 @@ BEGIN
         WHERE i.id=v_item_id AND v.patient_id=p_actor_id AND v.status='approved'
           AND NOT i.is_removed FOR SHARE OF i,v;
       IF NOT FOUND THEN
-        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Activity is no longer approved';
+        -- One neutral result covers missing, foreign and no-longer-approved identifiers.
+        -- A patient must not be able to probe whether another record exists.
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Activity context unavailable',
+          HINT='activity_context_unavailable';
       END IF;
       UPDATE public.care_conversation_messages SET care_plan_item_id=v_item_id
         WHERE id=(v_result->>'id')::uuid;
@@ -72,12 +75,30 @@ BEGIN
     IF p_actor_role IS DISTINCT FROM 'clinician' THEN
       RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='Conversation unavailable';
     END IF;
-    -- Match publication/generation: evidence fence BEFORE plan/patient locks.
-    -- Resolve identity without row locks, then recheck the exact thread below.
-    SELECT patient_id INTO v_patient FROM public.care_conversations
-      WHERE id=(p_payload->>'conversation_id')::uuid;
+    -- Reject an outsider before waiting on a patient-scoped evidence lock. This is the
+    -- lock-free equivalent of 066's lock_care_conversation_pair: the exact thread must
+    -- still belong to an active care-team link at an active clinic, and the clinician
+    -- must still hold an active membership at that link's clinic. Every denial is neutral.
+    SELECT c.* INTO v_thread FROM public.care_conversations c
+      JOIN public.care_teams t ON t.id=c.care_team_id
+        AND t.patient_id=c.patient_id AND t.clinician_id=c.clinician_id
+        AND t.clinic_id=c.clinic_id
+      JOIN public.patients p ON p.id=t.patient_id
+      JOIN public.clinicians clinician ON clinician.id=t.clinician_id
+      JOIN public.clinics cl ON cl.id=t.clinic_id
+      JOIN public.clinic_memberships membership
+        ON membership.clinician_id=t.clinician_id AND membership.clinic_id=t.clinic_id
+      WHERE c.id=(p_payload->>'conversation_id')::uuid
+        AND c.clinician_id=p_actor_id AND t.status='active'
+        AND cl.status='active' AND membership.status='active';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='Conversation unavailable';
+    END IF;
+    v_patient := v_thread.patient_id;
+    -- Match publication/generation: evidence fence BEFORE assignment/thread, plan and
+    -- patient row locks. The existing operation then rechecks authorization under locks.
     PERFORM private.lock_care_plan_evidence(v_patient,true);
-    -- Existing RPC rechecks and locks current assignment and exact private thread.
+    -- Existing RPC rechecks and locks the current assignment and exact private thread.
     PERFORM public.care_conversation_operation(p_actor_id,p_actor_role,'messages',
       jsonb_build_object('conversation_id',p_payload->>'conversation_id','limit',1));
     SELECT * INTO v_thread FROM public.care_conversations
@@ -89,16 +110,22 @@ BEGIN
       WHERE id=(p_payload->>'message_id')::uuid AND conversation_id=v_thread.id
         AND sender_role='patient';
     IF NOT FOUND OR v_message.care_plan_item_id IS NULL THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Activity context unavailable';
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Activity context unavailable',
+        HINT='activity_context_unavailable';
     END IF;
     SELECT i.* INTO v_item FROM public.care_plan_items i
       JOIN public.care_plan_versions v ON v.id=i.plan_version_id
       WHERE i.id=v_message.care_plan_item_id AND v.patient_id=v_thread.patient_id
-        AND v.status='approved' AND NOT i.is_removed FOR SHARE OF i,v;
+      FOR SHARE OF i,v;
     IF NOT FOUND THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Activity is no longer approved';
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Activity context unavailable',
+        HINT='activity_context_unavailable';
     END IF;
     SELECT * INTO v_plan FROM public.care_plan_versions WHERE id=v_item.plan_version_id;
+    IF v_plan.status IS DISTINCT FROM 'approved' OR v_item.is_removed THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Activity is no longer current',
+        HINT='activity_context_stale';
+    END IF;
     SELECT * INTO v_draft FROM public.care_plan_versions
       WHERE patient_id=v_thread.patient_id AND status='draft' FOR UPDATE;
     IF NOT FOUND THEN
@@ -120,7 +147,9 @@ BEGIN
         (review_source_item_id=v_item.id OR
           (v_item.source_fact_id IS NOT NULL AND source_fact_id=v_item.source_fact_id));
     IF v_count<>1 THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Review the existing draft before opening this activity';
+      RAISE EXCEPTION USING ERRCODE='22023',
+        MESSAGE='Review the existing draft before opening this activity',
+        HINT='care_plan_draft_exists';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM public.care_plan_audit_events
       WHERE plan_version_id=v_draft.id AND event_type='message_review_opened'

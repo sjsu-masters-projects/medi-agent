@@ -160,11 +160,11 @@ def public_turn(record: dict[str, Any]) -> dict[str, Any]:
     verdict = deterministic_safety_floor(str(user_message.get("content") or ""))
     guidance = None
     if verdict is not None and record.get("status") != "completed":
-        key = (
-            "mental_health_emergency_response"
-            if verdict.intent == "mental_health"
-            else "emergency_response"
-        )
+        key = {
+            "emergency_mental_health_keyword": "mental_health_emergency_response",
+            "emergency_symptom_keyword": "emergency_response",
+            "urgent_medication_error": "medication_error_response",
+        }.get(verdict.safety_rule, "emergency_response")
         guidance = resolve_locale_resource(user_message.get("language"), TRIAGE_COPY)[key]
     return {
         **{key: record[key] for key in fields if key in record},

@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { ProcessingDots } from "@/components/ui/motion";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { ChatTextarea, chatButton, chatDisplayTime } from "./chat-presentation";
-import { normalizeLocale } from "@/types";
+import { normalizeLocale, type Locale } from "@/types";
 import { ConversationActivityAttachment, ConversationActivityContext } from "./conversation-activity";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
@@ -19,13 +19,13 @@ const button = chatButton;
 const input = "min-h-[52px] w-full rounded-2xl border border-line-strong bg-surface px-4 py-2 text-base font-normal text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
 type Presentation = { compact?: boolean; conversationId?: string | null; recipientId?: string | null; onThreadPresentationChange?: (id: string | null) => void };
 
-export function CareConversations({ locale = "en-US", audience = "patient", visible = true, ...presentation }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean } & Presentation) {
+export function CareConversations({ locale = "en-US", audience = "patient", visible = true, ...presentation }: { locale?: Locale; audience?: "patient" | "clinician"; visible?: boolean } & Presentation) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
   if (!accessToken || !user) return null;
   return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} {...presentation} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, onThreadPresentationChange }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
+function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, onThreadPresentationChange }: { token: string; locale: Locale; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
@@ -239,7 +239,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
 }
 
 function ConversationThread({ token, thread, locale, visible, draft, onDraft, onSending, onRead, onSaved, focusOnOpen, audience, backAction }: {
-  token: string; thread: CareConversation; locale: string; visible: boolean; draft: ConversationDraft;
+  token: string; thread: CareConversation; locale: Locale; visible: boolean; draft: ConversationDraft;
   onDraft: (draft: ConversationDraft) => void; onSending: (sending: boolean) => void;
   onRead: (id: string) => void; onSaved: (message: CareConversationMessage) => void;
   focusOnOpen?: boolean;

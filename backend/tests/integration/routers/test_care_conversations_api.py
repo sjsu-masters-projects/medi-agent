@@ -176,6 +176,45 @@ def test_clinician_review_routes_only_to_authorized_rpc(client, conversation):
     assert payload["p_payload"] == {"conversation_id": thread["id"], "message_id": message["id"]}
 
 
+@pytest.mark.parametrize(
+    "hint,expected_code",
+    [
+        ("activity_context_unavailable", "ACTIVITY_CONTEXT_UNAVAILABLE"),
+        ("activity_context_stale", "ACTIVITY_CONTEXT_STALE"),
+        ("care_plan_draft_exists", "CARE_PLAN_DRAFT_EXISTS"),
+    ],
+)
+def test_activity_review_returns_stable_safe_error_codes(
+    client, conversation, hint, expected_code
+):
+    actor, thread, message, db = conversation
+    actor.role = "clinician"
+    db.rpc.return_value.execute.side_effect = APIError(
+        {"code": "22023", "message": "private record", "details": "private record", "hint": hint}
+    )
+    response = client.post(ROOT + f"/{thread['id']}/messages/{message['id']}/activity-review")
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == expected_code
+    assert "private record" not in response.text
+
+
+def test_invalid_attached_send_has_its_own_stable_error(client, conversation):
+    _, thread, _, db = conversation
+    db.rpc.return_value.execute.side_effect = APIError(
+        {"code": "22023", "message": "private record", "details": None, "hint": None}
+    )
+    response = client.post(
+        ROOT + f"/{thread['id']}/messages",
+        json={
+            "body": "Synthetic question",
+            "client_message_id": str(uuid4()),
+            "care_plan_item_id": str(uuid4()),
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_CONVERSATION_REQUEST"
+
+
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "before=not-uuid"])
 def test_invalid_pagination(client, conversation, query):
     _, thread, _, db = conversation

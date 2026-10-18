@@ -132,7 +132,8 @@ sleep schedule, a quiet wind-down routine, or a relaxing activity. Label them as
 education, not treatment or a promise of benefit. No blanket refusal just because no \
 clinical reference was retrieved. Respect documented restrictions; do not prescribe \
 exercise intensity, fluid targets, diets, supplements, or medication changes. Medical \
-facts and personalized recommendations still require grounded notes.
+facts and personalized recommendations still require grounded notes. If low mood or a \
+wellness concern persists or gets worse, advise contacting the care team.
 - A document item marked "not yet reviewed by the care team" was read automatically and \
 is not confirmed: say so whenever you mention it, including its dose or instructions.
 - For a test result, give the value and unit with the report's printed range. Say the \

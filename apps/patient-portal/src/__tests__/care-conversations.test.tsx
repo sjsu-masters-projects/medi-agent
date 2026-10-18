@@ -117,7 +117,7 @@ describe("human conversations", () => {
   it.each([
     ["en-US", "Automatic translation unavailable for this message"],
     ["es-MX", "Traducción automática no disponible para este mensaje"],
-  ])("shows the original, not a translation whose safety check failed (%s)", async (locale, note) => {
+  ] as const)("shows the original, not a translation whose safety check failed (%s)", async (locale, note) => {
     vi.mocked(careConversations.messages).mockResolvedValue({
       items: [{ ...message("newest", "Take 5 mg daily"), translation: "Toma 50 mg al dia", translation_locale: "es-MX", translation_guard_passed: false }],
       next_cursor: null,
@@ -171,7 +171,7 @@ describe("human conversations", () => {
     await screen.findByText("This conversation is unavailable. Choose an authorized contact.");
     expect(careConversations.open).not.toHaveBeenCalled();
   });
-  it.each(["en-US", "es-MX"])("keeps emergency wording after the contacts and labels the compact thread actions (%s)", async (locale) => {
+  it.each(["en-US", "es-MX"] as const)("keeps emergency wording after the contacts and labels the compact thread actions (%s)", async (locale) => {
     const spanish = locale === "es-MX";
     const view = render(<CareConversations compact locale={locale} />);
     const notice = screen.getByRole("note");
@@ -518,7 +518,7 @@ describe("human conversations", () => {
     expect(screen.getByRole("button", { name: /Dr. One · Clinic One/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it.each(["en-US", "es-MX"])("requires explicit confirmation before preparing a new key after a definitive mismatch (%s)", async (locale) => {
+  it.each(["en-US", "es-MX"] as const)("requires explicit confirmation before preparing a new key after a definitive mismatch (%s)", async (locale) => {
     const spanish = locale === "es-MX";
     vi.mocked(careConversations.send).mockRejectedValueOnce({
       status: 422, details: { error: { code: "MESSAGE_IDEMPOTENCY_MISMATCH" } },

@@ -1,4 +1,4 @@
-"""Answer an emergency deterministically, before any agent or model runs.
+"""Answer deterministic emergency and medication-error signals before a model runs.
 
 This is the runtime expression of the rule in `.agent/ARCHITECTURE.md`: anything that
 decides safety is code. When a message trips the keyword floor, the model is not consulted
@@ -29,11 +29,12 @@ LOCALE_STATE_KEY = "locale"
 """Session-state key holding the patient's locale, seeded when the run starts."""
 
 # Which reviewed response each floor rule earns. `deterministic_safety_floor` returns
-# exactly these two rules today, and checks self-harm first so a message carrying both
-# signals is answered with the crisis line rather than a general emergency instruction.
+# these rules, and checks emergencies first so severe symptoms are never reduced to an
+# urgent medication-error response.
 _COPY_KEY_BY_RULE: dict[str, str] = {
     "emergency_mental_health_keyword": "mental_health_emergency_response",
     "emergency_symptom_keyword": "emergency_response",
+    "urgent_medication_error": "medication_error_response",
 }
 
 _FALLBACK_COPY_KEY = "emergency_response"

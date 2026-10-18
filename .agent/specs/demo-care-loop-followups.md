@@ -14,11 +14,13 @@ includes the pending task-board/documentation reconciliation after #188.
    must be retained, not duplicated. Clinician LOC-003 work remains separate.
 2. **AI-006:** allow bounded general wellness education instead of blanket refusal;
    distinguish mild/stable symptoms and low mood from urgent deterioration while
-   retaining deterministic emergency/crisis floors, overdose/unsafe-dose and
-   suspected medication-reaction escalation. Remove only the unused legacy
-   ingestion graph/test after verifying callers. Route SOAP through the registry;
-   failure produces no invented/stored note. Operational budgets are explicitly
-   configured limits, never claimed measured clinical performance.
+   retaining deterministic emergency/crisis floors, bilingual medication-error
+   and suspected medication-reaction escalation. The unused legacy ingestion
+   graph/test is removed after verifying callers and migrating its golden coverage.
+   Route SOAP through the registry; transient provider and truncation failures get
+   one bounded retry, while any final failure produces no invented/stored note.
+   Operational budgets are configured limits, never claimed measured clinical
+   performance.
 3. **EVA-001:** reuse the existing synthetic evaluation framework with a bounded,
    paired-locale demo suite for grounding, explanation, symptom classification,
    unavailable responses and safety/approval boundaries. Keep raw final responses
@@ -62,6 +64,9 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   and adds an explicit clinician-only review action. Replays compare attachment
   identity; a stale source rejects a new send but does not erase a prior saved send.
   Invalid source validation rolls back the message, notification and audit together.
+  Review authorization is checked before waiting on the patient evidence fence and
+  is rechecked after it. Invalid message input, unavailable context, superseded
+  context and an existing ambiguous draft have distinct stable failures.
 - Review creates a full draft from the approved version or reuses the existing
   draft. Carried items keep provenance; projected medication items target the
   existing medication rather than proposing a duplicate. Verification defaults
@@ -86,6 +91,9 @@ New nonclinical activity-message copy remains **draft, awaiting bilingual review
 `Actividad del plan adjunta`, `Esta actividad ya no pertenece al plan actual.`, and
 `Tu mensaje no cambia el plan ni los recordatorios. Tu equipo debe revisar y aprobar cualquier cambio.`
 Stale attachment recovery: `La actividad adjunta ya no está disponible. Conservamos tu texto. Quita la actividad o vuelve a cargar las actividades antes de enviar.`
+Today recovery copy also remains draft: `Actualiza tus actividades e intenta de nuevo.`,
+`Vuelve a iniciar sesión. Tu respuesta no se ha guardado.`, and
+`No pudimos confirmar que se guardó tu respuesta. Actualiza antes de volver a intentarlo; la actividad no se ha marcado como completada.`
 Clinical titles/frequencies displayed beside these strings are existing approved
 wording, not new UI translations. Reviewed emergency/crisis copy is unchanged.
 

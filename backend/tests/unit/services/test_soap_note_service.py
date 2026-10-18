@@ -256,6 +256,59 @@ class TestCompose:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
+        "code",
+        [
+            GenerationErrorCode.RATE_LIMITED,
+            GenerationErrorCode.UNAVAILABLE,
+            GenerationErrorCode.TRUNCATED,
+        ],
+    )
+    async def test_a_transient_or_truncated_failure_is_retried_exactly_once(
+        self, mock_db, code
+    ) -> None:
+        generate = AsyncMock(
+            side_effect=[
+                GenerationProviderError(code, "safe synthetic failure"),
+                response(NOTE.model_dump_json()),
+            ]
+        )
+        with patch("app.services.soap_note_service.generate_for_workload", generate):
+            note = await SoapNoteService(mock_db).compose({"patient_info": {}})
+
+        assert note == NOTE
+        assert generate.await_count == 2
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "code",
+        [
+            GenerationErrorCode.INVALID_REQUEST,
+            GenerationErrorCode.INVALID_RESPONSE,
+            GenerationErrorCode.AUTHENTICATION,
+            GenerationErrorCode.CONFIGURATION,
+            GenerationErrorCode.TIMEOUT,
+        ],
+    )
+    async def test_non_retryable_provider_failures_get_one_attempt(self, mock_db, code) -> None:
+        generate = AsyncMock(side_effect=GenerationProviderError(code, "safe synthetic failure"))
+        with patch("app.services.soap_note_service.generate_for_workload", generate):
+            note = await SoapNoteService(mock_db).compose({"patient_info": {}})
+
+        assert note is None
+        assert generate.await_count == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("text", ["not JSON", "{}", '{"subjective":""}'])
+    async def test_invalid_content_is_not_retried(self, mock_db, text) -> None:
+        generate = AsyncMock(return_value=response(text))
+        with patch("app.services.soap_note_service.generate_for_workload", generate):
+            note = await SoapNoteService(mock_db).compose({"patient_info": {}})
+
+        assert note is None
+        assert generate.await_count == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
         "text",
         [
             "not JSON",
@@ -298,15 +351,25 @@ class TestCompose:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "failure",
+        "failure,expected_attempts",
         [
-            TimeoutError("secret provider detail"),
-            GenerationProviderError(GenerationErrorCode.RATE_LIMITED, "secret provider detail"),
-            GenerationProviderError(GenerationErrorCode.TRUNCATED, "secret provider detail"),
+            (TimeoutError("secret provider detail"), 1),
+            (
+                GenerationProviderError(GenerationErrorCode.RATE_LIMITED, "secret provider detail"),
+                2,
+            ),
+            (
+                GenerationProviderError(GenerationErrorCode.UNAVAILABLE, "secret provider detail"),
+                2,
+            ),
+            (
+                GenerationProviderError(GenerationErrorCode.TRUNCATED, "secret provider detail"),
+                2,
+            ),
         ],
     )
     async def test_routed_failure_stores_nothing_and_logs_no_raw_error(
-        self, mock_db, patient_id, clinician_id, failure, caplog
+        self, mock_db, patient_id, clinician_id, failure, expected_attempts, caplog
     ) -> None:
         service = SoapNoteService(mock_db)
         provider = MagicMock(generate=AsyncMock(side_effect=failure))
@@ -319,9 +382,12 @@ class TestCompose:
         assert result.status == "error"
         assert result.soap_note_id is None
         store.assert_not_awaited()
-        factory.assert_called_once_with(
-            route_for(Workload.SOAP).primary,
-            timeout_seconds=route_for(Workload.SOAP).budget_seconds,
+        assert factory.call_count == expected_attempts
+        assert provider.generate.await_count == expected_attempts
+        assert all(
+            call.args == (route_for(Workload.SOAP).primary,)
+            and call.kwargs == {"timeout_seconds": route_for(Workload.SOAP).budget_seconds}
+            for call in factory.call_args_list
         )
         assert "secret provider detail" not in caplog.text
 

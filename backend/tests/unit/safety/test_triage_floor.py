@@ -12,6 +12,7 @@ import pytest
 from app.safety import (
     apply_safety_override,
     contains_adverse_effect_signal,
+    contains_medication_error_signal,
     deterministic_safety_floor,
     is_escalation,
 )
@@ -32,8 +33,21 @@ EMERGENCY_ES = [
     "me desmayé en la cocina",
 ]
 
-SELF_HARM_EN = ["I want to die", "I have been thinking about suicide", "I want to kill myself"]
-SELF_HARM_ES = ["quiero quitarme la vida", "he pensado en suicidarme", "quiero matarme"]
+SELF_HARM_EN = [
+    "I want to die",
+    "I have been thinking about suicide",
+    "I want to kill myself",
+    "I can't go on",
+    "I can’t go on anymore.",
+    "I cant go on like this!",
+]
+SELF_HARM_ES = [
+    "quiero quitarme la vida",
+    "he pensado en suicidarme",
+    "quiero matarme",
+    "no puedo más",
+    "Ya no puedo mas con esto.",
+]
 
 ORDINARY = [
     "I would like to schedule a follow-up next week",
@@ -119,6 +133,62 @@ class TestTheFloor:
         """A patient in distress does not type carefully."""
         assert deterministic_safety_floor(message) is not None
 
+    @pytest.mark.parametrize(
+        "message",
+        ["I can't go on vacation this week", "No puedo más café porque es tarde"],
+    )
+    def test_crisis_phrases_do_not_match_when_the_phrase_clearly_continues(
+        self, message: str
+    ) -> None:
+        assert deterministic_safety_floor(message) is None
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "I accidentally took my metformin twice this morning.",
+            "I took an extra dose of insulin.",
+            "Can I double my prescribed dose tonight?",
+            "I overdosed on my medication.",
+            "The care team told me to hold my medicine. I took it anyway today.",
+            "Me tomé la metformina dos veces esta mañana por error.",
+            "Tomé una dosis extra de insulina.",
+            "¿Puedo duplicar mi dosis esta noche?",
+            "Tuve una sobredosis del medicamento.",
+            "Mi equipo de atención me indicó pausar el medicamento. Lo tomé hoy.",
+        ],
+    )
+    def test_medication_errors_are_deterministically_urgent(self, message: str) -> None:
+        verdict = deterministic_safety_floor(message)
+
+        assert verdict is not None
+        assert verdict.intent == "medication_question"
+        assert verdict.urgency == "urgent"
+        assert verdict.safety_rule == "urgent_medication_error"
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "What does overdose mean?",
+            "Why is my medication taken twice daily?",
+            "¿Qué significa sobredosis?",
+            "Mi receta dice tomar el medicamento dos veces al día.",
+        ],
+    )
+    def test_medication_education_and_normal_schedules_do_not_trip_the_floor(
+        self, message: str
+    ) -> None:
+        assert not contains_medication_error_signal(message)
+        assert deterministic_safety_floor(message) is None
+
+    def test_severe_symptoms_outrank_a_medication_error(self) -> None:
+        verdict = deterministic_safety_floor(
+            "I accidentally took two doses and now I have chest pain."
+        )
+
+        assert verdict is not None
+        assert verdict.urgency == "emergency"
+        assert verdict.safety_rule == "emergency_symptom_keyword"
+
 
 class TestEscalationIsMonotonic:
     def test_the_floor_can_force_emergency_over_a_model_verdict(self) -> None:
@@ -143,6 +213,18 @@ class TestEscalationIsMonotonic:
 
         assert urgency == "urgent"
         assert "side-effect" in reason
+
+    def test_a_medication_error_forces_urgent_over_a_routine_model_verdict(self) -> None:
+        intent, urgency, reason = apply_safety_override(
+            intent="general",
+            urgency="routine",
+            reason="model said routine",
+            message="I accidentally took my medicine twice this morning",
+        )
+
+        assert intent == "medication_question"
+        assert urgency == "urgent"
+        assert "same-day" in reason
 
     def test_an_emergency_is_never_downgraded(self) -> None:
         _, urgency, _ = apply_safety_override(

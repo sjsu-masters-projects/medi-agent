@@ -45,6 +45,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Intentional dynamic SSR: the proxy hint keeps the first HTML paint in the resolved locale.
   const locale = supportedPatientLocale((await headers()).get(PATIENT_LOCALE_HEADER))
     ?? supportedPatientLocale((await cookies()).get(PATIENT_LOCALE_COOKIE)?.value);
   return (

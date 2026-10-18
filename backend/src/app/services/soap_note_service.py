@@ -27,6 +27,7 @@ from app.adk.background_generation import generate_for_workload
 from app.adk.registry import Workload, route_for
 from app.core.llm_failures import categorize_llm_failure
 from app.models.dashboard import SoapNote
+from app.models.generation import GenerationErrorCode, GenerationProviderError, GenerationResponse
 from app.services.soap_note_prompts import SOAP_SYSTEM_INSTRUCTION, build_soap_prompt
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_LOOKBACK_DAYS = 30
 MAX_CHAT_MESSAGES = 20
 MAX_ADR_ASSESSMENTS = 5
+SOAP_RETRYABLE_ERRORS = frozenset(
+    {
+        GenerationErrorCode.RATE_LIMITED,
+        GenerationErrorCode.UNAVAILABLE,
+        GenerationErrorCode.TRUNCATED,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -196,13 +204,7 @@ class SoapNoteService:
     async def compose(self, patient_context: dict[str, Any]) -> SoapNote | None:
         """Ask the model to document the record, or return None if it could not."""
         try:
-            response = await generate_for_workload(
-                Workload.SOAP,
-                prompt=build_soap_prompt(patient_context),
-                response_schema=SoapNote.model_json_schema(),
-                system_instruction=SOAP_SYSTEM_INSTRUCTION,
-                temperature=0.3,
-            )
+            response = await self._generate_with_one_transient_retry(patient_context)
             note = SoapNote.model_validate_json(response.text)
             if not all(
                 value.strip()
@@ -217,6 +219,30 @@ class SoapNoteService:
                 extra={"failure_reason": categorize_llm_failure(exc)},
             )
             return None
+
+    async def _generate_with_one_transient_retry(
+        self, patient_context: dict[str, Any]
+    ) -> GenerationResponse:
+        """Retry one normalized transient/truncation failure, never invalid content."""
+        prompt = build_soap_prompt(patient_context)
+        for attempt in range(2):
+            try:
+                return await generate_for_workload(
+                    Workload.SOAP,
+                    prompt=prompt,
+                    response_schema=SoapNote.model_json_schema(),
+                    system_instruction=SOAP_SYSTEM_INSTRUCTION,
+                    temperature=0.3,
+                )
+            except GenerationProviderError as exc:
+                if attempt == 0 and exc.code in SOAP_RETRYABLE_ERRORS:
+                    logger.warning(
+                        "Retrying SOAP generation after a recoverable provider failure",
+                        extra={"failure_reason": exc.code.value},
+                    )
+                    continue
+                raise
+        raise AssertionError("SOAP retry loop exhausted without returning or raising")
 
     async def store(
         self, *, patient_id: str, clinician_id: str, note: SoapNote

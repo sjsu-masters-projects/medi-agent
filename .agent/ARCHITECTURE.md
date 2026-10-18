@@ -80,7 +80,7 @@ may suggest or draft; it must not decide authority, bypass rules, or write an ap
 clinical fact without review.
 
 Demo follow-ups route SOAP through the existing workload registry (failure writes
-no note) and retire the unused ingestion graph after migrating its golden tests
+no note). The unused ingestion graph has been retired after its golden tests moved
 to the current extraction service. The patient locale cookie is a presentation
 hint only, never identity or authorization. COM-002 stores an approved activity
 reference in a private message; its explicit review transaction opens/reuses an

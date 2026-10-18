@@ -58,6 +58,7 @@ def test_demo_is_bounded_paired_and_covers_the_demo_boundaries(scenarios) -> Non
         if "care_responder" in scenario.tags:
             assert scenario.inputs["message"] in request.prompt
             assert "general wellness" in request.system_instruction
+            assert "persists or gets worse" in request.system_instruction
 
 
 @pytest.mark.asyncio

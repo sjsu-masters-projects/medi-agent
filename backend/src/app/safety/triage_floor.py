@@ -83,6 +83,68 @@ MENTAL_HEALTH_EMERGENCY_KEYWORDS = frozenset(
     }
 )
 
+_MENTAL_HEALTH_CRISIS_PATTERNS = (
+    re.compile(r"\bi can(?:not|'t|’t) go on\b(?:\s+(?:anymore|like this))?(?=\s*(?:[.!?]|$))"),
+    re.compile(r"\b(?:ya\s+)?no puedo m[aá]s\b(?:\s+con esto)?(?=\s*(?:[.!?]|$))"),
+)
+
+# These patterns describe a medication error or an unsafe requested dose change. They
+# intentionally require concrete dose/taking language: general education such as "what
+# is an overdose?" must not be turned into a report about the patient.
+_MEDICATION_ERROR_PATTERNS = (
+    re.compile(
+        r"\b(?:i\s+)?(?:accidentally|mistakenly)\s+(?:took|take|taken)\b.{0,80}\b(?:twice|again|two doses?)\b"
+    ),
+    re.compile(
+        r"\b(?:i\s+)?(?:took|take|taken)\b.{0,80}\b(?:twice|again|two doses?)\b.{0,40}\b(?:accidentally|by mistake|in error)\b"
+    ),
+    re.compile(
+        r"\b(?:i\s+)?(?:took|take|taken|had)\b.{0,50}\b(?:an?\s+)?(?:extra|double)\s+dose\b"
+    ),
+    re.compile(
+        r"\b(?:double|doubling)\s+(?:my\s+|the\s+)?(?:prescribed\s+)?(?:dose|insulin|medication|medicine)\b"
+    ),
+    re.compile(r"\b(?:i|we|he|she|they)\b.{0,40}\b(?:overdosed|had an overdose)\b"),
+    re.compile(r"\b(?:i\s+)?(?:took|take|taken)\b.{0,40}\b(?:an?\s+)?overdose\b"),
+    re.compile(
+        r"\b(?:accidentalmente|por error|sin querer)\s+(?:me\s+)?(?:tom[eé]|tome|tomar)\b.{0,80}\b(?:dos veces|otra vez|dos dosis)\b"
+    ),
+    re.compile(
+        r"\b(?:me\s+)?(?:tom[eé]|tome)\b.{0,80}\b(?:dos veces|otra vez|dos dosis)\b.{0,40}\b(?:por error|sin querer|accidentalmente)\b"
+    ),
+    re.compile(
+        r"\b(?:me\s+)?(?:tom[eé]|tome|tomar)\b.{0,50}\b(?:una\s+)?dosis\s+(?:extra|doble)\b"
+    ),
+    re.compile(r"\b(?:duplicar|dupliqu[eé])\s+(?:mi\s+|la\s+)?(?:dosis|insulina|medicamento)\b"),
+    re.compile(
+        r"\b(?:yo\s+)?(?:tuve|tuvo|tuvimos|sufr[ií]|tom[eé]|tome)\b.{0,50}"
+        r"\b(?:una\s+)?(?:sobredosis|sobredosificaci[oó]n)\b"
+    ),
+)
+
+_HELD_OR_STOPPED_MEDICATION_PATTERNS = (
+    re.compile(
+        r"\b(?:care team|doctor|clinician|pharmacist|document|paper)\b.{0,100}"
+        r"\b(?:told|said|says|instructed)?\b.{0,40}\b(?:hold|stop|stopped|not take|discontinue)\b"
+        r".{0,120}\b(?:i\s+)?(?:took|take|taken|continued taking)\b"
+    ),
+    re.compile(
+        r"\b(?:i\s+)?(?:took|take|taken|continued taking)\b.{0,120}"
+        r"\b(?:even though|although|after|despite)\b.{0,80}"
+        r"\b(?:told|said|instructed|hold|stop|stopped|not take|discontinue)\b"
+    ),
+    re.compile(
+        r"\b(?:equipo de atenci[oó]n|m[eé]dico|farmac[eé]utico|documento|informe)\b.{0,120}"
+        r"\b(?:indic[oó]|dijo|dice)?\b.{0,40}\b(?:pausar|suspender|dejar de tomar|no tomar|detener)\b"
+        r".{0,120}\b(?:me\s+)?(?:tom[eé]|tome|tomado|segu[ií] tomando)\b"
+    ),
+    re.compile(
+        r"\b(?:me\s+)?(?:tom[eé]|tome|tomado|segu[ií] tomando)\b.{0,120}"
+        r"\b(?:aunque|a pesar de|despu[eé]s de)\b.{0,80}"
+        r"\b(?:indic[oó]|dijo|pausar|suspender|dejar de tomar|no tomar|detener)\b"
+    ),
+)
+
 ADVERSE_EFFECT_KEYWORDS = frozenset(
     {
         "side effect",
@@ -232,6 +294,14 @@ def contains_adverse_effect_signal(text: str) -> bool:
     return False
 
 
+def contains_medication_error_signal(text: str) -> bool:
+    """Detect a concrete unsafe dose or a medication taken after hold/stop advice."""
+    normalized = text.lower()
+    return any(pattern.search(normalized) for pattern in _MEDICATION_ERROR_PATTERNS) or any(
+        pattern.search(normalized) for pattern in _HELD_OR_STOPPED_MEDICATION_PATTERNS
+    )
+
+
 def _is_negated_adverse_signal(clause: str, index: int) -> bool:
     prefix = clause[:index]
     without_article = re.sub(r"\b(?:a|an|un|una)\s+$", "", prefix)
@@ -252,7 +322,10 @@ def deterministic_safety_floor(message: str) -> SafetyVerdict | None:
     """
     normalized = message.lower()
 
-    if matches_any_unnegated(normalized, MENTAL_HEALTH_EMERGENCY_KEYWORDS):
+    mental_health_crisis = matches_any_unnegated(
+        normalized, MENTAL_HEALTH_EMERGENCY_KEYWORDS
+    ) or any(pattern.search(normalized) for pattern in _MENTAL_HEALTH_CRISIS_PATTERNS)
+    if mental_health_crisis:
         return SafetyVerdict(
             intent="mental_health",
             urgency="emergency",
@@ -266,6 +339,14 @@ def deterministic_safety_floor(message: str) -> SafetyVerdict | None:
             urgency="emergency",
             reason="Emergency symptom keyword match",
             safety_rule="emergency_symptom_keyword",
+        )
+
+    if contains_medication_error_signal(normalized):
+        return SafetyVerdict(
+            intent="medication_question",
+            urgency="urgent",
+            reason="Medication dose or hold/stop error requires same-day review",
+            safety_rule="urgent_medication_error",
         )
 
     return None

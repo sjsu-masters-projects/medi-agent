@@ -1,7 +1,7 @@
 import { normalizeLocale, type Locale } from "@/types";
-import { isAuthEntryPath, readLocaleCookie, supportedPatientLocale } from "@/content/patient-locale";
+import { GUEST_LOCALE_STORAGE_KEY, isAuthEntryPath, readLocaleCookie, supportedPatientLocale } from "@/content/patient-locale";
 
-export const GUEST_LOCALE_STORAGE_KEY = "patient-portal.guest.locale";
+export { GUEST_LOCALE_STORAGE_KEY } from "@/content/patient-locale";
 
 export function getSignupErrorKey(error: unknown): "accountExists" | "failure" {
   if (typeof error !== "object" || error === null || !("status" in error) || error.status !== 422 || !("details" in error)) return "failure";

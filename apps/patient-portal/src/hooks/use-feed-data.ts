@@ -29,7 +29,7 @@ import {
 } from "@/types";
 import { getEffectiveSessionExpiresAt } from "../../../../packages/shared/src/utils/jwt-expiry";
 import { ApiTransportError } from "../../../../packages/shared/src/utils/api-transport";
-import { getTodayErrorMessage, type TodayErrorCode } from "@/content/today-copy";
+import { getTodayDocumentImportErrorMessage, getTodayErrorMessage, type TodayDocumentImportErrorCode, type TodayErrorCode } from "@/content/today-copy";
 import type { Locale } from "@/types";
 
 interface ApiAdherenceStats {
@@ -91,7 +91,7 @@ export function useFeedData(locale: Locale = "en-US") {
   );
   const [adherenceStats, setAdherenceStats] =
     useState<AdherenceStats>(emptyAdherenceStats);
-  const [documentImportError, setDocumentImportError] = useState<string | null>(
+  const [documentImportError, setDocumentImportError] = useState<TodayDocumentImportErrorCode | null>(
     null,
   );
   const [documentImporting, setDocumentImporting] = useState(false);
@@ -180,9 +180,7 @@ export function useFeedData(locale: Locale = "en-US") {
 
   async function getDocumentImportSession(): Promise<ActivePatientSession | null> {
     if (!accessToken || !user) {
-      setDocumentImportError(
-        "Please sign in again before importing a clinical document.",
-      );
+      setDocumentImportError("signIn");
       return null;
     }
 
@@ -205,9 +203,7 @@ export function useFeedData(locale: Locale = "en-US") {
     if (!refreshToken) {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
-      setDocumentImportError(
-        "Your session expired. Please sign in again before importing a clinical document.",
-      );
+      setDocumentImportError("expired");
       return null;
     }
 
@@ -219,9 +215,7 @@ export function useFeedData(locale: Locale = "en-US") {
     } catch {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
-      setDocumentImportError(
-        "Your session expired. Please sign in again before importing a clinical document.",
-      );
+      setDocumentImportError("expired");
       return null;
     }
   }
@@ -257,10 +251,8 @@ export function useFeedData(locale: Locale = "en-US") {
         },
         { token: session.accessToken },
       );
-    } catch (error) {
-      setDocumentImportError(
-        (error as Error).message || "Document import failed.",
-      );
+    } catch {
+      setDocumentImportError("failed");
     } finally {
       setDocumentImporting(false);
     }
@@ -270,7 +262,7 @@ export function useFeedData(locale: Locale = "en-US") {
     actionError: actionError ? getTodayErrorMessage(actionError, locale) : null,
     submitting,
     adherenceStats,
-    documentImportError,
+    documentImportError: documentImportError ? getTodayDocumentImportErrorMessage(documentImportError, locale) : null,
     documentImporting,
     error: feed.error,
     importDocumentFile,

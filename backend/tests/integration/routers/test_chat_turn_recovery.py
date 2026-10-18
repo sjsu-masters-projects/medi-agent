@@ -218,9 +218,10 @@ async def test_expired_lease_cannot_start_a_clinical_write(monkeypatch, turn_run
     [
         ("I have crushing chest pain", "emergency_response"),
         ("I want to kill myself", "mental_health_emergency_response"),
+        ("I accidentally took my medicine twice", "medication_error_response"),
     ],
 )
-def test_reviewed_emergency_guidance_survives_deadline_and_reload(locale, status, text, key):
+def test_reviewed_safety_guidance_survives_deadline_and_reload(locale, status, text, key):
     record = {
         "status": status,
         "attempt": 1,
