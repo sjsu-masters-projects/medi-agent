@@ -193,3 +193,40 @@ The title falls back to the first user message and is also set at turn begin.
   while in flight). Streamed drafts clear on interruption and on socket close.
 - Not a defect: the retry never re-feeds its failed attempt; the turn's own user message is
   excluded from history (covered by `test_disconnected_socket_does_not_discard_reply...`).
+
+## Production fix: expired turns and starved saves (branch `fix/chat-expiry-and-notification-latency`, migration 074)
+
+Evidence (October 18, 06:40-06:46 UTC, one synthetic patient): every turn logged
+`ValidationError/CHAT_TURN_EXPIRED` one to four seconds after its socket opened, far inside the 45
+second lease, and the patient saw the generic "Could not load or complete the conversation". The
+same minutes held 2.5 to 8.6 second notification reads on a five-thread worker pool.
+
+- Cause 1, shared threads: every blocking database call used `asyncio.to_thread`, whose default
+  pool is `min(32, cpu + 4)` = 5 threads on the one-vCPU backend. Overlapping notification reads
+  (see NOT-001) held all five, so a turn's begin, history, actions and save queued behind them.
+  Chat-turn RPCs now run on their own four-thread pool and notification reads on a three-thread
+  pool (`app/core/db_pools.py`); neither can starve the other or the default pool.
+- Cause 2, a lease with no room to save: the lease was `timeout + 5` = 45 s while the processing
+  budget (`asyncio.timeout`) was 40 s and wrapped the save call too. A reply finishing near the end
+  had five seconds for a call that may itself wait ten. The lease is now the processing budget plus
+  a 30 s save grace (`turn_budget`: 40 s and 70 s with the default `CHAT_TURN_TIMEOUT_SECONDS=30`,
+  never above the 120 s database limit) and the save runs outside the processing budget.
+- Cause 3, a finished reply was thrown away: `complete` required `status='processing'`, so a lease
+  that lapsed (deadline, or a lost socket marking the turn interrupted) rejected a good reply.
+  Migration 074 accepts `complete` for the current lease while the turn is processing, or
+  interrupted with no reply and no dismissal, and returns `late: true`; the service logs it
+  (turn id only). A lease replaced by a retry, a dismissed turn and a failed turn are still
+  refused, so a turn never gets two replies. `actions` stays strict: no new clinical action starts
+  on a lapsed lease. A reply after an uncertain action is kept; the action is never repeated.
+- Cause 4, wording: `CHAT_TURN_EXPIRED` now sends its own fixed message and the portal shows
+  "That reply took too long and was not kept. Your message is saved: use Retry message below."
+  (en-US and es-MX) while the server's turn list supplies the retry card. A retry reuses the saved
+  message and the same turn row (attempt plus one, at most three; never after an action started).
+- Not fully proven from the logs: which exact overlap replaced or lapsed the lease within seconds.
+  The fixes above remove each plausible path (starved calls, short lease, strict completion); the
+  deployed recheck should look for `after its turn lease lapsed` and for any remaining
+  `CHAT_TURN_EXPIRED`.
+- Tests: `test_chat_turn_postgres.py` (deadline maths and clamps, late completion once, refusal
+  after retry/dismissal/failure, actions stay strict, 074 re-run and grants), router tests with a
+  slow model and a slow save, and pool-isolation unit tests.
+

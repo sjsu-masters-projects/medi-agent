@@ -1,3 +1,4 @@
+import { getJwtExpiresAt } from "../../../../packages/shared/src/utils/jwt-expiry";
 import { api } from "@/services/api";
 import { PortalUserRole } from "@/types";
 import type { PatientAuthSession } from "@/store/slices/auth-slice";
@@ -27,7 +28,8 @@ export async function refreshPatientSession(refreshToken: string): Promise<Patie
 
     return {
         accessToken: response.tokens.access_token,
-        expiresAt: response.tokens.expires_at,
+        expiresAt:
+            response.tokens.expires_at || getJwtExpiresAt(response.tokens.access_token) || 0,
         refreshToken: response.tokens.refresh_token,
         user: {
             email: response.user.email,

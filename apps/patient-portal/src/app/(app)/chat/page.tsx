@@ -183,7 +183,7 @@ export default function ChatPage() {
             {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
             <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} onRetry={retryTurn} onDismiss={dismissTurn} />
             {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
-                <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
+                <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_TURN_EXPIRED" ? recoveryCopy.expired : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
                 {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
             </div>}
             {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">

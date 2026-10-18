@@ -59,3 +59,11 @@ export { createAuthSessionStorage } from "./auth-session";
 export { ApiTransportError, fetchWithReadRecovery, getTransportErrorMessage } from "./api-transport";
 export type { BuildLoginRedirectUrlParams } from "./return-path";
 export { buildLoginRedirectUrl, sanitizeLoginPath, sanitizeReturnPath } from "./return-path";
+export { createSessionGuard } from "./session-guard";
+export {
+    CLINICIAN_SESSION_LIMITS,
+    PATIENT_SESSION_LIMITS,
+    evaluateSessionLimits,
+    resolveSessionLimits,
+} from "./session-limits";
+export type { SessionLimitReason, SessionLimits } from "./session-limits";

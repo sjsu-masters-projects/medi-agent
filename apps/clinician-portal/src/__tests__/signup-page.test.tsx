@@ -98,7 +98,7 @@ describe("Clinician signup page", () => {
                     id: "clinician-1",
                     role: "clinician",
                 },
-            });
+            }, { signIn: true });
         });
         expect(post).toHaveBeenNthCalledWith(
             1,

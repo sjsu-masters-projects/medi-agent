@@ -201,9 +201,7 @@ export function DocumentUploadZone({
     const completedIds: string[] = [];
     const token =
       typeof window !== "undefined"
-        ? (readStoredSession()?.accessToken ??
-          localStorage.getItem("access_token") ??
-          "")
+        ? (readStoredSession()?.accessToken ?? "")
         : "";
     const apiBase =
       process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";

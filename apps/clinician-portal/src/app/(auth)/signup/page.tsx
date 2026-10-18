@@ -247,7 +247,7 @@ function ClinicianSignupPageContent() {
                     role: PortalUserRole.CLINICIAN,
                 },
             };
-            writeStoredSession(session);
+            writeStoredSession(session, { signIn: true });
             dispatch(hydrateSession(session));
             if (response.clinic) {
                 const context = mapClinicContext(response.clinic);

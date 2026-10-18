@@ -11,6 +11,7 @@ from postgrest.exceptions import APIError
 from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
+from app.core.db_pools import run_chat_turn_db
 from app.core.exceptions import ExternalServiceError, ValidationError
 from app.models.chat import ChatMessage
 from app.models.enums import coerce_locale
@@ -20,6 +21,21 @@ from app.utils.localization import resolve_locale_resource
 
 logger = logging.getLogger(__name__)
 
+# Time left for saving a finished reply after the processing budget ends: the save call's own
+# 10 second limit plus margin for a slow database. The database deadline is the processing
+# budget plus this, so a reply that finished inside its budget is never lost to the lease.
+SAVE_GRACE_SECONDS = 30
+
+
+def turn_budget(model_timeout_seconds: float) -> tuple[int, int]:
+    """(processing budget, database lease) in seconds for one Nora turn.
+
+    The processing budget bounds history, context, model calls and tools; the lease adds the
+    save grace and stays within the database limit of 120 seconds.
+    """
+    processing = min(90, max(10, int(model_timeout_seconds) + 10))
+    return processing, processing + SAVE_GRACE_SECONDS
+
 
 class ChatTurnService:
     def __init__(self, db: Client, patient_id: str, session_id: str) -> None:
@@ -28,7 +44,7 @@ class ChatTurnService:
     async def call(self, action: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
             response = await asyncio.wait_for(
-                asyncio.to_thread(
+                run_chat_turn_db(
                     self.db.rpc(
                         "chat_turn_operation",
                         {
@@ -127,6 +143,12 @@ class TurnExecution:
         result = await self.service.call("complete", {**self.identity, **message})
         if not result.get("accepted"):
             raise ValidationError("CHAT_TURN_EXPIRED")
+        if result.get("late"):
+            # The lease had lapsed but nothing replaced it: the finished reply is kept.
+            logger.warning(
+                "Accepted a finished Nora reply after its turn lease lapsed (turn %s)",
+                self.identity["id"],
+            )
         self.completed = True
         return cast(dict[str, Any], result["message"])
 
