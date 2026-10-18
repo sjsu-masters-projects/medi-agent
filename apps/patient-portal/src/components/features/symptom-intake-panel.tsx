@@ -57,7 +57,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
     }
 
     useLayoutEffect(() => {
-        registerReply?.((text, mode) => {
+        registerReply?.((text, mode, spokenLocale) => {
             if (!active || !draft) return "unhandled";
             if (disabled) return "blocked";
             const command = text.trim().toLocaleLowerCase().replace(/[.!?]+$/, "");
@@ -71,7 +71,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
                     save("answered", suggestion, String(suggestion), mode);
                 } else {
                     intake.mutate("reply", { mutation_id: crypto.randomUUID(), question_id: question.id,
-                        text, input_mode: mode, locale });
+                        text, input_mode: mode, locale: spokenLocale ?? locale });
                     setEditing(null); setConsent(null); setHint(false);
                 }
             } else {

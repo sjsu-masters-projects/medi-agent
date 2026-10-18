@@ -27,6 +27,7 @@ from app.models.symptom_intake import (
 from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety, safety_response
 from app.safety.triage_floor import SafetyVerdict
 from app.services.chat_safety_service import ChatSafetyService
+from app.utils.localization import written_language
 
 
 class SymptomIntakeService:
@@ -259,7 +260,8 @@ class SymptomIntakeService:
 
     async def reply(self, intake_id: UUID, data: IntakeReply) -> dict[str, Any]:
         row = await self._read_row(intake_id)
-        decision = evaluate_intake_safety(data.text, data.locale)
+        locale = written_language(data.text, data.locale).value
+        decision = evaluate_intake_safety(data.text, locale)
         if decision:
             return await self.interrupt(row, data.model_dump(mode="json"), decision)
         bundle = self.library(row["library_version"])
@@ -279,7 +281,7 @@ class SymptomIntakeService:
                 state=state,
                 value=value,
                 wording=data.text,
-                locale=data.locale,
+                locale=locale,
                 input_mode=data.input_mode,
             ),
         )

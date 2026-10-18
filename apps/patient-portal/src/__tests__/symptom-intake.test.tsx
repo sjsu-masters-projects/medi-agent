@@ -167,10 +167,10 @@ it("routes spoken answers privately and never treats spoken assent as confirmati
     await screen.findByText("Type or speak your answer below. You can say “not sure” or “skip”.");
     expect(reader).toHaveBeenCalledWith(expect.stringContaining("Choose your severity"), "en-US");
     const handler = register.mock.calls.at(-1)?.[0];
-    act(() => { expect(handler("cinco", "voice")).toBe("handled"); });
+    act(() => { expect(handler("cinco", "voice", "es-MX")).toBe("handled"); });
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(mutate.mock.calls[0][2]).toBe("reply");
-    expect(mutate.mock.calls[0][3]).toMatchObject({ text: "cinco", input_mode: "voice", question_id: "severity" });
+    expect(mutate.mock.calls[0][3]).toMatchObject({ text: "cinco", input_mode: "voice", question_id: "severity", locale: "es-MX" });
 });
 
 it("requires a separate acceptance of source suggestions", async () => {

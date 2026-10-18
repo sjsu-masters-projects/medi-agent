@@ -167,7 +167,7 @@ interface PatientChatSessionActions {
     startNewConversation: () => void;
 }
 
-export type PrivateReplyHandler = (text: string, mode: "typed" | "voice") => "handled" | "blocked" | "unhandled";
+export type PrivateReplyHandler = (text: string, mode: "typed" | "voice", locale?: ChatLocale) => "handled" | "blocked" | "unhandled";
 
 export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOCALE,
     privateReply?: PrivateReplyHandler, privateIntakeActive = false, privateAnswerReady = false, privateScope = ""): PatientChatSessionState & PatientChatSessionActions {
@@ -243,6 +243,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         handsFreeMode: boolean;
         privateIntakeRecording: boolean;
         privateRecordingScope: string;
+        recordedLanguage: ChatLocale | null;
         pauseMonitorStop: (() => void) | null;
         dictatedInput: boolean;
         playbackGeneration: number;
@@ -261,6 +262,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         handsFreeMode: resolveInitialHandsFree(),
         privateIntakeRecording: false,
         privateRecordingScope: "",
+        recordedLanguage: null,
         pauseMonitorStop: null,
         dictatedInput: false,
         playbackGeneration: 0,
@@ -325,7 +327,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             setVoiceStatus("idle"); setInput(""); return;
         }
 
-        const handled = privateReplyRef.current?.(trimmedContent, mode) ?? "unhandled";
+        const handled = privateReplyRef.current?.(trimmedContent, mode, mode === "voice" ? voiceRefs.current.recordedLanguage ?? voiceRefs.current.selectedLanguage : undefined) ?? "unhandled";
         if (handled !== "unhandled") {
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setVoiceStatus("idle");
@@ -470,6 +472,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             if (payload.type === "transcript_final") {
+                voiceRefs.current.recordedLanguage = payload.language ? normalizeVoiceEventLanguage(payload.language) : voiceRefs.current.selectedLanguage;
                 voiceRefs.current.finalTranscript = payload.transcript;
                 setVoiceInterimTranscript("");
                 setInput(
@@ -1047,6 +1050,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         voiceRefs.current.inputPrefixForDictation = input;
         voiceRefs.current.privateIntakeRecording = privateActiveRef.current;
         voiceRefs.current.privateRecordingScope = privateScopeRef.current;
+        voiceRefs.current.recordedLanguage = null;
 
         // Prefer backend recording (Deepgram via voice WS) when available.
         if (voiceCapabilities.recording && accessToken && user) {
@@ -1140,6 +1144,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             voiceRefs.current.mediaRecorder = recorder;
             voiceRefs.current.finalTranscript = "";
             voiceRefs.current.recordedAudioUrl = null;
+            voiceRefs.current.recordedLanguage = null;
 
             sendVoiceSocketEvent({
                 type: "audio_start",

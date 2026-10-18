@@ -7,7 +7,7 @@ PAT-002-C and ADR follow-up lifecycle implementation remain outside this change.
 
 ## Recorded automated evidence
 
-- Backend owning suite: **77 passed**:
+- Backend owning suite: **79 passed**:
   `PYTHONPATH=src .venv/bin/pytest tests/unit/intake tests/integration/routers/test_symptom_intake_api.py tests/integration/routers/test_chat_voice_api.py tests/unit/services/test_a2a_task_service.py -q --no-cov`
 - Disposable PostgreSQL: **25 passed**:
   `PYTHONPATH=src SYMPTOM_INTAKE_TEST_POSTGRES=1 CHAT_SAFETY_TEST_POSTGRES_DOCKER=1 .venv/bin/pytest tests/integration/test_symptom_handoff_postgres.py tests/integration/test_symptom_intake_postgres.py -q --no-cov`
@@ -20,14 +20,14 @@ PAT-002-C and ADR follow-up lifecycle implementation remain outside this change.
 - Patient focused suite: **87 passed**:
   `NODE_OPTIONS=--no-experimental-webstorage npm exec vitest run src/__tests__/voice-pause-monitor.test.ts src/__tests__/chat-page.test.tsx src/__tests__/symptom-intake.test.tsx`
   Includes private typed/STT answers, private TTS without chat message ID,
-  hands-free resume, source suggestion acceptance, blocked spoken assent,
-  consent invalidation, preview privacy and stable mutation identity on token refresh.
+  hands-free resume/pause detection, source suggestion acceptance, blocked spoken assent,
+  consent invalidation, preview privacy and stable mutation identity on token refresh. Answer locale retains STT metadata or the existing written-language detector without switching the pinned draft language.
 - Patient typecheck and lint passed. Changed Python Ruff checks passed; mypy
   passed for eight changed source/script files. Migration parser validated **86 files**.
 - Initial full patient run: **716 passed, 1 failed**. The unchanged ADR follow-up
   storage-spy control failed under Node 22.17.1 with experimental native Web Storage
   enabled. Final run with `NODE_OPTIONS=--no-experimental-webstorage npm exec vitest run`: **721 passed**, 68 files. This uses jsdom Web Storage for the browser test environment.
-- Both portal production builds passed. The patient build needed its generated Turbopack cache moved aside after the sandboxed build cached a worker-port error; no source change was needed. Clinician lint/typecheck and 34 ADR/deep-dive tests passed.
+- Both portal production builds passed. The patient build needed its generated Turbopack cache moved aside after the sandboxed build cached a worker-port error; no source change was needed. Clinician lint/typecheck and 49 ADR/deep-dive/load-state tests passed.
 - `pip install -r requirements-dev.txt` and `pip check` succeeded; no dependency or
   lockfile changes were made. The locked install supplied the previously missing
   `pypdf` dependency. PostgreSQL uses the official disposable `postgres:16-alpine`

@@ -97,3 +97,33 @@ async def test_voice_emergency_precedes_parser_and_unavailable_library():
     )
     assert result["status"] == "interrupted_safety"
     svc.library.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "declared", "actual"),
+    [
+        ("Me duele la cabeza desde ayer.", "en-US", "es-MX"),
+        ("The headache is in my forehead.", "es-MX", "en-US"),
+    ],
+)
+async def test_reply_preserves_answer_language_without_changing_draft(text, declared, actual):
+    svc = service()
+    row = resolved_row()
+    svc._read_row = AsyncMock(return_value=row)
+    svc.library = MagicMock(return_value=synthetic_bundle())
+    svc.answer = AsyncMock(return_value={"status": "collecting"})
+    await svc.reply(
+        uuid4(),
+        IntakeReply(
+            expected_revision=11,
+            mutation_id=uuid4(),
+            question_id="description",
+            text=text,
+            locale=declared,
+            input_mode="voice",
+        ),
+    )
+    answer = svc.answer.call_args.args[1]
+    assert answer.wording == text and answer.locale == actual
+    assert row["locale"] == "es-MX"
