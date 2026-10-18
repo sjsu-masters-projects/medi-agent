@@ -1293,7 +1293,7 @@ def test_time_zone_lookup_answers_like_the_catalogue_without_scanning_it(sql):
     assert seconds < 1.5
 
 
-def test_076_is_re_runnable_and_keeps_the_lookup_private(sql):
+def test_075_is_re_runnable_and_keeps_the_lookup_private(sql):
     migration = next(MIGRATIONS.glob("*_notification_zone_lookup.sql")).read_text()
     sql(migration)
     sql(migration)

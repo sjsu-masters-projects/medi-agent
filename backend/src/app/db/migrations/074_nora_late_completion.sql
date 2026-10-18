@@ -112,7 +112,7 @@ BEGIN
  def:=pg_catalog.pg_get_functiondef('public.chat_turn_operation(uuid,text,text,jsonb)'::regprocedure);
  IF def NOT LIKE '%reply_unavailable%' OR def NOT LIKE '%IS NULL OR p_payload->>''language'' IS NULL%'
    OR def NOT LIKE '%''late'',t.status<>''processing''%' OR def NOT LIKE '%status=''interrupted''%' THEN
-  RAISE EXCEPTION 'chat_turn_operation does not carry the 073 validation and the 075 late completion';
+  RAISE EXCEPTION 'chat_turn_operation does not carry the 073 validation and the 074 late completion';
  END IF;
  IF pg_catalog.has_function_privilege('anon','public.chat_turn_operation(uuid,text,text,jsonb)','EXECUTE')
    OR pg_catalog.has_function_privilege('authenticated','public.chat_turn_operation(uuid,text,text,jsonb)','EXECUTE')

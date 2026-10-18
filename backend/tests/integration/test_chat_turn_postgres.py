@@ -25,7 +25,7 @@ def turn_sql(sql):
         "062_chat_message_attachments.sql",
         "072_nora_turn_recovery.sql",
         "073_nora_turn_begin_validation.sql",
-        "075_nora_late_completion.sql",
+        "074_nora_late_completion.sql",
     ):
         sql((MIGRATIONS / name).read_text())
     return sql
@@ -390,8 +390,8 @@ def test_reply_after_an_uncertain_action_is_still_kept(turn_sql):
     assert turn_sql("SELECT status FROM chat_turns;") == "completed"
 
 
-def test_075_is_re_runnable_and_keeps_grants(turn_sql):
-    migration = (MIGRATIONS / "075_nora_late_completion.sql").read_text()
+def test_074_is_re_runnable_and_keeps_grants(turn_sql):
+    migration = (MIGRATIONS / "074_nora_late_completion.sql").read_text()
     turn_sql(migration)
     turn_sql(migration)
     for role in ("anon", "authenticated"):

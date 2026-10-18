@@ -187,7 +187,7 @@ The title falls back to the first user message and is also set at turn begin.
 - Not a defect: the retry never re-feeds its failed attempt; the turn's own user message is
   excluded from history (covered by `test_disconnected_socket_does_not_discard_reply...`).
 
-## Production fix: expired turns and starved saves (branch `fix/chat-expiry-and-notification-latency`, migration 075)
+## Production fix: expired turns and starved saves (branch `fix/chat-expiry-and-notification-latency`, migration 074)
 
 Evidence (October 18, 06:40-06:46 UTC, one synthetic patient): every turn logged
 `ValidationError/CHAT_TURN_EXPIRED` one to four seconds after its socket opened, far inside the 45
@@ -206,7 +206,7 @@ same minutes held 2.5 to 8.6 second notification reads on a five-thread worker p
   never above the 120 s database limit) and the save runs outside the processing budget.
 - Cause 3, a finished reply was thrown away: `complete` required `status='processing'`, so a lease
   that lapsed (deadline, or a lost socket marking the turn interrupted) rejected a good reply.
-  Migration 075 accepts `complete` for the current lease while the turn is processing, or
+  Migration 074 accepts `complete` for the current lease while the turn is processing, or
   interrupted with no reply and no dismissal, and returns `late: true`; the service logs it
   (turn id only). A lease replaced by a retry, a dismissed turn and a failed turn are still
   refused, so a turn never gets two replies. `actions` stays strict: no new clinical action starts
@@ -220,6 +220,6 @@ same minutes held 2.5 to 8.6 second notification reads on a five-thread worker p
   deployed recheck should look for `after its turn lease lapsed` and for any remaining
   `CHAT_TURN_EXPIRED`.
 - Tests: `test_chat_turn_postgres.py` (deadline maths and clamps, late completion once, refusal
-  after retry/dismissal/failure, actions stay strict, 075 re-run and grants), router tests with a
+  after retry/dismissal/failure, actions stay strict, 074 re-run and grants), router tests with a
   slow model and a slow save, and pool-isolation unit tests.
 

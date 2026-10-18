@@ -178,7 +178,7 @@ the client cannot manufacture a bulk-read cutoff. Each loaded page retains its
 own cutoff. Bulk reads stop if the account changes; JWT renewal does not remount
 child workflows or discard message drafts.
 
-## Production fix: slow reads, duplicate polling, starved chat (migration 076)
+## Production fix: slow reads, duplicate polling, starved chat (migration 075)
 
 Evidence (October 18, 06:40-06:46 UTC): `/notification-centre`, `/summary` and `/action-items`
 took 2.5 to 8.6 s with 502s at about 8.2 s, other endpoints about 0.2 s. The "duplicate pairs"
@@ -189,7 +189,7 @@ focus, visibility change, token or filter change without limit.
   That view reads the time-zone files on each call: 4.07 ms in the offline harness (151 rows
   filtered), slower hosted. The reads evaluate every unread receipt, so 300 reminders cost over a
   second per read, and the summary, list and action-items reads for one person queue on one
-  advisory lock (`notification_prepare`), turning that into the 8 s tail. Migration 076 adds
+  advisory lock (`notification_prepare`), turning that into the 8 s tail. Migration 075 adds
   `private.timezone_names` (service role read only), answers from it first and falls back to the
   live view for any name it lacks, so every input answers as before. Harness (500 receipts
   plus 50 appointments, one patient): summary 1.33 s to 0.16 s, list 1.37 s to 0.16 s, row
