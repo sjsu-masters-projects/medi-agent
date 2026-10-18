@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from typing import Any
 from uuid import UUID
 
@@ -624,6 +625,29 @@ class AuthService:
             return role
         return None
 
+    @staticmethod
+    def _resolve_expires_at(session: Any) -> int:
+        """Return an absolute expiry in epoch seconds; never 0.
+
+        Prefers the provider's ``expires_at``, then ``expires_in`` from now, then the
+        access token's ``exp`` claim (read without verification, only for scheduling).
+        """
+        expires_at = getattr(session, "expires_at", None)
+        if isinstance(expires_at, int | float) and expires_at > 0:
+            return int(expires_at)
+        expires_in = getattr(session, "expires_in", None)
+        if isinstance(expires_in, int | float) and expires_in > 0:
+            return int(time.time() + expires_in)
+        token = getattr(session, "access_token", None)
+        if token:
+            try:
+                exp = decode_unverified_claims(token).get("exp")
+            except JWTError:
+                exp = None
+            if isinstance(exp, int | float) and exp > 0:
+                return int(exp)
+        raise AuthenticationError("Authentication failed — session has no expiry")
+
     @classmethod
     def _format_session(cls, response: Any, expected_role: str | None = None) -> Any:
         """Normalize Supabase auth response into our standard shape."""
@@ -645,7 +669,7 @@ class AuthService:
                 "access_token": session.access_token,
                 "refresh_token": session.refresh_token,
                 "token_type": "bearer",
-                "expires_at": session.expires_at or 0,
+                "expires_at": cls._resolve_expires_at(session),
             },
             "user": {
                 "id": str(user.id),

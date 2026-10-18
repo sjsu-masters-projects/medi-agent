@@ -7,9 +7,11 @@ import { finishHydration, hydrateSession } from "./slices/auth-slice";
 import { store } from "./store";
 import { refreshPatientSession } from "@/services/auth-refresh";
 import { useAuthSessionRefresh } from "@/hooks/use-auth-session-refresh";
+import { useSessionLifecycle } from "@/hooks/use-session-lifecycle";
 
 function AuthSessionRefresh() {
     useAuthSessionRefresh();
+    useSessionLifecycle();
     return null;
 }
 

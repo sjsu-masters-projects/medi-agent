@@ -45,6 +45,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 vi.mock("@/services/auth-session", () => ({
+    consumeSignOutReason: () => null,
     writeStoredSession,
 }));
 
@@ -228,7 +229,7 @@ describe("Clinician login page", () => {
                 expiresAt: 2234567890,
                 refreshToken: "aal2-refresh-token",
                 user: { email: "doctor@example.com", id: "clinician-1", role: "clinician" },
-            });
+            }, { signIn: true });
             expect(replace).toHaveBeenCalledWith("/dashboard");
         });
     });

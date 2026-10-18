@@ -1,5 +1,6 @@
 """Tests for Auth service."""
 
+import time
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -1083,15 +1084,22 @@ async def test_format_session_missing_expires_at(auth_service):
     mock_session.access_token = "token"
     mock_session.refresh_token = "refresh"
     mock_session.expires_at = None  # Missing expires_at
+    mock_session.expires_in = 3600
 
     mock_response = Mock()
     mock_response.user = mock_user
     mock_response.session = mock_session
 
+    before = int(time.time())
     result = auth_service._format_session(mock_response)
 
-    # Should default to 0
-    assert result["tokens"]["expires_at"] == 0
+    # Never 0: derived from expires_in when the provider omits expires_at
+    assert before + 3600 <= result["tokens"]["expires_at"] <= int(time.time()) + 3600
+
+    # With no expiry source at all the session is refused rather than given expiry 0
+    mock_session.expires_in = None
+    with pytest.raises(AuthenticationError):
+        auth_service._format_session(mock_response)
 
 
 # ── Invitation signup, invitation sign-in and recovery limits ─────────────────

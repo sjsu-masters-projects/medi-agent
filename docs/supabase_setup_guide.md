@@ -296,6 +296,28 @@ Use normal test settings and local PostgreSQL, never a remote connection string.
 After authorized rollout, verify ledger checksum, owner vs assigned/unassigned clinician
 reads, and browser write/publication-RPC denial. Local tests do not prove remote application.
 
+## Session settings
+
+The portals enforce their own sign-in limits in the browser (AUTH-002). They do not depend on any Supabase dashboard setting.
+
+| Portal | Idle limit | Absolute limit | Warning |
+| --- | --- | --- | --- |
+| Clinician | 2 hours | 12 hours from sign-in | Modal 2 minutes before the idle limit, with a countdown and "Stay signed in" |
+| Patient | 30 days | 90 days from sign-in | None; signed out silently with a login-page notice |
+
+Activity in any tab counts (a shared `lastActivityAt`, written at most every 30 seconds). Defaults live in `packages/shared/src/utils/session-limits.ts`; optional overrides are `NEXT_PUBLIC_CLINICIAN_SESSION_IDLE_MINUTES`, `NEXT_PUBLIC_CLINICIAN_SESSION_MAX_HOURS`, `NEXT_PUBLIC_CLINICIAN_SESSION_WARNING_SECONDS`, `NEXT_PUBLIC_PATIENT_SESSION_IDLE_MINUTES` and `NEXT_PUBLIC_PATIENT_SESSION_MAX_HOURS`. No override is needed.
+
+These limits are client-side. A user who bypasses the app can keep using a valid token until it expires and its refresh token stops working, so treat them as a usability and shared-device control, not a hard server guarantee.
+
+Recommended Supabase values under **Authentication**, as an optional server-side backstop:
+
+- JWT expiry: 3600 seconds (the current project value).
+- Refresh token rotation: on, with reuse detection on (the current project state).
+- Refresh token reuse interval: 10 to 30 seconds, which tolerates two tabs racing on one refresh token.
+- Time-box user sessions (12 hours) and inactivity timeout: Pro plan only, and this project is on Free, so the app-enforced limits are the only limits. Even on Pro, a time-box is project-wide, so a 12-hour value would also cut patients short of their 90 days. Rely on the app limits for both portals.
+
+The backend accepts access tokens up to 30 seconds past their `exp` (clock-skew leeway), and a session response never reports `expires_at` as 0.
+
 ## Verification checklist
 
 - [ ] Every committed migration is recorded with its exact filename and SHA-256 checksum in `public.schema_migrations`.

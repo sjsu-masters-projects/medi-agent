@@ -34,6 +34,7 @@ vi.mock("@/services/api", () => ({
 }));
 
 vi.mock("@/services/auth-session", () => ({
+    consumeSignOutReason: () => null,
     writeStoredSession,
 }));
 
@@ -135,7 +136,7 @@ describe("Patient login page", () => {
                     id: "patient-1",
                     role: "patient",
                 },
-            });
+            }, { signIn: true });
         });
         expect(replace).toHaveBeenCalledWith("/today");
         expect(get).not.toHaveBeenCalled();

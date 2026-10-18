@@ -24,11 +24,7 @@ function getAccessToken(): string {
         return "";
     }
 
-    return (
-        readStoredSession()?.accessToken ??
-        window.localStorage.getItem("access_token") ??
-        ""
-    );
+    return readStoredSession()?.accessToken ?? "";
 }
 
 function createRealtimeClient(): SupabaseClient | null {

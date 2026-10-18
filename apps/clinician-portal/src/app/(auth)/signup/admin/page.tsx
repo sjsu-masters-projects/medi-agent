@@ -106,7 +106,7 @@ export default function ClinicAdminSignupPage() {
                 },
             };
 
-            writeStoredSession(session);
+            writeStoredSession(session, { signIn: true });
             dispatch(hydrateSession(session));
             router.replace("/dashboard");
         } catch (submissionError) {
