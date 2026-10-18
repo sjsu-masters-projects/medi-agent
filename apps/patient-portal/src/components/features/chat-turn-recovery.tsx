@@ -9,6 +9,7 @@ export function ChatTurnRecovery({ turns, locale, connected, onRetry, onDismiss 
     const processing = turns.some((turn) => turn.status === "processing");
     return <div className="space-y-2" aria-live="polite">
         {turns.map((turn) => <section key={turn.client_message_id} className="rounded-2xl border border-line-strong bg-surface p-3.5 text-sm">
+            {turn.safety_guidance && <p role="alert" className="mb-3 whitespace-pre-wrap rounded-xl bg-danger-tint p-3 font-medium text-danger-ink">{turn.safety_guidance}</p>}
             <p className="font-semibold">{turn.status === "processing"
                 ? spanish ? "Nora está preparando tu respuesta" : "Nora is preparing your reply"
                 : turn.status === "unknown"

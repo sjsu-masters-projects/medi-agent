@@ -28,6 +28,7 @@ export interface ChatTurnApi {
     retryable: boolean;
     attempt: number;
     failure_code?: string | null;
+    safety_guidance?: string;
     document_id: string | null;
     user_message?: ChatMessageApi;
 }

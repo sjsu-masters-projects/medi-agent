@@ -59,7 +59,9 @@ retryable under the same identity; rejected claims restore the editable text. Pe
 text/audio stays in memory, not localStorage/sessionStorage. Existing saved voice
 attachments remain supported.
 
-Compatibility: updated clients explicitly request `turn_protocol=1`. Legacy sockets
+Compatibility: updated clients explicitly request `turn_protocol=1` and keep sending
+disabled until the server's recovery handshake arrives. A 15-second handshake timeout
+reconnects without submitting work to an older backend. Legacy sockets
 keep their old behavior, without a durable-retry guarantee. New sockets do not fall
 back to legacy execution if the migration/store is unavailable. Rollout order is
 reviewed migration 071 → backend → patient portal. No remote step has been run.
@@ -67,10 +69,12 @@ reviewed migration 071 → backend → patient portal. No remote step has been r
 Local checks:
 
 - Patient `npm run lint`, `npm run typecheck`: pass.
-- Patient `npm run test -- --reporter=json`: 695 passed; focused chat suite: 71 passed.
+- Patient `npm run test -- --reporter=json`: 696 passed after the handshake guard;
+  final focused chat suite including the additional safety presentation regression:
+  73 passed.
 - Backend dummy-config `PYTHONPATH=src .venv/bin/pytest` on `test_chat_turn_recovery`,
   `test_chat_api`, `test_chat_document_focus`, `test_chat_websocket_stability` and
-  `test_chat_emergency_copy` under `tests/integration/routers`, `--no-cov -q`: 45 passed.
+  `test_chat_emergency_copy` under `tests/integration/routers`, `--no-cov -q`: 53 passed.
 - `CHAT_TURN_TEST_POSTGRES_DOCKER=1` with the same dummy config, isolated
   `tests/integration/test_chat_turn_postgres.py --no-cov -q`: 12 passed. Includes
   duplicate/concurrent claims, stale leases, action uncertainty, ownership, foreign,
@@ -85,3 +89,8 @@ Still required before Done: PR review/CI, an authorized migration/rollout, and t
 synthetic deployed acceptance path above. Actual authenticated mobile screenshots,
 keyboard/reduced-motion review, and a browser-disconnect check have not been recorded
 locally. Human messaging, LOC-003 and PAT-002-B are untouched.
+
+Recovery preserves the existing deterministic, reviewed emergency and crisis guidance
+for processing/interrupted turns, including after a timeout or reload. It is never
+inferred from model fragments or newly translated. Completion returns to the saved
+answer; clinical actions and escalation remain the existing workflow.

@@ -90,4 +90,9 @@ describe("saved Nora turn recovery", () => {
         const state = chatSlice.reducer(chatSlice.reducer(undefined, addMessage(message)), addMessage(message));
         expect(state.messages).toHaveLength(1);
     });
+
+    it("keeps server-reviewed safety guidance visible on an interrupted reply", () => {
+        render(<ChatTurnRecovery turns={[{ ...row, safety_guidance: "Reviewed synthetic safety guidance" }]} locale="en-US" connected onRetry={vi.fn()} onDismiss={vi.fn()} />);
+        expect(screen.getByRole("alert")).toHaveTextContent("Reviewed synthetic safety guidance");
+    });
 });

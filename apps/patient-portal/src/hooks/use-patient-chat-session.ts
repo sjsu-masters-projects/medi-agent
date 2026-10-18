@@ -248,6 +248,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         handsFreeMode: resolveInitialHandsFree(),
     });
     const socketRef = useRef<WebSocket | null>(null);
+    const durableReadyRef = useRef(false);
     const recovery = useChatTurnRecovery(`${user?.id ?? ""}:${sessionId}`, socketRef);
     const receiveTurns = useEffectEvent((rows: ChatTurnApi[], snapshot = false) => {
         recovery.accept(rows, snapshot);
@@ -309,7 +310,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             return;
         }
 
-        if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+        if (!durableReadyRef.current || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
             dispatch(setChatError("Chat is reconnecting. Try sending in a moment."));
             setVoiceStatus("idle");
             return;
@@ -708,6 +709,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             socketAuthProtocols(accessToken),
         );
         socketRef.current = socket;
+        durableReadyRef.current = false;
+        let durableReady = false;
+        const handshakeTimer = window.setTimeout(() => {
+            if (isMounted && !durableReady) socket.close();
+        }, 15000);
 
         socket.onopen = () => {
             if (!isMounted) {
@@ -716,7 +722,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
             clearChatReconnectTimer();
             reconnectRef.current.attempts = 0;
-            dispatch(setConnectionStatus("connected"));
+            // A socket opening alone does not prove the backend supports safe retries.
+            // Keep sending disabled until its durable recovery handshake arrives.
             dispatch(setChatError(null));
         };
 
@@ -736,7 +743,13 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
             switch (payload.type) {
                 case "chat_turn": receiveTurns([payload.turn]); return;
-                case "chat_turns": receiveTurns(payload.turns, true); return;
+                case "chat_turns":
+                    durableReady = true;
+                    durableReadyRef.current = true;
+                    window.clearTimeout(handshakeTimer);
+                    dispatch(setConnectionStatus("connected"));
+                    receiveTurns(payload.turns, true);
+                    return;
                 case "chat_history": {
                     socketHistoryReceived = true;
                     const incomingHistory = payload.messages.map(mapChatMessageFromApi);
@@ -885,6 +898,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 return;
             }
 
+            durableReadyRef.current = false;
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setTyping(false));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
@@ -897,6 +911,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         return () => {
             isMounted = false;
+            window.clearTimeout(handshakeTimer);
+            durableReadyRef.current = false;
             stopSpeechRecognition();
             stopAssistantPlayback();
             closeVoiceSocket();
@@ -1142,7 +1158,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     return {
         recoveryTurns: recovery.turns,
         turnBusy: recovery.turnBusy,
-        retryTurn: (id: string) => { if (recovery.retry(id)) { dispatch(setTyping(true)); dispatch(setChatError(null)); } },
+        retryTurn: (id: string) => { if (durableReadyRef.current && recovery.retry(id)) { dispatch(setTyping(true)); dispatch(setChatError(null)); } },
         dismissTurn: recovery.dismiss,
         assistantDraft,
         assistantDraftStartedAt,

@@ -11,6 +11,8 @@ from supabase import Client
 
 from app.core.exceptions import ExternalServiceError, ValidationError
 from app.models.enums import coerce_locale
+from app.safety import TRIAGE_COPY, deterministic_safety_floor
+from app.utils.localization import resolve_locale_resource
 
 
 class ChatTurnService:
@@ -127,6 +129,16 @@ def public_turn(record: dict[str, Any]) -> dict[str, Any]:
         "deadline_at",
         "failure_code",
     )
+    user_message = record.get("user_message") or {}
+    verdict = deterministic_safety_floor(str(user_message.get("content") or ""))
+    guidance = None
+    if verdict is not None and record.get("status") != "completed":
+        key = (
+            "mental_health_emergency_response"
+            if verdict.intent == "mental_health"
+            else "emergency_response"
+        )
+        guidance = resolve_locale_resource(user_message.get("language"), TRIAGE_COPY)[key]
     return {
         **{key: record[key] for key in fields if key in record},
         **(
@@ -135,6 +147,7 @@ def public_turn(record: dict[str, Any]) -> dict[str, Any]:
             else {}
         ),
         "document_id": (record.get("document_context") or {}).get("id"),
+        **({"safety_guidance": guidance} if guidance else {}),
         "retryable": record.get("status") in {"failed", "interrupted"}
         and not record.get("dismissed_at")
         and not record.get("actions_started")

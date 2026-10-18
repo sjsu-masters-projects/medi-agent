@@ -10,9 +10,11 @@ from app.core.exceptions import ValidationError
 from app.models.chat import ChatMessageCreate
 from app.models.enums import ChatRole, Language
 from app.routers import chat
+from app.safety import TRIAGE_COPY
 from app.services.chat_service import ChatService
 from app.services.chat_turn_execution import TurnChatService
 from app.services.chat_turn_service import ChatTurnService, TurnExecution, public_turn
+from app.utils.localization import resolve_locale_resource
 
 
 @pytest.fixture
@@ -162,3 +164,23 @@ async def test_expired_lease_cannot_start_a_clinical_write(monkeypatch, turn_run
     with pytest.raises(ValidationError):
         await staged.save_symptom_report("patient", {"synthetic": True})
     write.assert_not_awaited()
+
+
+@pytest.mark.parametrize("locale", ["en-US", "es-MX"])
+@pytest.mark.parametrize("status", ["processing", "interrupted"])
+@pytest.mark.parametrize(
+    "text,key",
+    [
+        ("I have crushing chest pain", "emergency_response"),
+        ("I want to kill myself", "mental_health_emergency_response"),
+    ],
+)
+def test_reviewed_emergency_guidance_survives_deadline_and_reload(locale, status, text, key):
+    record = {
+        "status": status,
+        "attempt": 1,
+        "user_message": {"content": text, "language": locale},
+    }
+    assert (
+        public_turn(record)["safety_guidance"] == resolve_locale_resource(locale, TRIAGE_COPY)[key]
+    )

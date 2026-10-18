@@ -126,6 +126,7 @@ class MockWebSocket {
 
     emitOpen() {
         this.onopen?.();
+        this.emitMessage({ type: "chat_turns", turns: [] });
     }
 
     send(data: string) {
@@ -571,6 +572,14 @@ describe("Patient chat page", () => {
         await waitFor(() => expect(fetchChatHistory).toHaveBeenLastCalledWith("patient-1", "access-token", "chat-saved"));
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith("patient-1", { documentId: null, durableTurns: true, documentDismissed: true, sessionId: "chat-saved" });
         expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
+    });
+
+    it("does not send to an older backend that never acknowledges durable recovery", async () => {
+        renderPage();
+        await act(async () => { MockWebSocket.instances[0].onopen?.(); });
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Synthetic question" } });
+        expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+        expect(MockWebSocket.instances[0].sent).toEqual([]);
     });
 
     it("replaces the focused document in an open conversation without losing the unsent draft", async () => {
