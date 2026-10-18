@@ -1,6 +1,6 @@
 # UX-006 — Clinician schedule and multi-clinic consistency
 
-Status: accepted design (October 17, 2026). Owner: Rajeev. Builds on SCH-001 (appointment
+Status: built on `feature/clinician-schedule` (October 17, 2026), deployed check pending. Accepted design October 17, 2026. Owner: Rajeev. Builds on SCH-001 (appointment
 offers), CLN-003 slices A–F (unified multi-clinic view) and UX-005 (queue + detail pattern).
 
 ## Problem
@@ -64,3 +64,23 @@ Terrace) showed the unified view works but reads as messy:
 - Headers, filters and chips are consistent on every list; Settings is consolidated.
 - 390 px and 1280 px without horizontal scroll; tests for agenda, needs-action, side panel with
   busy times, patient tab and counts; deployed check with Elena Park.
+
+## Build notes (October 17)
+
+- **Backend:** `GET /appointments/schedule?from&to&clinic_id` (own visits in [from, to), needs-action
+  items grouped per offer, next visit; 45-day cap), `GET /appointments/busy?from&to` (own intervals and
+  clinic names only; 48 h cap), and `GET /appointments/?patient_id=` for the patient tab. All are scoped
+  to the caller's own appointments (`clinician_id`) or, for the patient filter, to an active link.
+- **Counts:** `GET /clinicians/me/patients` returns one row per care-team link, so a patient shared by two
+  of the caller's clinics appeared twice (Appointments "5" against 4 distinct patients on the Roster), and
+  a clinic filter still listed the other clinic's link. It now lists only in-scope links and tags each with
+  its own clinic. The distinct-patient definition is the Roster's.
+- **Portal:** `/appointments` is "My schedule" (sidebar label too). Edit and cancel do not exist in the
+  clinician portal today; the visit detail offers the existing calendar export and "Offer new times".
+- **Consistency fixes:** the header scope text is "All clinics" or the filtered clinic for multi-clinic
+  users and nothing otherwise (it no longer falls back to a stored or single clinic); every list header
+  carries it; the filter sits in the list toolbar where there is one (dashboard, ADR, MedWatch) and at the
+  top right of the header elsewhere (roster, upload queue, alerts, messages, schedule); the ADR and
+  MedWatch headers use the same title size and subtitle tone as the other pages.
+- **Not done:** the Settings consolidation (duplicate clinic, default-clinic "Role", placement under
+  "Administration") from decision 5 is not part of this change.

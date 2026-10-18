@@ -434,7 +434,14 @@ Triggers, auth, healthy-run signals and Cloud Logging queries:
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
 
 Every appointment and offer group carries `clinic_id` (and `clinician_id`) copied from its care-team
-link by a database trigger, so it cannot disagree with the link. `GET /appointments/` rows and the
+link by a database trigger, so it cannot disagree with the link. UX-006 adds
+`GET /appointments/schedule?from&to[&clinic_id]` (the caller's own visits, open offers and change
+requests, next visit; 45-day cap), `GET /appointments/busy?from&to` (own booked intervals with clinic
+names, never patients; 48 h cap) and `GET /appointments/?patient_id=` (one linked patient's visits).
+Message translation is never done on send or read: reads set `translation_pending` and
+`POST /care-conversations/{id}/messages/{message_id}/translation` translates one message (same
+authorization as reading the conversation, idempotent, honours a fresh failure marker).
+ `GET /appointments/` rows and the
 propose/respond/update responses carry `clinic_id` and `clinic_name` for both roles; a clinician's list
 shows only visits at clinics where they hold a link. A clinician cannot hold overlapping
 `confirmed`/`scheduled` visits across all their clinics (exclusion constraint
