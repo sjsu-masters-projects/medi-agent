@@ -1,6 +1,7 @@
 # Demo care-loop follow-ups — LOC-002, EVA-001, AI-006, COM-002
 
-Status: In review. One PR; separate behavior and test lanes. This increment
+Status: In review in [#191](https://github.com/sjsu-masters-projects/medi-agent/pull/191).
+One PR; separate behavior and test lanes. This increment
 includes the pending task-board/documentation reconciliation after #188.
 
 ## Acceptance plan

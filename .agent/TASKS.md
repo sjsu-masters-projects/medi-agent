@@ -1,6 +1,6 @@
 # MediAgent — Project task board
 
-> **Active plan:** Implement the approved [demo care-loop follow-ups](specs/demo-care-loop-followups.md) in one PR: LOC-002 patient language consistency, EVA-001 repeatable synthetic evaluation, AI-006 runtime/response fixes and COM-002 message-to-plan review. Keep #188 and #187 deployed acceptance separate; #159 still gates restored symptom capture. Other acceptance and PLAN-002/DEMO-001 remain in the board.
+> **Active plan:** Review [#191](https://github.com/sjsu-masters-projects/medi-agent/pull/191), implementing the approved [demo care-loop follow-ups](specs/demo-care-loop-followups.md) in one PR: LOC-002 patient language consistency, EVA-001 repeatable synthetic evaluation, AI-006 runtime/response fixes and COM-002 message-to-plan review. Keep #188 and #187 deployed acceptance separate; #159 still gates restored symptom capture. Other acceptance and PLAN-002/DEMO-001 remain in the board.
 >
 > **Updated:** October 17, 2026 · **Feature freeze:** December 4, 2026
 >
