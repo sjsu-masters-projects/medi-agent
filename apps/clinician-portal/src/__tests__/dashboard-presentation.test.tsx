@@ -34,8 +34,32 @@ describe("Dashboard presentation", () => {
             { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
         ] as never;
         render(<DashboardPage />);
-        expect(screen.getByText("Bay Clinic", { selector: "span" })).toBeInTheDocument();
+        const chip = screen.getByText("Bay Clinic", { selector: "span" });
+        expect(chip).toBeInTheDocument();
+        // The chip sits on its own line under the name at every width.
+        expect(chip.parentElement).toHaveClass("flex-col");
+        expect(chip.parentElement?.className).not.toContain("sm:flex-row");
         expect(screen.getByLabelText("Clinic")).toBeInTheDocument();
+        resetClinicFilter();
+    });
+    it("names All clinics, the filtered clinic or the only clinic in the header", () => {
+        const two = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        resetClinicFilter();
+        clinicFilterState.clinics = two;
+        const first = render(<DashboardPage />);
+        expect(screen.getByText(/ · All clinics$/)).toBeInTheDocument();
+        first.unmount();
+        clinicFilterState.clinicId = "clinic-b";
+        const second = render(<DashboardPage />);
+        expect(screen.getByText(/ · Bay Clinic$/)).toBeInTheDocument();
+        second.unmount();
+        resetClinicFilter();
+        clinicFilterState.clinics = [two[0]] as never;
+        render(<DashboardPage />);
+        expect(screen.getByText(/ · City Health$/)).toBeInTheDocument();
         resetClinicFilter();
     });
     it("keeps internal patient identity in navigation without displaying it or inferring missed doses", () => {

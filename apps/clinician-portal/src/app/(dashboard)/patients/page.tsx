@@ -121,7 +121,7 @@ export default function PatientsPage() {
                     >
                         <span className="flex min-w-0 items-center gap-3">
                             <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{`${patient.first_name.charAt(0)}${patient.last_name.charAt(0)}`.toUpperCase()}</span>
-                            <span className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                            <span className="flex min-w-0 flex-col items-start gap-0.5">
                                 <span className="min-w-0 break-words text-[15px] font-semibold text-ink">
                                     {patient.first_name} {patient.last_name}
                                 </span>
