@@ -56,7 +56,7 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   the existing approved-plan endpoint; recipient selection remains explicit.
   Attaching/changing an activity does not send. An uncertain retry locks body,
   source identity and client message UUID together. Confirmed sends clear them.
-- Migration `074_care_conversation_activity_review.sql` extends existing message
+- Migration `076_care_conversation_activity_review.sql` extends existing message
   and plan-item tables. It stores an item reference, not a second clinical summary.
   The saved message presents the source's approved wording; a superseded source
   is labelled historical. Database authorization still owns thread isolation.
@@ -78,7 +78,7 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   existing actions. The source plan stays approved until an authorized publication.
 - This uses today's patient-level approved-plan model. Per-team plan ownership is
   PLAN-002, not implicitly implemented by attaching an item to a private thread.
-- Apply 074 only with separate authorization, before deploying this backend.
+- Apply 076 only with separate authorization, before deploying this backend.
   Rerunning it is tested; existing conversation reads/legacy deployments remain
   compatible. No remote migration, publication or live acceptance is claimed.
 
@@ -105,7 +105,7 @@ All checks use synthetic fixtures and isolated data, not live patient accounts.
 | --- | --- |
 | Backend `PYTHONPATH=src .venv/bin/pytest tests --ignore=tests/integration/test_appointment_offer_transactions.py --no-cov -q --tb=short --disable-warnings` | 3,622 passed / 344 opt-in skips after merging current main; excluded native database fixture run separately |
 | Native appointment transaction suite, same pytest flags | 31 passed outside sandbox; its disposable PostgreSQL startup was denied in the initial sandbox run |
-| Conversation PostgreSQL suite with `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` | 43 passed after merging current main and renumbering the activity migration to 074, including publication lock order, rerun permissions, concurrent draft review and preservation of main's clinic guard functions |
+| Conversation PostgreSQL suite with `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` | 43 passed after merging current main and renumbering the activity migration to 076, including publication lock order, rerun permissions, concurrent draft review and preservation of main's clinic guard functions |
 | Final conversation service/API suites | 60 passed, including neutral errors for concurrent draft changes |
 | AI/SOAP/evaluation/ingestion focused checks | 563 passed; exact commands in the [operator guide](../../docs/demo-ai-evaluation.md) |
 | Patient `npm run test -- --silent` | 737 passed after merging current main (includes localized stale-attachment feedback and current chat recovery tests) |

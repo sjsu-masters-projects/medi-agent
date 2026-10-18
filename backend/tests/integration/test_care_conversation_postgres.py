@@ -714,7 +714,7 @@ def activity_sql(sql):
       REVOKE ALL ON FUNCTION private.lock_care_plan_evidence(uuid,boolean) FROM PUBLIC,anon,authenticated;
       GRANT EXECUTE ON FUNCTION private.lock_care_plan_evidence(uuid,boolean) TO service_role;
     """)
-    migration = (MIGRATION.parent / "074_care_conversation_activity_review.sql").read_text()
+    migration = (MIGRATION.parent / "076_care_conversation_activity_review.sql").read_text()
     clinic_guards = """SELECT md5(pg_get_functiondef(
       'public.care_conversation_operation(uuid,text,text,jsonb)'::regprocedure)) ||
       md5(pg_get_functiondef('private.lock_care_conversation_pair(uuid,uuid,text)'::regprocedure));"""
