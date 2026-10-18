@@ -95,3 +95,126 @@ export async function proposeAppointmentOffer(
   );
   return rows.map(mapAppointment);
 }
+
+/** A visit on the clinician's own schedule (patient name and timezone come with it). */
+export interface ScheduleVisit extends Appointment {
+  patientName?: string;
+  patientTimezone?: string;
+}
+
+export type NeedsActionKind = "awaiting_reply" | "change_request" | "expired";
+
+export interface NeedsActionItem {
+  kind: NeedsActionKind;
+  appointmentId: string;
+  proposalGroupId?: string;
+  patientId: string;
+  patientName?: string;
+  clinicId?: string;
+  clinicName?: string;
+  slotCount: number;
+  firstSlotAt: string;
+  expiresAt?: string;
+  expiringSoon: boolean;
+}
+
+export interface MySchedule {
+  visits: ScheduleVisit[];
+  needsAction: NeedsActionItem[];
+  nextVisit: ScheduleVisit | null;
+}
+
+export interface BusyInterval {
+  startsAt: string;
+  endsAt: string;
+  clinicId?: string;
+  clinicName?: string;
+}
+
+type ScheduleVisitRecord = AppointmentRecord & {
+  patient_name?: string | null;
+  patient_timezone?: string | null;
+};
+
+function mapVisit(row: ScheduleVisitRecord): ScheduleVisit {
+  return {
+    ...mapAppointment(row),
+    patientName: row.patient_name ?? undefined,
+    patientTimezone: row.patient_timezone ?? undefined,
+  };
+}
+
+/** The caller's own visits in [from, to), what needs action, and the next visit. */
+export async function fetchMySchedule(
+  token: string,
+  from: string,
+  to: string,
+  clinicId?: string | null,
+): Promise<MySchedule> {
+  const query = new URLSearchParams({ from, to });
+  if (clinicId) query.set("clinic_id", clinicId);
+  const body = await api.get<{
+    visits: ScheduleVisitRecord[];
+    needs_action: {
+      kind: NeedsActionKind;
+      appointment_id: string;
+      proposal_group_id?: string | null;
+      patient_id: string;
+      patient_name?: string | null;
+      clinic_id?: string | null;
+      clinic_name?: string | null;
+      slot_count: number;
+      first_slot_at: string;
+      expires_at?: string | null;
+      expiring_soon: boolean;
+    }[];
+    next_visit?: ScheduleVisitRecord | null;
+  }>(`/api/v1/appointments/schedule?${query}`, { token });
+  return {
+    visits: body.visits.map(mapVisit),
+    needsAction: body.needs_action.map((item) => ({
+      kind: item.kind,
+      appointmentId: item.appointment_id,
+      proposalGroupId: item.proposal_group_id ?? undefined,
+      patientId: item.patient_id,
+      patientName: item.patient_name ?? undefined,
+      clinicId: item.clinic_id ?? undefined,
+      clinicName: item.clinic_name ?? undefined,
+      slotCount: item.slot_count,
+      firstSlotAt: item.first_slot_at,
+      expiresAt: item.expires_at ?? undefined,
+      expiringSoon: item.expiring_soon,
+    })),
+    nextVisit: body.next_visit ? mapVisit(body.next_visit) : null,
+  };
+}
+
+/** The caller's own booked intervals in [from, to) at every clinic: times and clinics only. */
+export async function fetchBusyTimes(
+  token: string,
+  from: string,
+  to: string,
+): Promise<BusyInterval[]> {
+  const query = new URLSearchParams({ from, to });
+  const rows = await api.get<
+    { starts_at: string; ends_at: string; clinic_id?: string | null; clinic_name?: string | null }[]
+  >(`/api/v1/appointments/busy?${query}`, { token });
+  return rows.map((row) => ({
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    clinicId: row.clinic_id ?? undefined,
+    clinicName: row.clinic_name ?? undefined,
+  }));
+}
+
+/** One patient's visits and offers that the access rule lets the caller see. */
+export async function fetchPatientAppointments(
+  token: string,
+  patientId: string,
+): Promise<Appointment[]> {
+  const rows = await api.get<AppointmentRecord[]>(
+    `/api/v1/appointments/?patient_id=${encodeURIComponent(patientId)}`,
+    { token },
+  );
+  return rows.map(mapAppointment);
+}

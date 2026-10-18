@@ -1,198 +1,189 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import { ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
-import { AppointmentOfferForm } from "@/components/features/appointment-offer-form";
-import { AppointmentOfferHistory } from "@/components/features/appointment-offer-history";
+import { NewOfferPanel } from "@/components/features/new-offer-panel";
+import { ScheduleAgenda } from "@/components/features/schedule-agenda";
+import { ScheduleNeedsAction } from "@/components/features/schedule-needs-action";
+import { VisitDetailPanel } from "@/components/features/visit-detail-panel";
 import { Button, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
-import { useAppointmentScheduling } from "@/hooks/use-appointment-scheduling";
-import { useClinicFilter, type ClinicFilter } from "@/hooks/use-clinic-filter";
+import { SegmentedControl } from "@/components/ui/toolbar";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
+import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import {
-  fetchSchedulingProfile,
+  fetchMySchedule,
+  fetchSchedulingAppointments,
+  fetchSchedulingPatients,
   type AssignedSchedulingPatient,
+  type MySchedule,
+  type ScheduleVisit,
 } from "@/services/appointments";
 import type { RootState } from "@/store/store";
 import type { Appointment } from "@/types";
-import { resolveSchedulingTimezone } from "@/utils/appointment-times";
+import { agendaRange, dayLabel, visitTimeLabel, type AgendaMode } from "@/utils/schedule";
 
-function PatientAppointments({
-  token,
-  patient,
-  appointments,
-  disabled,
-  onCreated,
-  onSendingChange,
-  appointmentId,
-}: {
-  token: string;
-  patient: AssignedSchedulingPatient;
-  appointments: Appointment[];
-  disabled: boolean;
-  onCreated: (rows: Appointment[]) => void;
-  onSendingChange: (sending: boolean) => void;
-  appointmentId?: string | null;
-}) {
-  const [settings, setSettings] = useState<ReturnType<
-    typeof resolveSchedulingTimezone
-  > | null>(null);
-  const [settingsFailed, setSettingsFailed] = useState(false);
+interface Target {
+  appointmentId: string;
+  patientId: string;
+  patientName?: string;
+}
+
+function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmentId: string | null }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const clinicFilter = useClinicFilter();
+  const [mode, setMode] = useState<AgendaMode>("day");
+  const [schedule, setSchedule] = useState<MySchedule | null>(null);
+  const [roster, setRoster] = useState<AssignedSchedulingPatient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [previous, setPrevious] = useState<Appointment>();
-  const [draftVersion, setDraftVersion] = useState(0);
-  const [success, setSuccess] = useState(false);
+  const [now, setNow] = useState(() => new Date(Date.now()));
+  const [offerFor, setOfferFor] = useState<{ previous?: Appointment } | null>(null);
+  const [sent, setSent] = useState(false);
+  const [fallback, setFallback] = useState<Appointment[] | null>(null);
+
+  const { clinicId, ready } = clinicFilter;
   useEffect(() => {
-    let active = true;
-    void fetchSchedulingProfile(token, patient.id)
-      .then((profile) => {
-        if (active) setSettings(resolveSchedulingTimezone(profile.timezone));
+    if (!ready) return;
+    let live = true;
+    const current = new Date(Date.now());
+    const { from, to } = agendaRange(mode, current);
+    void Promise.all([
+      fetchMySchedule(token, from.toISOString(), to.toISOString(), clinicId),
+      fetchSchedulingPatients(token, clinicId).catch(() => null),
+    ])
+      .then(([result, people]) => {
+        if (!live) return;
+        setSchedule(result);
+        if (people) setRoster(people);
+        setNow(current);
+        setError(false);
       })
       .catch(() => {
-        if (active) setSettingsFailed(true);
+        if (live) setError(true);
+      })
+      .finally(() => {
+        if (live) setLoading(false);
       });
     return () => {
-      active = false;
+      live = false;
     };
-  }, [token, patient.id, attempt]);
-  if (!settings)
-    return settingsFailed ? (
-      <ErrorState
-        title="Could not load the patient's timezone"
-        description="Retry before entering appointment times."
-        onRetry={() => {
-          setSettingsFailed(false);
-          setAttempt((value) => value + 1);
-        }}
-      />
-    ) : (
-      <div className="space-y-3 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <p role="status" className="text-sm text-muted">
-          Loading the patient&apos;s timezone…
-        </p>
-        <Skeleton className="h-[42px] w-full" />
-        <Skeleton className="h-[42px] w-2/3" />
-      </div>
-    );
-  function created(rows: Appointment[]) {
-    onCreated(rows);
-    setPrevious(undefined);
-    setDraftVersion((value) => value + 1);
-    setSuccess(true);
+  }, [token, mode, clinicId, ready, attempt]);
+
+  function refresh() {
+    setLoading(true);
+    setError(false);
+    setAttempt((value) => value + 1);
   }
+
+  const openVisit = useCallback(
+    (id: string | null) => {
+      const next = new URLSearchParams(searchParams?.toString() ?? "");
+      if (id) next.set("appointmentId", id);
+      else next.delete("appointmentId");
+      const query = next.toString();
+      router.replace(query ? `${pathname}?${query}` : (pathname ?? "/appointments"), { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  // A link to an appointment that is not in the loaded range (for example from an alert):
+  // look it up in the caller's full list, which applies the same access rule.
+  const known =
+    schedule?.visits.find((visit) => visit.id === appointmentId) ??
+    schedule?.needsAction.find((item) => item.appointmentId === appointmentId);
+  useEffect(() => {
+    if (!appointmentId || known || !schedule) return;
+    let live = true;
+    void fetchSchedulingAppointments(token, clinicId)
+      .then((rows) => {
+        if (live) setFallback(rows);
+      })
+      .catch(() => {
+        if (live) setFallback([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [appointmentId, known, schedule, token, clinicId]);
+
+  let target: Target | null = null;
+  if (appointmentId) {
+    const fromFallback = fallback?.find((row) => row.id === appointmentId);
+    const patientId =
+      (known && "patientId" in known ? known.patientId : undefined) ??
+      fromFallback?.patientId;
+    if (patientId) {
+      const person = roster.find((row) => row.id === patientId);
+      target = {
+        appointmentId,
+        patientId,
+        patientName:
+          (known && "patientName" in known ? known.patientName : undefined) ??
+          (person ? `${person.first_name} ${person.last_name}` : undefined),
+      };
+    }
+  }
+  const unavailable = Boolean(appointmentId && !target && fallback && !known);
+
+  const scope = clinicScopeLabel(clinicFilter);
+  const visits = schedule?.visits ?? [];
+  const next: ScheduleVisit | null = schedule?.nextVisit ?? null;
+  const period = mode === "day" ? "today" : "this week";
+
   return (
-    <div className="ma-enter space-y-4">
-      <p className="inline-flex flex-wrap items-center gap-2 rounded-[9px] border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-2">
-        <Icon name="globe" className="h-4 w-4 text-muted" />
-        Appointment timezone:{" "}
-        <strong className="font-mono text-xs font-medium text-ink">
-          {settings.timezone}
-        </strong>
-      </p>
-      {settings.fallback && (
-        <p
-          role="status"
-          className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink"
-        >
-          <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            The patient has no valid saved timezone. Times are entered and
-            displayed in UTC.
-          </span>
-        </p>
-      )}
-      {success && (
+    <div className="ma-page space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">My schedule</h1>
+          <p className="mt-1 text-sm text-muted">
+            Your visits and appointment offers{scope ? ` · ${scope}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ClinicFilterField filter={clinicFilter} />
+          <Button
+            aria-label="Refresh schedule"
+            disabled={loading}
+            onClick={refresh}
+            variant="secondary"
+          >
+            <Icon name="refresh" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{loading ? "Refreshing…" : "Refresh"}</span>
+          </Button>
+          <Button
+            disabled={!roster.length}
+            onClick={() => {
+              setSent(false);
+              setOfferFor({});
+            }}
+          >
+            <Icon name="plus" className="h-4 w-4" />
+            New offer
+          </Button>
+        </div>
+      </div>
+
+      {sent && (
         <p
           role="status"
           className="ma-enter flex items-start gap-2.5 rounded-xl border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink"
         >
           <Icon name="check" className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            Appointment offer sent. The patient can choose a time in Visits.
-          </span>
+          <span>Appointment offer sent. The patient can choose a time in Visits.</span>
         </p>
       )}
-      <div className="grid items-start gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <AppointmentOfferForm
-          key={draftVersion}
-          token={token}
-          careTeamId={patient.care_team_id}
-          timezone={settings.timezone}
-          disabled={disabled}
-          previous={previous}
-          onCreated={created}
-          onSendingChange={onSendingChange}
-        />
-        <section className="min-w-0 rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
-          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
-            <div>
-              <h2 className="text-[15px] font-semibold text-ink">
-                Appointments and patient responses
-              </h2>
-              <p className="mt-0.5 text-[13px] text-muted">
-                {patient.first_name} {patient.last_name}
-              </p>
-            </div>
-            <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
-              {settings.timezone}
-            </span>
-          </div>
-          <AppointmentOfferHistory
-            patientName={`${patient.first_name} ${patient.last_name}`}
-            appointmentId={appointmentId}
-            token={token}
-            appointments={appointments}
-            timezone={settings.timezone}
-            disabled={disabled}
-            onRepropose={(visit) => {
-              setPrevious(visit);
-              setSuccess(false);
-              setDraftVersion((value) => value + 1);
-            }}
-          />
-        </section>
-      </div>
-    </div>
-  );
-}
+      {unavailable && (
+        <p role="status" className="text-sm text-muted">
+          The linked appointment is unavailable.
+        </p>
+      )}
 
-function SchedulingWorkspace({ token, appointmentId }: { token: string; appointmentId: string | null }) {
-  const clinicFilter: ClinicFilter = useClinicFilter();
-  const { patients, appointments, loading, error, refresh, addOffer } =
-    useAppointmentScheduling(token, clinicFilter.clinicId, clinicFilter.ready);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [previousTarget, setPreviousTarget] = useState(appointmentId);
-  if (previousTarget !== appointmentId) {
-    setPreviousTarget(appointmentId);
-    setSelectedId(null);
-  }
-  const linkedAppointment = appointments.find((visit) => visit.id === appointmentId);
-  const effectiveSelectedId = selectedId ?? linkedAppointment?.careTeamId ?? "";
-  const [sending, setSending] = useState(false);
-  const selected = patients.find(
-    (patient) => patient.care_team_id === effectiveSelectedId,
-  );
-  return (
-    <div className="ma-page space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
-            Appointments
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Offer times to assigned patients and review their responses.
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          disabled={loading || sending}
-          onClick={refresh}
-        >
-          <Icon name="refresh" className="h-4 w-4" />
-          {loading ? "Refreshing…" : "Refresh appointments"}
-        </Button>
-      </div>
       {error && (
         <div
           role="alert"
@@ -200,104 +191,129 @@ function SchedulingWorkspace({ token, appointmentId }: { token: string; appointm
         >
           <span className="flex min-w-0 flex-1 items-start gap-2.5">
             <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              Could not refresh scheduling data. Previously loaded appointments
-              remain visible; retry before sending an offer.
-            </span>
+            <span>Could not load your schedule.{schedule ? " Showing what was loaded before." : ""}</span>
           </span>
           <Button variant="secondary" onClick={refresh} disabled={loading}>
             Retry
           </Button>
         </div>
       )}
-      {appointmentId && !loading && !error && (!linkedAppointment || !patients.some((patient) => patient.id === linkedAppointment.patientId && patient.care_team_id === linkedAppointment.careTeamId)) && <p role="status" className="text-sm text-muted">The linked appointment is unavailable. Select an assigned patient to review other appointments.</p>}
-      {loading && !patients.length ? (
-        <div className="space-y-3 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-          <p role="status" className="text-sm text-muted">
-            Loading assigned patients and appointments…
-          </p>
-          <Skeleton className="h-[42px] w-full max-w-md" />
-          <Skeleton className="h-24 w-full" />
+
+      {loading && !schedule ? (
+        <div aria-label="Loading schedule" className="space-y-3">
+          <p role="status" className="text-sm text-muted">Loading your schedule…</p>
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
         </div>
+      ) : !schedule ? (
+        error ? <ErrorState title="Your schedule is unavailable" description="Retry to load your visits." onRetry={refresh} /> : null
       ) : (
         <>
-          {!patients.length && !error && clinicFilter.clinicId ? (
-            <div className="space-y-3 rounded-2xl border border-line bg-surface px-5 py-6 text-sm text-ink-2 shadow-[var(--shadow-card)]">
-              <div className="flex justify-end"><ClinicFilterField filter={clinicFilter} /></div>
-              <p><ClinicFilterEmpty filter={clinicFilter} /></p>
+          <ScheduleNeedsAction
+            items={schedule.needsAction}
+            now={now.getTime()}
+            onOpen={(item) => openVisit(item.appointmentId)}
+            showClinic={clinicFilter.multi}
+          />
+          <SegmentedControl
+            label="Schedule range"
+            onChange={setMode}
+            options={[
+              { value: "day", label: "Today" },
+              { value: "week", label: "This week" },
+            ]}
+            value={mode}
+          />
+          {visits.length ? (
+            <ScheduleAgenda
+              now={now}
+              onOpen={(visit) => openVisit(visit.id)}
+              showClinic={clinicFilter.multi}
+              visits={visits}
+            />
+          ) : clinicId && !next ? (
+            <div className="rounded-2xl border border-line bg-surface px-5 py-6 text-sm text-ink-2 shadow-[var(--shadow-card)]">
+              <ClinicFilterEmpty filter={clinicFilter} noun="visits" />
             </div>
-          ) : !patients.length && !error ? (
+          ) : (
             <EmptyState
               icon={<Icon name="cal" />}
-              title="No assigned patients"
-              description="An active care-team assignment is required to offer appointments."
-            />
-          ) : (
-            <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-line bg-surface px-5 py-4 shadow-[var(--shadow-card)]">
-              <div className="w-full max-w-md">
-              <label className="block">
-                <span className="mb-1.5 block text-[13px] font-medium text-ink-2">
-                  Patient
-                </span>
-                <select
-                  className="h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted"
-                  value={effectiveSelectedId}
-                  disabled={loading || error || sending}
-                  onChange={(event) => setSelectedId(event.target.value)}
-                >
-                  <option value="">Select an assigned patient</option>
-                  {patients.map((patient) => (
-                    <option
-                      key={patient.care_team_id}
-                      value={patient.care_team_id}
+              title={`No visits ${period}`}
+              description={
+                next
+                  ? undefined
+                  : "Nothing is booked. Offer times to a patient to fill your schedule."
+              }
+              action={
+                <div className="flex flex-col items-center gap-3">
+                  {next && (
+                    <button
+                      className="max-w-full break-words rounded-lg px-2 py-1 text-sm text-ink-2 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      onClick={() => openVisit(next.id)}
+                      type="button"
                     >
-                      {patient.first_name} {patient.last_name}
-                      {clinicFilter.multi && patient.clinic_name ? ` · ${patient.clinic_name}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selected?.clinic_name && (
-                <p className="mt-1.5 text-[13px] text-muted">
-                  Clinic: {selected.clinic_name}
-                </p>
-              )}
-              </div>
-              <p className="pb-2.5 text-[13px] text-muted">
-                <span className="font-mono">{patients.length}</span> assigned
-              </p>
-              <div className="ml-auto pb-1">
-                <ClinicFilterField filter={clinicFilter} />
-              </div>
-            </div>
-          )}
-          {selected && (
-            <PatientAppointments
-              appointmentId={appointmentId}
-              key={selected.care_team_id}
-              token={token}
-              patient={selected}
-              appointments={appointments.filter(
-                (visit) =>
-                  visit.patientId === selected.id &&
-                  visit.careTeamId === selected.care_team_id,
-              )}
-              disabled={loading || error || sending}
-              onCreated={addOffer}
-              onSendingChange={setSending}
+                      Next visit: {dayLabel(new Date(next.scheduledAt), now)}, {visitTimeLabel(next)}
+                      {next.patientName ? ` · ${next.patientName}` : ""}
+                    </button>
+                  )}
+                  <Button
+                    disabled={!roster.length}
+                    onClick={() => {
+                      setSent(false);
+                      setOfferFor({});
+                    }}
+                    variant="secondary"
+                  >
+                    <Icon name="plus" className="h-4 w-4" />
+                    New offer
+                  </Button>
+                </div>
+              }
             />
           )}
         </>
+      )}
+
+      {target && (
+        <VisitDetailPanel
+          appointmentId={target.appointmentId}
+          key={target.appointmentId}
+          onClose={() => openVisit(null)}
+          onRepropose={(visit) => {
+            openVisit(null);
+            setSent(false);
+            setOfferFor({ previous: visit });
+          }}
+          patientId={target.patientId}
+          patientName={target.patientName}
+          showClinic={clinicFilter.multi}
+          token={token}
+        />
+      )}
+      {offerFor && (
+        <NewOfferPanel
+          onClose={() => setOfferFor(null)}
+          onCreated={() => {
+            setOfferFor(null);
+            setSent(true);
+            refresh();
+          }}
+          previous={offerFor.previous}
+          roster={roster}
+          showClinic={clinicFilter.multi}
+          token={token}
+        />
       )}
     </div>
   );
 }
 
-function AppointmentsContent() {
-  const appointmentId = useSearchParams().get("appointmentId");
+function ScheduleContent() {
+  const appointmentId = useSearchParams()?.get("appointmentId") ?? null;
   const token = useSelector((state: RootState) => state.auth.accessToken);
   return token ? (
-    <SchedulingWorkspace key={token} token={token} appointmentId={appointmentId} />
+    <ScheduleWorkspace key={token} token={token} appointmentId={appointmentId} />
   ) : (
     <p role="status" className="text-sm text-muted">
       Sign in as a clinician to manage appointments.
@@ -306,5 +322,9 @@ function AppointmentsContent() {
 }
 
 export default function AppointmentsPage() {
-  return <Suspense fallback={<p role="status">Loading appointments…</p>}><AppointmentsContent /></Suspense>;
+  return (
+    <Suspense fallback={<p role="status">Loading your schedule…</p>}>
+      <ScheduleContent />
+    </Suspense>
+  );
 }

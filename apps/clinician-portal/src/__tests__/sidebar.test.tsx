@@ -68,7 +68,7 @@ describe("Sidebar", () => {
 
         expect(screen.getByText("Risk Radar")).toBeInTheDocument();
         expect(screen.getByText("Patient Roster")).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("href", "/appointments");
+        expect(screen.getByRole("link", { name: "My schedule" })).toHaveAttribute("href", "/appointments");
         expect(screen.getByText("Review Queue")).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "ADR Reviews" })).toHaveAttribute("href", "/adr-reviews");
         expect(screen.getByRole("link", { name: "MedWatch" })).toHaveAttribute("href", "/medwatch");
@@ -136,8 +136,8 @@ describe("Sidebar", () => {
 
         const expand = await screen.findByRole("button", { name: "Expand sidebar" });
         expect(expand).toHaveAttribute("aria-expanded", "false");
-        expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("title", "Appointments");
-        expect(screen.getByText("Appointments")).toHaveClass("md:sr-only");
+        expect(screen.getByRole("link", { name: "My schedule" })).toHaveAttribute("title", "My schedule");
+        expect(screen.getByText("My schedule")).toHaveClass("md:sr-only");
         expect(window.localStorage.getItem("clinician-portal.sidebar-collapsed")).toBe("1");
 
         fireEvent.click(expand);
