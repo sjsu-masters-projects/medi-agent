@@ -25,6 +25,7 @@ def turn_sql(sql):
         "062_chat_message_attachments.sql",
         "072_nora_turn_recovery.sql",
         "073_nora_turn_begin_validation.sql",
+        "075_nora_late_completion.sql",
     ):
         sql((MIGRATIONS / name).read_text())
     return sql
@@ -304,3 +305,102 @@ def test_073_is_re_runnable_and_keeps_grants(turn_sql):
         )
         == "f"
     )
+
+
+def expire(turn_sql):
+    turn_sql("UPDATE chat_turns SET deadline_at=clock_timestamp()-interval '1 second';")
+
+
+@pytest.mark.parametrize("asked,expected", [(70, 70), (1, 10), (500, 120), (None, 45)])
+def test_deadline_is_the_requested_lease_clamped_to_ten_through_one_twenty_seconds(
+    turn_sql, asked, expected
+):
+    data = request()
+    if asked is None:
+        del data["timeout_seconds"]
+    else:
+        data["timeout_seconds"] = asked
+    data["request_hash"] = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    call(turn_sql, payload=data)
+    seconds = float(
+        turn_sql("SELECT extract(epoch FROM deadline_at - created_at) FROM chat_turns;")
+    )
+    assert expected - 1 <= seconds <= expected + 1
+
+
+def test_finished_reply_just_past_the_deadline_is_kept_once(turn_sql):
+    data = request()
+    record = call(turn_sql, payload=data)["turn"]
+    expire(turn_sql)
+    result = call(turn_sql, "complete", finish(record))
+    assert result["accepted"] and result["late"]
+    assert turn_sql("SELECT status||'|'||coalesce(failure_code,'-') FROM chat_turns;") == (
+        "completed|-"
+    )
+    assert turn_sql("SELECT count(*) FROM chat_messages WHERE role='assistant';") == "1"
+    replay = call(turn_sql, payload=data)
+    assert not replay["execute"] and replay["assistant_message"]["content"] == "Synthetic reply"
+    # A second completion for the same lease cannot add another reply.
+    assert not call(turn_sql, "complete", finish(record))["accepted"]
+    assert turn_sql("SELECT count(*) FROM chat_messages WHERE role='assistant';") == "1"
+
+
+def test_timely_completion_is_not_marked_late(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    assert call(turn_sql, "complete", finish(record))["late"] is False
+
+
+def test_late_completion_after_the_socket_was_lost_keeps_the_reply(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    call(turn_sql, "interrupted", record)
+    assert call(turn_sql, "complete", finish(record))["accepted"]
+
+
+def test_late_completion_is_refused_once_the_turn_was_retried_dismissed_or_failed(turn_sql):
+    data = request()
+    original = call(turn_sql, payload=data)["turn"]
+    expire(turn_sql)
+    assert call(turn_sql, payload=data)["execute"]  # retried: the old lease is gone
+    assert not call(turn_sql, "complete", finish(original))["accepted"]
+
+    dismissed = request()
+    record = call(turn_sql, "begin", dismissed, session="dismissed")["turn"]
+    call(turn_sql, "interrupted", record, session="dismissed")
+    call(turn_sql, "dismiss", dismissed, session="dismissed")
+    assert not call(turn_sql, "complete", finish(record), session="dismissed")["accepted"]
+
+    failed = request()
+    record = call(turn_sql, "begin", failed, session="failed")["turn"]
+    call(turn_sql, "failed", record, session="failed")
+    assert not call(turn_sql, "complete", finish(record), session="failed")["accepted"]
+
+
+def test_a_lapsed_lease_still_cannot_start_a_clinical_action(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    expire(turn_sql)
+    assert not call(turn_sql, "actions", record)["accepted"]
+    assert turn_sql("SELECT actions_started FROM chat_turns;") == "f"
+
+
+def test_reply_after_an_uncertain_action_is_still_kept(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    assert call(turn_sql, "actions", record)["accepted"]
+    expire(turn_sql)
+    assert call(turn_sql, "complete", finish(record))["accepted"]
+    assert turn_sql("SELECT status FROM chat_turns;") == "completed"
+
+
+def test_075_is_re_runnable_and_keeps_grants(turn_sql):
+    migration = (MIGRATIONS / "075_nora_late_completion.sql").read_text()
+    turn_sql(migration)
+    turn_sql(migration)
+    for role in ("anon", "authenticated"):
+        assert (
+            turn_sql(
+                f"SELECT has_function_privilege('{role}','chat_turn_operation(uuid,text,text,jsonb)','EXECUTE');"
+            )
+            == "f"
+        )
+    record = call(turn_sql, payload=request())["turn"]
+    expire(turn_sql)
+    assert call(turn_sql, "complete", finish(record))["late"]

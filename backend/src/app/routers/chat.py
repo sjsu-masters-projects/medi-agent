@@ -41,7 +41,12 @@ from app.services.chat_service import (
     normalize_session_id,
 )
 from app.services.chat_turn_execution import TurnChatService, TurnEmitter
-from app.services.chat_turn_service import ChatTurnService, TurnExecution, public_turn
+from app.services.chat_turn_service import (
+    ChatTurnService,
+    TurnExecution,
+    public_turn,
+    turn_budget,
+)
 from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
@@ -609,6 +614,15 @@ async def list_chat_conversations(
     return [ChatConversation.model_validate(row) for row in rows]
 
 
+def _turn_error_message(code: str) -> str:
+    """Plain, fixed wording per turn failure code; never provider or exception text."""
+    if code == "CHAT_TURN_BUSY":
+        return "A reply is already in progress in this conversation. Recovering it now."
+    if code == "CHAT_TURN_EXPIRED":
+        return "This reply took too long and was not kept. Your message is saved: try again."
+    return "Chat recovery is required."
+
+
 async def _process_durable_message(
     websocket: WebSocket, service: ChatService, context: dict[str, Any], request: dict[str, Any]
 ) -> dict[str, Any]:
@@ -619,8 +633,8 @@ async def _process_durable_message(
         incoming = incoming.model_copy(
             update={"language": written_language(incoming.content, incoming.language)}
         )
-        timeout = min(100, max(10, int(settings.chat_turn_timeout_seconds) + 10))
-        result = await turns.begin({**request, "language": incoming.language.value}, timeout + 5)
+        timeout, lease_seconds = turn_budget(settings.chat_turn_timeout_seconds)
+        result = await turns.begin({**request, "language": incoming.language.value}, lease_seconds)
         record = result["turn"]
         # Label the conversation now, not after completion, so an interrupted first
         # turn is still findable. Only an empty title is written (idempotent).
@@ -701,7 +715,9 @@ async def _process_durable_message(
                     "conversation_history": history,
                 },
             )
-            saved = await staged.complete()
+        # Saved outside the processing budget: a finished reply gets its own save call and the
+        # lease's save grace, so a slow model cannot leave no time to keep what it produced.
+        saved = await staged.complete()
         if staged.pending_state:
             await _refresh_conversation_state(
                 service,
@@ -744,11 +760,7 @@ async def _process_durable_message(
                 "type": "error",
                 "code": code,
                 "client_message_id": request.get("client_message_id"),
-                "message": (
-                    "A reply is already in progress in this conversation. Recovering it now."
-                    if code == "CHAT_TURN_BUSY"
-                    else "Chat recovery is required."
-                ),
+                "message": _turn_error_message(code),
             },
         )
         try:
