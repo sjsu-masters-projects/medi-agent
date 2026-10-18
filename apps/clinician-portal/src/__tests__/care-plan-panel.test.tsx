@@ -6,12 +6,14 @@ import {
     fetchClinicianCarePlanGeneration,
     fetchClinicianDocumentSource,
     retryClinicianCarePlanGeneration,
+    fetchBackTranslation,
     translateClinicianCarePlanItem,
     updateClinicianCarePlan,
 } from "@/services/clinicians";
 
 vi.mock("@/services/clinicians", () => ({
     approveClinicianCarePlan: vi.fn(),
+    fetchBackTranslation: vi.fn(),
     fetchClinicianCarePlanReviewContext: vi.fn(),
     fetchClinicianCarePlanGeneration: vi.fn(),
     fetchClinicianDocumentSource: vi.fn(),
@@ -367,25 +369,54 @@ describe("CarePlanPanel", () => {
         vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
         vi.mocked(updateClinicianCarePlan).mockImplementation(async (_patient, _plan, items) => ({ ...plan, items: [{ ...item, ...items[0], wording_origin: { "en-US": "source", "es-MX": "clinician_edited" } }] }));
         vi.mocked(translateClinicianCarePlanItem).mockResolvedValue(plan);
+        vi.mocked(fetchBackTranslation).mockResolvedValue({ back_translation: { title: "Walk", instructions: "Walk 20 minutes", frequency: "daily" }, guards: { numbers_match: true, medication_names_match: true } });
         render(<CarePlanPanel patientId="patient-1" />);
 
         expect(await screen.findByText("From source")).toBeInTheDocument();
         expect(screen.getByText(/AI translation · check it/)).toBeInTheDocument();
         expect(screen.getByText("Shown in patient's Today")).toBeInTheDocument();
         const check = screen.getByRole("checkbox", { name: /I verified the English wording/ });
+        // Not tickable until the back-translation of the saved Spanish has loaded and passed.
+        expect(check).toBeDisabled();
+        await waitFor(() => expect(check).toBeEnabled());
         fireEvent.click(check);
         expect(check).toBeChecked();
         fireEvent.change(screen.getByDisplayValue("Walk 20 minutes (es)"), { target: { value: "Camine 20 minutos" } });
         expect(check).not.toBeChecked();
+        expect(check).toBeDisabled();
+        expect(screen.getAllByText("Save your changes first").length).toBeGreaterThan(0);
         expect(screen.getByRole("button", { name: /Re-translate from English/ })).toBeDisabled();
-        fireEvent.click(check);
         fireEvent.click(screen.getByRole("button", { name: "Save review" }));
-        await waitFor(() => expect(updateClinicianCarePlan).toHaveBeenCalledWith("patient-1", "plan-1", [expect.objectContaining({
+        await waitFor(() => expect(updateClinicianCarePlan).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(updateClinicianCarePlan).mock.calls[0][2][0]).toEqual(expect.objectContaining({ wording_verified: false }));
+        // The saved Spanish is back-translated again before it can be attested.
+        await waitFor(() => expect(fetchBackTranslation).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.getByRole("checkbox", { name: /I verified the English wording/ })).toBeEnabled());
+        fireEvent.click(screen.getByRole("checkbox", { name: /I verified the English wording/ }));
+        fireEvent.click(screen.getByRole("button", { name: "Save review" }));
+        await waitFor(() => expect(updateClinicianCarePlan).toHaveBeenLastCalledWith("patient-1", "plan-1", [expect.objectContaining({
             title: "Walk", wording_verified: true, source_locale: "en-US",
             wording: expect.objectContaining({ "es-MX": expect.objectContaining({ instructions: "Camine 20 minutos" }) }),
         })]));
         expect(await screen.findByText("Edited by clinician")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: /Re-translate from English/ }));
         await waitFor(() => expect(translateClinicianCarePlanItem).toHaveBeenCalledWith("patient-1", "plan-1", "item-1", "en-US"));
+    });
+
+    it.each([
+        ["failed guards", () => vi.mocked(fetchBackTranslation).mockResolvedValue({ back_translation: { title: "Walk", instructions: "Walk 30 minutes", frequency: "daily" }, guards: { numbers_match: false, medication_names_match: true } }), "Numbers or medication names differ — fix the Spanish"],
+        ["an unavailable back-translation", () => vi.mocked(fetchBackTranslation).mockRejectedValue(new Error("down")), "Back-translation unavailable — retry"],
+        ["a pending back-translation", () => vi.mocked(fetchBackTranslation).mockReturnValue(new Promise(() => undefined)), "Back-translation is loading"],
+    ])("keeps the attestation disabled with %s", async (_name, arrange, reason) => {
+        const item = { id: "item-1", source_fact_id: "fact-1", category: "movement", schedule: {}, medication: {},
+            uncertainty: [], conflict: {}, is_removed: false, ...verified("Walk", "Walk 20 minutes", "daily"), wording_verified: false };
+        const plan = { id: "plan-1", patient_id: "patient-1", version_number: 2, status: "draft" as const, items: [item] };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: plan, active: null, patient_locale: "es-MX", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        arrange();
+        render(<CarePlanPanel patientId="patient-1" />);
+        const check = await screen.findByRole("checkbox", { name: /I verified the English wording/ });
+        await waitFor(() => expect(check.closest("label")).toHaveTextContent(reason));
+        expect(check).toBeDisabled();
     });
 });

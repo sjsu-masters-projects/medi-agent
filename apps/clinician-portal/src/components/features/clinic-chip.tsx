@@ -6,6 +6,7 @@ import type { ClinicFilter } from "@/hooks/use-clinic-filter";
 /**
  * The clinic of a patient's link: a small neutral pill, the same tone for every clinic so the
  * meaning comes from the text. It renders only when the clinician belongs to several clinics.
+ * It sits on its own line under a name and wraps rather than truncating; `title` keeps the full name.
  */
 export function ClinicChip({ className = "", name }: { className?: string; name?: string | null }) {
     if (!name) {
@@ -13,7 +14,7 @@ export function ClinicChip({ className = "", name }: { className?: string; name?
     }
     return (
         <span
-            className={`inline-block max-w-[180px] truncate rounded-full border border-line bg-surface-2 px-2 py-0.5 align-middle text-[11px] font-medium text-ink-2 ${className}`}
+            className={`inline-block max-w-full break-words rounded-full border border-line bg-surface-2 px-2 py-0.5 align-middle text-[11px] font-medium text-ink-2 ${className}`}
             title={name}
         >
             {name}

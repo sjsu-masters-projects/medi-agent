@@ -105,7 +105,6 @@ function getRoleTone(role: ClinicianRole) {
 }
 
 const GENERAL_SECTIONS = [
-    { id: "clinic-profile", label: "Clinic Profile" },
     { id: "your-clinics", label: "Your clinics" },
     { id: "my-profile", label: "My Profile" },
     { id: "security", label: "Security" },
@@ -174,7 +173,6 @@ export default function SettingsPage() {
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [clinicName, setClinicName] = useState("");
     const [pendingAction, setPendingAction] = useState<PendingStaffAction | null>(null);
-    const [clinicCode, setClinicCode] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteRole, setInviteRole] = useState<ClinicianRole>(ClinicianRole.PROVIDER);
@@ -193,7 +191,7 @@ export default function SettingsPage() {
     const [inviteRecords, setInviteRecords] = useState<InviteCodeRecord[]>([]);
     const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
     // Presentational only: highlights the section navigator entry the user last chose.
-    const [activeSection, setActiveSection] = useState<GeneralSectionId>("clinic-profile");
+    const [activeSection, setActiveSection] = useState<GeneralSectionId>("your-clinics");
     // Clinic-scoped actions (staff, invitations, invite codes) belong to one clinic. With one
     // membership the portal sends it automatically; with several the server answers
     // CLINIC_REQUIRED and the picker below asks which one. Nothing else in the portal changes.
@@ -269,7 +267,6 @@ export default function SettingsPage() {
             setClinicRequired(false);
             setStaffList(result.staff);
             setClinicName(result.clinic_name);
-            setClinicCode(result.clinic_code ?? null);
         } catch (e) {
             setStaffList([]);
             handleClinicError(e);
@@ -536,8 +533,7 @@ export default function SettingsPage() {
     return (
         <div className="ma-page space-y-5">
             <div>
-                <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Clinic settings</h1>
-                {clinicName ? <p className="mt-1 text-sm text-muted">{clinicName}</p> : null}
+                <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Settings</h1>
             </div>
 
             <div role="group" aria-label="Settings views" className="flex h-11 max-w-full gap-6 overflow-x-auto border-b border-line-strong">
@@ -594,39 +590,6 @@ export default function SettingsPage() {
                     </nav>
 
                     <div className="min-w-0 space-y-5">
-                        <Card padding="none">
-                            <div className="scroll-mt-24" id="clinic-profile">
-                                <CardHeader icon="building">
-                                    <h3 className="text-[15px] font-semibold text-ink">Clinic Profile</h3>
-                                </CardHeader>
-                                <div className="divide-y divide-line">
-                                    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-4">
-                                        <p className="text-[13px] text-muted">Clinic Name</p>
-                                        <p className="text-sm font-medium text-ink">{clinicName || "—"}</p>
-                                    </div>
-                                    {/* The open join code is shown to admins only; the server sends it to no one else. */}
-                                    {isClinicAdmin ? (
-                                    <div className="space-y-2 px-5 py-4">
-                                        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-                                            <p className="text-[13px] text-muted">Clinic Code</p>
-                                            <div className="flex items-center gap-2">
-                                                <p className="rounded-[10px] border border-line-strong bg-surface-2 px-3 py-1.5 font-mono text-lg tracking-[0.08em] text-ink">
-                                                    {clinicCode || "Unavailable"}
-                                                </p>
-                                                <CopyButton aria-label="Copy clinic code" value={clinicCode}>
-                                                    Copy
-                                                </CopyButton>
-                                            </div>
-                                        </div>
-                                        <p className="text-[13px] text-muted">
-                                            New clinicians can join with this clinic code. Sending an invite is optional.
-                                        </p>
-                                    </div>
-                                    ) : null}
-                                </div>
-                            </div>
-                        </Card>
-
                         {token ? (
                             <YourClinicsCard
                                 onChanged={() => {
@@ -661,10 +624,6 @@ export default function SettingsPage() {
                                         onChange={(event) => setSpecialty(event.target.value)}
                                         placeholder="Family Medicine"
                                         value={specialty}
-                                    />
-                                    <ReadOnlyField
-                                        label="Role"
-                                        value={profile ? getRoleLabel(profile.role) : "Loading profile…"}
                                     />
                                     <ReadOnlyField label="Email" value={profile?.email || "—"} />
                                 </div>

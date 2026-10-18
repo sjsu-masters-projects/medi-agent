@@ -15,7 +15,7 @@ const sections: Record<string, { title: string; icon: IconName }> = {
     "/messages": { title: "Messages", icon: "chat" },
     "/alerts": { title: "Alerts", icon: "bell" },
     "/smart-import": { title: "External record import", icon: "download" },
-    "/settings": { title: "Clinic settings", icon: "gear" },
+    "/settings": { title: "Settings", icon: "gear" },
     "/settings/mfa": { title: "Account security", icon: "shield" },
 };
 

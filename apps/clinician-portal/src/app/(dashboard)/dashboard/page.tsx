@@ -10,6 +10,7 @@ import { CompactField, SegmentedControl, compactSelectClass } from "@/components
 import { readStoredClinicContext } from "@/services/clinic-context";
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { RiskBadge } from "@/components/features/risk-badge";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import { fetchPatientRiskSnapshot } from "@/services/clinicians";
 import { subscribeDashboardRealtime } from "@/services/dashboard-realtime";
@@ -228,7 +229,8 @@ export default function DashboardPage() {
     }, [minMedCount, patients, query, riskFilter, sortBy, sortOrder]);
 
     const flip = useFlip(visiblePatients.map((patient) => patient.patient_id).join(","));
-    const clinicName = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
+    const storedClinic = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
+    const scopeLabel = clinicScopeLabel(clinicFilter, storedClinic);
     const today = useSyncExternalStore(noopSubscribe, todayLabel, () => "");
     const statTone = (label: string) => label.includes("Critical") ? "text-risk" : label.includes("ADR") || label.includes("MedWatch") ? "text-warn-ink" : "text-ink";
     const columns = "grid-cols-[minmax(200px,1.3fr)_112px_minmax(170px,1fr)_minmax(200px,1.4fr)_minmax(150px,1fr)_112px]";
@@ -257,7 +259,7 @@ export default function DashboardPage() {
                 <div className="radar-floor" aria-hidden="true" />
                 <div className="radar-glow" aria-hidden="true" />
                 <div className="relative flex min-w-0 flex-col gap-1.5">
-                    <p className="text-sm text-muted">{today}{clinicName ? ` · ${clinicName}` : ""}</p>
+                    <p className="text-sm text-muted">{today}{scopeLabel ? ` · ${scopeLabel}` : ""}</p>
                     <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em] text-ink">Risk Radar</h1>
                     <p className="text-[15px] text-ink-2">Assigned patient overview</p>
                 </div>
@@ -407,7 +409,7 @@ export default function DashboardPage() {
                                 {/* Name */}
                                 <div className="flex min-w-0 items-center gap-3">
                                     <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{initials}</span>
-                                    <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                                    <div className="flex min-w-0 flex-col items-start gap-0.5">
                                         <p className="min-w-0 break-words text-[15px] font-semibold text-ink">
                                             {patient.first_name} {patient.last_name}
                                         </p>

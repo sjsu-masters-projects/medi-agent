@@ -198,13 +198,18 @@ export function YourClinicsCard({ onChanged, revision = 0, token }: YourClinicsC
                                         {isDefault ? <Badge variant="info">Default</Badge> : null}
                                     </div>
                                     {isAdmin ? (
-                                        <div className="flex items-center gap-2 text-[13px] text-muted">
-                                            <span>Clinic code</span>
-                                            <span className="font-mono text-ink-2">{clinic.clinic_code}</span>
-                                            <CopyButton aria-label={`Copy clinic code for ${clinic.clinic_name}`} value={clinic.clinic_code}>
-                                                Copy
-                                            </CopyButton>
-                                        </div>
+                                        <>
+                                            <div className="flex items-center gap-2 text-[13px] text-muted">
+                                                <span>Clinic code</span>
+                                                <span className="font-mono text-ink-2">{clinic.clinic_code}</span>
+                                                <CopyButton aria-label={`Copy clinic code for ${clinic.clinic_name}`} value={clinic.clinic_code}>
+                                                    Copy
+                                                </CopyButton>
+                                            </div>
+                                            <p className="text-[13px] text-muted">
+                                                New clinicians can join with this clinic code. Sending an invite is optional.
+                                            </p>
+                                        </>
                                     ) : null}
                                     {leaveReason ? <p className="text-xs text-muted">{leaveReason}</p> : null}
                                 </div>

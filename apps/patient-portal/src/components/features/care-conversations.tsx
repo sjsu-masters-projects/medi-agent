@@ -394,7 +394,8 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
         // A translation whose safety check failed (numbers changed) is never shown; the original
         // stays the main text and a short note says the automatic translation is unavailable.
         const guardFailed = !own && Boolean(message.translation) && message.translation_guard_passed === false;
-        const hasTranslation = !own && Boolean(message.translation) && !guardFailed;
+        // Defence in depth: only a translation into the patient's own language is ever the main text.
+        const hasTranslation = !own && Boolean(message.translation) && !guardFailed && message.translation_locale === locale;
         const originalShown = showOriginal.has(message.id);
         const displayBody = hasTranslation && !originalShown ? (message.translation ?? message.body) : message.body;
         const translatedLabel = message.translation_locale === "es-MX" ? copy.translatedFromEnglish : copy.translatedFromSpanish;

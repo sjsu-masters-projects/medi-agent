@@ -22,11 +22,17 @@ const staff = [
 
 function mockSignedInAs(role: string) {
     mocks.get.mockImplementation(async (path: string) => {
-        if (path === "/api/v1/staff/") return { staff, clinic_name: "City Health", clinic_code: "ABC123" };
+        if (path.startsWith("/api/v1/staff/")) return { staff, clinic_name: "City Health", clinic_code: "ABC123" };
         if (path === "/api/v1/clinicians/me") {
             return { id: "clinician-1", email: "provider@example.com", first_name: "Pat", last_name: "Lee", specialty: "", role };
         }
         if (path === "/api/v1/clinicians/me/invite-codes") return { invites: [] };
+        if (path === "/api/v1/clinicians/me/clinics") {
+            return {
+                default_clinic_id: "clinic-1",
+                clinics: [{ clinic_id: "clinic-1", clinic_name: "City Health", role, status: "active", clinic_code: role === "admin" ? "ABC123" : null }],
+            };
+        }
         throw new Error(`Unexpected request ${path}`);
     });
 }
@@ -66,11 +72,22 @@ describe("Settings team and roles", () => {
     it("shows the clinic code and its Copy button only to a clinic admin", async () => {
         mockSignedInAs("provider");
         render(<SettingsPage />);
-        await screen.findByRole("heading", { name: "Clinic Profile" });
+        await screen.findByRole("heading", { name: "Your clinics" });
         await screen.findAllByText("City Health");
         expect(screen.queryByText("Clinic Code")).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Copy clinic code" })).not.toBeInTheDocument();
         expect(screen.queryByText("ABC123")).not.toBeInTheDocument();
+    });
+
+    it("shows the join code once, on the admin's clinic row, with its helper line", async () => {
+        mockSignedInAs("admin");
+        render(<SettingsPage />);
+        await screen.findByText("ABC123");
+        expect(screen.getAllByText("ABC123")).toHaveLength(1);
+        expect(screen.getAllByText("New clinicians can join with this clinic code. Sending an invite is optional.")).toHaveLength(1);
+        expect(screen.queryByRole("heading", { name: "Clinic Profile" })).not.toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+        expect(screen.queryByText("Role", { selector: "p, label, span, dt" })).not.toBeInTheDocument();
     });
 
     it("copies the clinic code and says so next to the button", async () => {
@@ -79,7 +96,7 @@ describe("Settings team and roles", () => {
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
         try {
             render(<SettingsPage />);
-            const copy = await screen.findByRole("button", { name: "Copy clinic code" });
+            const copy = await screen.findByRole("button", { name: "Copy clinic code for City Health" });
             await screen.findByText("ABC123");
             fireEvent.click(copy);
             expect(await screen.findByText("Copied")).toHaveAttribute("role", "status");

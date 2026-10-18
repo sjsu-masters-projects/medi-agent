@@ -359,14 +359,15 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
           const translation = message.translation;
           const translationLocale = message.translation_locale;
           const guardPassed = message.translation_guard_passed;
-          const sourceLabel = own ? undefined : (translationLocale === "en-US" ? "Translated from Spanish" : translationLocale === "es-MX" ? "Translated from English" : undefined);
+          // A clinician reads English: only a translation into English is ever shown.
+          const sourceLabel = own ? undefined : (translationLocale === "en-US" ? "Translated from Spanish" : undefined);
           return <li key={message.id} className={`ma-bubble flex max-w-[78%] flex-col gap-1 ${own ? "items-end self-end" : "items-start self-start"}`}>
             <p className="px-1 text-[11px] text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
             <p className={`whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm ${own ? "rounded-[18px_18px_6px_18px] bg-primary text-white" : "rounded-[18px_18px_18px_6px] bg-surface-2 text-ink"}`}>{message.body}</p>
             {translation && sourceLabel && guardPassed === false ? <p className="px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
             {translation && sourceLabel && guardPassed !== false ? <div className="mt-0.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">
               <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted"><Icon name="spark" className="h-3 w-3" />{sourceLabel}</p>
-              <p className="mt-1 whitespace-pre-wrap">{translation}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words">{translation}</p>
             </div> : null}
           </li>;
         })}
