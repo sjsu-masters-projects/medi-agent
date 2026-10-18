@@ -11,6 +11,9 @@ import { redirectToLogin } from "@/services/auth-redirect";
 
 const REFRESH_EARLY_WINDOW_SECONDS = 30 * 60;
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000;
+// A token issued with a short lifetime is always inside the early window; without a floor
+// each refresh re-triggered the next one at once and rebuilt every live connection.
+const MIN_REFRESH_GAP_MS = 5 * 60 * 1000;
 
 function shouldRefreshSoon(expiresAt: number, nowSeconds = Math.floor(Date.now() / 1000)) {
     return expiresAt - nowSeconds <= REFRESH_EARLY_WINDOW_SECONDS;
@@ -22,7 +25,7 @@ export function useAuthSessionRefresh() {
         (state: RootState) => state.auth,
     );
 
-    const refreshState = useRef({ inFlight: false });
+    const refreshState = useRef({ inFlight: false, lastRefreshAt: 0 });
 
     const refreshContext = useMemo(
         () => ({ expiresAt, refreshToken, isAuthenticated, loading }),
@@ -60,6 +63,14 @@ export function useAuthSessionRefresh() {
                 return;
             }
 
+            const expiresInSeconds = currentExpiresAt - Math.floor(Date.now() / 1000);
+            if (
+                expiresInSeconds > 60 &&
+                Date.now() - refreshState.current.lastRefreshAt < MIN_REFRESH_GAP_MS
+            ) {
+                return;
+            }
+
             refreshState.current.inFlight = true;
 
             try {
@@ -81,6 +92,7 @@ export function useAuthSessionRefresh() {
                 // A transient failure keeps the session; the next check tries again.
             } finally {
                 refreshState.current.inFlight = false;
+                refreshState.current.lastRefreshAt = Date.now();
             }
         }
 
