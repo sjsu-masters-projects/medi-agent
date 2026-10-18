@@ -1,7 +1,14 @@
 import { resolveLocaleResource, type Locale, type LocaleResourceMap } from "@/types";
 
 const en = {
-    title: "Draft — not submitted", start: "Start a symptom draft", intro: "Form answers remain private until you confirm. Your initial Nora message remains in chat history.",
+    title: "Draft — not submitted", start: "Start a symptom draft", intro: "Your answers here remain private until you confirm. Your initial Nora message remains in chat history.",
+    answerPrompt: "Type or speak your answer below. You can say “not sure” or “skip”.",
+    suggestion: "From your message", useSuggestion: "Use this answer", detailEntry: "Enter detailed fields instead",
+    listen: "Listen", reviewFirst: "Review the summary, then use the confirmation controls to share. A spoken reply cannot submit it.",
+    productReported: "Products reported by you — unverified; not added to your medication list",
+    recordSource: "Approved record source", excerptSource: "Source document", pendingAnswer: "Your answer — not yet verified as saved",
+    editReply: "Edit this response", existingDraft: "You have an unfinished draft in this conversation. Continue or cancel it before starting another.",
+    urgentReview: "Your high-severity answer has been queued for care-team review. This does not mean someone has read it. Messages are not continuously monitored.",
     loading: "Loading your draft…", unavailable: "Guided intake is unavailable. Reload the saved state to check any prior action.",
     error: "We could not verify this action. Reload the saved state before retrying.", reload: "Reload saved state", retry: "Retry the same action",
     save: "Save answer", unknown: "I don’t know", declined: "Prefer not to answer", edit: "Edit", review: "Review before sharing", cancel: "Cancel draft",
@@ -15,7 +22,14 @@ const en = {
     states: { answered: "Answered", unknown: "Unknown", declined: "Declined", not_asked: "Not asked", not_applicable: "Not applicable" },
 };
 const es: typeof en = {
-    title: "Borrador — no enviado", start: "Iniciar un borrador de síntomas", intro: "Las respuestas del formulario son privadas hasta que confirmes. Tu mensaje inicial a Nora permanece en el historial del chat.",
+    title: "Borrador — no enviado", start: "Iniciar un borrador de síntomas", intro: "Tus respuestas aquí son privadas hasta que confirmes. Tu mensaje inicial a Nora permanece en el historial del chat.",
+    answerPrompt: "Escribe o di tu respuesta abajo. Puedes decir “no sé” o “prefiero no responder”.",
+    suggestion: "De tu mensaje", useSuggestion: "Usar esta respuesta", detailEntry: "Ingresar campos detallados",
+    listen: "Escuchar", reviewFirst: "Revisa el resumen y usa los controles de confirmación para compartirlo. Una respuesta hablada no lo envía.",
+    productReported: "Productos reportados por ti — sin verificar; no se agregaron a tu lista de medicamentos",
+    recordSource: "Fuente aprobada del expediente", excerptSource: "Documento fuente", pendingAnswer: "Tu respuesta — aún no se ha verificado el guardado",
+    editReply: "Editar esta respuesta", existingDraft: "Tienes un borrador sin terminar en esta conversación. Continúalo o cancélalo antes de iniciar otro.",
+    urgentReview: "Tu respuesta de alta intensidad está en espera de revisión por tu equipo de atención. Esto no significa que alguien la haya leído. Los mensajes no se supervisan continuamente.",
     loading: "Cargando tu borrador…", unavailable: "La captura guiada no está disponible. Carga el estado guardado para verificar una acción anterior.",
     error: "No pudimos verificar esta acción. Vuelve a cargar el estado guardado antes de reintentar.", reload: "Cargar el estado guardado", retry: "Reintentar la misma acción",
     save: "Guardar respuesta", unknown: "No sé", declined: "Prefiero no responder", edit: "Editar", review: "Revisar antes de compartir", cancel: "Cancelar borrador",
@@ -42,6 +56,7 @@ export function intakeErrorCopy(code: string, locale: Locale) {
         : "The draft changed. Reload the saved state and review a new preview.";
     if (code === "INTAKE_TERMINAL") return es ? "Esta captura ya terminó. Carga el estado guardado." : "This intake has ended. Reload the saved state.";
     if (code === "INTAKE_ANSWER_INVALID") return es ? "Revisa tu respuesta e intenta de nuevo." : "Check your answer and try again.";
+    if (code === "INTAKE_REPLY_AMBIGUOUS") return es ? "No pude interpretar esa respuesta. Di un número del 1 al 10 para intensidad, o el nombre del producto si corresponde. También puedes decir no sé o prefiero no responder." : "I could not interpret that answer. Use a number from 1 to 10 for severity, or name the product when asked. You can also say not sure or skip.";
     return getSymptomIntakeCopy(locale).error;
 }
 export function intakeValueCopy(value: unknown, locale: Locale): string {

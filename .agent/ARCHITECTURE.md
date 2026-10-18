@@ -191,13 +191,13 @@ credentials or contact a clinical system.
 Nora's routine symptom route opens an owned private draft; it does not extract and
 save a clinical report or start ordinary ADR work. Manual entry from a saved Nora
 turn remains available without model generation. The deterministic safety floor
-runs before ordinary work and on form answers, corrections, preview and confirmation.
+runs before ordinary work and on typed, voice or form answers, corrections, preview and confirmation.
 Safety alerts use independent durable outboxes and the existing retry worker.
 
 The paired `en-US`/`es-MX` question bundle is immutable and pinned by version/hash.
 Activation requires genuine review evidence in the packaged manifest and matching
 approved database eligibility, plus the disabled-by-default runtime flag. Drafts,
-answer mutations and audit are patient-private; form values never become chat rows.
+answer mutations and audit are patient-private; private answer values never become chat rows.
 The original Nora message remains under existing transcript visibility rules.
 
 The server constructs a versioned preview separating patient answers, record context
@@ -213,8 +213,14 @@ commit one immutable patient-confirmed report with append-only audit. Unknown se
 is null. New direct inserts fail closed; historical rows stay `legacy_unconfirmed`.
 Clinical consumers select confirmed reports; the existing clinician detail view labels
 legacy history and confirmed testimony separately. Delegated symptom tasks canonicalize
-report input at submission/working transitions. No new clinical verdict or automatic
-ADR follow-up is added. PAT-002-C's timeline remains separate.
+report input at submission/working transitions. Additive migration 071 atomically
+enqueues the existing ADR screen and assigned-clinic notices at confirmation;
+exact unique active-list products permit ADR drafts, while unlisted products remain
+unverified testimony without medication writes. Retry cannot overwrite clinician
+review. Independent urgent and emergency outbox identities prevent suppression.
+Chat/voice questions reuse the existing voice transport without storing private
+recording audio or TTS against a chat row. Explicit confirmation remains a button;
+spoken assent cannot submit. No new clinical verdict or automatic ADR follow-up is added. PAT-002-C's timeline remains separate.
 
 See [the contract and acceptance evidence](../docs/pat-002-b-acceptance-2026-10-12.md)
 for exact endpoints, recovery behavior and rollout prerequisites.

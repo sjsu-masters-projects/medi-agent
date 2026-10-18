@@ -14,7 +14,8 @@ function errorCode(failure: unknown, fallback: string) {
 }
 export function useSymptomIntake(sessionId = "default") {
     const { accessToken: token, user } = useSelector((state: RootState) => state.auth);
-    const scope = `${user?.id ?? ""}:${token ?? ""}:${sessionId}`;
+    // Refreshing the same actor's token must preserve uncertain mutation identities.
+    const scope = `${user?.id ?? ""}:${sessionId}`;
     const latest = useRef(scope);
     useLayoutEffect(() => { latest.current = scope; }, [scope]);
     const controller = useRef<AbortController | null>(null);
@@ -77,7 +78,7 @@ export function useSymptomIntake(sessionId = "default") {
             const result = await operation(request.signal);
             if (latest.current !== scope || request.signal.aborted) return;
             if (result.persistence_status !== "uncertain") { pending.current = null; setPendingScope(null); }
-            setState({ scope, draft: result, error: null, busy: false });
+            setState({ scope, draft: { ...result, suggestions: result.suggestions ?? (result.intake_id === draft?.intake_id ? draft.suggestions : undefined) }, error: null, busy: false });
             return result;
         } catch (failure) {
             if (latest.current !== scope || (request.signal.aborted && !timedOut)) return;

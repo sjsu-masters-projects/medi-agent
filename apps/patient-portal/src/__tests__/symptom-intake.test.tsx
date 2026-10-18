@@ -26,6 +26,7 @@ it("recovers the owned draft without writing or mirroring answers into chat", as
 });
 
 it.each(["en-US", "es-MX"] as const)("saves unknown as null and never selects a rating in %s", async (locale) => {
+    active.mockResolvedValue({ ...draft, locale });
     mutate.mockResolvedValue({ ...draft, answers: { severity: { question_id: "severity", state: "unknown", value: null, wording: "", locale } }, revision: 1, current_question: null });
     render(panel(locale));
     const select = await screen.findByLabelText(question.wording[locale]);
@@ -108,7 +109,8 @@ it("recovers a completed save without offering another pending confirmation", as
     mutate.mockRejectedValueOnce(new Error("synthetic lost response"));
     render(panel()); fireEvent.click(await screen.findByRole("checkbox")); fireEvent.click(screen.getByText("Confirm and share with my care team"));
     fireEvent.click(await screen.findByText("Reload saved state"));
-    await screen.findByText("Report saved for care-team review: one-report");
+    await screen.findByRole("heading", { name: "Report saved for care-team review" });
+    expect(screen.queryByText(/one-report/)).not.toBeInTheDocument();
     expect(screen.queryByText("Retry the same action")).not.toBeInTheDocument();
     expect(mutate).toHaveBeenCalledTimes(1);
 });
@@ -155,4 +157,60 @@ it.each(["en-US", "es-MX"] as const)("preserves unavailable-library feedback on 
     render(panel(locale));
     expect(await screen.findByText(locale === "en-US" ? /Guided intake is unavailable/ : /La captura guiada no está disponible/)).toBeInTheDocument();
     expect(screen.queryByText(locale === "en-US" ? "Start a symptom draft" : "Iniciar un borrador de síntomas")).not.toBeInTheDocument();
+});
+
+it("routes spoken answers privately and never treats spoken assent as confirmation", async () => {
+    const register = vi.fn();
+    const reader = vi.fn();
+    mutate.mockResolvedValue({ ...draft, revision: 1 });
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} onReadAloud={reader} handsFree /></Provider>);
+    await screen.findByText("Type or speak your answer below. You can say “not sure” or “skip”.");
+    expect(reader).toHaveBeenCalledWith(expect.stringContaining("Choose your severity"), "en-US");
+    const handler = register.mock.calls.at(-1)?.[0];
+    act(() => { expect(handler("cinco", "voice")).toBe("handled"); });
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(mutate.mock.calls[0][2]).toBe("reply");
+    expect(mutate.mock.calls[0][3]).toMatchObject({ text: "cinco", input_mode: "voice", question_id: "severity" });
+});
+
+it("requires a separate acceptance of source suggestions", async () => {
+    active.mockResolvedValue({ ...draft, suggestions: { severity: 5 } });
+    render(panel());
+    await screen.findByText("From your message");
+    expect(mutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Use this answer"));
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(mutate.mock.calls[0][3]).toMatchObject({ value: 5, state: "answered" });
+});
+
+it("preserves an uncertain mutation identity across a token refresh", async () => {
+    mutate.mockRejectedValueOnce(new Error("synthetic response lost"));
+    render(panel());
+    fireEvent.click(await screen.findByText("I don’t know"));
+    await screen.findByText(/We could not verify/);
+    const original = mutate.mock.calls[0][3];
+    act(() => store.dispatch(hydrateSession({ accessToken: "refreshed-token", refreshToken: "synthetic", expiresAt: 9999999999,
+        user: { id: "patient-A", email: "patient-A@synthetic.invalid", role: "patient" } })));
+    await waitFor(() => expect(active).toHaveBeenCalledTimes(2));
+    mutate.mockResolvedValue({ ...draft, revision: 1 });
+    fireEvent.click(screen.getByText("Retry the same action"));
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(2));
+    expect(mutate.mock.calls[1][3]).toEqual(original);
+});
+
+it("blocks a spoken confirm reply and hides internal identifiers in the preview", async () => {
+    const register = vi.fn();
+    active.mockResolvedValue({ ...draft, status: "ready_for_confirmation", current_question: null, can_review: true, can_confirm: true,
+        preview_hash: "a".repeat(64), preview: { schema_version: "symptom-report/1", answers: {}, summary: "My original account",
+            context: { purpose: "patient_symptom_preview", version: "symptom-context/1", medications: [{ name: "Test medicine", source_id: "private-source-uuid" }],
+                facts: [{ fact_type: "dose", value: { amount: "5 mg" }, source_id: "private-fact-uuid" }], excerpts: [] },
+            source_message_id: "private-source-turn", session_id: "default" } });
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} /></Provider>);
+    await screen.findByText("My original account");
+    act(() => { expect(register.mock.calls.at(-1)?.[0]("confirm", "voice")).toBe("blocked"); });
+    expect(mutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByText("Confirm and share with my care team")).toBeDisabled();
+    expect(screen.queryByText(/private-source-uuid|private-fact-uuid|private-source-turn/)).not.toBeInTheDocument();
+    expect(screen.getByText(/amount: 5 mg/)).toBeInTheDocument();
 });

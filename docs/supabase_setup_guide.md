@@ -385,3 +385,14 @@ Rollback disables intake and its ordinary writes while preserving drafts, confir
 reports and durable safety-alert retry. It must not restore automatic unconfirmed
 report insertion. See [the acceptance record](pat-002-b-acceptance-2026-10-12.md) for
 local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
+
+
+### October 17 additive handoff migration
+
+Keep applied 059/060 names and checksums unchanged. `071_confirmed_symptom_handoff.sql`
+adds transactional ADR/review handoff, source-message locale, voice provenance and
+independent urgent alerts. Its exact checksum, prerequisites, authorization state
+and read-only `preflight_symptom_intake.py` procedure are in the
+[PAT-002-B rollout](pat-002-b-rollout.md). Do not run unrelated pending migrations
+as part of this change. Candidate-2 remains pending genuine review; neither SQL
+nor a passing test approves a question bundle.

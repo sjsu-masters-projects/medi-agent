@@ -1,6 +1,12 @@
 {
   "active_version": "candidate-1",
   "bundles": {
+    "candidate-2": {
+      "file": "candidate-2.json",
+      "status": "pending_review",
+      "sha256": "cb35ff1dcd75d42cc147744ce5f056d6b676ba00d19a069769f1db6244c4939f",
+      "approval": null
+    },
     "candidate-1": {
       "file": "candidate-1.json",
       "status": "approved",

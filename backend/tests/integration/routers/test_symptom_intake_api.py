@@ -80,3 +80,21 @@ def test_confirmation_requires_explicit_true_consent(
     )
     assert response.status_code == 422
     confirm.assert_not_awaited()
+
+
+def test_reply_is_private_and_cannot_carry_confirmation(client, patient_dependencies, monkeypatch):
+    reply = AsyncMock(return_value={"status": "collecting"})
+    monkeypatch.setattr(SymptomIntakeService, "reply", reply)
+    body = {
+        "expected_revision": 2,
+        "mutation_id": str(uuid4()),
+        "question_id": "severity",
+        "text": "cinco",
+        "locale": "es-MX",
+        "input_mode": "voice",
+    }
+    url = ROOT + f"/{uuid4()}/reply"
+    response = client.post(url, json=body)
+    assert response.status_code == 200 and response.headers["Cache-Control"] == "private, no-store"
+    assert client.post(url, json={**body, "consent": True}).status_code == 422
+    assert reply.await_count == 1

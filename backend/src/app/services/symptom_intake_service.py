@@ -13,10 +13,17 @@ from supabase import Client
 
 from app.config import settings
 from app.core.exceptions import AuthorizationError, ValidationError
+from app.intake.conversation import interpret, source_suggestions
 from app.intake.library import Bundle, load_library, select_question, validate_value
 from app.intake.preview import retrieve_context, summarize, verify_context
 from app.models.auth import CurrentUser
-from app.models.symptom_intake import IntakeAnswer, IntakeConfirm, IntakeMutation, IntakeStart
+from app.models.symptom_intake import (
+    IntakeAnswer,
+    IntakeConfirm,
+    IntakeMutation,
+    IntakeReply,
+    IntakeStart,
+)
 from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety, safety_response
 from app.safety.triage_floor import SafetyVerdict
 from app.services.chat_safety_service import ChatSafetyService
@@ -88,6 +95,13 @@ class SymptomIntakeService:
 
     async def _visible(self, row: dict[str, Any]) -> dict[str, Any]:
         response = self.describe(row)
+        if row["status"] in {"collecting", "ready_for_confirmation"}:
+            source = await self._source(
+                IntakeStart(
+                    source_message_id=row["source_message_id"], session_id=row["session_id"]
+                )
+            )
+            response["suggestions"] = source_suggestions(str(source["content"]))
         if row.get("preview"):
             try:
                 visible = await verify_context(self.db, row)
@@ -151,7 +165,14 @@ class SymptomIntakeService:
                 "timezone_fallback": fallback,
             },
         )
-        return self.describe(row)
+        response = self.describe(row)
+        response["suggestions"] = (
+            source_suggestions(str(source["content"]))
+            if row["source_message_id"] == str(data.source_message_id)
+            else {}
+        )
+        response["existing_draft"] = row["source_message_id"] != str(data.source_message_id)
+        return response
 
     async def _source(self, data: IntakeStart) -> dict[str, Any]:
         result = await asyncio.to_thread(
@@ -236,6 +257,33 @@ class SymptomIntakeService:
         }
         return self.describe(await self._call("answer", payload))
 
+    async def reply(self, intake_id: UUID, data: IntakeReply) -> dict[str, Any]:
+        row = await self._read_row(intake_id)
+        decision = evaluate_intake_safety(data.text, data.locale)
+        if decision:
+            return await self.interrupt(row, data.model_dump(mode="json"), decision)
+        bundle = self.library(row["library_version"])
+        question = bundle.question(data.question_id)
+        if (
+            data.question_id not in row["answers"]
+            and select_question(bundle, row["answers"]) != question
+        ):
+            raise ValidationError("Answer the current question", code="INTAKE_ANSWER_INVALID")
+        state, value = interpret(question, data.text)
+        return await self.answer(
+            intake_id,
+            IntakeAnswer(
+                expected_revision=data.expected_revision,
+                mutation_id=data.mutation_id,
+                question_id=data.question_id,
+                state=state,
+                value=value,
+                wording=data.text,
+                locale=data.locale,
+                input_mode=data.input_mode,
+            ),
+        )
+
     @staticmethod
     def _answer_text(data: IntakeAnswer) -> str:
         value = data.value
@@ -301,11 +349,39 @@ class SymptomIntakeService:
         if select_question(bundle, row["answers"]) is not None:
             raise ValidationError("Resolve required questions", code="INTAKE_ANSWER_INVALID")
         context = await retrieve_context(self.db, row)
+        summary = summarize(row, bundle)
+        product = row["answers"].get("product", {})
+        if product.get("state") == "answered" and product.get("value", {}).get("concern") is True:
+            name = str(product["value"].get("name", ""))
+            matched = any(
+                str(m.get("name", "")).strip().casefold() == name.strip().casefold()
+                for m in context.get("medications", [])
+            )
+            label = (
+                (
+                    "Producto reportado por el paciente — sin verificar"
+                    if matched
+                    else "Producto reportado por el paciente, no encontrado en la lista actual — sin verificar"
+                )
+                if row["locale"] == "es-MX"
+                else (
+                    "Patient-reported product — unverified"
+                    if matched
+                    else "Patient-reported product, not on the current medication list — unverified"
+                )
+            )
+            summary += f"\n{label}: {name}"
+        if row["answers"].get("concomitant", {}).get("state") == "answered":
+            summary += "\n" + (
+                "Los productos y cambios adicionales son reportados por el paciente, sin verificar."
+                if row["locale"] == "es-MX"
+                else "Additional products and changes are patient-reported and unverified."
+            )
         snapshot = {
             "schema_version": "symptom-report/1",
             "answers": row["answers"],
             "context": context,
-            "summary": summarize(row, bundle),
+            "summary": summary,
             "source_message_id": row["source_message_id"],
             "session_id": row["session_id"],
             "locale": row["locale"],

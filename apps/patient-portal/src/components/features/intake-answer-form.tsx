@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { getSymptomIntakeCopy } from "@/content/symptom-intake-copy";
 import type { IntakeAnswer, IntakeQuestion, Locale } from "@/types";
 
-const input = "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500";
-const button = "min-h-11 rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-50";
+const input = "w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus:ring-2 focus:ring-brand";
+const button = "min-h-11 rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink disabled:opacity-50";
 export function IntakeAnswerForm({ question, locale, answer, disabled, save }: {
     question: IntakeQuestion; locale: Locale; answer?: IntakeAnswer; disabled: boolean;
     save: (state: "answered" | "unknown" | "declined", value: IntakeAnswer["value"], wording: string) => void;

@@ -63,7 +63,9 @@ def test_voice_websocket_transcribes_final_audio(client, monkeypatch, patient_id
 
     monkeypatch.setattr("app.routers.voice.VoiceService.transcribe_audio", _mock_transcribe)
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         ready = websocket.receive_json()
         assert ready["type"] == "voice_ready"
 
@@ -118,7 +120,9 @@ def test_voice_websocket_generates_assistant_audio(client, monkeypatch, patient_
         _mock_persist_assistant,
     )
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         assert websocket.receive_json()["type"] == "voice_ready"
         websocket.send_json(
             {
@@ -191,8 +195,9 @@ def test_voice_websocket_never_sends_a_silent_clip(client, monkeypatch, patient_
     assert response["code"] == "voice_processing_failed"
 
 
-def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
-    client, monkeypatch, patient_id
+@pytest.mark.parametrize("private", [False, True])
+def test_voice_websocket_streams_audio_chunks_and_persists_only_ordinary_chat_audio(
+    client, monkeypatch, patient_id, private
 ):
     token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
     monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
@@ -205,6 +210,7 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
         return "I feel dizzy"
 
     async def _mock_persist(self, *, patient_id, audio, mime_type, purpose, message_id=None):
+        assert not private, "A private intake answer must not create a chat audio object"
         assert audio == b"chunk"
         assert mime_type == "audio/webm"
         assert purpose == "user"
@@ -220,13 +226,16 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
     )
     monkeypatch.setattr("app.routers.voice.VoiceService.persist_audio", _mock_persist)
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         assert websocket.receive_json()["type"] == "voice_ready"
         websocket.send_json(
             {
                 "type": "audio_start",
                 "mime_type": "audio/webm",
                 "language": "en-US",
+                "private_intake": private,
             }
         )
         assert websocket.receive_json() == {"type": "audio_stream_started"}
@@ -247,18 +256,25 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
             "language": "en-US",
             "model": "nova-3",
         }
-        assert websocket.receive_json() == {
-            "type": "audio_stream_complete",
-            "audio_url": f"{patient_id}/voice-user.webm",
-            "signed_url": "https://storage.example.com/voice-user.webm",
-        }
+        complete = websocket.receive_json()
+        assert complete == (
+            {"type": "audio_stream_complete"}
+            if private
+            else {
+                "type": "audio_stream_complete",
+                "audio_url": f"{patient_id}/voice-user.webm",
+                "signed_url": "https://storage.example.com/voice-user.webm",
+            }
+        )
 
 
 def test_voice_websocket_returns_validation_errors(client, monkeypatch, patient_id):
     token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
     monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         assert websocket.receive_json()["type"] == "voice_ready"
         websocket.send_json(
             {

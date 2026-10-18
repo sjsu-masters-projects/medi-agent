@@ -24,6 +24,14 @@ class IntakeAnswer(IntakeMutation):
     value: Any = None
     wording: str = Field(default="", max_length=1000)
     locale: Literal["en-US", "es-MX"]
+    input_mode: Literal["form", "typed", "voice"] = "form"
+
+
+class IntakeReply(IntakeMutation):
+    question_id: str = Field(min_length=1, max_length=40)
+    text: str = Field(min_length=1, max_length=1000)
+    locale: Literal["en-US", "es-MX"]
+    input_mode: Literal["typed", "voice"] = "typed"
 
 
 class IntakePreview(BaseModel):

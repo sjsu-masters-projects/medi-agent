@@ -339,9 +339,20 @@ class A2ATaskService:
             self.db.table("adr_assessments").upsert(
                 row,
                 on_conflict="symptom_report_id",
+                ignore_duplicates=True,
             )
         )
         rows = [item for item in (result.data or []) if isinstance(item, dict)]
+        if not rows:
+            # A retry must preserve a draft already edited/reviewed by a clinician.
+            existing = await self._execute(
+                self.db.table("adr_assessments")
+                .select("*")
+                .eq("symptom_report_id", symptom_report_id)
+                .eq("patient_id", patient_id)
+                .limit(1)
+            )
+            rows = [item for item in (existing.data or []) if isinstance(item, dict)]
         if not rows:
             raise ExternalServiceError("Supabase", "Failed to persist ADR review draft")
         return rows[0]
