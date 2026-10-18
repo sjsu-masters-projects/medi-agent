@@ -901,3 +901,136 @@ def test_activity_review_waits_before_publication_row_locks(activity_sql):
     finish(publication)
     finish(review)
     assert sql("SELECT count(*) FROM care_plan_versions WHERE status='draft'") == "1"
+
+
+def test_activity_review_rejects_an_outsider_without_queueing_behind_evidence_locks(
+    activity_sql,
+):
+    """The authorization pre-check runs before the blocking per-patient evidence lock."""
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    holder = sql.start(
+        f"""BEGIN; SET ROLE service_role;
+      SELECT private.lock_care_plan_evidence('{PATIENT}',true);
+      SELECT pg_sleep(2.5);
+      COMMIT;""",
+        "evidence-holder",
+    )
+    wait_event(sql, "evidence-holder", "PgSleep")
+    started = time.monotonic()
+    error = sql(
+        activity_operation(
+            "review",
+            {"conversation_id": thread["id"], "message_id": message["id"]},
+            actor=OTHER,
+            role="clinician",
+        ),
+        succeeds=False,
+    )
+    elapsed = time.monotonic() - started
+    finish(holder)
+    assert "Conversation unavailable" in error
+    assert elapsed < 2.0
+
+
+PLATFORM_STUBS = """
+CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT null::uuid $$;
+CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'anon' $$;
+CREATE SCHEMA storage;
+CREATE TABLE storage.buckets(id text PRIMARY KEY, name text, public boolean,
+  file_size_limit bigint, allowed_mime_types text[]);
+CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid() PRIMARY KEY, bucket_id text,
+  name text, owner uuid, metadata jsonb);
+CREATE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql IMMUTABLE
+  AS $$ SELECT string_to_array(name,'/') $$;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_auth_admin') THEN
+  CREATE ROLE supabase_auth_admin NOLOGIN; END IF; END $$;
+CREATE FUNCTION public.rls_auto_enable() RETURNS void LANGUAGE sql AS $$ SELECT 1 $$;
+CREATE TABLE public.schema_migrations(filename text PRIMARY KEY, checksum text,
+  applied_at timestamptz DEFAULT now());
+-- 015 needs the pgvector extension, which the stock image lacks; 020 only pins its function.
+CREATE DOMAIN public.vector AS real[];
+CREATE FUNCTION public.match_drug_knowledge_chunks(public.vector,integer,text[],text[],double precision)
+  RETURNS void LANGUAGE sql AS $$ SELECT $$;
+"""
+
+
+@pytest.fixture
+def full_chain_sql(postgres):
+    """Every committed migration in order (except the pgvector-only 015), as production runs."""
+    database = "chain_" + uuid4().hex
+    subprocess.run(
+        postgres,
+        input=f"CREATE DATABASE {database};",
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    command = postgres + ["-d", database]
+
+    def execute(statement, *, succeeds=True):
+        result = subprocess.run(
+            command, input=statement, capture_output=True, text=True, timeout=60
+        )
+        assert (result.returncode == 0) is succeeds, result.stderr
+        return result.stdout.strip() if succeeds else result.stderr
+
+    execute(PLATFORM_STUBS)
+    for path in sorted(MIGRATION.parent.glob("*.sql")):
+        if path.name.startswith("015_"):
+            continue
+        execute(path.read_text())
+    execute(f"""
+      INSERT INTO auth.users VALUES ('{PATIENT}'),('{CLINICIAN}');
+      INSERT INTO patients(id,email,first_name,last_name,date_of_birth) VALUES
+        ('{PATIENT}','patient@synthetic.invalid','Synthetic','Patient','1960-01-01');
+      INSERT INTO clinics(id,display_name,canonical_name) VALUES
+        ('{CLINIC}','Synthetic clinic','synthetic clinic');
+      INSERT INTO clinicians(id,email,first_name,last_name,specialty,clinic_name,clinic_id) VALUES
+        ('{CLINICIAN}','one@synthetic.invalid','Synthetic','Clinician','Synthetic',
+         'Synthetic clinic','{CLINIC}');
+      INSERT INTO care_teams(id,patient_id,clinician_id,role,status) VALUES
+        ('{TEAM}','{PATIENT}','{CLINICIAN}','primary_care','active');
+    """)
+    return execute
+
+
+def test_activity_attach_and_review_work_on_the_full_migration_chain(full_chain_sql):
+    """Notification triggers (051 to 075) must coexist with the activity operations."""
+    sql = full_chain_sql
+    plan, item = str(uuid4()), str(uuid4())
+    sql(f"""
+      INSERT INTO care_plan_versions(id,patient_id,version_number,status)
+        VALUES('{plan}','{PATIENT}',1,'draft');
+      INSERT INTO care_plan_items(id,plan_version_id,category,title,instructions,frequency)
+        VALUES('{item}','{plan}','hydration','Synthetic activity','Approved source instruction','daily');
+      -- Seeding only: source-document eligibility is owned by the care-plan suite.
+      ALTER TABLE care_plan_versions DISABLE TRIGGER care_plan_aaa_document_review_guard;
+      UPDATE care_plan_versions SET status='approved',approved_by='{CLINICIAN}',approved_at=now()
+        WHERE id='{plan}';
+      ALTER TABLE care_plan_versions ENABLE TRIGGER care_plan_aaa_document_review_guard;
+    """)
+    thread = json.loads(sql(operation("open", {"recipient_id": CLINICIAN})))
+    payload = {
+        "conversation_id": thread["id"],
+        "body": "Question about frequency",
+        "client_message_id": str(uuid4()),
+        "care_plan_item_id": item,
+    }
+    message = json.loads(sql(activity_operation("send", payload)))
+    assert message["activity_context"]["item_id"] == item
+    review = json.loads(
+        sql(
+            activity_operation(
+                "review",
+                {"conversation_id": thread["id"], "message_id": message["id"]},
+                actor=CLINICIAN,
+                role="clinician",
+            )
+        )
+    )
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{review['plan_id']}'") == "draft"
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "1"
