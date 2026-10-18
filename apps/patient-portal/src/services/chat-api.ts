@@ -22,6 +22,17 @@ export interface ChatMessageApi {
     attachments?: unknown[] | null;
 }
 
+export interface ChatTurnApi {
+    client_message_id: string;
+    status: "processing" | "completed" | "failed" | "interrupted";
+    retryable: boolean;
+    attempt: number;
+    failure_code?: string | null;
+    safety_guidance?: string;
+    document_id: string | null;
+    user_message?: ChatMessageApi;
+}
+
 export interface AssistantCompleteEvent {
     type: "assistant_complete";
     message: ChatMessageApi;
@@ -75,6 +86,7 @@ export interface ChatErrorEvent {
     type: "error";
     code?: string;
     message?: string;
+    client_message_id?: string;
 }
 
 export interface EscalationRecommendedEvent {
@@ -124,6 +136,8 @@ export interface AppointmentCreatedEvent {
 }
 
 export type ChatSocketEvent =
+    | { type: "chat_turn"; turn: ChatTurnApi }
+    | { type: "chat_turns"; turns: ChatTurnApi[] }
     | AppointmentCreatedEvent
     | AppointmentProposalEvent
     | AssistantChunkEvent
@@ -283,6 +297,7 @@ export function newConversationId(): string {
 }
 
 export interface ChatWebSocketOptions {
+    durableTurns?: boolean;
     documentId?: string | null;
     /** The patient dismissed this conversation's document; the server clears it. */
     documentDismissed?: boolean;
@@ -304,6 +319,7 @@ export function buildChatWebSocketUrl(
     parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
     parsed.pathname = `/ws/chat/${patientId}`;
     parsed.search = "";
+    if (options.durableTurns) parsed.searchParams.set("turn_protocol", "1");
 
     const documentId = options.documentId?.trim();
     if (documentId) {

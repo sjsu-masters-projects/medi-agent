@@ -315,8 +315,8 @@ jobs:
             files: tests/integration/test_adr_loop_postgres.py tests/integration/test_medwatch_3500_postgres.py
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=14
           - name: care-conversations
-            files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py
-            minimums: test_care_conversation_postgres=33 test_clinic_memberships_postgres=38
+            files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py tests/integration/test_chat_turn_postgres.py
+            minimums: test_care_conversation_postgres=33 test_clinic_memberships_postgres=38 test_chat_turn_postgres=18
     defaults:
       run:
         working-directory: backend
@@ -342,6 +342,7 @@ jobs:
           CARE_CONVERSATION_TEST_POSTGRES_DOCKER: "1"
           NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER: "1"
           EMAIL_TEST_POSTGRES_DOCKER: "1"
+          CHAT_TURN_TEST_POSTGRES_DOCKER: "1"
         run: |
           mkdir -p test-results
           pytest ${{ matrix.files }} -v -rs --tb=short --no-cov --junitxml=test-results/postgres-${{ matrix.name }}.xml

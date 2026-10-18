@@ -92,6 +92,15 @@ to a conversation (`session_id`): one per day by default, plus any the patient s
 model's recap is built from stored messages, so a restart loses nothing. Design and
 checks: [NORA-002](specs/nora-002-grounded-answers.md).
 
+PAT-001-A adds the opt-in `turn_protocol=1` websocket contract: a patient/session
+turn claim saves the user message atomically, fences execution with a lease and
+deadline, and atomically commits the final reply. Recovery reads saved status, not
+process memory; retries reuse the original identity and cannot repeat uncertain
+clinical actions. Document identity and evidence version are fixed at submission,
+independent of later focus changes. The older socket contract remains explicitly
+available during rollout, without durable retry guarantees. See the
+[turn recovery contract](specs/pat-001-a-nora-turn-recovery.md) for rollout and tests.
+
 ## Human conversations (COM-001-B)
 
 COM-001-B adds deterministic in-app conversations partitioned by patient and

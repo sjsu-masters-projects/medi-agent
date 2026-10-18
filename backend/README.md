@@ -213,6 +213,29 @@ clinical quality or availability under load. Offline tests simulate 429s;
 live checks do not deliberately overload providers. Per-process concurrency
 limits do not coordinate across Cloud Run replicas or Jobs.
 
+## Nora turn recovery (PAT-001-A / PAT-004)
+
+The patient websocket opts into durable execution with `turn_protocol=1`.
+`user_message` includes a UUID `client_message_id`, the exact text/language/audio,
+and an explicit `document_id` (null for general questions). Retries reuse those
+values. `chat_turn` and `chat_turns` carry processing/completed/failed/interrupted
+status and safe retry eligibility. `recover_turns` refreshes saved status/history;
+`dismiss_turn` hides only an interrupted/failed reply, never resolves clinical work.
+Client requests stay in memory; saved turns recover from the server after refresh.
+
+Migration `072_nora_turn_recovery.sql` is backend-only, with RLS and browser grants
+revoked. Apply it **only with separate operator authorization**, before backend
+and patient rollout. Older clients retain their existing contract, not durable
+retry guarantees. An unavailable durable store must fail closed, not rerun through
+the legacy path. Full contract and verification:
+[PAT-001-A](../.agent/specs/pat-001-a-nora-turn-recovery.md).
+
+072 is re-runnable and ends with RLS/table/function privilege assertions. Turn rows
+retain document identity/version, not summary text. A fresh authorized summary is
+returned only to execution and cleaned with `normalize_patient_summary`. A failed
+startup handshake stops at an unavailable state with manual reconnect; a busy claim
+recovers the existing turn without resending the new text.
+
 ## Package Layout
 
 ```

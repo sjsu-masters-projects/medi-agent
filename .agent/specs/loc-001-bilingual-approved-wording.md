@@ -4,6 +4,13 @@
 locale per approved plan" rule in `pat-005-clinician-approved-today-feed-plan.md`
 (§ locale attestation) and `docs/portal-ui-ux-review-2026-10-10.md` (language section).
 
+## Pending interface wording review
+
+[PAT-001-A recovery-copy drafts](pat-001-a-nora-turn-recovery.md#pending-es-mx-interface-wording-drafts--not-approved)
+list the new recovery, busy/unavailable, retry-help and revised document-unavailable
+wording. They are not yet reviewed/approved Spanish copy; existing clinical safety
+resources are unchanged.
+
 ## Problem
 
 A patient's saved language (`patients.preferred_language`) controls the portal chrome,

@@ -25,7 +25,9 @@ export const chatSlice = createSlice({
     initialState,
     reducers: {
         addMessage: (state, action: PayloadAction<ChatMessage>) => {
-            state.messages.push(action.payload);
+            const index = state.messages.findIndex((message) => message.id === action.payload.id);
+            if (index < 0) state.messages.push(action.payload);
+            else state.messages[index] = action.payload;
         },
         setMessages: (state, action: PayloadAction<ChatMessage[]>) => {
             state.messages = action.payload;
