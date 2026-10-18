@@ -888,8 +888,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     if (["CHAT_DOCUMENT_UNAVAILABLE", "CHAT_DOCUMENT_CHANGED"].includes(payload.code ?? "")) setDocumentUnavailable(true);
                     resetAssistantDraft();
                     dispatch(setTyping(false));
-                    dispatch(setChatError(payload.code === "CHAT_TURN_BUSY" ? "CHAT_TURN_BUSY" : payload.message || "Chat request failed."));
-                    if (payload.code === "CHAT_TURN_BUSY" && socket.readyState === WebSocket.OPEN) {
+                    dispatch(setChatError(payload.code === "CHAT_TURN_BUSY" || payload.code === "CHAT_TURN_EXPIRED" ? payload.code : payload.message || "Chat request failed."));
+                    // The saved message and its Retry card come from the server's turn list.
+                    if ((payload.code === "CHAT_TURN_BUSY" || payload.code === "CHAT_TURN_EXPIRED") && socket.readyState === WebSocket.OPEN) {
                         socket.send(JSON.stringify({ type: "recover_turns" }));
                     }
                     // A backend error mid-turn invalidates pending auto-play

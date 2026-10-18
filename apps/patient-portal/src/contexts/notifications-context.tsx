@@ -12,6 +12,10 @@ import type { NotificationPage, NotificationSummary } from "@/types/notification
 /** Background refresh while the tab is visible. Every poll re-authorizes in the database,
  * so it stays slow; opening, focusing, reading or acting refreshes at once. */
 export const NOTIFICATION_POLL_MS = 60_000;
+/** After failures the poll backs off (60 s, 2 min, 4 min, then 5 min) and resets on success. */
+export const NOTIFICATION_MAX_BACKOFF_MS = 300_000;
+/** Focus and visibility events arrive together (and often) on phones; one refresh serves them. */
+export const NOTIFICATION_MIN_GAP_MS = 10_000;
 
 interface NotificationState {
   locale: Locale;
@@ -51,6 +55,10 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
   const [error, setError] = useState<NotificationState["error"]>(null);
   const [skipped, setSkipped] = useState(0);
   const revision = useRef(0);
+  const inFlight = useRef(0);
+  const lastStart = useRef(0);
+  const failures = useRef(0);
+  const hasPage = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const writing = useRef(false);
@@ -58,13 +66,14 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
   const depth = useRef(1);
   const snapshots = useRef<string[]>([]);
   const clearDeniedCache = useCallback(() => {
-    snapshots.current = []; depth.current = 1;
+    snapshots.current = []; depth.current = 1; hasPage.current = false;
     setCanMarkDisplayed(false); setPage(null); setSummary(null);
   }, []);
-  const invalidate = useCallback(() => { revision.current++; controller.current?.abort(); }, []);
+  const invalidate = useCallback(() => { revision.current++; inFlight.current = 0; controller.current?.abort(); }, []);
   const invalidateSession = useCallback(() => { epoch.current++; invalidate(); }, [invalidate]);
   const [cacheKey, setCacheKey] = useState({ token, locale });
   if (cacheKey.token !== token || cacheKey.locale !== locale) {
+    hasPage.current = false; failures.current = 0;
     setCacheKey({ token, locale }); setPage(null); setSummary(null); setError(null); setLoading(true); setBusy(false); setCanMarkDisplayed(false);
   }
   useLayoutEffect(() => {
@@ -74,13 +83,17 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
   }, [token, locale, invalidateSession]);
   const denied = (failure: unknown) => failure instanceof ApiClientError && [401, 403].includes(failure.status);
 
-  const refresh = useCallback(async (cursor?: string) => {
+  /** `background` refreshes (poll, focus) never interrupt one already running, keep what is
+   * shown when they fail, and stay quiet unless there is nothing to show. */
+  const refresh = useCallback(async (cursor?: string, background = false) => {
     if (!token || writing.current || document.visibilityState !== "visible") return;
+    if (background && inFlight.current) return;
     const request = ++revision.current;
+    inFlight.current = request; lastStart.current = Date.now();
     controller.current?.abort();
     const abort = new AbortController();
     controller.current = abort;
-    setLoading(true);
+    if (!background) setLoading(true);
     const readPages = async () => {
       const pages: NotificationPage[] = [];
       let next = cursor;
@@ -99,31 +112,46 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
       readPages(), notifications.summary(token, abort.signal),
     ]);
     if (!mounted.current || abort.signal.aborted || request !== revision.current) return;
+    inFlight.current = 0;
+    const failed = list.status === "rejected" || counts.status === "rejected";
+    failures.current = failed ? Math.min(failures.current + 1, 6) : 0;
     if ((list.status === "rejected" && denied(list.reason)) || (counts.status === "rejected" && denied(counts.reason))) {
       clearDeniedCache(); setError("load");
     } else {
       if (list.status === "fulfilled") {
+        hasPage.current = true;
         snapshots.current = cursor ? [...snapshots.current, ...list.value.tokens] : list.value.tokens;
         setCanMarkDisplayed(snapshots.current.length > 0);
         depth.current = cursor ? depth.current + 1 : list.value.depth;
         setPage((current) => cursor && current ? { ...list.value.page, items: [...current.items, ...list.value.page.items.filter((item) => !current.items.some((old) => old.id === item.id))] } : list.value.page);
       }
-      setSummary(counts.status === "fulfilled" ? counts.value : null);
-      setError(list.status === "rejected" || counts.status === "rejected" ? "load" : null);
+      // A failed count keeps the last known one; a person never sees a stale zero replaced by
+      // a question mark (or an error banner) because a background poll hit a slow database.
+      if (counts.status === "fulfilled") setSummary(counts.value);
+      setError(failed && (!background || !hasPage.current) ? "load" : null);
     }
     setLoading(false);
   }, [token, locale, unread, clearDeniedCache]);
 
   useEffect(() => {
     mounted.current = true;
-    const update = () => { void refresh(); };
-    update();
-    const timer = setInterval(update, NOTIFICATION_POLL_MS);
-    window.addEventListener("focus", update);
-    document.addEventListener("visibilitychange", update);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      const delay = Math.min(NOTIFICATION_POLL_MS * 2 ** failures.current, NOTIFICATION_MAX_BACKOFF_MS);
+      timer = setTimeout(() => { void refresh(undefined, true).finally(() => { if (mounted.current) schedule(); }); }, delay);
+    };
+    // The scope changed (sign-in, language, filter): read at once, then poll.
+    void refresh();
+    schedule();
+    const nudge = () => {
+      if (Date.now() - lastStart.current < NOTIFICATION_MIN_GAP_MS) return;
+      void refresh(undefined, true);
+    };
+    window.addEventListener("focus", nudge);
+    document.addEventListener("visibilitychange", nudge);
     return () => {
       mounted.current = false; invalidate();
-      clearInterval(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", update);
+      clearTimeout(timer); window.removeEventListener("focus", nudge); document.removeEventListener("visibilitychange", nudge);
     };
   }, [refresh, invalidate]);
 
@@ -132,7 +160,7 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
     const captured = [...snapshots.current];
     const session = epoch.current;
     writing.current = true; setBusy(true); setError(null); setSkipped(0);
-    revision.current++; controller.current?.abort();
+    revision.current++; inFlight.current = 0; controller.current?.abort();
     try {
       if (id) await notifications.read(token, id);
       else {
@@ -159,7 +187,7 @@ function NotificationSession({ children, token, locale, timezone }: { children: 
   }
 
   return <NotificationContext.Provider value={{ locale, timezone, page, summary, unread, loading, busy, error, skipped, canMarkDisplayed,
-    setUnread: (value) => { if (value === unread || writing.current) return; revision.current++; controller.current?.abort(); depth.current = 1; snapshots.current = []; setCanMarkDisplayed(false); setPage(null); setUnread(value); },
+    setUnread: (value) => { if (value === unread || writing.current) return; revision.current++; inFlight.current = 0; controller.current?.abort(); depth.current = 1; snapshots.current = []; hasPage.current = false; setCanMarkDisplayed(false); setPage(null); setUnread(value); },
     refresh: () => refresh(), loadMore: () => page?.next_cursor ? refresh(page.next_cursor) : Promise.resolve(),
     markRead: (id) => write(id), markAllRead: () => write(),
   }}>{children}</NotificationContext.Provider>;

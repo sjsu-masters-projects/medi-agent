@@ -720,6 +720,22 @@ describe("Patient chat page", () => {
         expect(socket.sent.map((text) => JSON.parse(text).type)).toEqual(["user_message", "recover_turns"]);
     });
 
+    it.each([Language.EN, Language.ES])("explains an expired reply in plain words and offers the saved message's retry (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: getChatControlsCopy(locale).message }), { target: { value: "Synthetic slow question" } });
+        fireEvent.click(screen.getByRole("button", { name: getChatControlsCopy(locale).send }));
+        const request = JSON.parse(socket.sent[0]);
+        await act(async () => {
+            socket.emitMessage({ type: "error", code: "CHAT_TURN_EXPIRED", client_message_id: request.client_message_id, message: "This reply took too long and was not kept. Your message is saved: try again." });
+        });
+        expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).expired);
+        expect(screen.queryByText(getChatControlsCopy(locale).chatError)).not.toBeInTheDocument();
+        expect(socket.sent.map((text) => JSON.parse(text).type)).toEqual(["user_message", "recover_turns"]);
+    });
+
     it("replaces the focused document in an open conversation without losing the unsent draft", async () => {
         renderPage();
         fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Unsent synthetic question" } });
